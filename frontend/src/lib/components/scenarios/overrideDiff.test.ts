@@ -52,19 +52,43 @@ function roundTrips(b: ModelInput, after: ProjectModel) {
 }
 
 describe('diffModel', () => {
-	it('says a demand object edit can’t be recorded yet, but lets a removed unit take its objects (engine 1.7.0)', () => {
+	it('turns demand objects into demandObject.add / .set / .remove, and lets a removed unit take its objects (engine 1.39.0)', () => {
 		const b = base();
 		const e = editing(b);
-		e.addDemandObject(UP, 'municipal');
-		const d = diffModel(b, e.snapshot());
-		expect(d.unsupported).toEqual(["Adding, changing or removing a demand object: a scenario can't change demand objects yet. Change them on the catchment."]);
-		// A base with an object on the lower farm: removing that farm is a node.remove, which drops it.
-		const withObject = structuredClone(b);
-		withObject.model.demandObjects = [{ ...structuredClone(e.snapshot().demandObjects![0]!), nodeId: LO }];
-		const e2 = editing(withObject);
-		e2.removeNode(LO);
-		const ops = roundTrips(withObject, e2.snapshot());
-		expect(ops.some((op) => op.op === 'node.remove')).toBe(true);
+		const town = e.addDemandObject(UP, 'municipal');
+		town.name = 'Village';
+		town.monthlyM3Day = new Array(12).fill(300);
+		let ops = roundTrips(b, e.snapshot());
+		expect(ops).toEqual([{ op: 'demandObject.add', demandObject: expect.objectContaining({ id: town.id, nodeId: UP, name: 'Village', monthlyM3Day: new Array(12).fill(300) }) }]);
+		// Recorded, then edited in place: one demandObject.set per field, next to each other (one edit group),
+		// so a switch to a count × litres records as it is, the save rules checked once after the last.
+		const withTown = applyScenario(b, ops).input;
+		const e2 = editing(withTown);
+		const o = e2.model.demandObjects![0]!;
+		Object.assign(o, { sizing: 'perUnit', count: 1200, litresPerUnitDay: 230, returnPct: 0.3, note: 'Census 2022' });
+		o.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 }];
+		ops = roundTrips(withTown, e2.snapshot());
+		expect(ops.map((x) => (x.op === 'demandObject.set' ? x.field : x.op))).toEqual(['sizing', 'count', 'litresPerUnitDay', 'returnPct', 'schedule', 'note']);
+		expect(ops.every((x) => x.op === 'demandObject.set' && x.demandObjectId === town.id)).toBe(true);
+		// A schedule of none, null or [] is the same: clearing one that was never set records nothing.
+		const e3 = editing(withTown);
+		e3.model.demandObjects![0]!.schedule = [];
+		expect(diffModel(withTown, e3.snapshot())).toEqual({ ops: [], unsupported: [], problems: [] });
+		// Moved to another unit: removed and added again. Removed: demandObject.remove.
+		e3.model.demandObjects![0]!.nodeId = LO;
+		expect(roundTrips(withTown, e3.snapshot()).map((x) => x.op)).toEqual(['demandObject.remove', 'demandObject.add']);
+		e3.removeDemandObject(town.id);
+		expect(roundTrips(withTown, e3.snapshot())).toEqual([{ op: 'demandObject.remove', demandObjectId: town.id }]);
+		// An edit that breaks a save rule (a return from water piped out) is a problem, and nothing is recorded as something else.
+		const e4 = editing(withTown);
+		Object.assign(e4.model.demandObjects![0]!, { destination: 'external', returnPct: 0.4 });
+		expect(diffModel(withTown, e4.snapshot()).problems).toEqual([expect.stringMatching(/^ops 1–2 \(demandObject\.set, "Village"\): .*piped out of the catchment/)]);
+		// A unit removed takes its objects with it: a node.remove, no object op.
+		const e5 = editing(withTown);
+		e5.removeNode(UP);
+		const removed = roundTrips(withTown, e5.snapshot());
+		expect(removed.some((x) => x.op === 'node.remove')).toBe(true);
+		expect(removed.some((x) => x.op.startsWith('demandObject.'))).toBe(false);
 	});
 
 	it('records nothing when nothing changed, or only the row order did', () => {

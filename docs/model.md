@@ -3154,8 +3154,10 @@ switching stays with WP-3.8's operating rules (the hands-off flow on the
 river pump and River to dam, §2.7h, doesn't switch demand objects).
 - *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
   crops and its objects alike; the client wants every category cut by the
-  same % (#53 O4, issue #90), so no per-category restriction is planned, and
-  a scenario op to add or scale one object is a follow-up.
+  same % (#53 O4, issue #90), so no per-category restriction is planned.
+  One object is added, changed (its demand, count, schedule…) or removed by
+  the scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.39.0,
+  [scenarios.md](./scenarios.md)), classed by the object's unit.
 - *Restrictions and basic needs (decided, not built).* The client agreed
   (issue #90) that a restriction never cuts domestic supply below a
   basic-needs floor of 25 litres per person per day, that cuts follow DWS's

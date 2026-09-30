@@ -5,7 +5,9 @@
 // reads and builds its data. No Svelte, no API.
 import {
 	blankEwrRuleTable,
+	DEMAND_OBJECT_CATEGORY_LABEL,
 	DEMAND_SCALE_MAX,
+	newDemandObjectDefaults,
 	ewrSourceConfidence,
 	LAND_COVER_CLASSES,
 	SCALABLE_SERIES_KINDS,
@@ -17,6 +19,9 @@ import {
 	type BoreholeMode,
 	type BoreholeTarget,
 	type DemandCategory,
+	type DemandObject,
+	type DemandObjectCategory,
+	type DemandObjectSizing,
 	type EwrRuleTable,
 	type ModelInput,
 	type NetworkNode,
@@ -36,6 +41,7 @@ import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import {
 	CROP_FIELD_SPECS,
+	DEMAND_OBJECT_FIELD_SPECS,
 	LAND_COVER_FIELD_SPECS,
 	NODE_FIELD_SPECS,
 	SETTINGS_SPECS,
@@ -45,6 +51,7 @@ import {
 	parseValue,
 	percentMessage,
 	settingsValue,
+	type DemandObjectFormField,
 	type PeDraft,
 	type ValueSpec
 } from './fields';
@@ -79,16 +86,18 @@ export function stepInputs(base: ModelInput, ops: readonly ScenarioOp[]): { befo
 	return scenarioSteps(base, ops);
 }
 
-/** Every node and crop name the base or an op gives an id, for describing an op whose target is gone. */
+/** Every node, crop and demand-object name the base or an op gives an id, for describing an op whose target is gone. */
 export function namesOf(models: readonly (ProjectModel | undefined)[], ops: readonly ScenarioOp[] = []): Map<string, string> {
 	const names = new Map<string, string>();
 	for (const m of models) {
 		for (const n of m?.nodes ?? []) names.set(n.id, n.name);
 		for (const c of m?.crops ?? []) names.set(c.id, c.name);
+		for (const o of m?.demandObjects ?? []) names.set(o.id, o.name);
 	}
 	for (const op of ops) {
 		if ((op.op === 'node.add' || op.op === 'node.insert') && op.node?.id) names.set(op.node.id, op.node.name);
 		if (op.op === 'crop.add' && op.crop?.id) names.set(op.crop.id, op.crop.name);
+		if (op.op === 'demandObject.add' && op.demandObject?.id) names.set(op.demandObject.id, op.demandObject.name);
 	}
 	return names;
 }
@@ -177,6 +186,9 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'landCover.set': 'Change land cover',
 	'borehole.add': 'Add a borehole',
 	'borehole.remove': 'Remove a borehole',
+	'demandObject.add': 'Add a demand object',
+	'demandObject.set': 'Change a demand object',
+	'demandObject.remove': 'Remove a demand object',
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall or daily A-pan',
 	'demand.scale': 'Scale demand',
@@ -292,6 +304,22 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const b = m?.boreholes?.find((x) => x.id === op.boreholeId);
 			return b ? `${nodeName(b.nodeId)}: remove the borehole “${b.name}”` : 'Remove a borehole';
 		}
+		case 'demandObject.add': {
+			const o = op.demandObject;
+			return `${nodeName(o.nodeId)}: add the demand object “${o.name}”, ${objectText(o)}`;
+		}
+		case 'demandObject.set': {
+			const o = m?.demandObjects?.find((x) => x.id === op.demandObjectId);
+			const what = o ? `${nodeName(o.nodeId)}, demand object “${o.name}”` : 'A demand object';
+			if (op.field === 'schedule') return `${what}: schedule ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
+			const f = DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField];
+			const was = o ? (o as unknown as Record<string, unknown>)[op.field] : undefined;
+			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+		}
+		case 'demandObject.remove': {
+			const o = m?.demandObjects?.find((x) => x.id === op.demandObjectId);
+			return o ? `${nodeName(o.nodeId)}: remove the demand object “${o.name}” (${objectText(o)})` : 'Remove a demand object';
+		}
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
 			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
@@ -337,6 +365,18 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			return `Unknown change ${(op as { op?: string }).op ?? ''}`;
 	}
 }
+
+/** A demand object in a few words: "Municipal (town), 300 m³/day on average" or "Livestock, 400 × 45 l a day", and piped out or off when it is. */
+export function objectText(o: DemandObject): string {
+	const size =
+		o.sizing === 'perUnit'
+			? `${fmtNum(o.count ?? 0)} × ${fmtNum(o.litresPerUnitDay ?? 0, 1, true)} l a day`
+			: `${fmtNum((o.monthlyM3Day ?? []).reduce((a, v) => a + v, 0) / 12, 1, true)} m³/day on average`;
+	return [DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category, size, o.destination === 'external' ? 'piped out' : '', o.enabled === false ? 'not modelled' : ''].filter(Boolean).join(', ');
+}
+
+/** A demand object's schedule in words (none, null and an empty one run the same). */
+const scheduleText = (w: DemandObject['schedule']) => (w?.length ? `${w.length} window${w.length === 1 ? '' : 's'}` : 'none');
 
 /** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
 export function volumeText(a: AllocationEntry): string {
@@ -417,6 +457,14 @@ export interface OpDraft {
 	coverClass: string;
 	coverAreaKm2: string;
 	densityPct: string;
+	/** demandObject.set / .remove: the object (engine ≥ 1.39.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
+	demandObjectId: string;
+	doName: string;
+	doCategory: DemandObjectCategory;
+	doSizing: DemandObjectSizing;
+	doMonthlyM3Day: string;
+	doCount: string;
+	doLitres: string;
 	/** borehole.remove: the borehole; borehole.add: the new one's fields (WP-3.9). */
 	boreholeId: string;
 	bhName: string;
@@ -483,6 +531,13 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		coverClass: LAND_COVER_CLASSES[0].id,
 		coverAreaKm2: '',
 		densityPct: '100',
+		demandObjectId: '',
+		doName: '',
+		doCategory: 'municipal',
+		doSizing: 'monthly',
+		doMonthlyM3Day: '',
+		doCount: '',
+		doLitres: '',
 		boreholeId: '',
 		bhName: '',
 		bhCapacityM3Day: '',
@@ -561,7 +616,9 @@ export function draftSpec(d: Pick<OpDraft, 'kind' | 'field'>): ValueSpec | null 
 						? CROP_FIELD_SPECS
 						: d.kind === 'landCover.set'
 							? LAND_COVER_FIELD_SPECS
-							: null;
+							: d.kind === 'demandObject.set'
+								? DEMAND_OBJECT_FIELD_SPECS
+								: null;
 	return (table as Record<string, { spec: ValueSpec }> | null)?.[d.field]?.spec ?? null;
 }
 
@@ -727,6 +784,40 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'borehole.remove':
 				op = { op: 'borehole.remove', boreholeId: need(d.boreholeId, 'a borehole') };
 				break;
+			case 'demandObject.add': {
+				const name = d.doName.trim();
+				if (!name) throw new DraftError('enter a name for the demand object');
+				const nodeId = need(d.nodeId, 'a hydrological unit');
+				const perUnit = d.doSizing === 'perUnit';
+				// Its category's defaults (the Network form's Add demand), then what was typed.
+				const defaults = newDemandObjectDefaults(d.doCategory);
+				const o: DemandObject = {
+					id: newId(),
+					nodeId,
+					name,
+					category: d.doCategory,
+					...defaults,
+					sizing: d.doSizing,
+					monthlyM3Day: perUnit ? null : (parsed({ t: 'monthly', unit: 'm³/day', scale: 1, nullable: false }, d.doMonthlyM3Day, 'Demand by month') as number[]),
+					count: perUnit ? number(d.doCount, 'the count') : null,
+					litresPerUnitDay: perUnit ? number(d.doLitres, 'the litres per unit a day') : null,
+					monthlyFactor: null,
+					enabled: true,
+					note: ''
+				};
+				op = { op: 'demandObject.add', demandObject: o };
+				break;
+			}
+			case 'demandObject.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick what to change');
+				const value = parsed(spec, d.value, DEMAND_OBJECT_FIELD_SPECS[d.field as DemandObjectFormField].label);
+				op = { op: 'demandObject.set', demandObjectId: need(d.demandObjectId, 'a demand object'), field: d.field, value } as ScenarioOp;
+				break;
+			}
+			case 'demandObject.remove':
+				op = { op: 'demandObject.remove', demandObjectId: need(d.demandObjectId, 'a demand object') };
+				break;
 			case 'settings.set': {
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick a setting');
@@ -874,6 +965,8 @@ function scaleNote(kind: ScenarioOpName, text: string): string {
 			.replace(/(^|; )allocation\.maxRateM3s: /g, '$1the maximum rate ')
 			.replace(/(^|; )allocation\.validTo: is before valid from/g, '$1valid to is before valid from')
 			.replace(/(^|; )allocation\.(\w+): /g, '$1$2 ');
+	// A new demand object's errors name its field.
+	if (kind === 'demandObject.add') return text.replace(/(^|; )demandObject\.(\w+): /g, '$1$2 ');
 	if (kind === 'demand.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, `the demand must be between 0 % and ${DEMAND_SCALE_MAX * 100} % of what they'd take`);
 	return text;
 }

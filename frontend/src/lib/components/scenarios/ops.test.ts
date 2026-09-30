@@ -301,6 +301,43 @@ describe('buildOp', () => {
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the borehole “BH new”');
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
 	});
+
+	it('builds and describes a demand object to add, change and remove (engine 1.39.0)', () => {
+		const add = buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: ' Village ', doCategory: 'municipal', doSizing: 'monthly', doMonthlyM3Day: '300' }), m, id);
+		expect(add.ok, JSON.stringify(add)).toBe(true);
+		const op = (add as { op: ScenarioOp }).op;
+		// The category's defaults, as the Network tab's Add demand gives them (municipal: half returns, supplied first).
+		expect(op).toMatchObject({
+			op: 'demandObject.add',
+			demandObject: { nodeId: UP, name: 'Village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		});
+		expect(describeOp(op, base())).toBe('Upper farm: add the demand object “Village”, Municipal (town), 300 m³/day on average');
+		const after = applyScenario(base(), [op]);
+		expect(after.problems).toEqual([]);
+		const demandObjectId = (op as { demandObject: { id: string } }).demandObject.id;
+		// A per-unit one needs its count and litres.
+		const stock = buildOp(draft({ kind: 'demandObject.add', nodeId: LO, doName: 'Cattle', doCategory: 'livestock', doSizing: 'perUnit', doCount: '400', doLitres: '45' }), m, id);
+		expect((stock as { op: ScenarioOp }).op).toMatchObject({ demandObject: { sizing: 'perUnit', count: 400, litresPerUnitDay: 45, monthlyM3Day: null } });
+		expect(describeOp((stock as { op: ScenarioOp }).op, base())).toBe('Lower farm: add the demand object “Cattle”, Livestock, 400 × 45 l a day');
+		expect(buildOp(draft({ kind: 'demandObject.add', nodeId: LO, doName: 'Cattle', doSizing: 'perUnit', doCount: '' }), m, id)).toEqual({ ok: false, error: 'Enter the count' });
+		expect(buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: '' }), m, id)).toEqual({ ok: false, error: 'Enter a name for the demand object' });
+		// Change one field: typed as the form shows it (a share as %), described with what it was.
+		const set = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'returnPct', value: '20' }), after.input.model, id);
+		expect(set).toEqual({ ok: true, op: { op: 'demandObject.set', demandObjectId, field: 'returnPct', value: 0.2 } });
+		expect(describeOp((set as { op: ScenarioOp }).op, after.input)).toBe('Upper farm, demand object “Village”: Share returned 50 % → 20 %');
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'returnPct', value: '150' }), after.input.model, id)).toEqual({ ok: false, error: 'Must be at most 100 %' });
+		// A note may be empty; a name may not.
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'note', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: '' } });
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'name', value: ' ' }), after.input.model, id)).toMatchObject({ ok: false });
+		expect(describeOp({ op: 'demandObject.set', demandObjectId, field: 'schedule', value: null }, after.input)).toBe('Upper farm, demand object “Village”: schedule none → none');
+		const remove = buildOp(draft({ kind: 'demandObject.remove', demandObjectId }), after.input.model, id);
+		expect(remove).toEqual({ ok: true, op: { op: 'demandObject.remove', demandObjectId } });
+		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the demand object “Village” (Municipal (town), 300 m³/day on average)');
+		expect(describeOp((remove as { op: ScenarioOp }).op, null)).toBe('Remove a demand object');
+		// Its class is its unit's.
+		expect(classifyOp(op, [UP])).toBe('proposal');
+		expect(classifyOp(op, [LO])).toBe('baseline');
+	});
 });
 
 describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {

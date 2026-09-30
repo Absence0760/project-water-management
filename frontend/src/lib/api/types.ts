@@ -998,6 +998,8 @@ export interface ApplicantResults {
 		crops: { id: string; name: string }[];
 		cropAreas: { nodeId: string; cropId: string; areaM2: number }[];
 		boreholes?: { id: string; nodeId: string; name: string }[];
+		/** Demand objects on their units (engine ≥ 1.39.0: a demandObject.add under a hidden object's id is shown by the id they gave). */
+		demandObjects?: { id: string; nodeId: string; name: string }[];
 	};
 }
 

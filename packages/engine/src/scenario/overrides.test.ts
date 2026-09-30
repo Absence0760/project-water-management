@@ -8,7 +8,7 @@ import { diffInputs } from '../compare';
 import { buildTopology } from '../network/topology';
 import { blankEwrRuleTable, type EwrRuleTable } from '../reserve/rules';
 import { runModel } from '../run';
-import type { ModelInput, NetworkNode, RunSeries } from '../project';
+import type { DemandObject, ModelInput, NetworkNode, RunSeries } from '../project';
 import type { AllocationEntry } from '../allocations/compare';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
@@ -80,6 +80,28 @@ function deepFreeze<T>(v: T): T {
 }
 
 const one = (op: ScenarioOp, b = base()) => applyScenario(b, [op]);
+
+/** A monthly demand object on a unit (engine ≥ 1.7.0): invented values. */
+function demandObject(id: string, nodeId: string, over: Partial<DemandObject> = {}): DemandObject {
+	return {
+		id,
+		nodeId,
+		name: `Object ${id}`,
+		category: 'municipal',
+		sizing: 'monthly',
+		monthlyM3Day: new Array(12).fill(300),
+		count: null,
+		litresPerUnitDay: null,
+		lossPct: 0,
+		monthlyFactor: null,
+		returnPct: 0.5,
+		priority: 'first',
+		destination: 'internal',
+		enabled: true,
+		note: '',
+		...over
+	};
+}
 const nodeOf = (x: ModelInput, id: string) => x.model.nodes.find((n) => n.id === id);
 
 describe('applyScenario: each op', () => {
@@ -1347,6 +1369,117 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 });
 
+describe('demand-object ops (engine ≥ 1.39.0)', () => {
+	const withObject = () => {
+		const b = base();
+		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Town' })];
+		return b;
+	};
+	const set = (field: string, value: unknown, id = 'do1') => ({ op: 'demandObject.set', demandObjectId: id, field, value }) as ScenarioOp;
+
+	it('demandObject.add puts a new object on a unit, and only on a unit', () => {
+		const o = demandObject('do2', 'B', { name: '  Stock  ', category: 'livestock', sizing: 'perUnit', monthlyM3Day: null, count: 400, litresPerUnitDay: 45 });
+		const r = one({ op: 'demandObject.add', demandObject: o });
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.demandObjects).toEqual([{ ...o, name: 'Stock' }]);
+		expect(one({ op: 'demandObject.add', demandObject: { ...o, nodeId: 'G' } }).problems).toEqual(['op 1 (demandObject.add): a demand object is on a hydrological unit; "Outlet gauge" is a gauge']);
+		expect(one({ op: 'demandObject.add', demandObject: { ...o, nodeId: 'zz' } }).problems).toEqual(['op 1 (demandObject.add): node zz not found']);
+		expect(one({ op: 'demandObject.add', demandObject: o }, withObject()).problems).toEqual([]);
+		expect(one({ op: 'demandObject.add', demandObject: { ...o, id: 'do1' } }, withObject()).problems).toEqual(['op 1 (demandObject.add): demand object id do1 is already in use']);
+		// A model rule the new object breaks (a demand per unit with no count) is a problem, and nothing is added.
+		const bad = one({ op: 'demandObject.add', demandObject: { ...o, count: null } });
+		expect(bad.problems).toEqual([expect.stringMatching(/^op 1 \(demandObject\.add\): demand object "Stock": a demand per unit needs a count/)]);
+		expect(bad.input.model.demandObjects).toBeUndefined();
+	});
+
+	it('the new object is modelled: its unit takes its demand on top of its crops', () => {
+		const b = base();
+		const o = demandObject('do2', 'B', { monthlyM3Day: new Array(12).fill(250), returnPct: 0 });
+		const before = runModel(b).summary.farms.find((n) => n.nodeId === 'B')!;
+		const after = runModel(one({ op: 'demandObject.add', demandObject: o }, b).input).summary.farms.find((n) => n.nodeId === 'B')!;
+		// Farm B has no crops, so its whole demand is the object's 250 m³/day.
+		expect(before.avgDemandM3Day).toBe(0);
+		expect(after.avgDemandM3Day).toBeCloseTo(250, 6);
+		expect(after.demandObjects!.map((x) => [x.id, x.avgDemandM3Day])).toEqual([['do2', expect.closeTo(250, 6)]]);
+	});
+
+	it('demandObject.set changes one field; a name is trimmed and a schedule rebuilt from its known fields', () => {
+		const r = applyScenario(withObject(), [set('name', '  New town '), set('returnPct', 0.2), set('monthlyM3Day', new Array(12).fill(120))]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.demandObjects![0]).toMatchObject({ name: 'New town', returnPct: 0.2, monthlyM3Day: new Array(12).fill(120) });
+		const window = { label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5, extra: 1 };
+		const s = one(set('schedule', [window]), withObject());
+		expect(s.problems).toEqual([]);
+		expect(s.input.model.demandObjects![0]!.schedule).toEqual([{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 }]);
+		expect(one(set('count', 5, 'zz'), withObject()).problems).toEqual(['op 1 (demandObject.set): demand object zz not found']);
+		expect(one(set('nodeId', 'B'), withObject()).problems).toEqual(['op 1 (demandObject.set): "nodeId" is not a demand-object field a scenario can set']);
+		expect(one(set('lossPct', 1), withObject()).problems).toEqual(['op 1 (demandObject.set): lossPct must be at least 0 and below 1']);
+		// A schedule window the model rules refuse (a yearly span with no dates) is a problem.
+		expect(one(set('schedule', [{ ...window, span: 'yearly' }]), withObject()).problems).toEqual([expect.stringMatching(/^op 1 \(demandObject\.set\): demand object "Town": schedule window 1/)]);
+	});
+
+	it('consecutive demandObject.set ops on one object are one edit group: monthly to per unit in any order', () => {
+		const toPerUnit = [set('sizing', 'perUnit'), set('count', 2000), set('litresPerUnitDay', 230), set('monthlyM3Day', null)];
+		for (const ops of [toPerUnit, [...toPerUnit].reverse()]) {
+			const r = applyScenario(withObject(), ops);
+			expect(r.problems).toEqual([]);
+			expect(r.input.model.demandObjects![0]).toMatchObject({ sizing: 'perUnit', count: 2000, litresPerUnitDay: 230, monthlyM3Day: null });
+		}
+		// Positive control: the sizing alone breaks the rule, and is skipped.
+		expect(applyScenario(withObject(), [set('sizing', 'perUnit')]).problems).toEqual([expect.stringMatching(/^op 1 \(demandObject\.set\): .*needs a count/)]);
+		// A group that breaks a rule is skipped whole, named by the object.
+		const broken = applyScenario(withObject(), [set('destination', 'external'), set('priority', 'last')]);
+		expect(broken.problems).toEqual([expect.stringMatching(/^ops 1–2 \(demandObject\.set, "Town"\): .*piped out of the catchment/)]);
+		expect(broken.input.model.demandObjects![0]!.priority).toBe('first');
+		// Another object's op ends the group.
+		const b = withObject();
+		b.model.demandObjects!.push(demandObject('do2', 'B'));
+		expect(applyScenario(b, [set('sizing', 'perUnit'), set('count', 10, 'do2'), set('count', 10), set('litresPerUnitDay', 100)]).problems).toHaveLength(1);
+		// A last group still breaking a rule is what a next op meets (scenarioSteps' after), so a form can finish it.
+		expect(scenarioSteps(withObject(), [set('sizing', 'perUnit')]).after.model.demandObjects![0]!.sizing).toBe('perUnit');
+	});
+
+	it('demandObject.remove takes the object out; a removed node takes its objects with it', () => {
+		expect(one({ op: 'demandObject.remove', demandObjectId: 'do1' }, withObject()).input.model.demandObjects).toEqual([]);
+		expect(one({ op: 'demandObject.remove', demandObjectId: 'zz' }, withObject()).problems).toEqual(['op 1 (demandObject.remove): demand object zz not found']);
+		const gone = applyScenario(base(), [{ op: 'demandObject.add', demandObject: demandObject('do2', 'B') }, { op: 'node.remove', nodeId: 'B' }]);
+		expect(gone.input.model.demandObjects).toEqual([]);
+		expect(gone.applied[1]!.notes).toContain('dropped 1 demand object(s)');
+	});
+
+	it('is classified by the object’s unit', () => {
+		const b = withObject();
+		expect(classifyOp({ op: 'demandObject.add', demandObject: demandObject('do2', 'A') }, ['A'], b)).toBe('proposal');
+		expect(classifyOp({ op: 'demandObject.add', demandObject: demandObject('do2', 'B') }, ['A'], b)).toBe('baseline');
+		expect(classifyOp(set('count', 1), ['A'], b)).toBe('proposal');
+		expect(classifyOp(set('count', 1), ['B'], b)).toBe('baseline');
+		expect(classifyOp({ op: 'demandObject.remove', demandObjectId: 'do1' }, ['A'], b)).toBe('proposal');
+		expect(classifyOp({ op: 'demandObject.remove', demandObjectId: 'do1' }, ['B'], b)).toBe('baseline');
+		// Without the input it can't see whose object it is: baseline.
+		expect(classifyOp(set('count', 1), ['A'])).toBe('baseline');
+		// An object added on a node the scenario added is the proposal's (classifyScenario counts the new node as owned).
+		const newFarm = node('N', { name: 'New farm', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 9 });
+		expect(classifyScenario(base(), [{ op: 'node.add', node: newFarm }, { op: 'demandObject.add', demandObject: demandObject('do9', 'N') }], [])).toEqual(['proposal', 'proposal']);
+	});
+
+	it('the validator rebuilds the object from its known fields and names each bad one', () => {
+		const o = demandObject('do2', 'A');
+		const { ops, errors } = validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...o, extra: 'x' } }]);
+		expect(errors).toEqual([]);
+		expect(ops[0]).toEqual({ op: 'demandObject.add', demandObject: o });
+		const { note: _note, ...noNote } = o;
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: noNote }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...o, category: 'mine', returnPct: 2 } }]).errors).toEqual([
+			'ops[0].demandObject.category: must be one of domestic, municipal, industrial, livestock, irrigation, external, other',
+			'ops[0].demandObject.returnPct: must be at most 1'
+		]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...o, schedule: [{ span: 'always' }] } }]).errors).toEqual(['ops[0].demandObject.schedule: window 1: label missing']);
+		expect(validateScenarioOps([{ op: 'demandObject.set', demandObjectId: 'do1', field: 'id', value: 'x' }]).errors).toEqual(['ops[0].field: is not a demand-object field a scenario can set']);
+		expect(validateScenarioOps([{ op: 'demandObject.set', demandObjectId: 'do1', field: 'priority', value: 'never' }]).errors).toEqual(['ops[0].value: must be one of first, shared, last']);
+		expect(validateScenarioOps([{ op: 'demandObject.remove' }]).errors).toEqual(['ops[0].demandObjectId: missing']);
+	});
+});
+
 describe('classifyOp', () => {
 	const owned = ['A'];
 	const b = base();
@@ -1676,8 +1809,8 @@ describe('mask: names (an application judged in its applicant’s namespace, WP-
 
 describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and counts")', () => {
 	// The applicant owns A. Hidden: nodes B and C, crop c2 (on C), transfer t2
-	// (C → B), land-cover patch lc1 (on B) and borehole bh1 (on C). t1 (C → A)
-	// touches A, so they see it.
+	// (C → B), land-cover patch lc1 (on B), borehole bh1 and demand object do1
+	// (both on C). t1 (C → A) touches A, so they see it.
 	function baseM(): ModelInput {
 		const b = base();
 		b.model.crops.push({ id: 'c2', name: 'Pecans', cropFactor: new Array(12).fill(0.6) });
@@ -1686,9 +1819,10 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		b.model.boreholes = [
 			{ id: 'bh1', nodeId: 'C', name: 'Secret hole', capacityM3Day: 100, annualCapM3: null, mode: 'emergency', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
 		];
+		b.model.demandObjects = [demandObject('do1', 'C', { name: 'Secret town' })];
 		return b;
 	}
-	const mask: ScenarioMask = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: ['c2'], transfers: ['t2'], landCover: ['lc1'], boreholes: ['bh1'] };
+	const mask: ScenarioMask = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: ['c2'], transfers: ['t2'], landCover: ['lc1'], boreholes: ['bh1'], demandObjects: ['do1'] };
 	const apply = (ops: ScenarioOp[], b = baseM()) => applyScenario(b, ops, { mask });
 	/** What the applicant is told: what applied (with its notes) and the problems, the probed id written as ID. */
 	const told = (r: ReturnType<typeof applyScenario>, id: string) => JSON.stringify([r.applied, r.problems]).replaceAll(id, 'ID');
@@ -1698,6 +1832,8 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		['transfer.remove', 't2', (id) => ({ op: 'transfer.remove', transferId: id })],
 		['landCover.remove', 'lc1', (id) => ({ op: 'landCover.remove', patchId: id })],
 		['borehole.remove', 'bh1', (id) => ({ op: 'borehole.remove', boreholeId: id })],
+		['demandObject.remove', 'do1', (id) => ({ op: 'demandObject.remove', demandObjectId: id })],
+		['demandObject.set', 'do1', (id) => ({ op: 'demandObject.set', demandObjectId: id, field: 'count', value: 10 })],
 		['cropArea.set', 'c2', (id) => ({ op: 'cropArea.set', nodeId: 'A', cropId: id, areaM2: 10 })]
 	];
 
@@ -1722,10 +1858,11 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 				op: 'borehole.add',
 				borehole: { id, nodeId: 'A', name: 'New hole', capacityM3Day: 50, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
 			})
-		]
+		],
+		['demandObject', 'do1', (id) => ({ op: 'demandObject.add', demandObject: demandObject(id, 'A', { name: 'Secret town' }) })]
 	];
 	const listOf = (x: ModelInput, kind: string) =>
-		(({ crop: x.model.crops, transfer: x.model.transfers, landCover: x.model.landCover ?? [], borehole: x.model.boreholes ?? [] }) as Record<string, { id: string }[]>)[kind]!;
+		(({ crop: x.model.crops, transfer: x.model.transfers, landCover: x.model.landCover ?? [], borehole: x.model.boreholes ?? [], demandObject: x.model.demandObjects ?? [] }) as Record<string, { id: string }[]>)[kind]!;
 
 	it.each(reusing)('a new %s reusing a hidden id applies exactly as a free one, and moves to a fresh id', (kind, hidden, op) => {
 		// Frozen: masking and restoring never touch the base.
@@ -1765,7 +1902,7 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(apply([{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes).toEqual(['dropped 1 transfer(s)']);
 		expect(apply([{ op: 'node.remove', nodeId: 'B' }]).applied[0]!.notes).toEqual([]);
 		// Positive control: unmasked, every count.
-		expect(applyScenario(baseM(), [{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes).toEqual(['dropped 2 crop area(s)', 'dropped 2 transfer(s)', 'dropped 1 borehole(s)']);
+		expect(applyScenario(baseM(), [{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes).toEqual(['dropped 2 crop area(s)', 'dropped 2 transfer(s)', 'dropped 1 borehole(s)', 'dropped 1 demand object(s)']);
 		expect(applyScenario(baseM(), [{ op: 'node.remove', nodeId: 'B' }]).applied[0]!.notes).toEqual(['dropped 1 transfer(s)', 'dropped 1 land-cover patch(es)']);
 		// Their own farm still counts what is theirs, and the EWR table sited there (settings are theirs to see).
 		expect(apply([{ op: 'node.remove', nodeId: 'A' }]).applied[0]!.notes).toEqual([

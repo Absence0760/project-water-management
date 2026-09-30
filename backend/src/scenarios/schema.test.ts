@@ -33,6 +33,16 @@ describe('checkOps', () => {
 		const bh = { id: 'bh', nodeId: a, name: 'BH', capacityM3Day: 1, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 };
 		expect(checkOps([{ op: 'borehole.add', borehole: bh }, { op: 'borehole.remove', boreholeId: 'x' }]).errors).toEqual(['ops[0].borehole.id: must be a UUID', 'ops[1].boreholeId: must be a UUID']);
 		expect(checkOps([{ op: 'borehole.add', borehole: { ...bh, id: b } }]).errors).toEqual([]);
+		// Demand-object ops (engine ≥ 1.39.0): the new object's id and unit, and the object set or removed.
+		const dobj = { id: 'do', nodeId: 'farm', name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(1), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' };
+		expect(
+			checkOps([
+				{ op: 'demandObject.add', demandObject: dobj },
+				{ op: 'demandObject.set', demandObjectId: 'x', field: 'count', value: 1 },
+				{ op: 'demandObject.remove', demandObjectId: 'y' }
+			]).errors
+		).toEqual(['ops[0].demandObject.id: must be a UUID', 'ops[0].demandObject.nodeId: must be a UUID', 'ops[1].demandObjectId: must be a UUID', 'ops[2].demandObjectId: must be a UUID']);
+		expect(checkOps([{ op: 'demandObject.add', demandObject: { ...dobj, id: b, nodeId: a } }, { op: 'demandObject.remove', demandObjectId: b }]).errors).toEqual([]);
 		// A non-id value of transfer.set is not an id.
 		expect(checkOps([{ op: 'transfer.set', transferId: t, field: 'priority', value: 3 }]).errors).toEqual([]);
 		// demand.scale (issue #53 R1): each node it names, by its place in the list; none named is every farm.

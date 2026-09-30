@@ -9,6 +9,7 @@ import { DAM_AREA_EXPONENT, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Bore
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
+	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
 	SCALABLE_SERIES_KINDS,
@@ -18,6 +19,9 @@ import {
 	allocationOpIssues,
 	allowed,
 	cropFieldError,
+	demandObjectFieldError,
+	demandObjectOpIssues,
+	demandObjectValue,
 	demandScaleError,
 	ewrRuleTableOpIssues,
 	isIsoDate,
@@ -75,13 +79,14 @@ export interface ScenarioResult {
 
 /**
  * What an application's ops must not see (roadmap WP-3.3, docs/scenarios.md
- * § Applications): the nodes, crops, transfers, land-cover patches and
- * boreholes its applicant can't see. The ops apply to the base with:
+ * § Applications): the nodes, crops, transfers, land-cover patches,
+ * boreholes, demand objects and registered volumes its applicant can't see. The ops apply to the base with:
  *
  *  - each hidden node under the anonymous name the applicant sees it by
  *    (`nodes`: id → "Farm 3"); node ids stay, the applicant sees them;
- *  - each hidden crop, transfer, land-cover patch and borehole under an
- *    opaque id (and a hidden crop or borehole under an opaque name), chosen
+ *  - each hidden crop, transfer, land-cover patch, borehole, demand object
+ *    and registered volume under an opaque id (and a hidden crop, borehole or
+ *    demand object under an opaque name), chosen
  *    so no op mentions it: an op that targets or reuses a hidden item's id
  *    or name meets exactly what it meets for a free one;
  *  - counts of hidden items left out of the notes (`dropped 2 crop area(s)`),
@@ -103,6 +108,8 @@ export interface ScenarioMask {
 	boreholes?: readonly string[];
 	/** Registered volumes (engine ≥ 1.35.0, allocation.set): those on units the applicant can't see. */
 	allocations?: readonly string[];
+	/** Demand objects (engine ≥ 1.39.0, demandObject.*): those on units the applicant can't see. */
+	demandObjects?: readonly string[];
 }
 
 /** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #90). */
@@ -129,7 +136,7 @@ export interface ApplyOptions {
 	mask?: ScenarioMask;
 }
 
-type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole' | 'allocation';
+type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole' | 'allocation' | 'demandObject';
 type Named = { id: string; name: string };
 type Identified = { id: string; name?: string };
 interface Masked {
@@ -158,9 +165,10 @@ const ID_LISTS = {
 	transfer: (m: ModelInput['model']) => m.transfers as Identified[],
 	landCover: (m: ModelInput['model']) => (m.landCover ?? []) as Identified[],
 	borehole: (m: ModelInput['model']) => (m.boreholes ?? []) as Identified[],
-	allocation: (m: ModelInput['model']) => (m.allocations ?? []) as Identified[]
+	allocation: (m: ModelInput['model']) => (m.allocations ?? []) as Identified[],
+	demandObject: (m: ModelInput['model']) => (m.demandObjects ?? []) as Identified[]
 } as const;
-const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes', allocation: 'allocations' } as const;
+const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes', allocation: 'allocations', demandObject: 'demandObjects' } as const;
 
 /**
  * A copy of `model` with the masked nodes under their mask names and the
@@ -188,7 +196,7 @@ function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly
 		return t;
 	};
 	const crops = new Map<string, [string, string]>();
-	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map(), allocation: new Map() } as Masked['ids'];
+	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map(), allocation: new Map(), demandObject: new Map() } as Masked['ids'];
 	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
 		const hidden = new Set(mask[MASK_KEY[kind]] ?? []);
 		if (!hidden.size) continue;
@@ -208,8 +216,8 @@ function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly
 }
 
 /**
- * Hidden items back under their real ids (and a hidden borehole under its
- * real name): an item an op added under a hidden one's id first moves to a
+ * Hidden items back under their real ids (and a hidden borehole or demand
+ * object under its real name): an item an op added under a hidden one's id first moves to a
  * fresh id (`${id}-2`, …), so the hidden one keeps the id the base knows it by.
  */
 function restoreIds(m: ModelInput['model'], masked: Masked, out: MaskedReId[]) {
@@ -233,8 +241,8 @@ function restoreIds(m: ModelInput['model'], masked: Masked, out: MaskedReId[]) {
 			const h = hidden.get(x.id);
 			if (!h) continue;
 			x.id = h.id;
-			// A crop's name comes back through unmask (suffixed if an op took it); a borehole's name is not unique.
-			if (kind === 'borehole') x.name = h.name!;
+			// A crop's name comes back through unmask (suffixed if an op took it); a borehole's or demand object's name is not unique.
+			if (kind === 'borehole' || kind === 'demandObject') x.name = h.name!;
 		}
 		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = hidden.get(a.cropId)?.id ?? a.cropId;
 	}
@@ -462,7 +470,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)', (p) => see.item(p.id));
 			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
 			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
-			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId));
+			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId) && see.item(o.id));
 			// Registered volumes (engine ≥ 1.35.0) stay, as the file keeps them: the run lists them as on no unit
 			// (notInRunAllocationIds). Said here so the change isn't silent; counted only where the caller sees them.
 			const orphaned = (m.allocations ?? []).filter((a) => a.nodeId === n.id && see.item(a.id)).length;
@@ -585,6 +593,33 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			m.boreholes = m.boreholes!.filter((b) => b.id !== op.boreholeId);
 			break;
 		}
+		case 'demandObject.add': {
+			const { demandObject: o, issues } = demandObjectOpIssues(op.demandObject);
+			if (!o) fail(`the demand object isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
+			if ((m.demandObjects ?? []).some((x) => x.id === o!.id)) fail(`demand object id ${o!.id} is already in use`);
+			const n = findNode(d, o!.nodeId);
+			if (n.kind !== 'farm') fail(`a demand object is on a hydrological unit; "${n.name}" is ${n.kind === 'user' ? 'an other water user' : 'a gauge'}`);
+			// How its fields fit together (sizing, destination, schedule) is a model rule, checked after the op.
+			m.demandObjects = [...(m.demandObjects ?? []), { ...o!, name: o!.name.trim() }];
+			break;
+		}
+		case 'demandObject.set': {
+			const o = (m.demandObjects ?? []).find((x) => x.id === op.demandObjectId) ?? fail(`demand object ${op.demandObjectId} not found`);
+			// Written by the allowlist's own name for the field, never the op's text.
+			const field = allowed(DEMAND_OBJECT_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a demand-object field a scenario can set`);
+			const e = demandObjectFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			// No schedule, null and an empty one run the same (engine ≥ 1.17.0): clearing a schedule the object hasn't got leaves it as it is.
+			const noSchedule = (v: unknown) => v === undefined || v === null || (Array.isArray(v) && v.length === 0);
+			if (field === 'schedule' && noSchedule(op.value) && noSchedule(o.schedule)) break;
+			(o as unknown as Record<string, unknown>)[field] = demandObjectValue(field, op.value);
+			break;
+		}
+		case 'demandObject.remove': {
+			if (!(m.demandObjects ?? []).some((x) => x.id === op.demandObjectId)) fail(`demand object ${op.demandObjectId} not found`);
+			m.demandObjects = m.demandObjects!.filter((x) => x.id !== op.demandObjectId);
+			break;
+		}
 		case 'settings.set': {
 			const e = settingsValueError(op.path, op.value);
 			if (e) fail(`${op.path} ${e}`);
@@ -704,11 +739,16 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 
 /**
  * Do ops `a` and `b` (in that order) belong to one edit? Consecutive
- * `node.set` ops on the same node do: the network rules are checked once,
- * after the last of them (docs/scenarios.md § Edit groups).
+ * `node.set` ops on the same node do, and (engine ≥ 1.39.0) consecutive
+ * `demandObject.set` ops on the same demand object: the network rules are
+ * checked once, after the last of them (docs/scenarios.md § Edit groups).
  */
 const sameGroup = (a: ScenarioOp | undefined, b: ScenarioOp | undefined): boolean =>
-	a?.op === 'node.set' && b?.op === 'node.set' && typeof a.nodeId === 'string' && a.nodeId === b.nodeId;
+	(a?.op === 'node.set' && b?.op === 'node.set' && typeof a.nodeId === 'string' && a.nodeId === b.nodeId) ||
+	(a?.op === 'demandObject.set' && b?.op === 'demandObject.set' && typeof a.demandObjectId === 'string' && a.demandObjectId === b.demandObjectId);
+
+/** The ops that form edit groups (sameGroup): a last group of them that breaks a rule stays open for a next op. */
+const groupable = (op: ScenarioOp) => op.op === 'node.set' || op.op === 'demandObject.set';
 
 /** 1-based op numbers in words: `3`, `3–5` for a run, `3, 5` otherwise. */
 function opNumbers(indices: readonly number[]): string {
@@ -760,11 +800,14 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 		const after = structureIssues(draft);
 		const introduced = [...new Set([...after].filter(([k]) => !issues.has(k)).map(([k, text]) => (masked && hiddenRule(k, masked) ? MASKED_RULE : text)))];
 		if (introduced.length) {
-			// One op: `op 3 (node.set)`, as always. Several: `ops 3–5 (node.set, "Upper farm")`, the node named as it stood before them.
-			const nodeName = () => cur.model.nodes.find((n) => n.id === (op as { nodeId?: unknown }).nodeId)?.name ?? '';
-			const label = group.length === 1 ? `op ${group[0]!.index + 1} (${kind})` : `ops ${opNumbers(group.map((g) => g.index))} (${kind}, "${nodeName()}")`;
+			// One op: `op 3 (node.set)`, as always. Several: `ops 3–5 (node.set, "Upper farm")`, the node (or demand object) named as it stood before them.
+			const targetName = () =>
+				op.op === 'demandObject.set'
+					? ((cur.model.demandObjects ?? []).find((o) => o.id === op.demandObjectId)?.name ?? '')
+					: (cur.model.nodes.find((n) => n.id === (op as { nodeId?: unknown }).nodeId)?.name ?? '');
+			const label = group.length === 1 ? `op ${group[0]!.index + 1} (${kind})` : `ops ${opNumbers(group.map((g) => g.index))} (${kind}, "${targetName()}")`;
 			problems.push(`${label}: ${introduced.join('; ')}`);
-			if (index === ops.length - 1 && op.op === 'node.set') pending = draft;
+			if (index === ops.length - 1 && groupable(op)) pending = draft;
 			draft = cur;
 		} else {
 			cur = draft;
@@ -835,7 +878,7 @@ const seniorUser = (n: NetworkNode) => n.kind === 'user' && (n.userPriority ?? '
  *
  * `ownedNodeIds` are the applicant's own nodes, plus any the scenario added
  * (classifyScenario adds those for you). `input` is the input the op applies
- * to; ops that target a transfer, land-cover patch or registered volume by
+ * to; ops that target a transfer, land-cover patch, borehole, demand object or registered volume by
  * id, or remove or move a node, need it to see which nodes they touch, and
  * are 'baseline' without it. `addedCropIds` are the crops the scenario itself
  * added (classifyScenario passes them): changing or removing one of those is
@@ -925,6 +968,15 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'borehole.remove': {
 			const b = input?.model.boreholes?.find((x) => x.id === op.boreholeId);
 			return ok(!!b && mine(b.nodeId));
+		}
+		// A demand object is supplied from its unit's own dam, river pump and boreholes (model.md §2.7f):
+		// one on the applicant's unit is theirs to propose, like a borehole; one on another's unit is baseline.
+		case 'demandObject.add':
+			return ok(mine(op.demandObject?.nodeId));
+		case 'demandObject.set':
+		case 'demandObject.remove': {
+			const o = input?.model.demandObjects?.find((x) => x.id === op.demandObjectId);
+			return ok(!!o && mine(o.nodeId));
 		}
 		case 'demand.scale':
 			// Only the author's own nodes, named: without nodeIds it scales every farm (or user) of the catchment.

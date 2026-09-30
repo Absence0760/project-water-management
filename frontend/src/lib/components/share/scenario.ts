@@ -120,6 +120,12 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('A new borehole on {unit}', { unit: unit(op.borehole.nodeId) });
 		case 'borehole.remove':
 			return t('A borehole removed');
+		case 'demandObject.add':
+			return t('A new water use that isn’t a crop on {unit}', { unit: unit(op.demandObject.nodeId) });
+		case 'demandObject.set':
+			return t('A water use that isn’t a crop changed: {field}', { field: op.field });
+		case 'demandObject.remove':
+			return t('A water use that isn’t a crop removed');
 		case 'settings.set':
 			return t('A catchment setting changed: {path}', { path: op.path });
 		case 'series.scale':

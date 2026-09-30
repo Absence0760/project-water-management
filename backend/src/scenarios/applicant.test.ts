@@ -152,6 +152,8 @@ describe('applicationMask', () => {
 		expect(mask.boreholes).toEqual(['b2']);
 		// Registered volumes (engine ≥ 1.35.0): a neighbour's, and one on no unit, are hidden too.
 		expect(mask.allocations).toEqual(['a2', 'a3']);
+		// Demand objects (engine ≥ 1.39.0): the neighbour's village.
+		expect(mask.demandObjects).toEqual(['d2']);
 	});
 
 	it('answers an op on a hidden item’s id exactly as on a free one, and reuse of one moves the new item (assessor only)', () => {
@@ -161,12 +163,14 @@ describe('applicationMask', () => {
 			['p2', (id: string) => ({ op: 'landCover.remove' as const, patchId: id })],
 			['b2', (id: string) => ({ op: 'borehole.remove' as const, boreholeId: id })],
 			['a2', (id: string) => ({ op: 'allocation.remove' as const, allocationId: id })],
-			['a3', (id: string) => ({ op: 'allocation.remove' as const, allocationId: id })]
+			['a3', (id: string) => ({ op: 'allocation.remove' as const, allocationId: id })],
+			['d2', (id: string) => ({ op: 'demandObject.remove' as const, demandObjectId: id })],
+			['d2', (id: string) => ({ op: 'demandObject.set' as const, demandObjectId: id, field: 'count' as const, value: 20 })]
 		] as const) {
 			expect(apply([op(hidden)]).problems).toEqual([expect.stringMatching(/not found$/)]);
 			expect(told(apply([op(hidden)]), hidden)).toBe(told(apply([op('free')]), 'free'));
 			// Positive control: their own item of the same kind is found.
-			expect(apply([op(({ t2: 't1', p2: 'p1', b2: 'b1', a2: 'a1', a3: 'a1' } as const)[hidden])]).problems).toEqual([]);
+			expect(apply([op(({ t2: 't1', p2: 'p1', b2: 'b1', a2: 'a1', a3: 'a1', d2: 'd1' } as const)[hidden])]).problems).toEqual([]);
 		}
 		const addHole = (id: string) => ({
 			op: 'borehole.add' as const,
@@ -177,6 +181,14 @@ describe('applicationMask', () => {
 		expect(reused.reIds).toEqual([{ kind: 'borehole', id: 'b2', as: 'b2-2' }]);
 		// Their own borehole's id is theirs to see: reusing it is refused, as they would expect.
 		expect(apply([addHole('b1')]).problems).toEqual(['op 1 (borehole.add): borehole id b1 is already in use']);
+		// A demand object (engine ≥ 1.39.0) the same way; the neighbour's keeps its id and name.
+		const addObject = (id: string) => ({ op: 'demandObject.add' as const, demandObject: { ...base.model.demandObjects![0]!, id, name: 'New cottages' } });
+		const object = apply([addObject('d2')]);
+		expect(object.problems).toEqual([]);
+		expect(told(object, 'd2')).toBe(told(apply([addObject('free')]), 'free'));
+		expect(object.reIds).toEqual([{ kind: 'demandObject', id: 'd2', as: 'd2-2' }]);
+		expect(object.input.model.demandObjects!.find((o) => o.id === 'd2')).toEqual(base.model.demandObjects![1]);
+		expect(apply([addObject('d1')]).problems).toEqual(['op 1 (demandObject.add): demand object id d1 is already in use']);
 	});
 
 	it('answers a rename to a hidden name exactly as a rename to a free one (the oracle closed)', () => {

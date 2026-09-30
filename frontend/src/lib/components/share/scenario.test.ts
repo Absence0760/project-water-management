@@ -107,6 +107,26 @@ describe('changeRows', () => {
 		]);
 	});
 
+	it('words the demand-object ops (engine ≥ 1.39.0) without an object’s name, since one may be on another unit', () => {
+		const o = { id: 'd', nodeId: 'n-other', name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' } as const;
+		const ops: ScenarioOp[] = [
+			{ op: 'demandObject.add', demandObject: { ...o, nodeId: OWN, name: 'Cottages' } },
+			{ op: 'demandObject.add', demandObject: o },
+			{ op: 'demandObject.set', demandObjectId: 'd', field: 'returnPct', value: 0.2 },
+			{ op: 'demandObject.remove', demandObjectId: 'd' }
+		];
+		const rows = changeRows(scenario({ ops, classified: null }));
+		expect(rows.map((r) => sp(r.text))).toEqual([
+			'A new water use that isn’t a crop on Rooikloof',
+			'A new water use that isn’t a crop on another hydrological unit',
+			'A water use that isn’t a crop changed: returnPct',
+			'A water use that isn’t a crop removed'
+		]);
+		expect(JSON.stringify(rows)).not.toContain('Neighbour village');
+		// Without its run's classes, the rule on the op alone: an object on their own unit is the proposal.
+		expect(rows.map((r) => r.cls)).toEqual(['proposal', 'baseline', 'baseline', 'baseline']);
+	});
+
 	it('takes the class its run applied when it has one for every op', () => {
 		expect(changeRows(scenario({ classified: ['baseline', 'baseline'] })).map((r) => r.cls)).toEqual(['baseline', 'baseline']);
 		// A list that doesn't line up with the ops is ignored.

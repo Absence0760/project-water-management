@@ -16,6 +16,11 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_CURVE_MAX_ROWS,
+	DEMAND_OBJECT_CATEGORIES,
+	DEMAND_OBJECT_DESTINATIONS,
+	DEMAND_OBJECT_PRIORITIES,
+	DEMAND_OBJECT_SIZINGS,
+	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
 	LAND_COVER_CLASSES,
 	PE_KINDS,
@@ -30,6 +35,8 @@ import {
 	type AccumulationMode,
 	type Borehole,
 	type CropDef,
+	type DemandObject,
+	type DemandScheduleWindow,
 	type FlowShareMethod,
 	type LandCoverPatch,
 	type NetworkNode,
@@ -39,6 +46,7 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
+import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS } from '../network/demandSchedule';
 import {
 	EWR_CHARGE_SOURCES,
 	EWR_NATURAL_SOURCES,
@@ -673,6 +681,123 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 }
 
 // ---------------------------------------------------------------------------
+// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.39.0)
+// ---------------------------------------------------------------------------
+
+/**
+ * The fields `demandObject.set` may change: every field of a demand object
+ * but `id`, and not `nodeId` (an object on another unit is removing it and
+ * adding one there, as a land-cover patch). How the fields fit together (a
+ * monthly demand needs 12 values, a demand per unit a count and litres,
+ * nothing returns from one piped out, the schedule's windows) is a model
+ * rule (modelRules.ts), so consecutive `demandObject.set` ops on one object
+ * are one edit group, checked once after the last (docs/scenarios.md § Edit groups).
+ */
+export const DEMAND_OBJECT_SET_FIELDS = [
+	'name',
+	'category',
+	'sizing',
+	'monthlyM3Day',
+	'count',
+	'litresPerUnitDay',
+	'lossPct',
+	'monthlyFactor',
+	'returnPct',
+	'priority',
+	'destination',
+	'enabled',
+	'schedule',
+	'note'
+] as const;
+export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
+
+const DEMAND_WINDOW_KEYS = ['label', 'span', 'from', 'to', 'easterFrom', 'easterTo', 'weekdays', 'factor'] as const;
+const DEMAND_WINDOW_CHECKS: Record<(typeof DEMAND_WINDOW_KEYS)[number], Check> = {
+	label: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be text of at most 200 characters'),
+	span: oneOf(DEMAND_SCHEDULE_SPANS),
+	from: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
+	to: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
+	easterFrom: nullable((v) => (Number.isInteger(v) ? null : 'must be a whole number of days')),
+	easterTo: nullable((v) => (Number.isInteger(v) ? null : 'must be a whole number of days')),
+	weekdays: nullable((v) =>
+		Array.isArray(v) && v.length >= 1 && v.length <= 7 && v.every((d) => Number.isInteger(d) && d >= 1 && d <= 7) ? null : 'must be 1–7 ISO weekdays (1 = Monday … 7 = Sunday)'
+	),
+	factor: range(0, DEMAND_SCHEDULE_MAX_FACTOR)
+};
+/**
+ * A demand object's schedule, as the backend's model schema takes it: up to
+ * DEMAND_SCHEDULE_MAX_WINDOWS windows, each with all its fields. What they
+ * mean (real dates, spans in order) is a model rule (scheduleWindowProblem).
+ */
+const demandSchedule: Check = nullable((v) => {
+	if (!Array.isArray(v)) return 'must be a list of schedule windows';
+	if (v.length > DEMAND_SCHEDULE_MAX_WINDOWS) return `must be at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows`;
+	for (let i = 0; i < v.length; i++) {
+		const w = v[i];
+		if (!isObj(w)) return `window ${i + 1}: must be an object`;
+		for (const k of DEMAND_WINDOW_KEYS) {
+			const e = k in w ? DEMAND_WINDOW_CHECKS[k](w[k]) : 'missing';
+			if (e) return `window ${i + 1}: ${k} ${e}`;
+		}
+	}
+	return null;
+});
+/** A checked schedule rebuilt from each window's known fields (null stays null). */
+const scheduleOf = (v: unknown): DemandScheduleWindow[] | null =>
+	Array.isArray(v) ? v.map((w) => Object.fromEntries(DEMAND_WINDOW_KEYS.map((k) => [k, cloneValue((w as Obj)[k])])) as unknown as DemandScheduleWindow) : null;
+
+const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
+	name: (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 200 ? null : 'must be a name of 1–200 characters'),
+	category: oneOf(DEMAND_OBJECT_CATEGORIES),
+	sizing: oneOf(DEMAND_OBJECT_SIZINGS),
+	monthlyM3Day: nullable(monthlyOf(nonNeg)),
+	count: nullable(nonNeg),
+	litresPerUnitDay: nullable(nonNeg),
+	lossPct: (v) => (isNum(v) && v >= 0 && v < 1 ? null : 'must be at least 0 and below 1'),
+	monthlyFactor: nullable(monthlyOf(nonNeg)),
+	returnPct: frac,
+	priority: oneOf(DEMAND_OBJECT_PRIORITIES),
+	destination: oneOf(DEMAND_OBJECT_DESTINATIONS),
+	enabled: boolean,
+	schedule: demandSchedule,
+	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
+};
+
+const DEMAND_OBJECT_FIELD_CHECK = checksOf(DEMAND_OBJECT_FIELD_CHECKS);
+
+export function demandObjectFieldError(field: string, value: unknown): string | null {
+	const c = checkFor(DEMAND_OBJECT_FIELD_CHECK, field);
+	return c ? c(value) : `"${field}" is not a demand-object field a scenario can set`;
+}
+
+/** A demandObject.set value as applyScenario writes it: a name trimmed, a schedule rebuilt from its windows' known fields. */
+export function demandObjectValue(field: DemandObjectSetField, value: unknown): unknown {
+	return field === 'name' ? (value as string).trim() : field === 'schedule' ? scheduleOf(value) : cloneValue(value);
+}
+
+const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
+/** Left out = no schedule (every day at its month's demand), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'note']);
+
+/**
+ * A `demandObject.add` op's object rebuilt from its known fields (its
+ * schedule's windows too), with every problem as `[field, message]`: the
+ * validator's and applyScenario's one check.
+ */
+export function demandObjectOpIssues(raw: unknown): { demandObject: DemandObject | null; issues: [string, string][] } {
+	if (!isObj(raw)) return { demandObject: null, issues: [['', 'must be a demand object']] };
+	const errs: string[] = [];
+	const o = pickFields(raw, DEMAND_OBJECT_FIELDS, DEMAND_OBJECT_OPTIONAL, '', errs) as Obj;
+	const issues: [string, string][] = errs.map((e) => {
+		const [k, ...rest] = e.slice(1).split(': ');
+		return [k!, rest.join(': ')];
+	});
+	if (issues.length) return { demandObject: null, issues };
+	if ('schedule' in o) o.schedule = scheduleOf(o.schedule);
+	return { demandObject: o as unknown as DemandObject, issues };
+}
+
+// ---------------------------------------------------------------------------
 // node.insert (engine ≥ 1.35.0)
 // ---------------------------------------------------------------------------
 
@@ -696,6 +821,9 @@ export type TransferSetOp = { [F in TransferSetField]: { op: 'transfer.set'; tra
 export type SettingsSetOp = { [P in SettingsPath]: { op: 'settings.set'; path: P; value: SettingsPathValues[P] } }[SettingsPath];
 export type CropSetOp = { [F in CropSetField]: { op: 'crop.set'; cropId: string; field: F; value: Exclude<CropDef[F], undefined> } }[CropSetField];
 export type LandCoverSetOp = { [F in LandCoverSetField]: { op: 'landCover.set'; patchId: string; field: F; value: LandCoverPatch[F] } }[LandCoverSetField];
+export type DemandObjectSetOp = {
+	[F in DemandObjectSetField]: { op: 'demandObject.set'; demandObjectId: string; field: F; value: Exclude<DemandObject[F], undefined> };
+}[DemandObjectSetField];
 
 /**
  * One override. A closed union: every op targets an existing element by id
@@ -729,6 +857,11 @@ export type ScenarioOp =
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
 	| { op: 'borehole.remove'; boreholeId: string }
+	/** A new demand object on a unit (engine ≥ 1.39.0): a town, household, livestock or any other demand that isn't a crop. */
+	| { op: 'demandObject.add'; demandObject: DemandObject }
+	/** Change one field of a demand object (engine ≥ 1.39.0). */
+	| DemandObjectSetOp
+	| { op: 'demandObject.remove'; demandObjectId: string }
 	| SettingsSetOp
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
 	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
@@ -799,6 +932,9 @@ export const SCENARIO_OP_NAMES = [
 	'landCover.set',
 	'borehole.add',
 	'borehole.remove',
+	'demandObject.add',
+	'demandObject.set',
+	'demandObject.remove',
 	'settings.set',
 	'series.scale',
 	'demand.scale',
@@ -987,6 +1123,24 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'borehole.remove':
 			op = { op: 'borehole.remove', boreholeId: need('boreholeId', id) as string };
+			break;
+		case 'demandObject.add': {
+			const { demandObject, issues } = demandObjectOpIssues(raw.demandObject);
+			for (const [k, m] of issues) errors.push(`${where}.demandObject${k ? `.${k}` : ''}: ${m}`);
+			op = { op: 'demandObject.add', demandObject: demandObject as DemandObject };
+			break;
+		}
+		case 'demandObject.set': {
+			const demandObjectId = need('demandObjectId', id);
+			const field = need('field', (v) => (typeof v === 'string' && DEMAND_OBJECT_FIELD_CHECK.byName.has(v) ? null : 'is not a demand-object field a scenario can set'));
+			const known = allowed(DEMAND_OBJECT_SET_FIELDS, field);
+			if (known) need('value', (v) => demandObjectFieldError(known, v));
+			// A schedule is rebuilt from its windows' known fields; any other value is kept as sent.
+			op = { op: 'demandObject.set', demandObjectId, field, value: known === 'schedule' && errors.length === n ? scheduleOf(raw.value) : cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
+		case 'demandObject.remove':
+			op = { op: 'demandObject.remove', demandObjectId: need('demandObjectId', id) as string };
 			break;
 		case 'settings.set': {
 			const path = need('path', (v) =>

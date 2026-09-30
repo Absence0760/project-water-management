@@ -1530,6 +1530,13 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
+// 2026-09-30  total 1301 → 1306 KB (engine 1.39.0, the demand-object scenario
+//             ops: measured 1303 with main @ 285c1c75). demandObject.add /
+//             .set / .remove in the engine's scenario code (validator with the
+//             schedule's window checks, apply, classification, the mask kind),
+//             their "Add a change" forms, field specs and descriptions,
+//             override mode recording object edits, and three share-page lines
+//             in both catalogues. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1540,7 +1547,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1301,
+	totalCodeKb: 1306,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

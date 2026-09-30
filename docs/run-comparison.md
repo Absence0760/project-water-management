@@ -454,7 +454,11 @@ name**:
   matched by id, then by their "from → to" route. **Individual boreholes**
   (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
   name): added, removed, or changed with the old and new capacity, mode,
-  target, annual cap and depletion.
+  target, annual cap and depletion. **Demand objects** (engine ≥ 1.7.0) are
+  matched by id, then by (unit name, object name): added, removed, or
+  changed with the old and new category, size, return, priority and
+  schedule, and (from engine 1.39.0, since a scenario's `demandObject.set`
+  may change it) the note saying where its number comes from, spaces aside.
 
 ### Series and metrics only one run has
 
