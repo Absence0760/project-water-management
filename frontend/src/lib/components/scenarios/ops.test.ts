@@ -1,7 +1,7 @@
 import { applyScenario, blankEwrRuleTable, classifyOp, classifyScenario, type EwrRuleTable, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { OUTLET_SITE, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
+import { NEW_ALLOCATION, OUTLET_SITE, allocationDraft, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -300,6 +300,82 @@ describe('buildOp', () => {
 		expect(remove).toEqual({ ok: true, op: { op: 'borehole.remove', boreholeId } });
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the borehole “BH new”');
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
+	});
+});
+
+describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {
+	const m = base().model;
+	let n = 0;
+	const id = () => `22222222-0000-4000-8000-${String(++n).padStart(12, '0')}`;
+	const draft = (o: Partial<OpDraft>): OpDraft => ({ ...emptyDraft(o.kind), ...o });
+	const built = (o: Partial<OpDraft>): ScenarioOp => {
+		const r = buildOp(draft(o), m, id);
+		expect(r.ok, JSON.stringify(r)).toBe(true);
+		return (r as { op: ScenarioOp }).op;
+	};
+
+	it('moves a node and inserts one above the nodes ticked', () => {
+		const move = built({ kind: 'node.move', nodeId: LO, downstreamNodeId: UP });
+		expect(move).toEqual({ op: 'node.move', nodeId: LO, downstreamNodeId: UP });
+		expect(describeOp(move, base())).toBe('Move “Lower farm”: drains into Outflow gauge → Upper farm');
+		expect(applyScenario(base(), [move]).problems).toEqual([]);
+		// Insert a dam above the gauge, taking both farms; a stale tick (a node that doesn't drain there) is dropped.
+		const ins = built({ kind: 'node.insert', newKind: 'farm', newName: ' Weir dam ', downstreamNodeId: G, damCapacityM3: '50000', upstreamNodeIds: [UP, LO, G] });
+		expect(ins).toMatchObject({ op: 'node.insert', node: { name: 'Weir dam', kind: 'farm', downstreamNodeId: G, damCapacityM3: 50_000 }, upstreamNodeIds: [UP, LO] });
+		expect(describeOp(ins, base())).toBe('Insert the hydrological unit “Weir dam” above Outflow gauge, taking what Upper farm, Lower farm drain, dam 50\u202f000 m³');
+		expect(applyScenario(base(), [ins]).problems).toEqual([]);
+		expect(buildOp(draft({ kind: 'node.insert', newName: 'X', downstreamNodeId: G, upstreamNodeIds: [] }), m, id)).toEqual({ ok: false, error: 'Tick the nodes that will drain into the new one (with none, add a node instead)' });
+		expect(buildOp(draft({ kind: 'node.move', nodeId: LO }), m, id)).toEqual({ ok: false, error: 'Pick what it will drain into' });
+	});
+
+	it('changes and removes a crop, changes a land-cover patch, removes a rule table', () => {
+		const factors = built({ kind: 'crop.set', cropId: CROP, field: 'cropFactor', value: '0.5' });
+		expect(factors).toEqual({ op: 'crop.set', cropId: CROP, field: 'cropFactor', value: new Array(12).fill(0.5) });
+		expect(describeOp(factors, base())).toBe('Crop Orchard: Crop factors 0.6 every month → 0.5 every month');
+		const eff = built({ kind: 'crop.set', cropId: CROP, field: 'irrigationEfficiency', value: '85' });
+		expect(eff).toEqual({ op: 'crop.set', cropId: CROP, field: 'irrigationEfficiency', value: 0.85 });
+		expect(describeOp(eff, base())).toBe("Crop Orchard: Irrigation efficiency the hydrological unit's → 85 %");
+		expect(buildOp(draft({ kind: 'crop.set', cropId: CROP, field: 'irrigationEfficiency', value: '120' }), m, id)).toEqual({ ok: false, error: 'Must be at most 100 %' });
+		const rm = built({ kind: 'crop.remove', cropId: CROP });
+		expect(describeOp(rm, base())).toBe('Remove the crop “Orchard”, and its area on 1 hydrological unit');
+		const patch = built({ kind: 'landCover.set', patchId: P, field: 'factors', value: '20; 35' });
+		expect(patch).toEqual({ op: 'landCover.set', patchId: P, field: 'factors', value: { mar: 0.2, lowFlow: 0.35 } });
+		expect(describeOp(patch, base())).toBe("Lower farm, Pine plantation (mature) patch of 1.5 km²: Reductions (MAR, low flow) the class's → MAR −20 %, low flow −35 %");
+		const density = built({ kind: 'landCover.set', patchId: P, field: 'densityPct', value: '10' });
+		expect(density).toEqual({ op: 'landCover.set', patchId: P, field: 'densityPct', value: 0.1 });
+		for (const op of [factors, eff, rm, patch, density]) expect(applyScenario(base(), [op]).problems, op.op).toEqual([]);
+		const withTable = base();
+		withTable.settings = { ...withTable.settings, ewrRules: [{ ...blankEwrRuleTable(null), source: 'Invented desktop run', sourceKind: 'desktop' }] };
+		const drop = built({ kind: 'ewrRule.remove', ewrSite: OUTLET_SITE });
+		expect(drop).toEqual({ op: 'ewrRule.remove', siteNodeId: null });
+		expect(describeOp(drop, withTable)).toBe('Reserve rule table at the outlet (Outflow gauge): “Invented desktop run” (Desktop estimate, low confidence) → removed');
+		expect(applyScenario(withTable, [drop]).problems).toEqual([]);
+		expect(classifyOp(drop, [UP, LO, G], withTable)).toBe('baseline');
+	});
+
+	it('sets a new registered volume or replaces one, and removes one, in the form\'s words', () => {
+		const add = built({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alSource: 'surface', alVolume: '120000', alFrom: '2020-10-01', months: [3, 1, 2], alRate: '0.05' });
+		expect(add).toMatchObject({ op: 'allocation.set', allocation: { nodeId: UP, waterSource: 'surface', volumeM3PerYear: 120_000, validFrom: '2020-10-01', months: [1, 2, 3], maxRateM3s: 0.05 } });
+		expect('storageM3' in (add as { allocation: object }).allocation).toBe(false);
+		expect(describeOp(add, base())).toBe('Upper farm: add a registered volume, surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		const withVolume = applyScenario(base(), [add]);
+		expect(withVolume.problems).toEqual([]);
+		expect(classifyScenario(base(), [add], [UP])).toEqual(['proposal']);
+		expect(classifyScenario(base(), [add], [LO])).toEqual(['baseline']);
+		// Picking it starts the form from what it holds; a replacement keeps its id.
+		const a = withVolume.input.model.allocations![0]!;
+		const refill = allocationDraft(emptyDraft('allocation.set'), a);
+		expect(refill).toMatchObject({ nodeId: UP, alVolume: '120000', alFrom: '2020-10-01', months: [1, 2, 3], alRate: '0.05', alStorage: '' });
+		const replace = (buildOp({ ...refill, allocationId: a.id, alVolume: '90000' }, withVolume.input.model, id) as { op: ScenarioOp }).op;
+		expect(replace).toEqual({ op: 'allocation.set', allocation: { ...a, volumeM3PerYear: 90_000 } });
+		expect(describeOp(replace, withVolume.input)).toBe('Upper farm: registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s → surface 90\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		const rm = built({ kind: 'allocation.remove', allocationId: a.id });
+		expect(describeOp(rm, withVolume.input)).toBe('Upper farm: remove the registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');
+		expect(applyScenario(withVolume.input, [rm]).problems).toEqual([]);
+		// The engine's refusals in the form's words.
+		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alVolume: '-1' }), m, id)).toEqual({ ok: false, error: 'The volume must be a number of m³ from 0 to below 10¹²' });
+		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, nodeId: UP, alVolume: '1', alFrom: '2022-01-01', alTo: '2021-01-01' }), m, id)).toEqual({ ok: false, error: 'Valid to is before valid from (2022-01-01)' });
+		expect(buildOp(draft({ kind: 'allocation.set', allocationId: NEW_ALLOCATION, alVolume: '1' }), m, id)).toEqual({ ok: false, error: 'Pick the hydrological unit or other user it is for' });
 	});
 });
 
