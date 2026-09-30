@@ -6,6 +6,7 @@
 	// generated from docs/engine-audit.md.
 	import { validationStatement, type RunSummary } from '@water-management/engine';
 	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { ENGINE_BUILD } from './engineBuild';
 
 	let {
 		summary,
@@ -21,7 +22,8 @@
 	} = $props();
 	const h = $derived(`h${headingLevel}`);
 
-	const v = $derived(validationStatement({ summary, engineVersion, legacy }));
+	// The site build's record (release builds only); validationStatement shows it only for its own engine version.
+	const v = $derived(validationStatement({ summary, engineVersion, legacy }, ENGINE_BUILD));
 	const uid = `vs-${Math.random().toString(36).slice(2, 9)}`;
 	const metric = (x: number | null, id: string) => (x == null ? '–' : id === 'pbias' ? `${fmtNum(x, 1)} %` : fmtNum(x, 2));
 </script>
@@ -83,8 +85,14 @@
 	{#if v.flaggedYears.length}
 		<p>Water years whose catchment rain reads far below CHIRPS:</p>
 		<ul>
-			{#each v.flaggedYears as y (y.start)}<li>{fmtDay(y.start)} – {y.end ? fmtDay(y.end) : '…'}: {fmtNum(y.ratio * 100)} % of CHIRPS</li>{/each}
+			{#each v.flaggedYears as y (`${y.seriesKind}:${y.start}`)}<li>{fmtDay(y.start)} – {y.end ? fmtDay(y.end) : '…'}: {fmtNum(y.ratio * 100)} % of CHIRPS</li>{/each}
 		</ul>
+		{#if v.flaggedYearsMayBeCut}
+			<p class="muted small" data-testid="flagged-years-cut">
+				This run was made on engine {v.engineVersion}, which kept only the first {v.flaggedYears.length} flagged years here; the data-quality line
+				below names every one. Re-run it on the current engine for the full list.
+			</p>
+		{/if}
 	{/if}
 	{#if v.dataQuality.length}
 		<ul>
