@@ -6,7 +6,7 @@
 // (docs/engine-audit.md R1).
 import { curveAreaAt, fixedReleaseFloor, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
-import { groundwaterDay, startsWaterYear, type PlanBorehole } from './boreholes';
+import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { pumpsRiverToday, riverRoom, surfaceSplit, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
 import type { PlanOfftake } from './offtake';
@@ -516,6 +516,35 @@ function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null
 	return [s, g];
 }
 
+/**
+ * The most a transfer's destination draws from its dam today for its demand
+ * `D` (the transfer room, audit N4; engine ≥ 1.31.0, issue #200): `D` less
+ * what its primary direct boreholes pump first (each unit's room today,
+ * together within the groundwater allocation room), capped at the surface
+ * allocation room. Both are known before the transfers are settled, and the
+ * bound holds whatever else supplies part of `D` later in the day: off-take
+ * water and a river-first pump depend on today's river flow, which isn't known
+ * yet, so they are not taken off (docs/model.md §2.6). `used` and `alloc` are
+ * the node's volumes so far this water year (null without boreholes or a cap).
+ */
+export function damDrawBound(node: PlanNode, D: number, used: Float64Array | null, alloc: Float64Array | null, t: number): number {
+	let primary = 0;
+	const b = node.borehole;
+	if (b && used) {
+		for (let k = 0; k < b.units.length; k++) {
+			const u = b.units[k]!;
+			if (!u.toDam && u.mode === 1) primary += unitRoom(u, used[k]!);
+		}
+	}
+	const c = node.allocationCap;
+	let s = Infinity;
+	if (c && alloc) {
+		if (c.groundwater) primary = Math.min(primary, Math.max(0, c.groundwater[t]! - alloc[1]!));
+		if (c.surface) s = Math.max(0, c.surface[t]! - alloc[0]!);
+	}
+	return Math.min(primary > 0 ? Math.max(0, D - primary) : D, s);
+}
+
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; captureAt?: number } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map((n, i) => {
@@ -611,6 +640,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (r.storageSet) r.storageSet[t] = startStorage(i, t) - (t === 0 ? nodes[i]!.initialStorageM3 : r.storage[t - 1]!);
 			}
 		}
+		// Annual borehole caps (WP-3.9) and allocation caps run per water year, October to September.
+		// Cleared before the transfers, whose room reads them (issue #200).
+		if (startsYear(t)) {
+			for (const u of bhUsed) u?.fill(0);
+			for (const u of allocUsed) u?.fill(0);
+		}
 		// [Transfers] "Draw from dam": uses the storage at the end of the
 		// previous day (Q, row N-1), so all transfers are settled before any farm
 		// irrigates, the source's own irrigation included (quirk Q3: the source
@@ -618,8 +653,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		//   v = MAX(0, MIN(source free, destination room, max daily))
 		// with source free = Q_src[t−1] − drawn today − reserve and destination
 		// room = cap_dst − (Q_dst[t−1] + rain on it − evaporation − seepage)
-		// + D_dst[t] + a fixed release's floor (engine ≥ 1.29.0) − scheduled
-		// into it today, so a transfer never pumps into a
+		// + the most its dam can be drawn today (damDrawBound: D_dst[t] less
+		// what its primary boreholes supply first, within an allocation cap;
+		// engine ≥ 1.31.0, issue #200) + a fixed release's floor (engine ≥
+		// 1.29.0) − scheduled into it today, so a transfer never pumps into a
 		// full dam only to spill, and one to a farm with no dam still serves its
 		// demand (audit N4). The dam's own gains and losses today (N2) count:
 		// they follow yesterday's storage alone, so they are known before the
@@ -657,6 +694,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
 				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
+				const draw = damDrawBound(dst, dstD, bhUsed[tr.to]!, allocUsed[tr.to]!, t);
 				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the
 				// room counts it as it would be with no inflow and nothing transferred in. For a dam that
 				// only receives, that is a lower bound of the day's release. One that also sends later
@@ -665,7 +703,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date).
 				const kd = capacityK(dst, t);
 				const rel = dst.release && dst.release.rule === 2 ? fixedReleaseFloor(dst.release, month[t]!, qStart - drawnToday[tr.to]!, kd === 1 ? dst.deadStorageM3 : dst.deadStorageM3 * kd) : 0;
-				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + dstD + rel - intoToday[tr.to]!);
+				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
 			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
@@ -723,11 +761,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 
 		const nat = naturalFlow[t]!;
 		const ewrT = ewr[t]!;
-		// Annual borehole caps (WP-3.9) run per water year, October to September.
-		if (startsYear(t)) {
-			for (const u of bhUsed) u?.fill(0);
-			for (const u of allocUsed) u?.fill(0);
-		}
 		for (let oi = 0; oi < order.length; oi++) {
 			const i = order[oi]!;
 			const node = nodes[i]!;

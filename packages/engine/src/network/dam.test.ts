@@ -2,7 +2,7 @@
 // destination (WP-3.5, docs/model.md §2.7a): hand-worked cases on a fixed
 // natural flow, the defaults leaving a run unchanged, and the invariants.
 import { describe, expect, it } from 'vitest';
-import type { DamCurvePoint, ModelInput, NetworkNode } from '../project';
+import type { Borehole, DamCurvePoint, ModelInput, NetworkNode, Transfer } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { checkInvariants, checkTransferLimits } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
@@ -367,5 +367,110 @@ describe('dam storage (WP-3.5)', () => {
 		const x = o.series.find((s) => s.nodeId === 'A' && s.key === 'dam_release')!;
 		x.values[5] = 150;
 		expect(checkInvariants(i, o)).toMatch(/release|balance|outflow/);
+	});
+});
+
+describe('transfer room (audit N4, issue #200)', () => {
+	// W (a full 50 000 m³ dam, no demand) sends to A (full, needs 300 m³/day) up to 864 m³/day, no evaporation.
+	const withTransfer = (a: Partial<NetworkNode> = {}, days = 30, need = 300): ModelInput => {
+		const i = input({ damInitialPct: 1, ...a }, { need, days, settings: { lakeEvapFactor: 0 } });
+		i.model.nodes = [...i.model.nodes, node('W', 'farm', 'G', { damCapacityM3: 50_000, damInitialPct: 1, pctUpstreamToDam: 0, pctRunoffToDam: 0 })];
+		i.model.transfers = [{ id: 't', fromNodeId: 'W', toNodeId: 'A', months: [1, 2, 3, 9, 10, 11, 12], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }];
+		return i;
+	};
+	const primary = (over: Partial<Borehole> = {}): Borehole => ({ id: 'b1', nodeId: 'A', name: 'BH1', capacityM3Day: 200, annualCapM3: 2_000, mode: 'primary', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0, ...over });
+	/** Tamper with day t's transfer, W → A, and return what checkTransferLimits says. */
+	const moved = (i: ModelInput, o: ReturnType<typeof run>, t: number, v: number) => {
+		const x = structuredClone(o);
+		x.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[t] = v;
+		x.series.find((s) => s.nodeId === 'W' && s.key === 'transfer')!.values[t] = -v;
+		return checkTransferLimits(i, x);
+	};
+
+	it('a full dam with no other source takes back its demand, and nothing spills (positive control)', () => {
+		const i = withTransfer();
+		const o = run(i, new Array(30).fill(0));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		const got = col(o, 'A', 'transfer')!;
+		for (let t = 0; t < d.length; t++) {
+			expect(d[t]).toBeGreaterThan(250);
+			expect(got[t]).toBeCloseTo(d[t]!, 9);
+		}
+		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+	});
+
+	it('a primary borehole: the room counts only the demand the dam meets, until its annual cap runs out', () => {
+		const i = withTransfer();
+		i.model.boreholes = [primary()];
+		const o = run(i, new Array(30).fill(0));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		const got = col(o, 'A', 'transfer')!;
+		const gw = col(o, 'A', 'groundwater_used')!;
+		for (let t = 0; t < d.length; t++) {
+			// 200 a day for the first 10 days (2 000 m³ a year), then nothing: the dam meets the rest.
+			expect(gw[t]).toBeCloseTo(t < 10 ? 200 : 0, 9);
+			expect(got[t]).toBeCloseTo(d[t]! - gw[t]!, 9);
+		}
+		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+		// The old room (the full demand) sent the borehole's 200 too, and it spilled: the check now refuses it.
+		expect(moved(i, o, 3, d[3]!)).toMatch(/received .* > its room/);
+		expect(moved(i, o, 3, d[3]! - 200)).toBeNull();
+	});
+
+	it("the primary borehole's annual volume clears on 1 October before the transfers are settled", () => {
+		// A January need of 600 m³/day is ~280 in September and ~380 in October, above the borehole's 200.
+		const i = withTransfer({}, 20, 600);
+		i.series.rain_catchment_mm!.startDate = '2021-09-21';
+		i.model.boreholes = [primary()];
+		const o = run(i, new Array(20).fill(0));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		const got = col(o, 'A', 'transfer')!;
+		const gw = col(o, 'A', 'groundwater_used')!;
+		// 21–30 September use the 2 000 m³; 1 October (day 10) pumps again, and the room already knows it.
+		for (let t = 0; t < d.length; t++) expect(d[t]).toBeGreaterThan(200);
+		expect(gw[9]).toBeCloseTo(200, 9);
+		expect(gw[10]).toBeCloseTo(200, 9);
+		for (let t = 0; t < d.length; t++) expect(got[t]).toBeCloseTo(d[t]! - gw[t]!, 9);
+		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+	});
+
+	it("an allocation cap: once the surface volume is used, the dam isn't drawn and the transfer stops", () => {
+		const i = withTransfer();
+		i.settings.allocationMode = 'cap';
+		i.model.allocations = [{ id: 's', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 3_000 }];
+		const o = run(i, new Array(30).fill(0));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		const got = col(o, 'A', 'transfer')!;
+		const room = col(o, 'A', 'allocation_room_surface')!;
+		for (let t = 0; t < d.length; t++) expect(got[t]).toBeCloseTo(Math.min(d[t]!, room[t]!), 9);
+		// Both sides of the cap are exercised: days with room for the whole demand, and days with none.
+		expect(room.some((r, t) => r >= d[t]!)).toBe(true);
+		const spent = room.findIndex((r) => r === 0);
+		expect(spent).toBeGreaterThan(0);
+		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+		expect(moved(i, o, spent, d[spent]!)).toMatch(/received .* > its room/);
+	});
+
+	it('river off-take water is still counted as unknown: it arrives after the transfers are settled (docs/model.md §2.6)', () => {
+		// U's runoff reaches A both down the river (not into A's dam) and through a 300 m³/day off-take, used first.
+		const i = withTransfer({ pctUpstreamToDam: 0, pctRunoffToDam: 0 });
+		const ot: Transfer = { id: 'o', fromNodeId: 'U', toNodeId: 'A', months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 300 / 86_400, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'capacity', topUpDam: false };
+		i.model.transfers = [...i.model.transfers, ot];
+		const o = run(i, new Array(30).fill(5_000));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		const used = col(o, 'A', 'offtake_used')!;
+		const got = col(o, 'A', 'transfer')!;
+		const spill = col(o, 'A', 'spill')!;
+		// The off-take meets the whole demand, the transfer still brings it, and it spills the same day.
+		for (let t = 0; t < d.length; t++) {
+			expect(used[t]).toBeCloseTo(d[t]!, 9);
+			expect(got[t]).toBeCloseTo(d[t]!, 9);
+			expect(spill[t]).toBeCloseTo(d[t]!, 6);
+		}
 	});
 });
