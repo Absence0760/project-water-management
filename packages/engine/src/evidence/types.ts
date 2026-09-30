@@ -10,7 +10,8 @@ import type { InputChange, RunInputsSnapshot } from '../compare';
 import type { Erratum } from '../liability/errata';
 import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
-import type { AllocationLimitBound, RunSummary } from '../project';
+import type { DemandSourceShare } from '../network/demandSources';
+import type { AllocationLimitBound, DemandObjectCategory, DemandObjectDestination, DemandObjectPriority, DemandObjectSizing, DemandObjectSource, RunSummary } from '../project';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import type { Band } from '../uncertainty/bands';
@@ -46,8 +47,13 @@ import type { ApplicantPrompts } from './prompts';
  * evidence-8: Appendix C's fixed prompts (`applicantStatement.prompts`: purpose and need,
  * mitigation, monitoring, each answered or empty for "Not given"; prompts.ts). A pack
  * drafted before it has no `prompts`: its Appendix C says the prompts aren't part of it.
+ * evidence-9: § 6 the applicant's demand objects (`demandObjects`, issue #259): each object
+ * on the applicant's units, or that the application adds, changes or removes, with its sizing,
+ * its source (engine ≥ 1.56.0) and the note on it, its demand in both runs, and the share of
+ * their demand by source, with a flag when most of it isn't from meter records. A pack drafted
+ * before it has no `demandObjects`, and its report has no § 6.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-8';
+export const EVIDENCE_REPORT_VERSION = 'evidence-9';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -455,6 +461,59 @@ export interface EvidenceServedUnit {
 	daysB: number | null;
 }
 
+/** What the application does to a demand object of the applicant's (§ 6, evidence-9). */
+export type EvidenceDemandObjectChange = 'added' | 'changed' | 'removed' | 'unchanged';
+
+/**
+ * One of the applicant's demand objects (§ 6, evidence-9): as the
+ * application ran it (as the baseline did, for one it removes). Its sizing,
+ * source and note are the model's, verbatim; the demand is the run's.
+ */
+export interface EvidenceDemandObject {
+	id: string;
+	name: string;
+	/** The unit (a farm node) that supplies it, and that unit's name in the run it is read from. */
+	nodeId: string;
+	unit: string;
+	category: DemandObjectCategory;
+	change: EvidenceDemandObjectChange;
+	/** false = kept on record, not modelled: no demand in the run. */
+	enabled: boolean;
+	sizing: DemandObjectSizing;
+	/** 'monthly': m³/day per water-year month (Oct–Sep); null under 'perUnit'. */
+	monthlyM3Day: number[] | null;
+	/** 'perUnit': how many, litres per unit per day, and losses (0–1); null (losses 0) under 'monthly'. */
+	count: number | null;
+	litresPerUnitDay: number | null;
+	lossPct: number;
+	priority: DemandObjectPriority;
+	destination: DemandObjectDestination;
+	/** Where its number comes from (engine ≥ 1.56.0); null = not recorded. */
+	source: DemandObjectSource | null;
+	/** The detail of the source (which meter, which strategy and year, which norm); '' = none given. */
+	note: string;
+	/** Mean demand over the run, m³/day; null when the run doesn't model it (absent, or disabled). */
+	demandA: number | null;
+	demandB: number | null;
+	/** Share of its demand supplied in the application, 0–1; null when not modelled there. */
+	suppliedB: number | null;
+}
+
+/** § 6 The applicant's demand objects (evidence-9). */
+export interface EvidenceDemandObjects {
+	/** Set when there is nothing to list: printed in the section's place (rule 3). */
+	notAssessed: string | null;
+	objects: EvidenceDemandObject[];
+	/**
+	 * Their demand in the application by source, the rule's order, not
+	 * recorded last (demandSourceShares over every listed object the
+	 * application models): the same shares as the run's demand-objects table.
+	 */
+	bySource: DemandSourceShare[];
+	/** Their whole mean demand in the application, m³/day. */
+	demandM3Day: number;
+}
+
 /** Per EWR site, the days units upstream got their whole demand while the site's EWR failed (§ 4, engine ≥ 1.33.0). */
 export interface EvidenceServedWhileFailing {
 	/** Set when the runs don't carry it: printed in the section's place. */
@@ -717,6 +776,8 @@ export interface EvidenceReport {
 	allocations: EvidenceAllocations;
 	/** Page 1's licence impact by year class (issue #53 R7, evidence-5); null for baseline evidence. Absent from an older pack's document. */
 	licenceImpact?: EvidenceLicenceImpact | null;
+	/** § 6: the applicant's demand objects and their sources (evidence-9); null for baseline evidence. Absent from an older pack's document, which has no § 6. */
+	demandObjects?: EvidenceDemandObjects | null;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;
