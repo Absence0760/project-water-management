@@ -1084,8 +1084,9 @@ rainfall feed", with a count when the feed wrote only some of its days):
 `SeriesMeta.feed`, read from `time_series.feed_id` / `feed_days` under RLS
 ([ui.md § Data](./ui.md#data)).
 
-Not built yet: the audit event per merge (WP-2.4), the debounced re-run after
-new data (WP-2.11), and a bounding-box config for CHIRPS (cells only).
+The audit event per merge (`series.merged`) and the debounced re-run after new
+data (WP-2.11) are built (see Merging above); a bounding-box config for CHIRPS
+is #69's last open item.
 
 ## Server-side reports
 
