@@ -2066,8 +2066,17 @@ note's link on the Summary, `notes.ts` `noteHref`).
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Where the number comes
   from**. Per unit: **Number of** people / head / units, **Litres per** person
-  / head / unit **a day** and **Distribution losses** (%). The line below gives
-  its mean m³/day as the engine sizes it; **Use October's demand for every
+  / head / unit **a day** and **Distribution losses** (%). A domestic or
+  municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
+  the number of people when it is sized per person, "none" when it is m³/day
+  by month) for its basic-needs floor, with a hint under it saying which
+  number a blank field counts. The line below gives
+  its mean m³/day as the engine sizes it, and for a domestic or municipal
+  object a second line (`demandObjectFloor.ts`) gives its **Basic-needs
+  floor** (m³/day, 25 litres a person a day, and whose people it counts),
+  says "at least its whole demand" when the floor is as large as the most it
+  asks for in any month (the engine's day floor is MIN(floor, demand)), or
+  says it has none until its people are entered; **Use October's demand for every
   month** fills a monthly row. **On/off schedule** (engine ≥ 1.17.0, issue
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
@@ -2086,7 +2095,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   yet and says so. After a run, the human-impact tables show **Demand
   objects**: per object its unit, priority, demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
-  one without) and returned (or "piped out").
+  one without) and returned (or "piped out"). When an object has a
+  basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
+  (l/day supplied at the tap, beside Supplied %: the municipal restriction
+  level, for display), **Basic-needs floor** (m³/day) and **Below the
+  floor** (the days, with the mean m³/day below it on a second line, stacked
+  so the table keeps its width); "–" on an object without one, which the
+  intro says means no floor (`HumanImpactTables.test.ts`,
+  `e2e/tests/demand-objects.spec.ts`).
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -4407,8 +4423,14 @@ read it before.
   "no demand" for a group with no demand (never a negative demand, which the
   client's sketch showed), "—" under 1 m³/day. A note under stage 2 names
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
-  cut beyond its equitable share, a senior user's charge that stands, or a
-  junior user's charge beyond what it takes. The share is the engine's
+  cut beyond its equitable share, a senior user's charge that stands, a
+  junior user's charge beyond what it takes, or what a unit's basic-needs
+  floor keeps of the cut (engine ≥ 1.44.0, issue #123: stage 2 never goes
+  below it, and the paragraph under the board says so; the per-farm table
+  badges the row in the same words, `basicNeedsNote`;
+  `e2e/tests/basic-needs-floor.spec.ts` seeds a unit whose EWR cut goes
+  beyond its share and checks the badge, the board's note and the volume
+  left at the floor). The share is the engine's
   equal one: every category is cut by the same %, which the client
   confirmed (O4, issue #90,
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
@@ -5113,7 +5135,10 @@ them scenarios).
   or remove a transfer, add or remove land cover, change a setting, scale
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
-  months; none ticked is all; `demand.scale`, issue #53 R1), set an EWR
+  months; none ticked is all; `demand.scale`, issue #53 R1; for units, from
+  engine 1.45.0, **Part of their demand**: all of it, the crops, or the
+  demand objects of one category, DWS's % per category, never below a
+  domestic or municipal object's basic-needs floor), set an EWR
   site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
   gauge marked as an EWR site, then the Settings tab's own table editor,
   starting from the site's table; always a baseline assumption,
@@ -5122,7 +5147,12 @@ them scenarios).
   reach (ticking the nodes draining there that will drain into it), change
   or remove a crop, change a land-cover patch (its reductions typed as
   "MAR %; low-flow %"), remove an EWR site's rule table, and set (new, or an
-  existing one filled in) or remove a registered volume
+  existing one filled in) or remove a registered volume; from engine 1.45.0
+  add a demand object (unit, name, category, and m³/day by month or a count
+  × litres a day, the rest at the category's defaults), change one field of
+  one (every field, labelled as on the Network tab's form; its on/off
+  schedule with the Network tab's own schedule editor, recorded whole) or
+  remove one
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
@@ -5167,9 +5197,11 @@ them scenarios).
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
-  change can express (a node's kind, the outlet moved, a demand object…) is
+  change can express (a node's kind, the outlet moved…) is
   listed there and disables Record until it is undone (a crop's factors, a
-  crop removed and what a node drains into record from engine 1.35.0); the
+  crop removed and what a node drains into record from engine 1.35.0, and a
+  demand object added, changed or removed, its schedule and people served
+  included, from engine 1.45.0); the
   tables' own problems ("Fix before saving") block it too. While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an

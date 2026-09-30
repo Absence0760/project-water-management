@@ -211,6 +211,10 @@ bottom:
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
    *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
    *"Fit record: parameters edited since the fit (x1)"*.
+   A demand object's line names its category, size, return, priority,
+   schedule and, from engine 1.44.0, the people it serves for its
+   basic-needs floor (*"…, serves 2 000 people"*), so a change of people
+   is listed like any other field.
    **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list
    of EWR sites differs (a gauge added or removed, turned into a unit, or
    ticked or unticked as an EWR site), one network line names both runs'
@@ -460,7 +464,11 @@ name**:
   matched by id, then by their "from → to" route. **Individual boreholes**
   (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
   name): added, removed, or changed with the old and new capacity, mode,
-  target, annual cap and depletion.
+  target, annual cap and depletion. **Demand objects** (engine ≥ 1.7.0) are
+  matched by id, then by (unit name, object name): added, removed, or
+  changed with the old and new category, size, return, priority and
+  schedule, and (from engine 1.45.0, since a scenario's `demandObject.set`
+  may change it) the note saying where its number comes from, spaces aside.
 
 ### Series and metrics only one run has
 

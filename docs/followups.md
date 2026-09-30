@@ -201,6 +201,18 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+- [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
+      engine 1.44.0, issue #123; to put to the hydrologist through #90).
+      A restriction what-if holds a domestic or municipal object's floor
+      (25 l a person a day), on a full-allocation run too, but a full
+      allocation alone rescales the object, floor included, to the unit's
+      registered volume (0 in a year with nothing registered), and the
+      results then never show it below basic needs. Domestic use and basic
+      human needs aren't licensed uses. Decide: (a) hold the floor after the
+      allocation factor on every day, or (b) keep the rescale and report the
+      floor from the demand before it, so those days show as below basic
+      needs. Either is a change to `allocations/mode.ts` `planAllocations`
+      or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -2439,8 +2451,8 @@ role and not before it.
         the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
         list re-applied to prove it gives back the edited model. Edits no op
         can express are named and block recording (a node's kind, the outlet
-        moved, demand objects); crop edits and removals, moves and inserts
-        record since the later ops below (engine 1.35.0).
+        moved); crop edits and removals, moves and inserts record since the
+        later ops below (engine 1.35.0), demand objects since engine 1.45.0.
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -3244,27 +3256,41 @@ from the WP:
       report. Trigger: the evidence report (or a WUA screen) needing to
       grade demands by source, or the first catchment with objects from
       more than one source.
-- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
-      #54 Q13, agreed by the client in issue #90). A restriction never cuts
-      domestic supply below 25 litres per person per day; cuts follow DWS's
-      % restrictions; a municipality's own restriction levels are an
-      optional display only. Nothing applies a floor today: a curtailment or
-      `demand.scale` cut reaches a domestic object like any other demand.
-      Durable fix: a per-object floor (population × 25 l/p/d, from a
-      `perUnit` object's count, or entered) that the drought restriction
-      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
-      shortfall reported apart, and an optional municipal-level label on the
-      share-the-pain board. Trigger: building WP-3.8's drought restriction
-      rule, or the first catchment with a domestic object under a
-      restriction.
-- [ ] **A scenario op for demand objects.** Scenarios can't add, change or
-      remove one (`demand.scale` on a unit scales its crops and objects
-      together); override mode says an object edit can't be recorded. Durable
-      fix: `demandObject.add` / `.remove` / `.set` ops (like `borehole.*`),
-      classified proposal / baseline by the object's unit, with a mask kind
-      for applicants, and per-category scaling for #53 R3's restriction
-      what-ifs. Trigger: the first licensing or restriction what-if that
-      needs a non-crop demand changed.
+- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
+      issue #123, migration 127; agreed in issue #90 Q13). A domestic or
+      municipal demand object has a floor of population × 25 l a day (its
+      `population`, or a per-person object's count); a `demand.scale`
+      restriction never cuts it below that, the curtailment report and the
+      share-the-pain board never leave its unit less than its floor once the
+      EWR is met (what the floor keeps is shown), and the results, the
+      summary CSV and the demand-objects table report the days and volume
+      below the floor apart from the shortfall, with the l/person/day
+      supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
+      stay one % for every category (#53 O4). Still to do when it is built:
+      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
+      same floor; it doesn't exist yet, so there is nothing to wire.
+- [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
+      related: issue #73 "Later scenario ops"). `demandObject.add` /
+      `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
+      add checks every field and puts the object on a unit only; set changes
+      one field (every one but `id` and `nodeId`, the schedule rebuilt from
+      its windows' fields), consecutive sets on one object are one edit
+      group (a sizing switched with its count and litres); the save rules
+      apply after each group. Classified by the object's unit (proposal on
+      an owned unit, as a borehole). Applicants: a `demandObjects` mask kind
+      (opaque id and name, `applicationMask`, the results' `reIds`), and
+      `node.remove` counts only objects they see. Override mode records an
+      object added, changed (per field, schedule included) or removed, and
+      "Add a change" has the three ops, the schedule included. Run comparison now lists a changed object note. The fuzz
+      generator and the invariants cover them.
+- [x] **Per-category scaling of demand** (engine 1.45.0, 2026-09-30; issue
+      #123's DWS % restrictions per category). `demand.scale` takes an
+      optional `part`: `crops` (a unit's crop water requirement) or a demand
+      object category (`domestic`, `municipal`, …), so a what-if cuts
+      domestic by 10 % and irrigation by 30 % as two ops. A part's factor
+      stacks on the unit's own and goes through the same basic-needs floor
+      (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
+      below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.

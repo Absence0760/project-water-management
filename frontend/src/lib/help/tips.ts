@@ -231,6 +231,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.schedule']
 	},
 	{
+		id: 'basic-needs-floor',
+		term: 'Basic-needs floor',
+		short: 'The 25 litres a person a day a restriction never cuts a domestic or municipal demand object below: people served × 25 l.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['demandObject.population']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
@@ -424,10 +432,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-factor',
 		term: 'Demand factor',
-		short: 'A scenario’s multiplier on what a hydrological unit or other water user would take, per month: 0.85 is 85 % of it.',
+		short: 'A scenario’s multiplier on what a unit or water user would take, per month (0.85 = 85 %); on a unit also per part (crops, a category).',
 		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
 		category: 'farm',
-		fields: ['node.demandFactor']
+		fields: ['node.demandFactor', 'node.partDemandFactor']
 	},
 	{
 		id: 'return-flow',

@@ -5,15 +5,16 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
-	import { BOREHOLE_MODES, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '$lib/nav/unsaved';
 	import { leavesScenario } from './leaves';
 	import { siteOptions } from '$lib/components/settings/ewrRules';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
-	import { CROP_FIELDS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
-	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
+	import DemandScheduleFields from '$lib/components/network/DemandScheduleFields.svelte';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
+	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
 		input,
@@ -51,6 +52,9 @@
 	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
 	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
 	const allocations = $derived(input.model.allocations ?? []);
+	// Demand objects (engine ≥ 1.45.0): on units only.
+	const objects = $derived(input.model.demandObjects ?? []);
+	const demandObject = $derived(objects.find((o) => o.id === d.demandObjectId));
 	// node.insert: the nodes that drain into the picked node, which the new one can sit above.
 	const insertAbove = $derived(nodes.filter((n) => nodes.some((x) => x.downstreamNodeId === n.id)));
 	const insertUps = $derived(nodes.filter((n) => d.downstreamNodeId && n.downstreamNodeId === d.downstreamNodeId));
@@ -65,6 +69,7 @@
 		// A crop's own efficiency left out is the unit's, as null is.
 		if (d.kind === 'crop.set') return crop && d.field ? ((crop as unknown as Record<string, unknown>)[d.field] ?? null) : undefined;
 		if (d.kind === 'landCover.set') return patch && d.field ? (patch as unknown as Record<string, unknown>)[d.field] : undefined;
+		if (d.kind === 'demandObject.set') return demandObject && d.field ? ((demandObject as unknown as Record<string, unknown>)[d.field] ?? null) : undefined;
 		return undefined;
 	});
 	const currentArea = $derived(
@@ -78,11 +83,14 @@
 		if (d.kind === 'settings.set') return SETTINGS_FIELDS.map((f) => ({ value: f.path, label: f.label }));
 		if (d.kind === 'crop.set') return CROP_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'landCover.set') return LAND_COVER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
+		if (d.kind === 'demandObject.set') return DEMAND_OBJECT_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		return [];
 	});
 
 	/** Start the value at what the field holds now, so a small change is a small edit. */
 	function prefill() {
+		// A demand object's schedule (engine ≥ 1.45.0 in the form): a copy of the object, edited by the Network form's own schedule editor.
+		d.doScheduleObject = d.kind === 'demandObject.set' && d.field === 'schedule' && demandObject ? (JSON.parse(JSON.stringify(demandObject)) as typeof demandObject) : null;
 		const s = draftSpec(d);
 		d.value = s ? valueText(s, current) : '';
 		d.months = s?.t === 'months' && Array.isArray(current) ? [...(current as number[])] : [];
@@ -335,6 +343,30 @@
 					{#each input.model.boreholes ?? [] as b (b.id)}<option value={b.id}>{nodeName(b.nodeId)}: {b.name}</option>{/each}
 				</select>
 			</div>
+		{:else if d.kind === 'demandObject.add'}
+			<div class="field">
+				<label for="op-node">Hydrological unit</label>
+				<select id="op-node" bind:value={d.nodeId}>
+					<option value="" disabled>Pick a hydrological unit</option>
+					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+				</select>
+			</div>
+		{:else if d.kind === 'demandObject.set' || d.kind === 'demandObject.remove'}
+			<div class="field grow">
+				<label for="op-object">Demand object</label>
+				<select
+					id="op-object"
+					value={d.demandObjectId}
+					onchange={(e) => {
+						d.demandObjectId = e.currentTarget.value;
+						prefill();
+					}}
+				>
+					<option value="" disabled>{objects.length ? 'Pick a demand object' : 'The model has no demand object'}</option>
+					{#each objects as o (o.id)}<option value={o.id}>{nodeName(o.nodeId)}: {o.name}</option>{/each}
+				</select>
+				{#if d.kind === 'demandObject.remove' && demandObject}<span class="hint" data-testid="op-current">Now: {objectText(demandObject)}</span>{/if}
+			</div>
 		{:else if d.kind === 'landCover.remove'}
 			<div class="field">
 				<label for="op-patch">Land-cover patch</label>
@@ -347,7 +379,7 @@
 			</div>
 		{/if}
 
-		{#if d.kind === 'node.set' || d.kind === 'transfer.set' || d.kind === 'settings.set' || d.kind === 'crop.set' || d.kind === 'landCover.set'}
+		{#if d.kind === 'node.set' || d.kind === 'transfer.set' || d.kind === 'settings.set' || d.kind === 'crop.set' || d.kind === 'landCover.set' || d.kind === 'demandObject.set'}
 			<div class="field">
 				<label for="op-field">{d.kind === 'settings.set' ? 'Setting' : 'Field'}</label>
 				<select
@@ -366,12 +398,26 @@
 		{/if}
 	</div>
 
+	{#if d.kind === 'demandObject.set' && d.field === 'schedule' && d.doScheduleObject}
+		<div class="form-row" data-testid="op-schedule">
+			<DemandScheduleFields object={d.doScheduleObject} readonly={false} />
+		</div>
+		<p class="hint">The schedule replaces the object's whole schedule; no windows is none (every day at its month's demand).</p>
+	{/if}
+
 	{#if spec && d.field}
 		<div class="form-row">
 			{@render valueField(spec, d.kind === 'node.set' ? NODE_FIELD_SPECS[d.field as keyof typeof NODE_FIELD_SPECS].label : (fieldOptions.find((f) => f.value === d.field)?.label ?? 'Value'))}
 		</div>
 		{#if d.kind === 'crop.set'}
 			<p class="hint">A crop's factors and efficiency apply on every hydrological unit that grows it, so changing a crop the scenario didn't add is a <strong>baseline assumption</strong>.</p>
+		{/if}
+		{#if d.kind === 'demandObject.set' && (d.field === 'sizing' || d.field === 'destination')}
+			<p class="hint">
+				{d.field === 'sizing'
+					? 'Add the count and litres (or the demand by month) as the next changes on this object: changes in a row on one object are checked together.'
+					: 'An object piped out returns nothing: set its share returned to 0 as the next change on this object.'}
+			</p>
 		{/if}
 	{/if}
 
@@ -569,6 +615,42 @@
 				<input id="op-density" type="text" inputmode="decimal" bind:value={d.densityPct} />
 			</div>
 		</div>
+	{:else if d.kind === 'demandObject.add'}
+		<div class="form-row">
+			<div class="field grow">
+				<label for="op-do-name">Name</label>
+				<input id="op-do-name" type="text" maxlength="200" bind:value={d.doName} />
+			</div>
+			<div class="field">
+				<label for="op-do-cat">Category</label>
+				<select id="op-do-cat" bind:value={d.doCategory}>
+					{#each DEMAND_OBJECT_CATEGORIES as c (c)}<option value={c}>{DEMAND_OBJECT_CATEGORY_LABEL[c]}</option>{/each}
+				</select>
+			</div>
+			<div class="field">
+				<label for="op-do-size">Demand given as</label>
+				<select id="op-do-size" bind:value={d.doSizing}>
+					<option value="monthly">m³/day by month</option>
+					<option value="perUnit">a count × litres a day</option>
+				</select>
+			</div>
+			{#if d.doSizing === 'monthly'}
+				<div class="field grow">
+					<label for="op-do-monthly">Demand by month (m³/day)</label>
+					<input id="op-do-monthly" type="text" inputmode="decimal" placeholder="12 values, Oct to Sep, or one for every month" bind:value={d.doMonthlyM3Day} />
+				</div>
+			{:else}
+				<div class="field">
+					<label for="op-do-count">Count (people, head or units)</label>
+					<input id="op-do-count" type="text" inputmode="decimal" bind:value={d.doCount} />
+				</div>
+				<div class="field">
+					<label for="op-do-litres">Litres per unit a day</label>
+					<input id="op-do-litres" type="text" inputmode="decimal" bind:value={d.doLitres} />
+				</div>
+			{/if}
+		</div>
+		<p class="hint">Its return share, priority and destination start at the category's defaults, as on the Network tab; change them with “Change a demand object” after adding it, or add it in the model tables (<strong>Edit in the model tables</strong>) to set everything, its schedule included, at once.</p>
 	{:else if d.kind === 'borehole.add'}
 		<div class="form-row">
 			<div class="field">
@@ -670,6 +752,15 @@
 					<option value="user">Other water users</option>
 				</select>
 			</div>
+			{#if d.demandCategory === 'farm'}
+				<div class="field">
+					<label for="op-demand-part">Part of their demand</label>
+					<select id="op-demand-part" bind:value={d.demandPart}>
+						<option value="">All of it (crops and demand objects)</option>
+						{#each DEMAND_PART_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					</select>
+				</div>
+			{/if}
 			<div class="field">
 				<label for="op-demand-pct">Demand (% of what they'd take)</label>
 				<input id="op-demand-pct" type="text" inputmode="decimal" placeholder="e.g. 85" bind:value={d.demandPct} />
@@ -689,7 +780,10 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
-		<p class="hint">Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply.</p>
+		<p class="hint">
+			Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply. A part's
+			cut stacks on the whole demand's, so DWS's % per category is one change per category; a domestic or municipal cut never goes below its basic-needs floor (25 l a person a day).
+		</p>
 	{/if}
 
 	<div class="actions">

@@ -39,6 +39,7 @@ import {
 	type CropDef,
 	type DemandObject,
 	DEMAND_OBJECT_CATEGORY_LABEL,
+	DEMAND_PARTS,
 	type FarmSummary,
 	type LandCoverPatch,
 	type NetworkNode,
@@ -1314,6 +1315,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Demand factor (engine ≥ 0.41.0, the demand.scale scenario op).
 		const df = optionalMonthlyChange(x.demandFactor, y.demandFactor, '×', 'none');
 		if (df) parts.push(`demand factor ${df}`);
+		// Demand factors by part (engine ≥ 1.45.0, demand.scale with a part): the crops' or one object category's.
+		for (const part of DEMAND_PARTS) {
+			const at = (n: NetworkNode) => (n.partDemandFactor && typeof n.partDemandFactor === 'object' && Object.hasOwn(n.partDemandFactor, part) ? n.partDemandFactor[part] : null);
+			const pf = optionalMonthlyChange(at(x), at(y), '×', 'none');
+			if (pf) parts.push(`${part} demand factor ${pf}`);
+		}
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
@@ -1436,7 +1443,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
 		const describe = (x: DemandObject) =>
-			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.enabled ? '' : ', off'}`;
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.enabled ? '' : ', off'}`;
 		// No schedule, null and an empty one all run the same (engine ≥ 1.17.0). Each window in a fixed
 		// key order, since a model read back from jsonb has its keys in Postgres's order, not the editor's.
 		const scheduleOf = (x: DemandObject) =>
@@ -1448,9 +1455,13 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [x, y] of objs.pairs) {
 			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
+			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
+			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
-			if (moved || scheduleChanged || fields.some((f) => !same(x[f], y[f])))
-				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}` });
+			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.45.0).
+			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();
+			if (moved || scheduleChanged || populationChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
+				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}${noteChanged ? `, note "${(x.note ?? '').trim()}" → "${(y.note ?? '').trim()}"` : ''}` });
 		}
 	}
 
@@ -1773,6 +1784,7 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		...NODE_FIELDS.map(([k, label]): [string, string] => [label, String(k)]),
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
+		...DEMAND_PARTS.map((p): [string, string] => [`${p} demand factor`, 'partDemandFactor']),
 		['dam release', 'damReleaseM3Day'],
 		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
 		['hands-off flow', 'handsOffM3Day'],

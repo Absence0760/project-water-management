@@ -32,7 +32,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
 	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true,
-	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
+	demandFactor: true, partDemandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
 	gaPropertyAreaHa: true, gaRateM3HaYear: true,
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true
@@ -53,7 +53,7 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 };
 const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
 	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
-	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, schedule: true, note: true
+	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, schedule: true, population: true, note: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,

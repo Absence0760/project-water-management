@@ -15,7 +15,7 @@ import { buildTopology } from '../network/topology';
 import { transferActiveMonths, transferRatesM3s } from '../network/transferRates';
 import { defaultProjectSettings, upgradeLegacyModel, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { randomInput } from '../testing/fuzz';
-import { checkAll, sameOutput } from '../testing/invariants';
+import { checkAll, floorLift, sameOutput } from '../testing/invariants';
 import { randomOps } from '../testing/scenarioFuzz';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { Rng } from '../random';
@@ -95,14 +95,18 @@ function baseFor(seed: number): ModelInput {
 describe('scenarios on random networks', () => {
 	it(`${CASES} random scenarios keep every engine invariant`, () => {
 		const failures: string[] = [];
+		// Demand-object ops (engine ≥ 1.45.0) that applied: the property is only as good as the ops it saw.
+		let objectOps = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
 			const base = baseFor(seed);
 			const ops = randomOps(base, seed);
-			const { input } = applyScenario(base, ops);
+			const { input, applied } = applyScenario(base, ops);
+			objectOps += applied.filter((a) => a.op.op.startsWith('demandObject.')).length;
 			const bad = checkAll(input, seed);
 			if (bad) failures.push(`seed ${seed}: ${bad}\n  ops: ${JSON.stringify(ops)}`);
 		}
 		expect(failures.join('\n\n')).toBe('');
+		expect(objectOps).toBeGreaterThan(0);
 	}, 300_000);
 
 	it(`${Math.max(20, Math.floor(CASES / 5))} random scenarios under a cap or full allocation keep every engine invariant (allocation.set / .remove reach the run)`, () => {
@@ -125,6 +129,7 @@ describe('scenarios on random networks', () => {
 	it(`no silent change over ${CASES * 4} random scenarios: every op that changes the input is an InputChange`, () => {
 		const failures: string[] = [];
 		let changed = 0;
+		let objectChanges = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES * 4 && failures.length < 3; seed++) {
 			const base = baseFor(seed);
 			const empty = applyScenario(base, []);
@@ -135,6 +140,7 @@ describe('scenarios on random networks', () => {
 				const r = applyScenario(cur, [op]);
 				if (resolved(r.input) !== resolved(cur)) {
 					changed++;
+					if (op.op.startsWith('demandObject.')) objectChanges++;
 					if (diffInputs(snapshot(cur), snapshot(r.input)).length === 0) failures.push(`seed ${seed}: silent change from ${JSON.stringify(op)}`);
 				}
 				// A skipped op changes nothing at all.
@@ -145,6 +151,7 @@ describe('scenarios on random networks', () => {
 		expect(failures.join('\n')).toBe('');
 		// The property is only as good as the changes it saw.
 		expect(changed).toBeGreaterThan(CASES * 4);
+		expect(objectChanges).toBeGreaterThan(0);
 	}, 300_000);
 
 	/** The 0-based ops a problem names: `op 3 (…)`, `ops 3–5 (…)` or `ops 3, 5 (…)` (1-based). */
@@ -212,6 +219,15 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 					continue;
 				}
 				targeted++;
+				// The basic-needs floor (engine ≥ 1.44.0): a full cut leaves each domestic and municipal
+				// object with people exactly MIN(floor, its demand), worked from the model (floorLift).
+				const lifted = D!.map((_, t) => floorLift(base, x, n.id, t, 0));
+				if (lifted.some((v) => v > 0)) {
+					D!.forEach((v, t) => expect(Math.abs(v - lifted[t]!), `seed ${seed} ${n.id} day ${t}: demand at the floor`).toBeLessThanOrEqual(1e-9 * Math.max(1, lifted[t]!)));
+					G!.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D![t]! * (1 + 1e-12) + 1e-12));
+					if (GW) GW.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: groundwater`).toBeLessThanOrEqual(G![t]! * (1 + 1e-12) + 1e-12));
+					continue;
+				}
 				expect(D!.every((v) => v === 0), `seed ${seed} ${n.id}: demand`).toBe(true);
 				expect(G!.every((v) => v === 0), `seed ${seed} ${n.id}: supplied`).toBe(true);
 				if (GW) expect(GW.every((v) => v === 0), `seed ${seed} ${n.id}: groundwater`).toBe(true);
@@ -234,9 +250,12 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D, G] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!, col(y, n.id, 'supplied')!];
+				// The basic-needs floor (engine ≥ 1.44.0): exactly k × the base's demand plus what the floor
+				// holds on a cut (k < 1), worked from the model (floorLift); nothing more.
 				for (let t = 0; t < D.length; t++) {
 					const k = months.includes(monthOfEpochDay(day0 + t)) ? factor : 1;
-					expect(Math.abs(D[t]! - k * D0[t]!), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
+					const want = k * D0[t]! + floorLift(base, x, n.id, t, k);
+					expect(Math.abs(D[t]! - want), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
 					expect(G[t]!, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D[t]! * (1 + 1e-12) + 1e-12);
 				}
 			}

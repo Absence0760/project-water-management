@@ -1550,14 +1550,29 @@
 //             Measured against main @ 82248f4e: 1,333,296 → 1,333,517 gzip
 //             bytes (+0.22 KB), in the evidence report's own lazy chunk; it
 //             fits the headroom left above, so no raise.
-// 2026-09-30  total 1309 → 1312 KB (engine 1.47.0, CR-23, the CHIRPS gap
+// 2026-09-30  total 1309 → 1313 KB (engine 1.44.0, issue #123, the basic-needs
+//             floor: People served on a demand object, the floor columns in
+//             the human-impact tables, the curtailment badge and board note;
+//             measured 1308 locally with #248 merged, main @ 564ede95; CI
+//             runs ~2 KB above that). Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1319 KB (engine 1.45.0, the demand-object scenario
+//             ops and demand.scale by part: demandObject.add / .set / .remove
+//             in the engine's scenario code (validator with the schedule's
+//             window checks, apply, classification, the mask kind) and
+//             demand.scale's part, their "Add a change" forms (the Network
+//             form's schedule editor now also in the form's chunk), field
+//             specs and descriptions, override mode recording object edits,
+//             and four share-page lines in both catalogues; measured 1314
+//             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+//             above that). Headroom ~3 KB.
+// 2026-09-30  total 1319 → 1322 KB (engine 1.47.0, CR-23, the CHIRPS gap
 //             map: its fit, month-block mapper and warnings in the engine's
 //             rain code, the shared month/season fit in quantileMap.ts,
 //             Settings' "CHIRPS quantile map" fieldset, the glossary entry,
 //             the fit-provenance line and the compare note, the snapshot
 //             lead and whole-month rule). Measured against main @ ac3b2ef4:
 //             1,338,970 → 1,342,592 gzip bytes (+3.54 KB), raised by that
-//             rounded down; headroom ~0.9 KB.
+//             rounded down, on top of the entries above.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1568,7 +1583,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1312,
+	totalCodeKb: 1322,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
