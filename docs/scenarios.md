@@ -383,8 +383,8 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, or a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, and a dam's survey and sediment (the dam as it is) |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
-| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own | baseline. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
-| `node.move` | owned, no land or manual flow share, not a gauge, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
+| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a senior other water user (the default priority) | baseline. A senior user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist, so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
+| `node.move` | owned, no land or manual flow share, not a gauge or a senior other water user, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
 | `crop.add` | always | |
 | `crop.set`, `crop.remove` | the crop is one the scenario itself added (`classifyScenario` passes them; `classifyOp`'s fourth argument) | baseline: a crop's factors and efficiency are agronomic data that apply on every farm growing it, farms the applicant may not see among them, so a change to one isn't theirs to propose (and classing by who grows it would tell an applicant whether a hidden farm does). Stopping a crop on their own farm is `cropArea.set` to 0, a proposal |
@@ -455,7 +455,9 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
   moves and inserts that apply and ones refused); and a land-free gauge
   inserted mid-river on 50 networks leaves every other node's series as they
   were (1e-9 relative), the reach shortfall aside, with every invariant
-  holding. `overrides.test.ts` has each later op's cases: what it does, its
+  holding (the outflow and the outlet's EWR included); and random scenarios
+  over bases under a cap or a full allocation keep every invariant, so a
+  scenario's volumes reach the allocation self-check. `overrides.test.ts` has each later op's cases: what it does, its
   problems, the base untouched, its run-comparison lines, its class
   (masked too), a cap run under a scenario's volume, and hidden volumes
   answering exactly as free ids.

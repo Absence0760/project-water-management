@@ -1006,6 +1006,10 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(classifyOp({ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
 		expect(classifyOp({ op: 'node.insert', node: { ...dam, kind: 'gauge' }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
 		expect(classifyOp({ op: 'node.insert', node: { ...dam, areaKm2: 1 }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
+		// A senior other water user (the default priority) curtails the farms above it (model.md §2.7c): not the proposal's to insert.
+		const user = node('U', { name: 'New town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(100) });
+		expect(classifyOp({ op: 'node.insert', node: user, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
+		expect(classifyOp({ op: 'node.insert', node: { ...user, userPriority: 'junior' }, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
 		// An inserted node is the scenario's own: moving it next is the proposal too.
 		expect(classifyScenario(base(), [{ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }, { op: 'node.move', nodeId: 'D', downstreamNodeId: 'A' }], [])).toEqual(['proposal', 'baseline']);
 		expect(classifyScenario(base(), [{ op: 'node.add', node: { ...dam, downstreamNodeId: 'B' } }, { op: 'node.move', nodeId: 'D', downstreamNodeId: 'A' }], [])).toEqual(['proposal', 'proposal']);
@@ -1103,14 +1107,20 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		const none = base();
 		none.model.landCover![0]!.areaKm2 = 0;
 		expect(texts(none, one({ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.9 }, none).input)).toEqual(['Farm B: land cover "pine" 0 km² → 0 km² condensed, its patches’ cover changed']);
-		// The same patches in another order are no change.
+		// The same patches in another order are no change, even where float sums depend on the order (0.1 + 0.2 + 0.3).
 		const two = base();
-		two.model.landCover!.push({ id: 'lc2', nodeId: 'B', coverClass: 'pine', areaKm2: 0.5, densityPct: 0.9, factors: null });
+		two.model.landCover = [0.1, 0.2, 0.3].map((a, i) => ({ id: `p${i}`, nodeId: 'B', coverClass: 'pine' as const, areaKm2: a, densityPct: 1, factors: i ? { mar: 0.1 * i, lowFlow: 0.2 } : null }));
 		const swapped = structuredClone(two);
 		swapped.model.landCover!.reverse();
 		expect(texts(two, swapped)).toEqual([]);
 		// Another class is another patch group: removed from one, added to the other.
 		expect(texts(base(), one({ op: 'landCover.set', patchId: 'lc1', field: 'coverClass', value: 'eucalyptus' }).input)).toHaveLength(2);
+	});
+
+	it('landCover.set keeps only a reduction’s two known keys', () => {
+		const op = { op: 'landCover.set', patchId: 'lc1', field: 'factors', value: { mar: 0.1, lowFlow: 0.2, junk: 1 } } as unknown as ScenarioOp;
+		expect(validateScenarioOps([op]).ops).toEqual([{ ...op, value: { mar: 0.1, lowFlow: 0.2 } }]);
+		expect(one(op).input.model.landCover![0]!.factors).toEqual({ mar: 0.1, lowFlow: 0.2 });
 	});
 
 	it('landCover.set refuses a missing patch, a bad value and nodeId; classified by the patch’s farm', () => {

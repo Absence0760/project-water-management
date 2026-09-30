@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
 import { buildTopology } from '../network/topology';
-import { transferRatesM3s } from '../network/transferRates';
+import { transferActiveMonths, transferRatesM3s } from '../network/transferRates';
 import { defaultProjectSettings, upgradeLegacyModel, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { randomInput } from '../testing/fuzz';
 import { checkAll, sameOutput } from '../testing/invariants';
@@ -68,8 +68,9 @@ function canonical(v: unknown): string {
 /**
  * The input as the engine and compare resolve it: settings merged, older node fields at their defaults, no land cover = [],
  * a crop's own irrigation efficiency null or absent alike (both are the farm's, engine ≥ 0.43.0), and a transfer's
- * months, max rate and monthly rates as the rate each month gets (engine ≥ 1.14.0): run comparison reads a rule written
- * as its one rate per month, or as twelve zeros, as no change (compare.test.ts), since a run does nothing differently.
+ * months, max rate and monthly rates as the rate each month gets and the months it is active in (engine ≥ 1.14.0): run
+ * comparison reads a rule written as its one rate per month, or as twelve zeros with no months listed, as no change
+ * (compare.test.ts), since a run does nothing differently.
  */
 const resolved = (x: ModelInput) => {
 	const s = snapshot(x);
@@ -80,7 +81,8 @@ const resolved = (x: ModelInput) => {
 		model: {
 			...model,
 			crops: model.crops.map((c) => ({ ...c, irrigationEfficiency: c.irrigationEfficiency ?? undefined })),
-			transfers: model.transfers.map((t) => ({ ...t, months: undefined, maxRateM3s: undefined, monthlyRateM3s: undefined, rates: transferRatesM3s(t) }))
+			// With the months each rule is active in: a listed month at rate 0 still runs (it relaxes its siblings' reserve, simulate.ts).
+			transfers: model.transfers.map((t) => ({ ...t, months: undefined, maxRateM3s: undefined, monthlyRateM3s: undefined, rates: transferRatesM3s(t), active: [...transferActiveMonths(t)] }))
 		}
 	});
 };
@@ -101,6 +103,23 @@ describe('scenarios on random networks', () => {
 			if (bad) failures.push(`seed ${seed}: ${bad}\n  ops: ${JSON.stringify(ops)}`);
 		}
 		expect(failures.join('\n\n')).toBe('');
+	}, 300_000);
+
+	it(`${Math.max(20, Math.floor(CASES / 5))} random scenarios under a cap or full allocation keep every engine invariant (allocation.set / .remove reach the run)`, () => {
+		const failures: string[] = [];
+		let volumeOps = 0;
+		for (let seed = SEED0, done = 0; done < Math.max(20, Math.floor(CASES / 5)) && seed < SEED0 + CASES * 20 && failures.length < 3; seed++) {
+			const raw = randomInput(seed, { ...GEN, allocationModes: true });
+			if (!raw.model.allocations?.length || (raw.settings.allocationMode ?? 'none') === 'none') continue;
+			const base = { ...raw, settings: resolveSettings(raw.settings) };
+			const ops = randomOps(base, seed);
+			volumeOps += ops.filter((o) => o.op === 'allocation.set' || o.op === 'allocation.remove').length;
+			const bad = checkAll(applyScenario(base, ops).input, seed);
+			if (bad) failures.push(`seed ${seed}: ${bad}\n  ops: ${JSON.stringify(ops)}`);
+			done++;
+		}
+		expect(failures.join('\n\n')).toBe('');
+		expect(volumeOps).toBeGreaterThan(0);
 	}, 300_000);
 
 	it(`no silent change over ${CASES * 4} random scenarios: every op that changes the input is an InputChange`, () => {
@@ -302,8 +321,9 @@ describe('node.move and node.insert on random networks (engine ≥ 1.35.0)', () 
 			const [x, y] = [runModel(base), runModel(r.input)];
 			for (const s of x.series) {
 				// The reach shortfall (workbook AB) is measured against the elements directly upstream, which the insert changes by design (model.md §2.7).
-				if (!s.nodeId || s.key === 'ewr_shortfall_incremental') continue;
-				const t = y.series.find((z) => z.nodeId === s.nodeId && z.key === s.key)!.values;
+				// Catchment series too (no nodeId: the outflow, natural flow, the outlet's EWR and its shortfall).
+				if (s.key === 'ewr_shortfall_incremental') continue;
+				const t = y.series.find((z) => (z.nodeId ?? null) === (s.nodeId ?? null) && z.key === s.key)!.values;
 				for (let i = 0; i < s.values.length; i++) {
 					const a = s.values[i]!;
 					const b = t[i]!;

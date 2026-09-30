@@ -49,6 +49,7 @@ import {
 	type Transfer
 } from './project';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
+import type { LandCoverPatch } from './project';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
 import { comparePlausibility, type PlausibilityComparison } from './plausibility/compare';
 
@@ -1335,17 +1336,29 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	{
 		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
 		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
+		// Each group's patches sorted before summing (engine ≥ 1.35.0): the same patches in another order sum to the same
+		// floats, and their reductions compare as a set, as the run reads them (resolveLandCover sorts by node and patch id).
 		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
-			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string; patches: string[] }>();
+			const raw = new Map<string, { farm: string; cls: string; ps: LandCoverPatch[] }>();
 			for (const p of m.landCover ?? []) {
 				const farm = farmOf(p.nodeId);
 				const k = key(farm, p.coverClass);
-				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '', patches: [] };
-				cur.km2 += p.areaKm2;
-				cur.patches.push(`${p.areaKm2}@${p.densityPct}`);
-				cur.condensed += p.areaKm2 * p.densityPct;
-				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
-				g.set(k, cur);
+				const cur = raw.get(k) ?? { farm, cls: p.coverClass, ps: [] };
+				cur.ps.push(p);
+				raw.set(k, cur);
+			}
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string; patches: string }>();
+			for (const [k, { farm, cls, ps }] of raw) {
+				const token = (p: LandCoverPatch) => `${p.areaKm2}@${p.densityPct}@${p.factors ? `${p.factors.mar}/${p.factors.lowFlow}` : 'default'}`;
+				const sorted = [...ps].sort((x, y) => (token(x) < token(y) ? -1 : token(x) > token(y) ? 1 : 0));
+				g.set(k, {
+					farm,
+					cls,
+					km2: sorted.reduce((t, p) => t + p.areaKm2, 0),
+					condensed: sorted.reduce((t, p) => t + p.areaKm2 * p.densityPct, 0),
+					factors: sorted.map((p) => (p.factors ? `${p.factors.mar}/${p.factors.lowFlow}` : 'default')).join(';'),
+					patches: sorted.map((p) => `${p.areaKm2}@${p.densityPct}`).join(';')
+				});
 			}
 			return g;
 		};
@@ -1358,10 +1371,8 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
 			// The area on its own too (engine ≥ 1.35.0, landCover.set): a patch at no cover can grow without its condensed area moving.
 			// Also a patch's cover on its own (a patch of no area, or two patches that cancel out): the patches changed.
-			// Patches as a set (sorted), so the same patches in another order are no change.
-			const px = [...x?.patches ?? []].sort().join(';');
-			const py = [...y.patches].sort().join(';');
 			if (!x) continue;
+			const [px, py] = [x.patches, y.patches];
 			if (!same(x.condensed, y.condensed) || !same(x.km2, y.km2) || x.factors !== y.factors || px !== py) {
 				const area = !same(x.km2, y.km2) ? ` (area ${km2(x.km2)} → ${km2(y.km2)})` : '';
 				const cover = !area && same(x.condensed, y.condensed) && px !== py ? ', its patches’ cover changed' : '';

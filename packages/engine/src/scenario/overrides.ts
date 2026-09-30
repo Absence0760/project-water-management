@@ -19,6 +19,7 @@ import {
 	landCoverFieldError,
 	nodeAddFieldError,
 	nodeFieldError,
+	reductions,
 	settingsValueError,
 	transferFieldError,
 	type ScenarioOp
@@ -552,7 +553,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const p = (m.landCover ?? []).find((x) => x.id === op.patchId) ?? fail(`land-cover patch ${op.patchId} not found`);
 			const e = landCoverFieldError(op.field, op.value);
 			if (e) fail(`${op.field} ${e}`);
-			(p as unknown as Record<string, unknown>)[op.field] = cloneData(op.value);
+			(p as unknown as Record<string, unknown>)[op.field] = op.field === 'factors' ? reductions(op.value) : cloneData(op.value);
 			break;
 		}
 		case 'borehole.add': {
@@ -806,6 +807,9 @@ export type OpClass = 'proposal' | 'baseline';
 /** A gauge (an EWR site), or a node with land or a manual flow share: part of how the catchment's runoff is split. */
 const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0 || n.areaHiKm2 > 0 || n.areaLoKm2 > 0 || n.flowShareManual != null;
 
+/** A senior other water user (the default priority, USER_DEFAULTS): farms upstream of it pass its demand (model.md §2.7c). */
+const seniorUser = (n: NetworkNode) => n.kind === 'user' && (n.userPriority ?? 'senior') === 'senior';
+
 /**
  * Is this op the applicant's proposal, or a change to the baseline
  * assumptions an assessor must see called out? docs/scenarios.md
@@ -848,14 +852,16 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		}
 		case 'node.insert':
 			// As node.add: a new structure on the reach. The nodes it re-points keep their values and their order along the river.
-			return ok(!sharesRunoff(op.node));
+			// A senior other water user (the default priority) is the exception: farms upstream of it must pass its demand
+			// (model.md §2.7c), so inserting one above others' farms curtails them, which is not the proposal's to decide.
+			return ok(!sharesRunoff(op.node) && !seniorUser(op.node));
 		case 'node.move': {
 			// Moving the applicant's own abstraction point (a leaf with no land) is where they propose to take water;
 			// moving anything else, or a node others drain into, redraws the river as modelled.
 			const n = input?.model.nodes.find((x) => x.id === op.nodeId);
 			const leaf = !!input && !input.model.nodes.some((x) => x.downstreamNodeId === op.nodeId);
 			const ewrSite = Array.isArray(input?.settings.ewrRules) && input.settings.ewrRules.some((t) => t?.siteNodeId === op.nodeId);
-			return ok(mine(op.nodeId) && !!n && !sharesRunoff(n) && leaf && !ewrSite);
+			return ok(mine(op.nodeId) && !!n && !sharesRunoff(n) && !seniorUser(n) && leaf && !ewrSite);
 		}
 		case 'cropArea.set':
 			return ok(mine(op.nodeId));

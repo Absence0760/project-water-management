@@ -2417,6 +2417,24 @@ role and not before it.
         and run comparison now lists a volume's storage, months and maximum
         rate, and a land-cover patch's area and cover on their own
         ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)).
+        Left open:
+        - [ ] **A transfer rule that moves nothing relaxes its siblings'
+              reserve** (found reviewing #73; `network/simulate.ts` ~726,
+              `freeBy[tr.from]`): a rule active in a month at max rate 0 (a
+              listed month at rate 0), or any rule with a lower reserve at
+              the same priority, counts in the free water above each rule's
+              reserve, so two 50 %-reserve rules from a full 1000 m³ dam move
+              800 m³ with a 0 %-reserve rate-0 rule beside them (the dam ends
+              at 200 m³, below both reserves) and 500 m³ without it. Durable
+              fix: free water per rule from its own reserve, and a rule with
+              no rate this month not active; an engine-audit entry, a
+              version bump and an invariant. Trigger: the hydrologist's
+              review of transfers, or any project with two rules from one
+              dam at different reserves.
+        - [x] **Scenario fuzz with allocation modes** (done in #73):
+              `scenario.invariants.test.ts` runs `checkAll` on random
+              scenarios over bases under a cap or a full allocation, so a
+              scenario's volumes reach the allocation self-check.
 
 - **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
   [ui.md § Report](./ui.md#report)). Built: the print route

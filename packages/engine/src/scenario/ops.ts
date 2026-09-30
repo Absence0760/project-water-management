@@ -578,8 +578,12 @@ const LAND_COVER_FIELD_CHECKS: Record<LandCoverSetField, Check> = {
 	coverClass: oneOf(LAND_COVER_CLASSES.map((c) => c.id)),
 	areaKm2: nonNeg,
 	densityPct: frac,
-	factors: nullable((v) => (isObj(v) && Object.keys(v).length === 2 && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
+	// Other keys are dropped when the op is rebuilt (validateScenarioOps, applyScenario), as everywhere else.
+	factors: nullable((v) => (isObj(v) && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
 };
+
+/** A patch's reductions rebuilt from their two known keys (null stays null). */
+export const reductions = (v: unknown): { mar: number; lowFlow: number } | null => (isObj(v) ? { mar: v.mar as number, lowFlow: v.lowFlow as number } : null);
 
 export function landCoverFieldError(field: string, value: unknown): string | null {
 	const c = (LAND_COVER_FIELD_CHECKS as Record<string, Check>)[field];
@@ -936,7 +940,7 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			const patchId = need('patchId', id);
 			const field = need('field', (v) => (typeof v === 'string' && v in LAND_COVER_FIELD_CHECKS ? null : 'is not a land-cover field a scenario can set'));
 			if (typeof field === 'string' && field in LAND_COVER_FIELD_CHECKS) need('value', (v) => landCoverFieldError(field, v));
-			op = { op: 'landCover.set', patchId, field, value: cloneValue(raw.value) } as ScenarioOp;
+			op = { op: 'landCover.set', patchId, field, value: field === 'factors' ? reductions(raw.value) : cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
 		case 'borehole.add':
