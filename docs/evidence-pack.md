@@ -529,9 +529,11 @@ follows the alert mails' pattern ([architecture.md § Alert emails](./architectu
 
 **Who gets it.** Everyone whose role on the project, direct or through its
 team, is editor or owner (they issue and withdraw packs), and, for an
-application's pack, the scenario's owner while they still hold a role above
-farmer (an applicant is a contributor). Never a viewer, a farmer, another
-applicant or a non-member, and never the person who issued or withdrew it:
+application's pack, the scenario's owner while they still hold any role above
+farmer (an applicant is a contributor; one since ranked viewer still gets it,
+as the application's party who still reads its packs). Otherwise never a
+viewer, a farmer, another applicant or a non-member, and never the person
+who issued or withdrew it:
 they just did it. Once per pack, person and event (the primary key).
 
 **Which events** (decided 2026-09-30):

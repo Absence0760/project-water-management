@@ -2816,10 +2816,13 @@ nothing else.
   Notices](./evidence-pack.md#notices)). Only the issue and withdraw routes
   queue notices, through `app_pack_notice_queue`, which refuses anyone but
   an editor of the pack's project and a pack not in that state; `water_app`
-  has no write policy on `pack_notice`, so no caller chooses a recipient.
+  holds only `SELECT` on `pack_notice` and there is no write policy, so no
+  caller chooses a recipient (`catalogue.db.test.ts` pins the grant).
   The recipients are fixed by `pack_notice_audience`: the project's editors
-  and owners and the application's own scenario owner (never a viewer, a
-  farmer, another applicant or a non-member), at most once per pack,
+  and owners and the application's own scenario owner at any role above
+  farmer (an owner ranked viewer included: they are the application's
+  party). Never another viewer, a farmer, another applicant or a
+  non-member, at most once per pack,
   person and event. Each email is built as its recipient under RLS, with
   their role and address checked again at send (a member removed or
   demoted since, or an address SES suppressed since, gets nothing), and it
