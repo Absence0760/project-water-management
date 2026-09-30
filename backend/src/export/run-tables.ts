@@ -1491,19 +1491,23 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
  * switched one off (engine ≥ 1.17.0), and a domestic or municipal one's
  * basic-needs floor (engine ≥ 1.44.0, issue #123): the people it serves, the
  * floor, the days and the volume supplied below it (apart from the
- * shortfall) and what it got per person. Only in runs with objects; the
- * floor columns only when an object has one.
+ * shortfall) and what it got per person, and where each one's number comes
+ * from (engine ≥ 1.56.0: meter, aadd, perCapita, other, or "not recorded").
+ * Only in runs with objects; the floor columns only when an object has one,
+ * the source column only when an object has one.
  */
 export function* demandObjectLines(summary: RunSummary): Generator<string> {
 	const rows = (summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o })));
 	if (!rows.length) return;
 	const off = rows.some(({ o }) => o.daysOff !== undefined);
 	const floor = rows.some(({ o }) => o.basicNeedsM3Day !== undefined);
+	const source = rows.some(({ o }) => o.source !== undefined);
 	yield csvRow(['Demand objects (whole run)']);
 	yield csvRow([
 		'Hydrological unit',
 		'Demand object',
 		'Category',
+		...(source ? ['Source'] : []),
 		'Priority',
 		'Destination',
 		'Average demand (m³/day)',
@@ -1520,6 +1524,7 @@ export function* demandObjectLines(summary: RunSummary): Generator<string> {
 			unit,
 			o.name,
 			o.category,
+			...(source ? [o.source ?? 'not recorded'] : []),
 			o.priority,
 			o.destination,
 			o.avgDemandM3Day,

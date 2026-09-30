@@ -503,6 +503,18 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
 	});
 
+	it('engine 1.56.0: a Source column when an object records one, "not recorded" for the rest', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [{ ...object, source: 'meter' as const }, { ...object, id: 't', name: 'Town' }] }] })];
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Source,Priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,meter,first,internal,25,20,5,80,0,1');
+		expect(lines[3]).toBe('"Farm, upper",Town,domestic,not recorded,first,internal,25,20,5,80,0,1');
+		// No object records one (every run before engine 1.56.0): no column.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Source/);
+	});
+
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
 		const lines = [...curtailmentLines(c)];
 		expect(lines.some((l) => l.startsWith('Equitable share of supply (fairness benchmark) [K total] (%),'))).toBe(true);
