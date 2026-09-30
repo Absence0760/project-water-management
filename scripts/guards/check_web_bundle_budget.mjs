@@ -1316,6 +1316,12 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #71: measured 1202 with main @
+//             e8cd5bc9 merged, against main's 1200). The errata section of
+//             the validation statement (liability/ValidationStatement: the
+//             errata table, keyed on the run's engine and its fit's) and the
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
 // 2026-09-29  no ceiling changed (issue #69, CHIRPS bounding box: the Data
 //             feeds panel's box fields took the Settings tab chunk to 61 KB,
 //             over its 60 KB ceiling). API keys render for owners only, so
@@ -1338,6 +1344,9 @@
 //             b681786e merged, at the ceiling; main grew since the entry
 //             above). Nothing of the bounding box changed; the usual
 //             headroom back. Headroom ~3 KB.
+// 2026-09-29  total 1208 → 1210 KB (issue #69: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the bounding box changed. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1348,7 +1357,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1208,
+	totalCodeKb: 1210,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

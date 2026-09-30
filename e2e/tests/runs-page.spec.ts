@@ -204,7 +204,7 @@ test('the validation statement sits in the Record group, folded shut; opened, it
 
 	await panel.getByRole('heading', { name: 'Validation statement' }).click();
 	// The report's statement, its headings one level under the panel's.
-	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', 'Known limitations']);
+	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', /^Errata of engine \d+\.\d+\.\d+$/, 'Known limitations']);
 	await expect(panel.getByText('Engine version', { exact: true })).toBeVisible();
 	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
 	await expectNoViolations(page);

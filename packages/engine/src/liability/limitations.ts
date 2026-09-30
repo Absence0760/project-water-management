@@ -7,7 +7,7 @@
 //
 // The parser is pure (it takes the Markdown as a string). The list the app
 // uses is the committed limitations.generated.ts, written by
-// `pnpm gen:limitations`; limitations.test.ts parses the doc again and fails
+// `pnpm gen:liability`; limitations.test.ts parses the doc again and fails
 // when the two differ, so a change to an audit item's status has to
 // regenerate the list in the same change.
 

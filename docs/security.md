@@ -2413,14 +2413,21 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   it on every surface.
 - **Known limitations can't be left out quietly.** The report's validation
   statement lists every open engine-audit.md item, generated from the doc;
-  a test fails when the committed list and the doc differ.
+  a test fails when the committed list and the doc differ. The same holds for
+  the **errata** (known bugs per engine version, `docs/engine-errata.md`):
+  the statement lists those of the run's engine version.
+- **Methodology statement.** `docs/methodology/v<N>.md`, cited by version and
+  the SHA-256 of its bytes. A published version is never edited: a test pins
+  every published hash, so an edit fails and has to become a new version,
+  and a hash cited by an old sign-off or pack stays checkable.
 - **Sign-off.** A registered professional signs a run
   ([data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
   - *Who:* editors and owners, as themselves only (RLS `user_id =
     app_current_user_id()`); viewers read; farmers see nothing.
   - *What:* the server rebuilds the statement (the ten confirmations of
-    `signoff-3`, the
-    limitations, the notes, the disclaimer version, the run's id and engine
+    `signoff-4`, the
+    limitations, the errata of the run's engine version, the methodology
+    statement's version and hash, the notes, the disclaimer version, the run's id and engine
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
     ticked. The registration is fixed choices (engine

@@ -250,7 +250,7 @@ generated `KNOWN_LIMITATIONS` (the list every report prints), and a
 departure's *Pending a hydrologist's confirmation* mark is read from it too.
 The departures' own words are `lib/methods/departures.ts`; its test checks
 that every id is a row of the audit. After changing an audit decision, run
-`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+`pnpm gen:liability` as usual and the page follows; when the audit adds or
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 
@@ -5443,13 +5443,19 @@ exists, says so with a link to Runs & results.
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
     engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the run's self-checks, the
+    for this build* until CI injects them), the methodology statement it
+    cites (version and a 12-digit hash prefix, `docs/methodology/`), the
+    run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years and checks, and the **known
-    limitations** table (ID, limitation, where it stands) generated from
-    engine-audit.md. The same component is on screen, folded shut, in a
+    caveat, the flagged data-quality years and checks, the **errata** of
+    the run's engine version or its fit's (ID, what goes wrong, when it
+    applies, fixed in; "None recorded for this engine version in
+    docs/engine-errata.md" without one), and the **known limitations** table
+    (ID, limitation, where it stands) generated from engine-audit.md. The
+    sign-off dialog shows the same methodology line, and lists the errata
+    after the limitations in the box that must be scrolled to its end. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, date, the self-declared registration as "Pr.Sci.Nat.
@@ -5460,7 +5466,7 @@ exists, says so with a link to Runs & results.
     "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the ten
-    statements a signer of the current version confirms (`signoff-3`). When
+    statements a signer of the current version confirms (`signoff-4`). When
     a listed sign-off was made under an earlier version, a line says it
     confirmed that version's wording, recorded by its hash, not the
     statements below. An editor or owner gets **Sign off this
