@@ -138,9 +138,13 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   recorded hash; the frozen report may be issued; there is a sign-off of the
   *current* pack statement (a new known limitation or erratum since the
   signature means signing again); both runs' server stamps still match their
-  rows ([security.md § Run stamps](./security.md)); and the live report may
-  still be issued (the nomination, the declared rule and the cited ensemble
-  haven't moved since the draft). Then it stamps the issue (`issued_at`,
+  rows ([security.md § Run stamps](./security.md)); no erratum found since
+  the draft was made applies to either run's engine or its fit's (the pack's
+  `errataFoundSince` is empty; otherwise `409` `pack_errata_since_draft`,
+  naming them: the manifest would never list them, so the pack is drafted
+  again, which records them, and that draft is signed and issued); and the
+  live report may still be issued (the nomination, the declared rule and the
+  cited ensemble haven't moved since the draft). Then it stamps the issue (`issued_at`,
   `issued_by`, set by the database, never the caller) and, for a new
   version, marks the predecessor superseded, naming the successor.
   In the same transaction it builds the pack's reproduction bundle, checks
@@ -269,7 +273,11 @@ erratum shows on verify once the API that carries it is deployed.
 The pack's own page (`GET …/packs/:packId`, `errataFoundSince`) lists them
 too, in its bar above the report, which is never printed: the pack and its
 PDF print only what the manifest recorded. On a draft they are the errata
-found since the draft was made; drafting the pack again records them.
+found since the draft was made, and issue refuses it
+(`pack_errata_since_draft`, [§ Lifecycle](#lifecycle)) until the pack is
+drafted again, which records them. So a pack is only ever issued with every
+erratum known at its issue; `errataFoundSince` on verify lists only those
+found after it.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
