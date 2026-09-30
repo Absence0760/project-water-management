@@ -1953,8 +1953,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   "between 800 and 12 345.5 m³/day by month") and names the months it takes
   nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
   dam's own hint says what it leaves in the river: senior users' demand, and
-  the hands-off flow under Supply when there is one. Not in the table (the
-  table's River to dam column edits the one value).
+  the hands-off flow under Supply when there is one. The months are edited
+  only here: on a farm set by month the node table's River to dam cell
+  (`NetworkTab.svelte`, desktop and phone card) has no input for the one
+  value the run ignores, but the months' range, read-only ("by month:
+  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
+  tables it is plain text. A farm with the one value edits it in the table as
+  before.
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
@@ -5288,13 +5294,18 @@ last by Ann, 12 Aug 2026: 40% → 60%", that links to History filtered to that
 field (`?tab=history&kind=revision&unit=<unit>&q=<words>`, the unit only for a
 unit's own fields). A field never changed since it was set shows nothing.
 
-- **Where:** the node sheet's numeric fields and **Drains into**, the farm
+- **Where:** the node sheet's numeric fields and **Drains into**, its
+  Supply section (the supply rule, the river pump capacity, the trigger's two
+  levels, the hands-off flow and its EWR tick) and **Set River to dam by
+  month**, the farm
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
   warm-up, the rain threshold, the flow-share method, the annual assurance
-  threshold, the data-quality thresholds). Monthly tables and rule editors
-  have none.
+  threshold, the data-quality thresholds). A twelve-month row set or cleared
+  reads as its range on the line ("none → by month: 0–800 m³/day", "300
+  m³/day every month", `compactMonths`); History keeps the full row. Other
+  monthly tables and rule editors have none.
 - **Data:** one `GET …/history/fields` for the whole project
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at

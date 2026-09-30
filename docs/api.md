@@ -2810,7 +2810,11 @@ RLS (`backend/src/history/fields.ts`), no request per field. Keys:
   from a settings line's subject (engine `settingsChangePaths`).
 - `node:<nodeId>:<field>`: a node's field (`damCapacityM3`, `downstreamNodeId`,
   …), from the label after "Name: " on a changed node's line (engine
-  `nodeChangeFields`).
+  `nodeChangeFields`; the longest matching label wins). The supply fields
+  (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`)
+  and the operating rules (engine ≥ 1.31.0: `handsOffEwr`, and the monthly
+  `handsOffM3Day` and `divertMonthlyM3Day`, whose `change` is the engine's
+  full row, "none → 0, 0, …, 800 m³/day (Oct–Sep)") are keyed too.
 - `crop:<nodeId>:<cropId>`: a unit's planted area of a crop, changed, added
   or removed (an area added with its new unit isn't counted).
 
