@@ -5429,8 +5429,10 @@ exists, says so with a link to Runs & results.
   sections (WP-3.13, `components/liability/`):
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
-    engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the run's self-checks, the
+    engine version, the build's invariant and soak results (the record the
+    release build injects, `lib/engineBuild.ts`; *Not recorded for this
+    build* without one, as in dev and the e2e build, or for a run another
+    engine version made), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows

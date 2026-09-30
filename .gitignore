@@ -41,6 +41,8 @@ out/
 .parcel-cache/
 
 # Test / coverage
+# The engine build's test record (scripts/release/engine-build.mjs), made per release.
+engine-build.json
 coverage/
 .nyc_output/
 test-results/

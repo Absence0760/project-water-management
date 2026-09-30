@@ -71,6 +71,14 @@ trap 'rm -rf "$stage"' EXIT
 [[ -f "$ca" ]] || { echo "error: missing $ca" >&2; exit 1; }
 compgen -G "$backend/migrations/*.sql" >/dev/null || { echo "error: no migrations in $backend/migrations" >&2; exit 1; }
 
+# The engine build's test record (WP-3.13; backend/src/release/engineBuild.ts),
+# baked into every bundle as the esbuild define __ENGINE_BUILD_JSON__: the
+# release sets ENGINE_BUILD_JSON from scripts/release/engine-build.mjs.
+# Unset, it is an empty string and engineBuild() is null. Set, it must be a
+# record for this ENGINE_VERSION, or packaging stops here.
+node "$repo_root/scripts/release/engine-build.mjs" --check
+engine_build_define="$(node -e 'process.stdout.write(JSON.stringify(process.env.ENGINE_BUILD_JSON || ""))')"
+
 # ESM bundles that still contain CommonJS deps (pg) need a real `require`.
 banner="import{createRequire}from'module';const require=createRequire(import.meta.url);"
 maps="$out/sourcemaps"
@@ -83,6 +91,7 @@ esbuild() {
     --bundle --platform=node --target=node24 --format=esm \
     --minify --keep-names --sourcemap \
     --banner:js="$banner" --log-level=warning \
+    --define:__ENGINE_BUILD_JSON__="$engine_build_define" \
     --metafile="$meta/$name.json" --outfile="$outfile"
   mv "$outfile.map" "$maps/"
 }

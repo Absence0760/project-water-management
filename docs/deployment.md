@@ -889,7 +889,9 @@ nothing. Step by step:
      `export-tf-vars.sh`). Until the account
      is bootstrapped and `export-tf-vars.sh` has run, **every release stops
      here** with a pointer to the runbook, before anything is built.
-6. **build** installs dependencies and builds the artifact. It has no
+6. **build** installs dependencies, runs the engine suite and soak for the
+   [engine build record](#engine-build-record) (a failure stops the release
+   here), and builds the artifact with that record in it. It has no
    environment and no AWS credentials, so third-party npm code never runs
    next to them.
 7. **deploy** waits in `environment: production` until the operator opens
@@ -900,6 +902,43 @@ nothing. Step by step:
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
    ECR, tagged with the version.
+
+### Engine build record
+
+Every report's validation statement names the engine build's own test results
+(model.md §2.10f, roadmap WP-3.13), and the evidence pack manifests will too
+(WP-3.14). The build job of both release workflows makes that record before it
+builds:
+
+```bash
+node scripts/release/engine-build.mjs --cases 2000 --out "$RUNNER_TEMP/engine-build.json"
+```
+
+It runs the engine's unit suite (`packages/engine`, vitest project `unit`: the
+invariant tests, the pinned regression seeds and the random-network soak
+sharded across `src/fuzz/`) with `FUZZ_CASES=2000 FUZZ_SEED=1`, so a rerun of
+the same commit runs the same catchments (about 5 minutes on a 4-core runner;
+the job's timeout is 30), and writes
+`{"version": ENGINE_VERSION, "gitSha": HEAD, "invariantsPassed": true, "soakCases": 2000}`.
+It exits 1, and the release stops, when any test fails or vitest's report
+doesn't show every soak shard running at 2 000 cases; it refuses a checkout
+whose tracked files differ from HEAD, since the record names that commit. The
+workflow then sets `ENGINE_BUILD_JSON` to the file's text for the build:
+
+- **web**: `frontend/vite.config.ts` injects it as the `__ENGINE_BUILD_JSON__`
+  define, which `src/lib/engineBuild.ts` reads for `ValidationStatement` (the
+  report, the Runs panel's Record group, a scenario's comparison). The build
+  fails when it is set but isn't a record for this `ENGINE_VERSION`.
+- **backend**: `infra/scripts/package-lambdas.sh` checks it
+  (`engine-build.mjs --check`) and passes it to every bundle as the same
+  esbuild define; `backend/src/release/engineBuild.ts` `engineBuild()` reads
+  it (null without one). It is not an environment variable of the Lambdas.
+
+Unset, both inject an empty string: dev, the e2e build and any local build say
+*Not recorded for this build*. To make one locally:
+`pnpm test:engine:build --max-workers 3` (the whole suite on every core needs
+more than 4 GB), then
+`ENGINE_BUILD_JSON="$(cat engine-build.json)" pnpm build:frontend`.
 
 ### The production environment's branch and tag policy
 

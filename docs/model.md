@@ -5286,10 +5286,17 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
 - **Runoff coefficient (audit W1)**: natural flow ÷ rain on the catchment,
   marked implausible above 1.
 - **Engine version, and the build's test results** (`EngineBuild`: version,
-  git SHA, invariant suite passed, soak cases). CI does not inject the build
-  record yet ([followups.md](./followups.md#liability-and-sign-off-wp-313)),
-  so the statement says the results were not recorded; a record is only
-  ever shown for the version it was made for.
+  git SHA, invariant suite passed, soak cases; `liability/engineBuild.ts`).
+  The release workflows run `scripts/release/engine-build.mjs`: the engine's
+  whole unit suite (the invariant tests and pinned regression seeds) with the
+  random-network soak (`src/fuzz/`) widened to 2 000 catchments from seed 1,
+  on the released commit, and the builds inject the record
+  ([deployment.md § Engine build record](./deployment.md#engine-build-record)).
+  `parseEngineBuild` reads it only when it has exactly that shape and was
+  made for this build's `ENGINE_VERSION`, and `validationStatement` shows it
+  only for a run of that version: an older run's statement, and any build
+  without a record (dev, the e2e build), says the results were not
+  recorded.
 - **Self-checks**: the run's own verification (`summary.verification`).
 - **Known limitations**, generated from [engine-audit.md](./engine-audit.md):
   every finding or workbook quirk whose decision is still open (it says

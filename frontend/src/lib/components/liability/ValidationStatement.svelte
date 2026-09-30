@@ -3,25 +3,31 @@
 	// engine's validationStatement() over the stored summary, so it needs no
 	// request. Printed in the report, and on screen in ValidationPanel (the
 	// run's Record group, the scenario view); the known limitations are
-	// generated from docs/engine-audit.md.
-	import { validationStatement, type RunSummary } from '@water-management/engine';
+	// generated from docs/engine-audit.md. The build's invariant suite and soak
+	// come from the record CI injects (lib/engineBuild.ts), shown only for a
+	// run this engine version made.
+	import { validationStatement, type EngineBuild, type RunSummary } from '@water-management/engine';
+	import { ENGINE_BUILD } from '$lib/engineBuild';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 
 	let {
 		summary,
 		engineVersion,
 		legacy,
+		build = ENGINE_BUILD,
 		headingLevel = 3
 	}: {
 		summary: RunSummary;
 		engineVersion: string;
 		legacy: boolean;
+		/** This build's engine test record; the injected one unless a test passes its own. */
+		build?: EngineBuild | null;
 		/** The level of its own headings (Calibration, Data quality, Known limitations): one below the heading it sits under. */
 		headingLevel?: 3 | 4;
 	} = $props();
 	const h = $derived(`h${headingLevel}`);
 
-	const v = $derived(validationStatement({ summary, engineVersion, legacy }));
+	const v = $derived(validationStatement({ summary, engineVersion, legacy }, build));
 	const uid = `vs-${Math.random().toString(36).slice(2, 9)}`;
 	const metric = (x: number | null, id: string) => (x == null ? '–' : id === 'pbias' ? `${fmtNum(x, 1)} %` : fmtNum(x, 2));
 </script>

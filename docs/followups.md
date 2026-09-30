@@ -3574,13 +3574,15 @@ professional sign-off on a run, all on the report route
 [data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
 Left, each with its trigger:
 
-- [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an
-      `EngineBuild` (version, git SHA, invariants passed, soak cases) and the
-      report says *Not recorded for this build* without one. Durable fix: the
-      web release workflow runs the invariant suite and a soak, writes the
-      record, and the frontend build injects it (a Vite `define`) for the
-      report to pass in. Trigger: before the first evidence pack (WP-3.14),
-      which must state it.
+- [x] **`ENGINE_BUILD` from CI.** Done (issue #71 follow-up): both release
+      workflows run `scripts/release/engine-build.mjs` (the engine unit suite
+      with a 2 000-case soak, seeds from 1) and inject its record as
+      `ENGINE_BUILD_JSON`: a Vite `define` the report's validation statement
+      reads (`frontend/src/lib/engineBuild.ts`) and an esbuild `define` in
+      every Lambda bundle (`backend/src/release/engineBuild.ts`,
+      `engineBuild()`, for the evidence pack manifests). A failed suite stops
+      the release; a record for another `ENGINE_VERSION` fails the build
+      ([deployment.md § Engine build record](./deployment.md#engine-build-record)).
 - [ ] **Methodology statement and engine errata** (`docs/methodology/`,
       versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
       per engine version). Only the limitations list is generated so far.

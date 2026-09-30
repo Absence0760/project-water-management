@@ -17,7 +17,8 @@ name: Deploy frontend
 #              Actions), `production` environment with a required reviewer and
 #              a main + release-tags deployment policy, the release-tag
 #              ruleset, every AWS variable/secret set. No AWS.
-#   build      pnpm build + the CSP hash check. No AWS.
+#   build      the engine suite + soak (scripts/release/engine-build.mjs, whose
+#              record the build injects), pnpm build + the CSP hash check. No AWS.
 #   deploy     `environment: production` (required reviewer, then OIDC):
 #              S3 sync + CloudFront invalidation.
 #   attach     `contents: write` only: attaches the build zip to the Release.
@@ -88,7 +89,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30  # the engine soak: ~5 min on a 4-core runner
     steps:
       - name: Checkout the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,6 +111,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The engine build's test record (WP-3.13, model.md §2.10f): the engine's
+      # unit suite (the invariant tests) with its random-network soak widened to
+      # 2 000 catchments from seed 1, on this commit. A failed suite stops the
+      # release here. The record (engine-build.json) goes to the build as
+      # ENGINE_BUILD_JSON, which the report's validation statement prints (a Vite define,
+      # frontend/vite.config.ts; the build refuses a record for another engine).
+      - name: Engine invariant suite and soak
+        run: |
+          set -euo pipefail
+          node scripts/release/engine-build.mjs --cases 2000 --out "$RUNNER_TEMP/engine-build.json"
+          record="$(cat "$RUNNER_TEMP/engine-build.json")"
+          test -n "$record"
+          printf 'ENGINE_BUILD_JSON=%s\n' "$record" >> "$GITHUB_ENV"
 
       # PUBLIC_API_URL comes from frontend/.env.production (`/api`, same
       # origin — CloudFront proxies it to the Lambda). Deliberately not

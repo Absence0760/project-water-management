@@ -7,6 +7,7 @@
 // pass marks.
 import type { CalibrationFlowKind, RunSummary } from '../project';
 import type { SeriesKind } from '../project';
+import type { EngineBuild } from './engineBuild';
 import type { Limitation } from './limitations';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
 
@@ -34,18 +35,6 @@ export function moriasiPbias(pbias: number | null | undefined): MoriasiRating | 
 export const MORIASI_CAVEAT =
 	'Ratings from Moriasi et al. (2007), whose thresholds were set for monthly flows. This run is scored on daily flows, which score lower for the same skill, so read them as a guide, not a pass mark.';
 
-/**
- * The engine build's own test results, injected at build time from CI
- * (WP-3.13). Not wired yet (docs/followups.md): until it is, a statement says
- * the build's results were not recorded rather than claiming them.
- */
-export interface EngineBuild {
-	version: string;
-	gitSha: string;
-	invariantsPassed: boolean;
-	soakCases: number;
-}
-
 export interface ValidationMetric {
 	id: 'nse' | 'pbias' | 'kge' | 'logNse';
 	label: string;
@@ -65,7 +54,7 @@ export interface FlaggedYear {
 
 export interface ValidationStatement {
 	engineVersion: string;
-	/** The build's invariant suite and soak results; null until CI injects them. */
+	/** The build's invariant suite and soak results (./engineBuild); null when the build has no record. */
 	build: EngineBuild | null;
 	/** A legacy (b023 workbook) run: workbook comparison only, never evidence (audit H1). */
 	legacy: boolean;

@@ -1521,7 +1521,8 @@ must build WP-2.15 Phase B.
   to the statement's SHA-256, `signoff.created` in the audit log, the run
   cited so kept), with the dialog. Engine 0.31.2. Left
   ([followups.md § Liability and sign-off](../followups.md#liability-and-sign-off-wp-313)):
-  `ENGINE_BUILD` from CI, the methodology statement and errata docs, the
+  `ENGINE_BUILD` from CI (done: `scripts/release/engine-build.mjs`,
+  [deployment.md § Engine build record](../deployment.md#engine-build-record)), the methodology statement and errata docs, the
   pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
   sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
   scenario is signed through its run, which is what a pack cites.
