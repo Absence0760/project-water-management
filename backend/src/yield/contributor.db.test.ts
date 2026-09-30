@@ -84,7 +84,7 @@ describe('an applicant’s yield on their own application', () => {
 		expect(byNode).toEqual({ [rooikloof.id]: 60_000, [newDam.id]: 30_000 });
 	});
 
-	it('queues one on a dam the application inserts on a reach (node.insert, engine 1.35.0, migration 118), through the API and RLS alike', async () => {
+	it('queues one on a dam the application inserts on a reach (node.insert, engine 1.35.0, migration 119), through the API and RLS alike', async () => {
 		const weir = node('Weir dam', outlet.id, { pctRunoffToDam: 1, damCapacityM3: 25_000, damInitialPct: 1, damMinPct: 0, areaKm2: 0 });
 		const s = await applicant.call('POST', `${P()}/scenarios`, {
 			name: 'A weir dam below Rooikloof',
