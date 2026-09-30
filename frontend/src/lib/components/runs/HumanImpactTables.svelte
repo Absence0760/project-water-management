@@ -33,6 +33,8 @@
 	const PRIORITY: Record<string, string> = { first: 'first', shared: 'with the crops', last: 'last' };
 	// Days a schedule switched an object off (engine ≥ 1.17.0): a column only when one has a schedule.
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
+	// The basic-needs floor (engine ≥ 1.38.0, issue #123): its columns only when an object has one.
+	const anyFloor = $derived(objects.some(({ o }) => o.basicNeedsM3Day !== undefined));
 </script>
 
 {#if objects.length}
@@ -40,6 +42,9 @@
 	<p class="muted small">
 		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops (daily averages over the run).
 		Their demand is part of the hydrological unit’s.
+		{#if anyFloor}
+			A domestic or municipal object’s basic-needs floor is 25 litres a person a day; days and volume below it are counted apart from the days short.
+		{/if}
 	</p>
 	<div class="table-wrap">
 		<table class="data demand-objects" data-testid="demand-objects-table">
@@ -53,6 +58,12 @@
 					<th scope="col" class="num">Supplied<br /><span class="u">%</span></th>
 					<th scope="col" class="num">Days short</th>
 					{#if anyOff}<th scope="col" class="num">Days off</th>{/if}
+					{#if anyFloor}
+						<th scope="col" class="num">Basic-needs floor<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Days below the floor</th>
+						<th scope="col" class="num">Below the floor<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Supplied<br /><span class="u">l/person/day</span></th>
+					{/if}
 					<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
 				</tr>
 			</thead>
@@ -67,6 +78,16 @@
 						<td class="num">{fmtPct(o.fractionSupplied)}</td>
 						<td class="num">{fmtNum(o.daysShort, 0)}</td>
 						{#if anyOff}<td class="num">{o.daysOff === undefined ? '–' : fmtNum(o.daysOff, 0)}</td>{/if}
+						{#if anyFloor}
+							{#if o.basicNeedsM3Day === undefined}
+								<td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td>
+							{:else}
+								<td class="num">{fmtNum(o.basicNeedsM3Day, 1, true)}</td>
+								<td class="num" class:below={(o.daysBelowBasicNeeds ?? 0) > 0}>{fmtNum(o.daysBelowBasicNeeds ?? 0, 0)}</td>
+								<td class="num">{fmtNum(o.avgBelowBasicNeedsM3Day ?? 0, 1, true)}</td>
+								<td class="num">{fmtNum(o.avgSuppliedLitresPerPersonDay ?? 0, 0)}</td>
+							{/if}
+						{/if}
 						<td class="num">{o.destination === 'external' ? 'piped out' : fmtNum(o.avgReturnedM3Day)}</td>
 					</tr>
 				{/each}
@@ -272,7 +293,8 @@
 		min-height: 24px;
 	}
 	td.short,
-	td.neg {
+	td.neg,
+	td.below {
 		color: var(--warning);
 		font-weight: 600;
 	}

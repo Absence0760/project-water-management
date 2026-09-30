@@ -268,6 +268,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!inRange(o.lossPct, 0, 0.999999) || !inRange(o.returnPct, 0, 1) || (o.monthlyFactor ?? []).some((v) => !inRange(v, 0, Infinity)))
 			issues.push({ area: 'network', message: `${label}: losses are 0–99%, the return share 0–100%, and the monthly profile can't be negative.` });
 		if (o.destination === 'external' && o.returnPct > 0) issues.push({ area: 'network', message: `${label}: water piped out of the catchment returns nothing; set its return share to 0%.` });
+		// The people it serves, for the basic-needs floor (engine ≥ 1.38.0): the API refuses a negative one.
+		if (o.population !== null && o.population !== undefined && !inRange(o.population, 0, Infinity))
+			issues.push({ area: 'network', message: `${label}: the people it serves can't be negative.` });
 		// Its schedule (engine ≥ 1.17.0): the engine's own window rule, as the API applies it.
 		if ((o.schedule?.length ?? 0) > DEMAND_SCHEDULE_MAX_WINDOWS) issues.push({ area: 'network', message: `${label}: a schedule has at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows.` });
 		(o.schedule ?? []).forEach((w, i) => {

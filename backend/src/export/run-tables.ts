@@ -867,6 +867,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield '';
 		yield* otherUserLines(summary);
 	}
+	if (summary.farms?.some((f) => f.demandObjects?.length)) {
+		yield '';
+		yield* demandObjectLines(summary);
+	}
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
@@ -996,8 +1000,12 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 	const names = new Map((c.ewrSites ?? []).map((s) => [s.nodeId, s.name]));
 	for (const f of c.farms) if (!names.has(f.nodeId)) names.set(f.nodeId, f.name);
 	const site = (id: string) => names.get(id) ?? id;
-	yield csvRow(['Farm', ...CURTAILMENT_COLUMNS.map(([h]) => h)]);
-	for (const f of c.farms) yield csvRow([f.name, ...CURTAILMENT_COLUMNS.map(([, v]) => v(f, site))]);
+	// The basic-needs floor (engine ≥ 1.38.0, issue #123): two columns at the end, only when a farm has one.
+	const floor = c.farms.some((f) => f.basicNeedsM3Day !== undefined);
+	const floorHeaders = floor ? ['Basic-needs floor (m³/day)', 'Held back of the cut for basic needs (m³/day)'] : [];
+	const floorCells = (f: CurtailmentRow): Cell[] => (floor ? [f.basicNeedsM3Day ?? null, f.basicNeedsHeldM3Day ?? null] : []);
+	yield csvRow(['Farm', ...CURTAILMENT_COLUMNS.map(([h]) => h), ...floorHeaders]);
+	for (const f of c.farms) yield csvRow([f.name, ...CURTAILMENT_COLUMNS.map(([, v]) => v(f, site)), ...floorCells(f)]);
 	const t = c.totals;
 	yield csvRow([
 		'Total',
@@ -1020,7 +1028,8 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 		t.volumeLeftM3Day,
 		'',
 		'',
-		t.ewrCutBeyondShareM3Day ?? null
+		t.ewrCutBeyondShareM3Day ?? null,
+		...(floor ? [t.basicNeedsM3Day ?? null, t.basicNeedsHeldM3Day ?? null] : [])
 	]);
 	yield csvRow([EQUITABLE_SHARE_FOOTNOTE]);
 }
@@ -1436,6 +1445,55 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
 	}
 	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+}
+
+/**
+ * Each unit's demand objects over the whole run (engine ≥ 1.7.0, docs/model.md
+ * §2.7f): demand, supply, deficit and days short, the days a schedule
+ * switched one off (engine ≥ 1.17.0), and a domestic or municipal one's
+ * basic-needs floor (engine ≥ 1.38.0, issue #123): the people it serves, the
+ * floor, the days and the volume supplied below it (apart from the
+ * shortfall) and what it got per person. Only in runs with objects; the
+ * floor columns only when an object has one.
+ */
+export function* demandObjectLines(summary: RunSummary): Generator<string> {
+	const rows = (summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o })));
+	if (!rows.length) return;
+	const off = rows.some(({ o }) => o.daysOff !== undefined);
+	const floor = rows.some(({ o }) => o.basicNeedsM3Day !== undefined);
+	yield csvRow(['Demand objects (whole run)']);
+	yield csvRow([
+		'Hydrological unit',
+		'Demand object',
+		'Category',
+		'Priority',
+		'Destination',
+		'Average demand (m³/day)',
+		'Average supplied (m³/day)',
+		'Average deficit (m³/day)',
+		'Demand supplied (%)',
+		'Average returned (m³/day)',
+		'Days short',
+		...(off ? ['Days off'] : []),
+		...(floor ? ['People served', 'Basic-needs floor (m³/day, 25 l/person/day)', 'Days below the floor', 'Average below the floor (m³/day)', 'Supplied per person (l/person/day)'] : [])
+	]);
+	for (const { unit, o } of rows) {
+		yield csvRow([
+			unit,
+			o.name,
+			o.category,
+			o.priority,
+			o.destination,
+			o.avgDemandM3Day,
+			o.avgSuppliedM3Day,
+			o.avgDeficitM3Day,
+			pct(o.fractionSupplied) as Cell,
+			o.avgReturnedM3Day,
+			o.daysShort,
+			...(off ? [o.daysOff ?? null] : []),
+			...(floor ? [o.basicNeedsPopulation ?? null, o.basicNeedsM3Day ?? null, o.daysBelowBasicNeeds ?? null, o.avgBelowBasicNeedsM3Day ?? null, o.avgSuppliedLitresPerPersonDay ?? null] : [])
+		]);
+	}
 }
 
 /**

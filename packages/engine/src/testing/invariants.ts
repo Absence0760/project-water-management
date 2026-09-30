@@ -186,6 +186,8 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	for (const o of x.model.demandObjects ?? []) {
 		if (o.monthlyM3Day) o.monthlyM3Day = o.monthlyM3Day.map((v) => v * 2);
 		if (o.count !== null) o.count *= 2;
+		// The basic-needs floor (engine ≥ 1.38.0) scales with the people, so a restricted object's demand doubles too.
+		if (o.population !== null && o.population !== undefined) o.population *= 2;
 	}
 	let o1: ModelOutput;
 	let o2: ModelOutput;

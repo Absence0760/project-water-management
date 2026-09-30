@@ -40,7 +40,8 @@ import {
 	type ReportWindow
 } from '../network/curtailment';
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
-import type { CropArea, CurtailmentFarm, CurtailmentSummary, NetworkNode, Transfer } from '../project';
+import type { CropArea, CurtailmentFarm, CurtailmentSummary, DemandObject, NetworkNode, Transfer } from '../project';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
 import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
 
@@ -67,7 +68,8 @@ const NOISE_M3 = 1e-6;
 /** The run's series a projection reads, by node kind (null node = catchment). */
 export const PROJECTION_SERIES = {
 	// return_flow: read only for a unit with demand objects (engine ≥ 1.7.0), whose consumptive share follows it.
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow'],
+	// basic_needs: only on a unit with a basic-needs floor (engine ≥ 1.38.0); read when present.
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs'],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
@@ -106,10 +108,22 @@ export interface ProjectionRun {
 	 * consumptive share over a window follows its stored return_flow, not
 	 * 1 − β(1 − e). Absent = none, right for any run without them.
 	 */
-	demandObjects?: readonly { nodeId: string; enabled: boolean }[];
+	demandObjects?: readonly ProjectionDemandObject[];
 	/** A stored series of the run (null node = catchment); undefined when the run has none. */
 	series(nodeId: string | null, key: string): StoredValues | undefined;
 }
+
+/**
+ * What the projection reads of a demand object: its unit and whether it runs,
+ * and (engine ≥ 1.38.0) what its basic-needs floor needs, so a unit with a
+ * floor is read with its basic_needs series. A caller without the category
+ * gets no floor, as a run before 1.38.0 has none.
+ */
+export type ProjectionDemandObject = { nodeId: string; enabled: boolean } & Partial<Pick<DemandObject, 'category' | 'sizing' | 'count' | 'population'>>;
+
+/** A unit has a basic-needs floor (engine ≥ 1.38.0) when one of its enabled objects is domestic or municipal with people. */
+const hasFloor = (objects: readonly ProjectionDemandObject[] | undefined, nodeId: string): boolean =>
+	!!objects?.some((o) => o.enabled !== false && o.nodeId === nodeId && o.category !== undefined && basicNeedsPopulation({ category: o.category, sizing: o.sizing ?? 'monthly', count: o.count ?? null, population: o.population ?? null }) !== null);
 
 /** The run lacks a series the projection needs (a run from before engine 0.17.0, say). */
 export class ProjectionInputError extends Error {}
@@ -431,7 +445,7 @@ export interface CurtailmentOptions {
 	 * ProjectionRun.demandObjects): a unit with an enabled one is read with
 	 * its return_flow as well.
 	 */
-	demandObjects?: readonly { nodeId: string; enabled: boolean }[];
+	demandObjects?: readonly ProjectionDemandObject[];
 }
 
 /**
@@ -511,6 +525,8 @@ export function curtailmentSeriesKeys(
 		if (n.kind === 'farm') {
 			add(n.id, 'supplied', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
 			if (options.demandObjects?.some((o) => o.enabled !== false && o.nodeId === n.id)) add(n.id, 'return_flow');
+			// Its basic-needs floor (engine ≥ 1.38.0): read when the run stored one (prepareCurtailment).
+			if (hasFloor(options.demandObjects, n.id) && (!has || has(n.id, BASIC_NEEDS_SERIES.key))) add(n.id, BASIC_NEEDS_SERIES.key);
 			if (!stored) add(n.id, 'runoff', 'dam_storage');
 			if (!stored && !perRule && inRule.has(n.id)) add(n.id, 'transfer');
 		} else if (n.kind === 'user') {
@@ -565,7 +581,9 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 			ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
 			consumptivePerSupplied: consumptiveShare(n, run),
 			// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned, as runModel has it.
-			...(run.demandObjects?.some((o) => o.enabled !== false && o.nodeId === n.id) ? { returned: need(run, n.id, 'return_flow', days) } : {})
+			...(run.demandObjects?.some((o) => o.enabled !== false && o.nodeId === n.id) ? { returned: need(run, n.id, 'return_flow', days) } : {}),
+			// Its basic-needs floor (engine ≥ 1.38.0), when the run stored one: a run before 1.38.0 has none, as its table.
+			...(hasFloor(run.demandObjects, n.id) && run.series(n.id, BASIC_NEEDS_SERIES.key) ? { basicNeeds: need(run, n.id, BASIC_NEEDS_SERIES.key, days) } : {})
 		} satisfies CurtailmentInput;
 		return [{ i, input }];
 	});

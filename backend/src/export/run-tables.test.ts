@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	curtailmentLines,
+	demandObjectLines,
 	ewrAssuranceLines,
 	otherUserLines,
 	landCoverLines,
@@ -372,6 +373,37 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
 		expect(lines).toContain('Town,senior,100,90,45,5,no (senior),0,0,5');
 		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
+	});
+
+	it('engine 1.38.0: adds the basic-needs floor and what it held back, only when a farm has a floor', () => {
+		const plain = [...curtailmentLines(c)];
+		expect(plain.join('\n')).not.toMatch(/Basic-needs floor/);
+		const floored = [...curtailmentLines({ ...c, farms: [{ ...farm, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 }], totals: { ...c.totals, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 } })];
+		const header = floored.find((l) => l.startsWith('Farm,'))!.split(',');
+		const row = floored.find((l) => l.startsWith('"Farm, upper"'))!.replace('"Farm, upper"', 'F').split(',');
+		const total = floored.find((l) => l.startsWith('Total,'))!.split(',');
+		expect(header.slice(-2)).toEqual(['Basic-needs floor (m³/day)', 'Held back of the cut for basic needs (m³/day)']);
+		expect(row.slice(-2)).toEqual(['25', '7.5']);
+		expect(total).toHaveLength(header.length);
+		expect(total.slice(-2)).toEqual(['25', '7.5']);
+	});
+
+	it('engine 1.38.0: lists the demand objects with their basic-needs floor apart from the shortfall', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const town = { ...object, id: 't', name: 'Town', category: 'industrial' as const };
+		const withFloor = { ...object, basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 1, avgBelowBasicNeedsM3Day: 5, avgSuppliedLitresPerPersonDay: 20 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [withFloor, town] }] })];
+		expect(lines[0]).toBe('Demand objects (whole run)');
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short,People served,"Basic-needs floor (m³/day, 25 l/person/day)",Days below the floor,Average below the floor (m³/day),Supplied per person (l/person/day)'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,first,internal,25,20,5,80,0,1,1000,25,1,5,20');
+		expect(lines[3]).toBe('"Farm, upper",Town,industrial,first,internal,25,20,5,80,0,1,,,,,');
+		// No floor anywhere: no floor columns; no objects: no block.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [town] }] })][1]).not.toMatch(/floor/);
+		expect([...demandObjectLines(summary)]).toEqual([]);
+		expect([...summaryCsvLines(meta, { ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [withFloor] }] })]).toContain('Demand objects (whole run)');
+		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {

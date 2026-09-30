@@ -5,7 +5,7 @@
 //
 //   1. Today: what it was supplied (I / H).
 //   2. EWR met: what is left once the EWR charge is met as well (U / H for a
-//      farm, bounded to 0–100 %; for another user, what it takes after its
+//      farm, bounded to 0–100 %, never below its basic-needs floor, engine ≥ 1.38.0; for another user, what it takes after its
 //      supply cut, or all of it for a senior user, which is not curtailed).
 //
 // The equitable share (M / H = K_tot) is not a stage: it is the same fraction
@@ -91,6 +91,9 @@ function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 	if (store >= NOTE_FLOOR_M3_DAY) notes.push(`store less / pass inflow ${fmtVol(store)} m³/day`);
 	const beyond = f.ewrCutBeyondShareM3Day ?? 0;
 	if (beyond >= NOTE_FLOOR_M3_DAY) notes.push(`EWR cut exceeds its equitable share by ${fmtVol(beyond)} m³/day`);
+	// The basic-needs floor (engine ≥ 1.38.0, issue #123): the EWR stage never goes below it.
+	const held = f.basicNeedsHeldM3Day ?? 0;
+	if (held >= NOTE_FLOOR_M3_DAY) notes.push(`basic needs keep ${fmtVol(held)} m³/day (25 l a person a day, floor ${fmtVol(f.basicNeedsM3Day ?? 0)} m³/day)`);
 	return {
 		nodeId: f.nodeId,
 		name: names[f.nodeId] ?? f.name,

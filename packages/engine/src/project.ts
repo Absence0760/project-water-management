@@ -1658,9 +1658,25 @@ export interface DemandObject {
 	 * at its month's demand.
 	 */
 	schedule?: DemandScheduleWindow[] | null;
+	/**
+	 * The people it serves, for the basic-needs floor (engine ≥ 1.38.0, issue
+	 * #123, docs/model.md §2.7f): a domestic or municipal object is never cut
+	 * below population × 25 litres per person per day by a restriction.
+	 * Null or absent = a `perUnit` object's count; a `monthly` one without it
+	 * has no floor. Read only for the BASIC_NEEDS_CATEGORIES.
+	 */
+	population?: number | null;
 	/** Where the number comes from (meter records, a reconciliation strategy, a norm, the workbook), for the report. */
 	note: string;
 }
+
+/**
+ * The categories a basic-needs floor protects (engine ≥ 1.38.0, issue #123):
+ * people's water, the NWA's basic human needs. The floor is
+ * DEMAND_NORMS.basicLitresPerPersonDay (25 l per person per day, the Free
+ * Basic Water level) × the object's population.
+ */
+export const BASIC_NEEDS_CATEGORIES: readonly DemandObjectCategory[] = ['domestic', 'municipal'];
 
 /**
  * Sizing norms for a new per-unit demand object (issue #54, 2b research,
@@ -1983,6 +1999,21 @@ export interface DemandObjectSummary {
 	daysShort: number;
 	/** Days its schedule switched it off (factor 0; engine ≥ 1.17.0, only on an object with a schedule). Never counted as short. */
 	daysOff?: number;
+	/**
+	 * The basic-needs floor (engine ≥ 1.38.0, issue #123, docs/model.md
+	 * §2.7f), only on a domestic or municipal object with a population:
+	 * the people it serves and its floor, population × 25 l ÷ 1000 (÷ (1 −
+	 * losses) when sized per unit), m³/day abstracted. On a day the floor is
+	 * that, or the day's whole demand when it is less (a day off has none).
+	 */
+	basicNeedsPopulation?: number;
+	basicNeedsM3Day?: number;
+	/** Days it got less than the day's floor (beyond float noise): below basic needs, not only short. */
+	daysBelowBasicNeeds?: number;
+	/** Mean of what the floor lacked, MAX(floor − supplied, 0), m³/day: the part of the deficit that is below basic needs. */
+	avgBelowBasicNeedsM3Day?: number;
+	/** What it was supplied per person served, at the tap (after losses), l per person per day: the municipal restriction level, for display. */
+	avgSuppliedLitresPerPersonDay?: number;
 }
 
 /**
@@ -2300,6 +2331,16 @@ export interface CurtailmentFarm {
 	ewrBindingSiteId?: string | null;
 	/** MAX(ΔG − target, 0) ≥ 0: how far the EWR supply cut exceeds the farm's equitable share (audit Q13); flagged when > 0. */
 	ewrCutBeyondShareM3Day?: number;
+	/**
+	 * The unit's basic-needs floor over the window (engine ≥ 1.38.0, issue
+	 * #123, docs/model.md §2.11): the mean of its domestic and municipal
+	 * objects' daily floor. The volume left is never below it: U =
+	 * MAX(MAX(M − ΔG, 0), floor) and S = MAX(N − ΔG, floor − I). Absent on a
+	 * unit without such an object.
+	 */
+	basicNeedsM3Day?: number;
+	/** What the floor held back of the cut, U − MAX(M − ΔG, 0) ≥ 0: water the equitable share and the EWR would take but basic needs keep. */
+	basicNeedsHeldM3Day?: number;
 }
 
 /**
@@ -2359,6 +2400,9 @@ export interface CurtailmentSummary {
 		ewrCutBeyondShareM3Day?: number;
 		totalChangeM3Day: number;
 		volumeLeftM3Day: number;
+		/** Σ the farms' basic-needs floor and what it held back (engine ≥ 1.38.0); only when a farm has one. */
+		basicNeedsM3Day?: number;
+		basicNeedsHeldM3Day?: number;
 	};
 }
 

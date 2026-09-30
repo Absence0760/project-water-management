@@ -223,7 +223,9 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		offtake_to_dam: 'offtake_in',
 		passed_for_senior: 'senior_requirement',
 		'object_demand@': 'demand objects',
-		'object_supplied@': 'demand objects'
+		'object_supplied@': 'demand objects',
+		// The basic-needs floor (engine 1.38.0) is written only on a unit with a demand object.
+		basic_needs: 'demand objects'
 	};
 	const base = (key: string) => (key.includes('@') ? key.slice(0, key.indexOf('@') + 1) : key);
 
