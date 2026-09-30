@@ -203,11 +203,11 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		m.engine.build
 			? `Check out the build that made the manifest: \`git checkout ${m.engine.build}\`.`
 			: `Check out any commit whose \`packages/engine/src/version.ts\` sets \`ENGINE_VERSION = '${engines[0]}'\` (a change in the engine's behaviour always changes that version), for example the first one: \`git log --reverse --format=%H -S "ENGINE_VERSION = '${engines[0]}'" -- packages/engine/src/version.ts | head -1\`.`,
-		'Then, with Node 24 and pnpm 10, from the repository root:',
+		'Then, with Node 24 and pnpm 10, from the repository root (give the path to where you saved this bundle):',
 		'',
 		'```',
 		'pnpm install --frozen-lockfile',
-		`pnpm reproduce:pack ${zipName}`,
+		`pnpm reproduce:pack path/to/${zipName}`,
 		'```',
 		'',
 		'It checks that every file matches its hash in bundle.json, that manifest.json hashes to the manifest hash, that the inputs and stored results are the ones the manifest lists, and then re-runs each run from its stored inputs and compares the results digest. It exits non-zero on any mismatch.',
@@ -449,7 +449,7 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 			if (!sameJson(snapshot.settings, want.settings)) problems.push(`its settings aren't the manifest's (${differingPaths(snapshot.settings, want.settings).join(', ')})`);
 			if (!sameJson(snapshot.model, want.model)) problems.push(`its model isn't the manifest's (${differingPaths(snapshot.model, want.model).join(', ')})`);
 		}
-		const ok = add(`inputs:${r}`, problems.length === 0, problems.join('; ') || `${mine.length} input series match their hashes and the manifest${r === 'baseline' ? ', and so do the settings and model' : ''}`);
+		const ok = add(`inputs:${r}`, problems.length === 0, problems.join('; ') || `${mine.length === 1 ? '1 input series matches its hash' : `${mine.length} input series match their hashes`} and the manifest${r === 'baseline' ? ', and so do the settings and model' : ''}`);
 		inputs[r] = { snapshot, values, input: ok ? ({ settings: snapshot.settings, model: snapshot.model, series } as ModelInput) : null };
 	}
 
@@ -523,14 +523,17 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 			if (fresh.startDate !== stored.startDate) why.push(`it starts on ${fresh.startDate}, not ${stored.startDate}`);
 			const paths = differingPaths(stored.summary, fresh.summary);
 			if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
-			const was = new Map(stored.series.map((s) => [`${s.nodeId ?? ''}|${s.key}`, s.valuesSha256]));
-			const now = new Map(again.series.map((s) => [`${s.nodeId ?? ''}|${s.key}`, s.valuesSha256]));
+			// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
+			const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at node ${s.nodeId}`);
+			const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
+			const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
 			const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));
 			const gone = [...was.keys()].filter((k) => !now.has(k));
 			const added = [...now.keys()].filter((k) => !was.has(k));
-			if (changed.length) why.push(`${changed.length} daily output${changed.length === 1 ? '' : 's'} differ (${changed.slice(0, 5).join(', ')}${changed.length > 5 ? ', …' : ''})`);
-			if (gone.length) why.push(`${gone.length} stored output${gone.length === 1 ? '' : 's'} not produced`);
-			if (added.length) why.push(`${added.length} output${added.length === 1 ? '' : 's'} not stored`);
+			const some = (names: string[]) => `${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}`;
+			if (changed.length) why.push(`${changed.length === 1 ? '1 daily output differs' : `${changed.length} daily outputs differ`} (${some(changed)})`);
+			if (gone.length) why.push(`${gone.length === 1 ? '1 stored output is' : `${gone.length} stored outputs are`} not produced (${some(gone)})`);
+			if (added.length) why.push(`${added.length === 1 ? '1 output is' : `${added.length} outputs are`} not stored (${some(added)})`);
 			const engineNote = named.engineVersion !== ENGINE_VERSION ? ` The run was made with engine ${named.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
 			add(`reproduce:${r}`, false, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`);
 		}
