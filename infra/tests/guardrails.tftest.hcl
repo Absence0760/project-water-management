@@ -418,7 +418,7 @@ override_resource {
   }
 }
 
-# Evidence pack PDFs (packs.tf, 116_pack_render)
+# Evidence pack PDFs (packs.tf, 119_pack_render)
 override_resource {
   target          = aws_s3_bucket.packs
   override_during = plan
@@ -2524,7 +2524,7 @@ run "report_downloads" {
 }
 
 # ---------------------------------------------------------------------------
-# Issued evidence packs' PDFs (packs.tf, s3_cloudfront.tf; 116_pack_render):
+# Issued evidence packs' PDFs (packs.tf, s3_cloudfront.tf; 119_pack_render):
 # a private bucket that keeps every PDF (versioned, Object Lock, nothing
 # expires), written only by the renderer under packs/, read only by
 # CloudFront's /packs/* behaviour for signed URLs.
@@ -2613,6 +2613,33 @@ run "packs" {
       aws_cloudfront_origin_access_control.packs.signing_protocol == "sigv4"
     )
     error_message = "The packs OAC must sign every origin request (sigv4)."
+  }
+
+  # --- The worker checks the renderer's answer against the stored object ------------------
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.worker_packs.statement) == 1 &&
+      toset(data.aws_iam_policy_document.worker_packs.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.worker_packs.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
+      aws_iam_role_policy.worker_packs.role == aws_iam_role.worker_lambda.id &&
+      aws_lambda_function.worker.environment[0].variables["PACKS_BUCKET"] == aws_s3_bucket.packs.bucket
+    )
+    error_message = "The worker may only read (HEAD) pack PDFs under packs/, to check the renderer's answer before recording its hash; it knows the packs bucket (PACKS_BUCKET)."
+  }
+  assert {
+    condition = (
+      aws_vpc_endpoint.s3.vpc_endpoint_type == "Interface" &&
+      aws_vpc_endpoint.s3.service_name == "com.amazonaws.af-south-1.s3" &&
+      aws_vpc_endpoint.s3.private_dns_enabled &&
+      length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
+      length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
+      can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 1 &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn])
+    )
+    error_message = "The worker reaches S3 through one interface endpoint whose policy allows only its read of packs/ in the packs bucket."
   }
 }
 
@@ -3326,8 +3353,9 @@ run "network" {
       "vpce_sqs <- worker_lambda tcp/443-443",
       "vpce_ses <- api_lambda tcp/443-443",
       "vpce_ses <- worker_lambda tcp/443-443",
+      "vpce_s3 <- worker_lambda tcp/443-443",
     ])
-    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker. A new edge is a deliberate change to this list."
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf). A new edge is a deliberate change to this list."
   }
   assert {
     condition = aws_vpc.main.cidr_block != "" && toset(flatten([
@@ -3352,6 +3380,7 @@ run "network" {
       "worker_lambda -> vpce_sqs tcp/443-443",
       "worker_lambda -> vpce_ses tcp/443-443",
       "worker_lambda -> vpce tcp/443-443",
+      "worker_lambda -> vpce_s3 tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -3411,21 +3440,23 @@ run "network" {
       vpce           = aws_security_group.vpce.description
       vpce_sqs       = aws_security_group.vpce_sqs.description
       vpce_ses       = aws_security_group.vpce_ses.description
+      vpce_s3        = aws_security_group.vpce_s3.description
       } == {
       api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
       migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
-      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
       rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
       vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
       vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
       vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
+      vpce_s3        = "S3 interface endpoint: 443 from the worker Lambda only."
     }
     error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
   }
   assert {
     condition = aws_vpc.main.cidr_block != "" && alltrue([
       for f in fileset(".", "*.tf") :
-      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses)\"", file(f)))
+      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses|vpce_s3)\"", file(f)))
     ])
     error_message = "A new security group needs its description pinned in the assert above."
   }
@@ -3435,7 +3466,7 @@ run "network" {
         aws_security_group.api_lambda.description, aws_security_group.migrate_lambda.description,
         aws_security_group.worker_lambda.description, aws_security_group.rds.description,
         aws_security_group.vpce.description, aws_security_group.vpce_sqs.description,
-        aws_security_group.vpce_ses.description,
+        aws_security_group.vpce_ses.description, aws_security_group.vpce_s3.description,
       ] : length(d) <= 255 && can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]+$", d))
     ])
     error_message = "Security-group descriptions are limited to 255 characters of a-zA-Z0-9. _-:/()#,@[]+=&;{}!$* (no apostrophes, no em dashes), or AWS rejects the create."

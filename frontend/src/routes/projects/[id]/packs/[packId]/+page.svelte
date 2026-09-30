@@ -103,7 +103,7 @@
 	const reload = () => load(projectId, packId, true);
 
 	const pack = $derived(detail?.pack ?? null);
-	/** Where the server-rendered PDF is (116_pack_render): ready, rendering, failed or none. */
+	/** Where the server-rendered PDF is (119_pack_render): ready, rendering, failed or none. */
 	const pdf = $derived(detail?.pdf ?? null);
 
 	let renderingAgain = $state(false);

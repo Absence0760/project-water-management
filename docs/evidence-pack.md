@@ -154,7 +154,7 @@ naming the pack.
 
 ## The PDF
 
-Issuing a pack prints it (116_pack_render; the machinery is a report's,
+Issuing a pack prints it (119_pack_render; the machinery is a report's,
 [architecture.md § An evidence pack's PDF](./architecture.md#an-evidence-packs-pdf)):
 
 1. **Queued with the issue.** `POST …/issue` queues a `pack_render` job in
@@ -175,7 +175,10 @@ Issuing a pack prints it (116_pack_render; the machinery is a report's,
    by default, no lifecycle; [deployment.md § Evidence packs](./deployment.md#evidence-packs)),
    so the object can't be deleted or overwritten by the app; locally it is
    MinIO's `water-packs`.
-4. **Recorded once.** `app_record_pack_pdf` sets `pdf_key`, `pdf_sha256` and
+4. **Checked, then recorded once.** In production the renderer's answer names
+   the hash; the worker first checks that the packs bucket holds an object
+   under that hash's key whose stored checksum is that hash, and refuses the
+   answer otherwise. `app_record_pack_pdf` sets `pdf_key`, `pdf_sha256` and
    `pdf_pages` from the render job only; the first PDF recorded stands (a
    redelivered answer or a second render changes nothing, and a second print
    is refused: `POST …/pdf` answers `409` once one is recorded). From then on

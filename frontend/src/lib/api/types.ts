@@ -1527,7 +1527,7 @@ export interface Pack {
 	verifyPath: string;
 	reportVersion: string;
 	engineVersion: string;
-	/** The server-rendered PDF's SHA-256, once recorded (116_pack_render); null until then. */
+	/** The server-rendered PDF's SHA-256, once recorded (119_pack_render); null until then. */
 	pdfSha256: string | null;
 	pdfPages: number | null;
 	bundleSha256: string | null;
@@ -1555,7 +1555,7 @@ export interface PackDetail {
 	/** The stored manifest still hashes to its recorded SHA-256. */
 	manifestMatches: boolean;
 	signoffs: Signoff[];
-	/** Where its server-rendered PDF is (116_pack_render). */
+	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
 	issue: PackIssueChecks | null;
 }

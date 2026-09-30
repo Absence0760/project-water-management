@@ -1,4 +1,4 @@
-// The pack_render handler's decisions (116_pack_render; docs/evidence-pack.md §
+// The pack_render handler's decisions (119_pack_render; docs/evidence-pack.md §
 // The PDF), with the database, browser, storage and queue stubbed. The SQS
 // path and the renderer's answers run against Postgres in
 // evidence/packs.db.test.ts; the real print through MinIO in the pack e2e.
@@ -16,9 +16,11 @@ const { calls } = vi.hoisted(() => ({
 const renderReportPdf = vi.fn();
 const putPackPdf = vi.fn(async (key: string, body: Uint8Array, sha256: string) => void calls.puts.push({ key, bytes: body.length, sha256 }));
 vi.mock('../../reports/render.js', async (orig) => ({ ...(await orig<typeof import('../../reports/render.js')>()), renderReportPdf: (...a: unknown[]) => renderReportPdf(...a) }));
+const headPackPdf = vi.fn(async (_key: string, _sha256: string): Promise<{ ok: boolean; reason?: string }> => ({ ok: true }));
 vi.mock('../../reports/storage.js', async (orig) => ({
 	...(await orig<typeof import('../../reports/storage.js')>()),
-	putPackPdf: (k: string, b: Uint8Array, h: string) => putPackPdf(k, b, h)
+	putPackPdf: (k: string, b: Uint8Array, h: string) => putPackPdf(k, b, h),
+	headPackPdf: (k: string, h: string) => headPackPdf(k, h)
 }));
 vi.mock('../../reports/tokens.js', () => ({
 	issuePackRenderToken: async (_db: unknown, projectId: string, packId: string) => (calls.tokens.push({ projectId, packId }), 'T'.repeat(43))
@@ -65,6 +67,7 @@ afterEach(() => {
 	calls.puts.length = 0;
 	renderReportPdf.mockReset();
 	putPackPdf.mockClear();
+	headPackPdf.mockClear();
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
@@ -129,12 +132,25 @@ describe('pack_render in production (REPORT_RENDERER=sqs)', () => {
 		expect(renderReportPdf).not.toHaveBeenCalled();
 	});
 
-	it('records the renderer’s answer: its hash and pages, never a key', async () => {
+	it('records the renderer’s answer once the packs bucket holds that PDF under its hash: its hash and pages, never a key', async () => {
 		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const d = db({ issued: true, hasPdf: false });
 		await run(d, { packId: K, result: { ok: true, pages: 7, bytes: 10, ms: 5, sha256: SHA } });
+		expect(headPackPdf).toHaveBeenCalledWith(`packs/${P}/${K}/${SHA}.pdf`, SHA);
 		expect(recorded(d)).toEqual([[K, SHA, 7]]);
 		expect(calls.tokens).toEqual([]);
+	});
+
+	it('refuses an answer whose PDF isn’t stored under that hash, for good, recording nothing', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const answer = { packId: K, result: { ok: true, pages: 7, bytes: 10, ms: 5, sha256: SHA } };
+		headPackPdf.mockResolvedValueOnce({ ok: false, reason: 'missing' });
+		const d = db({ issued: true, hasPdf: false });
+		await expect(run(d, answer)).rejects.toMatchObject({ message: expect.stringMatching(/does not hold/), retry: false });
+		headPackPdf.mockResolvedValueOnce({ ok: false, reason: 'mismatch' });
+		await expect(run(d, answer)).rejects.toMatchObject({ message: expect.stringMatching(/checksum is not the hash/), retry: false });
+		expect(recorded(d)).toEqual([]);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'pack_pdf_answer_refused', packId: K, projectId: P, reason: 'missing' }));
 	});
 
 	it('asks again after a retryable failure (2^n minutes), until the requests are used up; a final failure fails at once', async () => {

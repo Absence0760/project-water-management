@@ -1369,7 +1369,7 @@ plan-only until the first deploy):
 ## Evidence packs
 
 An issued evidence pack's PDF ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf),
-116_pack_render) is printed by the same renderer as a report, on the same two
+119_pack_render) is printed by the same renderer as a report, on the same two
 queues, and kept in a bucket of its own (infra/packs.tf, plan-only until the
 first deploy):
 
@@ -1384,8 +1384,17 @@ first deploy):
   renders; then the pack's PDF shows as failed and an editor asks again
   (`POST …/packs/:packId/pdf`). Failed answers count in `report-render-failed`
   (the log line carries `packId` instead of `reportId`; a store failure logs
-  `pack_store_failed`). The renderer needs `PACKS_BUCKET` (Terraform sets
-  it; it refuses to start without it).
+  `pack_store_failed`). Before recording, the worker checks the answer
+  against the bucket: it HEADs `packs/<project>/<pack>/<sha256>.pdf` with
+  checksum mode on and records only when the object exists and its stored
+  SHA-256 checksum is the answered hash; otherwise the answer is refused for
+  good (`pack_pdf_answer_refused` in the worker's log, the pack's PDF shows
+  failed with why, nothing recorded), so a buggy or compromised renderer
+  can't fix a wrong hash on a pack. The worker reaches S3 through an **S3
+  interface endpoint** (one AZ, ~$7.30/month; its policy allows only the
+  worker's `s3:GetObject` on `packs/*`) and holds that one grant. The renderer
+  and the worker both need `PACKS_BUCKET` (Terraform sets it; each refuses to
+  start without it).
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
   Lock**: every object is retained from its upload for `pack_retention_days`
@@ -1399,6 +1408,12 @@ first deploy):
   COMPLIANCE mode (no one, the root user included, can remove an object
   before its date) is a change to `infra/packs.tf` and can't be undone for
   the objects written under it.
+- **Orphan objects.** A retry, a re-render after a failure, or a redelivered
+  request prints the pack again, and a Chromium PDF differs per render (its
+  creation date), so each is a new object under its own hash, and only the
+  first recorded counts. Those orphans are held for the same retention
+  period as the recorded PDF; only the governance bypass (below) removes
+  them.
 - **Downloads**: the `/packs/*` behaviour serves the bucket through its own
   OAC to CloudFront signed URLs from the report-download key group only,
   exactly as `/reports/*` (§ Reports); `GET …/packs/:packId/pdf` redirects
@@ -1409,7 +1424,7 @@ first deploy):
   The pack keeps its recorded `pdfSha256`, and verify keeps answering it:
   say on the pack why its PDF is gone (withdraw it with that reason).
 - **Cost:** a PDF is ~1 MB kept for 10 years, ≈ $0.0003/month each at S3
-  Standard; nothing idle.
+  Standard (orphans included); the S3 interface endpoint ~$7.30/month idle.
 
 ## Runbooks
 

@@ -420,7 +420,7 @@ override_resource {
   }
 }
 
-# Evidence pack PDFs (packs.tf, 116_pack_render)
+# Evidence pack PDFs (packs.tf, 119_pack_render)
 override_resource {
   target          = aws_s3_bucket.packs
   override_during = plan

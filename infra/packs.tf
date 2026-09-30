@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------------
 # Issued evidence packs' PDFs (roadmap WP-3.14 "Rendering: reuse WP-2.15",
 # issue #71; docs/evidence-pack.md § The PDF, docs/deployment.md § Evidence
-# packs, backend/migrations/116_pack_render.sql)
+# packs, backend/migrations/119_pack_render.sql)
 #
 # Issuing a pack queues a pack_render job, which the renderer Lambda
 # (reports.tf) prints exactly as it prints a report: the pack's own page,
@@ -165,4 +165,96 @@ resource "aws_cloudfront_origin_access_control" "packs" {
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
+}
+
+# --- The worker's check of the renderer's answer ---------------------------------
+#
+# The renderer's answer (render-results) names the PDF's SHA-256, which the
+# worker records on the pack for good and verify publishes. So before
+# recording, the worker HEADs the object under that hash's key with checksum
+# mode on and records only when it exists and S3's stored checksum is that
+# hash (reports/storage.ts headPackPdf, jobs/handlers/pack-render.ts): a buggy
+# or compromised renderer can't fix a hash of bytes the bucket doesn't hold.
+# HeadObject needs s3:GetObject; the worker gets it on packs/* only (it never
+# reads a PDF's bytes: the code only HEADs).
+#
+# The worker is in the private VPC with no internet, so it reaches S3 through
+# an S3 interface endpoint (network.tf: "add that service's VPC endpoint"),
+# like SQS, SES and Secrets Manager: security-group rules reference groups
+# only, and the endpoint policy allows only this read of this bucket's
+# packs/ by the worker. One AZ (~$7.30/month): both subnets still reach it.
+# A free S3 gateway endpoint would need a prefix-list egress rule, which the
+# network guardrails refuse (tests/guardrails.tftest.hcl, run "network").
+
+data "aws_iam_policy_document" "worker_packs" {
+  statement {
+    sid       = "HeadPackPdfs"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.packs.arn}/packs/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_packs" {
+  name   = "pack-pdf-checks"
+  role   = aws_iam_role.worker_lambda.id
+  policy = data.aws_iam_policy_document.worker_packs.json
+}
+
+resource "aws_security_group" "vpce_s3" {
+  name        = "${local.project}-vpce-s3"
+  description = "S3 interface endpoint: 443 from the worker Lambda only."
+  vpc_id      = aws_vpc.main.id
+  tags        = { Name = "${local.project}-vpce-s3" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "vpce_s3_from_worker" {
+  security_group_id            = aws_security_group.vpce_s3.id
+  referenced_security_group_id = aws_security_group.worker_lambda.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+  description                  = "HTTPS from the worker Lambda (pack PDF checks)"
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_to_vpce_s3" {
+  security_group_id            = aws_security_group.worker_lambda.id
+  referenced_security_group_id = aws_security_group.vpce_s3.id
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+  description                  = "S3 endpoint"
+}
+
+# With private DNS, the SDK's default s3.<region>.amazonaws.com (and the
+# bucket's virtual-hosted name) resolve to the endpoint's ENIs: no app change.
+# private_dns_only_for_inbound_resolver_endpoint is false: there is no S3
+# gateway endpoint in this VPC for the in-VPC names to fall back on.
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = slice(aws_subnet.private[*].id, 0, 1)
+  security_group_ids  = [aws_security_group.vpce_s3.id]
+  private_dns_enabled = true
+
+  dns_options {
+    private_dns_only_for_inbound_resolver_endpoint = false
+  }
+
+  # Only the worker, only a read of packs/ in the packs bucket.
+  policy = data.aws_iam_policy_document.s3_endpoint.json
+
+  tags = { Name = "${local.project}-s3" }
+}
+
+data "aws_iam_policy_document" "s3_endpoint" {
+  statement {
+    sid       = "WorkerHeadsPackPdfs"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.packs.arn}/packs/*"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
 }

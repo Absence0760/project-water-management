@@ -1,4 +1,4 @@
--- 116_pack_render — the server-rendered PDF of an issued evidence pack
+-- 119_pack_render — the server-rendered PDF of an issued evidence pack
 -- (roadmap WP-3.14 "Rendering: reuse WP-2.15", issue #71;
 -- docs/evidence-pack.md § The PDF, docs/architecture.md § Server-side
 -- reports, docs/security.md § Render tokens).
@@ -65,7 +65,7 @@ ALTER TABLE render_token
 		END
 	);
 COMMENT ON COLUMN render_token.pack_id IS
-	'The evidence pack a pack render session may read (116_pack_render); NULL for a report token. Readable by the issuer and issued, at issue (render_token_issue).';
+	'The evidence pack a pack render session may read (119_pack_render); NULL for a report token. Readable by the issuer and issued, at issue (render_token_issue).';
 
 CREATE TRIGGER render_token_same_project BEFORE INSERT OR UPDATE ON render_token
 	FOR EACH ROW EXECUTE FUNCTION assert_same_project('pack_id');
@@ -182,7 +182,7 @@ CREATE FUNCTION app_record_pack_pdf(p_pack uuid, p_sha256 text, p_pages integer)
 	END
 	$$;
 COMMENT ON FUNCTION app_record_pack_pdf(uuid, text, integer) IS
-	'Records an issued evidence pack''s PDF (key packs/<project>/<pack>/<sha256>.pdf, its SHA-256, pages) once, from the caller''s running pack_render job of it (116_pack_render). False when one is recorded already.';
+	'Records an issued evidence pack''s PDF (key packs/<project>/<pack>/<sha256>.pdf, its SHA-256, pages) once, from the caller''s running pack_render job of it (119_pack_render). False when one is recorded already.';
 
 -- ---------------------------------------------------------------------------
 -- 4. The production worker's lookup for a render-results answer about a pack.

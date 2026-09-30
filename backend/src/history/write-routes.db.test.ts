@@ -528,7 +528,7 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' },
 	{
 		route: `POST ${P}/packs/:packId/pdf`,
-		exempt: 'asks again for an issued pack’s PDF; its pack_render job keeps who asked, and the PDF, once recorded, is fixed on the pack (116_pack_render)'
+		exempt: 'asks again for an issued pack’s PDF; its pack_render job keeps who asked, and the PDF, once recorded, is fixed on the pack (119_pack_render)'
 	}
 ];
 
@@ -610,7 +610,7 @@ describe('every write route records its change', () => {
 		expect((await owner!.call('PUT', `/projects/${ctx.projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
 	}, 60_000);
 
-	// Issuing the pack queues its PDF's render (pack_render, 116_pack_render); nothing here runs it, so no later file's tick may claim it.
+	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render); nothing here runs it, so no later file's tick may claim it.
 	afterAll(() => retirePendingJobs(ctx.packProjectId as string | undefined));
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);

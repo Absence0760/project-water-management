@@ -429,7 +429,7 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [`INSERT INTO render_token (token_hash, user_id, project_id, run_id, expires_at) VALUES ($1, $2, $3, $4, now())`, [nonce(), u(), h.projectId, ref]]
 	},
-	// A pack token (116_pack_render): render_token_issue refuses another project's pack before render_token_same_project does.
+	// A pack token (119_pack_render): render_token_issue refuses another project's pack before render_token_same_project does.
 	'render_token.pack_id': {
 		ref: (w) => w.issuedPackId,
 		insert: (h, ref) => [`INSERT INTO render_token (token_hash, user_id, project_id, pack_id, expires_at) VALUES ($1, $2, $3, $4, now())`, [nonce(), u(), h.projectId, ref]]

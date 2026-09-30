@@ -442,7 +442,7 @@ buys a **render session** that can read one report and nothing else.
   and the trigger); a farmer can't. An impact report's token (082) also names
   its baseline run (`against_run_id`), which may be in another project but
   must be one the issuer can read (the trigger, under their RLS). A pack's
-  token (purpose `pack`, 116_pack_render) names one evidence pack
+  token (purpose `pack`, 119_pack_render) names one evidence pack
   (`pack_id`) and no run: the trigger checks that the issuer reads that pack
   (RLS, as themselves) and that it was issued (`issued_at`: never a draft,
   nor a draft withdrawn before its issue), and a CHECK keeps exactly one
@@ -2623,7 +2623,7 @@ nothing else.
   a new version must be of the same application as its predecessor.
   `water_app` has no grant on the PDF and bundle columns at all: those hashes
   are printed by verify, so only a `SECURITY DEFINER` setter may write them.
-  The PDF's is `app_record_pack_pdf` (116_pack_render): it records only for
+  The PDF's is `app_record_pack_pdf` (119_pack_render): it records only for
   a pack that was issued, only from a *running* `pack_render` job of that
   pack whose acting user is the caller (so from the job handler's
   transaction, never a route's), under the key it derives itself
@@ -2706,7 +2706,18 @@ nothing else.
   group serve (`check_reports_path.mjs` keeps the SPA off `/packs`). The
   renderer's answer (`render-results`) carries the hash and pages only; the
   key is derived, never taken from a message (`transport.ts`,
-  `PackRenderResultMessage`).
+  `PackRenderResultMessage`). **The answer's hash is checked against the
+  stored object before it is recorded**: the worker HEADs the hash's key in
+  the packs bucket with checksum mode on (`reports/storage.ts`
+  `headPackPdf`) and records only when the object exists and S3's stored
+  SHA-256 checksum (verified by S3 at upload) is that hash; a missing object
+  or another checksum refuses the answer for good and records nothing
+  (`evidence/packs.db.test.ts` forges both). So a buggy or compromised
+  renderer, which could otherwise fix any hash on a pack forever (the
+  recording is write-once and verify publishes it), can only fail a render.
+  The worker's role may `s3:GetObject` under `packs/` (HEAD needs it; the
+  code never reads the bytes), through an S3 interface endpoint whose policy
+  allows nothing else.
 - **Personal data.** The signers' typed names and registrations are public
   on verify, as they are printed on the pack (a professional signature is
   made to be read by others; the pack sign-off dialog, with the pack view,

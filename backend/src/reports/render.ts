@@ -3,7 +3,7 @@
 //
 // It opens the SAME route a person prints from (/projects/:id/report?run=…,
 // with `&against=<project>:<run>` for an impact report, or an issued evidence
-// pack's page, /projects/:id/packs/:packId, 116_pack_render), so there is one
+// pack's page, /projects/:id/packs/:packId, 119_pack_render), so there is one
 // implementation of every chart and table:
 //   1. exchange the single-use render token for a render session
 //      (POST /auth/render-session): a cookie that reads this one project and
@@ -47,7 +47,7 @@ export interface ReportTarget {
 	token: string;
 }
 
-/** An issued evidence pack: its own page, /projects/:id/packs/:packId (116_pack_render). */
+/** An issued evidence pack: its own page, /projects/:id/packs/:packId (119_pack_render). */
 export interface PackTarget {
 	projectId: string;
 	packId: string;

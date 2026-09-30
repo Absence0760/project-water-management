@@ -117,7 +117,7 @@ describe('renderer Lambda', () => {
 	});
 });
 
-// An issued evidence pack (116_pack_render): the same browser, its own bucket, and an answer carrying the PDF's hash.
+// An issued evidence pack (119_pack_render): the same browser, its own bucket, and an answer carrying the PDF's hash.
 describe('renderer Lambda, an evidence pack', () => {
 	const pack = { packId: '00000000-0000-4000-8000-000000000006', projectId: ids.projectId };
 	const packRequest = { v: 1, type: 'render_pack', ...pack, token: TOKEN };

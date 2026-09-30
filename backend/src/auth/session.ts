@@ -18,7 +18,7 @@ function secret(): Uint8Array {
  * A render session (POST /auth/render-session, reports/scope.ts): what the
  * headless report renderer gets for a render token. It reads one project and
  * one run (and, for an impact report, compares it with one baseline), or one
- * evidence pack (116), and lives long enough for one render.
+ * evidence pack (119), and lives long enough for one render.
  */
 export const RENDER_SESSION_TTL_SECONDS = 10 * 60;
 

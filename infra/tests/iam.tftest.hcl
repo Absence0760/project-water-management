@@ -423,7 +423,7 @@ override_resource {
   }
 }
 
-# Evidence pack PDFs (packs.tf, 116_pack_render)
+# Evidence pack PDFs (packs.tf, 119_pack_render)
 override_resource {
   target          = aws_s3_bucket.packs
   override_during = plan
@@ -712,6 +712,7 @@ run "lambda_logs_scoped" {
         data.aws_iam_policy_document.renderer_packs.statement,
         data.aws_iam_policy_document.renderer_ecr_pull.statement,
         data.aws_iam_policy_document.worker_reports.statement,
+        data.aws_iam_policy_document.worker_packs.statement,
         data.aws_iam_policy_document.lambda_ses.statement,
         data.aws_iam_policy_document.lambda_ses_release.statement,
         data.aws_iam_policy_document.worker_mail_events.statement,

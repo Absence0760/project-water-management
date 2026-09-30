@@ -1,24 +1,28 @@
 // What the storage module sends to S3 (MinIO locally), with the client
 // stubbed: an evidence pack's PDF goes to its own bucket under its derived
-// key, carrying its SHA-256 (116_pack_render; the real round trip through
+// key, carrying its SHA-256 (119_pack_render; the real round trip through
 // MinIO is the pack e2e's). No network.
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sent, failHead } = vi.hoisted(() => ({ sent: [] as { name: string; input: Record<string, unknown> }[], failHead: { on: false } }));
+const { sent, failHead, objects } = vi.hoisted(() => ({ sent: [] as { name: string; input: Record<string, unknown> }[], failHead: { on: false }, objects: new Map<string, string | undefined>() }));
 vi.mock('@aws-sdk/client-s3', async (orig) => {
 	const sdk = await orig<typeof import('@aws-sdk/client-s3')>();
 	class S3Client {
 		async send(command: { constructor: { name: string }; input: Record<string, unknown> }) {
 			sent.push({ name: command.constructor.name, input: command.input });
 			if (command.constructor.name === 'HeadBucketCommand' && failHead.on) throw Object.assign(new Error('NotFound'), { name: 'NotFound' });
+			if (command.constructor.name === 'HeadObjectCommand') {
+				if (!objects.has(command.input.Key as string)) throw Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } });
+				return { ChecksumSHA256: objects.get(command.input.Key as string) };
+			}
 			return {};
 		}
 	}
 	return { ...sdk, S3Client };
 });
 
-const { packPdfKey, putPackPdf, putPdf, resetStorageClient } = await import('./storage.js');
+const { headPackPdf, packPdfKey, putPackPdf, putPdf, resetStorageClient } = await import('./storage.js');
 
 const P = '11111111-1111-4111-8111-111111111111';
 const K = '33333333-3333-4333-8333-333333333333';
@@ -28,6 +32,7 @@ const sha = createHash('sha256').update(pdf).digest('hex');
 beforeEach(() => {
 	sent.length = 0;
 	failHead.on = false;
+	objects.clear();
 	resetStorageClient();
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -77,5 +82,23 @@ describe('putPackPdf', () => {
 			'CreateBucketCommand water-reports',
 			'PutObjectCommand water-reports'
 		]);
+	});
+});
+
+describe('headPackPdf', () => {
+	it('is ok only for an object under the key whose stored checksum is that hash; says missing or mismatch otherwise', async () => {
+		vi.stubEnv('STORAGE', 's3');
+		vi.stubEnv('PACKS_BUCKET', 'water-management-packs-000000000000');
+		const key = packPdfKey(P, K, sha);
+		expect(await headPackPdf(key, sha)).toEqual({ ok: false, reason: 'missing' });
+		objects.set(key, createHash('sha256').update('other bytes').digest('base64'));
+		expect(await headPackPdf(key, sha)).toMatchObject({ ok: false, reason: 'mismatch' });
+		objects.set(key, undefined);
+		expect(await headPackPdf(key, sha)).toEqual({ ok: false, reason: 'mismatch', stored: null });
+		objects.set(key, createHash('sha256').update(pdf).digest('base64'));
+		expect(await headPackPdf(key, sha)).toEqual({ ok: true });
+		// Asked with checksum mode on, of the packs bucket.
+		expect(sent.at(-1)).toEqual({ name: 'HeadObjectCommand', input: { Bucket: 'water-management-packs-000000000000', Key: key, ChecksumMode: 'ENABLED' } });
+		await expect(headPackPdf(key, 'x')).rejects.toThrow('SHA-256');
 	});
 });

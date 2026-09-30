@@ -255,8 +255,8 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	PACKS_BUCKET: {
-		why: 'The evidence packs bucket (Object Lock; infra/packs.tf). Only the renderer stores a pack PDF; the API signs its downloads as CloudFront URLs on /packs/*, which name no bucket.',
-		checks: { renderer: required }
+		why: 'The evidence packs bucket (Object Lock; infra/packs.tf). The renderer stores a pack PDF; the worker HEADs it before recording the hash the renderer answered with (jobs/handlers/pack-render.ts); the API signs its downloads as CloudFront URLs on /packs/*, which name no bucket.',
+		checks: { worker: required, renderer: required }
 	},
 	S3_ENDPOINT: { why: 'MinIO only (STORAGE=local), which production refuses; STORAGE=s3 ignores it.' },
 	S3_REGION: { why: 'MinIO only.' },

@@ -41,7 +41,7 @@
 // underneath: the session is the requesting user's, so it can never see more
 // than they can.
 //
-// An evidence pack's session (116_pack_render: the pack_render job prints an
+// An evidence pack's session (119_pack_render: the pack_render job prints an
 // issued pack's own page, frontend/src/routes/projects/[id]/packs/[packId])
 // reads the pack and nothing else. The frozen manifest holds the whole
 // evidence report, so the page reads no run, no series and not even the

@@ -3865,7 +3865,7 @@ Left, from the design and the persona review (§11), each with its trigger.
       (WP-3.14). Until then the pack's page leaves the board out and says
       it isn't part of the pack (ui.md § Evidence pack).
 - [ ] **The server-rendered evidence PDF.** An *issued pack* is printed on
-      the server now (116_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
+      the server now (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
       from its frozen manifest; the *draft* evidence report on the report
       route still prints from the browser only. Left: page 1's licence
       impact board isn't in the manifest (the browser builds it from three
@@ -3895,7 +3895,7 @@ verify lookup; 2026-09-30: the server-rendered PDF, [evidence-pack.md](./evidenc
       says the signer's name and registration are public. Axe on both
       (`e2e/tests/evidence-pack.spec.ts`).
 - [x] **The server-rendered pack PDF and its hash.** Built 2026-09-30
-      (116_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)):
+      (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)):
       issuing queues a `pack_render` job that prints the pack's own page with
       WP-2.15 Phase B's renderer (a render scope over the pack alone: the
       manifest holds the report, so no run is read), stores it in its own

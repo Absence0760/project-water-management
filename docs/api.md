@@ -2046,7 +2046,7 @@ covers the manifest, the hash, the short code and the lifecycle).
   project's); `createdBy` and `issuedBy` are display names (null once the
   account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
   `signoffs` is a count. `pdfSha256` and `pdfPages` are set once, when the
-  PDF is recorded (116_pack_render); the bundle fields stay `null` until it
+  PDF is recorded (119_pack_render); the bundle fields stay `null` until it
   is built.
 - `PackPdfState = { status: 'ready' | 'rendering' | 'failed' | 'none',
   error }`: `ready` once the PDF is recorded; `rendering` while its render
@@ -3000,7 +3000,7 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
   ([security.md § Render tokens](./security.md#render-tokens)). A pack's
-  render session (an issued evidence pack's PDF, 116_pack_render) may `GET`
+  render session (an issued evidence pack's PDF, 119_pack_render) may `GET`
   only `/auth/me`, `/projects/:id/packs/:packId` and its `/signoffs`, with
   no query: not the project, its runs, the pack list or the pack's PDF.
 

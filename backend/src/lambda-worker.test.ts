@@ -114,7 +114,7 @@ describe('handler', () => {
 		acceptRenderResult.mockClear();
 	});
 
-	it('queues each evidence pack’s render-results message as a pack_render job before the tick, and logs one it drops (116_pack_render)', async () => {
+	it('queues each evidence pack’s render-results message as a pack_render job before the tick, and logs one it drops (119_pack_render)', async () => {
 		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const msg = {

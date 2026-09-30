@@ -1320,7 +1320,7 @@ render session needs a second run.
 
 ### An evidence pack's PDF
 
-Issuing a pack (116_pack_render; [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf))
+Issuing a pack (119_pack_render; [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf))
 queues a `pack_render` job (`jobs/handlers/pack-render.ts`, as the issuer,
 deduplicated per pack) that prints the pack's own page,
 `/projects/:id/packs/:packId`, with the same machinery as `report_render`:
@@ -1339,7 +1339,10 @@ What differs from a report:
   with no lifecycle, infra/packs.tf) under a **content-addressed** key,
   `packs/<project>/<pack>/<sha256>.pdf`, uploaded with that SHA-256 as its
   checksum. A second render is a second object, never an overwrite.
-- **Recorded once.** Only `app_record_pack_pdf` writes the pack's
+- **Checked, then recorded once.** A production answer's hash is recorded
+  only once the worker has HEADed that key in the packs bucket and found S3's
+  stored checksum equal to it (`headPackPdf`, through an S3 interface
+  endpoint). Only `app_record_pack_pdf` writes the pack's
   `pdf_key`, `pdf_sha256` and `pdf_pages`: from a running `pack_render` job
   of that pack, as its acting user, deriving the key from the ids and the
   hash; the first recorded stands. `GET /verify/:code` then answers the

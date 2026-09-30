@@ -228,7 +228,7 @@ describe('a session’s scope claim', () => {
 		}
 	});
 
-	it('a pack claim (116_pack_render) is a project and a pack and nothing else; a well-formed one gets no further than its pack (positive control)', async () => {
+	it('a pack claim (119_pack_render) is a project and a pack and nothing else; a well-formed one gets no further than its pack (positive control)', async () => {
 		const owner = await signUp('RsPackClaim');
 		const { projectId, runId } = await withRun(owner, 'Pack claim');
 		const packId = crypto.randomUUID();

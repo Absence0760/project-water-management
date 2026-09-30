@@ -3,7 +3,7 @@
 // (in process, or on the render-requests queue in production), stored only as
 // their SHA-256; single use, 5 minutes, for one project and one run (and, for
 // an impact report, the baseline it compares against, 082), or for one
-// issued evidence pack (116_pack_render), issued by and for the report's
+// issued evidence pack (119_pack_render), issued by and for the report's
 // requester (the pack render job's acting user). POST /auth/render-session
 // consumes one.
 import { newToken } from '../auth/tokens.js';
@@ -25,7 +25,7 @@ export async function issueRenderToken(db: Db, projectId: string, runId: string,
 }
 
 /**
- * Issue a render token for an evidence pack past draft (116_pack_render), as
+ * Issue a render token for an evidence pack past draft (119_pack_render), as
  * the transaction's user, who must read the pack (RLS). Commit before handing
  * it out, as issueRenderToken.
  */

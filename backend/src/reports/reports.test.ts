@@ -30,7 +30,7 @@ describe('reportFileName', () => {
 	});
 });
 
-describe('packPdfKey (116_pack_render)', () => {
+describe('packPdfKey (119_pack_render)', () => {
 	const K = '33333333-3333-4333-8333-333333333333';
 	const SHA = '0123456789abcdef'.repeat(4);
 	it('is content-addressed under the ids, as app_record_pack_pdf derives it, and refuses anything else', () => {

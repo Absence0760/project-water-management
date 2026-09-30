@@ -1,7 +1,7 @@
 // `pack_render`: print an issued evidence pack's own page to a PDF, store it
 // for good, and record its SHA-256 and page count on the pack once (roadmap
 // WP-3.14 "Rendering: reuse WP-2.15", issue #71; docs/evidence-pack.md § The
-// PDF, 116_pack_render.sql). Queued by POST …/packs/:packId/issue (and
+// PDF, 119_pack_render.sql). Queued by POST …/packs/:packId/issue (and
 // POST …/packs/:packId/pdf, an editor's retry while none is recorded), as the
 // editor who asked, deduplicated per pack.
 //
@@ -12,8 +12,11 @@
 //   REPORT_RENDERER=sqs (production): hand the render to the renderer Lambda
 //     on `render-requests` (PackRenderRequestMessage). It stores the PDF and
 //     answers on `render-results` with the PDF's SHA-256; the worker makes that
-//     a second pack_render job carrying `result`, which records it, or asks
-//     again after a retryable failure (requestPackRenderAgain).
+//     a second pack_render job carrying `result`, which records it once it
+//     has checked that the packs bucket holds an object under that hash's key
+//     stored with that checksum (headPackPdf; otherwise the answer is refused
+//     and nothing recorded), or asks again after a retryable failure
+//     (requestPackRenderAgain).
 //
 // The render token is issued in its own committed transaction as the acting
 // user, for this pack only (render_token.pack_id): the render session reads
@@ -29,7 +32,7 @@ import type { Db } from '../../db/tx.js';
 import { withUser } from '../../db/tx.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from '../../reports/render.js';
-import { packPdfKey, putPackPdf } from '../../reports/storage.js';
+import { headPackPdf, packPdfKey, putPackPdf } from '../../reports/storage.js';
 import { REPORT_MAX_ATTEMPTS } from '../../reports/store.js';
 import { issuePackRenderToken } from '../../reports/tokens.js';
 import { packRenderDedupeKey } from '../../evidence/packPdf.js';
@@ -101,6 +104,20 @@ export const packRenderHandler = defineHandler({
 			if (!payload.result.ok) {
 				if (payload.result.retry && (await requestPackRenderAgain(db, job.projectId, payload.packId))) return;
 				throw new JobError(`the renderer failed: ${payload.result.error}`, { retry: false });
+			}
+			// The answer's hash is published by verify and fixed for good, so it is recorded only when the
+			// packs bucket really holds a PDF under that hash's key, stored with that checksum: a buggy or
+			// compromised renderer can't fix a hash of bytes that don't exist.
+			const key = packPdfKey(job.projectId, payload.packId, payload.result.sha256);
+			const held = await headPackPdf(key, payload.result.sha256);
+			if (!held.ok) {
+				logEvent('warn', { event: 'pack_pdf_answer_refused', packId: payload.packId, projectId: job.projectId, reason: held.reason });
+				throw new JobError(
+					held.reason === 'missing'
+						? 'the renderer’s answer names a PDF the packs bucket does not hold; nothing was recorded'
+						: 'the stored PDF’s checksum is not the hash the renderer answered with; nothing was recorded',
+					{ retry: false }
+				);
 			}
 			const recorded = await recordPdf(db, payload.packId, payload.result.sha256, payload.result.pages);
 			logEvent('info', { event: 'pack_pdf_recorded', packId: payload.packId, projectId: job.projectId, pages: payload.result.pages, recorded });

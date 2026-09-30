@@ -1,5 +1,5 @@
 // An issued evidence pack's PDF (issue #71, WP-3.14 "Rendering: reuse
-// WP-2.15"; docs/evidence-pack.md § The PDF, 116_pack_render): issuing a
+// WP-2.15"; docs/evidence-pack.md § The PDF, 119_pack_render): issuing a
 // signed pack queues its render; the background worker (support/jobs.ts, one
 // tick) prints the pack's own page in its own headless Chromium through a
 // render session that reads that pack only, stores the PDF in MinIO under its

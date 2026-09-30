@@ -8,7 +8,7 @@
 // schema owner (immutable once issued, forward-only status, sign-off target
 // rules), who reads a pack, the runs a pack keeps, an account deletion, and a
 // project with an issued pack being kept. The issued pack's PDF too
-// (116_pack_render): the render issuing queues, its render session, the
+// (119_pack_render): the render issuing queues, its render session, the
 // renderer's answers (retry, failure, the PDF recorded once), and who
 // downloads it. Each "can't" has its positive control.
 //
@@ -38,6 +38,8 @@ import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
 import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
 import { acceptPackRenderResult } from '../reports/schedule.js';
+import { packPdfKey, packsBucket, putPackPdf } from '../reports/storage.js';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { trimRuns } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -106,6 +108,21 @@ async function sign(u: User, packId: string, name = 'Dr A. Hydrologist') {
 }
 
 const issue = (u: User, packId: string) => u.call('POST', `${packPath(packId)}/issue`);
+
+const S3 = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002';
+const minioUp = await fetch(`${S3}/minio/health/live`, { signal: AbortSignal.timeout(1500) })
+	.then((r) => r.ok)
+	.catch(() => false);
+if (!minioUp && process.env.CI) throw new Error(`packs.db.test.ts: MinIO is not reachable at ${S3} under CI; the job must start it (.github/workflows/ci.yml db-test)`);
+if (!minioUp) console.warn(`packs.db.test.ts: the pack PDF tests are skipped: MinIO is not running at ${S3} (pnpm dev:s3:up)`);
+/** A client straight to MinIO (DEV-ONLY docker credentials), to plant an object the renderer never stored. */
+const rawS3 = () =>
+	new S3Client({
+		endpoint: S3,
+		region: process.env.S3_REGION?.trim() || 'us-east-1',
+		forcePathStyle: true,
+		credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || 'minioadmin', secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || 'minioadmin' }
+	});
 
 // Whatever this file queued and left (issuing v2 queues its PDF's render, a retry waits two minutes): no later file's tick may claim it.
 afterAll(() => retirePendingJobs(projectId));
@@ -348,8 +365,11 @@ describe('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
 	});
 
-	// The PDF of the issued v1 (116_pack_render; docs/evidence-pack.md § The PDF), as production makes it.
-	describe('its PDF', () => {
+	// The PDF of the issued v1 (119_pack_render; docs/evidence-pack.md § The PDF), as production makes it.
+	// The renderer's answer is recorded only when the packs bucket holds its PDF (MinIO here): skipped
+	// locally without MinIO, and under CI a missing MinIO fails the file (ci.yml db-test starts it).
+	describe.skipIf(!minioUp)('its PDF', () => {
+		const PDF_BYTES = Buffer.from('the printed pack');
 		const PDF_SHA = sha256('the printed pack');
 		const pdfJobs = () =>
 			asOwner(
@@ -434,7 +454,30 @@ describe('issuing, superseding and withdrawing', () => {
 			expect(pack).toEqual({ pdf_key: null, pdf_sha256: null });
 		});
 
+		it('refuses an answer whose PDF the packs bucket does not hold under that hash: none there, or another checksum; nothing is recorded', async () => {
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const forged = sha256('a print that was never stored');
+			// No object under the claimed hash's key.
+			expect(await answer({ ok: true, pages: 3, bytes: 10, ms: 1, sha256: forged })).toBe('queued');
+			await tick();
+			expect((await pdfJobs()).at(-1)).toMatchObject({ isResult: true, status: 'dead', error: expect.stringMatching(/does not hold; nothing was recorded/) });
+			// An object under that key, but of other bytes (stored with their own, valid checksum).
+			const other = Buffer.from('other bytes under the forged key');
+			await rawS3().send(
+				new PutObjectCommand({ Bucket: packsBucket(), Key: packPdfKey(projectId, v1.id, forged), Body: other, ChecksumSHA256: createHash('sha256').update(other).digest('base64') })
+			);
+			expect(await answer({ ok: true, pages: 3, bytes: 10, ms: 1, sha256: forged })).toBe('queued');
+			await tick();
+			expect((await pdfJobs()).at(-1)).toMatchObject({ isResult: true, status: 'dead', error: expect.stringMatching(/checksum is not the hash/) });
+			const [pack] = await asOwner('SELECT pdf_key, pdf_sha256, pdf_pages FROM evidence_pack WHERE id = $1', [v1.id]);
+			expect(pack).toEqual({ pdf_key: null, pdf_sha256: null, pdf_pages: null });
+			expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.pdfSha256).toBeNull();
+			vi.restoreAllMocks();
+		});
+
 		it('records the renderer’s PDF once: its key, hash and pages, on the pack and on verify', async () => {
+			// What the renderer did before answering: stored the PDF under its hash, with that checksum (positive control for the check above).
+			await putPackPdf(packPdfKey(projectId, v1.id, PDF_SHA), PDF_BYTES, PDF_SHA);
 			expect(await answer({ ok: true, pages: 7, bytes: 123_456, ms: 2_000, sha256: PDF_SHA })).toBe('queued');
 			await tick();
 			expect((await pdfJobs()).at(-1)).toMatchObject({ isResult: true, status: 'done' });

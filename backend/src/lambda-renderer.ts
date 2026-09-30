@@ -22,7 +22,7 @@
 // are final), and the worker then asks again with a fresh token, after a
 // backoff (jobs/handlers/report-render.ts requestRenderAgain).
 //
-// An evidence pack's request (type `render_pack`, 116_pack_render) prints the
+// An evidence pack's request (type `render_pack`, 119_pack_render) prints the
 // pack's own page the same way, stores the PDF in the packs bucket under
 // packs/<project>/<pack>/<sha256>.pdf (Object Lock: kept for good) and answers
 // with the PDF's SHA-256, which the worker records on the pack once.

@@ -274,7 +274,7 @@ export const packRoutes = new Hono<AuthEnv>()
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					signoffs,
-					// The server-rendered PDF of an issued pack (116_pack_render): ready, rendering, failed or none.
+					// The server-rendered PDF of an issued pack (119_pack_render): ready, rendering, failed or none.
 					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
 					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest) : null
@@ -376,7 +376,7 @@ export const packRoutes = new Hono<AuthEnv>()
 			const issued = await loadPack(db, id, packId);
 			await recordAudit(db, id, 'pack.issued', audit(issued, pred ? { supersedesId: pred.id, supersedesVersion: pred.version } : {}));
 			if (pred) await recordAudit(db, id, 'pack.superseded', audit(pred, { byPackId: issued.id, byVersion: issued.version }));
-			// Its PDF, printed from the issued pack's own page (116_pack_render), in the same transaction as the issue.
+			// Its PDF, printed from the issued pack's own page (119_pack_render), in the same transaction as the issue.
 			const render = await queuePackRender(db, id, packId);
 			return { pack: issued, jobId: render.jobId };
 		});
