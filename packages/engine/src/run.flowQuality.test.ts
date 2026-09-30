@@ -239,3 +239,57 @@ describe('recordFlowFlags', () => {
 		expect(FLOW_DAY_FLAGS.length).toBe(7);
 	});
 });
+
+describe('gap fill on a resumed run', () => {
+	const at = toEpochDay('2020-10-01') - toEpochDay(START);
+	const cut = (s: { startDate: string; values: (number | null)[] }) => ({ startDate: '2020-10-01', values: s.values.slice(at) });
+	const LEFT_OUT = /^Resumed from 2020-10-01 without the observed gauge flow record's history: its gap fill is left out/;
+	/** The gauge record with a 5-day gap across the snapshot's day, filled from the logger (a donor ratio over the whole overlap). */
+	function filled(): ModelInput {
+		const gauge = record().values.slice();
+		for (let t = at - 2; t < at + 3; t++) gauge[t] = null;
+		const logger = record(1.3).values.map((v, t) => (v === null ? 1.3 : v));
+		return input(
+			{ flowGapFill: { flow_observed_m3s: { interpolateMaxDays: 1, donor: 'flow_logger_m3s', donorMaxDays: 30, donorMinOverlapDays: 100 }, flow_logger_m3s: null } },
+			{ flow_observed_m3s: { startDate: START, values: gauge }, flow_logger_m3s: { startDate: START, values: logger } }
+		);
+	}
+
+	it('with the history the resumed run fills exactly as the uninterrupted run (every series to the bit)', () => {
+		const inp = filled();
+		const full = runModel(inp);
+		const fill = full.series.find((s) => s.nodeId === null && s.key === 'observed_flow_fill')!.values;
+		// Positive control: the gap across the snapshot's day is filled from the donor, and single-day gaps interpolated.
+		expect(fill.slice(at, at + 3).every((c) => c === 2)).toBe(true);
+		expect(fill.includes(1)).toBe(true);
+		expect(checkResume(inp, at)).toBeNull();
+		expect(checkResume(inp, 100)).toBeNull();
+	});
+
+	it('without the history the fill is left out with a warning, never filled differently', () => {
+		const inp = filled();
+		const { snapshot } = runModelCapturing(inp, '2020-10-01');
+		const bare = runModelFrom(JSON.parse(JSON.stringify(snapshot)), {
+			...inp,
+			series: { rain_catchment_mm: cut(inp.series.rain_catchment_mm!), flow_observed_m3s: cut(inp.series.flow_observed_m3s!), flow_logger_m3s: cut(inp.series.flow_logger_m3s!) }
+		});
+		expect(bare.summary.warnings).toContainEqual(expect.stringMatching(LEFT_OUT));
+		expect(bare.series.some((s) => s.key === 'observed_flow_fill' || s.key === 'observed_flow_filled')).toBe(false);
+		expect(bare.summary.flowGapFill).toBeUndefined();
+		// Nothing is flagged infilled; the scored record is the stored one, its gaps still blank.
+		expect(col(bare)?.values.includes(FLOW_FLAG_CODE.infilled) ?? false).toBe(false);
+		const obs = bare.series.find((s) => s.nodeId === null && s.key === 'observed_flow')!.values;
+		expect(obs.slice(0, 3).every((v) => Number.isNaN(v))).toBe(true);
+		expect(checkFlowQuality({ ...inp, settings: { ...inp.settings, simulationStart: '2020-10-01' } }, bare)).toBeNull();
+	});
+
+	it('a fill that read no history before the snapshot’s day (the record and its donor start after it) is kept, without a warning', () => {
+		const late = (s: { values: (number | null)[] }) => ({ startDate: '2020-11-01', values: s.values.slice(0, 300) });
+		const base = filled();
+		const inp = { ...base, series: { ...base.series, flow_observed_m3s: late(record()), flow_logger_m3s: late(record(1.3)) } };
+		const { snapshot } = runModelCapturing(inp, '2020-10-01');
+		const bare = runModelFrom(JSON.parse(JSON.stringify(snapshot)), { ...inp, series: { ...inp.series, rain_catchment_mm: cut(inp.series.rain_catchment_mm!) } });
+		expect(bare.summary.warnings.some((w) => LEFT_OUT.test(w))).toBe(false);
+		expect(bare.series.some((s) => s.key === 'observed_flow_fill')).toBe(true);
+	});
+});

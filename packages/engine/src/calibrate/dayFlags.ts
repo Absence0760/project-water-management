@@ -164,17 +164,6 @@ export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 	});
 }
 
-/** A reading (a finite value ≥ 0, as flowDayFlags reads one) in `s` on an epoch day before `day`. */
-export function hasReadingBefore(s: DailySeries | undefined, day: number): boolean {
-	if (!s) return false;
-	const n = Math.min(s.values.length, day - toEpochDay(s.startDate));
-	for (let i = 0; i < n; i++) {
-		const v = s.values[i];
-		if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return true;
-	}
-	return false;
-}
-
 /** A day whose class is neither in the gauged range nor missing: what the run's quality column is stored for. */
 export function hasFlaggedDay(flags: ArrayLike<number>): boolean {
 	for (let t = 0; t < flags.length; t++) if (flags[t] !== FLOW_FLAG_CODE.inRange && flags[t] !== FLOW_FLAG_CODE.missing) return true;

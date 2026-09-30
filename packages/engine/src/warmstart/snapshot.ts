@@ -28,6 +28,7 @@
 // ±Infinity and −0 into tokens), so a backend can store one per base run.
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput } from '../project';
+import type { GapFillKind } from '../flowGapFill';
 import type { PreparedFits } from '../prepare';
 import { ENGINE_VERSION } from '../version';
 import { damCapacityOn } from '../network/development';
@@ -109,6 +110,11 @@ export interface ModelState {
 	 * (../run.ts leaves the class out and warns). Absent = no such history.
 	 */
 	flowRecordHistory?: true;
+	/**
+	 * The gap-filled records whose fill read readings, the record's or its donor's, before the snapshot's day
+	 * (engine ≥ 1.48.0): a resumed input without that history leaves their fill out, with a warning (../prepare.ts).
+	 */
+	flowFillHistory?: GapFillKind[];
 }
 
 /**

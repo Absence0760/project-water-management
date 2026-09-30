@@ -20,10 +20,10 @@ import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
-import { FLOW_FILL_COLUMNS } from './flowGapFill';
+import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, hasReadingBefore, recordFlowFlags } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -271,7 +271,10 @@ function runNetwork(
 ): ModelOutput {
 	const capturing = warm.captureDay !== undefined;
 	const resume = warm.resume;
-	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
+	const prepared = prepareRun(input, {
+		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
+		...(capturing ? { captureFits: true } : {})
+	});
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
@@ -971,6 +974,17 @@ function runNetwork(
 		})
 	});
 
+	// The filled records whose fill read readings (the record's or its donor's) before the snapshot's day: a resumed
+	// input without that history leaves their fill out (prepare.ts flowFillsFor), never fills them differently.
+	const fillHistory: GapFillKind[] =
+		capturing && flowFill
+			? GAP_FILL_KINDS.filter((k) => {
+					if (!flowFill[k]) return false;
+					const donor = settings.flowGapFill[k]?.donor;
+					const day = start + captureAt!;
+					return hasReadingBefore(series[k], day) || (!!donor && hasReadingBefore(series[donor], day));
+				})
+			: [];
 	if (capturing && warm.sink) {
 		const net = sim.captured!;
 		warm.sink.state = {
@@ -993,7 +1007,8 @@ function runNetwork(
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
-			...(flowRecordHistory ? { flowRecordHistory: true as const } : {})
+			...(flowRecordHistory ? { flowRecordHistory: true as const } : {}),
+			...(fillHistory.length ? { flowFillHistory: fillHistory } : {})
 		};
 	}
 

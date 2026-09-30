@@ -5842,11 +5842,12 @@ the scored record had readings before its day (`flowRecordHistory`), and a
 resumed input that carries the record without them leaves the suspect class
 out (`recordFlowFlags`' `suspect: false`: those days take their rating class)
 and warns "Resumed from … without the observed flow record's history: its
-quality flags leave out the suspect class …". The gauged-range, infilled and
-missing classes need no history and still match. A record that starts after
-the snapshot's day has no history to miss. (The gap fill, which interpolates
-across the snapshot's day, reads the history too; its columns are not
-guarded this way.) The run's self-checks hold it to its record
+quality flags leave out the suspect class …". The gauged-range and missing
+classes need no history and still match. A record that starts after the
+snapshot's day has no history to miss. The infilled class follows the gap
+fill, which is guarded the same way (§2.10i): resumed without the history it
+read, the fill is left out with a warning, so no day is infilled, never
+filled differently from the uninterrupted run. The run's self-checks hold it to its record
 (`checkFlowQuality`, part of `checkBalance`, §6 Verification). The same
 change fixed the self-check failing every run with a gap-filled record: the
 filled values (`observed_flow_filled`, NaN on the days not filled) were
@@ -5902,12 +5903,25 @@ lead-in and tail are never filled; nothing bounds them. Per record:
 
 Interpolation runs first, on the gaps short enough for it; the donor then
 fills only the longer ones. Everything is fitted and counted over the whole
-stored record, so the Data tab shows exactly what a run would fill. (A run
-resumed from a model-state snapshot, §2.16, fills from the records it is
-given: without the history before the snapshot's day, a gap across that day
-has no reading before it and stays open. The model's state never depends on
-an observed record, so only the fill columns and, with infilled days scored,
-the scores can differ.)
+stored record, so the Data tab shows exactly what a run would fill.
+
+**A resumed run (§2.16, engine ≥ 1.48.0).** The fill reads the whole record:
+a gap's bounding readings, the highest reading it clamps to and the donor's
+ratio over the whole overlap. A run resumed from a model-state snapshot with
+the history before the snapshot's day in its input fills exactly as the
+uninterrupted run, every column to the bit. Without that history it could
+only fill differently (a gap across the snapshot's day would stay open, the
+ratio and the clamp would come from part of the record), so the engine
+never does: the snapshot lists the filled records whose fill read readings,
+the record's or its donor's, before its day (`flowFillHistory`), and a
+resumed input that carries such a record with neither its nor its donor's
+readings before the run's start leaves that record's fill out altogether
+(no fill columns, no infilled day, the stored record scored as it is) and
+warns "Resumed from … without the … record's history: its gap fill is left
+out …". A fill that read nothing before the snapshot's day (the record and
+its donor start after it) is kept. The model's state never depends on an
+observed record, so only the fill columns, the infilled flags and, with
+infilled days scored, the scores are affected.
 
 **What reads a filled day: one control, the quality flags' infilled
 treatment** (`settings.qualityFlags.infilled`, §2.10h). Every filled day is
