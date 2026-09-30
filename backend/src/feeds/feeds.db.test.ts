@@ -74,6 +74,8 @@ async function claimDue(limit = 50, all = false) {
  * the alert and report schedulers would queue jobs for other files' leftover
  * rules and schedules, which the counts here would include (an
  * alerts.db.test.ts rule made "Run now" finish 2 jobs when that file ran first).
+ * Jobs other files left pending are the same hazard: db-setup.ts fails the
+ * file that leaves one, so the queue is empty when this file starts.
  */
 const tick = () => runTick({ feeds: false, reports: false, alerts: false });
 

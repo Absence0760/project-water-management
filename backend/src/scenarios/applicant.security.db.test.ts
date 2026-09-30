@@ -24,8 +24,8 @@
 // applications.db.test.ts, contributor-tables.db.test.ts and
 // oracles.db.test.ts keep the finer rules (the key allowlists, submission,
 // the oracles); this file is the "nothing else" sweep.
-import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { seriesHash } from '../runs/execute.js';
 
@@ -132,6 +132,9 @@ async function ownerKeys(t: string, key: string, where: string) {
 	const sql = `SELECT ${key} AS k FROM "${t}" x WHERE x.project_id = $1 AND $2::uuid IS NOT NULL AND (${where})`;
 	return new Set((await asOwner(sql, [projectId, applicantA.id])).map((r: Row) => r.k));
 }
+
+// The sweep, outlook, yield and alert jobs the write probes queued: no later file's tick should claim them (db-setup.ts).
+afterAll(() => retirePendingJobs(projectId));
 
 beforeAll(async () => {
 	let editor: User;
