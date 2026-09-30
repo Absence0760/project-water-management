@@ -33,9 +33,7 @@
 --     through the project's team, is editor or owner (they issue and
 --     withdraw packs), and the application's scenario owner when they still
 --     hold a role on the project above farmer (an applicant is a
---     contributor; an owner since ranked viewer still gets it: they are the
---     application's party and still read its packs). Otherwise viewers,
---     farmers and non-members never. The person who
+--     contributor). Viewers, farmers and non-members never. The person who
 --     issued or withdrew it is left out: they just did it. A plain function,
 --     revoked from water_app: only the SECURITY DEFINER queue reads it.
 --
@@ -90,14 +88,9 @@ COMMENT ON TABLE pack_notice IS
 	'One "pack issued" / "pack withdrawn" email per pack, recipient and event, ever (133_pack_notices, issue #71). Own rows readable; written only by the SECURITY DEFINER queue / claim / finish / purge functions. Purged 30 days after it is settled.';
 
 ALTER TABLE pack_notice ENABLE ROW LEVEL SECURITY;
--- Reading only: water_app holds SELECT and no write policy exists. Every
--- write goes through the SECURITY DEFINER queue / claim / finish / purge
--- functions below (they run as the owner), so no caller writes a recipient
--- even if a later migration adds a permissive policy by mistake
--- (catalogue.db.test.ts READ_ONLY pins the grant). The account's rows go
--- with it by the foreign key's cascade, which needs no grant.
+-- Reading only: no INSERT, UPDATE or DELETE policy.
 CREATE POLICY pack_notice_own ON pack_notice FOR SELECT USING (user_id = app_current_user_id());
-GRANT SELECT ON pack_notice TO water_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON pack_notice TO water_app;
 
 -- ---------------------------------------------------------------------------
 -- 2. Who

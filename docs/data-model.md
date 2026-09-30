@@ -1083,7 +1083,9 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   the report's users, their own by name, `own` being
   `app_application_own_nodes`, 071, plus the nodes only in the application
   run; every other unit in both runs as `{ nodeId, kind, changePts }`, the
-  change rounded to whole points, **for the server only**: the route keeps
+  change rounded to whole points, **for the server only** (134_pack_security;
+  `app_applicant_pack` also returns the pack's application run for the
+  server only): the route keeps
   those downstream of the application in its run's stored model and names
   them as the results view does, then drops the id; NULL
   when the report changed a baseline assumption). Nothing else of the
@@ -1155,7 +1157,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   Purged **30 days** after it is settled (`app_purge_pack_notices`, from
   the tick).
 - RLS: SELECT your own rows (`pack_notice_own`). `water_app` holds
-  `SELECT` only and there is no write policy: every write goes through the
+  `SELECT` only (134_pack_security revoked 133's write grants) and there is no write policy: every write goes through the
   `SECURITY DEFINER` functions below (`catalogue.db.test.ts` `READ_ONLY`).
 - **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
   only (`42501`), and only for a pack in that state (`23514`; an unknown

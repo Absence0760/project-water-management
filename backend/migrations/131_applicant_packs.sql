@@ -43,15 +43,11 @@
 --     nodes the owner still links, app_application_own_nodes, 071; and the
 --     nodes its proposals add) by name with their supply and reliability,
 --     baseline beside application; every other farm or water user present in
---     both runs as its node id, kind and change in share of demand supplied
---     in whole percentage points, **for the server only**: the route
---     (evidence/applicantPacks.ts) keeps only the units downstream of the
---     application's own and added nodes in the application run's stored
---     model and names each with the anonymous name the applicant already
---     sees on /base and the results view (projectBaseForApplicant,
---     downstreamOf, as scenarios/applicantResults.ts), then drops the id.
---     So the pack shows the applicant no unit, and no link between a name
---     and a place, that the results view doesn't. NULL when the report changed a baseline
+--     both runs only as "Farm n" / "Water user n" (ranked per kind in the
+--     order of a hash of its id, so the number says nothing about its name
+--     or place; a rank within this pack, not a label: it can shift between
+--     versions when the set of units changes) with its change in share of demand supplied, in
+--     whole percentage points. NULL when the report changed a baseline
 --     assumption (app_run_all_proposals' rule, 118: such a change could read
 --     another unit's values out through every figure that moves with it).
 --   Never another unit's name, id, demand, volumes or reliability, the
@@ -139,6 +135,8 @@ CREATE FUNCTION app_applicant_pack_units(p_report jsonb, p_own text[]) RETURNS j
 		SELECT u FROM u
 		WHERE NOT (u->>'nodeId' = ANY (coalesce(p_own, '{}'))) AND u->>'onlyIn' IS NULL
 		  AND jsonb_typeof(u->'change') = 'object' AND jsonb_typeof(u->'change'->'run') = 'number'
+	), numbered AS (
+		SELECT u, row_number() OVER (PARTITION BY u->>'kind' ORDER BY md5(u->>'nodeId'), u->>'nodeId') AS n FROM others
 	)
 	SELECT jsonb_build_object(
 		'own', coalesce((
@@ -161,15 +159,14 @@ CREATE FUNCTION app_applicant_pack_units(p_report jsonb, p_own text[]) RETURNS j
 			) ORDER BY u->>'kind', u->>'name', u->>'nodeId')
 			FROM mine
 		), '[]'::jsonb),
-		-- For the server only: the route keeps those downstream, names them as the results view does and drops the id (module comment).
 		'others', coalesce((
 			SELECT jsonb_agg(jsonb_build_object(
-				'nodeId', u->'nodeId',
 				'kind', u->'kind',
+				'n', n,
 				-- Whole percentage points; +0 for a rounded −0.
 				'changePts', round((u->'change'->>'run')::numeric) + 0
-			) ORDER BY u->>'nodeId')
-			FROM others
+			) ORDER BY u->>'kind', n)
+			FROM numbered
 		), '[]'::jsonb)
 	)
 	$$;
@@ -182,10 +179,7 @@ CREATE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 		pack jsonb,
 		verify jsonb,
 		figures jsonb,
-		units jsonb,
-		-- The application run the pack froze, for the server only: the route reads its stored model through
-		-- app_application_run_results (118) to find which other units are downstream (module comment).
-		application_run_id uuid
+		units jsonb
 	)
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 	AS $$
@@ -221,8 +215,7 @@ CREATE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 			v_meta,
 			v_verify,
 			app_share_pack_projection(p.manifest->'report', v_k AND v_proposals),
-			CASE WHEN v_proposals THEN app_applicant_pack_units(p.manifest->'report', v_own) END,
-			p.scenario_run_id;
+			CASE WHEN v_proposals THEN app_applicant_pack_units(p.manifest->'report', v_own) END;
 	END
 	$$;
 COMMENT ON FUNCTION app_applicant_pack(uuid, uuid) IS
@@ -234,10 +227,8 @@ GRANT EXECUTE ON FUNCTION app_applicant_pack_meta(uuid, uuid), app_applicant_pac
 -- 2. Share links: the applicant's own pack links
 -- ---------------------------------------------------------------------------
 
--- app_share_link_visible, from 128: a pack link is its editors' and the
--- contributor's who made it while they are still the pack's party
--- (app_applicant_pack_meta answers them), so an editor demoted since neither
--- sees nor revokes the links they made then.
+-- app_share_link_visible, from 128: a pack link is its editors' and, as a
+-- scenario link, the contributor's who made it.
 CREATE OR REPLACE FUNCTION app_share_link_visible(p_project uuid, p_kind text, p_target uuid, p_created_by uuid) RETURNS boolean
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 	AS $$
@@ -251,7 +242,7 @@ CREATE OR REPLACE FUNCTION app_share_link_visible(p_project uuid, p_kind text, p
 		END IF;
 		IF p_kind = 'pack' THEN
 			RETURN app_has_role(p_project, 'editor')
-				OR (p_created_by = app_current_user_id() AND app_applicant_pack_meta(p_project, p_target) IS NOT NULL);
+				OR (p_created_by = app_current_user_id() AND app_has_role(p_project, 'contributor'));
 		END IF;
 		RETURN false;
 	END

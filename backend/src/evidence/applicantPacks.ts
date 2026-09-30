@@ -1,5 +1,5 @@
 // An applicant's own application's evidence packs (roadmap WP-3.15; issue
-// #71; 131_applicant_packs.sql; docs/evidence-pack.md § Applicants,
+// #71; 131_applicant_packs.sql, 134_pack_security.sql; docs/evidence-pack.md § Applicants,
 // docs/api.md § Evidence packs → An applicant's packs).
 //
 // Issuing stays with the project's editors. An application's parties (its
@@ -171,7 +171,7 @@ export function nameOthers(rows: readonly ApplicantPackOtherRow[], naming: Other
 	});
 }
 
-/** The units field by field (app_applicant_pack_units, 131), the others named and filtered by `naming`. */
+/** The units field by field (app_applicant_pack_units, 131 and 134), the others named and filtered by `naming`. */
 export function toApplicantPackUnits(raw: Record<string, unknown>, naming: OthersNaming | null): NonNullable<ApplicantPack['units']> {
 	return {
 		own: arr(raw.own).map((x) => {
