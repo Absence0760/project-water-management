@@ -1214,8 +1214,13 @@ the suggested order (the IDs carry the detail):
       the median flow (indicative warnings with 8 or more segments, "Not
       judged" below), in the Plausibility checks panel and the summary CSV
       (model.md §2.10d). CR-18's flags joined its day mask in engine 1.22.0.
-- [ ] **Run comparison: the recession diagnostics (engine 1.19.0) and the
+- [x] **Run comparison: the recession diagnostics (engine 1.19.0) and the
       validation signatures (engine 1.55.0, CR-16) aren't set side by side.**
+      *Done 2026-09-30 (display only, no engine version): `RunComparison.plausibility`
+      gains `recession` and `signatures`, each run's stored numbers with pass
+      or fail, a change only between runs that scored the same record, and a
+      note on a run without them
+      ([run-comparison.md](./run-comparison.md#plausibility-checks)).*
       The Compare page shows neither: `packages/engine/src/plausibility/compare.ts`
       compares checks 1–4 only
       ([run-comparison.md](./run-comparison.md#plausibility-checks)), so a
