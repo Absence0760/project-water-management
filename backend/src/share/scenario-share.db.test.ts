@@ -11,7 +11,9 @@
 //   - the public answer is redacted (no other farm, member, e-mail,
 //     allocation holder), and hides results a server stamp doesn't cover;
 //   - the note visibility matrix on a scenario, reads and writes, per role;
-//   - every edit of a scenario note keeps the text it replaced.
+//   - every edit of a scenario note keeps the text it replaced;
+//   - the owner's inventory (`?scope=all`): every link with its target, the
+//     owner's alone, a target named only while the owner reads it.
 import { blankEwrRuleTable } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
@@ -364,6 +366,72 @@ describe('keeping the record', () => {
 		// Control: an application nobody commented on is deleted as before.
 		const bare = (await applicantB.call('POST', `${P()}/scenarios`, { name: 'Bare draft', baseRunId: published, ops: [] })).body.scenario.id as string;
 		expect((await applicantB.call('DELETE', `${P()}/scenarios/${bare}`)).status).toBe(204);
+	});
+});
+
+describe("the owner's inventory of every link", () => {
+	const all = (u: User) => u.call('GET', `${P()}/share-links?scope=all`);
+	type Listed = { id: string; label: string; targetKind: string | null; targetId: string | null; target: { name: string; status: string } | null; revokedBy: string | null };
+	const byId = (links: Listed[], id: string) => links.find((l) => l.id === id);
+
+	it('lists the baseline and every application link to the owner, each with its target; nobody else gets the list', async () => {
+		const baseline = await owner.call('POST', `${P()}/share-links`, { label: 'Inventory baseline', expiresInDays: 7 });
+		expect(baseline.status).toBe(201);
+		const byApplicant = await link(applicantA, appA, 'Applicant inventory');
+		const byAssessor = await link(assessor, appB, 'Assessor inventory');
+		const res = await all(owner);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const links = res.body.links as Listed[];
+		expect(byId(links, baseline.body.link.id)).toMatchObject({ targetKind: null, targetId: null, target: null });
+		expect(byId(links, byApplicant.body.link.id)).toMatchObject({ targetKind: 'scenario', targetId: appA, target: { name: 'Raise Rooikloof', status: 'submitted' } });
+		expect(byId(links, byAssessor.body.link.id)).toMatchObject({ targetKind: 'scenario', targetId: appB, target: { name: 'Other proposal', status: 'submitted' } });
+		// Every link the project has, as the database holds them (the owner reads every row).
+		const [{ n }] = (await asOwner('SELECT count(*)::int AS n FROM share_link WHERE project_id = $1', [projectId])) as [{ n: number }];
+		expect(links).toHaveLength(n);
+		// Without scope the list is still the baseline's alone.
+		const plain = (await owner.call('GET', `${P()}/share-links`)).body.links as Listed[];
+		expect(plain.every((l) => l.targetKind === null)).toBe(true);
+		expect(byId(plain, baseline.body.link.id)).toBeDefined();
+		// Below owner: 403; not a member: 404.
+		for (const u of [assessor, ngo, applicantA, farmer]) expect((await all(u)).status).toBe(403);
+		const stranger = await signUp('Shstranger');
+		expect((await all(stranger)).status).toBe(404);
+		expect((await owner.call('GET', `${P()}/share-links?scope=all&scenarioId=${appA}`)).status).toBe(400);
+	});
+
+	it('lets the owner withdraw an applicant’s link from the inventory, which kills that link only', async () => {
+		const made = await link(applicantA, appA, 'Owner withdraws');
+		const token = tokenOf(made.body.link.url);
+		const control = tokenOf((await link(assessor, appA, 'Stays live')).body.link.url);
+		expect((await openScenario(token)).status).toBe(200);
+		expect((await owner.call('DELETE', `${P()}/share-links/${made.body.link.id}`)).status).toBe(204);
+		expect((await openScenario(token)).status).toBe(404);
+		expect((await openScenario(control)).status).toBe(200);
+		const listed = byId((await all(owner)).body.links, made.body.link.id);
+		expect(listed?.revokedBy).toBe('Showner');
+	});
+
+	it("names a target only while the owner can read it: a withdrawn application says so, a draft one shows none", async () => {
+		const made = await link(applicantB, appB, 'Withdrawn later');
+		expect((await applicantB.call('POST', `${P()}/scenarios/${appB}/withdraw`)).status).toBe(200);
+		try {
+			// Withdrawn: the owner still reads it (editor+), and sees why the link opens nothing.
+			expect(byId((await all(owner)).body.links, made.body.link.id)?.target).toEqual({ name: 'Other proposal', status: 'withdrawn' });
+			// Reopened, it is a draft only its parties read: the link stays listed, its target unnamed.
+			expect((await applicantB.call('POST', `${P()}/scenarios/${appB}/reopen`)).status).toBe(200);
+			const links = (await all(owner)).body.links as Listed[];
+			expect(byId(links, made.body.link.id)).toMatchObject({ targetKind: 'scenario', targetId: appB, target: null });
+			expect(JSON.stringify(links)).not.toContain('Other proposal');
+			// Positive control: a submitted application is still named.
+			expect(links.find((l) => l.targetId === appA)?.target).toEqual({ name: 'Raise Rooikloof', status: 'submitted' });
+			// The owner can still withdraw a link whose target they can't read.
+			expect((await owner.call('DELETE', `${P()}/share-links/${made.body.link.id}`)).status).toBe(204);
+			expect(byId((await all(owner)).body.links, made.body.link.id)?.revokedBy).toBe('Showner');
+		} finally {
+			const now = (await applicantB.call('GET', `${P()}/scenarios/${appB}`)).body.scenario.status;
+			if (now === 'withdrawn') expect((await applicantB.call('POST', `${P()}/scenarios/${appB}/reopen`)).status).toBe(200);
+			expect((await applicantB.call('POST', `${P()}/scenarios/${appB}/submit`)).status).toBe(200);
+		}
 	});
 });
 

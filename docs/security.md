@@ -711,7 +711,13 @@ differences:
   (`app_share_link_creatable`), with the route answering `404` / `403` /
   `409` first. The assessors list and revoke every link to a scenario they
   read; an applicant only the links they made (`app_share_link_visible`).
-  Baseline links stay the owner's alone.
+  Baseline links stay the owner's alone. The owner reads and revokes every
+  link in the project, whoever made it: the Project page's Share links list
+  is that inventory (`GET …/share-links?scope=all`, owner only), each link
+  with its target's name and status. The name comes through the owner's own
+  RLS on `scenario` (a plain `LEFT JOIN`, no definer read), so a draft
+  application the owner can't read lists as an unnamed target, never its
+  name.
 - **One target.** The target is fixed at creation (no UPDATE grant) and
   checked to be a scenario of the link's project (a trigger). A scenario
   link answers nothing on `/share/view` or `/share/series`, a baseline link
@@ -757,7 +763,9 @@ differences:
   application that drew public comments can't be deleted
   (`scenario_comments_kept`), so the record doesn't cascade away.
 - **Tests:** `share/scenario-share.db.test.ts` (who makes, lists and revokes
-  a scenario link, each with its control; one target only, both ways, and
+  a scenario link, each with its control; the owner's inventory, every link
+  with its target to the owner alone, a draft target unnamed with a
+  submitted one as control, and the owner's revoke of an applicant's link; one target only, both ways, and
   the baseline link unchanged; revoked, expired and withdrawn against a live
   token; the string scan for other farms' names and ids, members, e-mails,
   the holder and non-public notes; unverified results hidden; the k rule),

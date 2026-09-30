@@ -1,7 +1,8 @@
 // Share-link routes (roadmap WP-2.3 phase 2, docs/api.md § Share).
 //
 // Owners list, create and revoke links to the published baseline (RLS in
-// 025_share_links.sql enforces the same). A link to one scenario (WP-3.15,
+// 025_share_links.sql enforces the same), and list every link in the project
+// with its target (`?scope=all`, the Project page's inventory) to revoke any. A link to one scenario (WP-3.15,
 // 115_scenario_share_notes.sql) is made by an editor on a scenario they read,
 // or by an applicant on their own, once it is submitted or decided; the
 // assessors list and revoke every link to it, an applicant the ones they
@@ -66,9 +67,11 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			if (!q.scenarioId) {
-				// The published baseline's links: the owner's, exactly as before.
+				// The published baseline's links, or (scope=all) the owner's inventory of every link in the project:
+				// the owner reads every share_link row (app_share_link_visible), so RLS alone would give the same list.
 				await requireRole(db, id, 'owner');
-				const { rows } = await db.query<ShareLinkRow>(`${SELECT_LINKS} WHERE s.project_id = $1 AND s.target_kind IS NULL ORDER BY s.created_at DESC, s.id`, [id]);
+				const where = q.scope === 'all' ? '' : ' AND s.target_kind IS NULL';
+				const { rows } = await db.query<ShareLinkRow>(`${SELECT_LINKS} WHERE s.project_id = $1${where} ORDER BY s.created_at DESC, s.id`, [id]);
 				return c.json({ links: rows.map(toLink) });
 			}
 			await requireRole(db, id, 'contributor');

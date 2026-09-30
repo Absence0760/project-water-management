@@ -1255,14 +1255,22 @@ it scrolls, and isn't fitted to the window.
   deleted but not yet saved reads "a removed farm".
 - **Share links** (WP-2.3 phase 2, `project/ShareLinksPanel.svelte`, rules
   in `project/shareLinks.ts`), owners only, under Farmers: read-only links
-  to the published baseline for people outside the project. *Make link*
+  to the published baseline for people outside the project, and the owner's
+  inventory of **every** public link in the project (`?scope=all`): the
+  baseline links made here and each application's links, made by its
+  assessors or applicant from the application's Share dialog. Under each
+  label the row says what the link opens ("The published baseline",
+  "Application “name”", or "An application you can't open" for one reopened
+  as a draft or deleted) and, for a live link whose application is
+  withdrawn or unreadable, that it opens nothing just now. The owner can
+  withdraw any live link from here; the confirm names the target. *Make link*
   takes who it's for (up to 100 characters) and how long it works (1 week,
   30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
   field with **Copy** (it falls back to selecting the field when the
   clipboard is refused), because the token isn't kept. The list shows each
   link's label and state (Live, Expired, Withdrawn), who made it and when,
   when it ends or who withdrew it, and when it was last opened (to the
-  hour), live links first. **Withdraw** asks first, then the link shows the
+  hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
 - On the **Network** tab, a farm with linked farmers says how many in its
