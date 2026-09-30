@@ -1103,6 +1103,8 @@ export const af: Catalogue = {
 	'8c9825dc': '’n Instelling van die opvanggebied verander: {path}',
 	// The {kind} record scaled by {factor}
 	'7bf8e335': 'Die {kind}-rekord met {factor} vermenigvuldig',
+	// Demand of {part} scaled by {factor}
+	'6f11e6e2': 'Waterbehoefte van {part} met {factor} vermenigvuldig',
 	// Demand scaled by {factor}
 	'43783ca2': 'Waterbehoefte met {factor} vermenigvuldig',
 	// The Reserve’s rule table replaced at {site}

@@ -12,7 +12,8 @@
 	import { siteOptions } from '$lib/components/settings/ewrRules';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
-	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
+	import DemandScheduleFields from '$lib/components/network/DemandScheduleFields.svelte';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
@@ -51,7 +52,7 @@
 	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
 	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
 	const allocations = $derived(input.model.allocations ?? []);
-	// Demand objects (engine ≥ 1.41.0): on units only.
+	// Demand objects (engine ≥ 1.43.0): on units only.
 	const objects = $derived(input.model.demandObjects ?? []);
 	const demandObject = $derived(objects.find((o) => o.id === d.demandObjectId));
 	// node.insert: the nodes that drain into the picked node, which the new one can sit above.
@@ -88,6 +89,8 @@
 
 	/** Start the value at what the field holds now, so a small change is a small edit. */
 	function prefill() {
+		// A demand object's schedule (engine ≥ 1.43.0 in the form): a copy of the object, edited by the Network form's own schedule editor.
+		d.doScheduleObject = d.kind === 'demandObject.set' && d.field === 'schedule' && demandObject ? (JSON.parse(JSON.stringify(demandObject)) as typeof demandObject) : null;
 		const s = draftSpec(d);
 		d.value = s ? valueText(s, current) : '';
 		d.months = s?.t === 'months' && Array.isArray(current) ? [...(current as number[])] : [];
@@ -394,6 +397,13 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if d.kind === 'demandObject.set' && d.field === 'schedule' && d.doScheduleObject}
+		<div class="form-row" data-testid="op-schedule">
+			<DemandScheduleFields object={d.doScheduleObject} readonly={false} />
+		</div>
+		<p class="hint">The schedule replaces the object's whole schedule; no windows is none (every day at its month's demand).</p>
+	{/if}
 
 	{#if spec && d.field}
 		<div class="form-row">
@@ -742,6 +752,15 @@
 					<option value="user">Other water users</option>
 				</select>
 			</div>
+			{#if d.demandCategory === 'farm'}
+				<div class="field">
+					<label for="op-demand-part">Part of their demand</label>
+					<select id="op-demand-part" bind:value={d.demandPart}>
+						<option value="">All of it (crops and demand objects)</option>
+						{#each DEMAND_PART_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					</select>
+				</div>
+			{/if}
 			<div class="field">
 				<label for="op-demand-pct">Demand (% of what they'd take)</label>
 				<input id="op-demand-pct" type="text" inputmode="decimal" placeholder="e.g. 85" bind:value={d.demandPct} />
@@ -761,7 +780,10 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
-		<p class="hint">Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply.</p>
+		<p class="hint">
+			Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply. A part's
+			cut stacks on the whole demand's, so DWS's % per category is one change per category; a domestic or municipal cut never goes below its basic-needs floor (25 l a person a day).
+		</p>
 	{/if}
 
 	<div class="actions">

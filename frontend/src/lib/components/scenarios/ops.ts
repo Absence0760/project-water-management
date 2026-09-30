@@ -12,6 +12,7 @@ import {
 	LAND_COVER_CLASSES,
 	SCALABLE_SERIES_KINDS,
 	scenarioSteps,
+	scheduleWindowProblem,
 	upgradeLegacyModel,
 	validateScenarioOps,
 	type AllocationEntry,
@@ -22,6 +23,7 @@ import {
 	type DemandObject,
 	type DemandObjectCategory,
 	type DemandObjectSizing,
+	type DemandPart,
 	type EwrRuleTable,
 	type ModelInput,
 	type NetworkNode,
@@ -42,7 +44,9 @@ import { kindLabel } from '$lib/series/kinds';
 import {
 	CROP_FIELD_SPECS,
 	DEMAND_OBJECT_FIELD_SPECS,
+	DEMAND_PART_OPTIONS,
 	LAND_COVER_FIELD_SPECS,
+	SCHEDULE_LABEL,
 	NODE_FIELD_SPECS,
 	SETTINGS_SPECS,
 	TRANSFER_FIELD_SPECS,
@@ -311,7 +315,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'demandObject.set': {
 			const o = m?.demandObjects?.find((x) => x.id === op.demandObjectId);
 			const what = o ? `${nodeName(o.nodeId)}, demand object “${o.name}”` : 'A demand object';
-			if (op.field === 'schedule') return `${what}: schedule ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
+			if (op.field === 'schedule') return `${what}: ${SCHEDULE_LABEL} ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
 			const f = DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField];
 			const was = o ? (o as unknown as Record<string, unknown>)[op.field] : undefined;
 			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
@@ -336,7 +340,10 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const user = op.category === 'user';
 			const who = op.nodeIds?.length ? op.nodeIds.map(nodeName).join(', ') : user ? 'every other water user' : 'every hydrological unit';
 			const months = op.months?.length ? `, in ${monthsText(op.months)}` : '';
-			return `${user ? 'Demand' : 'Irrigation demand'} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
+			// One part of a unit's demand (engine ≥ 1.43.0): its crops, or its demand objects of one category.
+			const part = op.part ? (DEMAND_PART_OPTIONS.find((p) => p.value === op.part)?.label ?? op.part) : null;
+			const whose = part ? `${part} demand` : user ? 'Demand' : 'Irrigation demand';
+			return `${whose} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
 		}
 		case 'ewrRule.set': {
 			const t = op.table;
@@ -375,8 +382,12 @@ export function objectText(o: DemandObject): string {
 	return [DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category, size, o.destination === 'external' ? 'piped out' : '', o.enabled === false ? 'not modelled' : ''].filter(Boolean).join(', ');
 }
 
-/** A demand object's schedule in words (none, null and an empty one run the same). */
-const scheduleText = (w: DemandObject['schedule']) => (w?.length ? `${w.length} window${w.length === 1 ? '' : 's'}` : 'none');
+/** A demand object's schedule in words (none, null and an empty one run the same): "2 windows (Weekends × 0.5, Christmas off)". */
+function scheduleText(w: DemandObject['schedule']): string {
+	if (!w?.length) return 'none';
+	const each = w.map((x, i) => `${x.label?.trim() || `window ${i + 1}`} ${x.factor === 0 ? 'off' : `× ${fmtNum(x.factor, 4, true)}`}`);
+	return `${w.length} window${w.length === 1 ? '' : 's'} (${each.join(', ')})`;
+}
 
 /** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
 export function volumeText(a: AllocationEntry): string {
@@ -457,7 +468,7 @@ export interface OpDraft {
 	coverClass: string;
 	coverAreaKm2: string;
 	densityPct: string;
-	/** demandObject.set / .remove: the object (engine ≥ 1.41.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
+	/** demandObject.set / .remove: the object (engine ≥ 1.43.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
 	demandObjectId: string;
 	doName: string;
 	doCategory: DemandObjectCategory;
@@ -465,6 +476,8 @@ export interface OpDraft {
 	doMonthlyM3Day: string;
 	doCount: string;
 	doLitres: string;
+	/** demandObject.set schedule: a copy of the object, its schedule edited by the Network form's own editor. */
+	doScheduleObject: DemandObject | null;
 	/** borehole.remove: the borehole; borehole.add: the new one's fields (WP-3.9). */
 	boreholeId: string;
 	bhName: string;
@@ -482,6 +495,8 @@ export interface OpDraft {
 	demandCategory: DemandCategory;
 	demandNodeIds: string[];
 	demandPct: string;
+	/** demand.scale's part (engine ≥ 1.43.0): '' for the whole demand, else crops or a demand object category. */
+	demandPart: DemandPart | '';
 	/** ewrRule.set (engine ≥ 1.6.0): the site (OUTLET_SITE or a gauge's id), and its table as the Settings editor holds it (one table). */
 	ewrSite: string;
 	ewrTables: EwrRuleTable[];
@@ -538,6 +553,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		doMonthlyM3Day: '',
 		doCount: '',
 		doLitres: '',
+		doScheduleObject: null,
 		boreholeId: '',
 		bhName: '',
 		bhCapacityM3Day: '',
@@ -553,6 +569,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		demandCategory: 'farm',
 		demandNodeIds: [],
 		demandPct: '',
+		demandPart: '',
 		ewrSite: '',
 		ewrTables: [],
 		upstreamNodeIds: [],
@@ -809,6 +826,18 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				break;
 			}
 			case 'demandObject.set': {
+				if (d.field === 'schedule') {
+					if (!d.doScheduleObject) throw new DraftError('pick a demand object');
+					// Plain data (the editor's state is a proxy); no windows is no schedule.
+					const w = JSON.parse(JSON.stringify(d.doScheduleObject.schedule ?? [])) as NonNullable<DemandObject['schedule']>;
+					// A window the run can't read is refused here in the Network form's words (the save rule applyScenario runs too).
+					w.forEach((x, i) => {
+						const bad = scheduleWindowProblem(x);
+						if (bad) throw new DraftError(`window ${i + 1}${x.label ? ` (“${x.label}”)` : ''}: ${bad}`);
+					});
+					op = { op: 'demandObject.set', demandObjectId: need(d.demandObjectId, 'a demand object'), field: 'schedule', value: w.length ? w : null };
+					break;
+				}
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick what to change');
 				const value = parsed(spec, d.value, DEMAND_OBJECT_FIELD_SPECS[d.field as DemandObjectFormField].label);
@@ -841,6 +870,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				const months = [...new Set(d.months)].sort((a, b) => a - b);
 				if (months.length && months.length < 12) s.months = months;
 				if (d.demandCategory === 'user') s.category = 'user';
+				else if (d.demandPart) s.part = d.demandPart;
 				op = s;
 				break;
 			}
@@ -965,8 +995,9 @@ function scaleNote(kind: ScenarioOpName, text: string): string {
 			.replace(/(^|; )allocation\.maxRateM3s: /g, '$1the maximum rate ')
 			.replace(/(^|; )allocation\.validTo: is before valid from/g, '$1valid to is before valid from')
 			.replace(/(^|; )allocation\.(\w+): /g, '$1$2 ');
-	// A new demand object's errors name its field.
+	// A new demand object's errors name its field; a schedule's name its window.
 	if (kind === 'demandObject.add') return text.replace(/(^|; )demandObject\.(\w+): /g, '$1$2 ');
+	if (kind === 'demandObject.set') return text.replace(/^window (\d+): /, 'schedule window $1: ');
 	if (kind === 'demand.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, `the demand must be between 0 % and ${DEMAND_SCALE_MAX * 100} % of what they'd take`);
 	return text;
 }

@@ -3162,7 +3162,7 @@ river pump and River to dam, §2.7h, doesn't switch demand objects).
   multiplies the unit's own demand factor, month by month:
   f_k[m] = f[m] × f_part(k)[m], and the floor below takes f_k. One object
   is added, changed (its demand, count, schedule…) or removed by the
-  scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.41.0,
+  scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.43.0,
   [scenarios.md](./scenarios.md)), classed by the object's unit.
 
 **The basic-needs floor** (engine ≥ 1.38.0, issue #123, from issue #90 Q13,

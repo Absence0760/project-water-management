@@ -2395,7 +2395,7 @@ role and not before it.
         list re-applied to prove it gives back the edited model. Edits no op
         can express are named and block recording (a node's kind, the outlet
         moved); crop edits and removals, moves and inserts record since the
-        later ops below (engine 1.35.0), demand objects since engine 1.41.0.
+        later ops below (engine 1.35.0), demand objects since engine 1.43.0.
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -3214,7 +3214,7 @@ from the WP:
       stay one % for every category (#53 O4). Still to do when it is built:
       WP-3.8's drought restriction rule (a cut by dam level) has to hold the
       same floor; it doesn't exist yet, so there is nothing to wire.
-- [x] **A scenario op for demand objects** (engine 1.41.0, 2026-09-30;
+- [x] **A scenario op for demand objects** (engine 1.43.0, 2026-09-30;
       related: issue #73 "Later scenario ops"). `demandObject.add` /
       `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
       add checks every field and puts the object on a unit only; set changes

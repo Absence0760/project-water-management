@@ -217,13 +217,13 @@ export const LAND_COVER_FIELD_SPECS: Record<LandCoverSetField, FieldSpec> = {
 export const LAND_COVER_FIELDS = LAND_COVER_SET_FIELDS.map((field) => ({ field, label: LAND_COVER_FIELD_SPECS[field].label }));
 
 // ---------------------------------------------------------------------------
-// demandObject.set (engine ≥ 1.41.0)
+// demandObject.set (engine ≥ 1.43.0)
 // ---------------------------------------------------------------------------
 
 /**
- * The demand-object fields "Add a change" sets one at a time. The schedule
- * (a list of date windows) is set in override mode, on the object's own form
- * in the Network editor, which records it as one demandObject.set.
+ * The demand-object fields "Add a change" sets one at a time with a typed
+ * value. The schedule (a list of date windows) has its own editor there, the
+ * Network form's (DemandScheduleFields), so it has no value spec.
  */
 export type DemandObjectFormField = Exclude<DemandObjectSetField, 'schedule'>;
 export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec> = {
@@ -242,9 +242,23 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	},
 	destination: { label: 'Destination', spec: { t: 'enum', options: [{ value: 'internal', label: 'Used in the catchment' }, { value: 'external', label: 'Piped out of the catchment (nothing returns)' }] } },
 	enabled: { label: 'Modelled', spec: { t: 'bool' } },
+	// The basic-needs floor's people (engine ≥ 1.38.0): a domestic or municipal object is never cut below 25 l each a day.
+	population: { label: 'People served', spec: num('', { nullable: true, nullLabel: 'its count (per person), else none' }) },
 	note: { label: 'Where the number comes from', spec: { t: 'text', optional: true } }
 };
-export const DEMAND_OBJECT_FIELDS = DEMAND_OBJECT_SET_FIELDS.filter((f): f is DemandObjectFormField => f !== 'schedule').map((field) => ({ field, label: DEMAND_OBJECT_FIELD_SPECS[field].label }));
+/** The schedule field's label, as the Network form heads it. */
+export const SCHEDULE_LABEL = 'On/off schedule';
+export const DEMAND_OBJECT_FIELDS = DEMAND_OBJECT_SET_FIELDS.map((field) => ({ field, label: field === 'schedule' ? SCHEDULE_LABEL : DEMAND_OBJECT_FIELD_SPECS[field].label }));
+
+
+/**
+ * demand.scale's parts (engine ≥ 1.43.0, issue #123): a unit's whole demand
+ * (no part), its crops, or its demand objects of one category.
+ */
+export const DEMAND_PART_OPTIONS: readonly EnumOption[] = [
+	{ value: 'crops', label: 'Crops (irrigation of the crop areas)' },
+	...DEMAND_OBJECT_CATEGORIES.map((c) => ({ value: c, label: `${DEMAND_OBJECT_CATEGORY_LABEL[c]} demand objects` }))
+];
 
 // ---------------------------------------------------------------------------
 // settings.set

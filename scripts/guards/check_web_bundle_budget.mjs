@@ -1530,14 +1530,17 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
-// 2026-09-30  total 1301 → 1309 KB (engine 1.41.0, the demand-object scenario
-//             ops: measured 1303 with main @ 285c1c75, 1306 with main @
-//             82248f4e and its licence impact board merged). demandObject.add /
-//             .set / .remove in the engine's scenario code (validator with the
-//             schedule's window checks, apply, classification, the mask kind),
-//             their "Add a change" forms, field specs and descriptions,
-//             override mode recording object edits, and three share-page lines
-//             in both catalogues. Headroom ~3 KB.
+// 2026-09-30  total 1301 → 1313 KB (engine 1.43.0, the demand-object scenario
+//             ops and demand.scale by part: measured 1310 with main @ 82248f4e
+//             and #250's basic-needs floor (feat/123-basic-needs-floor @
+//             1f94fc78) merged; 1303 before the part scaling, the schedule
+//             editor and #250). demandObject.add / .set / .remove in the
+//             engine's scenario code (validator with the schedule's window
+//             checks, apply, classification, the mask kind) and demand.scale's
+//             part, their "Add a change" forms (the Network form's schedule
+//             editor now also in the form's chunk), field specs and
+//             descriptions, override mode recording object edits, and four
+//             share-page lines in both catalogues. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1548,7 +1551,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1309,
+	totalCodeKb: 1313,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

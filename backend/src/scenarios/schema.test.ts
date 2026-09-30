@@ -33,7 +33,7 @@ describe('checkOps', () => {
 		const bh = { id: 'bh', nodeId: a, name: 'BH', capacityM3Day: 1, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 };
 		expect(checkOps([{ op: 'borehole.add', borehole: bh }, { op: 'borehole.remove', boreholeId: 'x' }]).errors).toEqual(['ops[0].borehole.id: must be a UUID', 'ops[1].boreholeId: must be a UUID']);
 		expect(checkOps([{ op: 'borehole.add', borehole: { ...bh, id: b } }]).errors).toEqual([]);
-		// Demand-object ops (engine ≥ 1.41.0): the new object's id and unit, and the object set or removed.
+		// Demand-object ops (engine ≥ 1.43.0): the new object's id and unit, and the object set or removed.
 		const dobj = { id: 'do', nodeId: 'farm', name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(1), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' };
 		expect(
 			checkOps([

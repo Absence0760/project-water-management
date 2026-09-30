@@ -457,7 +457,7 @@ name**:
   target, annual cap and depletion. **Demand objects** (engine ≥ 1.7.0) are
   matched by id, then by (unit name, object name): added, removed, or
   changed with the old and new category, size, return, priority and
-  schedule, and (from engine 1.41.0, since a scenario's `demandObject.set`
+  schedule, and (from engine 1.43.0, since a scenario's `demandObject.set`
   may change it) the note saying where its number comes from, spaces aside.
 
 ### Series and metrics only one run has
