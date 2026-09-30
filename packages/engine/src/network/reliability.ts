@@ -342,9 +342,18 @@ const waterYearLength = (wy: number) => (Date.UTC(wy + 1, 9, 1) - Date.UTC(wy, 9
 /** Is the day's demand fully met? */
 const isMet = (d: number, g: number) => d - g <= MET_NOISE * d;
 
-export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number, to: number, threshold: number): SupplyReliability {
-	const months = Array.from({ length: 12 }, () => ({ demandDays: 0, metDays: 0, demandM3: 0, suppliedM3: 0 }));
-	const years = new Map<number, { d: number; g: number; days: number }>();
+/**
+ * The day loop of nodeReliability: one node's sums, demand days, met days and
+ * failure runs over the window, into the month and water-year tallies it is
+ * handed. Its own function that takes the series as parameters, not a loop
+ * inside nodeReliability reading `n.demand` (issue #192, docs/engine-audit.md
+ * V1): under Node 24's V8, Maglev compiled that loop for on-stack replacement
+ * once and re-entered the code on later calls, which then read the demand and
+ * supplied of the node it was compiled for, so a farm's reliability came out
+ * with another farm's figures under its own id. Keep it this way; the
+ * `assurance` self-check (verify/checks.ts) catches the fault if it returns.
+ */
+function tallyWindow(demand: ArrayLike<number>, supplied: ArrayLike<number>, col: Uint8Array, row: Int32Array, from: number, to: number, mDemandDays: Float64Array, mMetDays: Float64Array, mDemand: Float64Array, mSupplied: Float64Array, yD: Float64Array, yG: Float64Array, yDays: Float64Array) {
 	let demandM3 = 0;
 	let suppliedM3 = 0;
 	let demandDays = 0;
@@ -356,57 +365,91 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 	let totalRunDef = 0;
 	let longest = 0;
 	let maxDef = 0;
-	const endRun = () => {
-		if (runLen === 0) return;
+	for (let t = from; t <= to; t++) {
+		const d = demand[t]!;
+		const g = supplied[t]!;
+		demandM3 += d;
+		suppliedM3 += g;
+		const c = col[t]!;
+		mDemand[c] = mDemand[c]! + d;
+		mSupplied[c] = mSupplied[c]! + g;
+		const r = row[t]!;
+		yD[r] = yD[r]! + d;
+		yG[r] = yG[r]! + g;
+		yDays[r] = yDays[r]! + 1;
+		let failed = false;
+		if (d > 0) {
+			demandDays++;
+			mDemandDays[c] = mDemandDays[c]! + 1;
+			if (isMet(d, g)) {
+				metDays++;
+				mMetDays[c] = mMetDays[c]! + 1;
+			} else failed = true;
+		}
+		if (failed) {
+			runLen++;
+			runDef += d - g;
+		} else if (runLen > 0) {
+			// A met day or a day without demand ends a failure run.
+			runs++;
+			totalRunDays += runLen;
+			totalRunDef += runDef;
+			longest = Math.max(longest, runLen);
+			maxDef = Math.max(maxDef, runDef);
+			runLen = 0;
+			runDef = 0;
+		}
+	}
+	if (runLen > 0) {
 		runs++;
 		totalRunDays += runLen;
 		totalRunDef += runDef;
 		longest = Math.max(longest, runLen);
 		maxDef = Math.max(maxDef, runDef);
-		runLen = 0;
-		runDef = 0;
-	};
-	for (let t = from; t <= to; t++) {
-		const d = n.demand[t]!;
-		const g = n.supplied[t]!;
-		demandM3 += d;
-		suppliedM3 += g;
-		const m = months[cal.col[t]!]!;
-		m.demandM3 += d;
-		m.suppliedM3 += g;
-		const y = years.get(cal.row[t]!) ?? { d: 0, g: 0, days: 0 };
-		y.d += d;
-		y.g += g;
-		y.days++;
-		years.set(cal.row[t]!, y);
-		if (!(d > 0)) {
-			endRun();
-			continue;
-		}
-		demandDays++;
-		m.demandDays++;
-		if (isMet(d, g)) {
-			metDays++;
-			m.metDays++;
-			endRun();
-		} else {
-			runLen++;
-			runDef += d - g;
-		}
 	}
-	endRun();
+	return { demandM3, suppliedM3, demandDays, metDays, runs, totalRunDays, totalRunDef, longest, maxDef };
+}
+
+export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number, to: number, threshold: number): SupplyReliability {
+	// The day loop is tallyWindow's (issue #192). Month and water-year tallies
+	// are typed arrays, not a Map of objects: sums still add day by day from +0
+	// in the same order, so every figure is the same float as before.
+	const { demand, supplied } = n;
+	const col = cal.col;
+	const row = cal.row;
+	const mDemandDays = new Float64Array(12);
+	const mMetDays = new Float64Array(12);
+	const mDemand = new Float64Array(12);
+	const mSupplied = new Float64Array(12);
+	const rows = Math.max(cal.rows, 0);
+	const yD = new Float64Array(rows);
+	const yG = new Float64Array(rows);
+	const yDays = new Float64Array(rows);
+	const { demandM3, suppliedM3, demandDays, metDays, runs, totalRunDays, totalRunDef, longest, maxDef } = tallyWindow(demand, supplied, col, row, from, to, mDemandDays, mMetDays, mDemand, mSupplied, yD, yG, yDays);
 	let wyCount = 0;
 	let wyMet = 0;
 	let wyPart = 0;
-	for (const [row, y] of years) {
-		if (!(y.d > 0)) continue;
+	for (let r = 0; r < rows; r++) {
+		if (!(yDays[r]! > 0) || !(yD[r]! > 0)) continue;
 		// Only a whole water year counts (engine ≥ 1.11.0): a part year at either end of the window would weigh a few months as a year.
-		if (y.days < waterYearLength(cal.wy0 + row)) {
+		if (yDays[r]! < waterYearLength(cal.wy0 + r)) {
 			wyPart++;
 			continue;
 		}
 		wyCount++;
-		if (y.g / y.d >= threshold) wyMet++;
+		if (yG[r]! / yD[r]! >= threshold) wyMet++;
+	}
+	const months: ReliabilityMonth[] = [];
+	for (let c = 0; c < 12; c++) {
+		const dd = mDemandDays[c]!;
+		months.push({
+			demandDays: dd,
+			metDays: mMetDays[c]!,
+			demandM3: nz(mDemand[c]!),
+			suppliedM3: nz(mSupplied[c]!),
+			timeReliability: dd > 0 ? mMetDays[c]! / dd : null,
+			volumetricReliability: ratio(mSupplied[c]!, mDemand[c]!)
+		});
 	}
 	return {
 		nodeId: n.nodeId,
@@ -427,14 +470,7 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 		longestFailureDays: longest,
 		meanFailureDeficitM3: runs > 0 ? totalRunDef / runs : null,
 		maxFailureDeficitM3: maxDef,
-		months: months.map((m) => ({
-			demandDays: m.demandDays,
-			metDays: m.metDays,
-			demandM3: nz(m.demandM3),
-			suppliedM3: nz(m.suppliedM3),
-			timeReliability: m.demandDays > 0 ? m.metDays / m.demandDays : null,
-			volumetricReliability: ratio(m.suppliedM3, m.demandM3)
-		}))
+		months
 	};
 }
 
