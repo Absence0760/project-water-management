@@ -15,6 +15,9 @@ export class FeedFormatError extends Error {
 	override readonly name = 'FeedFormatError';
 }
 
+/** A grid cell a feed names has no data (the sea, or outside the product's coverage): a FeedFormatError the fetch can word for a bounding box. */
+export class FeedNoDataError extends FeedFormatError {}
+
 export class FeedUnavailableError extends Error {
 	override readonly name = 'FeedUnavailableError';
 }

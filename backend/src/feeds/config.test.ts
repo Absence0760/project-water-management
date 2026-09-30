@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT } from '@water-management/engine';
-import { CHIRPS_FIRST_DAY, FeedInput, FeedPatch, feedProvenance, SOURCES } from './config.js';
+import { bboxCellCount, bboxCells, BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_FIRST_DAY, FeedInput, FeedPatch, feedProvenance, gridCells, SOURCES } from './config.js';
 
 const cells = [{ lat: -20.12, lon: 25.17 }];
 
@@ -101,5 +101,99 @@ describe('FeedPatch', () => {
 	it('takes any subset, and nothing unknown', () => {
 		expect(FeedPatch.parse({ enabled: false })).toEqual({ enabled: false });
 		expect(FeedPatch.safeParse({ lastSuccessAt: '2026-01-01' }).success).toBe(false);
+	});
+});
+
+describe('bounding box → grid cells (bboxCells, gridCells)', () => {
+	const cos = (lat: number) => Math.cos((lat * Math.PI) / 180);
+
+	it('a box drawn on grid lines covers whole cells only: no sliver from float error at its edges', () => {
+		// −20.1 / 0.05 is −402.00000000000006 in floating point; the edge must still be on the line.
+		const cells = bboxCells({ south: -20.2, west: 25.1, north: -20.1, east: 25.2 });
+		expect(cells.map((c) => [c.lat, c.lon])).toEqual([
+			[-20.175, 25.125],
+			[-20.175, 25.175],
+			[-20.125, 25.125],
+			[-20.125, 25.175]
+		]);
+		for (const c of cells) expect(c.weight).toBeCloseTo(cos(c.lat), 9);
+		expect(bboxCellCount({ south: -20.3, west: 25, north: -20, east: 25.4 })).toEqual({ rows: 6, cells: 48 });
+	});
+
+	it('a box inside one cell is that cell (its centre, so the reader picks it)', () => {
+		expect(bboxCells({ south: -20.14, west: 25.16, north: -20.11, east: 25.19 })).toEqual([{ lat: -20.125, lon: 25.175, weight: expect.any(Number) }]);
+	});
+
+	it('weights a partial cell by the share of it inside the box', () => {
+		// Rows: −20.05…−20.10 whole, −20.10…−20.13 is 0.6 of its cell; columns: 25.12…25.15 is 0.6, 25.15…25.20 whole.
+		const cells = bboxCells({ south: -20.13, west: 25.12, north: -20.05, east: 25.2 });
+		const w = Object.fromEntries(cells.map((c) => [`${c.lat},${c.lon}`, c.weight]));
+		expect(Object.keys(w)).toHaveLength(4);
+		expect(w['-20.075,25.175']).toBeCloseTo(cos(-20.075), 8);
+		expect(w['-20.075,25.125']).toBeCloseTo(0.6 * cos(-20.075), 8);
+		expect(w['-20.125,25.175']).toBeCloseTo(0.6 * cos(-20.125), 8);
+		expect(w['-20.125,25.125']).toBeCloseTo(0.36 * cos(-20.125), 8);
+	});
+
+	it('weights by area: a cell further from the equator counts for less (cos latitude)', () => {
+		const [low, high] = [bboxCells({ south: 0, west: 10, north: 0.05, east: 10.05 })[0]!, bboxCells({ south: 59.95, west: 10, north: 60, east: 10.05 })[0]!];
+		expect(low.weight).toBeCloseTo(cos(0.025), 9);
+		expect(high.weight).toBeCloseTo(cos(59.975), 9);
+		expect(high.weight / low.weight).toBeCloseTo(0.5, 3);
+	});
+
+	it('is the same for a box in the western and northern hemispheres (floor, not truncation)', () => {
+		expect(bboxCells({ south: 10.01, west: -30.04, north: 10.04, east: -30.01 }).map((c) => [c.lat, c.lon])).toEqual([[10.025, -30.025]]);
+	});
+
+	it('gridCells passes a cells feed through unchanged', () => {
+		const g = FeedInput.parse({ source: 'chirps', config: { cells } }).config as Parameters<typeof gridCells>[0];
+		expect(gridCells(g)).toEqual([{ lat: -20.12, lon: 25.17, weight: 1 }]);
+	});
+});
+
+describe('GridConfig with a bounding box', () => {
+	const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+
+	it('takes skipNoData with a box', () => {
+		expect(FeedInput.parse({ source: 'chirps', config: { bbox, skipNoData: true } }).config).toEqual({ bbox, skipNoData: true });
+		expect(FeedInput.safeParse({ source: 'chirps', config: { cells, skipNoData: true } }).error!.issues[0]).toMatchObject({ path: ['config', 'skipNoData'] });
+	});
+
+	it('takes a box for CHIRPS and CHIRPS-GEFS', () => {
+		expect(FeedInput.parse({ source: 'chirps', config: { bbox } }).config).toEqual({ bbox });
+		expect(FeedInput.parse({ source: 'chirps_gefs', config: { bbox } }).config).toEqual({ bbox });
+	});
+
+	it('takes the largest box: 100 cells, and 25 rows', () => {
+		expect(FeedInput.safeParse({ source: 'chirps', config: { bbox: { south: -20.5, west: 25, north: -20, east: 25.5 } } }).success).toBe(true);
+		expect(FeedInput.safeParse({ source: 'chirps', config: { bbox: { south: -21.25, west: 25, north: -20, east: 25.2 } } }).success).toBe(true);
+		expect([BBOX_MAX_CELLS, BBOX_MAX_ROWS]).toEqual([100, 25]);
+	});
+
+	it.each([
+		['both cells and a box', { cells, bbox }],
+		['neither cells nor a box', {}],
+		['a box of 110 cells (10 rows × 11)', { bbox: { south: -20.5, west: 25, north: -20.01, east: 25.51 } }],
+		['a box of 26 rows', { bbox: { south: -21.3, west: 25, north: -20, east: 25.05 } }],
+		['south above north', { bbox: { ...bbox, south: -20, north: -20.2 } }],
+		['a zero-height box', { bbox: { ...bbox, north: -20.2 } }],
+		['a box across 180°', { bbox: { south: -20.2, west: 179.9, north: -20.1, east: -179.9 } }],
+		['a box beyond the grid', { bbox: { south: -60.1, west: 25, north: -59.9, east: 25.1 } }],
+		['a box with an unknown key', { bbox: { ...bbox, crs: 'EPSG:4326' } }],
+		['a box missing an edge', { bbox: { south: -20.2, west: 25.1, north: -20.1 } }],
+		['skipNoData with listed cells (they stay strict)', { cells, skipNoData: true }],
+		['skipNoData that isn’t a boolean', { bbox, skipNoData: 'yes' }],
+		['skipNoData inside the box', { bbox: { ...bbox, skipNoData: true } }]
+	])('refuses %s', (_, config) => {
+		expect(FeedInput.safeParse({ source: 'chirps', config }).success).toBe(false);
+	});
+
+	it('says the limit, in degrees, for a box too big', () => {
+		const r = FeedInput.safeParse({ source: 'chirps', config: { bbox: { south: -21, west: 25, north: -20, east: 26 } } });
+		expect(r.error!.issues[0]).toMatchObject({
+			path: ['config', 'bbox'],
+			message: expect.stringMatching(/at most 100 of the 0\.05° grid cells in at most 25 rows \(about 0\.5° × 0\.5°.*this one covers 400 cells in 20 rows/)
+		});
 	});
 });

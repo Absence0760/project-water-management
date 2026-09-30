@@ -285,6 +285,28 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
 	});
 
+	it('CHIRPS by bounding box: attaches, fetches the area mean into the series; a box over the limit is a 400 that says it', async () => {
+		const owner = await signUp('Boxer');
+		const pid = await project(owner);
+		const big = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { bbox: { south: -21, west: 25, north: -20, east: 26 } } });
+		expect(big.status).toBe(400);
+		expect(big.body.details[0]).toMatchObject({ path: ['config', 'bbox'], message: expect.stringMatching(/at most 100 of the 0\.05° grid cells in at most 25 rows/) });
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } } })).status).toBe(400);
+
+		// Leaving out sea cells is a box's option: listed cells stay strict.
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], skipNoData: true } })).status).toBe(400);
+		const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+		const made = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { bbox, startDate: addDays(-20) } });
+		expect(made.status).toBe(201);
+		expect(made.body.feed.config).toEqual({ bbox, startDate: addDays(-20) });
+		await owner.call('POST', `/projects/${pid}/feeds/${made.body.feed.id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(addDays(-20));
+		expect(s.values.filter((v) => v !== null).length).toBeGreaterThan(0);
+		expect((await feedRow(made.body.feed.id))).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3) });
+	});
+
 	it('a later fetch never re-reads before the feed’s startDate, where the series holds the owner’s own days', async () => {
 		const owner = await signUp('Floor');
 		const pid = await project(owner);
@@ -908,6 +930,42 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		await ingest(ok('2026-01-02', [2]));
 		expect((await seriesMeta(owner, pid, 'rain_chirps_mm'))!.updatedAt > first.updatedAt).toBe(true);
 		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, 2, 3]);
+	});
+
+	it('a coastal box (skipNoData): a later fetch with another count of cells with data is refused and writes nothing; the same count merges', async () => {
+		// Four cells, one of them the fixture's sea.
+		const bbox = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+		const { owner, pid, id, ingest } = await setup('Coast', { config: { bbox, skipNoData: true } });
+		expect(await ingest(ok('2026-01-01', [1, 2], { days: 2, cellsUsed: 3 }))).toEqual({ merged: 2, lastDate: '2026-01-02' });
+		expect((await feedRow(id)).last_meta).toMatchObject({ cellsUsed: 3 });
+		// An empty answer read no day: the count carries forward.
+		await ingest({ ok: true, startDate: null, values: [], meta: { days: 0 } });
+		expect((await feedRow(id)).last_meta).toMatchObject({ cellsUsed: 3 });
+		// Positive control: the same count merges.
+		expect(await ingest(ok('2026-01-03', [3], { days: 1, cellsUsed: 3 }))).toEqual({ merged: 1, lastDate: '2026-01-03' });
+
+		// A land cell lost its data between fetches: refused, nothing written, the count kept.
+		expect(await ingest(ok('2026-01-04', [9], { days: 1, cellsUsed: 2 }))).toEqual({ merged: 0, lastDate: null });
+		const refused = await feedRow(id);
+		expect(refused).toMatchObject({ consecutive_failures: 1, last_data_date: '2026-01-03', last_meta: expect.objectContaining({ cellsUsed: 3 }) });
+		expect(refused.last_error).toMatch(/data in 2 of the box’s cells, not 3 as before, so nothing was written.*save the box again/);
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, 2, 3]);
+		// A count the box can't have, or none with days, is an invalid answer.
+		expect(await ingest(ok('2026-01-04', [9], { days: 1, cellsUsed: 5 }))).toEqual({ merged: 0, lastDate: null });
+		expect(await ingest(ok('2026-01-04', [9], { days: 1 }))).toEqual({ merged: 0, lastDate: null });
+		expect((await feedRow(id)).last_error).toBe('the fetcher’s answer was not valid, so nothing was written');
+
+		// Saving the box again resets the count (data_feed_stamp clears last_meta on a config change): the way out.
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { bbox: { ...bbox, north: -20.21 }, skipNoData: true } })).status).toBe(200);
+		expect((await feedRow(id)).last_meta).toBeNull();
+		expect(await ingest(ok('2026-01-04', [4], { days: 1, cellsUsed: 2 }))).toEqual({ merged: 1, lastDate: '2026-01-04' });
+		expect((await feedRow(id)).last_meta).toMatchObject({ cellsUsed: 2 });
+	});
+
+	it('records no cellsUsed for a feed that doesn’t leave out sea cells, whatever the fetcher says', async () => {
+		const { id, ingest } = await setup('NoCount');
+		await ingest(ok('2026-01-01', [1], { days: 1, cellsUsed: 7 }));
+		expect((await feedRow(id)).last_meta).not.toHaveProperty('cellsUsed');
 	});
 
 	it('writes nothing when the transaction fails after the merge: the merge and the health commit together', async () => {
