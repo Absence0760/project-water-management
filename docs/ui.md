@@ -5073,7 +5073,33 @@ scrolling in its box. Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
 
-**Every hydrological unit and water year**: the whole comparison as one table (one row
+**Every hydrological unit and water year**: first the **over/under-use
+chart** (`allocations/UsePlot.svelte`, the evidence report's § 5 chart, shared
+since 2026-09-29, issue #71 follow-up): one row per unit and water source with a
+registered volume, in the list's order (`comparisonUseRows`), one hollow mark
+per whole water year at modelled use ÷ the registered volume, a line at
+100 % and the project's band shaded behind it; a year past the axis (at most
+300 %) is an arrowhead at its edge. One neutral hue: the side of the band is
+read from position, never colour. Part years, years with nothing registered
+and units with no registered volume aren't drawn (the table lists them). On
+screen the chart is drawn px for px at its box's width (`fit`, 11 px text, at
+most 900 px wide); below 480 px (a phone) each row's label takes its own line
+above its marks, and the band and the 100 % line are drawn in each row's strip
+only, so nothing runs through a label (each has a halo on screen). A name cut
+to fit keeps the source whole and stays distinct from the others
+(`distinctShortNames`); the full label is its tooltip, and each mark's is its
+water year and share. A one-line lead above it names the quantity. The
+report's fixed drawing never draws its 9 px text under 9.5 px (a 549 px
+minimum), scrolling sideways in a focusable box on a phone. Its SVG is named by its title and described by a sentence
+counting the whole years above the band and in how many units
+(`useSummary`, which the report's chart carries too, per run), from the
+engine's own status for each year so it agrees with the table's "Above
+registered", counting every row even while the chart is folded (and saying
+how many it draws); the caption says what
+a mark, the line, the band and an arrowhead are, "modelled, not metered". It
+shows the first ten rows until **Show all N in the chart** / **Show the first
+10 in the chart** (`aria-controls="alloc-use-plot"`); the axis is the whole
+chart's, so opening it doesn't move the marks shown. Then the whole comparison as one table (one row
 per unit, source and water year, in the list's order so the units to look
 into first come first, each unit's years together, `rowsInListOrder`; a
 source with neither use nor a volume is left out), the WUA manager's
