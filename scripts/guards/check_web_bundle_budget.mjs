@@ -1334,6 +1334,10 @@
 //             via Lazy in SettingsTab, 9.6 KB), and the Settings tab
 //             measures 50,314 bytes (50 KB of 60, from 58). The total stays
 //             1202 KB of 1205. No new dependency. Headroom ~10 KB tab chunk.
+// 2026-09-29  total 1205 → 1208 KB (issue #69: measured 1205 with main @
+//             b681786e merged, at the ceiling; main grew since the entry
+//             above). Nothing of the bounding box changed; the usual
+//             headroom back. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1344,7 +1348,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1205,
+	totalCodeKb: 1208,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
