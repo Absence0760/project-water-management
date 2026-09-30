@@ -17,6 +17,7 @@ import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, signUp, tokenIn } from '../__tests__/helpers.js';
+import { minioUp } from '../__tests__/minio.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -39,9 +40,13 @@ type Entry =
 			call: (c: Ctx) => Promise<Res>;
 			/** The project the history goes to, when it isn't ctx.projectId (a copy's). */
 			projectOf?: (c: Ctx, res: Res) => string;
+			/** Needs MinIO (issuing a pack stores its bundle): skipped locally without it, fails under CI (__tests__/minio.ts). */
+			needsMinio?: true;
 	  }
 	| { route: string; exempt: string };
 
+/** Issuing a pack stores its reproduction bundle in MinIO (evidence/bundle.ts). */
+const minio = await minioUp('write-routes.db.test.ts (POST …/packs/:packId/issue)');
 const P = '/projects/:id';
 const at = (c: Ctx) => `/projects/${c.projectId}`;
 
@@ -485,7 +490,8 @@ const WRITE_ROUTES: Entry[] = [
 		route: `POST ${P}/packs/:packId/issue`,
 		records: ['pack.issued'],
 		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/issue`),
-		projectOf: (c) => c.packProjectId as string
+		projectOf: (c) => c.packProjectId as string,
+		needsMinio: true
 	},
 	{
 		route: `POST ${P}/packs/:packId/withdraw`,
@@ -608,7 +614,7 @@ describe('every write route records its change', () => {
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);
 	for (const e of recorded) {
-		it(`${e.route} records ${e.records.join(' + ')}`, async () => {
+		it.skipIf(e.needsMinio && !minio)(`${e.route} records ${e.records.join(' + ')}`, async () => {
 			const [{ rev, ev }] = await asOwner(
 				'SELECT (SELECT coalesce(max(id), 0) FROM model_revision) AS rev, (SELECT coalesce(max(id), 0) FROM audit_event) AS ev'
 			);

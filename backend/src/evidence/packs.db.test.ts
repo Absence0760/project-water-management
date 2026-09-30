@@ -10,6 +10,7 @@
 // project with an issued pack being kept. Each "can't" has its positive
 // control.
 import {
+	checkPackBundle,
 	declaredRuleRequest,
 	packManifestText,
 	runEnsemble,
@@ -20,7 +21,8 @@ import {
 } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { minioUp } from '../__tests__/minio.js';
 import { withUser } from '../db/tx.js';
 import { trimRuns } from '../runs/execute.js';
 
@@ -90,6 +92,21 @@ async function sign(u: User, packId: string, name = 'Dr A. Hydrologist') {
 }
 
 const issue = (u: User, packId: string) => u.call('POST', `${packPath(packId)}/issue`);
+const bytesSha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+
+/** Issuing a pack stores its reproduction bundle in MinIO (bundle.ts), so the describes that issue need it. */
+const minio = await minioUp('packs.db.test.ts (issuing a pack and what follows)');
+
+/** Download a pack's bundle as `u`, through the route's redirect to MinIO. */
+async function downloadBundle(u: User, packId: string) {
+	const res = await app.request(`${packPath(packId)}/bundle`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' }, redirect: 'manual' });
+	expect(res.status, await res.clone().text()).toBe(302);
+	expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+	expect(res.headers.get('cache-control')).toBe('no-store');
+	const got = await fetch(res.headers.get('location')!);
+	expect(got.status).toBe(200);
+	return { bytes: new Uint8Array(await got.arrayBuffer()), disposition: got.headers.get('content-disposition') };
+}
 
 beforeAll(async () => {
 	[owner, editor, viewer, stranger, contributor, farmer] = (await Promise.all(
@@ -181,7 +198,7 @@ describe('drafting a pack', () => {
 	});
 });
 
-describe('issuing, superseding and withdrawing', () => {
+describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	let v1: Awaited<ReturnType<typeof draft>>;
 	let v2: Awaited<ReturnType<typeof draft>>;
 
@@ -230,6 +247,59 @@ describe('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
 		expect((await issue(owner, v1.id)).status).toBe(409);
+	});
+
+	it('stores the reproduction bundle at issue under its derived key; its hash is on the pack and on verify', async () => {
+		const pack = (await viewer.call('GET', packPath(v1.id))).body.pack;
+		expect(pack.bundleSha256).toMatch(/^[0-9a-f]{64}$/);
+		const row = (await asOwner('SELECT bundle_key, bundle_sha256 FROM evidence_pack WHERE id = $1', [v1.id]))[0]!;
+		expect(row).toEqual({ bundle_key: `packs/${projectId}/${v1.id}/${pack.bundleSha256}.zip`, bundle_sha256: pack.bundleSha256 });
+		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.bundleSha256).toBe(pack.bundleSha256);
+		const issued = (await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'pack.issued' AND subject->>'packId' = $2`, [projectId, v1.id]))[0]!;
+		expect(issued.subject.bundleSha256).toBe(pack.bundleSha256);
+	});
+
+	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
+		const want = (await viewer.call('GET', packPath(v1.id))).body.pack.bundleSha256 as string;
+		const { bytes, disposition } = await downloadBundle(viewer, v1.id);
+		expect(bytesSha256(bytes)).toBe(want);
+		expect(disposition).toBe(`attachment; filename="pack-${v1.shortCode}.zip"`);
+		const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+		const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: v1.manifestSha256 });
+		expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+		expect(checked.checks.map((k) => k.id)).toContain('reproduce:baseline');
+		expect(checked.ok).toBe(true);
+	});
+
+	it('refuses the bundle of a draft (409); contributors and farmers get 403, a stranger 404', async () => {
+		const d = await draft(editor, baseRun);
+		const res = await viewer.call('GET', `${packPath(d.id)}/bundle`);
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/draft pack has no reproduction bundle/);
+		for (const u of [contributor, farmer]) expect((await u.call('GET', `${packPath(v1.id)}/bundle`)).status).toBe(403);
+		expect((await stranger.call('GET', `${packPath(v1.id)}/bundle`)).status).toBe(404);
+		expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
+	});
+
+	it('records a bundle only in the transaction that issues the pack, as an editor, once', async () => {
+		const record = (u: User, packId: string, sha = 'b'.repeat(64)) => withUser(u.id, (db) => db.query('SELECT app_record_pack_bundle($1, $2) AS key', [packId, sha]));
+		// After the issue's transaction: refused, though the owner issued it.
+		await expect(record(owner, v1.id)).rejects.toMatchObject({ code: '23514' });
+		// Not an editor: not permitted, whatever the pack.
+		await expect(record(viewer, v1.id)).rejects.toMatchObject({ code: '42501' });
+		await expect(record(stranger, v1.id)).rejects.toMatchObject({ code: '42501' });
+		// A draft has no bundle.
+		const d = await draft(editor, baseRun);
+		await expect(record(editor, d.id)).rejects.toMatchObject({ code: '23514' });
+		await expect(record(editor, d.id, 'not-a-hash')).rejects.toMatchObject({ code: '23514' });
+		expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
+		// water_app can't name the columns; the guard holds for the schema owner (recorded once).
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE evidence_pack SET bundle_key = 'k', bundle_sha256 = $2 WHERE id = $1`, [v1.id, 'c'.repeat(64)]))).rejects.toMatchObject({
+			code: '42501'
+		});
+		await expect(asOwner(`UPDATE evidence_pack SET bundle_key = 'k', bundle_sha256 = $2 WHERE id = $1`, [v1.id, 'c'.repeat(64)])).rejects.toMatchObject({ code: '23514' });
+		// Positive control: the issue itself recorded one (above), and it is unchanged.
+		expect((await asOwner('SELECT bundle_sha256 FROM evidence_pack WHERE id = $1', [v1.id]))[0]!.bundle_sha256).toMatch(/^[0-9a-f]{64}$/);
 	});
 
 	it('refuses a sign-off of an issued pack, through the route and the trigger', async () => {
@@ -301,6 +371,7 @@ describe('issuing, superseding and withdrawing', () => {
 				'engineVersion',
 				'errata',
 				'issuedAt',
+				'bundleSha256',
 				'manifestSha256',
 				'methodology',
 				'pdfSha256',
@@ -372,6 +443,26 @@ describe('issuing, superseding and withdrawing', () => {
 	});
 });
 
+describe.skipIf(!minio)('an application pack’s bundle', () => {
+	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists', async () => {
+		const p = await draft(editor, appRun);
+		await sign(editor, p.id);
+		const res = await issue(editor, p.id);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const { bytes } = await downloadBundle(viewer, p.id);
+		expect(bytesSha256(bytes)).toBe(res.body.pack.bundleSha256);
+		const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+		const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+		expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+		expect(checked.checks.map((k) => k.id)).toEqual(
+			expect.arrayContaining(['changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
+		);
+		expect(checked.ok).toBe(true);
+		// Withdrawn again, so the tests below find only baseline packs issued.
+		expect((await editor.call('POST', `${packPath(p.id)}/withdraw`, { reason: 'test application pack' })).status).toBe(200);
+	});
+});
+
 describe('the runs a pack cites', () => {
 	it('keeps them through the storage cap, and the run DELETE names the pack', async () => {
 		const cited = await asOwner('SELECT model_run_cited($1) AS b, model_run_cited($2) AS a, model_run_cited($3) AS s', [baseRun, appRun, seedRun]);
@@ -392,7 +483,7 @@ describe('the runs a pack cites', () => {
 	});
 });
 
-describe('an account deletion', () => {
+describe.skipIf(!minio)('an account deletion', () => {
 	it('clears who drafted and issued a pack, and nothing else', async () => {
 		const issuer = await signUp('PkIssuer');
 		expect((await owner.call('POST', `${at()}/members`, { email: issuer.email, role: 'editor' })).status).toBe(201);
@@ -442,7 +533,7 @@ describe('an account deletion', () => {
 	});
 });
 
-describe('deleting a project with packs', () => {
+describe.skipIf(!minio)('deleting a project with packs', () => {
 	/** A small project of its own, with a run and no nomination, so only the pack decides whether it goes. */
 	async function smallProject(name: string) {
 		const id = (await owner.call('POST', '/projects', { name })).body.project.id as string;
