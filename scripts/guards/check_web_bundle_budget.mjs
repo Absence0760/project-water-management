@@ -1571,14 +1571,15 @@
 //             LineChart's lanes: +2 KB (1306 → 1308 with main @ 8266a682);
 //             measured 1317 locally with #252 merged, main @ 17c4a590;
 //             CI runs ~2 KB above that). Headroom ~3 KB.
-// 2026-09-30  total 1322 → 1325 KB (issue #137, the landing page prerendered
-//             once per language: /welcome and /welcome/af). Measured against
-//             main @ c7df4af7: 1,340,999 → 1,342,667 gzip bytes (+1.6 KB;
-//             1311 → 1313 KB locally, CI ~2 KB above): the language switch's
-//             link form (its chunk and CSS, +0.25 KB), the landing's hreflang
-//             and og:locale tags (+0.3 KB), the route's load and entries
-//             (+0.2 KB), the root layout's URL-language step (+0.1 KB), and
-//             chunk-name churn. Headroom ~1 KB on CI (remeasured on the combined UI/UX branch, see the next entry).
+// 2026-09-30  total 1322 → 1325 KB (the combined UI/UX round: issue #137's
+//             landing page prerendered once per language, /welcome and
+//             /welcome/af, +1.6 KB: the language switch's link form, the
+//             hreflang and og:locale tags, the route's load and entries, the
+//             root layout's URL-language step; the project list's team filter
+//             (#176) and the owner's share-link list, partly offset by the
+//             portfolio page's removal). Measured 1319 locally on the combined
+//             branch with main @ ede070dc; CI runs ~2 KB above that. Headroom
+//             ~4 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
