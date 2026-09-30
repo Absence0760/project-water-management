@@ -1,7 +1,7 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, footerTemplate, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal } from './render.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal } from './render.js';
 import { reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
@@ -68,15 +68,6 @@ describe('reportQuery', () => {
 			['run', R],
 			['against', `${P}:33333333-3333-4333-8333-333333333333`]
 		]);
-	});
-});
-
-describe('footerTemplate', () => {
-	it("prints the page's footer text, escaped, then Chromium's page numbers, at a readable size", () => {
-		const t = footerTemplate('Dam <b>&</b> "river" · Run 1 · Model estimates.');
-		expect(t).toContain('Dam &#60;b&#62;&#38;&#60;/b&#62; &#34;river&#34; · Run 1 · Model estimates. Page <span class="pageNumber"></span> of <span class="totalPages"></span>.');
-		expect(t).not.toContain('<b>');
-		expect(t).toContain('font-size:7pt');
 	});
 });
 

@@ -1026,6 +1026,29 @@ export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 	updatedBy: string | null;
 }
 
+/**
+ * One run's place in its project's publications (GET …/runs/:runId/publication,
+ * issue #70): the printable report's published-by line and notice, and its
+ * changes since the previous publication.
+ */
+export interface RunPublication {
+	/** The run's newest publication (null: never published); the restriction as that publication has it. */
+	publication: { id: string; publishedAt: string; publishedBy: string | null; supersededAt: string | null; restriction: PublicationRestriction } | null;
+	/**
+	 * The publication before it (a published run's earlier one of another run, or for a run never
+	 * published the current one), with the net input changes from its run to this one and who made them.
+	 */
+	previous: {
+		id: string;
+		runId: string;
+		runLabel: string;
+		publishedAt: string;
+		publishedBy: string | null;
+		changes: InputChange[];
+		attribution: CompareAttribution | null;
+	} | null;
+}
+
 export interface PublishRequest {
 	runId: string;
 	note?: string;

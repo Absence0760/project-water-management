@@ -76,6 +76,7 @@ import type {
 	PublicationMeta,
 	PublicationPatch,
 	PublishRequest,
+	RunPublication,
 	Role,
 	Run,
 	RunCompareResponse,
@@ -563,7 +564,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			publish: (id: string, body: PublishRequest) => request<{ publication: Publication; farms: number }>('POST', `${p(id)}/publication`, body),
 			/** Change the current publication's notice, note or next date without re-publishing (editor). */
 			update: (id: string, pubId: string, body: PublicationPatch) =>
-				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication)
+				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication),
+			/** One run's publication and the changes since the one before (viewer; the printable report). */
+			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
 		},
 		shareLinks: {
 			/** The project's share links, newest first, revoked and expired ones included (owner). */
