@@ -622,8 +622,8 @@ role, freshness, Add data) and each tab's own header:
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
-  (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  (below), the section's own (the Network's **Tables** and **+ Add node**,
+  Crops' **Tables** and **+ Add crop**, Transfers' **Show on the map** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
   River & reserve's **Run** menu and **Open in Runs & results**, Units &
@@ -1567,9 +1567,9 @@ wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
 ## Network
 
 One page, the **map** (issue #17, option A's simplicity with nothing lost).
-It used to have three layouts (Map, Table, One node); with the Grids menu
+It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
-the **node table** is a grid (**Grids → Node table**, `grid=nodes`, the
+the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
 node's **full form** opens in a sheet over the map from its card's **Edit**
 (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
@@ -1579,15 +1579,25 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
-    "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
-    as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
+    as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add node**, which opens the new node's form in
     the sheet. With no nodes the map card is an empty panel with **Add
     outflow gauge**.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
-    filling the card, and one legend line under it. Colouring by supply is
+    filling the card, and the map key under it. Colouring by supply is
     **on by default** once the project has a run.
+  - **Map key** (`mapKey` in `NetworkSchematic.svelte`, also under the
+    report's drawing): headed groups, **Nodes** (the shapes), **Lines** (the
+    river, drawn thickening, "thicker with more area upstream", and
+    transfers) and **Colour: supply** / **Colour: dam level** (the bands),
+    then the run caption and the drag hint. Each swatch uses the map's own
+    shapes and classes (the dam square with its wave), and a colour band shows
+    a unit and a unit with a dam side by side, since the colour fills either
+    shape. It lists only what the drawing has (no Gauge entry without a
+    gauge, no Transfer without one). The drawing's colour tokens sit on the
+    box around map and key, so the key follows light and dark as the map does.
   - **Screen use:** from 900 px the layout is exactly the height left in the
     window below its top edge, less the page's 1rem gutter and the save bar
     while it shows (`--dock-h`; at least 520 px), the top measured on load and
@@ -1620,7 +1630,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
-  - The **Grids** menu closes through its element (`details.open`), not its
+  - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
   - Beside it (one column below 900 px, the map first), two cards:
@@ -1653,8 +1663,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here.
 
-  - **Node sheet** (`edit=<id>`, the `Dialog` `side wide` variant, 640 px,
-    the whole width on a phone): "Edit *name*" ("*name*: details" for a
+  - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
+    three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
@@ -1668,7 +1678,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
     node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.
 
   Every field of the old Table and One node layouts is a click away (Edit,
-  Grids → Node table), so nothing was removed.
+  Tables → Node table), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -1787,7 +1797,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
   last card. The ⓘ tips sat in the column headers, so the intro sends a
   phone to the field guide instead (`node-table.spec.ts`).
 - **The one-node form** (the node sheet): the picker (‹ select ›) stays in
-  reach above the scrolling form in the sheet's fixed sub-header.
+  reach above the scrolling form in the sheet's fixed sub-header. Each
+  section (Catchment area, Dam, Routing, …, Supply, Individual boreholes,
+  Land cover) is a bordered card with its title in a tinted header band, so
+  one section's fields don't run into the next's; the card itself stays
+  `--surface`, since read-only inputs are `--surface-2`.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets the system's SABI 2021 efficiency
@@ -1888,7 +1902,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   switch-back level must be at least the switch-to-river level. A farm with no
   dam on dam only that has anything routed to its dam gets the run's hint: it
   irrigates straight from the river with no limit; pick run of river with a
-  pump capacity. A farm turned into a gauge or other user keeps the section
+  pump capacity. A farm on river first or dam, river when low that also has
+  **River to dam** (the diversion into the dam, under Routing) gets a note that
+  the run counts the two as separate pumps, so one pump doing both jobs needs
+  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
   while it still has supply settings, so they can be reset. Read-only for
   viewers (no calculator).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
@@ -2002,7 +2019,7 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
-  a **Grids** menu (Crop factors, Planted areas → the
+  a **Tables** menu (Crop factors, Planted areas → the
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
@@ -2135,7 +2152,7 @@ overlays ever edit the catchment from there.
 ### Load crop factors
 
 **Load crop factors…**, under the crop-factor table of the [crop
-grids](#crop-grids) (editors only: Crops & demand's **Grids › Crop
+grids](#crop-grids) (editors only: Crops & demand's **Tables › Crop
 factors**, the grid modal from any tab, and scenario override mode, where it
 fills the scenario's crops), opens a dialog over it
 that fills the project's crop factors from a source, shows what changes and
@@ -2239,7 +2256,7 @@ but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 
-- **From:** the Network's and Crops & demand's **Grids** menus, and Crops &
+- **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
   (the #17 checklist).
 - **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
@@ -2517,7 +2534,15 @@ so, until it is moved. **Source and unit** (issue #66, 107,
 a row whose series records a source, or was converted at upload (uploaded in
 l/s, ML/day …), says so under its name ("DWS X1H001 · given in l/s (× 0.001
 to m³/s)"); a series uploaded in the stored unit with no source adds nothing,
-so the table stays one line a row. Under the chart, the charted series shows
+so the table stays one line a row. **Fed series**: a row a data feed wrote
+days of (`SeriesMeta.feed`, `time_series.feed_id`, 031) says so under its
+name, *Written by the CHIRPS daily rainfall feed* (the source's label), or
+how many days when the feed wrote only some of the days with a value (*312
+days written by the CHIRPS daily rainfall feed*: the rest were uploaded or
+imported, and the feed keeps them). Unlike the source, which records where a
+new series first came from, the mark is live: it goes once a user's upload
+has written over every day the feed wrote, or the feed is removed or
+re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). Under the chart, the charted series shows
 its source and the unit it was uploaded in; editors edit the source there
 (*Source*, saved on change, `PATCH …/series/:id { source }`), viewers read
 it. The **Add data** form has an optional **Source** field (up to 200
@@ -4850,7 +4875,7 @@ them scenarios).
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
   Network is its node table inline (`NetworkTab only="table"`), not the map:
-  the map's Grids menu and farm links open the page's grid modal and farm
+  the map's Tables menu and farm links open the page's grid modal and farm
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
   about unrecorded edits; leaving it does (the leave guard, above), and
@@ -5600,7 +5625,7 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   sections, the Project and Dams pages, where the sections sit in the app
   sidebar under the catchment's name, Projects / Teams / Help at its top, the
   Data badge, the phone bar's Menu and the phone Sections button, the section
-  header and each page's actions in it, the notice line, the Grids menu's grid
+  header and each page's actions in it, the notice line, the Tables menu's grid
   modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to the term's glossary topic page.

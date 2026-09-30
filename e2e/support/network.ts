@@ -1,9 +1,9 @@
 // The Network page is a map (issue #17): the node table opens as a grid from
-// the Grids menu (`grid=nodes`), a node's full form in a sheet from its card's
+// the Tables menu (`grid=nodes`), a node's full form in a sheet from its card's
 // Edit (`edit=<id>`). These open them the way a person does.
 import type { Page } from '@playwright/test';
 
-/** Opens the node table (Grids → Node table) and returns the grid's dialog. */
+/** Opens the node table (Tables → Node table) and returns the grid's dialog. */
 export async function openNodeTable(page: Page) {
 	const open = page.getByRole('dialog', { name: 'Node table' });
 	// The URL already names it (a reload keeps `grid=nodes`): it opens with the page; wait for it.
@@ -13,7 +13,7 @@ export async function openNodeTable(page: Page) {
 	}
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
-	await page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name: 'Node table', exact: true }).click();
+	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: 'Node table', exact: true }).click();
 	return page.getByRole('dialog', { name: 'Node table' });
 }
 

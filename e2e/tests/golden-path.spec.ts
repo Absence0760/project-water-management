@@ -112,7 +112,7 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 
 	// --- network: outflow gauge + three farms, one nested ------------------------
 	await tab(page, 'Network').click();
-	// This path builds the network in the node table (Grids → Node table).
+	// This path builds the network in the node table (Tables → Node table).
 	const grid = await openNodeTable(page);
 	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
 	for (let i = 0; i < 3; i++) await grid.getByRole('button', { name: '+ Add node' }).click();

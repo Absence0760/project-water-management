@@ -43,11 +43,11 @@ test.describe('desktop', () => {
 		expect(run.x).toBeGreaterThan(title.x + title.width);
 		await expectNoViolations(page);
 
-		// Network: its summary, Grids and Add node come from the tab, before Add data and Run model.
+		// Network: its summary, Tables and Add node come from the tab, before Add data and Run model.
 		await nav(page).getByRole('link', { name: 'Network' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
-		await expect(h.locator('details.grids-menu summary')).toHaveText(/Grids/);
+		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
 		await expect(actions).toHaveText(['+ Add node', 'Add data', 'Run model']);
 		await expectNoViolations(page);
