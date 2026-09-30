@@ -17,7 +17,7 @@
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '$lib/components/report/inputs';
 	import { CLASS_LABEL, describeOp, namesOf, snapshotInput, stepInputs } from '$lib/components/scenarios/ops';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '$lib/series/provenance';
 	import { WATER_YEAR_MONTHS, monthName } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import EvidenceSummary from './EvidenceSummary.svelte';
@@ -321,7 +321,7 @@
 						chirpsSource={chirpsSourceOfInput(base.series)}
 						apanDaily={apanDailyOfInput(base.series)}
 						chirpsFactors={runChirpsFactors(sum)}
-						observedOrigin={originOfInput(base.series, (fit as { flowKind?: string }).flowKind)}
+						observedOrigin={originOfFit(base.series, fit as { flowKind?: string; siteNodeId?: string | null })}
 					/>
 				{:else}
 					<p class="na">Not assessed: the parameters don’t come from a stored automatic fit, so there are no split-sample or dry → wet scores (C6).</p>

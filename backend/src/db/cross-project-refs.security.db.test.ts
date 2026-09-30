@@ -859,6 +859,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'outlooks/schema.ts:baseRunId': 'checked by seasonal_outlook_guard (the SQL case) and outlooks.db.test.ts; the route needs a multi-year record',
 	'outlooks/schema.ts:outlookId': 'a job payload: jobs/trust.security.db.test.ts',
 	'projects/outcomeSettings.ts:siteNodeId': 'checkOutcomeSite: outcomeSettings.db.test.ts refuses another project’s node',
+	'projects/settings.ts:calibrationSiteNodeId': 'checkCalibrationSite: projects/calibrationSite.db.test.ts refuses another project’s node',
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
 	'publish/publish.ts:runId': ['POST /projects/:id/publication runId'],

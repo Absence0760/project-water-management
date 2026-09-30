@@ -117,7 +117,7 @@
 		<div class="stat">
 			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
-			<dd class="sub">{fmtNum(cal.days)} days observed</dd>
+			<dd class="sub">{fmtNum(cal.days)} days observed{#if cal.siteName} at {cal.siteName}{/if}</dd>
 			<dd class="sub">{sample.short}</dd>
 		</div>
 		<div class="stat">
