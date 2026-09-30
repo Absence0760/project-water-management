@@ -234,7 +234,7 @@ describe('recordFlowFlags', () => {
 	});
 
 	it('names every code in the column label', () => {
-		for (const [i, f] of FLOW_DAY_FLAGS.entries()) expect(FLOW_QUALITY_COLUMN.label).toContain(`${i} = `);
+		for (const i of FLOW_DAY_FLAGS.keys()) expect(FLOW_QUALITY_COLUMN.label).toContain(`${i} = `);
 		expect(FLOW_QUALITY_COLUMN.label).toContain('3 = above the highest gauging');
 		expect(FLOW_DAY_FLAGS.length).toBe(7);
 	});
