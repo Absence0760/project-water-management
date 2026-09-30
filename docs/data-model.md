@@ -2189,7 +2189,8 @@ No job table of its own: `job` holds status, progress and errors.
   reads and deletes only the results they computed themselves
   (`created_by`), on an application they own, for a dam of it they may see
   (`app_contributor_yield_target`: their farm links on it, or a node its own
-  `node.add` ops add). An assessor's yield on the same application stays
+  `node.add` ops add, or from `121_contributor_yield_insert` its `node.insert`
+  ops, engine ≥ 1.35.0). An assessor's yield on the same application stays
   hidden from them. `job` gets the matching pair: a contributor queues a
   `yield` job as themselves for such a target (never on a saved run) and
   reads their own yield jobs. The API narrows the target further

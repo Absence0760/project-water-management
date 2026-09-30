@@ -12,8 +12,8 @@
 	import { siteOptions } from '$lib/components/settings/ewrRules';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
-	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
-	import { OP_LABEL, OUTLET_SITE, buildOp, draftSpec, draftStarted, emptyDraft, siteTable, startTable, tableText, type OpDraft } from './ops';
+	import { CROP_FIELDS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
+	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
 		input,
@@ -44,8 +44,17 @@
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
+	// ewrRule.remove (engine ≥ 1.35.0): only the sites that have a table.
+	const ewrSitesWithTable = $derived(ewrSites.filter((o) => siteTable(input, o.id ?? null)));
 	const node = $derived(nodes.find((n) => n.id === d.nodeId));
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));
+	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
+	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
+	const allocations = $derived(input.model.allocations ?? []);
+	// node.insert: the nodes that drain into the picked node, which the new one can sit above.
+	const insertAbove = $derived(nodes.filter((n) => nodes.some((x) => x.downstreamNodeId === n.id)));
+	const insertUps = $derived(nodes.filter((n) => d.downstreamNodeId && n.downstreamNodeId === d.downstreamNodeId));
+	const coverName = (id: string) => LAND_COVER_CLASSES.find((c) => c.id === id)?.label ?? id;
 	const spec = $derived(draftSpec(d));
 
 	/** The value the picked field has now, in the input the op meets. */
@@ -53,6 +62,9 @@
 		if (d.kind === 'node.set') return node && d.field ? (node as unknown as Record<string, unknown>)[d.field] : undefined;
 		if (d.kind === 'transfer.set') return transfer && d.field ? (transfer as unknown as Record<string, unknown>)[d.field] : undefined;
 		if (d.kind === 'settings.set') return d.field ? settingsValue(input.settings, d.field) : undefined;
+		// A crop's own efficiency left out is the unit's, as null is.
+		if (d.kind === 'crop.set') return crop && d.field ? ((crop as unknown as Record<string, unknown>)[d.field] ?? null) : undefined;
+		if (d.kind === 'landCover.set') return patch && d.field ? (patch as unknown as Record<string, unknown>)[d.field] : undefined;
 		return undefined;
 	});
 	const currentArea = $derived(
@@ -64,6 +76,8 @@
 		if (d.kind === 'node.set') return node ? nodeFields(node.kind).map((f) => ({ value: f.field, label: f.label })) : [];
 		if (d.kind === 'transfer.set') return TRANSFER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'settings.set') return SETTINGS_FIELDS.map((f) => ({ value: f.path, label: f.label }));
+		if (d.kind === 'crop.set') return CROP_FIELDS.map((f) => ({ value: f.field, label: f.label }));
+		if (d.kind === 'landCover.set') return LAND_COVER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		return [];
 	});
 
@@ -101,6 +115,12 @@
 	}
 	function toggleDemandNode(id: string, on: boolean) {
 		d.demandNodeIds = on ? [...d.demandNodeIds, id] : d.demandNodeIds.filter((x) => x !== id);
+	}
+	function toggleUpstream(id: string, on: boolean) {
+		d.upstreamNodeIds = on ? [...d.upstreamNodeIds, id] : d.upstreamNodeIds.filter((x) => x !== id);
+	}
+	function pickAllocation(id: string) {
+		d = { ...allocationDraft(d, allocations.find((a) => a.id === id)), allocationId: id };
 	}
 	/** Water-year order for demand.scale's months (Oct first), the order its demand rows read in. */
 	const WATER_YEAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
@@ -207,12 +227,73 @@
 			</select>
 		</div>
 
-		{#if d.kind === 'node.set' || d.kind === 'node.remove'}
+		{#if d.kind === 'node.set' || d.kind === 'node.remove' || d.kind === 'node.move'}
 			<div class="field">
 				<label for="op-node">Node</label>
 				<select id="op-node" value={d.nodeId} onchange={(e) => pickNode(e.currentTarget.value)}>
 					<option value="" disabled>Pick a node</option>
-					{#each d.kind === 'node.remove' ? nodes.filter((n) => n.downstreamNodeId !== null) : nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+					{#each d.kind === 'node.set' ? nodes : nodes.filter((n) => n.downstreamNodeId !== null) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+				</select>
+			</div>
+			{#if d.kind === 'node.move'}
+				<div class="field">
+					<label for="op-down">Drains into</label>
+					<select id="op-down" bind:value={d.downstreamNodeId}>
+						<option value="" disabled>Pick a node</option>
+						{#each nodes.filter((n) => n.id !== d.nodeId) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+					</select>
+					{#if node}<span class="hint" data-testid="op-current">Now: drains into {nodeName(node.downstreamNodeId ?? '')}</span>{/if}
+				</div>
+			{/if}
+		{:else if d.kind === 'crop.set' || d.kind === 'crop.remove'}
+			<div class="field">
+				<label for="op-crop">Crop</label>
+				<select
+					id="op-crop"
+					value={d.cropId}
+					onchange={(e) => {
+						d.cropId = e.currentTarget.value;
+						prefill();
+					}}
+				>
+					<option value="" disabled>Pick a crop</option>
+					{#each input.model.crops as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				</select>
+			</div>
+		{:else if d.kind === 'landCover.set'}
+			<div class="field">
+				<label for="op-patch">Land-cover patch</label>
+				<select
+					id="op-patch"
+					value={d.patchId}
+					onchange={(e) => {
+						d.patchId = e.currentTarget.value;
+						prefill();
+					}}
+				>
+					<option value="" disabled>Pick a patch</option>
+					{#each input.model.landCover ?? [] as p (p.id)}<option value={p.id}>{nodeName(p.nodeId)}: {coverName(p.coverClass)}, {p.areaKm2} km²</option>{/each}
+				</select>
+			</div>
+		{:else if d.kind === 'ewrRule.remove'}
+			<div class="field">
+				<label for="op-ewr-site">EWR site</label>
+				<select id="op-ewr-site" bind:value={d.ewrSite}>
+					<option value="" disabled>{ewrSitesWithTable.length ? 'Pick a site with a rule table' : 'No site has a rule table'}</option>
+					{#each ewrSitesWithTable as o (o.id ?? OUTLET_SITE)}<option value={o.id ?? OUTLET_SITE}>{o.label}</option>{/each}
+				</select>
+				{#if d.ewrSite}
+					{@const t = siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite)}
+					{#if t}<span class="hint" data-testid="op-current">Now: {tableText(t, true)}</span>{/if}
+				{/if}
+			</div>
+		{:else if d.kind === 'allocation.set' || d.kind === 'allocation.remove'}
+			<div class="field grow">
+				<label for="op-allocation">Registered volume</label>
+				<select id="op-allocation" value={d.allocationId} onchange={(e) => pickAllocation(e.currentTarget.value)}>
+					<option value="" disabled>{d.kind === 'allocation.remove' && !allocations.length ? 'The model has no registered volume' : 'Pick one'}</option>
+					{#if d.kind === 'allocation.set'}<option value={NEW_ALLOCATION}>A new registered volume</option>{/if}
+					{#each allocations as a (a.id)}<option value={a.id}>{a.nodeId ? nodeName(a.nodeId) : 'No unit'}: {volumeText(a)}</option>{/each}
 				</select>
 			</div>
 		{:else if d.kind === 'cropArea.set' || d.kind === 'landCover.add'}
@@ -266,7 +347,7 @@
 			</div>
 		{/if}
 
-		{#if d.kind === 'node.set' || d.kind === 'transfer.set' || d.kind === 'settings.set'}
+		{#if d.kind === 'node.set' || d.kind === 'transfer.set' || d.kind === 'settings.set' || d.kind === 'crop.set' || d.kind === 'landCover.set'}
 			<div class="field">
 				<label for="op-field">{d.kind === 'settings.set' ? 'Setting' : 'Field'}</label>
 				<select
@@ -289,9 +370,12 @@
 		<div class="form-row">
 			{@render valueField(spec, d.kind === 'node.set' ? NODE_FIELD_SPECS[d.field as keyof typeof NODE_FIELD_SPECS].label : (fieldOptions.find((f) => f.value === d.field)?.label ?? 'Value'))}
 		</div>
+		{#if d.kind === 'crop.set'}
+			<p class="hint">A crop's factors and efficiency apply on every hydrological unit that grows it, so changing a crop the scenario didn't add is a <strong>baseline assumption</strong>.</p>
+		{/if}
 	{/if}
 
-	{#if d.kind === 'node.add'}
+	{#if d.kind === 'node.add' || d.kind === 'node.insert'}
 		<div class="form-row">
 			<div class="field">
 				<label for="op-new-kind">Kind</label>
@@ -306,9 +390,16 @@
 			</div>
 			<div class="field">
 				<label for="op-down">Drains into</label>
-				<select id="op-down" bind:value={d.downstreamNodeId}>
+				<select
+					id="op-down"
+					value={d.downstreamNodeId}
+					onchange={(e) => {
+						d.downstreamNodeId = e.currentTarget.value;
+						d.upstreamNodeIds = [];
+					}}
+				>
 					<option value="" disabled>Pick a node</option>
-					{#each nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+					{#each d.kind === 'node.insert' ? insertAbove : nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
 			{#if d.newKind === 'farm'}
@@ -323,7 +414,69 @@
 				</div>
 			{/if}
 		</div>
-		<p class="hint">A new node is a leaf, with no land of its own; change its other values with “Change a node's value” once it is added.</p>
+		{#if d.kind === 'node.insert'}
+			<fieldset class="months" data-testid="op-insert-upstream">
+				<legend>What drains into it (from {d.downstreamNodeId ? nodeName(d.downstreamNodeId) : 'the node it drains into'})</legend>
+				{#each insertUps as n (n.id)}
+					<label><input type="checkbox" checked={d.upstreamNodeIds.includes(n.id)} onchange={(e) => toggleUpstream(n.id, e.currentTarget.checked)} /> {n.name}</label>
+				{:else}
+					<span class="hint">Pick the node it drains into first.</span>
+				{/each}
+			</fieldset>
+			<p class="hint">The new node sits on the river between the ticked nodes and the node they drained into, with no land of its own; change its other values with “Change a node's value” once it is added.</p>
+		{:else}
+			<p class="hint">A new node is a leaf, with no land of its own; change its other values with “Change a node's value” once it is added.</p>
+		{/if}
+	{:else if d.kind === 'node.move'}
+		<p class="hint">Whatever drains into the node moves with it. Moving a node that isn't the proposer's own new structure, or one others drain into, is a <strong>baseline assumption</strong>: it redraws the river as modelled.</p>
+	{:else if d.kind === 'crop.remove'}
+		<p class="hint">Removes the crop and its area on every hydrological unit that grows it. To stop growing it on one unit, set that unit's crop area to 0 instead.</p>
+	{:else if d.kind === 'ewrRule.remove'}
+		<p class="hint">Always a <strong>baseline assumption</strong>: the Reserve is the authority's, never part of the proposal.</p>
+	{:else if d.kind === 'allocation.set' && d.allocationId}
+		<div class="form-row">
+			<div class="field">
+				<label for="op-al-node">Hydrological unit or user</label>
+				<select id="op-al-node" bind:value={d.nodeId}>
+					<option value="" disabled>Pick one</option>
+					{#each pumpers as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+				</select>
+			</div>
+			<div class="field">
+				<label for="op-al-source">Water source</label>
+				<select id="op-al-source" bind:value={d.alSource}>
+					<option value="surface">Surface water</option>
+					<option value="groundwater">Groundwater</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="op-al-volume">Volume (m³ a year)</label>
+				<input id="op-al-volume" type="text" inputmode="decimal" bind:value={d.alVolume} />
+			</div>
+			<div class="field">
+				<label for="op-al-storage">Registered storage (m³)</label>
+				<input id="op-al-storage" type="text" inputmode="decimal" placeholder="empty for none" bind:value={d.alStorage} />
+			</div>
+			<div class="field">
+				<label for="op-al-from">Valid from (YYYY-MM-DD)</label>
+				<input id="op-al-from" type="text" placeholder="empty for open" bind:value={d.alFrom} />
+			</div>
+			<div class="field">
+				<label for="op-al-to">Valid to (YYYY-MM-DD)</label>
+				<input id="op-al-to" type="text" placeholder="empty for open" bind:value={d.alTo} />
+			</div>
+			<div class="field">
+				<label for="op-al-rate">Maximum rate (m³/s)</label>
+				<input id="op-al-rate" type="text" inputmode="decimal" placeholder="empty for none stated" bind:value={d.alRate} />
+			</div>
+		</div>
+		<fieldset class="months">
+			<legend>Months of use (none ticked: none stated)</legend>
+			{#each WATER_YEAR_MONTHS as m (m)}
+				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
+			{/each}
+		</fieldset>
+		<p class="hint">What the allocation mode caps or scales a run to (Settings › Registered volumes). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
 	{:else if d.kind === 'cropArea.set'}
 		<div class="form-row">
 			<div class="field">
