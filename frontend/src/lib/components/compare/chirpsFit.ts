@@ -21,8 +21,12 @@ export function chirpsFitNote(fit: NonNullable<RunComparison['chirpsFit']>): str
 	const wa = fit.fitWindowsA ?? [];
 	const wb = fit.fitWindowsB ?? [];
 	if (wa.length && wb.length && wa.join() !== wb.join()) parts.push(`fitted on: ${wa.join('; ')} → ${wb.join('; ')}`);
+	// Engine ≥ 1.47.0 (CR-23): the gap map, when either run had one.
+	const qa = fit.quantileMapA ?? null;
+	const qb = fit.quantileMapB ?? null;
+	if (qa !== qb) parts.push(`quantile map: ${qa ?? 'off'} → ${qb ?? 'off'}`);
 	return (
 		`The CHIRPS bias factors differ between the runs (${parts.join('; ')}), so rain differs on the days CHIRPS fills in for blank catchment rain. ` +
-		'Keep-dry or missing periods, the rain records, the CHIRPS settings (bias correction, fit period) or the engine version can each move them.'
+		'Keep-dry or missing periods, the rain records, the CHIRPS settings (bias correction, fit period, quantile map) or the engine version can each move them.'
 	);
 }

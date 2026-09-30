@@ -50,7 +50,13 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
 		['Calibration record', s.calibrationFlowKind ? (FLOW_KIND_LABEL[s.calibrationFlowKind] ?? s.calibrationFlowKind) : 'observed gauge flow, else logger'],
 		['Reporting window (curtailment)', describeWindow(s.reportStart, s.reportEnd)],
-		['CHIRPS bias correction', s.chirpsBiasCorrection === 'none' ? 'none (raw CHIRPS)' : `monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}`],
+		[
+			'CHIRPS bias correction',
+			s.chirpsBiasCorrection === 'none'
+				? 'none (raw CHIRPS)'
+				: // Engine ≥ 1.47.0 (CR-23): the gap map; a snapshot without it ran without.
+					`monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}${s.chirpsQuantileMap ? `; gap days quantile-mapped onto the catchment rain (wet days ≥ ${s.chirpsQuantileMap.wetDayMm} mm)` : ''}`
+		],
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],

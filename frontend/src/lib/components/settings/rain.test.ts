@@ -1,6 +1,6 @@
 import { ACCUMULATION_MODES, CHIRPS_BIAS_MODES, defaultProjectSettings, ZERO_RAIN_MODES } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, describeZeroRain, ZERO_RAIN_OPTIONS } from './rain';
+import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, describeZeroRain, withChirpsQuantileMap, ZERO_RAIN_OPTIONS } from './rain';
 
 describe('CHIRPS_BIAS_OPTIONS', () => {
 	it('offers every engine mode once, default first', () => {
@@ -66,5 +66,14 @@ describe('describeZeroRain', () => {
 
 	it('describes a fit recorded before engine 0.20.0 as having run accumulations as recorded', () => {
 		expect(describeZeroRain({ mode: 'missing', keepDry: [], missing: [] })).toBe('flagged runs treated as missing; accumulations as recorded');
+	});
+});
+
+describe('withChirpsQuantileMap (engine ≥ 1.47.0)', () => {
+	it('is off by default, turns on at the default threshold, and back on at the one it was turned off with', () => {
+		expect(defaultProjectSettings().chirpsQuantileMap).toBeNull();
+		expect(withChirpsQuantileMap(true, null)).toEqual({ wetDayMm: 1 });
+		expect(withChirpsQuantileMap(true, { wetDayMm: 2.5 })).toEqual({ wetDayMm: 2.5 });
+		expect(withChirpsQuantileMap(false, { wetDayMm: 2.5 })).toBeNull();
 	});
 });
