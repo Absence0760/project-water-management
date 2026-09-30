@@ -1555,6 +1555,16 @@
 //             the human-impact tables, the curtailment badge and board note;
 //             measured 1308 locally with #248 merged, main @ 564ede95; CI
 //             runs ~2 KB above that). Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1319 KB (engine 1.45.0, the demand-object scenario
+//             ops and demand.scale by part: demandObject.add / .set / .remove
+//             in the engine's scenario code (validator with the schedule's
+//             window checks, apply, classification, the mask kind) and
+//             demand.scale's part, their "Add a change" forms (the Network
+//             form's schedule editor now also in the form's chunk), field
+//             specs and descriptions, override mode recording object edits,
+//             and four share-page lines in both catalogues; measured 1314
+//             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+//             above that). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1565,7 +1575,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1313,
+	totalCodeKb: 1319,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

@@ -1093,10 +1093,18 @@ export const af: Catalogue = {
 	'e0cd6bd7': '’n Nuwe boorgat by {unit}',
 	// A borehole removed
 	'202eea90': '’n Boorgat verwyder',
+	// A new water use that isn’t a crop on {unit}
+	'873f992a': '’n Nuwe watergebruik by {unit} wat nie ’n gewas is nie',
+	// A water use that isn’t a crop changed: {field}
+	'6d42b6b3': '’n Watergebruik wat nie ’n gewas is nie, verander: {field}',
+	// A water use that isn’t a crop removed
+	'97fb3101': '’n Watergebruik wat nie ’n gewas is nie, verwyder',
 	// A catchment setting changed: {path}
 	'8c9825dc': '’n Instelling van die opvanggebied verander: {path}',
 	// The {kind} record scaled by {factor}
 	'7bf8e335': 'Die {kind}-rekord met {factor} vermenigvuldig',
+	// Demand of {part} scaled by {factor}
+	'6f11e6e2': 'Waterbehoefte van {part} met {factor} vermenigvuldig',
 	// Demand scaled by {factor}
 	'43783ca2': 'Waterbehoefte met {factor} vermenigvuldig',
 	// The Reserve’s rule table replaced at {site}
