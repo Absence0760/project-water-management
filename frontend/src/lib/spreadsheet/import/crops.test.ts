@@ -155,7 +155,7 @@ describe('nonCropDemand (non_crop_demand): the part above the crop areas becomes
 
 	it('makes a municipal object without crops, returning the farm’s return flow', () => {
 		const o = nonCropDemandObject((k) => `id:${k}`, 'Town dam', 'n1', new Array(12).fill(800), false, 0.2);
-		expect(o).toMatchObject({ id: 'id:demand-object:Town dam', category: 'municipal', returnPct: 0.2, sizing: 'monthly', priority: 'shared', destination: 'internal', enabled: true });
+		expect(o).toMatchObject({ id: 'id:demand-object:Town dam', category: 'municipal', returnPct: 0.2, sizing: 'monthly', priority: 'shared', destination: 'internal', enabled: true, source: 'other' });
 		expect(nonCropDemandObject((k) => k, 'F', 'n2', new Array(12).fill(1), true, 0).category).toBe('other');
 	});
 });

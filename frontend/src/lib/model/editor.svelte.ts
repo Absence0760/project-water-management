@@ -181,6 +181,8 @@ export class ModelEditor {
 			monthlyFactor: null,
 			enabled: true,
 			schedule: null,
+			// Where its number comes from (engine ≥ 1.56.0): not recorded until the modeller says, even at a category's norm.
+			source: null,
 			note: ''
 		};
 		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.

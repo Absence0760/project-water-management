@@ -239,6 +239,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.population']
 	},
 	{
+		id: 'demand-source',
+		term: 'Demand source',
+		short: 'Where a demand object’s number comes from, by rule: meter records where they exist, else a strategy’s AADD, else population × litres a day.',
+		category: 'network',
+		fields: ['demandObject.source']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',

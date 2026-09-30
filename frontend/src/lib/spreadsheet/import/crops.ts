@@ -147,6 +147,8 @@ export function nonCropDemandObject(uid: (key: string) => string, farm: string, 
 		priority: 'shared',
 		destination: 'internal',
 		enabled: true,
+		// The workbook's typed-over demand is neither a meter record, an AADD nor a norm by rule (engine 1.56.0).
+		source: 'other',
 		note: 'b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)'
 	};
 }
