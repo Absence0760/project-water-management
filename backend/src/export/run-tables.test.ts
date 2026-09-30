@@ -383,7 +383,8 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			],
 			daysByLevel: [360, 85, 20],
 			reviews: 2,
-			units: [{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 43.2 }]
+			units: [{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 43.2, daysByLevel: [360, 85, 20] }],
+			ewrReviews: 1
 		};
 		const lines = [...droughtRestrictionLines(r)];
 		expect(lines).toEqual([
@@ -391,12 +392,13 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			'Rule,"reviewed 1 Jan, lifted 1 May; Level 1 (below 60 %): crops 30 %; Level 2 (below 30 %): crops 60 %, domestic demand objects 20 %"',
 			'Source,"WUA, 2026"',
 			'Reviews in the run,2',
+			'Reviews after a day the EWR trigger’s site wasn’t met,1',
 			'Water year,Days,Days: No restriction,Days: Level 1 (below 60 %): crops 30 %,"Days: Level 2 (below 30 %): crops 60 %, domestic demand objects 20 %"',
 			'2003/04,365,300,65,0',
 			'2004/05,100,60,20,20',
 			'Whole run,465,360,85,20',
-			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean supplied (m³/day)',
-			'Farm A,100,80,20,43.2,75'
+			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean supplied (m³/day),Days restricted',
+			'Farm A,100,80,20,43.2,75,105'
 		]);
 		// In the summary sheet of a run with the rule only.
 		expect([...summaryCsvLines(meta, { ...summary, droughtRestriction: r })]).toContain('Whole run,465,360,85,20');

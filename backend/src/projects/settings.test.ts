@@ -1301,3 +1301,24 @@ describe('settings.droughtRestriction (engine 1.52.0, WP-3.8)', () => {
 		expect(mergeSettings({}).droughtRestriction).toBeUndefined();
 	});
 });
+
+describe('remapSettingNodeIds and the drought restriction rule (engine 1.52.0)', () => {
+	it('moves its dams, units and EWR site to the copy’s node ids, and leaves unknown ids as they were', () => {
+		const ids = new Map([
+			['a', 'A'],
+			['b', 'B'],
+			['g', 'G']
+		]);
+		const out = remapSettingNodeIds({ droughtRestriction: { reviewDates: ['01-01'], levels: [], basis: 'dams', damNodeIds: ['a', 'x'], nodeIds: ['b'], ewrTrigger: { siteNodeId: 'g', level: 1 } } }, ids);
+		expect(out.droughtRestriction).toMatchObject({ damNodeIds: ['A', 'x'], nodeIds: ['B'], ewrTrigger: { siteNodeId: 'G', level: 1 } });
+		const outlet = remapSettingNodeIds({ droughtRestriction: { reviewDates: ['01-01'], levels: [], ewrTrigger: { siteNodeId: null, level: 1 } } }, ids);
+		expect(outlet.droughtRestriction).toMatchObject({ ewrTrigger: { siteNodeId: null } });
+	});
+	it('takes the basis, units and EWR trigger, checked by the engine', () => {
+		const rule = { reviewDates: ['01-01'], levels: [{ belowPct: 0.5, cuts: { crops: 0.3 } }] };
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, basis: 'dams', damNodeIds: ['n1'], nodeIds: ['n2'], ewrTrigger: { siteNodeId: null, level: 1 } } }).success).toBe(true);
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, basis: 'dams' } }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, ewrTrigger: { siteNodeId: null, level: 2 } } }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, basis: 'river' } }).success).toBe(false);
+	});
+});

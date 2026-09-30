@@ -133,6 +133,15 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	if (isObj(s.outcomes) && typeof s.outcomes.siteNodeId === 'string' && ids.has(s.outcomes.siteNodeId)) {
 		s.outcomes = { ...s.outcomes, siteNodeId: ids.get(s.outcomes.siteNodeId) };
 	}
+	// The drought restriction rule's dams, units and EWR site (engine ≥ 1.52.0) follow their nodes too.
+	if (isObj(s.droughtRestriction)) {
+		const r = { ...s.droughtRestriction };
+		const map = (list: unknown) => (Array.isArray(list) ? list.map((id) => (typeof id === 'string' && ids.has(id) ? ids.get(id) : id)) : list);
+		if (r.damNodeIds !== undefined) r.damNodeIds = map(r.damNodeIds);
+		if (r.nodeIds !== undefined) r.nodeIds = map(r.nodeIds);
+		if (isObj(r.ewrTrigger) && typeof r.ewrTrigger.siteNodeId === 'string' && ids.has(r.ewrTrigger.siteNodeId)) r.ewrTrigger = { ...r.ewrTrigger, siteNodeId: ids.get(r.ewrTrigger.siteNodeId) };
+		s.droughtRestriction = r;
+	}
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
 		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };

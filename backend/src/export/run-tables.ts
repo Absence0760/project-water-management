@@ -1566,12 +1566,14 @@ export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestr
 	yield csvRow(['Rule', describeDroughtRestriction(r.rule)]);
 	if (r.rule.source?.trim()) yield csvRow(['Source', r.rule.source.trim()]);
 	yield csvRow(['Reviews in the run', r.reviews]);
+	if (r.ewrReviews !== undefined) yield csvRow(['Reviews after a day the EWR trigger’s site wasn’t met', r.ewrReviews]);
 	const levels = ['No restriction', ...r.rule.levels.map((l, i) => describeRestrictionLevel(l, i))];
 	yield csvRow(['Water year', 'Days', ...levels.map((l) => `Days: ${l}`)]);
 	for (const y of r.years) yield csvRow([waterYearLabel(y.waterYear), y.days, ...y.daysByLevel]);
 	yield csvRow(['Whole run', r.daysByLevel.reduce((a, b) => a + b, 0), ...r.daysByLevel]);
-	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean supplied (m³/day)']);
-	for (const u of r.units) yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day]);
+	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean supplied (m³/day)', 'Days restricted']);
+	for (const u of r.units)
+		yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day, u.daysByLevel ? u.daysByLevel.slice(1).reduce((a, b) => a + b, 0) : null]);
 }
 
 /**
