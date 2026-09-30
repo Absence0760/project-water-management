@@ -144,7 +144,7 @@ export interface TickResult {
 	reports?: ReportScheduleResult & { purged: number };
 	/** Alert checks queued, alert rows purged (0 when alerts scheduling was off), and alert mails sent by this tick. */
 	alerts: SendResult & { scheduled: number; purged: number };
-	/** Evidence pack notices sent by this tick, and settled ones purged (130_pack_notices). */
+	/** Evidence pack notices sent by this tick, and settled ones purged (133_pack_notices). */
 	packNotices: NoticeResult & { purged: number };
 }
 

@@ -1,4 +1,4 @@
--- 130_pack_notices — "pack issued" and "pack withdrawn" emails (issue #71,
+-- 133_pack_notices — "pack issued" and "pack withdrawn" emails (issue #71,
 -- docs/followups.md § Evidence report; docs/evidence-pack.md § Notices,
 -- docs/data-model.md § Evidence packs, docs/security.md § Evidence packs).
 --
@@ -85,7 +85,7 @@ CREATE INDEX pack_notice_open_idx ON pack_notice (status, created_at) WHERE stat
 CREATE INDEX pack_notice_settled_idx ON pack_notice (settled_at);
 
 COMMENT ON TABLE pack_notice IS
-	'One "pack issued" / "pack withdrawn" email per pack, recipient and event, ever (130_pack_notices, issue #71). Own rows readable; written only by the SECURITY DEFINER queue / claim / finish / purge functions. Purged 30 days after it is settled.';
+	'One "pack issued" / "pack withdrawn" email per pack, recipient and event, ever (133_pack_notices, issue #71). Own rows readable; written only by the SECURITY DEFINER queue / claim / finish / purge functions. Purged 30 days after it is settled.';
 
 ALTER TABLE pack_notice ENABLE ROW LEVEL SECURITY;
 -- Reading only: no INSERT, UPDATE or DELETE policy.

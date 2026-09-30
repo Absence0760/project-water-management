@@ -116,7 +116,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
-  createdAt, sentAt }]` (130). `account` is
+  createdAt, sentAt }]` (133). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view

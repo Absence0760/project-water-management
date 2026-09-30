@@ -28,7 +28,7 @@ panel, and the public verify page with its in-browser file check
 to an issued pack with public comments on it
 ([§ Sharing and comments](#sharing-and-comments), 2026-09-30); and the
 "pack issued" and "pack withdrawn" emails to the editors and the applicant
-([§ Notices](#notices), 130_pack_notices, 2026-09-30). What is left is
+([§ Notices](#notices), 133_pack_notices, 2026-09-30). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -421,7 +421,7 @@ signed out, comment, withdraw: the link says so and why).
 ## Notices
 
 When a pack is **issued**, or one that was issued is **withdrawn**, the
-project's editors and the application's owner get an email (130_pack_notices;
+project's editors and the application's owner get an email (133_pack_notices;
 Mailpit locally, SES in production; `backend/src/evidence/notices.ts`). It
 follows the alert mails' pattern ([architecture.md § Alert emails](./architecture.md#alert-emails)):
 

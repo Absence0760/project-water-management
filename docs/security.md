@@ -2210,7 +2210,7 @@ PDF someone else asked for kept the person as a recipient
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
-| Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (130) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
+| Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
@@ -2228,7 +2228,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, evidence pack emails sent (`packNotices`, 130), their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, evidence pack emails sent (`packNotices`, 133), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
@@ -2769,7 +2769,7 @@ nothing else.
   (operator decision, 2026-09-29: issuing stays with the project's editors).
   An editor shares an issued pack by link ([§ Pack links](#pack-links-wp-315-128_pack_share_notessql)).
   The pack routes' bodies are strict where they create or issue.
-- **Who is emailed about a pack** (130_pack_notices, [evidence-pack.md §
+- **Who is emailed about a pack** (133_pack_notices, [evidence-pack.md §
   Notices](./evidence-pack.md#notices)). Only the issue and withdraw routes
   queue notices, through `app_pack_notice_queue`, which refuses anyone but
   an editor of the pack's project and a pack not in that state; `water_app`

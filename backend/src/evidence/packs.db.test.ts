@@ -138,7 +138,7 @@ const rawS3 = () =>
 		credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || 'minioadmin', secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || 'minioadmin' }
 	});
 
-/** The pack's notices of one event (130_pack_notices), by recipient. */
+/** The pack's notices of one event (133_pack_notices), by recipient. */
 const notices = async (packId: string, event = 'issued') =>
 	(await asOwner('SELECT user_id::text, event, status FROM pack_notice WHERE pack_id = $1 AND event = $2 ORDER BY user_id', [packId, event])) as { user_id: string; event: string; status: string }[];
 
@@ -333,7 +333,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
 		expect((await issue(owner, v1.id)).status).toBe(409);
-		// The "pack issued" notice (130_pack_notices), queued with the issue: the other editor; not the issuer, a viewer, an applicant or a farmer.
+		// The "pack issued" notice (133_pack_notices), queued with the issue: the other editor; not the issuer, a viewer, an applicant or a farmer.
 		expect(await notices(v1.id)).toEqual([{ user_id: editor.id, event: 'issued', status: 'pending' }]);
 	});
 

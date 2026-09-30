@@ -1117,7 +1117,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
 
-**Notices (130_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
+**Notices (133_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
 
 - **`pack_notice`**: one "pack issued" or "pack withdrawn" email per pack,
   person and event, ever: primary key `(pack_id, user_id, event)` (it covers

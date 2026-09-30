@@ -1,4 +1,4 @@
-// "Pack issued" / "pack withdrawn" notices (issue #71; 130_pack_notices.sql,
+// "Pack issued" / "pack withdrawn" notices (issue #71; 133_pack_notices.sql,
 // evidence/notices.ts, docs/evidence-pack.md § Notices), at the SQL and
 // worker level, on packs planted past their guards (the routes' end-to-end
 // path is in packs.db.test.ts): who is queued (editors and owners, direct or

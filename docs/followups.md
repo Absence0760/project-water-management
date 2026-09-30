@@ -4265,7 +4265,7 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       128 without it).
 - [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner: built 2026-09-30
-      (130_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,
+      (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,
       or withdrawing one that was issued (with its reason), emails the
       project's editors and owners and the application's owner, never the
       actor; a supersede is told in the new version's email, and a draft

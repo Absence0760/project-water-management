@@ -1,5 +1,5 @@
 // "Pack issued" / "pack withdrawn" emails (issue #71; docs/evidence-pack.md §
-// Notices, 130_pack_notices.sql). The pattern is the alert mails'
+// Notices, 133_pack_notices.sql). The pattern is the alert mails'
 // (alerts/send.ts):
 //
 //   1. Queued in the transaction that issues or withdraws the pack, as the

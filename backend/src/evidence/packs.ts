@@ -383,7 +383,7 @@ export const packRoutes = new Hono<AuthEnv>()
 			if (pred) await recordAudit(db, id, 'pack.superseded', audit(pred, { byPackId: issued.id, byVersion: issued.version }));
 			// Its PDF, printed from the issued pack's own page (119_pack_render), in the same transaction as the issue.
 			const render = await queuePackRender(db, id, packId);
-			// "Pack issued" emails to the editors and the applicant (130_pack_notices), sent by the tick the render wakes.
+			// "Pack issued" emails to the editors and the applicant (133_pack_notices), sent by the tick the render wakes.
 			await queuePackNotices(db, packId, 'issued');
 			return { pack: issued, jobId: render.jobId };
 		});
@@ -455,7 +455,7 @@ export const packRoutes = new Hono<AuthEnv>()
 			mustChange(await db.query(`UPDATE evidence_pack SET status = 'withdrawn', status_reason = $3 WHERE project_id = $1 AND id = $2`, [id, packId, body.reason]));
 			const withdrawn = await loadPack(db, id, packId);
 			await recordAudit(db, id, 'pack.withdrawn', audit(withdrawn, { from: pack.status, reason: body.reason }));
-			// "Pack withdrawn" emails, only for a pack that was issued (130_pack_notices).
+			// "Pack withdrawn" emails, only for a pack that was issued (133_pack_notices).
 			return { pack: withdrawn, notices: await queuePackNotices(db, packId, 'withdrawn') };
 		});
 		// No job to wake the worker for: the wake-up only means "tick now", which sends the notices.

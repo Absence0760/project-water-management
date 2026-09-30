@@ -81,7 +81,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'note.deleted_by': { excluded: 'notes the person hid; note.deleted is in auditEvents' },
 	// Their own earlier texts of a scenario note, under that note (115_scenario_share_notes).
 	'note_revision.edited_by': { section: 'notes' },
-	// The "pack issued" / "pack withdrawn" emails sent to the person (130_pack_notices), 30 days.
+	// The "pack issued" / "pack withdrawn" emails sent to the person (133_pack_notices), 30 days.
 	'pack_notice.user_id': { section: 'packNotices' },
 	'project.created_by': { excluded: 'the project itself; the membership is in projectMemberships' },
 	'outlook_publication.ended_by': { excluded: 'the project’s outlook publication to farmers; outlook.unpublished is in auditEvents' },
@@ -234,7 +234,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE d.user_id = $1 ORDER BY d.created_at DESC`,
 			[userId]
 		);
-		// Own rows only under RLS (130): the evidence pack emails sent to them.
+		// Own rows only under RLS (133): the evidence pack emails sent to them.
 		const { rows: packNotices } = await db.query(
 			`SELECT project_id AS "projectId", pack_id AS "packId", event, status, created_at AS "createdAt", sent_at AS "sentAt"
 			 FROM pack_notice WHERE user_id = $1 ORDER BY created_at DESC, pack_id, event`,
