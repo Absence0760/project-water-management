@@ -574,6 +574,7 @@
         "priority": "shared",
         "destination": "internal",
         "enabled": true,
+        "source": "other",
         "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)"
       }
     ]

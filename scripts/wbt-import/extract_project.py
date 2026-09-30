@@ -469,7 +469,8 @@ def non_crop_demand_object(uid, farm: str, node_id: str, monthly: list[float], c
     demand is, and returns the farm's irrigation return flow %, so what it
     takes and gives back is the workbook's: supplied x r back, (1 - r) consumed.
     A farm with no crops at all is a town or scheme (municipal); otherwise the
-    category is left as other for the modeller to set."""
+    category is left as other for the modeller to set. Its source is 'other'
+    (engine 1.56.0): the workbook's number, not a meter record, AADD or norm."""
     return {
         "id": uid(f"demand-object:{farm}"),
         "nodeId": node_id,
@@ -485,6 +486,8 @@ def non_crop_demand_object(uid, farm: str, node_id: str, monthly: list[float], c
         "priority": "shared",
         "destination": "internal",
         "enabled": True,
+        # The workbook's typed-over demand is neither a meter record, an AADD nor a norm by rule (engine 1.56.0).
+        "source": "other",
         "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)",
     }
 
