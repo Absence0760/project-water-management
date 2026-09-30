@@ -1609,13 +1609,21 @@
 //             Appendix C's prompt rows; +1 KB). Measured 1333 locally on the
 //             combined branch with both issue #71 pieces, main @ 5604071e;
 //             CI ~2 KB above. Headroom ~3 KB.
-// 2026-09-30  total 1338 → 1343 KB (issue #259's follow-up, CR-16: the Compare
+// 2026-09-30  total 1338 → 1344 KB (issue #71, #270 with #268 and #269 in it:
+//             the applicant's pack view route and the Application panel's
+//             pack list (packs/applicantPack.ts), the errata found since
+//             issue on verify, the pack page and the applicant view
+//             (errataFoundSinceNote)). Measured 1338 locally, 1341 on CI;
+//             headroom ~3 KB.
+// 2026-09-30  total 1344 → 1351 KB (issue #259's follow-up, CR-16: the Compare
 //             page's plausibility table sets the recession diagnostics and
 //             the validation signatures side by side, compare/plausibility.ts's
 //             new rows and notes and the engine's recessionDelta and
 //             signaturesDelta in the compare chunk; ~+2–3 KB). Measured 1339
 //             locally on feat/compare-signatures over feat/recession-signatures
-//             @ e1b89994; CI ~2 KB above. Headroom ~2 KB.
+//             @ e1b89994; CI ~2 KB above. Re-measured with main @ 0672e461's
+//             1344 merged (#270, #268, #269): 1346 locally, CI ~2 KB above.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1626,7 +1634,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1343,
+	totalCodeKb: 1351,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
