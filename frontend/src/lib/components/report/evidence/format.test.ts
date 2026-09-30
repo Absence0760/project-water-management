@@ -20,6 +20,8 @@ describe('evidence report number formats', () => {
 		expect(valueText({ unit: 'Mm³/a' }, 1.3521)).toBe('1.352 Mm³/a');
 		expect(valueText({ unit: 'days' }, null)).toBe('–');
 		expect(digitsFor('Mm³')).toBe(2);
+		// The registered-use row counts whole unit-years (§ 5): no decimals.
+		expect(valueText({ unit: 'unit-years' }, 3)).toBe('3 unit-years');
 	});
 
 	it('prints a banded change as the paired median, its range and the run (D-U2)', () => {

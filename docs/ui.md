@@ -3265,7 +3265,9 @@ which checks every catchment tab).
   table (a group headed "Rule table at …") has the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
   desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
-  line), what **the table covers** (total flow, or low flows
+  line), the optional **Recommended ecological category (REC)** (ER9: A to
+  F or a band like B/C, upper-cased as typed, blank = not given; a label for
+  the evidence report, no result depends on it), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -5658,7 +5660,7 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
   Then **Expect questions about:** what an assessor will ask for, with the
-  way out (failed checks, "Not assessed" rows, the missing REC, no stored
+  way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).
 - **Board 2, the refusal.** When a refusing check fails (not the current
   nominated run, a legacy runoff model, a forecast run, another base run,
@@ -5677,13 +5679,18 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     numbers), the change table (fixed rows, each with its basis: Reserve
     months met per rule-table site, days below the pragmatic EWR, shortfall
     volume, outflow MAR with % of natural MAR, the applicant's own supply,
-    other users' supply), with the paired band and "worse in k of n", *Where
+    *Registered vs modelled use* (unit-years above a registered volume,
+    summed, no band; *Not assessed* without volumes), other users' supply),
+    with the paired band and "worse in k of n", *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
   - **1 The river**: per rule-table site, the site strip (source, component,
-    unit, REC *Not given*, EWR % nMAR, natural MAR against the
-    determination's), the two heat maps (`grid.ts`, month × water year,
+    unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
+    against the determination's, and, when there are any, the months whose
+    natural flow is drier than the table's driest point, where the
+    requirement is scaled with the flow: G16, also a caution flag on page 1),
+    the two heat maps (`grid.ts`, month × water year,
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
@@ -5698,6 +5705,18 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
     days and years fully met, baseline and application.
+  - **5 Registered water use** (WP-3.10,
+    [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
+    the allocation mode each run ran with, the band, volumes on no unit; the
+    over/under-use chart (`UsePlot`, `registeredUse.ts`: a row per unit and
+    water source, a mark per whole water year at modelled ÷ registered,
+    hollow for the baseline, filled for the application, the 100 % line and
+    the band shaded, one neutral hue, a year past 300 % an arrowhead at the
+    edge); the whole years above, within and below per unit and source with
+    the mean volumes; and every water year's registered volume and modelled
+    use, part years listed but not counted. Units by their unit name, never
+    the holder's. *Not assessed* when the runs carry no volumes, or none on a
+    unit of theirs.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every
@@ -5711,7 +5730,8 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
-- Tested by `e2e/tests/evidence-report.spec.ts`.
+- Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
+  `e2e/tests/evidence-allocations.spec.ts`.
 
 ## Help (`/help`)
 

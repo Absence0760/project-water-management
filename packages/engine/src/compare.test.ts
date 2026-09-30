@@ -1427,6 +1427,20 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists a rule table’s REC changing (ER9); absent and null are both not given', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.category = 'B/C';
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) not given → B/C']);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.category = 'C';
+		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) B/C → C']);
+		const d = structuredClone(a);
+		d.settings.ewrRules![0]!.category = null;
+		expect(texts(a, d)).toEqual([]);
+	});
+
 	it('lists the determination’s natural MAR changing (engine ≥ 1.11.0); absent and null are both not recorded', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];

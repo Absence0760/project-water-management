@@ -4,15 +4,22 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
+import type { AllocationNodeComparison, AllocationSourceComparison, AllocationWaterSource, AllocationYear } from '../allocations/compare';
+import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
 import type { EwrAssuranceSite } from '../reserve/assurance';
-import { ewrSourceConfidence } from '../reserve/rules';
+import { ewrSourceConfidence, isEwrCategory } from '../reserve/rules';
 import type { Band } from '../uncertainty/bands';
 import { calendarMonthOf, monthName } from '../uncertainty/ensemble';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION } from '../version';
 import {
 	EVIDENCE_REPORT_VERSION,
+	type EvidenceAllocationCounts,
+	type EvidenceAllocations,
+	type EvidenceAllocationSource,
+	type EvidenceAllocationUnit,
+	type EvidenceAllocationYear,
 	type EvidenceCheck,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
@@ -269,7 +276,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			cited: e.id === cited?.id
 		}));
 
-	const rows = changeRows(input, cited, paired);
+	const allocations = allocationSection(b, a);
+	const rows = changeRows(input, cited, paired, allocations);
 	const byMonth = a && paired ? monthChanges(b, a, paired.ewrDaysNotMetByMonth) : null;
 	const ranked = (byMonth ?? []).filter((m): m is EvidenceMonthChange & { band: Band } => !!m.band && m.band.p50 !== null);
 	const worstMonths = ranked
@@ -290,7 +298,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	]);
 	const coverage = baseSum?.coverage[0]?.fraction ?? null;
 	const coverageWarning = !!baseSum?.coverageWarning;
-	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited });
+	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited, allocations });
 	const refused = checks.some((c) => c.refuses && !c.passed);
 
 	return {
@@ -354,6 +362,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		},
 		credibility: { nominations: input.nominations.map((n) => ({ ...n })) },
 		users,
+		allocations,
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
@@ -399,7 +408,7 @@ const marMm3 = (m3Day: number | null | undefined) => (typeof m3Day === 'number' 
 const diff = (x: number | null, y: number | null) => (x === null || y === null ? null : y - x);
 const worseOf = (share: number | null | undefined, n: number) => (share === null || share === undefined ? null : { k: Math.round(share * n), n });
 
-function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, paired: EvidenceReport['uncertainty']['paired']): EvidenceRow[] {
+function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, paired: EvidenceReport['uncertainty']['paired'], allocations: EvidenceAllocations): EvidenceRow[] {
 	const b = input.baseline;
 	const a = input.application;
 	const rows: EvidenceRow[] = [];
@@ -511,7 +520,12 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 				: `${fixed(pctN(oa)!, 1)} % of the natural MAR${a && pctN(ob) !== null ? ` → ${fixed(pctN(ob)!, 1)} %` : ''}${a && oa && ob !== null ? `; ${signed(fixed((100 * (ob - oa)) / oa, 1))} %` : ''}`
 	});
 
-	if (!a) return rows;
+	// Registered water use (WP-3.10): one fixed row, after the applicant's own supply; last for baseline evidence.
+	const registered = registeredUseRow(allocations, !!a);
+	if (!a) {
+		rows.push(registered);
+		return rows;
+	}
 	// C15: the applicant's own supply, over the nodes the application owns.
 	const owned = new Set(a.scenario.ownedNodeIds);
 	const share = (run: EvidenceRunInput) => {
@@ -536,6 +550,8 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 		notAssessed: ub === null ? 'Not assessed: the application has no unit of its own with demand.' : null,
 		note: null
 	});
+
+	rows.push(registered);
 
 	// C14: every other user whose supply changed, largest loss first.
 	const users = userRows(b, a).filter((u) => !u.own && u.onlyIn === null && u.suppliedA !== null && u.suppliedB !== null);
@@ -609,6 +625,24 @@ function monthChanges(b: EvidenceRunInput, a: EvidenceRunInput, bands: readonly 
 // § 1 The river
 // ---------------------------------------------------------------------------
 
+/**
+ * A Reserve site's REC (ER9): its rule table's `category` in the run's
+ * settings, matched by site as the run matches it (the outlet is a table
+ * with no site or the outflow node's id). A label the site's report doesn't
+ * carry; null when not given.
+ */
+function siteCategory(run: EvidenceRunInput, site: EwrAssuranceSite): string | null {
+	const tables = run.inputs?.settings?.ewrRules;
+	if (!Array.isArray(tables)) return null;
+	const outflow = run.inputs?.model?.nodes?.find((n) => n.downstreamNodeId === null)?.id;
+	const key = (id: unknown) => (id === null || id === undefined || id === outflow ? null : id);
+	const t = tables.find((x) => !!x && typeof x === 'object' && key(x.siteNodeId) === site.nodeId);
+	return t && isEwrCategory(t.category) ? t.category : null;
+}
+
+/** Months whose natural flow is drier than the rule table's driest point (G16): the requirement is scaled with the flow there (model.md §2.9c). */
+const belowTable = (site: EwrAssuranceSite | null) => (site ? site.months.filter((m) => m.beyond === 'drier').length : null);
+
 function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] {
 	return (b.summary.ewrAssurance ?? []).map((site) => {
 		const other = a ? matchSite(a.summary.ewrAssurance ?? [], site) : null;
@@ -654,7 +688,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			sourceKind: ewrSourceConfidence(site.sourceKind) ?? 'kind of source not stated',
 			component: site.component === 'lowFlow' ? 'low flows' : 'total flow',
 			unit: site.unit,
-			category: null,
+			category: siteCategory(b, site),
 			ewrPctNmar: site.ewrPctNmar?.pct ?? null,
 			naturalMar: site.naturalMar ? { ...site.naturalMar } : null,
 			months,
@@ -666,6 +700,9 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			rateA: site.overall.rate,
 			rateB: other ? other.overall.rate : null,
 			monthsA: site.overall.months,
+			belowTableA: belowTable(site)!,
+			belowTableB: a ? belowTable(other) : null,
+			belowTableExpectedPct: site.naturalSource === 'run' && site.points.length ? 100 - site.points[site.points.length - 1]! : null,
 			byMonth,
 			fdcMonth
 		};
@@ -727,6 +764,170 @@ function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): Evidenc
 }
 
 // ---------------------------------------------------------------------------
+// § 5 Registered water use (WP-3.10)
+// ---------------------------------------------------------------------------
+
+/** Why § 5 and its page-1 row have nothing to compare. */
+export const ALLOCATIONS_NOT_ASSESSED = {
+	none: 'Not assessed: the runs carry no registered volumes (WARMS registrations, licences), so modelled use can’t be compared with a registered volume. An editor adds them on the Allocations tab; the model then has to run again.',
+	notMatched: (n: number) =>
+		`Not assessed: none of the runs’ ${n} registered volume${n === 1 ? ' is' : 's are'} matched to a farm or water user in them. Match them on the Allocations tab and run the model again.`,
+	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.'
+} as const;
+
+const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
+const hasVolume = (n: AllocationNodeComparison) => n.surface.allocationIds.length > 0 || n.groundwater.allocationIds.length > 0;
+const allocationCount = (c: NonNullable<EvidenceRunInput['allocations']>) =>
+	c.nodes.reduce((k, n) => k + n.surface.allocationIds.length + n.groundwater.allocationIds.length, 0) + c.unmatchedAllocationIds.length + c.notInRunAllocationIds.length;
+
+function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
+	const whole = side.years.filter((y) => !y.partial);
+	const n = (f: (y: AllocationYear) => boolean) => whole.filter(f).length;
+	return {
+		wholeYears: whole.length,
+		over: n((y) => y.status === 'over'),
+		within: n((y) => y.status === 'within'),
+		under: n((y) => y.status === 'under'),
+		noVolume: n((y) => y.status === 'unregistered' || y.status === 'none')
+	};
+}
+
+/**
+ * § 5: per farm or water user with a registered volume in either run, per
+ * water source with one, every water year of both runs: the registered
+ * volume and the modelled use, and whole years counted over, within and
+ * under the band. Units are matched by node id (as § 4 matches them) and
+ * named by the unit, never the holder (D3).
+ */
+function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
+	const ca = b.allocations ?? null;
+	const cb = a ? (a.allocations ?? null) : null;
+	const owned = new Set(a?.scenario.ownedNodeIds ?? []);
+	const unitsA = (ca?.nodes ?? []).filter(hasVolume);
+	const unitsB = (cb?.nodes ?? []).filter(hasVolume);
+	const total = Math.max(ca ? allocationCount(ca) : 0, cb ? allocationCount(cb) : 0);
+	const inA = new Map((ca?.nodes ?? []).map((n) => [n.nodeId, n]));
+	const inB = new Map((cb?.nodes ?? []).map((n) => [n.nodeId, n]));
+	const ids = [...unitsA.map((n) => n.nodeId), ...unitsB.map((n) => n.nodeId).filter((id) => !unitsA.some((n) => n.nodeId === id))];
+
+	const units: EvidenceAllocationUnit[] = ids.map((nodeId) => {
+		const na = inA.get(nodeId) ?? null;
+		const nb = inB.get(nodeId) ?? null;
+		const sources: EvidenceAllocationSource[] = [];
+		for (const src of SOURCES) {
+			const sa = na ? na[src] : null;
+			const sb = nb ? nb[src] : null;
+			if (!sa?.allocationIds.length && !sb?.allocationIds.length) continue;
+			const byYearA = new Map((sa?.years ?? []).map((y) => [y.waterYear, y]));
+			const byYearB = new Map((sb?.years ?? []).map((y) => [y.waterYear, y]));
+			const years = [...new Set([...byYearA.keys(), ...byYearB.keys()])].sort((x, y) => x - y);
+			sources.push({
+				waterSource: src,
+				years: years.map((wy): EvidenceAllocationYear => {
+					const ya = byYearA.get(wy) ?? null;
+					const yb = byYearB.get(wy) ?? null;
+					const any = (ya ?? yb)!;
+					return {
+						waterYear: wy,
+						days: any.days,
+						yearDays: any.yearDays,
+						partialA: ya ? ya.partial : null,
+						partialB: yb ? yb.partial : null,
+						registeredA: ya ? ya.registeredM3 : null,
+						modelledA: ya ? ya.modelledM3 : null,
+						statusA: ya ? ya.status : null,
+						registeredB: yb ? yb.registeredM3 : null,
+						modelledB: yb ? yb.modelledM3 : null,
+						statusB: yb ? yb.status : null
+					};
+				}),
+				countsA: sa?.allocationIds.length ? countsOf(sa) : null,
+				countsB: sb?.allocationIds.length ? countsOf(sb) : null,
+				meanModelledA: sa ? sa.meanModelledM3PerYear : null,
+				meanRegisteredA: sa ? sa.meanRegisteredM3PerYear : null,
+				meanModelledB: sb ? sb.meanModelledM3PerYear : null,
+				meanRegisteredB: sb ? sb.meanRegisteredM3PerYear : null
+			});
+		}
+		const n = (nb ?? na)!;
+		return { nodeId, name: n.name, kind: n.kind, own: owned.has(nodeId), onlyIn: a && !nb ? 'baseline' : a && !na ? 'application' : null, sources };
+	});
+
+	return {
+		notAssessed: total === 0 ? ALLOCATIONS_NOT_ASSESSED.none : units.length === 0 ? ALLOCATIONS_NOT_ASSESSED.notMatched(total) : null,
+		modeA: b.summary.allocations?.mode ?? null,
+		modeB: a ? (a.summary.allocations?.mode ?? null) : null,
+		toleranceA: ca?.tolerance ?? null,
+		toleranceB: cb?.tolerance ?? null,
+		units,
+		notMatchedA: ca ? ca.unmatchedAllocationIds.length + ca.notInRunAllocationIds.length : 0,
+		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null
+	};
+}
+
+/** Σ over units and sources of a run's whole years over, and of those judged. */
+function allocationTotals(al: EvidenceAllocations, run: 'A' | 'B') {
+	let over = 0;
+	let judged = 0;
+	for (const u of al.units)
+		for (const s of u.sources) {
+			const c = run === 'A' ? s.countsA : s.countsB;
+			if (c) ((over += c.over), (judged += c.wholeYears));
+		}
+	return { over, judged };
+}
+
+const bandWords = (tol: number | null) => (tol === null ? 'the band' : `±${fixed(tol * 100, 0)} %`);
+/** The band, both runs' when they differ: "±10 %", or "±10 % (baseline), ±15 % (application)". */
+const bandsWords = (al: EvidenceAllocations, app: boolean) =>
+	app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB
+		? `${bandWords(al.toleranceA)} (baseline), ${bandWords(al.toleranceB)} (application)`
+		: bandWords(al.toleranceA ?? al.toleranceB);
+const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not recorded' : ALLOCATION_MODE_LABEL[m]);
+
+/** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
+function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
+	const A = allocationTotals(al, 'A');
+	const B = app ? allocationTotals(al, 'B') : null;
+	const judged = A.judged + (B?.judged ?? 0);
+	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
+	const mode =
+		!app || al.modeA === al.modeB ? `allocation mode: ${modeWords(al.modeA)}` : `allocation mode: baseline ${modeWords(al.modeA)}, application ${modeWords(al.modeB)}`;
+	const capped = al.modeA === 'cap' || al.modeB === 'cap' ? '; a capped run’s use can’t go far above its volume' : '';
+	return {
+		id: 'registeredUse',
+		label: 'Registered vs modelled use',
+		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over units and water sources (modelled, not metered)`,
+		subject: null,
+		unit: 'unit-years',
+		higherIsWorse: true,
+		baseline: notAssessed ? null : A.over,
+		application: notAssessed || !B ? null : B.over,
+		change: app ? { run: notAssessed || !B ? null : B.over - A.over, band: null, bandNote: NO_BAND.notCarried, worse: null } : null,
+		notAssessed,
+		note: notAssessed ? null : `${A.over} of ${A.judged} unit-years judged${B ? `; application ${B.over} of ${B.judged}` : ''}; ${mode}${capped} (§ 5)`
+	};
+}
+
+/** The "read these first" line when the reported run's use is above a registered volume; null when it never is. */
+function allocationsOverFlag(al: EvidenceAllocations, app: boolean): string | null {
+	const items = al.units.flatMap((u) =>
+		u.sources.flatMap((s) => {
+			const c = app ? s.countsB : s.countsA;
+			if (!c || c.over === 0) return [];
+			const was = app ? (s.countsA ? ` (baseline ${s.countsA.over} of ${s.countsA.wholeYears})` : ' (no volume in the baseline)') : '';
+			return [`${u.name}${u.own ? ' (the applicant’s)' : ''}, ${s.waterSource} water, ${c.over} of ${c.wholeYears} whole water years${was}`];
+		})
+	);
+	if (!items.length) return null;
+	const SHOWN = 5;
+	const more = items.length > SHOWN ? `; and ${items.length - SHOWN} more` : '';
+	const differ = app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB;
+	const tol = `${bandWords(app ? (al.toleranceB ?? al.toleranceA) : al.toleranceA)}${differ ? ` (the application’s band; the baseline’s is ${bandWords(al.toleranceA)})` : ''}`;
+	return `The ${app ? 'application' : 'baseline'}’s modelled use is more than ${tol} above the registered volume: ${items.slice(0, SHOWN).join('; ')}${more} (§ 5).`;
+}
+
+// ---------------------------------------------------------------------------
 // Flags and questions
 // ---------------------------------------------------------------------------
 
@@ -739,6 +940,7 @@ function evidenceFlags(
 		assumptionsChanged: boolean;
 		rule: DeclaredUncertaintyRule | null;
 		cited: EvidenceEnsembleInput | null;
+		allocations: EvidenceAllocations;
 	}
 ): EvidenceFlag[] {
 	const b = input.baseline;
@@ -782,6 +984,19 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
+		if (below) {
+			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
+			add(
+				`belowTable-${s.key}`,
+				'caution',
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
+				}`,
+				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'
+			);
+		}
 		if (s.naturalMar && Math.abs(s.naturalMar.differencePct) > 10)
 			add(`nmar-${s.key}`, 'caution', `At ${s.name} the run’s natural MAR differs from the determination’s by ${signed(fixed(s.naturalMar.differencePct, 0))} %.`, 'The requirement read off the run’s natural flow shifts with it.');
 	}
@@ -795,6 +1010,8 @@ function evidenceFlags(
 	if (b.summary.chirpsCorrection && infill) add('chirps', 'count', `CHIRPS satellite rain fills gaps in the catchment rain (bias-corrected; factors fitted on ${infill} shared days).`);
 	const dq = b.summary.dataQuality?.seriesChecks?.length ?? 0;
 	if (dq) add('dataQuality', 'count', `${dq} data-quality check${dq === 1 ? '' : 's'} fired on the baseline’s inputs (§ 3).`);
+	const over = allocationsOverFlag(ctx.allocations, !!a);
+	if (over) add('allocationsOver', 'caution', over, 'Modelled, not metered: arithmetic against the registered volume, not a finding on whether a use is lawful.');
 	const wa = b.summary.warnings.length;
 	const wb = a?.summary.warnings.length ?? 0;
 	add('warnings', 'count', a ? `${wa} warning${wa === 1 ? '' : 's'} on the baseline and ${wb} on the application, verbatim in Appendix A.5.` : `${wa} run warning${wa === 1 ? '' : 's'}, verbatim in Appendix A.5.`);
@@ -806,7 +1023,9 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	const out: string[] = [];
 	for (const c of checks) if (!c.passed && c.fix) out.push(`${c.label}: ${c.fix}`);
 	for (const r of rows) if (r.notAssessed) out.push(`${r.label}${r.subject ? ` at ${r.subject}` : ''}: ${r.notAssessed}`);
-	if (river.length) out.push('The recommended ecological category (REC) of each EWR site is not given: expect the assessor to ask which Reserve determination applies (ER-D2).');
+	const noRec = river.filter((s) => s.category === null).map((s) => s.name);
+	if (noRec.length)
+		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table in Settings.`);
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');

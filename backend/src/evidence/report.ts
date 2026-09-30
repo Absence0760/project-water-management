@@ -29,6 +29,7 @@ import {
 	type RunSummary
 } from '@water-management/engine';
 import { Hono } from 'hono';
+import { runAllocationComparison } from '../allocations/runUse.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { differingKinds, storedValues } from '../compare/routes.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -96,6 +97,17 @@ function runInput(r: RunRow): EvidenceRunInput {
 		notesUpdatedAt: iso(r.notesUpdatedAt),
 		notesUpdatedBy: r.notesUpdatedBy
 	};
+}
+
+/**
+ * § 5 (registered water use): the run's modelled use against the allocations
+ * it ran with, per unit and water year. Only what the run stored: its
+ * allocations carry no holder name (D3), so a viewer reads nothing here the
+ * Allocations tab wouldn't show them.
+ */
+async function withAllocations(db: Db, run: EvidenceRunInput): Promise<EvidenceRunInput> {
+	const forecastFrom = run.summary.forecast?.from ?? null;
+	return { ...run, allocations: await runAllocationComparison(db, { id: run.id, startDate: run.startDate, forecastFrom, inputs: run.inputs }) };
 }
 
 interface EnsembleRow {
@@ -207,7 +219,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	const baseRow = recorded ? await loadRun(db, projectId, recorded.baseRunId) : named;
 	if (!baseRow) throw new ApiError(404, 'the application’s base run is gone, or you can’t see it');
 	const { rows: project } = await db.query<{ id: string; name: string }>('SELECT id, name FROM project WHERE id = $1', [projectId]);
-	const baseline = runInput(baseRow);
+	const baseline = await withAllocations(db, runInput(baseRow));
 
 	let application: EvidenceInput['application'] = null;
 	let changes: EvidenceInput['changes'] = [];
@@ -221,7 +233,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		);
 		const meta = sc[0];
 		application = {
-			...runInput(named),
+			...(await withAllocations(db, runInput(named))),
 			scenario: {
 				id: recorded.id,
 				name: meta?.name ?? recorded.name,
