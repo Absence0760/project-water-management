@@ -121,7 +121,25 @@ export const en = {
 	'mail.alert.restriction.level.advisory': 'please use less water (advisory)',
 	'mail.alert.restriction.level.restricted': 'restricted',
 	'mail.alert.restriction.wua':
-		'This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.'
+		'This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.',
+
+	// Evidence pack notices (issue #71): a pack was issued, or one that was issued was withdrawn.
+	'mail.pack.issued.subject': 'Evidence pack issued: {name} — {project}',
+	'mail.pack.issued.heading': 'Evidence pack issued',
+	'mail.pack.issued.body': 'Version {version} of the evidence pack for {what} in {project} has been issued.',
+	'mail.pack.issued.supersedes': 'It replaces version {previous}, which is now marked as superseded.',
+	'mail.pack.withdrawn.subject': 'Evidence pack withdrawn: {name} — {project}',
+	'mail.pack.withdrawn.heading': 'Evidence pack withdrawn',
+	'mail.pack.withdrawn.body': 'Version {version} of the evidence pack for {what} in {project} has been withdrawn. It no longer stands as evidence, and the verify page now says so.',
+	'mail.pack.withdrawn.reason': 'The reason given: “{reason}”',
+	'mail.pack.what.application': 'the application “{name}”',
+	'mail.pack.what.baseline': 'the baseline evidence',
+	'mail.pack.name.baseline': 'Baseline evidence',
+	'mail.pack.code': 'Its short code is {code}. Anyone with the code can check the pack, and whether it still stands, on the verify page.',
+	'mail.pack.action': 'Check the pack',
+	'mail.pack.open': 'Open the pack in the catchment',
+	'mail.pack.why.editor': 'You get this email because you can issue and withdraw evidence packs in {project}.',
+	'mail.pack.why.applicant': 'You get this email because the application “{name}” is yours.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -143,7 +161,9 @@ export const sections: Record<string, string> = {
 	'mail.alert':
 		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
 	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',
-	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.'
+	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.',
+	'mail.pack':
+		'Evidence pack emails: sent to the catchment’s editors and to the applicant when an evidence pack (a frozen, signed copy of the evidence report for a water-use licence application) is issued or withdrawn. {version} and {previous} are numbers; {code} is a short code like “3f2a-91bc-07de”; {project} is the catchment; {what} is one of the “what” lines; {name} is the application’s name (or the “name” line, for baseline evidence).'
 };
 
 /**
@@ -162,5 +182,7 @@ export const notes: Partial<Record<MailKey, string>> = {
 	'mail.alert.stale.line.one': 'One line per data feed; {overdue} is 1 (a day).',
 	'mail.alert.stale.line.other': 'One line per data feed; {overdue} is a number of days.',
 	'mail.alert.restriction.body': '{level} is one of the level lines below.',
+	'mail.pack.withdrawn.reason': '{reason} is the catchment team’s own words, as they wrote them (often in English), and it is public on the verify page.',
+	'mail.pack.why.applicant': 'To the applicant: {name} is the name they gave their application.',
 	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s cut, like “20 %”: use that much less than the registered water use. The farm page says it the same way.'
 };

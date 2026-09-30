@@ -411,7 +411,8 @@ const INNER_JOINS = new Map<string, string>([
 	// A removed member has no membership row to update, so 404 either way.
 	['projects/routes.ts FROM app_user u WHERE u.id = m.user_id', 'a current project member (the owner changing their role)'],
 	['teams/routes.ts FROM app_user u WHERE u.id = m.user_id', 'a current team member (a team-mate of the admin)'],
-	['alerts/send.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row']
+	['alerts/send.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row'],
+	['evidence/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the pack notice’s recipient, 133)']
 ]);
 
 describe('inner joins to app_user', () => {

@@ -5,9 +5,12 @@
 	// that a submit freezes the ops, that no one decides their own); this
 	// offers only the moves it would allow. Its comments (WP-3.15: the notes
 	// drawer with an audience picker) and, for the applicant and the
-	// assessors, its read-only share links (the Share dialog). For the
-	// project's viewers and up (not its applicants, who read no pack), it
-	// lists the application's evidence packs (WP-3.14) with their status.
+	// assessors, its read-only share links (the Share dialog). It lists the
+	// application's evidence packs (WP-3.14) with their status: every one to
+	// the project's viewers and up (the pack's own page), and to its
+	// applicant and whoever they shared it with the ones that were issued,
+	// never a draft (131_applicant_packs: their anonymised pack view, where
+	// the applicant also shares it by link).
 	import { base } from '$app/paths';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -15,8 +18,19 @@
 	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
+	import { applicantPackHref } from '$lib/components/packs/applicantPack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
-	import { api, OUTCOME_LABEL, scenarioProblems, SCENARIO_OUTCOMES, type Pack, type Scenario, type ScenarioOutcome, type ScenarioWithCheck } from '$lib/api';
+	import {
+		api,
+		OUTCOME_LABEL,
+		scenarioProblems,
+		SCENARIO_OUTCOMES,
+		type ApplicantPackMeta,
+		type Pack,
+		type Scenario,
+		type ScenarioOutcome,
+		type ScenarioWithCheck
+	} from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate } from '$lib/format/number';
 
@@ -53,7 +67,11 @@
 		 * the old status back on screen.
 		 */
 		locked?: boolean;
-		/** The caller reads evidence packs (viewer and up; an applicant doesn't). */
+		/**
+		 * The caller reads evidence packs (viewer and up). Otherwise (an applicant,
+		 * or someone they shared it with) the panel lists the application's
+		 * issued packs from GET …/scenarios/:sid/packs.
+		 */
 		canReadPacks?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
 		/** You stopped reading it (left the share): it leaves your list. */
@@ -165,19 +183,24 @@
 	// --- evidence packs ---------------------------------------------------------------
 	let packs = $state.raw<Pack[] | null>(null);
 	let packsFailed = $state(false);
+	/** The applicant's: the issued ones, from their own projection (they read no pack row). */
+	let myPacks = $state.raw<ApplicantPackMeta[] | null>(null);
 	$effect(() => {
-		if (!canReadPacks) return;
 		const sid = scenarioId;
 		packs = null;
+		myPacks = null;
 		packsFailed = false;
-		api.packs.list(projectId).then(
-			(all) => {
+		const failed = () => {
+			if (sid === scenarioId) packsFailed = true;
+		};
+		if (canReadPacks)
+			api.packs.list(projectId).then((all) => {
 				if (sid === scenarioId) packs = packsByScenario(all).get(sid) ?? [];
-			},
-			() => {
-				if (sid === scenarioId) packsFailed = true;
-			}
-		);
+			}, failed);
+		else
+			api.scenarios.packs(projectId, sid).then((list) => {
+				if (sid === scenarioId) myPacks = list;
+			}, failed);
 	});
 
 	// --- comments and share links (WP-3.15) -------------------------------------------
@@ -275,6 +298,27 @@
 				</ul>
 			{:else}
 				<p class="muted">None. An editor makes one from a run’s evidence report.</p>
+			{/if}
+		</div>
+	{:else}
+		<div class="packs" data-testid="application-panel-my-packs">
+			<h4>Evidence packs</h4>
+			{#if packsFailed}
+				<p class="muted">The packs couldn’t be read.</p>
+			{:else if myPacks === null}
+				<p class="muted">Loading…</p>
+			{:else if myPacks.length}
+				<ul>
+					{#each myPacks as p (p.id)}
+						<li>
+							<PackBadge status={p.status} version={p.version} />
+							<a href={applicantPackHref(base, projectId, s.id, p.id)}>Version {p.version}, code {p.shortCode}</a>
+							<span class="muted">issued {fmtDate(p.issuedAt)}</span>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="muted">None issued yet. The assessors issue a pack of the application once it is submitted; you can then read it here and share it by link.</p>
 			{/if}
 		</div>
 	{/if}

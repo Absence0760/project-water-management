@@ -377,8 +377,9 @@ resource "aws_cloudwatch_log_metric_filter" "self_check_failed_worker" {
 # recipient isn't verified), an IAM denial, throttling or the SES endpoint
 # being unreachable are API errors, not SES events, so the configuration-set
 # bounce/complaint alarms below never see them. The API sends the account
-# emails and invitations; the worker sends report links, so both log groups
-# feed one metric. (Alert emails have their own alarm, jobs.tf
+# emails and invitations; the worker sends report links and evidence pack
+# notices (evidence/notices.ts logs the same line, kind pack_notice), so both
+# log groups feed one metric. (Alert emails have their own alarm, jobs.tf
 # alert_mail_failures.)
 
 resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
@@ -408,7 +409,7 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
   period              = 900
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "An account, invitation or report email failed to send (the user was still told it was sent). Search the API and worker log groups for event = mail_send_failed: kind says which email, error the SES/SMTP error code (MessageRejected in the SES sandbox = recipient not verified; AccessDenied = IAM). Runbook: docs/deployment.md § Email."
+  alarm_description   = "An account, invitation, report or evidence pack email failed to send (the user was still told it was sent). Search the API and worker log groups for event = mail_send_failed: kind says which email, error the SES/SMTP error code (MessageRejected in the SES sandbox = recipient not verified; AccessDenied = IAM). Runbook: docs/deployment.md § Email."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 

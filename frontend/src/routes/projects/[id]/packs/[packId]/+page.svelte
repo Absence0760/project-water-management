@@ -23,7 +23,9 @@
 	// the loaded pack and data-report-ready. Once issued, the bar (never
 	// printed) says where the server PDF is (detail.pdf): its download when
 	// ready, "printing" while it renders, and why it failed, with an
-	// editor's "Try again" (POST …/pdf).
+	// editor's "Try again" (POST …/pdf). The bar also lists the errata found
+	// since the manifest was frozen (detail.errataFoundSince, 132): never
+	// printed, since the pack prints only what its manifest recorded.
 	//
 	// Sharing and comments (WP-3.15, 128_pack_share_notes): an editor makes a
 	// read-only share link to an issued pack here (Share link…, the same
@@ -46,7 +48,7 @@
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import PackActions from '$lib/components/packs/PackActions.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { latestOnly, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
+	import { errataFoundSinceNote, latestOnly, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 
 	const loadReport = () => import('$lib/components/report/evidence/EvidenceReport.svelte');
@@ -222,6 +224,14 @@
 				{#if pack.bundleSha256}Reproduction bundle SHA-256 <span class="mono hash" data-testid="pack-bundle-sha">{pack.bundleSha256}</span> (re-run it with
 					<span class="mono">pnpm reproduce:pack</span>).{/if}
 			</p>
+			{#if detail.errataFoundSince.length}
+				{@const since = errataFoundSinceNote(pack)}
+				<div class="alert alert-warning errata-alert" role="note" data-testid="pack-errata-since">
+					<strong>{since.heading}:</strong>
+					<ul class="errata-since">{#each detail.errataFoundSince as e (e.id)}<li><strong>{e.id}</strong> {e.summary}</li>{/each}</ul>
+					<p class="small">{since.note}</p>
+				</div>
+			{/if}
 			{#if pdf?.status === 'rendering'}
 				<p class="muted small" role="status" data-testid="pack-pdf-state" data-state="rendering">
 					The server is printing this pack’s PDF, whose SHA-256 the verify page will show.
@@ -267,6 +277,14 @@
 		margin: 0;
 		flex-basis: 100%;
 		overflow-wrap: anywhere;
+	}
+	.errata-alert {
+		flex-basis: 100%;
+		margin: 0;
+	}
+	.errata-since {
+		margin: 0.35rem 0;
+		padding-left: 1.2rem;
 	}
 	.mono {
 		font-family: var(--font-mono);

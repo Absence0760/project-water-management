@@ -286,3 +286,75 @@ export function reportReadyMail(to: string, url: string, f: ReportMailFacts): Ma
 		footer: ['The PDF is kept for 7 days.', "If you weren't expecting this, a member of the project sent it to you; you can ignore it."]
 	});
 }
+
+export type PackNoticeFacts = {
+	event: 'issued' | 'withdrawn';
+	projectId: string;
+	packId: string;
+	projectName: string;
+	/** The application's scenario (its id, for the applicant's pack view); null for baseline evidence. */
+	scenarioId: string | null;
+	/** The application's scenario name; null for baseline evidence. */
+	scenarioName: string | null;
+	version: number;
+	/** The version this one replaced (an issue that superseded another), or null. */
+	supersedesVersion: number | null;
+	/** `xxxx-xxxx-xxxx` (engine packShortCode). */
+	shortCode: string;
+	/** Why it was withdrawn (public on verify); null for an issue. */
+	reason: string | null;
+	/**
+	 * Why this person gets it: `editor` (they issue and withdraw the project's
+	 * packs; the mail links the pack's own page too) or `applicant` (the
+	 * application is theirs; the mail links their own copy of the pack, the
+	 * applicant's pack view of 131_applicant_packs, never the editors' page).
+	 */
+	as: 'editor' | 'applicant';
+};
+
+/**
+ * The recipient's own page for the pack: an editor's is the pack's page; an
+ * applicant's is their copy (frontend packs/applicantPack.ts
+ * applicantPackHref), which they read only for their own application.
+ */
+function packPagePath(f: PackNoticeFacts): string | null {
+	const project = encodeURIComponent(f.projectId);
+	const pack = encodeURIComponent(f.packId);
+	if (f.as === 'editor') return `/projects/${project}/packs/${pack}`;
+	// An applicant is emailed only about their application's pack; without one there is no copy of theirs to link.
+	return f.scenarioId ? `/projects/${project}/scenarios/${encodeURIComponent(f.scenarioId)}/packs/${pack}` : null;
+}
+
+/**
+ * An evidence pack was issued, or one that was issued was withdrawn (issue
+ * #71; docs/evidence-pack.md § Notices). Built by the worker as its recipient
+ * (evidence/notices.ts). It names the pack (version, subject, short code) and
+ * links the public verify page and the recipient's own view of the pack
+ * (an editor's pack page, an applicant's copy); never a figure. In the recipient's language
+ * (an applicant may read Afrikaans), English where a key has none.
+ */
+export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const name = f.scenarioName ?? tr.t('mail.pack.name.baseline');
+	const what = f.scenarioName === null ? tr.t('mail.pack.what.baseline') : tr.t('mail.pack.what.application', { name: f.scenarioName });
+	const v = { name, what, project: f.projectName, version: f.version, code: f.shortCode, product: PRODUCT };
+	const issued = f.event === 'issued';
+	const page = packPagePath(f);
+	const paragraphs: Para[] = issued
+		? [tr.t('mail.pack.issued.body', v), ...(f.supersedesVersion !== null ? [tr.t('mail.pack.issued.supersedes', { previous: f.supersedesVersion })] : [])]
+		: [tr.t('mail.pack.withdrawn.body', v), ...(f.reason ? [tr.t('mail.pack.withdrawn.reason', { reason: f.reason })] : [])];
+	paragraphs.push(tr.t('mail.pack.code', v));
+	return render(
+		'pack_notice',
+		to,
+		tr.t(issued ? 'mail.pack.issued.subject' : 'mail.pack.withdrawn.subject', v),
+		{
+			heading: tr.t(issued ? 'mail.pack.issued.heading' : 'mail.pack.withdrawn.heading'),
+			paragraphs,
+			action: { label: tr.t('mail.pack.action'), url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) },
+			footer: [f.as === 'editor' ? tr.t('mail.pack.why.editor', v) : tr.t('mail.pack.why.applicant', { name })],
+			links: page ? [{ label: tr.t('mail.pack.open'), url: sitePage(page) }] : []
+		},
+		tr
+	);
+}

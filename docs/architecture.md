@@ -680,8 +680,11 @@ alerts plug in as a further kind.
   `app_finish_job` **in the same transaction**, so the work and its "done"
   commit together. There is no principal that bypasses RLS: only claim,
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
-  functions that never return a payload. Each tick also purges finished jobs
-  after 30 days, report rows after 8, and invites 90 days past their expiry
+  functions that never return a payload. After the jobs and the alert
+  mails, each tick sends the evidence pack notices the issue and withdraw
+  routes queued (`evidence/notices.ts`, as each recipient;
+  [evidence-pack.md § Notices](./evidence-pack.md#notices)). Each tick also purges finished jobs
+  after 30 days, settled pack notices after 30, report rows after 8, and invites 90 days past their expiry
   (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
