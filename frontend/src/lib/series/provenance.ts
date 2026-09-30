@@ -3,6 +3,7 @@
 // provenance key ('CHIRPS/2.0'), '' for "not recorded".
 import {
 	CALIBRATION_FLOW_KINDS,
+	calibrationSeriesKey,
 	seriesOrigin,
 	type CalibrationFlowKind,
 	type SeriesOrigin,
@@ -65,18 +66,21 @@ export function chirpsSourceOf(list: readonly Pick<SeriesMeta, 'kind' | 'product
 
 /**
  * The source and given unit (107_series_source.sql) of each observed record a
- * run would read: the first outlet series of each kind by name, as runs pick
- * (null = not recorded); undefined when the list isn't known. For the fit
- * record's "calibration record changed since fit".
+ * run would read: the first series of each kind at each site by name, as runs
+ * pick (null = not recorded), keyed as the model input keys them (the kind at
+ * the outlet, `<kind>@<node id>` at a gauge, engine calibrationSeriesKey);
+ * undefined when the list isn't known. For the fit record's "calibration
+ * record changed since fit".
  */
 export function observedOriginsOf(
 	list: readonly Pick<SeriesMeta, 'kind' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'>[] | null | undefined
-): Partial<Record<CalibrationFlowKind, SeriesOrigin | null>> | undefined {
+): Partial<Record<string, SeriesOrigin | null>> | undefined {
 	if (!list) return undefined;
-	const out: Partial<Record<CalibrationFlowKind, SeriesOrigin | null>> = {};
-	for (const k of CALIBRATION_FLOW_KINDS) {
-		const s = list.find((x) => x.kind === k && !x.siteNodeId);
-		if (s) out[k] = seriesOrigin(s);
+	const out: Partial<Record<string, SeriesOrigin | null>> = {};
+	for (const s of list) {
+		if (!(CALIBRATION_FLOW_KINDS as readonly string[]).includes(s.kind)) continue;
+		const key = calibrationSeriesKey(s.kind as CalibrationFlowKind, s.siteNodeId ?? null);
+		if (!(key in out)) out[key] = seriesOrigin(s);
 	}
 	return out;
 }
@@ -87,6 +91,15 @@ export function originOfInput(series: Partial<Record<string, Pick<RunSeriesSnaps
 	const s = series[kind];
 	if (!s) return null;
 	return s.origin;
+}
+
+/** The same for a fit record's own record: the outlet's, or its calibration site's (engine ≥ 1.41.0). */
+export function originOfFit(
+	series: Partial<Record<string, Pick<RunSeriesSnapshot | DailySeries, 'origin'>>> | null | undefined,
+	record: { flowKind?: string; siteNodeId?: string | null } | null | undefined
+): SeriesOrigin | null | undefined {
+	if (!record?.flowKind || !(CALIBRATION_FLOW_KINDS as readonly string[]).includes(record.flowKind)) return originOfInput(series, record?.flowKind);
+	return originOfInput(series, calibrationSeriesKey(record.flowKind as CalibrationFlowKind, record.siteNodeId));
 }
 
 /**

@@ -17,14 +17,14 @@
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '$lib/components/report/inputs';
 	import { CLASS_LABEL, describeOp, namesOf, snapshotInput, stepInputs } from '$lib/components/scenarios/ops';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '$lib/series/provenance';
 	import { WATER_YEAR_MONTHS, monthName } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
 	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
-	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
+	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import { fdcMonths } from './grid';
@@ -321,7 +321,7 @@
 						chirpsSource={chirpsSourceOfInput(base.series)}
 						apanDaily={apanDailyOfInput(base.series)}
 						chirpsFactors={runChirpsFactors(sum)}
-						observedOrigin={originOfInput(base.series, (fit as { flowKind?: string }).flowKind)}
+						observedOrigin={originOfFit(base.series, fit as { flowKind?: string; siteNodeId?: string | null })}
 					/>
 				{:else}
 					<p class="na">Not assessed: the parameters don’t come from a stored automatic fit, so there are no split-sample or dry → wet scores (C6).</p>
@@ -566,6 +566,36 @@
 							</tbody>
 						</table>
 					</div>
+					{#if al.units.some((u) => u.sources.some((x) => x.capA || x.capB))}
+						<!-- evidence-6: a capped run's cap, per unit and source (RunSummary.allocations); an older pack's document has none. -->
+						<h3>What the cap held back</h3>
+						<p class="small muted">
+							A capped run holds each unit’s use to its registered volume and its licence’s months of use and maximum rate. A day counts when the source took all the room
+							the licence left it and the unit still went short; it is put to the limit that set the room that day.
+						</p>
+						<div class="table-wrap">
+							<table class="data compact" data-testid="evidence-allocation-cap">
+								<thead>
+									<tr>
+										<th scope="col">Unit and source</th>
+										<th scope="col">Baseline</th>
+										{#if app}<th scope="col">Application</th>{/if}
+									</tr>
+								</thead>
+								<tbody>
+									{#each al.units as u (u.nodeId)}
+										{#each u.sources.filter((x) => x.capA || x.capB) as src (src.waterSource)}
+											<tr>
+												<th scope="row">{unitSourceLabel(u, src)}</th>
+												<td>{src.capA ? capYearsText({ nodeId: u.nodeId, waterSource: src.waterSource, ...src.capA }) : 'Not capped'}</td>
+												{#if app}<td>{src.capB ? capYearsText({ nodeId: u.nodeId, waterSource: src.waterSource, ...src.capB }) : 'Not capped'}</td>{/if}
+											</tr>
+										{/each}
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
 				{/if}
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>

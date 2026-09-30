@@ -41,7 +41,8 @@ const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: tru
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
 const TRANSFER: Record<keyof Transfer, true> = {
 	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true,
-	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true
+	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true,
+	lossReturnPct: true, lossReturnNodeId: true
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
@@ -56,13 +57,14 @@ const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
-	ewrFractionDaysNotMet: true, ewrAgreement: true, noFlow: true
+	ewrFractionDaysNotMet: true, ewrAgreement: true, ewrAgreementSites: true, noFlow: true
 };
 const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,
 	windowStart: true, windowEnd: true, firstObservedDate: true, lastObservedDate: true, kge: true, kgeR: true,
 	kgeAlpha: true, kgeBeta: true, r2: true, logNse: true, logEpsilonM3s: true, volumeErrorPct: true,
-	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true, fitStatus: true, wr2012Fit: true
+	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true, fitStatus: true, wr2012Fit: true,
+	siteNodeId: true, siteName: true
 };
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [

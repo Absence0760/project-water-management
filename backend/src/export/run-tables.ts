@@ -200,7 +200,10 @@ const CALIBRATION_ROWS: Record<string, string> = {
 	logEpsilonM3s: 'log-NSE ε (m³/s)',
 	volumeErrorPct: 'Volume error (%, + = model too wet)',
 	flowKind: 'Observed record scored',
-	simulatedKey: 'Simulated series scored'
+	simulatedKey: 'Simulated series scored',
+	// Engine ≥ 1.41.0: scored at a gauge inside the network (settings.calibrationSiteNodeId); absent at the outlet.
+	siteName: 'Scored at the gauge (calibration site)',
+	siteNodeId: 'Calibration site node id'
 };
 
 type Cell = string | number | null;
@@ -848,6 +851,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield csvRow(['Catchment']);
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
 	if (summary.catchment.ewrAgreement) yield* ewrAgreementLines(summary.catchment.ewrAgreement);
+	// Engine ≥ 1.41.0: the same test at each gauge EWR site with a record of its own.
+	for (const site of summary.catchment.ewrAgreementSites ?? []) {
+		yield* ewrAgreementLines(site.agreement, `EWR test at ${site.name}: its ${RECORD_TEXT[site.flowKind]} vs the simulated flow there and its own EWR, on the days with an observation`);
+	}
 	yield '';
 
 	if (summary.forecast) {
@@ -1195,8 +1202,8 @@ const agreementCells = (a: EwrAgreementScores): Cell[] => [
  * (engine ≥ 0.5.3, issue #4): does the model fail the EWR on the days the
  * river did? The whole record, then each water year.
  */
-export function* ewrAgreementLines(a: EwrAgreement): Generator<string> {
-	yield csvRow(['Outlet EWR test: observed record vs simulated outflow, on the days with an observation']);
+export function* ewrAgreementLines(a: EwrAgreement, heading = 'Outlet EWR test: observed record vs simulated outflow, on the days with an observation'): Generator<string> {
+	yield csvRow([heading]);
 	yield csvRow(['Observed days', a.firstObservedDate ?? '', a.lastObservedDate ?? '', `${a.excludedDays} left out by the calibration exclusions`]);
 	yield csvRow(['Water year', ...AGREEMENT_HEADER]);
 	yield csvRow(['Whole record', ...agreementCells(a.overall)]);

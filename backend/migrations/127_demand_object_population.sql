@@ -1,4 +1,4 @@
--- 124_demand_object_population — the people a demand object serves, for the
+-- 127_demand_object_population — the people a demand object serves, for the
 -- basic-needs floor (engine 1.44.0, issue #123, docs/model.md §2.7f).
 --
 -- The client agreed (issue #90, Q13) that a restriction never cuts domestic

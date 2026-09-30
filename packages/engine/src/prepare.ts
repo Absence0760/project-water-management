@@ -514,6 +514,12 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		s.calibrationFlowKind = null;
 	}
 	s.calibrationFlowKind ??= null;
+	// The calibration site (engine ≥ 1.41.0): a node id, or null for the outlet. Whether it is a gauge with a record is calibrate()'s to say.
+	if (s.calibrationSiteNodeId != null && (typeof s.calibrationSiteNodeId !== 'string' || !s.calibrationSiteNodeId)) {
+		warnings.push(`calibration site ${JSON.stringify(s.calibrationSiteNodeId)} is not a node id; calibrating at the outlet`);
+		s.calibrationSiteNodeId = null;
+	}
+	s.calibrationSiteNodeId ??= null;
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
 	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);

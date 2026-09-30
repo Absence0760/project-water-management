@@ -467,6 +467,13 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			};
 			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)', (a) => see.node(a.nodeId) && see.item(a.cropId));
 			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)', (t) => see.item(t.id));
+			// An off-take whose seepage rejoined below it (engine ≥ 1.42.0) returns none now: the conservative side, said in a note.
+			for (const t of m.transfers) {
+				if (t.lossReturnNodeId !== n.id) continue;
+				t.lossReturnNodeId = null;
+				t.lossReturnPct = 0;
+				if (see.item(t.id)) notes.push(`a river off-take's seepage no longer returns to the river (it rejoined below "${n.name}")`);
+			}
 			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)', (p) => see.item(p.id));
 			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
 			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
@@ -529,11 +536,12 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				if (e) fail(`${k} ${e}`);
 			}
 			// Engine ≥ 1.14.0 fields, when given: monthly rates and a river off-take's.
-			for (const k of ['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam'] as const) {
+			for (const k of ['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam', 'lossReturnPct', 'lossReturnNodeId'] as const) {
 				if (t[k] === undefined) continue;
 				const e = transferFieldError(k, t[k]);
 				if (e) fail(`${k} ${e}`);
 			}
+			if (t.lossReturnNodeId && !m.nodes.some((n) => n.id === t.lossReturnNodeId)) fail(`lossReturnNodeId ${t.lossReturnNodeId} not found`);
 			// Monthly rates (engine ≥ 1.14.0) set the months and max rate kept beside them.
 			const added: Transfer = { ...cloneData(t), months: monthSet(t.months), monthlyRateM3s: t.monthlyRateM3s ?? null };
 			if (t.monthlyRateM3s) Object.assign(added, withMonthlyRates(t.monthlyRateM3s));
@@ -545,7 +553,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const field = allowed(TRANSFER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a transfer field a scenario can set`);
 			const e = transferFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
-			if ((field === 'fromNodeId' || field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
+			if ((field === 'fromNodeId' || field === 'toNodeId' || (field === 'lossReturnNodeId' && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
 			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
@@ -946,10 +954,11 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 			// see among them: only a crop the scenario itself added is the proposal's to change.
 			return ok(new Set(addedCropIds).has(op.cropId));
 		case 'transfer.add':
-			return ok(mine(op.transfer.fromNodeId) && mine(op.transfer.toNodeId));
+			// The unit its seepage rejoins below (engine ≥ 1.42.0) is credited that water, so it must be the proposal's too.
+			return ok(mine(op.transfer.fromNodeId) && mine(op.transfer.toNodeId) && (!op.transfer.lossReturnNodeId || mine(op.transfer.lossReturnNodeId)));
 		case 'transfer.set': {
 			const t = input?.model.transfers.find((x) => x.id === op.transferId);
-			const newEnd = op.field === 'fromNodeId' || op.field === 'toNodeId' ? mine(op.value as string) : true;
+			const newEnd = op.field === 'fromNodeId' || op.field === 'toNodeId' || (op.field === 'lossReturnNodeId' && op.value !== null) ? mine(op.value as string) : true;
 			return ok(!!t && mine(t.fromNodeId) && mine(t.toNodeId) && newEnd);
 		}
 		case 'transfer.remove': {

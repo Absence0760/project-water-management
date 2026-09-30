@@ -639,6 +639,29 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(got.rows.find((x) => x.id === 'registeredUse')!.note).toMatch(/allocation mode: Compare only/);
 	});
 
+	it('cites a capped run’s cap on each unit and source: the years it used its volume up and the days the limit held use back (evidence-6)', () => {
+		const withCap = (inp: ModelInput): ModelInput => ({ ...inp, settings: { ...inp.settings, allocationMode: 'cap' }, model: { ...inp.model, allocations } });
+		const outB = runModel(withCap(app));
+		// The baseline compares only; the application caps Farm two at half its use.
+		const got = evidenceReport(withAllocations(allocations, { b: { summary: outB.summary } }));
+		const f2 = got.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!;
+		const want = outB.summary.allocations!.nodes.find((n) => n.nodeId === 'F2')!.sources[0]!;
+		expect(f2.capA).toBeNull();
+		expect(f2.capB).toEqual({ capReached: want.capReached, limitBound: want.limitBound });
+		// Positive control: the cap bound, on volume only (the licence states no conditions).
+		expect(f2.capB!.capReached.length).toBeGreaterThan(0);
+		expect(f2.capB!.limitBound!.reduce((t, y) => t + y.volumeDays, 0)).toBeGreaterThan(0);
+		expect(f2.capB!.limitBound!.every((y) => y.rateDays === 0 && y.monthsDays === 0)).toBe(true);
+		// A run before engine 1.40.0: the years, no day counts.
+		const old = structuredClone(outB.summary);
+		for (const n of old.allocations!.nodes) for (const x of n.sources) delete x.limitBound;
+		const older = evidenceReport(withAllocations(allocations, { b: { summary: old } }));
+		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
+		// Not a cap run: nothing cited.
+		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
+		expect(got.version).toBe('evidence-6');
+	});
+
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
 		const i = withAllocations();
 		const cb = i.application!.allocations!;
@@ -1013,7 +1036,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-5');
+		expect(r.version).toBe('evidence-6');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});

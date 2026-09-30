@@ -203,7 +203,7 @@
 				</select>
 			{:else if s.t === 'node'}
 				<select id="op-value" bind:value={d.value}>
-					<option value="" disabled>Pick a hydrological unit</option>
+					{#if s.nullLabel !== undefined}<option value="">{s.nullLabel.charAt(0).toUpperCase() + s.nullLabel.slice(1)}</option>{:else}<option value="" disabled>Pick a hydrological unit</option>{/if}
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			{:else if s.t === 'curve'}

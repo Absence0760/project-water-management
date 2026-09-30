@@ -4,10 +4,12 @@
 	the observed flow was? A 2×2 table with its scores, then the same per
 	month and (collapsed) per water year. Used on the Runs page and twice,
 	side by side, in run comparison.
-	Input: a run summary (catchment.ewrAgreement, engine 0.5.3+).
+	Input: a run summary (catchment.ewrAgreement, engine 0.5.3+), or with
+	`site` one gauge EWR site's test (catchment.ewrAgreementSites, engine
+	1.41.0+): its own record against its simulated flow and requirement.
 -->
 <script lang="ts">
-	import type { RunSummary } from '@water-management/engine';
+	import type { EwrAgreementSite, RunSummary } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { AGREEMENT_HELP, agreementGap, biasVerdict, fmtRatio, monthRows, waterYearRows, type AgreementRow } from './agreement';
@@ -15,16 +17,19 @@
 	let {
 		summary,
 		title = 'EWR test: model against observed flow',
-		headingLevel = 3
+		headingLevel = 3,
+		site = null
 	}: {
 		summary: Pick<RunSummary, 'catchment' | 'calibration'>;
 		title?: string;
 		headingLevel?: 2 | 3 | 4;
+		/** A gauge EWR site's test instead of the outlet's. */
+		site?: EwrAgreementSite | null;
 	} = $props();
 
 	const uid = $props.id();
-	const a = $derived(summary.catchment?.ewrAgreement ?? null);
-	const gap = $derived(agreementGap(summary));
+	const a = $derived(site ? site.agreement : (summary.catchment?.ewrAgreement ?? null));
+	const gap = $derived(site ? (site.agreement.days === 0 ? 'The gauge’s record has no day inside the run.' : null) : agreementGap(summary));
 	const o = $derived(a?.overall);
 	const sub = $derived(`h${Math.min(headingLevel + 1, 6)}`);
 </script>
@@ -76,8 +81,9 @@
 	{:else}
 		<p class="muted small intro">
 			On each of the {fmtNum(a.days)} days with an observed flow ({a.firstObservedDate} – {a.lastObservedDate}), is the simulated outflow
-			below the EWR when the observed flow was? The observed record measures the same river the outlet EWR test uses, so it
-			shows whether the model's EWR failures are real. Every observed day counts, including those the parameters were fitted
+			below the EWR when the observed flow was? {#if site}The gauge's own record measures the river where this EWR site's test runs, against
+				its own requirement, so it shows whether the model's EWR failures there are real.{:else}The observed record measures the same river the
+				outlet EWR test uses, so it shows whether the model's EWR failures are real.{/if} Every observed day counts, including those the parameters were fitted
 			to.{#if a.excludedDays} {fmtNum(a.excludedDays)} excluded days are left out.{/if}
 		</p>
 		<p class="verdict"><strong>{biasVerdict(o)}</strong></p>

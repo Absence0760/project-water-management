@@ -17,6 +17,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
+import { checkCalibrationSite } from './calibrationSite.js';
 import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
@@ -307,6 +308,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
 				await checkOutcomeSite(db, id, site, (settings as { ewrRules?: unknown }).ewrRules);
+			}
+			// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
+			const calSite = (body.settings as { calibrationSiteNodeId?: string | null } | undefined)?.calibrationSiteNodeId;
+			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {
+				await checkCalibrationSite(db, id, calSite);
 			}
 			const changed = await db.query(
 				`UPDATE project SET

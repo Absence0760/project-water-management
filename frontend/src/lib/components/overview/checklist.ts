@@ -75,7 +75,7 @@ function seriesStep(series: SeriesMeta[] | null): ChecklistStep {
 	const base = { id: 'series', tab: 'series', title: 'Rainfall & flow data' } as const;
 	if (series === null) return { ...base, status: 'unknown', detail: 'Checking time series…' };
 	const rain = series.filter((x) => RAIN.includes(x.kind));
-	// The outlet's record: one attached to a gauge inside the network (084_gauge_records) is only checked, never calibrated against.
+	// The outlet's record: a run's calibration statistics (NSE, PBIAS) read it; one attached to a gauge inside the network (084_gauge_records) is checked there, and fitted only at a calibration site.
 	const observed = series.some((x) => OBSERVED.includes(x.kind) && !x.siteNodeId);
 	if (!rain.length)
 		return { ...base, status: 'todo', detail: 'Upload daily catchment rainfall (mm). Add observed flow (m³/s) to calibrate against.' };
