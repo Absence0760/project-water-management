@@ -23,7 +23,7 @@
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
-	import UsePlot from './UsePlot.svelte';
+	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
 	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
@@ -460,6 +460,7 @@
 							rows={use.rows}
 							axisMax={use.axisMax}
 							tolerance={al.toleranceA ?? al.toleranceB}
+							toleranceApplication={al.toleranceB ?? al.toleranceA}
 							application={app}
 							title="Modelled use as a share of the registered volume, per unit and water source, each whole water year{app ? ', baseline and application' : ''}"
 							caption="Over and under use of the registered volumes."
