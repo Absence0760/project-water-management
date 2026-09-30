@@ -14,6 +14,7 @@
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
+	import { loadImpactSeries, type ImpactSeries } from '../impactSeries';
 	import { boardChecks, DRAFT_STAMP, refusedChecks } from './sections';
 
 	let { projectId, runId }: { projectId: string; runId: string | null } = $props();
@@ -23,12 +24,15 @@
 	let project = $state.raw<Project | null>(null);
 	let report = $state.raw<EvidenceReport | null>(null);
 	let signoffs = $state.raw<SignoffList | null>(null);
+	/** Page 1's licence impact by year class reads three daily series of the two runs (issue #53 R7); fetched before ready, as the impact report does. */
+	let impactSeries = $state.raw<ImpactSeries | null>(null);
 	let status = $state<'loading' | 'loaded' | 'no-run' | 'not-found' | 'forbidden' | 'error' | 'chunk-failed'>('loading');
 	let error = $state('');
 
 	async function load(id: string, rid: string | null) {
 		status = 'loading';
 		report = null;
+		impactSeries = null;
 		if (!rid) {
 			status = 'no-run';
 			return;
@@ -39,12 +43,26 @@
 			report = r;
 			signoffs = so;
 			if (!r.refused) {
+				const app = r.identity.application;
+				let seriesFailed: unknown = null;
+				// A series the run doesn't have (404) is null and the board says what is missing; any other failure fails the page
+				// (with Try again), so a failed download is never printed as a fact about the runs.
+				const fetchSeries = (pid: string, run: string, key: string) =>
+					api.runs.series(pid, run, key, null).catch((e: unknown) => {
+						if (e instanceof ApiError && e.status === 404) return Promise.reject(e);
+						seriesFailed = e;
+						return Promise.reject(e);
+					});
+				const series = app ? loadImpactSeries(fetchSeries, { projectId: id, runId: r.identity.baseline.runId }, { projectId: id, runId: app.runId }) : null;
 				try {
 					await loadOnce(loadReport);
 				} catch {
 					status = 'chunk-failed';
 					return;
 				}
+				// A series that can't be fetched is null: the board then says what is missing.
+				impactSeries = await series;
+				if (seriesFailed) throw seriesFailed;
 			}
 			status = 'loaded';
 		} catch (e) {
@@ -139,7 +157,7 @@
 			</details>
 			<Lazy load={loadReport}>
 				{#snippet children(EvidenceReportView)}
-					<EvidenceReportView report={report!} {projectId} stamp={DRAFT_STAMP} {signoffs} signoffRunId={runId} onsignoffchange={signoffsChanged} />
+					<EvidenceReportView report={report!} {projectId} stamp={DRAFT_STAMP} {impactSeries} outcomes={project?.settings.outcomes ?? null} {signoffs} signoffRunId={runId} onsignoffchange={signoffsChanged} />
 				{/snippet}
 			</Lazy>
 		{/if}
@@ -237,6 +255,11 @@
 		.ev-page :global(tr),
 		.ev-page :global(figure) {
 			break-inside: avoid;
+		}
+		/* app.css makes table heads sticky; in print that lands them mid-page (the catchment report undoes it the same way). */
+		.ev-page :global(table.data thead) {
+			position: static;
+			display: table-header-group;
 		}
 	}
 </style>

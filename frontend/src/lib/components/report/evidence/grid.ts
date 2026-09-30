@@ -61,3 +61,19 @@ export function reserveGrid(site: Pick<EvidenceSite, 'months'>, side: 'a' | 'b')
 
 /** The water year's label: 1990 → "1990/91". */
 export const waterYearLabel = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+
+/**
+ * The FDC checks § 1 plots at a site, in order: the month the report ranks
+ * first (`fdcMonth`: the largest drop in months met, else the one met least
+ * often) and the river's driest month (`fdcDriestMonth`: the lowest mean
+ * natural flow in the baseline), one plot when they are the same month.
+ */
+export function fdcMonths(site: Pick<EvidenceSite, 'fdcMonth' | 'fdcDriestMonth'>, application: boolean): { month: number; kind: 'change' | 'driest' | 'both'; why: string }[] {
+	const chosen = application ? 'the month the application loses most months met in, or else the month met least often' : 'the month met least often';
+	const driest = 'the river’s driest month (the lowest mean natural flow in the baseline)';
+	const out: { month: number; kind: 'change' | 'driest' | 'both'; why: string }[] = [];
+	if (site.fdcMonth !== null)
+		out.push(site.fdcMonth === site.fdcDriestMonth ? { month: site.fdcMonth, kind: 'both', why: `${chosen}, and ${driest}.` } : { month: site.fdcMonth, kind: 'change', why: `${chosen}.` });
+	if (site.fdcDriestMonth !== null && site.fdcDriestMonth !== site.fdcMonth) out.push({ month: site.fdcDriestMonth, kind: 'driest', why: `${driest}.` });
+	return out;
+}

@@ -1942,7 +1942,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-2`: § 5 registered water use, `allocations`) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-3`: § 5 registered water use, `allocations` (evidence-2); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (evidence-3)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -1957,7 +1957,19 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   members, so `reserve[].worse` is there for bands stored before it existed),
   the input diff (`diffInputs` with stored values, as compare), the revisions
   since the previous publication, up to 50 other scenario runs on the same
-  baseline, and the engine's methodology, limitations and errata.
+  baseline, the other applications on the baseline (below), and the engine's
+  methodology, limitations and errata.
+- **Other applications on the baseline** (`cumulative`, § 4 and page 1's
+  *Other applications on this baseline, summed*): every other scenario that is
+  submitted, or decided `approved` / `approved_with_conditions`, with its
+  newest run of its current ops (`inputs.scenario.opsSha256` equal to the
+  scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
+  viewer's report lists no submitted application (editors read those) and
+  nobody's lists a draft. Only `summary.catchment.ewrDaysNotMet` and the
+  outlet's Reserve `overall` leave the database, not the runs. The engine
+  lists each one's own change against the baseline and sums those of the same
+  engine, period and runoff model (any other difference is the application's own ops): a sum of separate runs, not one combined
+  run (WP-3.11).
 - **Always answers.** A run that isn't evidence still gets `200` with
   `refused: true` and the failed checks (`checks[]`: nominated, legacy,
   forecast, base, engine, period, runoff model refuse; baseline assumptions,
