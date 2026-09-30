@@ -740,7 +740,7 @@ export const TIPS: HelpTipText[] = [
 		term: 'Quality flags (per-day)',
 		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
 		category: 'fit',
-		fields: ['settings.qualityFlags']
+		fields: ['settings.qualityFlags', 'run.observed_flow_quality']
 	},
 	{
 		id: 'calibration-rules',

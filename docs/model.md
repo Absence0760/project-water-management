@@ -5785,7 +5785,40 @@ With the record-representativeness statement (§2.10b, CR-34), which the
 panel quotes, this is how wet the calibration period is against the
 long-term record. The 20 % and 25 % note thresholds are judgement.
 
-Tested by `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
+**Stored with the run (engine ≥ 1.48.0).** A run stores the flags of the
+record its calibration statistics score as the column
+`observed_flow_quality`: each day's class code, in `FLOW_DAY_FLAGS` order
+(0 in range, 1 human use, 2 below the lowest gauging, 3 above the highest
+gauging, 4 suspect, 5 infilled, 6 missing), spelled out in the column's
+label so the daily CSV reads without this page. It sits beside the scored
+`observed_flow`: the catchment's when the run scores the outlet, the
+calibration site's node when it scores a gauge inside the network
+(`settings.calibrationSiteNodeId`, §2.10k), where no gauged range and no gap
+fill apply (the ratings and the fill are the outlet records'). Like
+`rain_catchment_missing` it is only output when some day is flagged (a class
+other than in range or missing); a record with no gauged range, no suspect
+and no filled day has none. Fit automatically and the column read the same
+function (`recordFlowFlags`), so what the charts show is what the fit read
+under the run's settings. The column records the classes, not the
+treatment: which classes the fit left out, censored or scored is the run's
+`settings.qualityFlags`, which the hydrograph's key reads from the run's own
+settings snapshot. A run resumed from a snapshot (§2.16) whose capture run
+stored the column stores it too, computed for its own days, so the two keep
+the same columns (and an input without the flow record, an outlook member's,
+stores none, never a column of zeros). Its codes equal the uninterrupted
+run's only when the resumed input carries the record's history: the suspect
+class reads the whole stored record (its outlier limit and flat stretches),
+as the gap fill does; every resume in the app either carries it or has no
+flow record. The run's self-checks hold it to its record
+(`checkFlowQuality`, part of `checkBalance`, §6 Verification). The same
+change fixed the self-check failing every run with a gap-filled record: the
+filled values (`observed_flow_filled`, NaN on the days not filled) were
+missing from the check's list of series that may be blank.
+
+Tested by `run.flowQuality.test.ts` (the column at the outlet and at a
+calibration site, equal to the fit's flags, absent with no flagged day,
+infilled days from the fill, a resumed run, the self-check with tampered
+columns), `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
 the settings resolver and rating rules, censoring, the rain classes, the
 summary's counts and notes, run-comparison lines), `calibrate.test.ts`
 (suspect days left out and scored on all days, censoring invariance with a
@@ -6088,6 +6121,9 @@ gauge is in sample and a project whose only record is at the gauge gets
 statistics. The run keeps that record as the gauge node's `observed_flow`
 (and `observed_flow_other` for its other record), beside the node's own
 `outflow`, which the Results tab charts as the calibration site's hydrograph.
+From engine 1.48.0 the record's per-day quality flags follow it: the column
+`observed_flow_quality` (§2.10h) is stored at the gauge node, not the
+catchment, and strips them along the foot of that hydrograph.
 The outlet's own record, when it has one, is still the catchment series
 `observed_flow`: the outlet hydrograph, the recession diagnostics, the
 plausibility checks and the gauge-vs-logger agreement read it as before.
@@ -7624,7 +7660,7 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |

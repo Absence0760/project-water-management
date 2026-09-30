@@ -2714,7 +2714,15 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). The alternative catchment gauge and the reanalysis (engine ≥
+was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+flags**: on a flow record a run reads (the outlet's gauge or logger record,
+or the calibration site's record when calibration scores a gauge inside the
+network), the days Fit automatically would flag (above
+or below the record's gauged range, suspect, infilled; model.md §2.10h) are
+strips along the foot of the chart with a key in words, as on the Runs
+hydrograph, computed from the stored record under the current settings
+(`recordFlowFlags`, so a gauge's record has no gauged range and no fill) and
+naming what Fit automatically does with each class now. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -4457,7 +4465,20 @@ read it before.
   its calibration statistics applied), never the project's current ones, so
   an old run shows what it was fitted and scored with. Each is clipped to the
   hydrograph's days; one that runs past them says "(partly outside the run)",
-  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). **The
+  observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
+  run's `observed_flow_quality` column, stored only when a day is flagged)
+  are thin strips along the foot of the plot, behind the lines, one strip
+  per flagged class (above the highest gauging, below the lowest, suspect,
+  infilled; top to bottom in that order, each in its own `--series-*`
+  colour), so a class reads by its place as well as its colour. A key under
+  the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
+  with its days and what Fit automatically does with them under the run's
+  own settings snapshot: "Above the highest gauging: 14 days; Fit
+  automatically: censored at the highest gauging" (`calibration/flowFlags.ts`). They
+  follow the scored record: on a run scored at a gauge inside the network
+  they are on the calibration site's hydrograph, not the outlet's. The figure
+  carries `data-lanes`. A plain
   drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it

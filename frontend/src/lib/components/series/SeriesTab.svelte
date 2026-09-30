@@ -31,7 +31,9 @@
 		isGapFillKind,
 		observedAgreement,
 		originLabel,
+		recordFlowFlags,
 		resolveFlowGapFill,
+		resolveQualityFlags,
 		seriesOrigin,
 		rainVsChirps,
 		rainVsChirpsCheck,
@@ -40,6 +42,7 @@
 		resolveZeroRain,
 		SERIES_KINDS,
 		toEpochDay,
+		type CalibrationFlowKind,
 		type ProjectSettings,
 		type SeriesCheckKind,
 		type SeriesKind,
@@ -68,6 +71,7 @@
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
+	import { flowFlagLanes } from '$lib/calibration/flowFlags';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import { foldList } from '$lib/components/common/fold';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -262,8 +266,9 @@
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
 
-	// The series a run reads for a kind: the first of that kind by name.
-	const first = (k: string) => [...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
+	// The series a run reads for a kind: the first of that kind by name, among the outlet's (a gauge's record,
+	// 084_gauge_records, is read only at its gauge: seriesInUse and the backend's loadLiveInput skip it too).
+	const first = (k: string) => [...list].filter((s) => s.kind === k && !s.siteNodeId).sort((a, b) => a.name.localeCompare(b.name))[0];
 
 	// Days a run treats as missing (CR-20) or spreads a multi-day accumulation over (B4), shaded on the
 	// catchment rain a run reads: the first by name. Accumulations are judged against the CHIRPS a run reads.
@@ -286,6 +291,30 @@
 		const donorKind = fill[viewing.kind]?.donor;
 		const d = donorKind ? first(donorKind) : undefined;
 		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null);
+	});
+
+	// The per-day quality flags of a flow record Fit automatically can score (CR-18, engine ≥ 1.48.0): the classes it
+	// reads (and a run stores as `observed_flow_quality` for the scored one), under the current settings, over the
+	// whole stored record. An outlet record takes its gauged range and the gap fill; the calibration site's record
+	// (a gauge inside the network) neither (recordFlowFlags). Another gauge's record is never scored: no flags.
+	const flagLanes = $derived.by(() => {
+		if (!viewing || !SITED_KINDS.has(viewing.kind)) return [];
+		const kind = viewing.kind as CalibrationFlowKind;
+		const sited = viewing.siteNodeId ?? null;
+		if (sited ? sited !== calibrationSite || !gaugeInUse.has(viewing.id) : viewing.id !== first(kind)?.id) return [];
+		const v = values[viewing.id];
+		if (!v) return [];
+		const qualityFlags = resolveQualityFlags(settings?.qualityFlags);
+		const flags = recordFlowFlags({
+			kind,
+			series: v,
+			start: toEpochDay(v.startDate),
+			days: v.values.length,
+			settings: { qualityFlags, dataQuality: dq },
+			siteNodeId: sited,
+			flowFill: flowShading ? { [kind]: flowShading } : null
+		});
+		return flowFlagLanes(flags, v.startDate, qualityFlags);
 	});
 
 	/** Say where a series' values came from (107_series_source.sql); '' clears it. Its values are untouched. */
@@ -705,6 +734,8 @@
 				recentDays={3 * 365}
 				recentLabel="Last 3 years"
 				shade={shading?.ranges ?? flowShading?.ranges ?? []}
+				lanes={flagLanes}
+				lanesLabel="Quality flags, as Fit automatically reads this record under the current settings"
 				caption={shading?.caption ?? flowShading?.caption ?? undefined}
 			/>
 		{:else}

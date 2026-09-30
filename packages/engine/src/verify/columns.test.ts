@@ -4,7 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
-import { GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS } from './columns';
+import { FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
+import { FLOW_FILL_COLUMNS } from '../flowGapFill';
+import { GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, OBSERVED_FLOW_COLUMNS } from './columns';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const rain = Array.from({ length: 120 }, (_, i) => (i % 13 === 0 ? 35 : i % 4 === 0 ? 2 : 0));
@@ -93,5 +95,28 @@ describe('LEGACY_RUNOFF_COLUMNS', () => {
 		for (const c of legacyOnly) expect(cat(out, c.key), c.key).toBeUndefined();
 		// Positive control: the GR4J series are there (exchange only when X2 ≠ 0).
 		for (const c of GR4J_COLUMNS) if (c.key !== 'exchange') expect(cat(out, c.key), c.key).toHaveLength(out.days);
+	});
+});
+
+describe('OBSERVED_FLOW_COLUMNS', () => {
+	it('names the observed record’s series a run stores, the optional ones only when a feature makes them', () => {
+		const flow = (scale: number) => ({ startDate: '2020-10-01', values: rain.map((r, t) => (t % 17 === 5 ? null : scale * (1 + r / 10))) });
+		const base = input({ runoffModel: 'gr4j', gr4j: { x1: 250, x2: 0, x3: 70, x4: 2.2, warmupDays: 365 } });
+		const plain = runModel({ ...base, series: { ...base.series, flow_observed_m3s: flow(1) } });
+		for (const c of OBSERVED_FLOW_COLUMNS) expect(cat(plain, c.key) !== undefined, c.key).toBe(!c.optional);
+		// Both records, a gap fill and a gauged range: every one of them.
+		const full = runModel({
+			...base,
+			settings: {
+				...base.settings,
+				flowGapFill: { flow_observed_m3s: { interpolateMaxDays: 2, donor: null, donorMaxDays: 60, donorMinOverlapDays: 365 }, flow_logger_m3s: null },
+				qualityFlags: { ratings: { flow_observed_m3s: { gaugedMaxM3s: 3, gaugedMinM3s: null, source: 'Synthetic' } } } as never
+			},
+			series: { ...base.series, flow_observed_m3s: flow(1), flow_logger_m3s: flow(1.1) }
+		});
+		for (const c of OBSERVED_FLOW_COLUMNS) expect(cat(full, c.key), c.key).toHaveLength(full.days);
+		expect(OBSERVED_FLOW_COLUMNS.map((c) => c.key)).toEqual(
+			expect.arrayContaining([FLOW_QUALITY_COLUMN.key, FLOW_FILL_COLUMNS.observed_flow.code.key, FLOW_FILL_COLUMNS.observed_flow.values.key])
+		);
 	});
 });
