@@ -173,6 +173,12 @@ describe('CurtailmentTable with the board', () => {
 		expect(withBoard.indexOf('Share the pain')).toBeLessThan(withBoard.indexOf('Per hydrological unit'));
 		expect(render(CurtailmentTable, { props: { summary } }).body).not.toContain('Share the pain');
 	});
+	it('badges a unit whose basic-needs floor keeps part of the cut (engine 1.38.0)', () => {
+		const held = { ...c, farms: [farm({ nodeId: 'h', name: 'Village farm', targetM3Day: 20, volumeLeftM3Day: 25, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 25 })] };
+		const body = render(CurtailmentTable, { props: { summary: { curtailment: held } as never } }).body;
+		expect(text(body)).toContain('basic needs keep 25 m³/day of the cut (floor 25 m³/day)');
+		expect(render(CurtailmentTable, { props: { summary } }).body).not.toContain('basic-needs-held');
+	});
 	it('shows no board for a run with no farms', () => {
 		const body = render(CurtailmentTable, { props: { summary: { curtailment: { ...c, farms: [] } } as never, board: true } }).body;
 		expect(body).not.toContain('Share the pain');

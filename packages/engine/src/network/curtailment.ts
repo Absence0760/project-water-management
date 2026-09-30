@@ -11,6 +11,8 @@
 // client-catchment and blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
 // formulas and the quirks this mirrors. Unlike the sheet nothing is rounded
 // or truncated (docs/engine-audit.md R1, Q14, Q15): the UI rounds for display.
+// From engine 1.38.0 (issue #123) a unit's basic-needs floor bounds the volume
+// left from below (docs/model.md §2.7f, §2.11).
 import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser, EwrSiteSummary } from '../project';
 
 /** m³/day → l/s: 1 m³/day = 1000 l / 86 400 s. The workbook divides by 86.4. */
@@ -62,6 +64,12 @@ export interface CurtailmentInput {
 	returned?: ArrayLike<number>;
 	/** The EWR site that bound the charge over the window (./attribution.ts bindingSite); null = not charged. */
 	ewrBindingSiteId?: string | null;
+	/**
+	 * The unit's basic-needs floor each day, m³/day [basic_needs] (engine ≥
+	 * 1.38.0, issue #123): the volume left never goes below its window mean.
+	 * Absent = no floor (a unit without a domestic or municipal object with people).
+	 */
+	basicNeeds?: ArrayLike<number>;
 }
 
 /** One EWR site's daily series (./attribution.ts), for the per-site table. */
@@ -151,8 +159,14 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 		// charge is a store-less / pass-inflow condition, shown on its own. The
 		// volume left never goes below 0, and a cut beyond the equitable share is
 		// flagged instead.
-		const S = nz(N + cut);
-		const U = nz(Math.max(M + cut, 0));
+		// Engine ≥ 1.38.0 (issue #123): a restriction never cuts the unit's domestic
+		// and municipal objects below their basic-needs floor B, so the volume left
+		// is at least B and the total change no deeper than B − I; what the floor
+		// holds back of the cut is reported, not dropped.
+		const B = f.basicNeeds ? nz(windowMean(f.basicNeeds, from, to)) : null;
+		const U0 = Math.max(M + cut, 0);
+		const S = nz(B === null ? N + cut : Math.max(N + cut, B - I));
+		const U = nz(B === null ? U0 : Math.max(U0, B));
 		const beyond = nz(Math.max(-cut - M, 0));
 		return {
 			nodeId: f.nodeId,
@@ -175,7 +189,8 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			ewrSupplyCutM3Day: cut,
 			ewrSupplyCutLs: nz(cut / M3_PER_DAY_PER_LS),
 			ewrBindingSiteId: f.ewrBindingSiteId ?? null,
-			ewrCutBeyondShareM3Day: beyond
+			ewrCutBeyondShareM3Day: beyond,
+			...(B === null ? {} : { basicNeedsM3Day: B, basicNeedsHeldM3Day: nz(U - U0) })
 		};
 	});
 
@@ -217,7 +232,10 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			ewrSupplyCutM3Day: sum('ewrSupplyCutM3Day'),
 			ewrCutBeyondShareM3Day: sum('ewrCutBeyondShareM3Day'),
 			totalChangeM3Day: sum('totalChangeM3Day'),
-			volumeLeftM3Day: sum('volumeLeftM3Day')
+			volumeLeftM3Day: sum('volumeLeftM3Day'),
+			...(rows.some((r) => r.basicNeedsM3Day !== undefined)
+				? { basicNeedsM3Day: nz(rows.reduce((s, r) => s + (r.basicNeedsM3Day ?? 0), 0)), basicNeedsHeldM3Day: nz(rows.reduce((s, r) => s + (r.basicNeedsHeldM3Day ?? 0), 0)) }
+				: {})
 		}
 	};
 }

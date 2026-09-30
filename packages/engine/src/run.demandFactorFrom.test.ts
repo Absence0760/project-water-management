@@ -40,8 +40,13 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!];
+				// The basic-needs floor (engine ≥ 1.38.0): a cut (factor < 1) may leave up to the unit's floor more.
+				const BN = col(y, n.id, 'basic_needs');
 				for (let t = cut; t < D.length; t++) {
-					expect(Math.abs(D[t]! - factor * D0[t]!), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
+					const held = BN && factor < 1 ? BN[t]! : 0;
+					const tol = 1e-9 * Math.max(1, D0[t]!);
+					expect(D[t]! - factor * D0[t]!, `seed ${seed} ${n.id} day ${t}`).toBeGreaterThanOrEqual(-tol);
+					expect(D[t]! - factor * D0[t]!, `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(held + tol);
 					if (D0[t]! > 0) scaledDays++;
 				}
 			}

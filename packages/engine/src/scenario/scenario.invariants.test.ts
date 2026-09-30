@@ -219,6 +219,15 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 					continue;
 				}
 				targeted++;
+				// The basic-needs floor (engine ≥ 1.38.0): a full cut leaves a unit's domestic and municipal
+				// objects their floor, and nothing else.
+				const BN = col(y, n.id, 'basic_needs');
+				if (BN) {
+					D!.forEach((v, t) => expect(Math.abs(v - BN[t]!), `seed ${seed} ${n.id} day ${t}: demand at the floor`).toBeLessThanOrEqual(1e-9 * Math.max(1, BN[t]!)));
+					G!.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D![t]! * (1 + 1e-12) + 1e-12));
+					if (GW) GW.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: groundwater`).toBeLessThanOrEqual(G![t]! * (1 + 1e-12) + 1e-12));
+					continue;
+				}
 				expect(D!.every((v) => v === 0), `seed ${seed} ${n.id}: demand`).toBe(true);
 				expect(G!.every((v) => v === 0), `seed ${seed} ${n.id}: supplied`).toBe(true);
 				if (GW) expect(GW.every((v) => v === 0), `seed ${seed} ${n.id}: groundwater`).toBe(true);
@@ -241,9 +250,14 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D, G] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!, col(y, n.id, 'supplied')!];
+				// The basic-needs floor (engine ≥ 1.38.0): a cut (k < 1) may leave up to the unit's floor more.
+				const BN = col(y, n.id, 'basic_needs');
 				for (let t = 0; t < D.length; t++) {
 					const k = months.includes(monthOfEpochDay(day0 + t)) ? factor : 1;
-					expect(Math.abs(D[t]! - k * D0[t]!), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
+					const held = BN && k < 1 ? BN[t]! : 0;
+					const tol = 1e-9 * Math.max(1, D0[t]!);
+					expect(D[t]! - k * D0[t]!, `seed ${seed} ${n.id} day ${t}`).toBeGreaterThanOrEqual(-tol);
+					expect(D[t]! - k * D0[t]!, `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(held + tol);
 					expect(G[t]!, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D[t]! * (1 + 1e-12) + 1e-12);
 				}
 			}

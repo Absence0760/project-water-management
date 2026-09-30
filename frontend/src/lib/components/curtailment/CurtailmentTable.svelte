@@ -125,6 +125,9 @@
 								{#if r.beyondShare}
 									<span class="badge badge-warn">EWR cut exceeds this hydrological unit's equitable share by {r.beyondShare} m³/day</span>
 								{/if}
+								{#if r.basicNeedsHeld}
+									<span class="badge" data-testid="basic-needs-held">basic needs keep {r.basicNeedsHeld} m³/day of the cut (floor {r.basicNeeds} m³/day)</span>
+								{/if}
 							</th>
 							<td class="num">{r.demand}</td>
 							<td class="num">{r.supplied}</td>

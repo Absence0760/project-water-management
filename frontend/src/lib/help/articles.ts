@@ -178,6 +178,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['demand-object'],
 		source: 'docs/model.md §2.7f; issue #90 Q4 and Q12'
 	},
+	'basic-needs-floor': {
+		long: 'A domestic or municipal demand object with people has a basic-needs floor: the people it serves × 25 litres a day, the Free Basic Water level, grossed up for distribution losses when it is sized per person. It is the number of people for a per-person object, or the people you enter for one given as m³/day by month (without them, it has no floor). On a day its demand is less than that, the floor is the day’s demand; a day its schedule switches it off has none.\n\nA restriction (a scenario’s cut in demand, as the same % for every category) never cuts the object below its floor, and the curtailment table and share-the-pain board never leave its hydrological unit less than its floor once the EWR is met: what the floor keeps is shown beside the cut. The results count the days and the volume it was supplied below its floor apart from its ordinary shortfall, and show what it got in litres a person a day, the level a municipality’s own restriction stages are set in.',
+		aliases: ['basic human needs', 'free basic water', '25 litres', 'l/p/d', 'restriction floor', 'population'],
+		related: ['demand-object', 'equitable-share'],
+		source: 'docs/model.md §2.7f and §2.11; issue #123; issue #90 Q13; Water Services Act regulations (free basic water, 25 l per person per day)'
+	},
 	'supply-rule': {
 		long: 'Dam only (the default) is what the model always did: irrigation draws on the hydrological unit’s dam alone. River first pumps from the river below the dam, up to the pump’s capacity, and the dam covers the rest. Trigger uses the dam until it holds less than the trigger level at the start of a day, then pumps from the river first until the dam is back at the stop level. Run of river has no dam: the pump takes what the river gives, up to its capacity, and the rest is a deficit.\n\nThe pump only takes the flow below the dam that the hydrological unit need not pass: the senior water users’ demand below it, and a pass-inflow release’s target, stay in the river. The capacity is m³/day: pumps × m³/h per pump × 24. With no capacity set, only the river’s flow limits the pumping, and the run says so.',
 		aliases: ['pump capacity', 'river abstraction', 'pump scenario', 'river first', 'run of river', 'dam first'],

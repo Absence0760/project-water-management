@@ -297,6 +297,10 @@ describe('validateModel', () => {
 			[{ sizing: 'perUnit', monthlyM3Day: null }, true],
 			[{ sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, false],
 			[{ destination: 'external', returnPct: 0.2 }, true],
+			// The people it serves, for the basic-needs floor (engine 1.38.0): none, a number, never negative.
+			[{ population: null }, false],
+			[{ population: 2000 }, false],
+			[{ population: -1 }, true],
 			// A schedule (engine 1.17.0): a good window, a bad date, too many windows.
 			[{ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }] }, false],
 			[{ schedule: [{ label: '', span: 'yearly', from: '02-30', to: '03-01', easterFrom: null, easterTo: null, weekdays: null, factor: 0 }] }, true],

@@ -38,7 +38,7 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './ne
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
-import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -534,6 +534,8 @@ function runNetwork(
 	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	// Each unit's enabled demand objects' names, in the plan's order (engine ≥ 1.7.0).
 	const objectNames = new Map<string, string[]>();
+	// Each unit's basic-needs floor per day (engine ≥ 1.38.0, docs/model.md §2.7f); null without one.
+	const basicNeeds = plan.nodes.map((n) => (n.objects ? unitBasicNeeds(n.objects) : null));
 	for (const [nodeId, list] of demandObjectsByNode(upgradeLegacyModel(input.model), [])) objectNames.set(nodeId, list.map((o) => o.name));
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
@@ -580,6 +582,9 @@ function runNetwork(
 				push(node.id, objectDemandKey(id), DEMAND_OBJECT_SERIES.demandLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, po.demand[k]!);
 				push(node.id, objectSuppliedKey(id), DEMAND_OBJECT_SERIES.suppliedLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, r.objectSupplied![k]!);
 			});
+			// The basic-needs floor (engine ≥ 1.38.0): only on a unit with a domestic or municipal object with people.
+			const floor = basicNeeds[i];
+			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
 		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
@@ -706,6 +711,8 @@ function runNetwork(
 					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
 					// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned.
 					...(plan.nodes[i]!.objects ? { returned: sim.workings![i]!.returnFlow } : {}),
+					// Its basic-needs floor (engine ≥ 1.38.0): the volume left never goes below it.
+					...(basicNeeds[i] ? { basicNeeds: basicNeeds[i]! } : {}),
 					ewrBindingSiteId: bind < 0 ? null : nodes[attribution.sites[bind]!.node]!.id
 				}
 			];
@@ -1497,6 +1504,29 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 		if (s) for (let t = 0; t < s.length; t++) if (s[t] === 0) off++;
 		const avgDemand = mean(d);
 		const avgSupplied = mean(g);
+		// The basic-needs floor (engine ≥ 1.38.0, docs/model.md §2.7f): days and volume below it, apart from the shortfall.
+		const floor = po.floor[k];
+		let basic = {};
+		if (floor !== null && floor !== undefined) {
+			const pop = basicNeedsPopulation(o)!;
+			const lack = new Float64Array(d.length);
+			let below = 0;
+			for (let t = 0; t < d.length; t++) {
+				const b = dayFloor(floor, d[t]!);
+				if (g[t]! < b * (1 - 1e-12)) {
+					below++;
+					lack[t] = b - g[t]!;
+				}
+			}
+			const loss = o.sizing === 'perUnit' && Number.isFinite(o.lossPct) && o.lossPct >= 0 && o.lossPct < 1 ? o.lossPct : 0;
+			basic = {
+				basicNeedsPopulation: pop,
+				basicNeedsM3Day: floor,
+				daysBelowBasicNeeds: below,
+				avgBelowBasicNeedsM3Day: mean(lack),
+				avgSuppliedLitresPerPersonDay: (avgSupplied * (1 - loss) * 1000) / pop
+			};
+		}
 		return {
 			id,
 			name: o.name,
@@ -1509,7 +1539,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgReturnedM3Day: avgSupplied * po.returnShare[k]!,
 			daysShort: short,
-			...(s ? { daysOff: off } : {})
+			...(s ? { daysOff: off } : {}),
+			...basic
 		};
 	});
 }

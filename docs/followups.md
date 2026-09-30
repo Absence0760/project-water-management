@@ -3201,19 +3201,19 @@ from the WP:
       report. Trigger: the evidence report (or a WUA screen) needing to
       grade demands by source, or the first catchment with objects from
       more than one source.
-- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
-      #54 Q13, agreed by the client in issue #90). A restriction never cuts
-      domestic supply below 25 litres per person per day; cuts follow DWS's
-      % restrictions; a municipality's own restriction levels are an
-      optional display only. Nothing applies a floor today: a curtailment or
-      `demand.scale` cut reaches a domestic object like any other demand.
-      Durable fix: a per-object floor (population × 25 l/p/d, from a
-      `perUnit` object's count, or entered) that the drought restriction
-      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
-      shortfall reported apart, and an optional municipal-level label on the
-      share-the-pain board. Trigger: building WP-3.8's drought restriction
-      rule, or the first catchment with a domestic object under a
-      restriction.
+- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.38.0,
+      issue #123, migration 124; agreed in issue #90 Q13). A domestic or
+      municipal demand object has a floor of population × 25 l a day (its
+      `population`, or a per-person object's count); a `demand.scale`
+      restriction never cuts it below that, the curtailment report and the
+      share-the-pain board never leave its unit less than its floor once the
+      EWR is met (what the floor keeps is shown), and the results, the
+      summary CSV and the demand-objects table report the days and volume
+      below the floor apart from the shortfall, with the l/person/day
+      supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
+      stay one % for every category (#53 O4). Still to do when it is built:
+      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
+      same floor; it doesn't exist yet, so there is nothing to wire.
 - [x] **A scenario op for demand objects** (engine 1.41.0, 2026-09-30;
       related: issue #73 "Later scenario ops"). `demandObject.add` /
       `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
@@ -3226,15 +3226,16 @@ from the WP:
       (opaque id and name, `applicationMask`, the results' `reIds`), and
       `node.remove` counts only objects they see. Override mode records an
       object added, changed (per field, schedule included) or removed, and
-      "Add a change" has the three ops (the schedule only through override
-      mode). Run comparison now lists a changed object note. The fuzz
+      "Add a change" has the three ops, the schedule included. Run comparison now lists a changed object note. The fuzz
       generator and the invariants cover them.
-- [ ] **Per-category scaling of demand objects** (split from the item
-      above; tracked on issue #123, "DWS % restrictions … per category").
-      `demand.scale` on a unit scales its crops and objects together; #53
-      R3's restriction what-ifs want one category (towns, livestock) cut on
-      its own. `demandObject.set` changes one object's own numbers
-      meanwhile. Durable fix and trigger: issue #123.
+- [x] **Per-category scaling of demand** (engine 1.43.0, 2026-09-30; issue
+      #123's DWS % restrictions per category). `demand.scale` takes an
+      optional `part`: `crops` (a unit's crop water requirement) or a demand
+      object category (`domestic`, `municipal`, …), so a what-if cuts
+      domestic by 10 % and irrigation by 30 % as two ops. A part's factor
+      stacks on the unit's own and goes through the same basic-needs floor
+      (engine 1.38.0, `planObjects`): a domestic or municipal cut never goes
+      below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.
