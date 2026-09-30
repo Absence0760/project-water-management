@@ -1312,6 +1312,44 @@ export interface SignoffList {
 	signoffs: Signoff[];
 }
 
+/** An evidence pack as the API returns it (docs/api.md § Evidence packs; backend/src/evidence/packs.ts PackMeta). */
+export interface PackMeta {
+	id: string;
+	title: string;
+	mode: 'application' | 'baseline';
+	scenarioId: string | null;
+	baselineRunId: string;
+	scenarioRunId: string | null;
+	version: number;
+	supersedesId: string | null;
+	supersededById: string | null;
+	status: 'draft' | 'issued' | 'superseded' | 'withdrawn';
+	manifestSha256: string;
+	/** `xxxx-xxxx-xxxx`: the manifest hash's first 12 hex digits. */
+	shortCode: string;
+	/** `/verify/<shortCode>`. */
+	verifyPath: string;
+	reportVersion: string;
+	engineVersion: string;
+	/** The server-rendered PDF's SHA-256, once recorded (114_pack_render). */
+	pdfSha256: string | null;
+	pdfPages: number | null;
+	bundleSha256: string | null;
+	createdAt: string;
+	createdBy: string | null;
+	issuedAt: string | null;
+	issuedBy: string | null;
+	statusReason: string | null;
+	signoffs: number;
+}
+
+/** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts). */
+export interface PackPdfState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	/** Why the last render gave up (`failed`). */
+	error: string | null;
+}
+
 /** POST /projects/:id/runs/:runId/signoffs. */
 export interface SignoffRequest {
 	fullName: string;

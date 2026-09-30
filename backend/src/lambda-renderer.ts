@@ -22,12 +22,26 @@
 // are final), and the worker then asks again with a fresh token, after a
 // backoff (jobs/handlers/report-render.ts requestRenderAgain).
 //
+// An evidence pack's request (type `render_pack`, 114_pack_render) prints the
+// pack's own page the same way, stores the PDF in the packs bucket under
+// packs/<project>/<pack>/<sha256>.pdf (Object Lock: kept for good) and answers
+// with the PDF's SHA-256, which the worker records on the pack once.
+//
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { assertLambdaEnv } from './config/production.js';
-import { type RenderResult, type RenderResultMessage, parseRenderRequest, sendToQueue } from './jobs/transport.js';
+import { createHash } from 'node:crypto';
+import {
+	type PackRenderRequestMessage,
+	type PackRenderResult,
+	type PackRenderResultMessage,
+	type RenderResult,
+	type RenderResultMessage,
+	parseRenderRequest,
+	sendToQueue
+} from './jobs/transport.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from './reports/render.js';
-import { putPdf, reportKey } from './reports/storage.js';
+import { packPdfKey, putPackPdf, putPdf, reportKey } from './reports/storage.js';
 import { logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
 
@@ -40,6 +54,10 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 		const req = parseRenderRequest(record.body);
 		if (!req) {
 			logEvent('warn', { event: 'render_request_ignored', messageId: record.messageId });
+			continue;
+		}
+		if (req.type === 'render_pack') {
+			if (!(await renderPack(req))) failures.push({ itemIdentifier: record.messageId });
 			continue;
 		}
 		let result: RenderResult;
@@ -83,3 +101,34 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 	}
 	return { batchItemFailures: failures };
 };
+
+/** One pack request: render, store, answer. False when the answer couldn't be sent (SQS retries the record). */
+async function renderPack(req: PackRenderRequestMessage): Promise<boolean> {
+	let result: PackRenderResult;
+	let reason: 'render' | 'store' = 'render';
+	try {
+		const rendered = await renderReportPdf({ projectId: req.projectId, packId: req.packId, token: req.token }, renderOptionsFromEnv());
+		if (rendered.pages < 1) throw new RenderError('the PDF has no pages');
+		const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
+		await putPackPdf(packPdfKey(req.projectId, req.packId, sha256), rendered.pdf, sha256);
+		result = { ok: true, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms, sha256 };
+	} catch (err) {
+		const e = err instanceof RenderError ? err : new RenderError('the PDF could not be stored');
+		if (!(err instanceof RenderError)) {
+			reason = 'store';
+			logEvent('error', { event: 'pack_store_failed', packId: req.packId, ...safeError(err) });
+		}
+		result = { ok: false, error: e.message.slice(0, 300), retry: e.retry };
+	}
+	const message: PackRenderResultMessage = { v: 1, type: 'rendered_pack', packId: req.packId, result };
+	try {
+		await sendToQueue(process.env.RENDER_RESULTS_QUEUE_URL, 'RENDER_RESULTS_QUEUE_URL', message);
+	} catch (err) {
+		logEvent('error', { event: 'render_result_send_failed', packId: req.packId, ...safeError(err) });
+		return false;
+	}
+	// As a report's: a failed answer is its own line (metric and alarm, infra/reports.tf); ids and outcome only.
+	if (!result.ok) logEvent('warn', { event: 'report_render_failed', packId: req.packId, projectId: req.projectId, reason, retry: result.retry });
+	logEvent('info', { event: 'pack_rendered', packId: req.packId, projectId: req.projectId, ok: result.ok, pages: result.ok ? result.pages : 0, ms: result.ok ? result.ms : null });
+	return true;
+}

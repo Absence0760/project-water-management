@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { jwtVerify, SignJWT } from 'jose';
 import { queryWithoutUser, withUser } from '../db/tx.js';
-import type { RenderScope } from '../reports/scope.js';
+import { isPackScope, type RenderScope, type ReportScope } from '../reports/scope.js';
 
 export const SESSION_COOKIE = 'wm_session';
 const TTL_SECONDS = 7 * 24 * 3600;
@@ -17,8 +17,8 @@ function secret(): Uint8Array {
 /**
  * A render session (POST /auth/render-session, reports/scope.ts): what the
  * headless report renderer gets for a render token. It reads one project and
- * one run (and, for an impact report, compares it with one baseline), and
- * lives long enough for one render.
+ * one run (and, for an impact report, compares it with one baseline), or one
+ * evidence pack (114), and lives long enough for one render.
  */
 export const RENDER_SESSION_TTL_SECONDS = 10 * 60;
 
@@ -27,7 +27,12 @@ export async function signSession(userId: string, scope?: RenderScope): Promise<
 	const ttl = scope ? RENDER_SESSION_TTL_SECONDS : TTL_SECONDS;
 	// iat is whole seconds; iat_ms lets the revocation watermark compare
 	// precisely, so a sign-in right after a password reset isn't rejected.
-	const claim = scope ? { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) } : null;
+	// A report's scope is a project and run (`a`: an impact report's baseline); a pack's, a project and pack (`k`).
+	const claim = !scope
+		? null
+		: isPackScope(scope)
+			? { p: scope.projectId, k: scope.packId }
+			: { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) };
 	return new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : {}) })
 		.setProtectedHeader({ alg: 'HS256' })
 		.setSubject(userId)
@@ -80,7 +85,7 @@ export async function readSession(c: Context): Promise<string | null> {
  * so resetting a password signs out every existing session, render sessions
  * included, and its id (`jti`, required) must not have been signed out
  * (POST /auth/logout, 102_session_revocation). A `scope` claim that isn't a well-formed project + run (with, if
- * any, a well-formed baseline project + run) makes the whole token invalid: a
+ * any, a well-formed baseline project + run), or a well-formed project + pack and nothing else, makes the whole token invalid: a
  * render session never widens into a full one.
  */
 export async function readSessionClaims(c: Context): Promise<Session | null> {
@@ -101,13 +106,21 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 		expiresAt = payload.exp;
 		issuedMs = typeof payload.iat_ms === 'number' ? payload.iat_ms : (payload.iat ?? 0) * 1000;
 		if (payload.scope !== undefined) {
-			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown } | null;
-			if (!s || typeof s.p !== 'string' || typeof s.r !== 'string' || !UUID.test(s.p) || !UUID.test(s.r)) return null;
-			scope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase() };
-			if (s.a !== undefined) {
-				const a = s.a as { p?: unknown; r?: unknown } | null;
-				if (!a || typeof a.p !== 'string' || typeof a.r !== 'string' || !UUID.test(a.p) || !UUID.test(a.r)) return null;
-				scope.against = { projectId: a.p.toLowerCase(), runId: a.r.toLowerCase() };
+			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown; k?: unknown } | null;
+			if (!s || typeof s.p !== 'string' || !UUID.test(s.p)) return null;
+			if (s.k !== undefined) {
+				// A pack's scope: a pack and nothing else.
+				if (typeof s.k !== 'string' || !UUID.test(s.k) || s.r !== undefined || s.a !== undefined) return null;
+				scope = { projectId: s.p.toLowerCase(), packId: s.k.toLowerCase() };
+			} else {
+				if (typeof s.r !== 'string' || !UUID.test(s.r)) return null;
+				const report: ReportScope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase() };
+				if (s.a !== undefined) {
+					const a = s.a as { p?: unknown; r?: unknown } | null;
+					if (!a || typeof a.p !== 'string' || typeof a.r !== 'string' || !UUID.test(a.p) || !UUID.test(a.r)) return null;
+					report.against = { projectId: a.p.toLowerCase(), runId: a.r.toLowerCase() };
+				}
+				scope = report;
 			}
 		}
 	} catch {

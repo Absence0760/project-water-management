@@ -36,7 +36,10 @@ import { rank, requireRole, UUID } from '../projects/access.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
+import { wakeWorker } from '../jobs/wake.js';
+import { packDownloadUrl, packFileName } from '../reports/storage.js';
 import { buildEvidenceReport } from './report.js';
+import { packPdfState, queuePackRender } from './packPdf.js';
 
 export const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -271,6 +274,8 @@ export const packRoutes = new Hono<AuthEnv>()
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					signoffs,
+					// The server-rendered PDF of an issued pack (114_pack_render): ready, rendering, failed or none.
+					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
 					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest) : null
 				});
@@ -335,7 +340,7 @@ export const packRoutes = new Hono<AuthEnv>()
 	.post('/:id/packs/:packId/issue', async (c) => {
 		const { id, packId } = c.req.param();
 		PackIssueBody.parse((await readJson(c, { optional: true })) ?? {});
-		return withUser(c.get('userId'), async (db) => {
+		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status !== 'draft') throw new ApiError(409, `only a draft pack is issued; this one is ${pack.status}`);
@@ -371,8 +376,47 @@ export const packRoutes = new Hono<AuthEnv>()
 			const issued = await loadPack(db, id, packId);
 			await recordAudit(db, id, 'pack.issued', audit(issued, pred ? { supersedesId: pred.id, supersedesVersion: pred.version } : {}));
 			if (pred) await recordAudit(db, id, 'pack.superseded', audit(pred, { byPackId: issued.id, byVersion: issued.version }));
-			return c.json({ pack: issued });
+			// Its PDF, printed from the issued pack's own page (114_pack_render), in the same transaction as the issue.
+			const render = await queuePackRender(db, id, packId);
+			return { pack: issued, jobId: render.jobId };
 		});
+		await wakeWorker(result.jobId);
+		return c.json({ pack: result.pack, pdf: { status: 'rendering', error: null } });
+	})
+	.get('/:id/packs/:packId/pdf', async (c) => {
+		const { id, packId } = c.req.param();
+		const found = await withUser(
+			c.get('userId'),
+			async (db) => {
+				await requireRole(db, id, 'viewer');
+				const pack = await loadPack(db, id, packId);
+				const { rows } = await db.query<{ key: string | null; name: string }>(
+					`SELECT p.pdf_key AS key, pr.name FROM evidence_pack p JOIN project pr ON pr.id = p.project_id WHERE p.id = $1`,
+					[packId]
+				);
+				return { pack, key: rows[0]?.key ?? null, name: rows[0]?.name ?? '' };
+			},
+			{ readOnly: true }
+		);
+		if (!found.key) throw new ApiError(409, found.pack.status === 'draft' ? 'a draft pack has no PDF: issue it first' : 'the PDF is not ready');
+		const url = await packDownloadUrl(found.key, packFileName(found.name, found.pack.version, found.pack.shortCode));
+		c.header('Cache-Control', 'no-store');
+		c.header('Referrer-Policy', 'no-referrer');
+		return c.redirect(url, 302);
+	})
+	.post('/:id/packs/:packId/pdf', async (c) => {
+		// Ask again for a pack's PDF when none is recorded (the last render gave up, or its answer never came).
+		const { id, packId } = c.req.param();
+		PackIssueBody.parse((await readJson(c, { optional: true })) ?? {});
+		const jobId = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const pack = await loadPack(db, id, packId, true);
+			if (pack.status === 'draft') throw new ApiError(409, 'a draft pack has no PDF: issue it first');
+			if (pack.pdfSha256) throw new ApiError(409, 'this pack’s PDF is recorded already; it is never printed again');
+			return (await queuePackRender(db, id, packId)).jobId;
+		});
+		await wakeWorker(jobId);
+		return c.json({ jobId, pdf: { status: 'rendering', error: null } }, 202);
 	})
 	.post('/:id/packs/:packId/withdraw', async (c) => {
 		const { id, packId } = c.req.param();

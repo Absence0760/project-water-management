@@ -300,7 +300,8 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
  * The headless renderer's sign-in (reports/render.ts). Public: the token is
  * the credential. It is consumed whatever happens next, and the session it
  * gives reads one project and one run as the requester (reports/scope.ts),
- * who must still be able to see both (and an impact report's baseline).
+ * who must still be able to see both (and an impact report's baseline), or,
+ * for a pack token (114), one evidence pack past draft.
  */
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));
@@ -309,6 +310,18 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 	if (!hash) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	const t = await withoutUser((db) => consumeRenderToken(db, hash));
 	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
+	if (t.kind === 'pack') {
+		await withUser(t.userId, async (db) => {
+			// The pack, still readable by the requester (RLS: evidence_pack is theirs) and past draft.
+			const { rows } = await db.query<{ ok: boolean }>(
+				`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM evidence_pack WHERE id = $2 AND project_id = $1 AND status <> 'draft') AS ok`,
+				[t.projectId, t.packId]
+			);
+			if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this evidence pack');
+		});
+		await issueSession(c, t.userId, { projectId: t.projectId, packId: t.packId });
+		return c.json({ ok: true });
+	}
 	await withUser(t.userId, async (db) => {
 		// The run, and an impact report's baseline, both still readable by the requester (RLS: model_run is theirs).
 		const { rows } = await db.query<{ ok: boolean }>(

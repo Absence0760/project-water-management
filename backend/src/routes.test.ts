@@ -67,7 +67,7 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
-	// Evidence packs (WP-3.14): auth-gated like every project route; only verify is public.
+	// Evidence packs (WP-3.14), their PDF (114_pack_render) included: auth-gated like every project route; only verify is public.
 	it('inventories the evidence pack routes as auth-gated, and verify as public', () => {
 		for (const r of [
 			'POST /projects/:id/packs',
@@ -77,7 +77,9 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/packs/:packId/signoffs',
 			'POST /projects/:id/packs/:packId/signoffs',
 			'POST /projects/:id/packs/:packId/issue',
-			'POST /projects/:id/packs/:packId/withdraw'
+			'POST /projects/:id/packs/:packId/withdraw',
+			'GET /projects/:id/packs/:packId/pdf',
+			'POST /projects/:id/packs/:packId/pdf'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);

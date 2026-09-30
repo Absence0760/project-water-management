@@ -9,6 +9,7 @@ import type {
 	DailySeries,
 	DayBoundary,
 	EvidenceReport,
+	PackManifest,
 	InputChange,
 	FarmIndex,
 	FarmView,
@@ -57,6 +58,8 @@ import type {
 	HistoryRevision,
 	RestoreResult,
 	SeriesRevisionMeta,
+	PackMeta,
+	PackPdfState,
 	Signoff,
 	SignoffList,
 	SignoffRequest,
@@ -554,6 +557,23 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		evidence: {
 			report: (id: string, runId: string) =>
 				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
+		},
+		/**
+		 * Evidence packs (issue #71, docs/api.md § Evidence packs): the reads the
+		 * pack's page makes, which are all a pack render session may make
+		 * (backend/src/reports/scope.ts).
+		 */
+		packs: {
+			/** One pack: its row, the frozen manifest, its sign-offs and its PDF's state (viewer). */
+			get: (id: string, packId: string) =>
+				request<{ pack: PackMeta; manifest: PackManifest; manifestMatches: boolean; signoffs: Signoff[]; pdf: PackPdfState }>(
+					'GET',
+					`${p(id)}/packs/${enc(packId)}`
+				),
+			/** The pack's sign-off statement and sign-offs (viewer); the same shape as a run's. */
+			signoffs: (id: string, packId: string) => request<SignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
+			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready). */
+			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`
 		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */

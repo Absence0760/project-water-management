@@ -97,6 +97,50 @@ export const RenderResultMessage = z
 	.strict();
 export type RenderResultMessage = z.output<typeof RenderResultMessage>;
 
+// An evidence pack's PDF (114_pack_render; docs/evidence-pack.md § The PDF)
+// goes the same way on the same two queues: a PackRenderRequestMessage asks
+// the renderer to print the pack's page; it stores the PDF under the key
+// derived from the ids and the PDF's SHA-256 (reports/storage.ts packPdfKey)
+// and answers with a PackRenderResultMessage carrying that hash, which
+// becomes a follow-up `pack_render` job that records it on the pack once
+// (app_record_pack_pdf).
+
+export const PackRenderRequestMessage = z
+	.object({
+		v: z.literal(1),
+		type: z.literal('render_pack'),
+		packId: Uuid,
+		projectId: Uuid,
+		token: z.string().regex(/^[A-Za-z0-9_-]{43}$/)
+	})
+	.strict();
+export type PackRenderRequestMessage = z.output<typeof PackRenderRequestMessage>;
+
+/** A pack render's outcome: a report's, plus the stored PDF's SHA-256. */
+export const PackRenderResult = z.discriminatedUnion('ok', [
+	z
+		.object({
+			ok: z.literal(true),
+			pages: z.number().int().min(1).max(10_000),
+			bytes: z.number().int().min(1),
+			ms: z.number().int().min(0),
+			sha256: z.string().regex(/^[0-9a-f]{64}$/)
+		})
+		.strict(),
+	z.object({ ok: z.literal(false), error: z.string().max(300), retry: z.boolean() }).strict()
+]);
+export type PackRenderResult = z.output<typeof PackRenderResult>;
+
+export const PackRenderResultMessage = z
+	.object({
+		v: z.literal(1),
+		type: z.literal('rendered_pack'),
+		packId: Uuid,
+		result: PackRenderResult
+	})
+	.strict();
+export type PackRenderResultMessage = z.output<typeof PackRenderResultMessage>;
+
 /** SQS's message limit: a body over it can't be sent, so it can't be received either. */
 export const MAX_MESSAGE_BYTES = 256 * 1024;
 
@@ -110,19 +154,24 @@ const parseJson = (body: string): unknown => {
 };
 
 /** A queue message body the worker understands, or null (logged and dropped by the caller). */
-export function parseWorkerMessage(body: string): WakeMessage | IngestResultMessage | RenderResultMessage | null {
+export function parseWorkerMessage(body: string): WakeMessage | IngestResultMessage | RenderResultMessage | PackRenderResultMessage | null {
 	const m = parseJson(body) as Partial<WakeMessage> | null;
 	if (m && m.v === 1 && m.type === 'wake' && typeof m.jobId === 'string') return { v: 1, type: 'wake', jobId: m.jobId };
 	const ingest = IngestResultMessage.safeParse(m);
 	if (ingest.success) return ingest.data;
 	const rendered = RenderResultMessage.safeParse(m);
-	return rendered.success ? rendered.data : null;
+	if (rendered.success) return rendered.data;
+	const pack = PackRenderResultMessage.safeParse(m);
+	return pack.success ? pack.data : null;
 }
 
-/** A `render-requests` message body, or null (the renderer logs and drops it). */
-export function parseRenderRequest(body: string): RenderRequestMessage | null {
-	const m = RenderRequestMessage.safeParse(parseJson(body));
-	return m.success ? m.data : null;
+/** A `render-requests` message body (a report's or a pack's), or null (the renderer logs and drops it). */
+export function parseRenderRequest(body: string): RenderRequestMessage | PackRenderRequestMessage | null {
+	const json = parseJson(body);
+	const m = RenderRequestMessage.safeParse(json);
+	if (m.success) return m.data;
+	const pack = PackRenderRequestMessage.safeParse(json);
+	return pack.success ? pack.data : null;
 }
 
 /**
