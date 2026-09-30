@@ -94,9 +94,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			else if (n.kind !== 'gauge') add(`ewrSiteKind:${n.id}`, `"${n.name}": only a gauge can be taken off the EWR sites`);
 		}
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
+		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';
-		if (n.kind !== 'farm' && (supply !== 'damFirst' || (n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined)))
-			add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
+		const hasPump = n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined;
+		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule; an other water user always takes from the river, up to its pump capacity`);
+		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))

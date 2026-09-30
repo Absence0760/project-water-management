@@ -381,6 +381,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
 	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8), from its own stream, last of all.
 	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
+	// A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8), from its own stream, last of all.
+	addUserPumps(new Rng(seed ^ 0x4f1bbcdc), nodes);
 	return {
 		settings,
 		model: {
@@ -626,6 +628,21 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 		n.supplyTriggerPct = g.frac(0.1, 0.1);
 		n.supplyStopPct = g.bool(0.9) ? g.float(n.supplyTriggerPct, 1) : g.frac();
 		if (rule === 'runOfRiver' && g.bool(0.8)) n.damCapacityM3 = 0;
+	}
+}
+
+/**
+ * A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8, docs/model.md
+ * §2.7c) in 30 % of seeds, on each user half the time: 0 (no pump), a trickle,
+ * or anything up to more than any flow, so the cap binds some days, every day
+ * or never, senior and junior, with and without boreholes (addBoreholes ran
+ * before).
+ */
+function addUserPumps(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'user' || !g.bool(0.5)) continue;
+		n.pumpCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
 	}
 }
 
