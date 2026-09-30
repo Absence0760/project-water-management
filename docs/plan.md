@@ -676,7 +676,16 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, three passes, the volume
     by default; from engine 1.6.0 each month filtered over its own days and
     the two years before it, so later days never change a month's verdict;
-    model.md §2.9d).*
+    model.md §2.9d).* Is ±15 % the right tolerance between the run's natural
+    MAR and the determination's before a run warns? For high flows (§2.9d):
+    is an event found in daily flow as at least half its duration at or
+    above half its peak, or should the level sit on the base flow? Should a
+    year be asked for no more events than its natural flow had (as built),
+    or require them outright in maintenance years, and count per water year
+    or per month? Should the DRM's high-flow volumes be a third check? Each
+    method choice above (not which table applies where) is an open row of
+    the engine audit (A1–A7), printed in the known limitations of every
+    report and sign-off until answered.
 18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
     criteria (engine 0.26.0, model.md §2.10e), defaults to confirm.* Is a
     parameter set behavioural at KGE′ ≥ 0.5 on the first half of the record,

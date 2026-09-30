@@ -9,7 +9,7 @@ import { fmtNum } from '$lib/format/number';
 
 /** Decimal places per unit. */
 export function digitsFor(unit: string): number {
-	if (unit === 'days') return 0;
+	if (unit === 'days' || unit === 'unit-years') return 0;
 	if (unit === 'Mm³/a') return 3;
 	if (unit === 'Mm³') return 2;
 	return 1;

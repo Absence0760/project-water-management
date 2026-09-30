@@ -190,3 +190,46 @@ describe('settings.evidenceUncertaintyRule', () => {
 		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.settings.evidenceUncertaintyRule).toEqual(RULE);
 	});
 });
+
+describe('§ 5 registered water use (WP-3.10)', () => {
+	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares by unit, never with the holder or registration', async () => {
+		// The nominated baseline ran without allocations.
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).toMatch(/^Not assessed: the runs carry no registered volumes/);
+		const created = await owner.call('POST', `/projects/${projectId}/allocations`, {
+			nodeId: farmId,
+			registrationNo: 'REG-EVIDENCE-7',
+			authorisation: 'registration',
+			holder: 'Evidence Holder Person',
+			waterSource: 'surface',
+			volumeM3PerYear: 100_000
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		// A stored run reads as it ran: adding a volume now doesn't reach it.
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).not.toBeNull();
+
+		const withVolume = await newRun('With a registered volume');
+		const res = await report(viewer, withVolume);
+		expect(res.status).toBe(200);
+		const r = res.body.report as EvidenceReport;
+		expect(r.version).toBe('evidence-2');
+		expect(r.allocations.notAssessed).toBeNull();
+		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
+		const s = r.allocations.units[0]!.sources[0]!;
+		expect(s.waterSource).toBe('surface');
+		// Three years from 1 October 2018: two whole water years, and part of a third.
+		expect(s.countsA?.wholeYears).toBe(2);
+		expect(s.years.filter((y) => !y.partialA).every((y) => Math.abs(y.registeredA! - 100_000) < 1e-6)).toBe(true);
+		expect(r.rows.find((x) => x.id === 'registeredUse')?.notAssessed).toBeNull();
+		// Volumes, never the holder's name or registration number (D3), even though the viewer's project has them.
+		const text = JSON.stringify(res.body);
+		expect(text).not.toContain('Evidence Holder Person');
+		expect(text).not.toContain('REG-EVIDENCE-7');
+		// Positive control for that: the owner's allocation list carries the holder.
+		expect(JSON.stringify((await owner.call('GET', `/projects/${projectId}/allocations`)).body)).toContain('Evidence Holder Person');
+		// The same numbers as the Allocations tab for the run (G14).
+		const tab = (await viewer.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison;
+		const tabYears = tab.nodes.find((n: { nodeId: string }) => n.nodeId === farmId).surface.years as { modelledM3: number; registeredM3: number }[];
+		expect(s.years.map((y) => [y.modelledA, y.registeredA])).toEqual(tabYears.map((y) => [y.modelledM3, y.registeredM3]));
+		expect((await owner.call('DELETE', `/projects/${projectId}/allocations/${created.body.allocation.id}`)).status).toBe(204);
+	});
+});
