@@ -6,6 +6,7 @@
 	// legend doubles as the hover read-out.
 	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import uPlot from 'uplot';
+	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
@@ -108,6 +109,8 @@
 	let plot: uPlot | null = null;
 	let width = $state(0);
 	let themeTick = $state(0);
+	// Bumped when the page's fonts finish loading: the canvas keeps the face it drew with (onFontsLoaded).
+	let fontsTick = $state(0);
 	// Legend clicks, by series label, so a rebuild (log scale, units, theme)
 	// keeps what the user switched on or off rather than resetting to `hidden`.
 	const shownByLabel = new Map<string, boolean>();
@@ -396,7 +399,7 @@
 		ctx.lineTo(x0, bbox.top + bbox.height);
 		ctx.stroke();
 		ctx.fillStyle = text;
-		ctx.font = `${12 * k}px system-ui, sans-serif`;
+		ctx.font = `${12 * k}px ${token('--font-sans', 'system-ui')}`;
 		ctx.textBaseline = 'top';
 		if (x1 - x0 > 40 * k) ctx.fillText(band.label, x0 + 4 * k, bbox.top + 4 * k);
 		ctx.restore();
@@ -433,6 +436,7 @@
 		const mq = matchMedia('(prefers-color-scheme: dark)');
 		const onTheme = () => themeTick++;
 		mq.addEventListener('change', onTheme);
+		const stopFonts = onFontsLoaded(() => fontsTick++);
 		// An explicit theme switch sets data-theme on <html>.
 		const mo = new MutationObserver(onTheme);
 		mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
@@ -449,6 +453,7 @@
 		}
 		return () => {
 			ro.disconnect();
+			stopFonts();
 			mq.removeEventListener('change', onTheme);
 			mo.disconnect();
 			removeEventListener('beforeprint', beforePrint);
@@ -456,9 +461,9 @@
 		};
 	});
 
-	// Rebuild when data, unit, scale, height or theme change…
+	// Rebuild when data, unit, scale, height, theme or the loaded fonts change…
 	$effect(() => {
-		void [plotted, unit, height, themeTick, hasData, host, log, series, shade, band, lanes];
+		void [plotted, unit, height, themeTick, fontsTick, hasData, host, log, series, shade, band, lanes];
 		untrack(build);
 	});
 	// …and only resize in place when the container width changes.
