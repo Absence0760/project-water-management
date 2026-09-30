@@ -110,7 +110,7 @@ describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
-		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations']);
+		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations', 'assurance']);
 		expect(v.checks.filter((c) => !c.passed)).toEqual([]);
 		expect(v.passed).toBe(true);
 		expect(v.maxResidual!.valueM3Day).toBeLessThan(1e-9);
@@ -188,6 +188,75 @@ describe('verification (engine 0.12.0)', () => {
 		const reports = verifyRun(input, broken).verification.checks.find((c) => c.id === 'reports')!;
 		expect(reports.passed).toBe(false);
 		expect(reports.detail).toMatch(/^the check could not run: /);
+	});
+});
+
+describe('the assurance self-check (engine 1.31.0, issue #192)', () => {
+	// A random network with two demand nodes whose sums differ, so a swap between them shows.
+	const pick = () => {
+		for (let seed = 1; seed < 60; seed++) {
+			const input = randomInput(seed, { maxDays: 400 });
+			const out = runModelChecked(input);
+			const r = out.summary.supplyAssurance?.reliability ?? [];
+			if (r.length >= 2 && r[0]!.demandM3 > 0 && r[1]!.demandM3 > 0 && r[0]!.demandM3 !== r[1]!.demandM3) return { input, out };
+		}
+		throw new Error('no random network with two demand nodes');
+	};
+	const { input, out } = pick();
+	const check = (o: ModelOutput) => verifyRun(input, o).verification.checks.find((c) => c.id === 'assurance')!;
+
+	it('passes on a sound run (the positive control)', () => {
+		expect(check(out)).toMatchObject({ passed: true, detail: null });
+	});
+
+	it('fails when a node carries another node’s sums under its own id, as the V8 miscompile left it', () => {
+		const t: ModelOutput = structuredClone(out);
+		const [a, b] = t.summary.supplyAssurance!.reliability;
+		// Everything but the identity from the other node: what issue #192 produced.
+		t.summary.supplyAssurance!.reliability[0] = { ...structuredClone(b!), nodeId: a!.nodeId, name: a!.name, kind: a!.kind };
+		const c = check(t);
+		expect(c.passed).toBe(false);
+		const name = input.model.nodes.find((n) => n.id === a!.nodeId)!.name;
+		expect(c.detail).toContain(`assurance "${name}"`);
+		expect(c.detail).toContain('its own daily series add up to');
+	});
+
+	it('fails on one month, a demand-day count, a stress cell or the system grid off', () => {
+		const month: ModelOutput = structuredClone(out);
+		const m = month.summary.supplyAssurance!.reliability[0]!.months.find((x) => x.demandM3 > 0)!;
+		m.suppliedM3 += 1;
+		expect(check(month).detail).toMatch(/water-year month \d+ doesn't add up/);
+
+		const days: ModelOutput = structuredClone(out);
+		days.summary.supplyAssurance!.reliability[1]!.demandDays += 1;
+		expect(check(days).detail).toMatch(/demand days met, its own daily series give/);
+
+		const cell = (o: ModelOutput, grid: (sa: NonNullable<ModelOutput['summary']['supplyAssurance']>) => (number | null)[][]) => {
+			const g = grid(o.summary.supplyAssurance!);
+			for (const row of g) {
+				const j = row.findIndex((v) => v !== null && v > 0.01);
+				if (j >= 0) {
+					row[j] = row[j]! / 2;
+					return o;
+				}
+			}
+			throw new Error('no cell with supply');
+		};
+		expect(check(cell(structuredClone(out), (sa) => sa.stress.nodes[0]!.ratio)).detail).toMatch(/^assurance stress grid "/);
+		expect(check(cell(structuredClone(out), (sa) => sa.stress.system.ratio)).detail).toMatch(/^assurance stress grid system /);
+	});
+
+	it('fails when a farm or water user is missing or listed twice, and passes a run without the summary', () => {
+		const short: ModelOutput = structuredClone(out);
+		short.summary.supplyAssurance!.reliability.pop();
+		expect(check(short).detail).toMatch(/^assurance lists \d+ farms and water users, the model has \d+/);
+		const twice: ModelOutput = structuredClone(out);
+		const r = twice.summary.supplyAssurance!.reliability;
+		r[1] = structuredClone(r[0]!);
+		expect(check(twice).detail).toMatch(/listed twice/);
+		const none: ModelOutput = structuredClone(out);
+		delete none.summary.supplyAssurance;
+		expect(check(none).passed).toBe(true);
 	});
 });
 
