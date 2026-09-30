@@ -364,6 +364,21 @@ describe('CHIRPS gap map: resumes, a month CHIRPS covers in part, and the ensemb
 			const k = toEpochDay(at) - toEpochDay(full.startDate);
 			expect(tailDifference(full, runModelFrom(snapshot, tailOnly), k), at).toBeNull();
 		}
+		// CHIRPS starting mid-month, a snapshot later that month: the lead starts with CHIRPS, so the resumed run leaves the month unmapped too.
+		const late = networked({ ...MAP, simulationStart: '2004-01-01', simulationEnd: '2004-06-30' }, {
+			...SERIES,
+			rain_chirps_mm: { startDate: '2004-01-10', values: chirps.values.slice(toEpochDay('2004-01-10') - d0) }
+		});
+		const lateFull = runModel(late);
+		const snap = captureModelState(late, '2004-01-17');
+		expect(openSnapshot(snap, late).pinned.fits.chirpsCorrection!.quantileMap!.lead!.startDate).toBe('2004-01-10');
+		const lateTail = structuredClone(late);
+		for (const x of Object.values(lateTail.series)) {
+			const cut = Math.max(0, toEpochDay('2004-01-17') - toEpochDay(x!.startDate));
+			x!.values = x!.values.slice(cut);
+			x!.startDate = fromEpochDay(Math.max(toEpochDay(x!.startDate), toEpochDay('2004-01-17')));
+		}
+		expect(tailDifference(lateFull, runModelFrom(snap, lateTail), 16)).toBeNull();
 		// Only a mid-month snapshot carries the month's lead.
 		expect(openSnapshot(captureModelState(inp, '2004-01-17'), inp).pinned.fits.chirpsCorrection!.quantileMap!.lead!.values).toHaveLength(16);
 		expect(openSnapshot(captureModelState(inp, '2004-03-01'), inp).pinned.fits.chirpsCorrection!.quantileMap!.lead).toBeUndefined();
@@ -386,6 +401,9 @@ describe('CHIRPS gap map: resumes, a month CHIRPS covers in part, and the ensemb
 		expect(jan.some((d) => whole.out.get(d) !== a.out.get(d))).toBe(true);
 		// The months before it are whole, so mapped.
 		expect([...a.out].some(([d, v]) => d < toEpochDay('2005-01-01') && v !== factorOnly(a.run.chirpsCorrection, d))).toBe(true);
+		// Nulls stored past the last reading don't make the month whole.
+		const padded = gapRain(input(MAP, { ...SERIES, rain_chirps_mm: { startDate: S, values: [...chirps.values.slice(0, end - d0 + 1), ...new Array(11).fill(null)] } }));
+		for (const d of jan) expect(padded.out.get(d)).toBe(a.out.get(d));
 		const q = a.run.chirpsCorrection!.quantileMap!;
 		expect(q.partialMonthDays).toBe(20);
 		expect(chirpsQuantileMapFallbackWarning(a.run.chirpsCorrection)).toMatch(

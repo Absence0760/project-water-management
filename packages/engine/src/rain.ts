@@ -659,7 +659,9 @@ export function chirpsQuantileMapper(corr: ChirpsCorrection | null, chirps: Dail
 	const l0 = qm.lead ? toEpochDay(qm.lead.startDate) : 0;
 	const ln = qm.lead?.values.length ?? 0;
 	const inLead = (day: number) => day >= l0 && day < l0 + ln;
-	const covered = (day: number) => inLead(day) || (day >= c0 && day < c0 + n);
+	// Coverage runs from the first to the last reading, so nulls stored past either end never make a month whole.
+	const [r0, r1] = readingSpan(chirps);
+	const covered = (day: number) => inLead(day) || (day >= r0 && day <= r1);
 	const valueOn = (day: number) => {
 		const v = inLead(day) ? qm.lead!.values[day - l0] : day >= c0 && day < c0 + n ? chirps.values[day - c0] : null;
 		return isReading(v) ? v : null;
@@ -718,12 +720,26 @@ export function withChirpsGapMapLead(corr: ChirpsCorrection | null, chirps: Dail
 	// A correction pinned from an earlier snapshot keeps its own lead's days (a chain of resumes with the history left out).
 	const old = corr.quantileMap.lead;
 	const o0 = old ? toEpochDay(old.startDate) : 0;
+	// The lead covers only what the capture run's coverage covered: from its first reading (or the old lead's start), never from the 1st regardless.
+	const from = Math.max(first, Math.min(old ? o0 : Infinity, readingSpan(chirps)[0]));
+	if (from >= day) return corr;
 	const values: (number | null)[] = [];
-	for (let d = first; d < day; d++) {
+	for (let d = from; d < day; d++) {
 		const v = old && d >= o0 && d < o0 + old.values.length ? old.values[d - o0] : d >= c0 && d < c0 + chirps.values.length ? chirps.values[d - c0] : null;
 		values.push(v ?? null);
 	}
-	return { ...corr, quantileMap: { ...corr.quantileMap, lead: { startDate: fromEpochDay(first), values } } };
+	return { ...corr, quantileMap: { ...corr.quantileMap, lead: { startDate: fromEpochDay(from), values } } };
+}
+
+/** The epoch days of a series' first and last reading; [1, 0] (empty) without one. */
+function readingSpan(s: DailySeries): [number, number] {
+	const c0 = toEpochDay(s.startDate);
+	let a = 0;
+	while (a < s.values.length && !isReading(s.values[a])) a++;
+	if (a === s.values.length) return [1, 0];
+	let b = s.values.length - 1;
+	while (!isReading(s.values[b])) b--;
+	return [c0 + a, c0 + b];
 }
 
 /**

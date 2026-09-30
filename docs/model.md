@@ -1052,7 +1052,9 @@ taken mid-month carries that month's CHIRPS before its day
 (`quantileMap.lead`, `withChirpsGapMapLead`), so a run resumed from it, even
 with the history left out of its input, maps the month from the same days.
 **A month is mapped only once the stored CHIRPS covers it from its 1st to
-its last day** (a snapshot's lead counts). Until then, typically the
+its last day**, counted from its first to its last reading, so nulls stored
+past either end don't count (a snapshot's lead counts, and starts no
+earlier than the capture run's CHIRPS did). Until then, typically the
 record's latest month while the feed is still adding days, its gap days take
 the monthly factor alone and the run says how many
 (`partialMonthDays`). Otherwise every day the feed appended would move the
