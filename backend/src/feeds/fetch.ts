@@ -120,12 +120,22 @@ export function fetchWindow(
 }
 
 /**
- * What a CHIRPS fetch may skip as already held: the feed's newest day, bounded
- * to the window (none before it, or for another source, or an empty window).
+ * What a CHIRPS fetch may skip as already held: the last day D such that
+ * every day from the window's first through D holds a value in `series`, the
+ * series the answer will merge into (store.ts heldSeries: its days from the
+ * window's first on). Not the feed's newest day: a day before it can be
+ * empty (published late, deleted, or a gap the merge kept), and a skipped
+ * day is never filled until its final is out. None for another source, an
+ * empty window, or when the first day holds nothing.
  */
-export function heldThrough(source: FeedSource, lastDataDate: string | null, window: FetchWindow): string | undefined {
-	if (source !== 'chirps' || lastDataDate === null || window.start > window.end || lastDataDate < window.start) return undefined;
-	return lastDataDate < window.end ? lastDataDate : window.end;
+export function heldThrough(source: FeedSource, window: FetchWindow, series: { startDate: string; values: (number | null)[] } | null): string | undefined {
+	if (source !== 'chirps' || series === null || window.start > window.end) return undefined;
+	const from = toEpochDay(window.start) - toEpochDay(series.startDate);
+	if (from < 0) return undefined;
+	const last = Math.min(toEpochDay(window.end) - toEpochDay(series.startDate), series.values.length - 1);
+	let i = from;
+	while (i <= last && series.values[i] !== null && series.values[i] !== undefined) i++;
+	return i > from ? addDays(series.startDate, i - 1) : undefined;
 }
 
 /** Text Postgres will store: it refuses U+0000 in text and in jsonb. */
@@ -199,7 +209,7 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 		switch (req.source) {
 			case 'chirps': {
 				const product = chirpsProduct(req.config);
-				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end, product, undefined, req.heldThrough ?? null);
+				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end, product, { heldThrough: req.heldThrough ?? null, today: req.today });
 				// Held preliminary days not read again still count (the feed card's "N preliminary days").
 				if (!r.values.length) return { ok: true, startDate: null, values: [], meta: r.prelimDays ? { days: 0, prelimDays: r.prelimDays, product } : { days: 0, product } };
 				const meta: Record<string, string | number> = { days: r.values.length, prelimDays: r.prelimDays, product };

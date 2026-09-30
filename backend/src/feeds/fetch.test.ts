@@ -182,7 +182,8 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 			// Every day after the marker is still in the window, through yesterday: nothing the re-read could revise is skipped.
 			expect(w.end).toBe(first.end);
 			if (finalThrough) expect(w.start).toBe(new Date(Date.parse(`${finalThrough}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10));
-			const h = held ? heldThrough('chirps', newest, w) : undefined;
+			// What the series holds after the first fetch: its days.
+			const h = held ? heldThrough('chirps', w, { startDate: r.startDate!, values: r.values }) : undefined;
 			const again = await runFetch({ source: 'chirps', config, ...w, today: day, ...(h ? { heldThrough: h } : {}) }, http);
 			// The feed card's preliminary count is the same either way.
 			expect(again.ok ? (again.meta.prelimDays ?? 0) : null).toBe(product === 'sat' ? 37 : 0);
@@ -351,14 +352,22 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(req('chirps_gefs', grid, '2026-01-10')).toBe(false);
 	});
 
-	it('heldThrough() is the feed’s newest day bounded to the window, CHIRPS only', () => {
+	it('heldThrough() is the last day of the window’s leading run the series holds a value on, CHIRPS only', () => {
 		const w = { start: '2026-01-10', end: '2026-01-20' };
-		expect(heldThrough('chirps', '2026-01-15', w)).toBe('2026-01-15');
-		expect(heldThrough('chirps', '2026-01-25', w)).toBe('2026-01-20');
-		expect(heldThrough('chirps', '2026-01-09', w)).toBeUndefined();
-		expect(heldThrough('chirps', null, w)).toBeUndefined();
-		expect(heldThrough('chirps', '2026-01-15', { start: '2026-02-01', end: '2026-01-20' })).toBeUndefined();
-		expect(heldThrough('dws', '2026-01-15', w)).toBeUndefined();
+		const ser = (startDate: string, values: (number | null)[]) => ({ startDate, values });
+		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, 3, 4, 5, 6]))).toBe('2026-01-15');
+		// A hole inside what the feed holds ends it: the hole is read again.
+		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, null, 4, 5, 6]))).toBe('2026-01-11');
+		// Bounded to the window's end; a series from before the window counts from the window's first day.
+		expect(heldThrough('chirps', w, ser('2026-01-10', new Array(30).fill(1)))).toBe('2026-01-20');
+		expect(heldThrough('chirps', w, ser('2026-01-05', [null, null, null, null, null, 1, 2]))).toBe('2026-01-11');
+		// Nothing on the window's first day, a series that starts later, or none: nothing held.
+		expect(heldThrough('chirps', w, ser('2026-01-10', [null, 2, 3]))).toBeUndefined();
+		expect(heldThrough('chirps', w, ser('2026-01-12', [1, 2, 3]))).toBeUndefined();
+		expect(heldThrough('chirps', w, ser('2026-01-10', []))).toBeUndefined();
+		expect(heldThrough('chirps', w, null)).toBeUndefined();
+		expect(heldThrough('chirps', { start: '2026-02-01', end: '2026-01-20' }, ser('2026-01-01', new Array(60).fill(1)))).toBeUndefined();
+		expect(heldThrough('dws', w, ser('2026-01-10', [1, 2, 3]))).toBeUndefined();
 	});
 
 	it('every window fetchWindow asks for passes (positive control)', () => {
@@ -368,7 +377,7 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 				for (const through of [null, '2026-05-31', '2020-03-01', '1995-01-01', '1970-12-31']) {
 					for (const final of [null, '2026-05-31', '2026-05-01', '2020-03-01', '1995-01-01']) {
 						const w = fetchWindow(source, config as never, last, today, through, final);
-						const held = heldThrough(source, last, w);
+						const held = heldThrough(source, w, last ? { startDate: '1950-01-01', values: new Array(30_000).fill(1) } : null);
 						expect(FetchRequestSchema.safeParse({ source, config, ...w, today, ...(held ? { heldThrough: held } : {}) }).success, `${source} ${last} ${through} ${final}`).toBe(true);
 					}
 				}

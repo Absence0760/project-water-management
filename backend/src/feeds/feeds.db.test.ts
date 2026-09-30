@@ -761,6 +761,27 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-60), end: addDays(-1) });
 	});
 
+	it('a hole in the series inside what the feed read is read again and filled: held days end at the first empty one', async () => {
+		const owner = await signUp('Holes');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60) } }))).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const full = (await series(owner, pid, 'rain_chirps_mm'))!;
+		// Day -20 (preliminary on the fixtures) loses its value: the newest day is still -3, but -20 isn't held.
+		const i = 40;
+		expect(full.startDate).toBe(addDays(-60));
+		expect(full.values[i]).not.toBeNull();
+		await asOwner(`UPDATE time_series SET "values"[$2] = NULL WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid, i + 1]);
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-21) });
+		// The inline fetch reads it again from the preliminary product and fills it.
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual(full.values);
+		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { prelimDays: 37, finalThrough: addDays(-40) } });
+	});
+
 	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
 	it('an empty answer records how far it read, so the next fetch moves past the empty stretch', async () => {
 		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: '1960-01-01' }, targetKind: 'flow_observed_m3s' });

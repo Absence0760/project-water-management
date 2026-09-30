@@ -81,6 +81,21 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
 	return out;
 }
 
+/**
+ * Days after a month ends by which its final files are out: CHC says
+ * "typically complete during the third week of the following month", and
+ * this leaves some weeks' slack. A final still missing after that is a gap.
+ */
+export const CHIRPS_FINAL_EXPECTED_DAYS = 45;
+
+/** Whether `day`'s final file should be out by `today` (epoch days): its month ended CHIRPS_FINAL_EXPECTED_DAYS before. */
+function finalExpected(day: string, today: number): boolean {
+	const y = Number(day.slice(0, 4));
+	const m = Number(day.slice(5, 7));
+	const monthEnd = toEpochDay(m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`) - 1;
+	return today - monthEnd > CHIRPS_FINAL_EXPECTED_DAYS;
+}
+
 export interface GridDays {
 	startDate: string;
 	values: (number | null)[];
@@ -106,16 +121,20 @@ export interface GridDays {
  * ones stays null. `finalThrough` marks the leading run of final days.
  *
  * `sat` reads as little as the publishing allows (issue #69). CHC publishes
- * a month's final files together, in date order, so the finals are probed
- * from the first day, that day alone and then `concurrency` at a time, until
- * a batch's last day has none: no later day can have one, and each is read
- * from the preliminary product directly. (A day missing inside a published
- * month only stops the probing when it ends a batch; the next fetches read
- * past it once the window starts after it.) A day with no final that the
- * feed already holds (on or before `heldThrough`, its newest day) is not
- * read again: a preliminary value is published once and only replaced by
- * the final, so it comes back null, which the merge leaves as it is
- * (keepOnNull), and counts in prelimDays.
+ * a month's final files together, about three weeks after it ends, so the
+ * finals are probed from the first day, that day alone and then
+ * `concurrency` at a time, until a batch's last day has none in a month
+ * whose finals may still be on their way (it ended less than
+ * CHIRPS_FINAL_EXPECTED_DAYS before `today`): no later day can have one, and
+ * each is read from the preliminary product directly. A final missing from
+ * an older month is a gap in the archive, not the publishing lag, so the
+ * probing goes on past it and the later finals are read as finals. A day
+ * with no final that the feed already holds (`heldThrough`: every day from
+ * the window's first through it holds a value in the series the answer
+ * merges into, jobs/handlers/feed-fetch.ts) is not read again: a
+ * preliminary value is published once and only replaced by the final, so it
+ * comes back null, which the merge leaves as it is (keepOnNull), and counts
+ * in prelimDays.
  */
 export async function fetchChirps(
 	http: FeedHttp,
@@ -123,9 +142,12 @@ export async function fetchChirps(
 	start: string,
 	end: string,
 	product: 'sat' | 'rnl' = 'sat',
-	concurrency = 6,
-	heldThrough: string | null = null
+	opts: { concurrency?: number; heldThrough?: string | null; today?: string } = {}
 ): Promise<GridDays> {
+	const concurrency = opts.concurrency ?? 6;
+	const heldThrough = opts.heldThrough ?? null;
+	// Without a today, the day after the window: its last month is the one still being published.
+	const today = toEpochDay(opts.today ?? fromEpochDay(toEpochDay(end) + 1));
 	const s = toEpochDay(start);
 	const days = Array.from({ length: Math.max(0, toEpochDay(end) - s + 1) }, (_, i) => fromEpochDay(s + i));
 	let got: { v: number | null; prelim: boolean }[];
@@ -138,7 +160,7 @@ export async function fetchChirps(
 			const batch = await mapLimit(days.slice(probed, probed + size), concurrency, (day) => gridMean(http, chirpsFinalUrl(day), cells));
 			batch.forEach((v, i) => (finals[probed + i] = v));
 			probed += batch.length;
-			if (batch.at(-1) === null) break;
+			if (batch.at(-1) === null && !finalExpected(days[probed - 1]!, today)) break;
 		}
 		got = await mapLimit(days, concurrency, async (day, i) => {
 			const f = finals[i]!;

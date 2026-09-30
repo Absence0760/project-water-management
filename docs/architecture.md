@@ -940,18 +940,29 @@ merges into:
   at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
   A `sat` fetch also reads only what can have changed (`fetchChirps`): CHC
-  publishes a month's finals together, in date order, so it probes the
-  finals from the window's first day (that day alone, then six at a time)
-  and stops after a batch whose last day has none; every later day goes
-  straight to the preliminary product. A preliminary value is published
-  once and only replaced by the final, so a day with no final that the feed
-  already holds (on or before its newest day, sent as the request's
-  `heldThrough`, bounded to the window) isn't read again: it comes back
-  null, which the merge keeps, and still counts in `prelimDays`. On the
+  publishes a month's finals together, about three weeks after it ends, so
+  it probes the finals from the window's first day (that day alone, then
+  six at a time) and stops after a batch whose last day has none in a month
+  whose finals may still be coming (ended less than 45 days ago,
+  `CHIRPS_FINAL_EXPECTED_DAYS`); every later day goes straight to the
+  preliminary product. A final missing from an older month is a gap in the
+  archive, so the probing goes on past it and the later finals are read as
+  finals; the marker stops before the gap, so that day is probed again each
+  fetch. A preliminary value is published once and only replaced by the
+  final, so a day with no final that the feed already holds isn't read
+  again: it comes back null, which the merge keeps, and still counts in
+  `prelimDays`. "Holds" is read from the series the answer merges into (the
+  live target, or the stage while a replacement backfills; store.ts
+  `heldSeries`) as the leading run of the window's days with a value, sent
+  as the request's `heldThrough`: an empty day inside it (published late,
+  deleted, or a gap the merge kept) ends the run and is read again. On the
   fixtures a caught-up feed's daily fetch goes from 194 range requests to 3
-  (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`). A final file missing
-  inside a published month stops the probing only when it ends a batch, and
-  then only until the window starts after it.
+  (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
+  **What this gives up:** a day before the final marker is never read
+  again, so a feed day deleted or overwritten there (an upload over it, a
+  restore) is not refilled by the feed; before #69 any day in the last 50
+  was. Changing the feed's place, product or series clears the marker, and
+  re-attaching the feed reads its whole window again.
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days

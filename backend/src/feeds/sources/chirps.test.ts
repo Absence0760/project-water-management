@@ -73,7 +73,7 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('2026-02-01')]: g(3),
 			[chirpsPrelimUrl('2026-02-03')]: g(5) // 02-02 missing between published days
 		});
-		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 'sat', 2);
+		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 'sat', { concurrency: 2 });
 		expect(r).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, null, 5], prelimDays: 2, finalThrough: '2026-01-31' });
 		expect(http.urls).not.toContain(chirpsPrelimUrl('2026-01-30'));
 	});
@@ -120,13 +120,38 @@ describe('fetchChirps', () => {
 		for (let d = 10; d <= 20; d++) files[chirpsPrelimUrl(`2026-01-${d}`)] = g(d);
 		files[chirpsPrelimUrl('2026-01-03')] = g(30);
 		const http = served(files);
-		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-01', '2026-01-20', 'sat', 4);
+		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-01', '2026-01-20', 'sat', { concurrency: 4 });
 		expect(r).toEqual({ startDate: '2026-01-01', values: [1, 2, 30, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], prelimDays: 12, finalThrough: '2026-01-02' });
 		// Batches [01], [02–05], [06–09], [10–13]: the last ends without a final, so 14–20 aren't probed.
 		const finals = new Set(http.urls.filter((u) => u.includes('/final/')));
 		expect(finals.size).toBe(13);
 		expect(finals).not.toContain(chirpsFinalUrl('2026-01-14'));
 		expect([...new Set(http.urls.filter((u) => u.includes('/prelim/') && u.includes('.2026.01.0')))]).toEqual([chirpsPrelimUrl('2026-01-03')]);
+	});
+
+	it('a final missing from a month whose finals are out is a gap: probing goes on and the later finals are read as finals', async () => {
+		const files: Record<string, Uint8Array> = { [chirpsPrelimUrl('2025-06-01')]: g(50) };
+		for (let d = 2; d <= 9; d++) files[chirpsFinalUrl(`2025-06-0${d}`)] = g(d);
+		const old = served(files);
+		// June ended more than CHIRPS_FINAL_EXPECTED_DAYS before today.
+		const r = await fetchChirps(old, [cell(0, 0)], '2025-06-01', '2025-06-09', 'sat', { today: '2025-09-01' });
+		expect(r).toEqual({ startDate: '2025-06-01', values: [50, 2, 3, 4, 5, 6, 7, 8, 9], prelimDays: 1 });
+		// The marker stops before the gap (here, the first day: none), so the next fetch probes it again.
+		expect(r).not.toHaveProperty('finalThrough');
+		// Positive control: while June's finals may still be on their way, a missing one stops the probing.
+		const recent = served(files);
+		const p = await fetchChirps(recent, [cell(0, 0)], '2025-06-01', '2025-06-09', 'sat', { today: '2025-07-20' });
+		expect(p).toEqual({ startDate: '2025-06-01', values: [50], prelimDays: 1 });
+		expect(new Set(recent.urls.filter((u) => u.includes('/final/')))).toEqual(new Set([chirpsFinalUrl('2025-06-01')]));
+		// A gap later in a published month: the marker stops just before it.
+		const gap = { ...files, [chirpsFinalUrl('2025-06-01')]: g(1), [chirpsPrelimUrl('2025-06-05')]: g(55) };
+		delete gap[chirpsFinalUrl('2025-06-05')];
+		expect(await fetchChirps(served(gap), [cell(0, 0)], '2025-06-01', '2025-06-09', 'sat', { today: '2025-09-01' })).toEqual({
+			startDate: '2025-06-01',
+			values: [1, 2, 3, 4, 55, 6, 7, 8, 9],
+			prelimDays: 1,
+			finalThrough: '2025-06-04'
+		});
 	});
 
 	it('sat does not re-read a day it holds (heldThrough) that has no final, and still reads a final that is out', async () => {
@@ -137,17 +162,17 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('2026-01-04')]: g(4),
 			[chirpsPrelimUrl('2026-01-05')]: g(5)
 		});
-		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-01', '2026-01-06', 'sat', 6, '2026-01-03');
+		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-01', '2026-01-06', 'sat', { heldThrough: '2026-01-03' });
 		// Nulls for the held days (the merge keeps what is there), counted as preliminary.
 		expect(r).toEqual({ startDate: '2026-01-01', values: [1, null, null, 4, 5], prelimDays: 4, finalThrough: '2026-01-01' });
 		expect(new Set(http.urls.filter((u) => u.includes('/prelim/')))).toEqual(new Set([chirpsPrelimUrl('2026-01-04'), chirpsPrelimUrl('2026-01-05'), chirpsPrelimUrl('2026-01-06')]));
 		// Nothing new after the held days: no values, but the held preliminary days still count.
 		const idle = served({});
-		expect(await fetchChirps(idle, [cell(0, 0)], '2026-01-02', '2026-01-06', 'sat', 6, '2026-01-04')).toEqual({ startDate: '2026-01-02', values: [], prelimDays: 3 });
+		expect(await fetchChirps(idle, [cell(0, 0)], '2026-01-02', '2026-01-06', 'sat', { heldThrough: '2026-01-04' })).toEqual({ startDate: '2026-01-02', values: [], prelimDays: 3 });
 		expect(idle.urls).toEqual([chirpsFinalUrl('2026-01-02'), chirpsPrelimUrl('2026-01-05'), chirpsPrelimUrl('2026-01-06')]);
 		// rnl has no preliminary days: heldThrough changes nothing.
 		const rnl = served({ [chirpsRnlUrl('2026-01-01')]: g(1), [chirpsRnlUrl('2026-01-02')]: g(2) });
-		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-01', '2026-01-03', 'rnl', 6, '2026-01-02')).toEqual({ startDate: '2026-01-01', values: [1, 2], prelimDays: 0, finalThrough: '2026-01-02' });
+		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-01', '2026-01-03', 'rnl', { heldThrough: '2026-01-02' })).toEqual({ startDate: '2026-01-01', values: [1, 2], prelimDays: 0, finalThrough: '2026-01-02' });
 	});
 
 	it('on the fixtures: rnl from 1981, sat only from 1998, each with its own daily timing', async () => {
@@ -198,10 +223,15 @@ describe('fetchChirps', () => {
 
 		it('asks for every day of a 31-, 30- and 28-day month exactly once, in order', async () => {
 			const http = served({});
-			await fetchChirps(http, [cell(0, 0)], '2025-01-01', '2025-04-30', 'sat', 1);
+			await fetchChirps(http, [cell(0, 0)], '2025-01-01', '2025-04-30', 'sat', { concurrency: 1 });
 			const day = (u: string) => u.match(/(\d{4})\.(\d{2})\.(\d{2})\.tif$/)!.slice(1).join('-');
-			// No final on the first day: none later either, so every day goes to the preliminary product.
-			expect(http.urls.filter((u) => u.includes('/final/')).map(day)).toEqual(['2025-01-01']);
+			// No final at all: every day goes to the preliminary product. The finals are probed in order, the
+			// old months' past their gaps and then up to the first batch without one in a month still being published.
+			const finals = http.urls.filter((u) => u.includes('/final/')).map(day);
+			expect(finals[0]).toBe('2025-01-01');
+			expect(new Set(finals).size).toBe(finals.length);
+			expect([...finals].sort()).toEqual(finals);
+			expect(finals.some((d) => d.startsWith('2025-04'))).toBe(false);
 			const prelims = http.urls.filter((u) => u.includes('/prelim/')).map(day);
 			expect(prelims).toHaveLength(31 + 28 + 31 + 30);
 			expect(new Set(prelims).size).toBe(prelims.length);

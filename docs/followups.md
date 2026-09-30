@@ -2441,7 +2441,7 @@ role and not before it.
         is read (#69):** the ingest keeps a checked final marker
         (`last_meta.finalThrough`) and the next window starts after it; a
         `sat` fetch stops probing finals after the first batch without one,
-        and doesn't re-read the preliminary days the feed holds
+        and doesn't re-read the preliminary days the series already holds
         (`heldThrough`). architecture.md § Data feeds, the window. On the
         fixtures a caught-up feed's daily fetch goes from 194 range requests
         to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days

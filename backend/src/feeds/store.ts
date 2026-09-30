@@ -199,6 +199,28 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 }
 
 /**
+ * The days of `window` the feed's answer will merge into, as the job's acting
+ * user (RLS), for fetch.ts heldThrough: the staged record while a confirmed
+ * replacement backfills (feed_stage; none staged yet, nothing is held), else
+ * the live target series. The slice starts on the window's first day, or on
+ * the series' first day when that is later. Null when there is none.
+ */
+export async function heldSeries(db: Db, feed: FeedRow, window: FetchWindow): Promise<{ startDate: string; values: (number | null)[] } | null> {
+	if (window.start > window.end) return null;
+	const slice = `to_char(greatest(start_date, $1::date), 'YYYY-MM-DD') AS "startDate",
+		"values"[greatest(1, ($1::date - start_date) + 1):($2::date - start_date) + 1] AS "values"`;
+	const { rows } =
+		feed.replaceFrom !== null
+			? await db.query<{ startDate: string; values: (number | null)[] | null }>(`SELECT ${slice} FROM feed_stage WHERE feed_id = $3`, [window.start, window.end, feed.id])
+			: await db.query<{ startDate: string; values: (number | null)[] | null }>(
+					`SELECT ${slice} FROM time_series WHERE project_id = $3 AND kind = $4 AND name = $5`,
+					[window.start, window.end, feed.projectId, feed.targetKind, feed.targetName]
+				);
+	const r = rows[0];
+	return r && r.values ? { startDate: r.startDate, values: r.values } : null;
+}
+
+/**
  * The issue date of the forecast a CHIRPS-GEFS feed last merged
  * (last_meta.issued), read after taking the feed's ingest lock so two
  * ingests of one feed see each other: the second waits for the first to

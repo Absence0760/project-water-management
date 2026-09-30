@@ -133,6 +133,16 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
  * day before the window (the window started after it, fetchWindow): the
  * later of the two. A marker that stops short of the window says nothing
  * about the days between, so only the answer's claim counts then.
+ *
+ * The ingest can't tell a final value from a preliminary one: the answer's
+ * days are only numbers, and in production they come from the fetcher
+ * Lambda, the one side that read the files. So a wrong claim is believed.
+ * That is bounded: the claim can only cover days of this answer with a
+ * value, the fetcher is our own code and the only role granted sending to
+ * `ingest-results` (infra/feeds.tf), and a wrong one costs only that those
+ * days aren't re-read until the feed's place, product or series changes
+ * (which clears the marker); no value is written that the answer didn't
+ * carry.
  */
 export function finalThroughAfter(feed: FeedRow, result: OkResult, window: FetchWindow): string | null {
 	if (feed.source !== 'chirps') return null;

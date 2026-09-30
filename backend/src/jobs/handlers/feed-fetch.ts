@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { fetchWindow, heldThrough, runFetch, utcToday } from '../../feeds/fetch.js';
 import { feedHttp } from '../../feeds/http.js';
 import { ingestResult } from '../../feeds/ingest.js';
-import { beginFeedFetch, feedForJob } from '../../feeds/store.js';
+import { beginFeedFetch, feedForJob, heldSeries } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
 
@@ -33,8 +33,8 @@ export const feedFetchHandler = defineHandler({
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
-		// A CHIRPS fetch needn't re-read the preliminary days the feed already holds (fetchChirps).
-		const held = heldThrough(feed.source, feed.lastDataDate, window);
+		// A CHIRPS fetch needn't re-read the preliminary days the series it merges into already holds (fetchChirps).
+		const held = feed.source === 'chirps' ? heldThrough(feed.source, window, await heldSeries(db, feed, window)) : undefined;
 		const request = { source: feed.source, config: feed.config, ...window, today, ...(held ? { heldThrough: held } : {}) };
 		if (feedFetcher() === 'sqs') {
 			await beginFeedFetch(db, feed.id, job.id, window);
