@@ -2074,13 +2074,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       Home/End step the read-out and the dot (`keyStep` in
       `charts/sparkline.ts`), with the point in words as `aria-valuetext`. A
       mouse press doesn't focus it. ui-playbook § 3; `sparklines.spec.ts`.
-- [ ] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
-      diagram labels work). The help `Diagram` never draws text under
+- [x] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
+      diagram labels work; done 2026-09-30). The help `Diagram` never draws text under
       9.5 px, so at column width the model pipeline, workflow, calibration
       loop, validation and rain-sources diagrams scroll a little sideways
-      instead of shrinking. Durable fix: redraw those five narrower (fewer
-      boxes per row, or stacked) so they fit the column whole at 1280 and
-      up. Waits on the operator's choice (keep the scroll, or redraw).
+      instead of shrinking (measured: the pipeline 53 px at 1440; at 1280 all
+      five, 40 to 213 px). Redrawn, text floor kept: every diagram is at most
+      660 units wide, which fits the 582 px column at 1280 (the pipeline top
+      to bottom, the workflow in two rows, the other three tighter).
+      `help/diagrams/width.test.ts` holds the width, and
+      `diagram-labels.spec.ts` checks none scrolls at 1440 or 1280 (ui.md §
+      Help).
 - [x] **Deleting a scenario's released base run sometimes answers 404**
       (issue #77, found 2026-09-28, fixed 2026-09-28): the scenarios e2e
       failed ~1 in 15. The cause was in the browser, not RLS (an editor's
@@ -2178,8 +2182,9 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       the self-checks used), and the self-checks link to it; the printable
       report keeps it under the checks. `self-checks.spec.ts` and
       `runs.spec.ts` pin it.
-- [ ] **The same water balance by water year in two places, and the
-      catchment's in a third** (issue #175's overlap check, 2026-09-29).
+- [x] **The same water balance by water year in two places, and the
+      catchment's in a third** (issue #175's overlap check, 2026-09-29; the
+      UI half done 2026-09-30, the choice of table still open, below).
       Model quality's *Water balance* (`#res-water-balance`, issue #137) and
       Dig deeper › Self-checks both draw the per-unit column-V balance by
       water year (`runs/WaterBalanceTable.svelte`, `runs/checks.ts`
@@ -2202,10 +2207,30 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       closure check (each water year's residual, pass or fail) with a link,
       and the summary CSV and `.xlsx` export keep both tables. Pin the
       surviving table's rendered lines with an e2e spec first, and update
-      ui.md § Water account, § Self-checks and the help articles.
-      **Who:** operator (which table is the client's).
+      ui.md § Water account, § Self-checks and the help articles. The
+      surviving table also gets the playbook's "Show all N" fold: on a
+      30-water-year run the Water balance table scrolls inside its 70vh box
+      and sideways at 1440.
+      **Who:** operator (which table is the client's; asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93)).
       **Trigger:** the next change to the Water account, the Water balance
       section or the Self-checks panel, or a client asking for the table.
+      **Done (2026-09-30), the part that doesn't wait on that choice:** on
+      Runs & results the Self-checks panel is now only the closure check
+      (one line: the balance closes in every water year and the whole run,
+      or the years that don't with their residuals; `runs/checks.ts`
+      `balanceClosure`) and a link to the table; the Water balance and the
+      Water account link to each other for the same run, each saying what
+      the other adds, instead of one repeating the other
+      (`self-checks.spec.ts` follows both links and Back). The printable
+      report still draws the table under its self-checks, its only copy
+      there.
+      - [ ] **Still open: which table is the client's** (operator). Then
+            either the Water account gains rain (mm), the runoff
+            coefficient, start and end storage and an m³ / Mm³ switch and
+            Model quality's Water balance becomes a link, or the account
+            becomes the link; the report prints the chosen one, and the
+            summary CSV and `.xlsx` keep both. Trigger unchanged.
 
 ## Roles and what each member sees
 
@@ -3429,6 +3454,21 @@ from the WP:
 
 ## Portfolio dashboard (WP-2.14)
 
+- [x] **Fold the portfolio into the project list as a team filter** (done
+      2026-09-30, issue #176). The list's rows already carried the
+      portfolio's figures from the same helpers; it gained the Restriction
+      (under Lowest dam) and Alerts columns, the 30-day units-short count,
+      the Figures age sort (the Data heading) and `?dir=desc`, and the tiles'
+      counts in its header line; with a team's chip picked it states that
+      team's thresholds and who can change them. `/teams/:id/portfolio`
+      redirects to `/?owner=team:<id>&sort=status`, keeping its sort. The
+      team thresholds still judge the rows (`GET /projects/outcomes`). Tests:
+      `portfolio.spec.ts` (rewritten for the team filter: figures, thresholds
+      and a viewer, old links and Back, sorting both ways, a farmer, a team
+      that isn't yours, thirty catchments at 1440 and 1280, axe),
+      `projects.spec.ts`, `teams.spec.ts`, `grouping.test.ts`,
+      `outcomes.test.ts`.
+
 - [x] **The project list's data age counted to the viewer's day, not the
       project's** (WUA-manager persona, #51; done 2026-09-29, issue #137).
       `GET /projects` rows carry the project's `today` (its time zone) and
@@ -3695,12 +3735,14 @@ Applicant view and the Applications tab. Left:
       if the client accepts that they could then file applications).
       Trigger: the first real NGO invited to comment (client decision,
       step-3 D5).
-- [ ] **The owner's inventory of every public link.** The Project page's
-      Share links list shows the baseline links only; scenario links are
-      listed per application (its Share dialog), made by assessors and
-      applicants. Durable fix: list every live link for the owner with its
-      target, and revoke from there. Trigger: before the first scenario
-      link is used with a real catchment.
+- [x] **The owner's inventory of every public link.** Done 2026-09-30:
+      the Project page's Share links list is every link in the project
+      (`GET …/share-links?scope=all`, owner only), the baseline's and each
+      application's, with what it opens, who made it, its dates and a
+      Withdraw behind a confirm ([ui.md § Project](./ui.md#project), [security.md §
+      Scenario links](./security.md#scenario-links-wp-315-115_scenario_share_notessql)).
+      Pack links join the same list once packs are a share-link target (the
+      item under § Evidence report).
 - [ ] **Afrikaans for the shared application page** (WP-3.15): the
       `share.scenario` strings are on the translation sheet
       (docs/i18n/af-translation-sheet.md). If they are not translated in the
@@ -3762,7 +3804,7 @@ Applicant view and the Applications tab. Left:
       the lever left is the ~0.5 s render delay: less script before the
       landing's first paint (the root layout's app-wide code). Trigger: the
       first deploy (Phase 6), tracked on #92 (moved there when #57 closed).
-- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+- [x] **`/welcome` in Afrikaans before hydration** (issue #51, the
       international persona). The page is prerendered once, in English, and
       `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
       `lang` switch together only once the app hydrates and loads the
@@ -3777,6 +3819,13 @@ Applicant view and the Applications tab. Left:
       or browser choice to the right one. Trigger: the landing page is
       linked from somewhere Afrikaans readers arrive first (a WUA's
       Afrikaans newsletter), or a screen-reader user reports it.
+      **Done** (issue #137, 2026-09-30): `/welcome` and `/welcome/af` are
+      prerendered from one route, `routes/welcome/[[lang=locale]]`, each in
+      its language with its own `<html lang>` (`hooks.server.ts`, no inline
+      script), canonical, `hreflang` alternates (`x-default` → `/welcome`)
+      and `og:locale`; the switch there is a pair of links, and `/welcome`
+      sends a visitor whose choice is Afrikaans on to `/welcome/af`
+      (ui.md § Landing page; `landing-language.spec.ts`).
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).

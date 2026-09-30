@@ -1,5 +1,5 @@
-// View helpers for ShareLinksPanel (WP-2.3 phase 2): a link's state and the
-// words for its row. Pure, so they are unit-tested (shareLinks.test.ts).
+// View helpers for ShareLinksPanel (WP-2.3 phase 2): a link's state, what it
+// opens (the owner's inventory of every link) and the words for its row. Pure, so they are unit-tested (shareLinks.test.ts).
 import type { ShareLink } from '$lib/api/types';
 import { fmtDate } from '$lib/format/number';
 
@@ -31,7 +31,21 @@ export interface LinkRow {
 	ends: string;
 	/** "2026-09-25 14:05", or "Never". */
 	lastUsed: string;
+	/** What it opens: "The published baseline", "Application “Raise my dam”" (the owner's inventory). */
+	opens: string;
+	/** Why a live link opens nothing just now (its application withdrawn, or no longer readable); null when it opens. */
+	opensNothing: string | null;
 	canRevoke: boolean;
+}
+
+/** What a link opens, in words, and why it opens nothing just now if it doesn't. */
+export function linkTarget(link: Pick<ShareLink, 'targetKind' | 'target'>): { opens: string; opensNothing: string | null } {
+	if (link.targetKind === null) return { opens: 'The published baseline', opensNothing: null };
+	const t = link.target;
+	if (!t) return { opens: 'An application you can’t open', opensNothing: 'Its application is a draft again or was deleted: the link opens nothing.' };
+	const opens = `Application “${t.name}”`;
+	if (t.status === 'submitted' || t.status === 'decided') return { opens, opensNothing: null };
+	return { opens, opensNothing: 'The application is withdrawn: the link opens nothing until it is submitted again.' };
 }
 
 /** One row of the list, in the viewer's own time zone. */
@@ -45,6 +59,7 @@ export function linkRow(link: ShareLink, now: number = Date.now()): LinkRow {
 		created: `${fmtDate(link.createdAt)}${by(link.createdBy)}`,
 		ends: state === 'revoked' ? `Withdrawn ${fmtDate(link.revokedAt)}${by(link.revokedBy)}` : fmtDate(link.expiresAt),
 		lastUsed: link.lastUsedAt ? fmtDate(link.lastUsedAt, true) : 'Never',
+		...linkTarget(link),
 		canRevoke: state === 'live'
 	};
 }
@@ -55,5 +70,6 @@ export function sortLinks(links: readonly ShareLink[], now: number = Date.now())
 	return [...live, ...links.filter((l) => linkState(l, now) !== 'live')];
 }
 
-/** The confirm before a revoke. */
-export const revokeQuestion = (label: string) => `Withdraw the link “${label}”? Anyone who has it will see “This link has expired or was withdrawn” from now on. This can’t be undone.`;
+/** The confirm before a revoke; `opens` names its target in the owner's inventory. */
+export const revokeQuestion = (label: string, opens?: string) =>
+	`Withdraw the link “${label}”${opens ? ` (${opens.charAt(0).toLowerCase()}${opens.slice(1)})` : ''}? Anyone who has it will see “This link has expired or was withdrawn” from now on. This can’t be undone.`;

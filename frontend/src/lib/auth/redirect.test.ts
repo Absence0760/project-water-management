@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeNext } from './redirect';
-import { isLandingRoot, isPublicPath, routeAccess, termsGateApplies } from './session.svelte';
+import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, STATIC_ROUTES, termsGateApplies } from './session.svelte';
 
 describe('safeNext', () => {
 	it('allows app-relative paths only', () => {
@@ -95,6 +95,15 @@ describe('routeAccess', () => {
 		expect(routeAccess('/welcome', '', true)).toBe('show');
 		expect(isPublicPath('/app/welcome', '/app')).toBe(true);
 		expect(routeAccess('/welcomes', '', false)).toBe('login');
+	});
+
+	it('opens the landing page in every language, and names its address per language (issue #137)', () => {
+		expect(routeAccess('/welcome/af', '', false)).toBe('show');
+		expect(routeAccess('/welcome/af', '', true)).toBe('show');
+		expect(isPublicPath('/app/welcome/af', '/app')).toBe(true);
+		expect(landingPath('en')).toBe('/welcome');
+		expect(landingPath('af')).toBe('/welcome/af');
+		expect(STATIC_ROUTES).toContain(LANDING_ROUTE);
 	});
 
 	it('opens the legal pages and the methods page to anyone, signed in or out', () => {

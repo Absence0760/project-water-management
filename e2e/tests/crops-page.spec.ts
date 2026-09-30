@@ -135,7 +135,18 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/crop=/);
 	await expect(page.getByTestId('crop-row')).toHaveCount(2);
+	// The Edit button that opened the sheet went with its row: the focus moves to the next crop's.
+	await expect(page.getByRole('button', { name: 'Edit Lucerne' })).toBeFocused();
 	await expect(page.getByRole('img', { name: 'Lower farm: 12 ha, Orchard 12 ha' })).toBeVisible();
+
+	// Lucerne (planted nowhere: no question) was last: the focus goes to the crop now last. With the list empty, to Add crop.
+	await (await openCropSheet(page, 'Lucerne')).getByRole('button', { name: 'Remove Lucerne' }).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Edit Orchard' })).toBeFocused();
+	await (await openCropSheet(page, 'Orchard')).getByRole('button', { name: 'Remove Orchard' }).click();
+	await answerConfirm(page, true, 'Remove crop “Orchard”?');
+	await expect(page.getByTestId('crop-row')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Add crop', exact: true })).toBeFocused();
 });
 
 test('the Tables menu and Edit areas open the full grids over the page; a farm opens its drawer', async ({ page, owner }) => {

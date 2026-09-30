@@ -310,8 +310,9 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	const pr = row(page, 'Outcome published');
 	await expect(pr.locator('td.c-ewr')).toContainText(pillText(pubFig)!);
 	await expect(pr.locator('td.c-ewr')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
-	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short in the week to 28 Jan 2022\s*$/);
-	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ %\s*$/);
+	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short in the week to 28 Jan 2022 \d+ in the 30 days to 28 Jan 2022\s*$/);
+	// Published without a restriction: said so, under the dam.
+	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ % Restriction: None\s*$/);
 	await expect(pr.locator('td.c-run')).toContainText('published today');
 
 	// Run, not published: the EWR from the run; unit figures wait for a publication.

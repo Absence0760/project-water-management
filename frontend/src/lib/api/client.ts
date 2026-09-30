@@ -623,6 +623,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		shareLinks: {
 			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
 			list: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links`).then((r) => r.links),
+			/** Every link in the project, the baseline's and each application's, with its target (owner: the Project page's inventory). */
+			listAll: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links?scope=all`).then((r) => r.links),
 			/** Make a link (owner). `url` carries the token: this is the only time it is shown. */
 			create: (id: string, label: string, expiresInDays: number) =>
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),

@@ -962,8 +962,10 @@ email show them by the project role they give, viewer / editor / owner
 ### Portfolio
 
 `GET /teams/:id/portfolio` (roadmap WP-2.14, `backend/src/portfolio/`): every
-catchment of the team you can see, with its latest figures, for the WUA's
-dashboard. Any team member; a team you aren't in is `404`, and so is every
+catchment of the team you can see, with its latest figures, for the teams
+list's cards and the team page (the portfolio page that first read it became
+the project list's team filter, issue #176, which reads the same figures from
+`GET /projects/outcomes`). Any team member; a team you aren't in is `404`, and so is every
 farmer (a farmer has no team membership). The rows come from **one query**
 run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is
@@ -2351,7 +2353,7 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | `?scenarioId=` (optional) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. Without `scenarioId`: the baseline links (owner). With it: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404` | owner; contributor with `scenarioId` |
+| GET | `/projects/:id/share-links` | `?scenarioId=` or `?scope=all` (optional, not both: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With neither: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404` | owner; contributor with `scenarioId` |
 | POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided | owner; contributor for a scenario link |
 | DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
@@ -2361,7 +2363,10 @@ never a farm's row, name or id.
 - `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt, targetKind, targetId, mine }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
   gone; `targetKind` `null` = the baseline, `'scenario'` with `targetId` its
-  scenario; `mine` = the caller made it). `lastUsedAt` moves at most once an
+  scenario; `target` = `{ name, status }` of that scenario as the caller
+  reads it under RLS, `null` for the baseline and for a scenario they can't
+  read now (an application reopened as a draft, or deleted), whose link
+  opens nothing; `mine` = the caller made it). `lastUsedAt` moves at most once an
   hour, on a `/share/view` or `/share/scenario`.
 - A link opens **only its own target**: a scenario link answers `404` on
   `/share/view` and `/share/series`, a baseline link `404` on

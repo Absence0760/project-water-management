@@ -3,7 +3,11 @@
 	// owner makes a link to the published baseline for someone outside the
 	// project, copies it once (the token isn't kept, so it can't be shown
 	// again), sees when each was last opened, and withdraws one. Owners only:
-	// OverviewTab renders this for an owner, and the API answers anyone else 403.
+	// ProjectTab renders this for an owner, and the API answers anyone else 403.
+	// The list there is the owner's inventory of every public link in the
+	// project (`?scope=all`): the baseline's and each application's, made by
+	// its assessors or applicant, each with what it opens, so the owner can
+	// withdraw any of them from one place.
 	// With `scenario` (WP-3.15, docs/ui.md § Applications) it is one
 	// submitted or decided scenario's links instead, in its Share dialog: an
 	// assessor lists and withdraws every link to it, its applicant the ones
@@ -17,7 +21,7 @@
 	let { projectId, scenario }: { projectId: string; scenario?: { id: string; name: string; status: ScenarioStatus } } = $props();
 	/** A link opens a scenario only while it is submitted or decided (app_share_scenario). */
 	const shareable = $derived(!scenario || scenario.status === 'submitted' || scenario.status === 'decided');
-	const listLinks = () => (scenario ? api.shareLinks.listForScenario(projectId, scenario.id) : api.shareLinks.list(projectId));
+	const listLinks = () => (scenario ? api.shareLinks.listForScenario(projectId, scenario.id) : api.shareLinks.listAll(projectId));
 
 	let links = $state<ShareLink[]>([]);
 	let loading = $state(true);
@@ -46,7 +50,7 @@
 				links = await listLinks();
 				published = true;
 			} else {
-				const [list, pub] = await Promise.all([api.shareLinks.list(projectId), api.publication.get(projectId)]);
+				const [list, pub] = await Promise.all([listLinks(), api.publication.get(projectId)]);
 				links = list;
 				published = pub.current !== null;
 			}
@@ -89,8 +93,8 @@
 		}
 	}
 
-	async function revoke(id: string, name: string) {
-		if (!(await confirmDialog({ title: 'Withdraw this link?', message: revokeQuestion(name), confirmLabel: 'Withdraw link', danger: true }))) return;
+	async function revoke(id: string, name: string, opens?: string) {
+		if (!(await confirmDialog({ title: 'Withdraw this link?', message: revokeQuestion(name, opens), confirmLabel: 'Withdraw link', danger: true }))) return;
 		busy = id;
 		error = null;
 		try {
@@ -123,6 +127,10 @@
 		<p class="muted small intro">
 			A read-only link to the published baseline for someone outside the project: the catchment’s reserve status and the WUA’s notice,
 			signed out. It never shows a hydrological unit’s name or figures, or the modeller’s note.
+		</p>
+		<p class="muted small intro" data-testid="share-inventory-note">
+			The list is every public link in this project: the baseline links made here, and the links to applications that their assessors
+			or applicants make from an application’s Share dialog. You can withdraw any of them.
 		</p>
 	{/if}
 	{#if published === false}
@@ -178,14 +186,16 @@
 						<tr class:dead={r.state !== 'live'}>
 							<th scope="row">
 								{r.label}
+								{#if !scenario}<span class="opens">{r.opens}</span>{/if}
 								<span class="state {r.state}">{STATE_WORD[r.state]}</span>
+								{#if !scenario && r.state === 'live' && r.opensNothing}<span class="nothing">{r.opensNothing}</span>{/if}
 							</th>
 							<td>{r.created}</td>
 							<td>{r.ends}</td>
 							<td>{r.lastUsed}</td>
 							<td class="act">
 								{#if r.canRevoke}
-									<button type="button" class="btn btn-sm btn-danger" disabled={busy === r.id} onclick={() => revoke(r.id, r.label)} aria-label="Withdraw {r.label}">Withdraw</button>
+									<button type="button" class="btn btn-sm btn-danger" disabled={busy === r.id} onclick={() => revoke(r.id, r.label, scenario ? undefined : r.opens)} aria-label="Withdraw {r.label}">Withdraw</button>
 								{/if}
 							</td>
 						</tr>
@@ -257,6 +267,19 @@
 	}
 	.state.live {
 		color: var(--success);
+	}
+	.opens {
+		display: block;
+		font-weight: 400;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		overflow-wrap: anywhere;
+	}
+	.nothing {
+		display: block;
+		font-weight: 400;
+		font-size: 0.8rem;
+		color: var(--warning);
 	}
 	tr.dead th,
 	tr.dead td {

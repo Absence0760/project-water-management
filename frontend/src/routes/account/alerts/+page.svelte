@@ -10,9 +10,10 @@
 	// Layout (issue #17): the section header, then one card per catchment,
 	// each alert one row (its name beside a three-way switch), so a farmer
 	// with thirty farms reads a list, not thirty stacked radio groups.
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '$lib/api';
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { session } from '$lib/auth/session.svelte';
 	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText, thresholdLine } from '$lib/components/alerts/words';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
@@ -47,6 +48,8 @@
 			await api.alerts.resume();
 			if (session.user) session.user = { ...session.user, mailSuppressed: null };
 			resumed = true;
+			// The banner, and the button just pressed, are gone (WCAG 2.4.3).
+			void focusPageStart();
 		} catch (e) {
 			resumeError = resumeProblem(e);
 		} finally {
@@ -62,7 +65,7 @@
 	const pending: Record<string, number> = {};
 	const failed: Record<string, string | undefined> = {};
 	const queue: Record<string, Promise<void>> = {};
-	function choose(p: ProjectAlerts, items: { kind: AlertChoice['kind'] | 'all'; nodeId?: string | null; mode: AlertMode }[]) {
+	function choose(p: ProjectAlerts, items: { kind: AlertChoice['kind'] | 'all'; nodeId?: string | null; mode: AlertMode }[]): Promise<void> {
 		const id = p.id;
 		if (!pending[id]) failed[id] = undefined;
 		pending[id] = (pending[id] ?? 0) + 1;
@@ -83,6 +86,23 @@
 			// A failed save leaves the switch where the server has it.
 			if (failed[id]) await load();
 		});
+		return queue[id];
+	}
+
+	// Each radio shows the server's choice whenever the page takes the
+	// server's answer. `checked={…}` alone can't: Svelte writes it only when
+	// its value changes, and a failed save leaves the server's value as it
+	// was, so the radio the person picked stayed picked in the DOM.
+	const serverChecked = (on: () => boolean) => (el: HTMLInputElement) => {
+		el.checked = on();
+	};
+
+	// A muted catchment's "Turn alert emails back on" goes with the note it
+	// sits in: focus its card's title rather than drop to the page (WCAG 2.4.3).
+	async function unmute(p: ProjectAlerts) {
+		await choose(p, [{ kind: 'all', mode: 'immediate' }]);
+		await tick();
+		if (!document.activeElement || document.activeElement === document.body) document.getElementById(`p-${p.id}`)?.focus();
 	}
 </script>
 
@@ -117,7 +137,7 @@
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('Try again')}</button></div>
 	{:else if projects === null}
-		<p class="muted" role="status">…</p>
+		<p class="muted" role="status">{t('Loading…')}</p>
 	{:else if !projects.length}
 		<p class="panel empty">{t('None of your catchments can send you alerts yet.')}</p>
 	{:else}
@@ -127,13 +147,13 @@
 				{@const offRule = p.choices.some((c) => !c.ruleOn)}
 				<section class="panel card" aria-labelledby="p-{p.id}" aria-busy={s.saving ? 'true' : undefined}>
 					<div class="card-head">
-						<h2 id="p-{p.id}">{p.name}</h2>
+						<h2 id="p-{p.id}" tabindex="-1">{p.name}</h2>
 						<p class="status" role="status" aria-live="polite">{s.saving ? t('Saving…') : s.saved ? t('Saved.') : ''}</p>
 					</div>
 					{#if p.muted}
 						<div class="alert alert-info muted-note">
 							{t('All alert emails for this catchment are off.')}
-							<button type="button" class="btn btn-sm" onclick={() => choose(p, [{ kind: 'all', mode: 'immediate' }])}>{t('Turn alert emails back on')}</button>
+							<button type="button" class="btn btn-sm" onclick={() => unmute(p)}>{t('Turn alert emails back on')}</button>
 						</div>
 					{/if}
 					{#if s.error}<div class="alert alert-error" role="alert">{s.error}</div>{/if}
@@ -154,7 +174,7 @@
 												type="radio"
 												name={slot(p, c)}
 												value={m}
-												checked={c.mode === m}
+												{@attach serverChecked(() => c.mode === m)}
 												onchange={() => choose(p, [{ kind: c.kind, nodeId: c.nodeId, mode: m }])}
 											/>
 											<svg class="tick" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L9.5 3.5" /></svg>
