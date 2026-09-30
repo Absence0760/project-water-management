@@ -119,6 +119,65 @@ def compare(py: dict, eng: dict) -> dict:
     return res
 
 
+def _close(a: float, b: float) -> bool:
+    return abs(a - b) <= ATOL + RTOL * max(abs(a), abs(b))
+
+
+def compare_summary(py: dict, eng: dict | None) -> tuple[dict, list[str]]:
+    """RunSummary.allocations' run-dependent parts (model.md §2.12a): per
+    capped unit and source the years the cap bound (`capReached`) and the
+    days each limit held use back (`limitBound`); per scaled unit the demand
+    and volume of each water year (`scaled`). Returns per-part (worst |Δ|,
+    ok) and the disagreements."""
+    parts: dict[str, list] = {}
+    bad: list[str] = []
+    mode = (eng or {}).get("mode")
+    if mode not in ("cap", "fullAllocation"):
+        if py:
+            bad.append("python has an allocation summary, the engine none")
+        return parts, bad
+    seen = set()
+    for node in eng.get("nodes", []):
+        nid = node["nodeId"]
+        if mode == "cap":
+            for src in node.get("sources", []):
+                key = (nid, src["waterSource"])
+                seen.add(key)
+                mine = py.get(key, {"capReached": [], "limitBound": []})
+                for part, fields in (("capReached", ("budgetM3", "usedM3")), ("limitBound", ("days", "volumeDays", "rateDays", "monthsDays"))):
+                    a = mine[part]
+                    b = src.get(part) or []
+                    worst = 0.0
+                    ok = [r["waterYear"] for r in a] == [r["waterYear"] for r in b]
+                    if ok:
+                        for ra, rb in zip(a, b):
+                            for f in fields:
+                                worst = max(worst, abs(ra[f] - rb[f]))
+                                ok = ok and _close(ra[f], rb[f])
+                    parts.setdefault(part, []).append((worst, ok))
+                    if not ok:
+                        bad.append(f"allocations.{part} ({nid}, {src['waterSource']}): python {a} vs engine {b}")
+        else:
+            key = (nid, "scaled")
+            seen.add(key)
+            a = py.get(key, [])
+            b = node.get("scaled") or []
+            worst = 0.0
+            ok = [r["waterYear"] for r in a] == [r["waterYear"] for r in b]
+            if ok:
+                for ra, rb in zip(a, b):
+                    for f in ("demandM3", "registeredM3"):
+                        worst = max(worst, abs(ra[f] - rb[f]))
+                        ok = ok and _close(ra[f], rb[f])
+            parts.setdefault("scaled", []).append((worst, ok))
+            if not ok:
+                bad.append(f"allocations.scaled ({nid}): python {a} vs engine {b}")
+    for key, v in py.items():
+        if key not in seen and (v if isinstance(v, list) else (v["capReached"] or v["limitBound"])):
+            bad.append(f"allocations {key}: only in python")
+    return parts, bad
+
+
 def build_cases(tmp: Path, n_random: int, seed: int, examples: bool) -> list[tuple[str, Path, Path]]:
     """Write every case's input, run the engine on all of them in one process,
     and return (name, input path, engine output path)."""
@@ -178,8 +237,17 @@ def evaluate(cases, impl=model, notes=None) -> dict:
         for k in r["only_engine"]:
             if notes is not None:
                 notes.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in the engine's output")
+        parts, bad = compare_summary(py.get("summary") or {}, eng.get("allocations"))
+        failures.extend(f"{name}: {b}" for b in bad)
+        for part, rows in parts.items():
+            agg = per_key.setdefault(f"allocations.{part}", {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
+            for worst, ok in rows:
+                agg["n"] += 1
+                agg["abs"] = max(agg["abs"], worst)
+                agg["bad"] += 0 if ok else 1
         for (node, key), c in r["columns"].items():
-            key = "transfer_rule@<rule>" if key.startswith("transfer_rule@") else key
+            if "@" in key:
+                key = key.split("@")[0] + "@<id>"
             agg = per_key.setdefault(key, {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
             agg["n"] += 1
             agg["abs"] = max(agg["abs"], c["abs"])

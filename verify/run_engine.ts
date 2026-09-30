@@ -6,7 +6,7 @@
 //   tsx verify/run_engine.ts examples <out dir>
 //
 // `run` reads a ModelInput document and writes { startDate, endDate, days,
-// warnings, series: [{ nodeId, key, values }] } (NaN written as null), or
+// warnings, allocations (RunSummary.allocations), series: [{ nodeId, key, values }] } (NaN written as null), or
 // { error } when runModel refuses the input.
 // `examples` writes the three invented example catchments' inputs, as
 // `pnpm seed:examples` builds them, without the automatic fit (so on GR4J's
@@ -34,6 +34,8 @@ function runOne(inPath: string, outPath: string): void {
 		endDate: out.endDate,
 		days: out.days,
 		warnings: out.summary.warnings ?? [],
+		// The cap's summary (§2.12a): which limit bound, per unit, source and water year.
+		allocations: out.summary.allocations ?? null,
 		series: out.series.map((s) => ({ nodeId: s.nodeId, key: s.key, values: s.values.map((v) => (Number.isFinite(v) ? v : null)) }))
 	};
 	writeFileSync(outPath, JSON.stringify(doc));
