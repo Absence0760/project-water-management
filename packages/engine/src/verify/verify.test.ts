@@ -247,6 +247,24 @@ describe('the assurance self-check (engine 1.33.0, issue #192)', () => {
 		expect(check(cell(structuredClone(out), (sa) => sa.stress.system.ratio)).detail).toMatch(/^assurance stress grid system /);
 	});
 
+	it('fails on failure runs, the annual measure or a month’s ratios off (every figure of a node is redone)', () => {
+		const withRuns = out.summary.supplyAssurance!.reliability.findIndex((r) => r.failureRuns > 0);
+		expect(withRuns).toBeGreaterThanOrEqual(0);
+		type R = NonNullable<ModelOutput['summary']['supplyAssurance']>['reliability'][number];
+		const tamper = (i: number, f: (r: R) => void) => {
+			const t: ModelOutput = structuredClone(out);
+			f(t.summary.supplyAssurance!.reliability[i]!);
+			return check(t).detail;
+		};
+		for (const f of [(r: R) => (r.failureRuns += 1), (r: R) => (r.longestFailureDays += 1), (r: R) => (r.meanFailureDays! += 0.5), (r: R) => (r.meanFailureDeficitM3! *= 1.01), (r: R) => (r.maxFailureDeficitM3 *= 1.01)])
+			expect(tamper(withRuns, f)).toMatch(/: failure runs \d+ \(longest/);
+		for (const f of [(r: R) => (r.waterYears += 1), (r: R) => (r.partWaterYears = (r.partWaterYears ?? 0) + 1), (r: R) => (r.waterYearsMet += 1), (r: R) => (r.annualReliability = 1.5)])
+			expect(tamper(0, f)).toMatch(/water years met \(\d+ part years\), its own daily series give/);
+		const month = out.summary.supplyAssurance!.reliability[0]!.months.findIndex((m) => m.demandDays > 0);
+		for (const f of [(r: R) => (r.months[month]!.timeReliability! /= 2), (r: R) => (r.months[month]!.volumetricReliability! /= 2)])
+			expect(tamper(0, f)).toMatch(/water-year month \d+'s reliability ratios don't follow/);
+	});
+
 	it('holds the water account’s EWR rows to each site’s own series, the pragmatic EWR and a rule table alike', () => {
 		const met: ModelOutput = structuredClone(out);
 		met.summary.supplyAssurance!.waterAccount.years[0]!.ewr[0]!.metM3 += 1;

@@ -29,6 +29,8 @@ export const DEFAULT_ANNUAL_THRESHOLD = 0.9;
  * the demand: supply = demand − (demand − surface) can differ from demand in
  * its last bit, and a residue is not a failure.
  */
+// verify/checks.ts assuranceTally hardcodes this 1e-9 on purpose, so the assurance
+// self-check stays independent of this module: change both together.
 const MET_NOISE = 1e-9;
 
 export type StressClass = 'low' | 'moderate' | 'high' | 'severe' | 'critical';
