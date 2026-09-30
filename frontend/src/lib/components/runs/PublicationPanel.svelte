@@ -38,7 +38,13 @@
 
 	let dialogOpen = $state(false);
 	let editing = $state(false);
+	// The edit form's notice and the publish dialog's are separate: with one
+	// shared draft, opening Publish while editing threw the edit away, and a
+	// cancelled publish left its text in the edit form.
 	let draft = $state<NoticeDraft>(emptyDraft());
+	let pubDraft = $state<NoticeDraft>(emptyDraft());
+	// A failed publish's message belongs to the dialog; a failed save's to the edit form.
+	let pubError = $state<string | null>(null);
 	let note = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -46,9 +52,9 @@
 
 	function openPublish() {
 		// Start from the current notice: re-publishing usually keeps it.
-		draft = draftFrom(current);
+		pubDraft = draftFrom(current);
 		note = '';
-		error = null;
+		pubError = null;
 		done = null;
 		dialogOpen = true;
 	}
@@ -62,13 +68,14 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 	async function publish() {
-		const parsed = parseDraft(draft);
+		if (saving) return;
+		const parsed = parseDraft(pubDraft);
 		if (!parsed.ok) {
-			error = parsed.error;
+			pubError = parsed.error;
 			return;
 		}
 		saving = true;
-		error = null;
+		pubError = null;
 		try {
 			const { publication, farms } = await api.publication.publish(projectId, {
 				runId: run.id,
@@ -76,12 +83,25 @@
 				nextExpectedOn: parsed.nextExpectedOn,
 				...(note.trim() ? { note: note.trim() } : {})
 			});
-			const { history: h } = await api.publication.get(projectId);
+			const published = `Published. ${farms === 1 ? '1 farmer view' : `${farms} farmer views`} updated.`;
 			dialogOpen = false;
-			done = `Published. ${farms === 1 ? '1 farmer view' : `${farms} farmer views`} updated.`;
+			// The run is published now, whatever the history fetch does: a failure
+			// there must not read as a failed publish (and invite a second one).
+			// Without it, the history is put together here, and the panel says so.
+			let h: PublicationMeta[];
+			try {
+				h = (await api.publication.get(projectId)).history;
+				done = published;
+			} catch {
+				h = [
+					{ id: publication.id, runId: publication.runId, publishedAt: publication.publishedAt, publishedBy: publication.publishedBy, restriction: { level: publication.restriction.level }, supersededAt: null },
+					...history.filter((x) => x.id !== publication.id).map((x) => (x.supersededAt ? x : { ...x, supersededAt: publication.publishedAt }))
+				];
+				done = `${published} The publication history couldn’t be refreshed: reload the page to see it.`;
+			}
 			onChange?.({ current: publication, history: h });
 		} catch (e) {
-			error = msg(e);
+			pubError = msg(e);
 		} finally {
 			saving = false;
 		}
@@ -111,28 +131,28 @@
 	}
 </script>
 
-{#snippet noticeFields(prefix: string)}
+{#snippet noticeFields(prefix: string, d: NoticeDraft)}
 	<fieldset class="notice-fields">
 		<legend>The WUA’s notice</legend>
 		<div class="row">
 			<div class="field">
 				<label for="{prefix}-level">Level</label>
-				<select id="{prefix}-level" bind:value={draft.level}>
+				<select id="{prefix}-level" bind:value={d.level}>
 					{#each ['none', 'advisory', 'restricted'] as const as level (level)}<option value={level}>{LEVEL_LABEL[level]}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
 				<label for="{prefix}-pct">Cut <span class="muted">(%, optional)</span></label>
-				<input id="{prefix}-pct" inputmode="decimal" bind:value={draft.pct} disabled={draft.level === 'none'} />
+				<input id="{prefix}-pct" inputmode="decimal" bind:value={d.pct} disabled={d.level === 'none'} />
 			</div>
 			<div class="field">
 				<label for="{prefix}-next">Next update expected <span class="muted">(optional)</span></label>
-				<input id="{prefix}-next" type="date" bind:value={draft.nextExpectedOn} />
+				<input id="{prefix}-next" type="date" bind:value={d.nextExpectedOn} />
 			</div>
 		</div>
 		{#each noticeTextFields() as f (f.code)}
 			<label for="{prefix}-{f.code}">{f.label} <span class="muted">(optional)</span></label>
-			<textarea id="{prefix}-{f.code}" lang={f.code} rows="3" maxlength={PUBLICATION_TEXT_MAX} bind:value={draft.notice[f.code]}></textarea>
+			<textarea id="{prefix}-{f.code}" lang={f.code} rows="3" maxlength={PUBLICATION_TEXT_MAX} bind:value={d.notice[f.code]}></textarea>
 		{/each}
 		<p class="muted small">Farmers read the notice first, in their language (in English, or another one written, when theirs is empty). The app never writes restriction wording itself.</p>
 	</fieldset>
@@ -178,7 +198,7 @@
 		</div>
 		{#if editing && current}
 			<form class="edit" onsubmit={saveNotice} aria-label="Edit the notice">
-				{@render noticeFields(`${uid}-edit`)}
+				{@render noticeFields(`${uid}-edit`, draft)}
 				<div class="acts">
 					<button type="submit" class="btn btn-primary btn-sm" disabled={saving}>{saving ? 'Saving…' : 'Save notice'}</button>
 					<button type="button" class="btn btn-sm" onclick={() => (editing = false)} disabled={saving}>Cancel</button>
@@ -186,7 +206,7 @@
 			</form>
 		{/if}
 	{/if}
-	{#if error && !dialogOpen}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if error && editing}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	{#if done}<p class="alert alert-info" role="status">{done}</p>{/if}
 </section>
 
@@ -201,10 +221,10 @@
 			{noStop === 1 ? '1 hydrological unit’s dam has' : `${noStop} hydrological units’ dams have`} no stop level (0 %), so their farmers are told the model assumes the pump can empty the dam. Set each dam’s stop level on the Network tab to show them the water they can still use.
 		</p>
 	{/if}
-	{@render noticeFields(`${uid}-pub`)}
+	{@render noticeFields(`${uid}-pub`, pubDraft)}
 	<label for="{uid}-note">Note for the project’s staff <span class="muted">(optional; farmers don’t see it)</span></label>
 	<textarea id="{uid}-note" rows="2" maxlength={PUBLICATION_TEXT_MAX} bind:value={note}></textarea>
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if pubError}<div class="alert alert-error" role="alert">{pubError}</div>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (dialogOpen = false)} disabled={saving}>Cancel</button>
 		<button type="button" class="btn btn-primary" onclick={publish} disabled={saving}>{saving ? 'Publishing…' : 'Publish'}</button>

@@ -164,7 +164,10 @@ test('a restore from the detail picks the restore itself; nothing recorded says 
 	await expect(historyDetail(page).getByTestId('history-differences').getByRole('listitem')).not.toHaveCount(0);
 	await historyDetail(page).getByRole('button', { name: 'Restore this version' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Restore this version?' });
-	await dialog.getByRole('button', { name: 'Restore', exact: true }).click();
+	// Enter in the reason restores, once the preview has loaded.
+	await expect(dialog.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
+	await dialog.getByLabel(/^Reason for restoring/).fill('survey redone');
+	await dialog.getByLabel(/^Reason for restoring/).press('Enter');
 	await expect(dialog).toBeHidden();
 	await expect(page.getByRole('status').filter({ hasText: 'Restored the version of' })).toBeVisible();
 	await expect(page).not.toHaveURL(/entry=/);

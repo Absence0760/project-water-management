@@ -29,7 +29,6 @@
 	import { session } from '$lib/auth/session.svelte';
 	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
 	import { upsertInvite } from '$lib/components/auth-extras/invites';
-	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
@@ -81,7 +80,6 @@
 	const invitesApi = emailAuthApi(api).teamInvites;
 	let invites = $state<Invite[]>([]);
 
-	let deleteOpen = $state(false);
 	let deleting = $state(false);
 
 	const isAdmin = $derived(team?.role === 'admin');
@@ -212,9 +210,18 @@
 	}
 
 	/** From the settings sheet: close it, then ask in the confirm dialog (never two modals stacked). */
-	function askDelete() {
+	async function askDelete() {
+		// A delete already on its way: the sheet reopened meanwhile doesn't send a second one.
+		if (!team || deleting) return;
 		settingsOpen = false;
-		deleteOpen = true;
+		const n = team.projectCount;
+		const ok = await confirmDialog({
+			title: 'Delete team?',
+			message: `Delete ${team.name}? Its ${n} project${n === 1 ? '' : 's'} stay, but members who only had access through the team lose it. This can't be undone.`,
+			confirmLabel: 'Delete team',
+			danger: true
+		});
+		if (ok) await deleteTeam();
 	}
 
 	async function deleteTeam() {
@@ -223,10 +230,8 @@
 		error = null;
 		try {
 			await api.teams.remove(team.id);
-			deleteOpen = false;
 			await goto(`${base}/teams`);
 		} catch (err) {
-			deleteOpen = false;
 			error = msg(err);
 		} finally {
 			deleting = false;
@@ -456,18 +461,6 @@
 	</LoadState>
 </main>
 
-<Dialog bind:open={deleteOpen} title="Delete team?">
-	<p>
-		Delete <strong>{team?.name}</strong>? Its {team?.projectCount ?? 0} project{team?.projectCount === 1 ? '' : 's'}
-		stay, but members who only had access through the team lose it. This can't be undone.
-	</p>
-	{#snippet actions()}
-		<button type="button" class="btn" onclick={() => (deleteOpen = false)}>Cancel</button>
-		<button type="button" class="btn btn-primary danger-btn" disabled={deleting} onclick={deleteTeam}>
-			{deleting ? 'Deleting…' : 'Delete team'}
-		</button>
-	{/snippet}
-</Dialog>
 
 <style>
 	.crumbs {
@@ -695,20 +688,6 @@
 	.roles dd {
 		margin: 0;
 		color: var(--text-2);
-	}
-	.danger-btn {
-		background: var(--danger);
-		border-color: var(--danger);
-		color: #fff;
-	}
-	.danger-btn:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--danger) 85%, #000);
-		border-color: color-mix(in srgb, var(--danger) 85%, #000);
-	}
-	@media (prefers-color-scheme: dark) {
-		.danger-btn {
-			color: #1a0a08;
-		}
 	}
 	@media (max-width: 560px) {
 		.head-actions {

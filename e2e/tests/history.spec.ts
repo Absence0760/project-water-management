@@ -100,7 +100,9 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 	await expect(since.getByRole('listitem').filter({ hasText: 'Model changed: Upper farm: dam capacity 150\u202f000 m³ → 175\u202f000 m³' })).toBeVisible();
 	await page.getByRole('button', { name: 'Restore these inputs' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Restore this run’s inputs?' });
-	await dialog.getByRole('button', { name: 'Restore', exact: true }).click();
+	// Enter in the reason restores, once the differences have loaded.
+	await expect(dialog.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
+	await dialog.getByLabel(/^Reason for restoring/).press('Enter');
 	await expect(dialog).toBeHidden();
 	await expect(page.getByText('This run’s inputs are restored.')).toBeVisible();
 	await expect(since.getByText('The saved inputs are the ones this run used.')).toBeVisible();

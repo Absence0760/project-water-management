@@ -315,9 +315,9 @@ test('an admin renames and deletes the team from the settings sheet; a member le
 	// Delete: the sheet gives way to the confirmation, then the list.
 	sheet = await openTeamSettings(page);
 	await sheet.getByRole('button', { name: 'Delete team' }).click();
-	const confirm = page.getByRole('dialog', { name: 'Delete team?' });
 	await expect(sheet).toBeHidden();
-	await confirm.getByRole('button', { name: 'Delete team' }).click();
+	await expect(page.getByRole('alertdialog', { name: 'Delete team?' })).toContainText('Delete Settings Board (renamed)? Its 0 projects stay');
+	await answerConfirm(page, true);
 	await expect(page).toHaveURL(/\/teams$/);
 	await expect(page.getByText("You're not in any team yet.")).toBeVisible();
 });

@@ -30,6 +30,7 @@
 		emptyText = 'No notes yet.',
 		words = NOTES_EN,
 		formFirst = false,
+		unsaved = $bindable(false),
 		onChanged
 	}: {
 		projectId: string;
@@ -40,6 +41,8 @@
 		emptyText?: string;
 		words?: NotesWords;
 		formFirst?: boolean;
+		/** Out: a note typed but not added, or an edit not saved (the drawer asks before closing on it). */
+		unsaved?: boolean;
 		/** After a note is added, edited or deleted (the count badges refresh). */
 		onChanged?: () => void;
 	} = $props();
@@ -53,6 +56,10 @@
 	let error = $state<string | null>(null);
 	let editing = $state<string | null>(null);
 	let editDraft = $state('');
+	$effect(() => {
+		const edited = editing !== null && editDraft !== (notes?.find((n) => n.id === editing)?.body ?? '');
+		unsaved = draft.trim() !== '' || edited;
+	});
 	/** A scenario comment's audience (its target's first by default). */
 	let audience = $state<NoteVisibility | null>(null);
 	const audiences = $derived(target.kind === 'scenario' ? target.audiences : []);

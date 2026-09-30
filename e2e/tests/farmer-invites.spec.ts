@@ -144,4 +144,10 @@ test('an owner previews a CSV of farmers, row by row, before sending it', async 
 	const pending = panel.getByRole('region', { name: /Pending farmer invitations/ });
 	await expect(pending.getByRole('listitem')).toHaveCount(2);
 	await expect(pending.getByRole('listitem').filter({ hasText: 'farmer.two@example.com' })).toContainText('Upper farm, Lower farm');
+
+	// Opened again, the sent CSV is gone, so it can't read as still to send.
+	await panel.getByRole('button', { name: 'Invite farmers' }).click();
+	await expect(dialog.getByLabel('Paste the CSV')).toHaveValue('');
+	await expect(dialog.getByLabel('…or upload a .csv file')).toHaveValue('');
+	await expect(dialog.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
 });
