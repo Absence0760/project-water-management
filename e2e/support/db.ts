@@ -336,3 +336,19 @@ export async function releaseYieldJob(jobId: string): Promise<void> {
 		if (r.rowCount !== 1) throw new Error(`no running yield job ${jobId}`);
 	});
 }
+
+/**
+ * A firing alert on a project (a data_stale rule and its open event), as the
+ * alert evaluator would leave it (WP-2.13): the project list's Alerts column
+ * and Needs attention count firing events, and a spec can't wait for the
+ * worker to fire one.
+ */
+export async function plantFiringAlert(projectId: string): Promise<void> {
+	await withDb(async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'data_stale', 7) RETURNING id`,
+			[projectId]
+		);
+		await db.query(`INSERT INTO alert_event (rule_id, project_id, kind, state, value) VALUES ($1, $2, 'data_stale', 'firing', 30)`, [rows[0]!.id, projectId]);
+	});
+}

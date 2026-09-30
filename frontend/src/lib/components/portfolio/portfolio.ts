@@ -1,7 +1,8 @@
-// The team portfolio page's wording and sorting (WP-2.14, docs/ui.md §
-// Portfolio). Every status is written out as text as well as coloured, so
-// colour is never the only signal; every unknown says why. Pure, so it is
-// unit-tested apart from the page.
+// A catchment's figures in words, and their order (WP-2.14): the project
+// list's outcome columns (which took in the team portfolio page, issue #176),
+// the teams list and the team page. Every status is written out as text as
+// well as coloured, so colour is never the only signal; every unknown says
+// why. Pure, so it is unit-tested apart from the pages.
 import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '$lib/api/types';
 import { dateAge, sharedWindowText, windowText, type DataEnd } from '$lib/format/age';
 import { fmtNum } from '$lib/format/number';
@@ -131,20 +132,13 @@ export function feedsText(p: Pick<PortfolioProject, 'feeds'>): string {
 // Sorting
 // ---------------------------------------------------------------------------
 
+/** The keys comparePortfolio sorts by (the project list names them, projects/grouping.ts). */
 export type PortfolioSortKey = 'status' | 'name' | 'age' | 'farms' | 'dam';
 export type SortDir = 'asc' | 'desc';
 export interface PortfolioSort {
 	key: PortfolioSortKey;
 	dir: SortDir;
 }
-
-export const SORT_LABELS: Record<PortfolioSortKey, string> = {
-	status: 'EWR status (worst first)',
-	name: 'Catchment name',
-	age: 'Figures age (oldest first)',
-	farms: 'Hydrological units short (most first)',
-	dam: 'Lowest dam (lowest first)'
-};
 
 /** The default: worst EWR status first. */
 export const DEFAULT_SORT: PortfolioSort = { key: 'status', dir: 'asc' };
@@ -194,16 +188,6 @@ export function comparePortfolio({ key, dir }: PortfolioSort): (a: PortfolioProj
 	};
 }
 
-/** A click on a column heading: the same key flips direction, a new key starts ascending (worst first). */
-export function nextSort(cur: PortfolioSort, key: PortfolioSortKey): PortfolioSort {
-	return cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
-}
-
-/** Read `?sort=` and `?dir=`, falling back to the default. */
-export function parseSort(sort: string | null, dir: string | null): PortfolioSort {
-	const key = sort && Object.hasOwn(SORT_LABELS, sort) ? (sort as PortfolioSortKey) : DEFAULT_SORT.key;
-	return { key, dir: dir === 'desc' ? 'desc' : 'asc' };
-}
 
 /** Counts per status, for the summary line above the table. */
 export function statusCounts(rows: readonly PortfolioProject[]): Record<PortfolioEwrStatus, number> {
@@ -224,7 +208,7 @@ export function curtailmentHref(p: Pick<PortfolioProject, 'id' | 'sourceRunId'>,
 }
 
 // ---------------------------------------------------------------------------
-// Totals: the teams list, the team page and the portfolio's header
+// Totals: the teams list, the team page and the project list's header line
 // ---------------------------------------------------------------------------
 
 /** Worst first, the order every status summary lists them in. */
