@@ -418,6 +418,26 @@ override_resource {
   }
 }
 
+# Evidence pack PDFs (packs.tf, 116_pack_render)
+override_resource {
+  target          = aws_s3_bucket.packs
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-packs-000000000000"
+    bucket = "water-management-packs-000000000000"
+    # The /packs/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-packs-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.packs
+  override_during = plan
+  values = {
+    id = "packs-oac-id"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
@@ -2416,13 +2436,15 @@ run "report_downloads" {
     error_message = "/reports/* must serve the reports bucket only to CloudFront signed URLs from the download key group, uncached (CachingDisabled), GET/HEAD over https, with the API's security headers."
   }
   # Positive control for the signer check: no other behaviour trusts a key
-  # group, and only /reports/* reaches the reports origin.
+  # group, only /reports/* reaches the reports origin and only /packs/* the
+  # packs origin (run packs pins that behaviour).
   assert {
     condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior :
       (b.path_pattern == "/reports/*") == (b.target_origin_id == "s3-reports") &&
-      (b.path_pattern == "/reports/*") == (length(coalesce(b.trusted_key_groups, [])) > 0)
+      (b.path_pattern == "/packs/*") == (b.target_origin_id == "s3-packs") &&
+      contains(["/reports/*", "/packs/*"], b.path_pattern) == (length(coalesce(b.trusted_key_groups, [])) > 0)
     ]) && length(coalesce(aws_cloudfront_distribution.frontend.default_cache_behavior[0].trusted_key_groups, [])) == 0
-    error_message = "Only the /reports/* behaviour reaches the reports bucket, and it alone requires signed URLs."
+    error_message = "Only the /reports/* behaviour reaches the reports bucket and only /packs/* the packs bucket, and they alone require signed URLs."
   }
   assert {
     condition     = aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
@@ -2499,6 +2521,110 @@ run "report_downloads" {
     )
     error_message = "The API names the signing key's id (Key-Pair-Id) and gets its public PEM, which it matches its private key against at cold start."
   }
+}
+
+# ---------------------------------------------------------------------------
+# Issued evidence packs' PDFs (packs.tf, s3_cloudfront.tf; 116_pack_render):
+# a private bucket that keeps every PDF (versioned, Object Lock, nothing
+# expires), written only by the renderer under packs/, read only by
+# CloudFront's /packs/* behaviour for signed URLs.
+# ---------------------------------------------------------------------------
+
+run "packs" {
+  command = plan
+
+  # --- The bucket: private, encrypted, TLS only, kept ----------------------------------
+  assert {
+    condition = (
+      aws_s3_bucket_public_access_block.packs.block_public_acls &&
+      aws_s3_bucket_public_access_block.packs.block_public_policy &&
+      aws_s3_bucket_public_access_block.packs.ignore_public_acls &&
+      aws_s3_bucket_public_access_block.packs.restrict_public_buckets
+    )
+    error_message = "The packs bucket must block every kind of public access."
+  }
+  assert {
+    condition     = one([for r in aws_s3_bucket_server_side_encryption_configuration.packs.rule : one(r.apply_server_side_encryption_by_default).sse_algorithm]) == "AES256"
+    error_message = "Pack PDFs must be encrypted at rest (SSE-S3)."
+  }
+  assert {
+    condition     = one([for r in aws_s3_bucket_ownership_controls.packs.rule : r.object_ownership]) == "BucketOwnerEnforced"
+    error_message = "ACLs off: the bucket owner owns every object."
+  }
+  assert {
+    condition = (
+      aws_s3_bucket.packs.object_lock_enabled &&
+      one(aws_s3_bucket_versioning.packs.versioning_configuration).status == "Enabled" &&
+      one(one(aws_s3_bucket_object_lock_configuration.packs.rule).default_retention).mode == "GOVERNANCE" &&
+      one(one(aws_s3_bucket_object_lock_configuration.packs.rule).default_retention).days == var.pack_retention_days &&
+      var.pack_retention_days == 3650
+    )
+    error_message = "Every pack PDF is kept: a versioned bucket with an Object Lock default retention (GOVERNANCE, pack_retention_days, 10 years by default)."
+  }
+  assert {
+    condition     = contains([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport")
+    error_message = "The packs bucket must refuse plain-HTTP access."
+  }
+  assert {
+    condition = (
+      length([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s if s.effect != "Deny"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s.sid if s.effect != "Deny"]) == "AllowCloudFrontReadPackPdfs" &&
+      toset(one([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s.actions if s.effect != "Deny"])) == toset(["s3:GetObject"]) &&
+      toset(one([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s.resources if s.effect != "Deny"])) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
+      tolist(one(one([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : s.condition if s.effect != "Deny"])).values) == tolist([aws_cloudfront_distribution.frontend.arn])
+    )
+    error_message = "The packs bucket policy's only grant is this distribution's GetObject of packs/* (the API never reads the bucket, it signs CloudFront URLs)."
+  }
+
+  # --- Least privilege: the renderer puts, and nothing else ----------------------------------
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.renderer_packs.statement) == 1 &&
+      toset(data.aws_iam_policy_document.renderer_packs.statement[0].actions) == toset(["s3:PutObject"]) &&
+      toset(data.aws_iam_policy_document.renderer_packs.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
+      aws_iam_role_policy.renderer_packs.role == aws_iam_role.renderer_lambda.id
+    )
+    error_message = "The renderer may only put pack PDFs under packs/: never read, list, delete, change a retention or bypass it."
+  }
+
+  # --- The download behaviour and its origin ----------------------------------------------
+  assert {
+    condition = length([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b if b.path_pattern == "/packs/*"]) == 1 && alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : (
+      b.target_origin_id == "s3-packs" &&
+      b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]) &&
+      b.viewer_protocol_policy == "https-only" &&
+      toset(b.allowed_methods) == toset(["GET", "HEAD"]) &&
+      b.cache_policy_id == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" &&
+      b.origin_request_policy_id == aws_cloudfront_origin_request_policy.report_downloads.id &&
+      b.response_headers_policy_id == "api-headers-policy-id"
+    ) if b.path_pattern == "/packs/*"])
+    error_message = "/packs/* must serve the packs bucket only to CloudFront signed URLs from the download key group, uncached, GET/HEAD over https, with the API's security headers."
+  }
+  assert {
+    condition = alltrue([for o in aws_cloudfront_distribution.frontend.origin :
+      o.domain_name == aws_s3_bucket.packs.bucket_regional_domain_name && o.origin_access_control_id == aws_cloudfront_origin_access_control.packs.id
+    if o.origin_id == "s3-packs"]) && length([for o in aws_cloudfront_distribution.frontend.origin : o if o.origin_id == "s3-packs"]) == 1
+    error_message = "The s3-packs origin must be the packs bucket, read through its own OAC."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_origin_access_control.packs.origin_access_control_origin_type == "s3" &&
+      aws_cloudfront_origin_access_control.packs.signing_behavior == "always" &&
+      aws_cloudfront_origin_access_control.packs.signing_protocol == "sigv4"
+    )
+    error_message = "The packs OAC must sign every origin request (sigv4)."
+  }
+}
+
+# A pack is evidence: under a year's retention is refused (positive control: run packs plans the default).
+run "rejects_short_pack_retention" {
+  command = plan
+
+  variables {
+    pack_retention_days = 30
+  }
+
+  expect_failures = [var.pack_retention_days]
 }
 
 # A rotation's overlap: two trusted keys, the API signing with the new one.
@@ -2635,13 +2761,15 @@ run "reports_renderer_created_from_its_image" {
       aws_lambda_function.renderer[0].environment[0].variables["RENDER_SITE_URL"] == local.site_origin &&
       aws_lambda_function.renderer[0].environment[0].variables["RENDER_API_URL"] == "${local.site_origin}/api" &&
       aws_lambda_function.renderer[0].environment[0].variables["STORAGE"] == "s3" &&
+      aws_lambda_function.renderer[0].environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket &&
+      aws_lambda_function.renderer[0].environment[0].variables["PACKS_BUCKET"] == aws_s3_bucket.packs.bucket &&
       tonumber(aws_lambda_function.renderer[0].environment[0].variables["REPORT_RENDER_TIMEOUT_MS"]) < 120000 &&
       !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "DATABASE_URL") &&
       !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET") &&
       !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "RUNTIME_SECRET_ARN") &&
       alltrue([for k in keys(aws_lambda_function.renderer[0].environment[0].variables) : !can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", k))])
     )
-    error_message = "The renderer opens the public site, stores to S3, stops before Lambda's timeout, and holds no database URL or secret."
+    error_message = "The renderer opens the public site, stores to the reports and packs buckets, stops before Lambda's timeout, and holds no database URL or secret."
   }
   assert {
     condition = (

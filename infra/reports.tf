@@ -18,7 +18,8 @@
 # the WAF like any browser, signing in with the single-use render token from
 # the request (docs/security.md § Render tokens). Its role can receive
 # render-requests, send render-results and put objects under reports/ in the
-# bucket: no database, no secrets, no read of any PDF.
+# bucket (and, for an issued evidence pack, under packs/ in the packs bucket,
+# packs.tf): no database, no secrets, no read of any PDF.
 #
 # Downloads go through the site's own CloudFront distribution, behind the WAF
 # (issue #126): GET /projects/:id/reports/:jobId/pdf checks membership and
@@ -366,7 +367,7 @@ resource "aws_lambda_function" "renderer" {
   count = local.renderer_enabled ? 1 : 0
 
   function_name = local.renderer_function_name
-  description   = "Server-side PDF reports: prints the site's report route in headless Chromium and stores the PDF. No VPC, no database (backend/src/lambda-renderer.ts)."
+  description   = "Server-side PDF reports and evidence packs: prints the site's report route or an issued pack's page in headless Chromium and stores the PDF. No VPC, no database (backend/src/lambda-renderer.ts)."
   role          = aws_iam_role.renderer_lambda.arn
 
   package_type = "Image"
@@ -402,6 +403,7 @@ resource "aws_lambda_function" "renderer" {
       REPORT_RENDER_TIMEOUT_MS = tostring((local.renderer_timeout_s - 20) * 1000)
       STORAGE                  = "s3"
       REPORTS_BUCKET           = aws_s3_bucket.reports.bucket
+      PACKS_BUCKET             = aws_s3_bucket.packs.bucket
       RENDER_RESULTS_QUEUE_URL = aws_sqs_queue.render_results.url
     }
   }
@@ -411,6 +413,7 @@ resource "aws_lambda_function" "renderer" {
     aws_iam_role_policy.lambda_logs["renderer"],
     aws_iam_role_policy.renderer_ecr_pull,
     aws_iam_role_policy.renderer_lambda,
+    aws_iam_role_policy.renderer_packs,
     aws_ecr_repository_policy.renderer,
   ]
 
@@ -532,7 +535,7 @@ resource "aws_cloudfront_public_key" "report_downloads" {
 
 resource "aws_cloudfront_key_group" "report_downloads" {
   name    = "${local.project}-report-downloads"
-  comment = "Trusted signers for /reports/* (report PDF downloads)"
+  comment = "Trusted signers for /reports/* and /packs/* (report and evidence pack PDF downloads)"
   items   = [for k in sort(keys(aws_cloudfront_public_key.report_downloads)) : aws_cloudfront_public_key.report_downloads[k].id]
 }
 

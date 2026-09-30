@@ -486,6 +486,16 @@ variable "renderer_memory_mb" {
   }
 }
 
+variable "pack_retention_days" {
+  description = "Object Lock default retention (GOVERNANCE mode) of each issued evidence pack's PDF in the packs bucket (packs.tf), from its upload. Default 3650 (10 years): a licence decision can be reviewed or appealed long after it is made, and the verify link answers with the PDF's hash for as long as the pack exists. An operator decision (docs/deployment.md § Evidence packs); raising it later applies to new objects only."
+  type        = number
+  default     = 3650
+  validation {
+    condition     = var.pack_retention_days >= 365 && var.pack_retention_days <= 36500 && floor(var.pack_retention_days) == var.pack_retention_days
+    error_message = "A whole number of days, at least 365 (a pack is evidence) and at most 36500 (S3's limit is 100 years)."
+  }
+}
+
 variable "renderer_reserved_concurrency" {
   description = "Max concurrent renderer Lambda executions: bounds spend and how many Chromiums load the site at once. At least 2, its SQS trigger's maximum_concurrency. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number

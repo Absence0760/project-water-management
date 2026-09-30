@@ -44,8 +44,19 @@ describe('findProblems', () => {
 		]);
 	});
 
+	it('flags /packs the same way: a top-level route through groups and escapes, and static files (the packs bucket, infra/packs.tf)', () => {
+		assert.match(routeProblem(['packs']), /top-level route "\/packs"/);
+		assert.match(routeProblem(['(app)', '[x+70]acks']), /top-level route "\/packs"/);
+		assert.match(routeProblem(['[slug]']), /also matches \/reports\/… and \/packs\/…/);
+		// Positive control: a pack page lives under /projects/:id/packs, and a name that only starts with "packs" is fine.
+		assert.equal(routeProblem(['projects', '[id]', 'packs', '[packId]']), null);
+		assert.equal(routeProblem(['packs-archive']), null);
+		assert.deepEqual(findProblems({ routeDirs: [], staticFiles: ['packs/x.pdf', 'packs-old.txt'] }), ['frontend/static/packs/x.pdf: a static file served at /packs/x.pdf']);
+	});
+
 	it('the explanation names the CloudFront behaviour', () => {
 		assert.match(WHY, /CloudFront routes \/reports\/\*/);
+		assert.match(WHY, /\/packs\/\* to the private packs bucket/);
 		assert.match(WHY, /infra\/s3_cloudfront\.tf/);
 	});
 });
@@ -62,7 +73,7 @@ describe('scan', () => {
 });
 
 describe('the real frontend', () => {
-	it('owns nothing under /reports (CloudFront serves signed report PDFs there)', () => {
+	it('owns nothing under /reports or /packs (CloudFront serves signed report and pack PDFs there)', () => {
 		const tree = scan();
 		assert.ok(tree.routeDirs.some((s) => s[0] === 'projects'), 'positive control: the scan sees the routes');
 		const problems = findProblems(tree);
