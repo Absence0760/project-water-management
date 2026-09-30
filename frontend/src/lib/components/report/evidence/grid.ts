@@ -82,8 +82,9 @@ export function fdcMonths(site: Pick<EvidenceSite, 'fdcMonth' | 'fdcDriestMonth'
 /**
  * The caption of one FDC check plot. With the paired change tabled under it
  * (evidence-7) the shading is each run's own spread and the table carries
- * the change; a pack issued before evidence-7 has no table, so its caption
- * keeps the warning that overlapping ranges don't mean no change.
+ * the change. Where the application's band is drawn but no change is tabled
+ * (a pack issued before evidence-7, or runs read at different table points)
+ * the caption keeps the warning that overlapping ranges don't mean no change.
  */
 export function fdcCaption(
 	site: Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote' | 'fdcChange'>,
@@ -93,11 +94,12 @@ export function fdcCaption(
 	const head = `${monthName(f.month)}: ${f.why} The simulated curve should lie on or above the EWR curve.`;
 	if (!site.fdcBands) return `${head} Curve band: ${site.fdcBandNote ?? 'no band'}.`;
 	const note = site.fdcBandNote ? ` ${site.fdcBandNote}` : '';
-	if (!application) return `${head} Shaded: the range of the kept parameter sets (R1).${note}`;
-	if (site.fdcChange === undefined)
-		return `${head} Shaded: the range of the kept parameter sets (R1; the application’s under R2, not a difference). Overlapping ranges don’t mean no change: the paired change is in the rows above and in § 2.${note}`;
+	const hatched = application && (site.fdcBands.find((m) => m.month === f.month)?.b?.some((x) => x !== null) ?? false);
+	if (!hatched) return `${head} Shaded: the range of the kept parameter sets on the baseline’s curve (R1).${note}`;
 	const tabled = site.fdcChange?.some((m) => m.month === f.month && m.points.length) ?? false;
-	return `${head} Shaded: how far the kept parameter sets spread each run’s own curve (R1; the application’s hatched, R2).${tabled ? ' The table below pairs them: each set on both runs, the change at each point.' : ''}${note}`;
+	if (!tabled)
+		return `${head} Shaded: the range of the kept parameter sets (R1; the application’s under R2, not a difference). Overlapping ranges don’t mean no change: the paired change is in the rows above and in § 2.${note}`;
+	return `${head} Shaded: how far the kept parameter sets spread each run’s own curve (R1; the application’s hatched, R2). The table below pairs them: each set on both runs, the change at each point.${note}`;
 }
 
 export interface FdcChangeRow {
@@ -130,15 +132,20 @@ export function fdcChangeRows(site: Pick<EvidenceSite, 'fdcChange'>, month: numb
 	const cells = site.fdcChange?.find((m) => m.month === month)?.points ?? [];
 	if (!cells.length) return [];
 	const digits = flowDigits(cells.flatMap((c) => [c.run, c.band?.p5, c.band?.p50, c.band?.p95].filter((v): v is number => typeof v === 'number' && Number.isFinite(v))));
-	return cells.map((c: EvidenceChange, j) => {
+	// A cell past the plotted points has no point to name: left out rather than printed as "NaN %".
+	return cells.flatMap((c: EvidenceChange, j) => {
+		const point = points[j];
+		if (point === undefined) return [];
 		const run = c.run === null ? null : signed(c.run, digits);
 		const b = c.band;
 		const banded = !c.bandNote && b && b.p5 !== null && b.p50 !== null && b.p95 !== null;
-		return {
-			point: points[j] ?? NaN,
-			main: banded ? signed(b.p50!, digits) : run ? `run: ${run}` : '–',
-			sub: banded ? `${signed(b.p5!, digits)} to ${signed(b.p95!, digits)}${run ? ` · run: ${run}` : ''}` : (c.bandNote ?? 'no band'),
-			worse: worseText(c)
-		};
+		return [
+			{
+				point,
+				main: banded ? signed(b.p50!, digits) : run ? `run: ${run}` : '–',
+				sub: banded ? `${signed(b.p5!, digits)} to ${signed(b.p95!, digits)}${run ? ` · run: ${run}` : ''}` : (c.bandNote ?? 'no band'),
+				worse: worseText(c)
+			}
+		];
 	});
 }

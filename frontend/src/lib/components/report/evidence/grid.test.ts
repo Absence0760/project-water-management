@@ -84,7 +84,8 @@ describe('fdcMonths: the FDC checks § 1 plots', () => {
 describe('the FDC check’s paired change (evidence-7)', () => {
 	const band = (p5: number | null, p50: number | null, p95: number | null, n = 40) => ({ n, p5, p50, p95, min: p5, max: p95 });
 	const cell = (over: Partial<EvidenceChange>): EvidenceChange => ({ run: -0.012, band: band(-0.02, -0.01, -0.004), bandNote: null, worse: { k: 38, n: 40 }, ...over });
-	const bands: EvidenceSite['fdcBands'] = [{ month: 5, a: [], b: [] }];
+	const bands: EvidenceSite['fdcBands'] = [{ month: 5, a: [band(1, 2, 3)], b: null }];
+	const hatched: EvidenceSite['fdcBands'] = [{ month: 5, a: [band(1, 2, 3)], b: [band(0.9, 1.9, 2.9)] }];
 	const f = { month: 5, why: 'the month met least often.' };
 
 	it('prints one row per table point: the paired median, its range and the run’s own difference, and the sets lower', () => {
@@ -103,21 +104,24 @@ describe('the FDC check’s paired change (evidence-7)', () => {
 		expect(fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({})] }] }, 6, [10])).toEqual([]);
 		expect(fdcChangeRows({ fdcChange: null }, 5, [10])).toEqual([]);
 		expect(fdcChangeRows({}, 5, [10])).toEqual([]);
+		// A cell past the plotted points is left out, never "NaN %".
+		expect(fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({}), cell({})] }] }, 5, [10]).map((r) => r.point)).toEqual([10]);
 	});
 
-	it('captions the chart: the table carries the change, and only a pack before evidence-7 keeps the overlap warning', () => {
-		const tabled = fdcCaption({ fdcBands: bands, fdcBandNote: null, fdcChange: [{ month: 5, points: [cell({})] }] }, f, true);
+	it('captions the chart: the table carries the change, and the overlap warning stays only where both bands are drawn with no table', () => {
+		const tabled = fdcCaption({ fdcBands: hatched, fdcBandNote: null, fdcChange: [{ month: 5, points: [cell({})] }] }, f, true);
 		expect(tabled).toMatch(/^May: the month met least often\. The simulated curve should lie on or above the EWR curve\. Shaded: how far the kept parameter sets spread each run’s own curve/);
 		expect(tabled).toContain('The table below pairs them');
 		expect(tabled).not.toMatch(/overlap/i);
-		// No table (the paired band is gated): the note says why, still no overlap apology.
+		// The paired band is gated: no hatched band and no table, so the shading is the baseline's alone; the note says why.
 		const gated = fdcCaption({ fdcBands: bands, fdcBandNote: 'The application’s curve: no band: not enough accepted parameter sets (12 of 41).', fdcChange: null }, f, true);
-		expect(gated).not.toContain('The table below');
+		expect(gated).toContain('Shaded: the range of the kept parameter sets on the baseline’s curve (R1).');
+		expect(gated).not.toMatch(/hatched|The table below|overlap/i);
 		expect(gated).toMatch(/12 of 41\)\.$/);
-		expect(gated).not.toMatch(/overlap/i);
-		// A pack issued before evidence-7: its frozen document has no change, so the warning stays.
-		expect(fdcCaption({ fdcBands: bands, fdcBandNote: null }, f, true)).toContain('Overlapping ranges don’t mean no change');
-		expect(fdcCaption({ fdcBands: bands, fdcBandNote: null, fdcChange: null }, f, false)).toMatch(/Shaded: the range of the kept parameter sets \(R1\)\.$/);
+		// Both bands drawn but no change tabled (a pack issued before evidence-7, or different table points): the warning stays.
+		expect(fdcCaption({ fdcBands: hatched, fdcBandNote: null }, f, true)).toContain('Overlapping ranges don’t mean no change');
+		expect(fdcCaption({ fdcBands: hatched, fdcBandNote: 'The paired change isn’t tabled: the two runs read this site against different table points.', fdcChange: null }, f, true)).toContain('Overlapping ranges don’t mean no change');
+		expect(fdcCaption({ fdcBands: bands, fdcBandNote: null, fdcChange: null }, f, false)).toMatch(/Shaded: the range of the kept parameter sets on the baseline’s curve \(R1\)\.$/);
 		expect(fdcCaption({ fdcBands: null, fdcBandNote: 'no band: no ensemble on the declared rule', fdcChange: null }, f, true)).toMatch(/Curve band: no band: no ensemble on the declared rule\.$/);
 	});
 });

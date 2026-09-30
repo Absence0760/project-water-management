@@ -5573,6 +5573,10 @@ it never changes a run's results.
   runs, per water-year month and table point, other − baseline of the
   impacted flow, with `worse`, the share of the pairs with a flow on both
   sides in which the other run's is lower (`null` below the 30-member gate).
+  It pairs the curves point by point, so it means something only where both
+  runs' rule tables read the site at the same points, unit and component; the
+  summary can't see the tables, and the evidence report, its one reader,
+  checks them and tables nothing otherwise.
   Identical runs give a zero band; a curve moved the same amount in every set
   gives a zero-width band at that amount, however far the sets spread each curve.
   The evidence report tables it under § 1's FDC plot (`EvidenceSite.fdcChange`).

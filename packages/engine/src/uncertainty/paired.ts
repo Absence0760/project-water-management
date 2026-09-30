@@ -152,8 +152,11 @@ export interface PairedSummary {
 	 * the share of the pairs with a flow on both sides in which the other
 	 * run's is lower; null below minMembers such pairs. Unlike two bands on
 	 * each run's own curve, which overlap whenever the sets disagree more
-	 * than the change moves the curve, this is the change itself. Absent from
-	 * a summary computed before it.
+	 * than the change moves the curve, this is the change itself. Pairs index
+	 * j of both curves: meaningful only where both runs' rule tables read the
+	 * site at the same points, in the same unit and component, which this
+	 * summary can't see (the evidence report checks it and tables nothing
+	 * otherwise). Absent from a summary computed before it.
 	 */
 	reserveFdcChange?: { key: string; name: string; months: { band: Band; worse: number | null }[][] }[];
 }

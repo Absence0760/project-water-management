@@ -204,7 +204,10 @@ describe('drafting a pack', () => {
 		expect(manifest.report.version).toBe('evidence-7');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
-		expect(manifest.report.licenceImpact).toEqual((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.licenceImpact);
+		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
+		expect(manifest.report.licenceImpact).toEqual(live.licenceImpact);
+		// § 1's paired FDC change (evidence-7) freezes with it, whatever it holds for this run.
+		expect(manifest.report.river.map((s) => s.fdcChange)).toEqual(live.river.map((s: { fdcChange?: unknown }) => s.fdcChange));
 		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
 	});
 

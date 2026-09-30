@@ -6063,10 +6063,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     `evidence-7` an application report has a small table under each plot
     (`evidence-fdc-change`): the paired change in the curve at each table
     point, as the median, the 5 to 95 % range and the runs' own difference,
-    and "lower in k of n sets" (`grid.ts` `fdcChangeRows`). The caption
-    (`fdcCaption`) then reads the shading as each run's own spread; a pack
-    issued before `evidence-7` has no table and keeps the old caption
-    (overlapping ranges don't mean no change). Then the compliance table. Then the application's EWR charge.
+    and "the application's flow lower in k of n sets" (`grid.ts` `fdcChangeRows`). The caption
+    (`fdcCaption`) then reads the shading as each run's own spread; where the
+    application's band is drawn with no table (a pack issued before
+    `evidence-7`, or runs read at different table points or units) it keeps the
+    warning that overlapping ranges don't mean no change. Then the
+    compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
     each departs from the rule; a start not completed reads *started, not

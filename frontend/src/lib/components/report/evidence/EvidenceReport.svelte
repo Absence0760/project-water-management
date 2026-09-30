@@ -189,7 +189,7 @@
 										<div class="table-wrap">
 											<table class="data compact" data-testid="evidence-fdc-change">
 												<caption class="small">{monthName(f.month)} curve, paired change (application − baseline, {site.unit})</caption>
-												<thead><tr><th scope="col">Flow exceeded</th><th scope="col" class="num">Change: median (5 to 95 %)</th><th scope="col" class="num">Lower in</th></tr></thead>
+												<thead><tr><th scope="col">Flow exceeded</th><th scope="col" class="num">Change: median (5 to 95 %)</th><th scope="col" class="num">Application’s flow lower in</th></tr></thead>
 												<tbody>
 													{#each moved as row, j (j)}
 														<tr><th scope="row">{fmtNum(row.point)} % of the time</th><td class="num">{row.main}{#if row.sub}<span class="sub">{row.sub}</span>{/if}</td><td class="num">{row.worse}</td></tr>

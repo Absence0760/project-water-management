@@ -51,6 +51,9 @@ runs' stored daily series and the project's year-class settings
 freezes the board and its hash covers it. A pack drafted before
 `evidence-5` has no board in its manifest: its page says so rather than
 show something its hash doesn't cover, and a new version carries it.
+The same holds for § 1's table of the paired change in the FDC check curve
+(`evidence-7`): a pack issued before it has no table, and its caption keeps
+the warning that the two curve bands overlapping doesn't mean no change.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and

@@ -389,7 +389,8 @@ export interface EvidenceSite {
 	 * in which the application's flow at the point is lower. Null for
 	 * baseline evidence, and when the application's curve has no band
 	 * (`fdcBandNote` says why) or the two runs read the site against
-	 * different table points. Absent from a pack's document before evidence-7.
+	 * different table points, units or components. Absent from a pack's
+	 * document before evidence-7.
 	 */
 	fdcChange?: { month: number; points: EvidenceChange[] }[] | null;
 	/**

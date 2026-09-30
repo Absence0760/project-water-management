@@ -326,6 +326,18 @@ An ensemble stored before engine 1.33.0 has none of these measures: each such
 cell prints "no band: the ensemble was stored before engine 1.33.0", and a run
 made before it prints the row *Not assessed* with the reason.
 
+Report version `evidence-7` added § 1's **paired change in the FDC check
+curve** (ER5 follow-up). The two curve bands on the chart come from the same
+parameter sets, so they overlap even when every set moves the curve the same
+way. A small table under each FDC plot therefore gives, at each table point,
+the paired median change in the application's flow with its 5–95 % range,
+the runs' own difference, and the sets in which the application's flow is
+lower (`river[].fdcChange`, from `PairedSummary.reserveFdcChange`). Nothing
+is tabled when the two runs read the site at different points, units or
+components. A pack issued before `evidence-7` keeps its frozen document: no
+table, and the caption keeps its warning that overlapping ranges don't mean
+no change.
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 

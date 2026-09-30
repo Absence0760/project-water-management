@@ -815,8 +815,13 @@ function fdcBandsOf(
 			b: other ? (other.months[i] ?? []).map(usable) : null
 		}));
 		const bOld = app && paired && !paired.gated && paired.carriesMeasures === false;
-		// The change is read point by point, so both runs must read the site at the same table points.
-		const samePoints = !!siteB && siteA.points.length === siteB.points.length && siteA.points.every((p, j) => p === siteB.points[j]);
+		// The change is read point by point, so both runs must read the site at the same table points, in the same unit and component.
+		const samePoints =
+			!!siteB &&
+			siteA.unit === siteB.unit &&
+			siteA.component === siteB.component &&
+			siteA.points.length === siteB.points.length &&
+			siteA.points.every((p, j) => p === siteB.points[j]);
 		const moved = other && !bOld ? (paired!.reserveFdcChange?.find((x) => x.key === key) ?? null) : null;
 		const fdcChange =
 			moved && siteB && samePoints
@@ -826,6 +831,7 @@ function fdcBandsOf(
 						const fb = siteB.byMonth.find((m) => m.month === month)?.fdc ?? [];
 						return {
 							month,
+							// `moved` implies an application, for which the change cell is never null.
 							points: points.map((p, j) => change(diff(fa[j]?.impacted ?? null, fb[j]?.impacted ?? null), p.band, worseOf(p.worse, p.band.n))!)
 						};
 					})
@@ -841,7 +847,7 @@ function fdcBandsOf(
 						: bOld
 							? `The application’s curve: ${NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE)}.`
 							: moved && !samePoints
-								? 'The paired change isn’t tabled: the two runs read this site against different table points.'
+								? 'The paired change isn’t tabled: the two runs read this site against different table points or units.'
 								: null,
 			fdcChange
 		};

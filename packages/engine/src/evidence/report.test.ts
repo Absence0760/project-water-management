@@ -873,6 +873,11 @@ describe('the evidence measures (engine 1.33.0): no-flow days, EWR below the wor
 		const own = baseOut.summary.ewrAssurance![0]!;
 		const theirs = appOut.summary.ewrAssurance![0]!;
 		expect(site.fdcChange!.map((m) => m.month)).toEqual([10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+		// A member's curve is in water-year order, each index the calendar month the table labels it with: the reference member (the run's own parameters) is the run's curve, to six figures.
+		const ref = ensemble.members.find((m) => m.reference)!.metrics!.reserveFdc!.outlet!;
+		expect(ref).toHaveLength(12);
+		const six = (v: number | null) => (v === null || v === 0 ? v : Number(v.toPrecision(6)));
+		for (const [i, m] of site.fdcChange!.entries()) expect(ref[i]).toEqual(own.byMonth.find((x) => x.month === m.month)!.fdc.map((pt) => six(pt.impacted)));
 		for (const [i, m] of site.fdcChange!.entries()) {
 			expect(m.points).toHaveLength(own.points.length);
 			const fa = own.byMonth.find((x) => x.month === m.month)!.fdc;
@@ -907,8 +912,13 @@ describe('the evidence measures (engine 1.33.0): no-flow days, EWR below the wor
 		const moved = { ...appOut.summary, ewrAssurance: appOut.summary.ewrAssurance!.map((x) => ({ ...x, points: x.points.map((pt, j) => (j === 0 ? pt + 1 : pt)) })) };
 		const got = evidenceReport(input({ application: { ...i.application!, summary: moved } }));
 		expect(got.river[0]!.fdcChange).toBeNull();
-		expect(got.river[0]!.fdcBandNote).toMatch(/different table points/);
+		expect(got.river[0]!.fdcBandNote).toMatch(/different table points or units/);
 		expect(got.river[0]!.fdcBands).not.toBeNull();
+		// Same points, another unit (m³/s against Mm³): a difference across units would read as a change, so none is tabled either.
+		const otherUnit = { ...appOut.summary, ewrAssurance: appOut.summary.ewrAssurance!.map((x) => ({ ...x, unit: x.unit === 'm3s' ? 'mcm' : 'm3s' })) } as typeof appOut.summary;
+		expect(evidenceReport(input({ application: { ...i.application!, summary: otherUnit } })).river[0]!.fdcChange).toBeNull();
+		// Positive control: the application's own summary tables it.
+		expect(evidenceReport(input()).river[0]!.fdcChange).not.toBeNull();
 	});
 
 	it('an ensemble stored before engine 1.33.0: every new measure says "no band" with the reason, never a zero', () => {
