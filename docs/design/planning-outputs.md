@@ -315,9 +315,9 @@ its record holds: a rule by storage band for that day of the year
 panel shows it with each row in `describeTriggerRow`'s words, the notes
 and warnings, and every level's years met per band
 ([ui.md § Seasonal outlook](../ui.md#seasonal-outlook)). Band edges stay
-the terciles; a WUA setting its own would be a new setting. Still to
-build: **WP-3.8's drought restriction rule**, which takes the table's
-steps (roadmap step 3).
+the terciles; a WUA setting its own would be a new setting. Under the
+table the panel shows it as WP-3.8's drought restriction rule and an
+editor can save it as the project's rule (engine 1.46.0, model.md §2.7i).
 
 ### 3.7 R7: licence impact by year class (**M**, inside the evidence report)
 

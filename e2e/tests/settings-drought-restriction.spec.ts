@@ -3,9 +3,11 @@
 // switching it on starts from the three-level template; an editor changes a
 // cut, removes a level and adds a review date, the save stores the rule
 // whole, a rule the engine refuses blocks the save, and switching it off
-// saves null. Axe on the section.
+// saves null. A viewer reads the rule, disabled. Axe on the section at desktop
+// and phone width, where the level cards stack with no sideways scroll.
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject } from '../support/api.ts';
+import { addMember, createProject } from '../support/api.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -16,7 +18,7 @@ async function savedRule(page: import('@playwright/test').Page, projectId: strin
 	return body.project.settings.droughtRestriction ?? null;
 }
 
-test('an editor switches drought restrictions on from the template, edits and saves the rule whole, and switching off saves null', async ({ page, owner }) => {
+test('an editor switches drought restrictions on from the template, edits and saves the rule whole, a viewer reads it, and switching off saves null', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Drought restrictions');
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -28,12 +30,21 @@ test('an editor switches drought restrictions on from the template, edits and sa
 
 	// On: the template's three levels, reviewed on 1 October and 1 January, lifted on 1 May.
 	await on.check();
-	const levels = section.getByTestId('restriction-levels');
-	await expect(levels.getByRole('columnheader')).toHaveText(['Level', 'Level 1', 'Level 2', 'Level 3']);
+	const levels = section.getByTestId('restriction-level');
+	await expect(levels.locator('legend')).toHaveText(['Level 1', 'Level 2', 'Level 3']);
+	await expect(section.getByTestId('restriction-template')).toBeVisible();
 	await expect(section.getByLabel('Level 1: starts below, % of capacity')).toHaveValue('60');
 	await expect(section.getByLabel('Level 1: cut on Crops (irrigation of the crop areas), %')).toHaveValue('20');
 	await expect(section.getByTestId('restriction-words')).toContainText('reviewed 1 Oct, 1 Jan, lifted 1 May; Level 1 (below 60 %): crops 20 %');
 	await expectNoViolations(page, { include: '#set-restrict' });
+	// At phone width the cards stack, one level under the other, and nothing scrolls sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await section.scrollIntoViewIfNeeded();
+	const [a, b] = [await levels.nth(0).boundingBox(), await levels.nth(1).boundingBox()];
+	expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page, { include: '#set-restrict' });
+	await page.setViewportSize({ width: 1280, height: 900 });
 
 	// A cut a deeper level undercuts blocks the save, with the engine's words.
 	await section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %').fill('10');
@@ -46,7 +57,7 @@ test('an editor switches drought restrictions on from the template, edits and sa
 
 	// Remove the deepest level, and add a third review date (1 February: the first month without one).
 	await section.getByRole('button', { name: 'Remove the deepest level' }).click();
-	await expect(levels.getByRole('columnheader')).toHaveText(['Level', 'Level 1', 'Level 2']);
+	await expect(levels.locator('legend')).toHaveText(['Level 1', 'Level 2']);
 	await section.getByRole('button', { name: 'Add a review date' }).click();
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
@@ -62,6 +73,15 @@ test('an editor switches drought restrictions on from the template, edits and sa
 	await page.reload();
 	await expect(on).toBeChecked();
 	await expect(section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %')).toHaveValue('45');
+
+	// A viewer reads the rule but can't change it.
+	const viewer = await signIn('Restriction viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	const seen = viewer.page.getByRole('region', { name: /^Drought restrictions/ });
+	await expect(seen.getByTestId('restriction-words')).toContainText('Level 2 (below 40 %): crops 45 %');
+	await expect(seen.getByLabel('Apply drought restrictions in runs')).toBeDisabled();
+	await expect(seen.getByRole('button', { name: 'Add a deeper level' })).toHaveCount(0);
 
 	// Off: the save sends null.
 	await on.uncheck();

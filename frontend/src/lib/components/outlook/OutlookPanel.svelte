@@ -20,11 +20,10 @@
 -->
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
-	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE } from '@water-management/engine';
-	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type RunMeta } from '$lib/api';
+	import { canonicalJson, describeDroughtRestriction, DISCLAIMER, DISCLAIMER_DRAFT_NOTE, type DroughtRestrictionRule } from '@water-management/engine';
+	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '$lib/api';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { buildTriggersView, triggerRuleView } from './triggers';
-	import type { DroughtRestrictionRule } from '@water-management/engine';
-	import type { Project } from '$lib/api';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
@@ -98,8 +97,20 @@
 	let ruleSaving = $state(false);
 	let ruleSaved = $state(false);
 	let ruleError = $state<string | null>(null);
+	// The project's rule is already this table's: nothing to save.
+	const ruleIsSame = $derived(!!triggerRule?.rule && !!droughtRestriction && canonicalJson(triggerRule.rule) === canonicalJson(droughtRestriction));
 	async function useTriggersAsRule() {
 		if (!triggerRule?.rule) return;
+		// Replacing a saved rule, which every run from now on follows, is asked first.
+		if (
+			droughtRestriction &&
+			!(await confirmDialog({
+				title: 'Replace the drought restriction rule?',
+				message: `Now: ${describeDroughtRestriction(droughtRestriction)}. From the triggers: ${describeDroughtRestriction(triggerRule.rule)}. Runs from now on follow the new rule.`,
+				confirmLabel: 'Replace the rule'
+			}))
+		)
+			return;
 		ruleSaving = true;
 		ruleError = null;
 		ruleSaved = false;
@@ -389,7 +400,10 @@
 						{#if triggerRule}
 							<div class="as-rule" data-testid="triggers-as-rule">
 								{#if triggerRule.words}
-									<p class="small">As a drought restriction rule (Settings → Drought restrictions): <span data-testid="triggers-rule-words">{triggerRule.words}</span>.</p>
+									<p class="small">
+										As a drought restriction rule (<a href="?tab=settings#set-restrict">Settings → Drought restrictions</a>):
+										<span data-testid="triggers-rule-words">{triggerRule.words}</span>.
+									</p>
 								{/if}
 								{#if triggerRule.notes.length}
 									<ul class="warnings" data-testid="triggers-rule-notes">
@@ -397,10 +411,15 @@
 									</ul>
 								{/if}
 								{#if triggerRule.rule && canEdit && onProjectChange}
-									<button type="button" disabled={ruleSaving} onclick={useTriggersAsRule} data-testid="triggers-use-rule">
-										{droughtRestriction ? 'Replace the drought restriction rule with this' : 'Use as the drought restriction rule'}
-									</button>
-									{#if ruleSaved}<p class="small" role="status" data-testid="triggers-rule-saved">Saved to Settings → Drought restrictions. Runs from now on follow it.</p>{/if}
+									{#if ruleIsSame}
+										<p class="small" data-testid="triggers-rule-current">This is the project’s drought restriction rule.</p>
+									{:else}
+										<button type="button" class="btn" disabled={ruleSaving} onclick={useTriggersAsRule} data-testid="triggers-use-rule">
+											{droughtRestriction ? 'Replace the drought restriction rule with this' : 'Use as the drought restriction rule'}
+										</button>
+									{/if}
+									<!-- Mounted with the button, so the saved message is announced when its text appears. -->
+									<p class="small" role="status" data-testid="triggers-rule-saved">{ruleSaved ? 'Saved to Settings → Drought restrictions. Runs from now on follow it.' : ''}</p>
 									{#if ruleError}<p class="err" role="alert">{ruleError}</p>{/if}
 								{/if}
 							</div>

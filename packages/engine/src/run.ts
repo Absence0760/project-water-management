@@ -1463,7 +1463,24 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 		.map((node, i) => ({ node, r: sim.nodes[i]! }))
 		.filter((x) => x.r.restrictedDemand)
 		.sort((a, b) => cmpStr(a.node.id, b.node.id))
-		.map(({ node, r }) => ({ nodeId: node.id, name: node.name, avgDemandM3Day: mean(r.demand), avgRestrictedDemandM3Day: mean(r.restrictedDemand!), avgSuppliedM3Day: mean(r.supplied) }));
+		.map(({ node, r }) => {
+			// The cut on the days a level was in force only: the run means dilute it with every unrestricted day.
+			let cut = 0;
+			let n = 0;
+			for (let t = 0; t < days; t++) {
+				if (lv[t] === 0) continue;
+				cut += r.demand[t]! - r.restrictedDemand![t]!;
+				n++;
+			}
+			return {
+				nodeId: node.id,
+				name: node.name,
+				avgDemandM3Day: mean(r.demand),
+				avgRestrictedDemandM3Day: mean(r.restrictedDemand!),
+				avgSuppliedM3Day: mean(r.supplied),
+				avgCutOnRestrictedDaysM3Day: n ? cut / n : null
+			};
+		});
 	return { rule, years: [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear), daysByLevel: total, reviews, units };
 }
 

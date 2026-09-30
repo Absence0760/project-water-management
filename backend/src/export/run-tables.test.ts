@@ -383,7 +383,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			],
 			daysByLevel: [360, 85, 20],
 			reviews: 2,
-			units: [{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75 }]
+			units: [{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 43.2 }]
 		};
 		const lines = [...droughtRestrictionLines(r)];
 		expect(lines).toEqual([
@@ -395,8 +395,8 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 			'2003/04,365,300,65,0',
 			'2004/05,100,60,20,20',
 			'Whole run,465,360,85,20',
-			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Cut (m³/day),Mean supplied (m³/day)',
-			'Farm A,100,80,20,75'
+			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Mean cut (m³/day),Mean cut on restricted days (m³/day),Mean supplied (m³/day)',
+			'Farm A,100,80,20,43.2,75'
 		]);
 		// In the summary sheet of a run with the rule only.
 		expect([...summaryCsvLines(meta, { ...summary, droughtRestriction: r })]).toContain('Whole run,465,360,85,20');

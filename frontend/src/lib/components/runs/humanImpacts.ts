@@ -1,4 +1,4 @@
-// Drought restrictions, land cover, groundwater, demand objects and other users' tables: a separate chunk
+// Land cover, groundwater, demand objects and other users' tables: a separate chunk
 // (HumanImpactTables.svelte), drawn on Units & supply (issue #137) and in the printable
 // report. A plain module rather than a `<script module>`, so the printable report can
 // load it before it says it is ready: Vite's dependency scan can't see a .svelte file's
@@ -8,13 +8,11 @@ import type { RunSummary } from '@water-management/engine';
 export const loadHumanImpacts = () => import('./HumanImpactTables.svelte');
 
 /** Which of the tables the run has (engine ≥ 0.22.0 and later; demand objects ≥ 1.7.0). */
-function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'droughtRestriction'>) {
+function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>) {
 	const farms = summary.farms ?? [];
 	const others = summary.users ?? [];
 	return {
 		landCover: !!summary.landCover,
-		// The drought restriction rule (engine ≥ 1.46.0, WP-3.8): its days per level and each unit's cut.
-		restrictions: !!summary.droughtRestriction,
 		groundwater: [...farms, ...others].some((f) => f.avgGroundwaterM3Day !== undefined),
 		demandObjects: farms.some((f) => !!f.demandObjects?.length),
 		users: others.length > 0
@@ -23,11 +21,11 @@ function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'drou
 
 /**
  * The run has any of the tables: land cover, boreholes (units or users), a
- * unit's demand objects, drought restrictions, or, with `users`, other water users.
+ * unit's demand objects, or, with `users`, other water users.
  */
-export function hasHumanImpacts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'droughtRestriction'>, users = true): boolean {
+export function hasHumanImpacts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>, users = true): boolean {
 	const p = parts(summary);
-	return p.landCover || p.groundwater || p.demandObjects || p.restrictions || (users && p.users);
+	return p.landCover || p.groundwater || p.demandObjects || (users && p.users);
 }
 
 /**
@@ -43,10 +41,10 @@ export const usersTableOnSupply = (summary: Pick<RunSummary, 'curtailment'>): bo
  * draws any of them; the curtailment targets when the run's only ones are
  * other users and the curtailment table lists them. null with none.
  */
-export function otherUsesLink(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'curtailment' | 'droughtRestriction'>): { hash: 'res-other-uses' | 'res-curtailment'; what: string; where: string } | null {
+export function otherUsesLink(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'curtailment'>): { hash: 'res-other-uses' | 'res-curtailment'; what: string; where: string } | null {
 	const p = parts(summary);
 	const usersHere = usersTableOnSupply(summary);
-	const names = [p.restrictions && 'drought restrictions', p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.users && usersHere && 'other water users'].filter(
+	const names = [p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.users && usersHere && 'other water users'].filter(
 		(x): x is string => !!x
 	);
 	if (names.length) {

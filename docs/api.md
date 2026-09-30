@@ -1590,8 +1590,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `settings.droughtRestriction`): `{ rule (as applied), years: [{
   waterYear, days, daysByLevel: [none, level 1, …] }], daysByLevel (the
   whole run), reviews (days the level was decided), units: [{ nodeId, name,
-  avgDemandM3Day, avgRestrictedDemandM3Day, avgSuppliedM3Day }] (farms, id
-  order) }`. The run has the catchment series `restriction_level` (0 =
+  avgDemandM3Day, avgRestrictedDemandM3Day, avgSuppliedM3Day,
+  avgCutOnRestrictedDaysM3Day (the mean cut over the days a level was in
+  force, null when none was) }] (farms, id order) }`. The run has the catchment series `restriction_level` (0 =
   none) and `restriction_cut@<part>` (the day's cut, 0–1, for each part a
   level cuts), and every farm `restricted_demand` (m³/day, what its sources
   are asked for; `demand` and `deficit` stay the unrestricted demand's).

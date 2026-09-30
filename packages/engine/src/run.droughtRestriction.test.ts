@@ -142,7 +142,8 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			expect(s.daysByLevel).toEqual([4, 6]);
 			expect(s.years).toEqual([{ waterYear: 2020, days: 10, daysByLevel: [4, 6] }]);
 			expect(s.reviews).toBe(2);
-			expect(s.units).toEqual([{ nodeId: 'A', name: 'A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 70, avgSuppliedM3Day: 70 }]);
+			// The cut on restricted days only: 50 a day, where the run mean (100 − 70) dilutes it to 30.
+			expect(s.units).toEqual([{ nodeId: 'A', name: 'A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 70, avgSuppliedM3Day: 70, avgCutOnRestrictedDaysM3Day: 50 }]);
 			expect(s.rule).toEqual(halfBelow70);
 		});
 		it('adds no column for a part no level cuts, and none on the gauge', () => {
@@ -324,6 +325,9 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			expect(checkDroughtRestriction(input, tamper('restriction_cut@crops', null, 5, 0.4))).toMatch(/restriction_cut@crops 0\.4 ≠ level 1's cut 0\.5/);
 			expect(checkDroughtRestriction(input, tamper(RESTRICTION_SERIES.restricted.key, 'A', 5, 60))).toMatch(/A day 5: restricted demand 60 ≠ 50/);
 			expect(checkDroughtRestriction(input, tamper('supplied', 'A', 5, 55))).toMatch(/never raises supply/);
+			// The check works the dates out itself: a rule whose review moved a day doesn't match the run's levels.
+			const moved = { ...input, settings: { ...input.settings, droughtRestriction: { ...halfBelow70, reviewDates: ['10-06'] } } };
+			expect(checkDroughtRestriction(moved, out)).toMatch(/day 4: drought restriction level 1 ≠ 0/);
 		});
 		it('refuses restriction columns without the rule', () => {
 			const off = { ...input, settings: { ...input.settings, droughtRestriction: null } };
@@ -369,6 +373,12 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			expect(base.settings.droughtRestriction).toBeNull();
 			const off = applyScenario(on.input, [{ op: 'settings.set', path: 'droughtRestriction', value: null }]);
 			expect(off.input.settings.droughtRestriction).toBeNull();
+			// Off over no rule changes nothing: no key written, no problem.
+			const none = { ...base, settings: { ...base.settings } };
+			delete none.settings.droughtRestriction;
+			const same = applyScenario(none, [{ op: 'settings.set', path: 'droughtRestriction', value: null }]);
+			expect(same.problems).toEqual([]);
+			expect('droughtRestriction' in same.input.settings).toBe(false);
 			const bad = applyScenario(base, [{ op: 'settings.set', path: 'droughtRestriction', value: { reviewDates: [], levels: [] } as unknown as DroughtRestrictionRule }]);
 			expect(bad.problems[0]).toMatch(/droughtRestriction reviewDates needs at least one review date/);
 			expect(validateScenarioOps([{ op: 'settings.set', path: 'droughtRestriction', value: halfBelow70 }]).errors).toEqual([]);

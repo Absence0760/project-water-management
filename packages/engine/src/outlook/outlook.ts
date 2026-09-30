@@ -34,6 +34,7 @@
 // Not part of runModel: a derived view. The one engine change it needs is
 // settings.demandFactorFrom (engine 0.44.0), so a level's demand factors
 // start on the decision date. Pure: no I/O. Deterministic.
+import { RESTRICTION_SERIES } from '../network/restriction';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { damCapacityOn } from '../network/development';
 import type { DailySeries, ModelInput, ModelOutput, SeriesKind } from '../project';
@@ -542,6 +543,7 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
  * is outside it (the member builders then say why).
  */
 export function outlookBaseAndSnapshot(input: ModelInput, date: string, given: { baseRun?: OutlookBaseRun; snapshot?: ModelStateSnapshot } = {}): { baseRun: OutlookBaseRun; snapshot: ModelStateSnapshot | null } {
+	if (given.baseRun) assertUnrestrictedBase(given.baseRun);
 	if (given.snapshot && given.snapshot.date !== date) throw new RangeError(`the snapshot is of ${given.snapshot.date}, not ${date}`);
 	if (given.baseRun && given.snapshot) return { baseRun: given.baseRun, snapshot: given.snapshot };
 	const tryCapture = () => {
@@ -720,14 +722,6 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
 }
 
 /**
- * The seasonal outlook: every analogue × every level, run and summarised.
- * Members = analogue years × levels that run, each a run of the season from
- * the base run's snapshot at the decision date (warmStart, the default), or
- * with warmStart false a full run of the history and the season. Levels
- * whose ops aren't all demand.scale, or don't apply, are reported with
- * their problems and not run.
- */
-/**
  * The input without its drought restriction rule (engine ≥ 1.46.0, WP-3.8,
  * docs/model.md §2.15 and §2.7i): the seasonal outlook and its review
  * triggers run without it. The rule is what the triggers are turned into,
@@ -735,14 +729,36 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
  * season starts from is then the unrestricted one too. Unchanged when the
  * rule is off.
  */
+/**
+ * Refuses a base run made with the drought restriction rule (engine ≥
+ * 1.46.0): its history is the restricted one, and the outlook and its
+ * triggers read the unrestricted history (withoutDroughtRestriction). A
+ * caller that passes its own base run passes one of the input without the
+ * rule; a snapshot captured with the rule is refused by its fingerprint.
+ */
+export function assertUnrestrictedBase(baseRun: OutlookBaseRun): void {
+	if (baseRun.series.some((s) => s.key === RESTRICTION_SERIES.level.key))
+		throw new Error('the base run was made with the drought restriction rule: an outlook reads the history without it, so pass a run of the input without the rule (withoutDroughtRestriction)');
+}
+
 export function withoutDroughtRestriction(input: ModelInput): ModelInput {
 	if (input.settings.droughtRestriction == null) return input;
 	const { droughtRestriction: _off, ...settings } = input.settings;
 	return { ...input, settings: settings as ModelInput['settings'] };
 }
 
+/**
+ * The seasonal outlook: every analogue × every level, run and summarised.
+ * Members = analogue years × levels that run, each a run of the season from
+ * the base run's snapshot at the decision date (warmStart, the default), or
+ * with warmStart false a full run of the history and the season. Levels
+ * whose ops aren't all demand.scale, or don't apply, are reported with
+ * their problems and not run. It runs without the drought restriction rule
+ * (withoutDroughtRestriction).
+ */
 export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOptions): SeasonalOutlook {
 	const input = withoutDroughtRestriction(raw);
+	if (options.baseRun) assertUnrestrictedBase(options.baseRun);
 	const season: OutlookSeason = { decisionDate: options.decisionDate, seasonEnd: options.seasonEnd };
 	const s = resolveSeason(season);
 	const warm = options.warmStart !== false;
