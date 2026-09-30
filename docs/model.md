@@ -5246,6 +5246,24 @@ it never changes a run's results.
   paired band is refused when the baseline's ensemble varied the pan
   coefficient and the other run is GR4J on a monthly PE row, which doesn't
   use it: the pairs would not be the same members.
+  Each Reserve site's band also carries `worse` (issue #71): the share of
+  pairs in which the other run meets fewer months at that site, counted over
+  the pairs with a rate on both sides; `null` below the 30-member gate. A
+  summary stored before it has no `worse`, and the evidence report then
+  prints no "worse in" for the row.
+- **The declared rule and the cited ensemble** (issue #71,
+  `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
+  G4): a project may declare one rule for its evidence,
+  `settings.evidenceUncertaintyRule` (members, bounds, pan shift and the
+  four thresholds). An evidence report cites the **first** complete, unpaired
+  ensemble on its baseline whose resolved options match that rule exactly
+  (`declaredRuleMismatches` empty; seed, records and rain sources are not
+  part of the rule), and the first complete paired ensemble on it. First,
+  not newest or kindest: the database draws each seed, so once one ensemble
+  on the rule has completed, starting more changes nothing the report cites,
+  and there is nothing to re-roll. Every other start is listed with how it
+  departs from the rule. No rule declared: nothing is cited, and no change
+  carries a band.
 - **Reproducible and checked.** The same input and options give an identical
   ensemble (tested); metrics are rounded to 6 significant figures. The server
   assigns the seed and stores the resolved options before the browser runs
