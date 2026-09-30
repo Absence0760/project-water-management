@@ -1441,7 +1441,13 @@ In short:
   (the two runs' summaries and inputs, the input diff with stored values,
   every farm by name), assembled by the pure engine builder; Step 3 D2's
   anonymising is for what an applicant holds (ER10), and a contributor gets
-  none of it.
+  none of it. § 4's other applications on the baseline (evidence-3) are read
+  the same way: the scenario and run policies decide which appear, so a
+  viewer's report lists no submitted application (only editors read those)
+  and nobody's lists a draft (only its applicant reads it, and it isn't an
+  application yet); `report.db.test.ts` checks both, with the team's submitted
+  scenario as the positive control. Only two numbers of each run leave the
+  database, not its summary.
 - **An import report can't be forged or rewritten** (017_project_import). What
   the importer flagged is the audit trail of a workbook's mistakes, so only the
   import that created the project may write it (the insert trigger checks the

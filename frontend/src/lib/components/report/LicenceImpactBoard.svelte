@@ -20,12 +20,12 @@
 	{:else}
 		<p class="lede">
 			The baseline’s complete water years, ranked by their natural flow and split into {METHOD[view.method]} ({view.nYears} years compared). Each
-			column sets the baseline {view.background} beside this run over the same years. The verdict is from the months below the requirement, not
+			column sets the baseline {view.background} beside {view.application} over the same years. The verdict is from the months below the requirement, not
 			from the annual totals.
 		</p>
 		<div class="table-wrap">
 			<table class="data board-table">
-				<caption class="visually-hidden">Impact by year class: the annual waterfall, the requirement not met and the verdict, baseline and this run</caption>
+				<caption class="visually-hidden">Impact by year class: the annual waterfall, the requirement not met and the verdict, baseline and {view.application}</caption>
 				<thead>
 					<tr>
 						<th scope="col"><span class="visually-hidden">Measure</span></th>
@@ -61,7 +61,7 @@
 								{#if c.below}
 									<dl class="steps">
 										<div class="step"><dt>Baseline</dt><dd class="num">{c.below.background}</dd></div>
-										<div class="step"><dt>This run</dt><dd class="num">{c.below.application}</dd></div>
+										<div class="step"><dt>{view.application.charAt(0).toUpperCase() + view.application.slice(1)}</dt><dd class="num">{c.below.application}</dd></div>
 										<div class="step step-left"><dt>Change</dt><dd class="num">{c.below.change}</dd></div>
 									</dl>
 									<span class="sub">of {c.below.units} {view.metric === 'reserveMonthsMet' ? 'months' : 'days'}</span>

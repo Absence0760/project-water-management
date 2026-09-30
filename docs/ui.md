@@ -5706,8 +5706,18 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     months met per rule-table site, days below the pragmatic EWR, shortfall
     volume, outflow MAR with % of natural MAR, the applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
-    summed, no band; *Not assessed* without volumes), other users' supply),
-    with the paired band and "worse in k of n", *Where
+    summed, no band; *Not assessed* without volumes), other users' supply,
+    and *Other applications on this baseline, summed* (the other submitted
+    or approved applications' own changes in days below the pragmatic EWR,
+    added up, no band, its basis saying it is a sum of separate runs and not
+    one combined run, WP-3.11; *None* when there are none the reader can
+    see)), with the paired band and "worse in k of n"; then **Impact by year
+    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    background, the application beside it, from the three daily series
+    `loadImpactSeries` fetches before ready; the year-class method and the
+    Reserve site are the project's `settings.outcomes`, as the impact report
+    reads them; *Not enough years* per class on a short record, and the
+    note when only one run is at full allocation); *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -5720,17 +5730,32 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
-    the FDC check of one month against the EWR curve (`FdcPlot`) and the
+    the FDC check against the EWR curve (`FdcPlot`) of the month the report
+    ranks first (the largest drop in months met, else the one met least
+    often) and, beside it, of the river's driest month (the lowest mean
+    natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
+    both, when they are the same month; `grid.ts` `fdcMonths`), and the
     compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
-    each departs from the rule), the baseline's bands (R1), the paired bands
+    each departs from the rule; a start not completed reads *started, not
+    completed: no result stored*, with a note that the app keeps nothing of
+    it but who, when and its rule, since the browser stores an ensemble only
+    when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
   - **3 Model and data**: calibration record, validation (`FitProvenance`, or
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
-    days and years fully met, baseline and application.
+    days and years fully met, baseline and application. Then **Other
+    applications on this baseline** (`evidence-cumulative`): each other
+    submitted or approved application, its status and its own change in days
+    below the pragmatic EWR and in Reserve months met at the outlet, the sum
+    of those counted (same engine, period and runoff model; any other says
+    why it isn't) and the sum with this application; the words say it is a
+    sum of separate runs, not a combined run (WP-3.11), listed as the reader
+    can see them; past 50 the newest 50 are listed and nothing is summed
+    (page 1's row then *Not assessed*).
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
@@ -5751,7 +5776,11 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     issued* for a draft), **Appendix C** (application only): the scenario's
     description and the run's notes, verbatim, the only free text.
 - **Draft stamp.** Every section head and the footer (`data-report-footer`)
-  read *Draft · not issued* until an evidence pack issues it (WP-3.14).
+  read *Draft · not issued* until an evidence pack issues it (WP-3.14), and
+  in print a diagonal *Draft · not issued* watermark crosses every page
+  (`position: fixed` in `@media print`, which Chromium repeats on each page;
+  `aria-hidden`, the text stamps being the accessible ones), so a cropped
+  page still says it.
 - **Ready and print.** `data-report-ready` follows the catchment report's
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
   browser's print (always light, A4). There is no server-rendered evidence

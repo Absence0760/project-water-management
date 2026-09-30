@@ -24,6 +24,13 @@ describe('evidence report number formats', () => {
 		expect(valueText({ unit: 'unit-years' }, 3)).toBe('3 unit-years');
 	});
 
+	it('prints the other applications’ sum without "run:", with why it has no band', () => {
+		const c = changeText({ unit: 'days', id: 'otherApplications' }, { run: 14, band: null, bandNote: 'no band: a sum of other runs’ own differences', worse: null });
+		expect(c).toEqual({ main: '+14 days', sub: 'no band: a sum of other runs’ own differences', banded: false });
+		// Control: any other row without a band keeps "run:".
+		expect(changeText({ unit: 'days', id: 'ewrDays' }, { run: 14, band: null, bandNote: 'no band', worse: null }).main).toBe('run: +14 days');
+	});
+
 	it('prints a banded change as the paired median, its range and the run (D-U2)', () => {
 		const c = changeText({ unit: 'days' }, { run: 135, band: band(-9, 98, 175), bandNote: null, worse: { k: 71, n: 77 } });
 		expect(c).toEqual({ main: '+98 days', sub: '−9 to +175 · run: +135 days', banded: true });
