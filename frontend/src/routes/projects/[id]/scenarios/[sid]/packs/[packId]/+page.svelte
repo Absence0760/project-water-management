@@ -5,7 +5,8 @@
 	// Issuing stays with the editors, so this page only reads, and links.
 	// An applicant reads no pack row (the manifest names every farm): this is
 	// the D2 projection the API builds, GET …/scenarios/:sid/packs/:packId.
-	// Its standing, code, hashes and signers (verify's fields); the river's
+	// Its standing, code, hashes and signers (verify's fields, with the errata
+	// found since issue as verify lists them, 132); the river's
 	// rows and sites a pack link shows; their own units by name; every other
 	// farm or water user only as "Farm n" with its change in whole points.
 	// The PDF, manifest and reproduction bundle aren't offered: each is the
@@ -19,7 +20,7 @@
 	import { api, ApiError, type ApplicantPack } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { latestOnly } from '$lib/components/packs/pack';
+	import { errataFoundSinceNote, latestOnly } from '$lib/components/packs/pack';
 	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '$lib/components/packs/applicantPack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -224,6 +225,14 @@
 				{#if view.verify.pdfSha256}<dt>PDF SHA-256</dt><dd class="mono">{view.verify.pdfSha256}</dd>{/if}
 				{#if view.verify.bundleSha256}<dt>Reproduction bundle SHA-256</dt><dd class="mono">{view.verify.bundleSha256}</dd>{/if}
 			</dl>
+			{#if view.verify.errataFoundSince.length}
+				{@const since = errataFoundSinceNote(view.verify)}
+				<div class="alert alert-warning errata-alert" role="note" data-testid="applicant-pack-errata-since">
+					<strong>{since.heading}:</strong>
+					<ul class="errata-since">{#each view.verify.errataFoundSince as e (e.id)}<li><strong>{e.id}</strong> {e.summary}</li>{/each}</ul>
+					<p class="small">{since.note}</p>
+				</div>
+			{/if}
 			{#if view.verify.signers.length}
 				<p>Signed by:</p>
 				<ul>
@@ -235,6 +244,13 @@
 </main>
 
 <style>
+	.errata-alert {
+		margin: 0.5rem 0;
+	}
+	.errata-since {
+		margin: 0.35rem 0;
+		padding-left: 1.2rem;
+	}
 	.applicant-pack {
 		max-width: 1000px;
 		display: flex;

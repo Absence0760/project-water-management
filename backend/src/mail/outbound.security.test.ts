@@ -83,7 +83,7 @@ const builders: Record<string, () => Mail[]> = {
 				templates.LOCALES.map((l) =>
 					templates.packNoticeMail(
 						TO,
-						{ event, as, projectId: 'p1', packId: 'k1', projectName: EVIL, scenarioName: EVIL, version: 2, supersedesVersion: 1, shortCode: 'ab12-cd34-ef56', reason: EVIL },
+						{ event, as, projectId: 'p1', packId: 'k1', projectName: EVIL, scenarioId: 's1', scenarioName: EVIL, version: 2, supersedesVersion: 1, shortCode: 'ab12-cd34-ef56', reason: EVIL },
 						l
 					)
 				)

@@ -6378,14 +6378,17 @@ Part of the workspace, so English, like the rest of the Applicant view
   whole points, and a line saying the numbers are the pack's own). When the
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
-  hashes, and the signers. No download: the PDF, manifest and bundle are
-  the assessors' copies.
+  hashes, the errata found since issue when verify names any (132; the
+  same note as the pack's page and verify), and the signers. No download:
+  the PDF, manifest and bundle are the assessors' copies. The "pack issued"
+  and "pack withdrawn" emails (133) link the applicant here.
 - 404 (not theirs, not issued, another application's) and 403 each have
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
-  view, their farm named and the neighbour as "Farm 1", no download, a
-  share link opened signed out, axe, the phone layout).
+  view, their farm named and the neighbour as "Farm 1", no download, the
+  errata found since issue, a share link opened signed out, axe, the phone
+  layout).
 
 ## Help (`/help`)
 

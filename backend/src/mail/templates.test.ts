@@ -181,6 +181,7 @@ describe('packNoticeMail (issue #71)', () => {
 		projectId: 'p1',
 		packId: 'k1',
 		projectName: 'Kloof',
+		scenarioId: 's1',
 		scenarioName: 'Upper dam',
 		version: 2,
 		supersedesVersion: 1,
@@ -189,7 +190,7 @@ describe('packNoticeMail (issue #71)', () => {
 		as: 'applicant'
 	} as const;
 
-	it('tells the applicant an issue: version, subject, short code and the public verify link, no pack page and no figure', () => {
+	it('tells the applicant an issue: version, subject, short code, the public verify link and their own copy of the pack, not the editors’ page, and no figure', () => {
 		const m = packNoticeMail('a@example.com', { ...base, event: 'issued' });
 		expect(m).toMatchObject({ kind: 'pack_notice', to: 'a@example.com', subject: 'Evidence pack issued: Upper dam — Kloof' });
 		expect(m.text).toContain('Version 2 of the evidence pack for the application “Upper dam” in Kloof has been issued.');
@@ -197,8 +198,15 @@ describe('packNoticeMail (issue #71)', () => {
 		expect(m.text).toContain('Its short code is ab12-cd34-ef56.');
 		expect(m.text).toContain('Check the pack: http://localhost:7777/verify/ab12-cd34-ef56');
 		expect(m.text).toContain('because the application “Upper dam” is yours');
-		expect(m.text).not.toContain('/packs/');
+		expect(m.text).toContain('Open the pack in the catchment: http://localhost:7777/projects/p1/scenarios/s1/packs/k1');
+		expect(m.text).not.toContain('/projects/p1/packs/k1');
 		expect(m.html).toMatch(/<html lang="en">/);
+	});
+
+	it('links no pack page for an applicant without an application (they are never emailed about baseline evidence)', () => {
+		const m = packNoticeMail('a@example.com', { ...base, event: 'issued', scenarioId: null, scenarioName: null });
+		expect(m.text).not.toContain('/packs/');
+		expect(m.text).toContain('Check the pack: http://localhost:7777/verify/ab12-cd34-ef56');
 	});
 
 	it('gives an editor the pack’s own page too, and says why they get it', () => {

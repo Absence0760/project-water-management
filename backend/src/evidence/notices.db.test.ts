@@ -30,6 +30,7 @@ let projectId: string;
 let baselinePack: string;
 let successorPack: string;
 let applicationPack: string;
+let applicationScenario: string;
 let draftWithdrawn: string;
 let draftPack: string;
 const HASH = 'ab12cd34ef56'.padEnd(64, '0');
@@ -101,6 +102,7 @@ beforeAll(async () => {
 		const [baseId, successorId] = [randomUUID(), randomUUID()];
 		const base = await pack('superseded', 1, null, false, true, undefined, baseId, successorId);
 		return {
+			scenario,
 			base,
 			successor: await pack('issued', 2, base, false, true, undefined, successorId),
 			application: await pack('issued', 1, null, true, true, `'${HASH}'`),
@@ -108,7 +110,8 @@ beforeAll(async () => {
 			draft: await pack('draft', 1, null, false, false)
 		};
 	});
-	({ base: baselinePack, successor: successorPack, application: applicationPack, draftWithdrawn, draft: draftPack } = planted as Record<string, string> as {
+	({ scenario: applicationScenario, base: baselinePack, successor: successorPack, application: applicationPack, draftWithdrawn, draft: draftPack } = planted as Record<string, string> as {
+		scenario: string;
 		base: string;
 		successor: string;
 		application: string;
@@ -205,14 +208,17 @@ describe('sending them', () => {
 		expect(await sendPackNotices()).toEqual({ sent: 0, skipped: 0, failed: 0 });
 	});
 
-	it('tells the applicant their application’s pack was issued, with the public verify link, and no link to the pack itself', async () => {
+	it('tells the applicant their application’s pack was issued, with the public verify link and their own copy (131), never the editors’ pack page', async () => {
 		const [m] = mailsTo(applicant);
 		expect(m).toMatchObject({ kind: 'pack_notice', subject: 'Evidence pack issued: Upper dam <b>raise</b> — Notice catchment' });
 		expect(m!.text).toContain('Version 1 of the evidence pack for the application “Upper dam <b>raise</b>” in Notice catchment has been issued.');
 		expect(m!.text).toContain('Its short code is ab12-cd34-ef56.');
 		expect(m!.text).toContain('Check the pack: http://localhost:7777/verify/ab12-cd34-ef56');
 		expect(m!.text).toContain('the application “Upper dam <b>raise</b>” is yours');
-		expect(m!.text).not.toContain(`/packs/${applicationPack}`);
+		expect(m!.text).toContain(
+			`Open the pack in the catchment: http://localhost:7777/projects/${projectId}/scenarios/${applicationScenario}/packs/${applicationPack}`
+		);
+		expect(m!.text).not.toContain(`/projects/${projectId}/packs/${applicationPack}`);
 		expect(m!.html).toContain('Upper dam &lt;b&gt;raise&lt;/b&gt;');
 	});
 

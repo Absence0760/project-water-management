@@ -463,7 +463,7 @@ row; they read a projection the database builds (D2's recommended default,
 
 | Shown | From |
 | --- | --- |
-| the standing, version, issue date, code, hashes, methodology, errata, signers | exactly what `GET /verify/:code` answers |
+| the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
 | their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
 | every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: ranked per kind in the order of a hash of the node's id, so the number says nothing of its name or place; a rank within this pack, not a label, so "Farm 3" in one version need not be "Farm 3" in the next |
@@ -546,10 +546,11 @@ they just did it. Once per pack, person and event (the primary key).
 **What it says.** The pack's version, what it is for (the application's
 name, or the baseline evidence), the catchment, the short code and the
 public verify link (**Check the pack**); for a withdrawal, the reason, which
-verify shows anyone already. Never a figure. Editors also get a link to the
-pack's own page; an applicant doesn't, since applicants read no pack yet
-([followups.md](./followups.md), "Applicants' access to their own
-application's packs"): the verify link works for them. The words are in the
+verify shows anyone already. Never a figure. It also links the recipient's
+own view of the pack (**Open the pack in the catchment**): an editor's is
+the pack's page, the applicant's their own copy
+(`/projects/:id/scenarios/:sid/packs/:packId`, [§ Applicants](#applicants)),
+never the editors' page, which they can't open. The words are in the
 mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
 recipient's language, English where a key has no translation.
 

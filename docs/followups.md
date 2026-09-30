@@ -4287,8 +4287,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       actor; a supersede is told in the new version's email, and a draft
       withdrawn is told to no one. Queued in the route's transaction, sent
       by the tick as each recipient under RLS, with the role and address
-      checked again at send; the email carries the version, the short code
-      and the verify link, never a figure
+      checked again at send; the email carries the version, the short code,
+      the verify link and the recipient's own view of the pack (the
+      applicant's is their copy, 131_applicant_packs), never a figure
       ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
       Afrikaans words went through the i18n translator and checker (the
       native speaker's review is pending with the rest, § Afrikaans).

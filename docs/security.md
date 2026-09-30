@@ -2825,8 +2825,9 @@ nothing else.
   demoted since, or an address SES suppressed since, gets nothing), and it
   carries only what verify already answers anyone (version, short code,
   withdrawal reason) plus the application's and catchment's names as the
-  recipient reads them: never a figure, and no link an applicant can't use
-  (they get the public verify page, not the pack's).
+  recipient reads them: never a figure, and no link a recipient can't use
+  (an editor gets the pack's page; the applicant the public verify page and
+  their own copy, 131's projection, never the editors' pack page).
   `evidence/notices.db.test.ts` checks each refusal beside its control.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the

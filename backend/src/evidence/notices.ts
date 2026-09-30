@@ -102,6 +102,7 @@ export async function prepareNotice(db: Db, c: ClaimedNotice): Promise<Prepared>
 				projectId: c.project_id,
 				packId: c.pack_id,
 				projectName: me.project,
+				scenarioId: c.scenario_id,
 				scenarioName,
 				version: c.version,
 				supersedesVersion: c.event === 'issued' ? c.supersedes_version : null,

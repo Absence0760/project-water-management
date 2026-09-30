@@ -4,7 +4,8 @@
 // submitted application (through the API: the screens are
 // evidence-pack.spec.ts'); the applicant finds it in their Application panel,
 // opens their copy (their own farm by name, the neighbour only as "Farm 1",
-// no PDF, manifest or bundle), makes a read-only share link to it, and
+// no PDF, manifest or bundle; the errata found since issue when there are
+// any), makes a read-only share link to it, and
 // someone signed out opens the link. axe on the pack view and the Share
 // dialog; the phone layout doesn't scroll sideways. Synthetic catchment and
 // invented rule table, as evidence-pack.spec.ts.
@@ -122,6 +123,25 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await expect(view).not.toContainText('Lower farm');
 	await expect(view.getByRole('link', { name: /Download/ })).toHaveCount(0);
 	await expectNoViolations(a);
+
+	// Errata found since issue, as verify lists them (132): none for this engine (the live answer) ...
+	await expect(view.getByTestId('applicant-pack-errata-since')).toHaveCount(0);
+	// ... and one listed when the API names one: no real erratum can be added from a test, so the live answer with one added.
+	const packApi = `${API_URL}/projects/${project.id}/scenarios/${scenarioId}/packs/${pack.id}`;
+	await a.route(packApi, async (route) => {
+		const res = await route.fetch();
+		const body = await res.json();
+		body.verify.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
+		await route.fulfill({ response: res, json: body });
+	});
+	await a.reload();
+	const since = view.getByTestId('applicant-pack-errata-since');
+	await expect(since).toContainText('Errata found since issue:');
+	await expect(since.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
+	await expectNoViolations(a);
+	await a.unroute(packApi);
+	await a.reload();
+	await expect(view.getByTestId('applicant-pack-standing')).toHaveAttribute('data-status', 'issued');
 
 	// A share link from the pack view, opened signed out.
 	await view.getByTestId('applicant-pack-share-open').click();

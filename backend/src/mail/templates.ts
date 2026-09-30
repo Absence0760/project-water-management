@@ -292,6 +292,8 @@ export type PackNoticeFacts = {
 	projectId: string;
 	packId: string;
 	projectName: string;
+	/** The application's scenario (its id, for the applicant's pack view); null for baseline evidence. */
+	scenarioId: string | null;
 	/** The application's scenario name; null for baseline evidence. */
 	scenarioName: string | null;
 	version: number;
@@ -304,16 +306,31 @@ export type PackNoticeFacts = {
 	/**
 	 * Why this person gets it: `editor` (they issue and withdraw the project's
 	 * packs; the mail links the pack's own page too) or `applicant` (the
-	 * application is theirs; they read no pack, so only the public verify link).
+	 * application is theirs; the mail links their own copy of the pack, the
+	 * applicant's pack view of 131_applicant_packs, never the editors' page).
 	 */
 	as: 'editor' | 'applicant';
 };
 
 /**
+ * The recipient's own page for the pack: an editor's is the pack's page; an
+ * applicant's is their copy (frontend packs/applicantPack.ts
+ * applicantPackHref), which they read only for their own application.
+ */
+function packPagePath(f: PackNoticeFacts): string | null {
+	const project = encodeURIComponent(f.projectId);
+	const pack = encodeURIComponent(f.packId);
+	if (f.as === 'editor') return `/projects/${project}/packs/${pack}`;
+	// An applicant is emailed only about their application's pack; without one there is no copy of theirs to link.
+	return f.scenarioId ? `/projects/${project}/scenarios/${encodeURIComponent(f.scenarioId)}/packs/${pack}` : null;
+}
+
+/**
  * An evidence pack was issued, or one that was issued was withdrawn (issue
  * #71; docs/evidence-pack.md § Notices). Built by the worker as its recipient
  * (evidence/notices.ts). It names the pack (version, subject, short code) and
- * links the public verify page; never a figure. In the recipient's language
+ * links the public verify page and the recipient's own view of the pack
+ * (an editor's pack page, an applicant's copy); never a figure. In the recipient's language
  * (an applicant may read Afrikaans), English where a key has none.
  */
 export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string | null): Mail {
@@ -322,6 +339,7 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 	const what = f.scenarioName === null ? tr.t('mail.pack.what.baseline') : tr.t('mail.pack.what.application', { name: f.scenarioName });
 	const v = { name, what, project: f.projectName, version: f.version, code: f.shortCode, product: PRODUCT };
 	const issued = f.event === 'issued';
+	const page = packPagePath(f);
 	const paragraphs: Para[] = issued
 		? [tr.t('mail.pack.issued.body', v), ...(f.supersedesVersion !== null ? [tr.t('mail.pack.issued.supersedes', { previous: f.supersedesVersion })] : [])]
 		: [tr.t('mail.pack.withdrawn.body', v), ...(f.reason ? [tr.t('mail.pack.withdrawn.reason', { reason: f.reason })] : [])];
@@ -335,7 +353,7 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 			paragraphs,
 			action: { label: tr.t('mail.pack.action'), url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) },
 			footer: [f.as === 'editor' ? tr.t('mail.pack.why.editor', v) : tr.t('mail.pack.why.applicant', { name })],
-			links: f.as === 'editor' ? [{ label: tr.t('mail.pack.open'), url: sitePage(`/projects/${f.projectId}/packs/${f.packId}`) }] : []
+			links: page ? [{ label: tr.t('mail.pack.open'), url: sitePage(page) }] : []
 		},
 		tr
 	);
