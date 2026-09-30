@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
-import { upgradeLegacyModel, type ModelInput } from './project';
+import { OPERATING_DEFAULTS, upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
@@ -28,7 +28,10 @@ describe('engine invariants on random networks', () => {
 		// draws in the generator, then 2079 until dam evaporation (N2); 25 is
 		// the first seed that shows it now.)
 		// The property is the network's, not the runoff model's: it was found under the legacy model's flow (removed in engine 1.0.0).
+		// Engine 1.31.0's generator gives seed 25 hands-off flows and River to dam by month (from their
+		// own stream, the rest of the seed unchanged); they are taken off so it still shows the property.
 		const input = randomInput(25);
+		for (const n of input.model.nodes) Object.assign(n, OPERATING_DEFAULTS);
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
 			return t[1]! / t[0]!;

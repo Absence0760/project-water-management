@@ -140,6 +140,17 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		expect(Math.min(...upStore)).toBeLessThan(25_000 * 0.9);
 	});
 
+	it('refuses a farm with a hands-off flow or River to dam by month (engine 1.31.0), naming each', () => {
+		const input = handBuilt();
+		Object.assign(input.model.nodes.find((n) => n.id === 'low')!, { handsOffEwr: true, divertMonthlyM3Day: new Array(12).fill(500) });
+		const out = runModel(input);
+		const r = farmAuditPlan(auditRun(input, out, 'low'), 'low');
+		expect('unsupported' in r && r.unsupported).toEqual(['a hands-off flow', 'River to dam by month']);
+		// A hands-off flow of 0 in every month is none: the farm stays supported.
+		Object.assign(input.model.nodes.find((n) => n.id === 'low')!, { handsOffEwr: false, handsOffM3Day: new Array(12).fill(0), divertMonthlyM3Day: null });
+		expect(disagreement(input, runModel(input), 'low')).toBeNull();
+	});
+
 	it("labels each column with FARM_COLUMNS' FarmTemplate letter", () => {
 		const input = handBuilt();
 		const out = runModel(input);

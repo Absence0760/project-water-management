@@ -3,6 +3,7 @@
 // pump scenarios, resolved from a node as runModel runs them. Pure; the
 // simulation (./simulate.ts) and the self-checks (../verify/checks.ts) both
 // read a node through these, so a stored value means the same thing to both.
+import { waterYearIndex } from '../calendar';
 import type { NetworkNode } from '../project';
 
 /**
@@ -43,7 +44,7 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 	if (rule === 'damFirst') {
 		// A farm with no dam irrigates from the river routed to it (K, M, O pass through the absent
 		// dam), with no pump limit: b023's stand-in for a river pump, kept, but said (issue #54).
-		if (!(n.damCapacityM3 > 0) && (n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || n.divertCapacityM3Day > 0))
+		if (!(n.damCapacityM3 > 0) && (n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || (Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0)))
 			warnings.push(
 				`farm "${n.name}": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity`
 			);
@@ -115,4 +116,76 @@ export function surfaceSplit(rule: PlanSupply['rule'], want: number, damAvail: n
 	}
 	const fromRiver = Math.max(0, Math.min(room, want));
 	return [Math.min(damAvail, want - fromRiver), fromRiver];
+}
+
+/**
+ * A farm's hands-off flow (engine ≥ 1.31.0, WP-3.8, issue #204, docs/model.md
+ * §2.7h) as the simulation runs it: the flow left in the river at the farm
+ * before the river pump or River to dam (the diversion O) takes anything.
+ */
+export interface PlanHandsOff {
+	/** m³/day by calendar month (index 1–12); null = no fixed amount. */
+	m3DayByMonth: Float64Array | null;
+	/** Also keep the EWR required at the farm (its cumulative requirement Z). */
+	ewr: boolean;
+}
+
+/**
+ * A 12-value water-year row (Oct–Sep) indexed by calendar month (1–12), each
+ * month a size ≥ 0; a missing month or one that isn't a number ≥ 0 is 0,
+ * with a warning. null for a row that isn't a list.
+ */
+function monthlyRow(raw: unknown, who: string, what: string, warnings: string[]): Float64Array | null {
+	if (!Array.isArray(raw)) {
+		warnings.push(`${who}: ${what} is not a list of 12 monthly values; ignored`);
+		return null;
+	}
+	if (raw.length !== 12) warnings.push(`${who}: ${what} should have 12 monthly values, has ${raw.length}; missing months are 0`);
+	const out = new Float64Array(13);
+	let bad = false;
+	for (let m = 1; m <= 12; m++) {
+		const x: unknown = raw[waterYearIndex(m)];
+		if (finite(x) && x >= 0) out[m] = x;
+		else if (x !== undefined) bad = true;
+	}
+	if (bad) warnings.push(`${who}: ${what} has a month that is not a size ≥ 0 m³/day; that month is 0`);
+	return out;
+}
+
+/**
+ * A farm's operating rules beyond the supply rule (engine ≥ 1.31.0, issue
+ * #204): the hands-off flow and River to dam by month. {} when neither is
+ * set (and on a node that isn't a farm, with a warning if one is), so a node
+ * without them runs exactly as engines before 1.31.0 did. A hands-off flow of
+ * 0 in every month without the EWR is none. Invalid months run as 0 with a
+ * warning; the backend refuses them on save.
+ */
+export function operatingOf(n: NetworkNode, warnings: string[]): { handsOff?: PlanHandsOff; divertM3DayByMonth?: Float64Array } {
+	const hasHandsOff = n.handsOffM3Day !== null && n.handsOffM3Day !== undefined;
+	const hasDivert = n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined;
+	if (n.kind !== 'farm') {
+		if (hasHandsOff || n.handsOffEwr === true || hasDivert)
+			warnings.push(`${n.kind === 'user' ? 'user' : 'gauge'} "${n.name}": only a farm has a hands-off flow and River to dam by month; ignored`);
+		return {};
+	}
+	const who = `farm "${n.name}"`;
+	const out: { handsOff?: PlanHandsOff; divertM3DayByMonth?: Float64Array } = {};
+	let byMonth = hasHandsOff ? monthlyRow(n.handsOffM3Day, who, 'hands-off flow', warnings) : null;
+	if (byMonth && !byMonth.some((v) => v > 0)) byMonth = null;
+	const ewr = n.handsOffEwr === true;
+	if (byMonth || ewr) out.handsOff = { m3DayByMonth: byMonth, ewr };
+	const divert = hasDivert ? monthlyRow(n.divertMonthlyM3Day, who, 'River to dam by month', warnings) : null;
+	if (divert) out.divertM3DayByMonth = divert;
+	return out;
+}
+
+/** The flow the hands-off rule keeps in the river today (m³): MAX(the month's amount, the EWR Z when kept). */
+export function handsOffToday(h: PlanHandsOff, calendarMonth: number, ewrRequired: number): number {
+	const fixed = h.m3DayByMonth ? h.m3DayByMonth[calendarMonth]! : 0;
+	return h.ewr ? Math.max(fixed, ewrRequired) : fixed;
+}
+
+/** River to dam's capacity today (m³/day): the month's, when set by month, else the one value. */
+export function divertCapacityToday(n: { divertCapacityM3Day: number; divertM3DayByMonth?: Float64Array }, calendarMonth: number): number {
+	return n.divertM3DayByMonth ? n.divertM3DayByMonth[calendarMonth]! : n.divertCapacityM3Day;
 }

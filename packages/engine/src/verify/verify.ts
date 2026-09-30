@@ -16,7 +16,7 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkAllocations, checkBalance, checkEwrAttribution, checkGroundwater, checkLandCover, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
+import { checkAllocations, checkBalance, checkEwrAttribution, checkGroundwater, checkLandCover, checkOperatingRules, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
@@ -28,7 +28,12 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['ewrAttribution', 'Each EWR site’s shortfall splits exactly into the part charged to the farms upstream (pro rata to their net impact, never more than a farm took) and the natural part', checkEwrAttribution],
 	['groundwater', 'Boreholes pump within their capacity, and the stream depletion they cause is lagged without losing or making water and never takes the river below 0', checkGroundwater],
 	['landCover', 'Land cover removes no more than each farm’s natural runoff, by its low-flow and MAR reductions, and the catchment total adds up', checkLandCover],
-	['allocations', 'Registered volumes: a cap is never exceeded in a water year, a full allocation’s demand adds up to the registered volume, and the run’s allocation summary matches its own series', checkAllocations]
+	['allocations', 'Registered volumes: a cap is never exceeded in a water year, a full allocation’s demand adds up to the registered volume, and the run’s allocation summary matches its own series', checkAllocations],
+	[
+		'operatingRules',
+		'Each farm’s river pump stays within its capacity, and the pump and River to dam leave the hands-off flow in the river (or all of it, when less flows) and divert no more than the month’s capacity',
+		checkOperatingRules
+	]
 ];
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {

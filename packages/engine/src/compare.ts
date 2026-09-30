@@ -1196,6 +1196,8 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
+	// Hands-off flow (engine ≥ 1.31.0); its monthly amounts and River to dam by month are diffed below.
+	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
 	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')],
 	// GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for the groundwater tables.
@@ -1287,6 +1289,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
+		// Operating rules (engine ≥ 1.31.0).
+		const ho = optionalMonthlyChange(x.handsOffM3Day, y.handsOffM3Day, 'm³/day', 'none');
+		if (ho) parts.push(`hands-off flow ${ho}`);
+		const dv = optionalMonthlyChange(x.divertMonthlyM3Day, y.divertMonthlyM3Day, 'm³/day', 'the one diversion capacity');
+		if (dv) parts.push(`River to dam by month ${dv}`);
 		if (!same(x.damCurve ?? null, y.damCurve ?? null)) {
 			const rows = (c: typeof x.damCurve) => (c && c.length ? `${c.length} rows` : 'none (power law)');
 			parts.push(`dam survey curve ${rows(x.damCurve)} → ${rows(y.damCurve)}${x.damCurve?.length && y.damCurve?.length ? ' (values changed)' : ''}`);

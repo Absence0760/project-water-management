@@ -98,6 +98,13 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
+		// Hands-off flow and River to dam by month (engine ≥ 1.31.0): a farm's, 12 monthly values each.
+		const hasOps = (n.handsOffM3Day !== null && n.handsOffM3Day !== undefined) || n.handsOffEwr === true || (n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined);
+		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a farm has a hands-off flow and River to dam by month`);
+		else {
+			if (n.handsOffM3Day && n.handsOffM3Day.length !== 12) add(`handsOffMonths:${n.id}`, `"${n.name}": the hands-off flow needs 12 values (m³/day, Oct–Sep)`);
+			if (n.divertMonthlyM3Day && n.divertMonthlyM3Day.length !== 12) add(`divertMonths:${n.id}`, `"${n.name}": River to dam by month needs 12 values (m³/day, Oct–Sep)`);
+		}
 		// Dam survey curve (WP-3.5): only a farm has a dam, and the curve must be one the run can use.
 		if (n.damCurve && n.damCurve.length) {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;

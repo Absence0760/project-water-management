@@ -134,6 +134,24 @@ describe('modelRuleIssues', () => {
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
 	});
 
+	it('hands-off flow and River to dam by month (engine 1.31.0): a farm\'s, 12 values each', () => {
+		const n = (id: string, kind: string, over: object = {}) => ({ id, name: id, kind, damCapacityM3: 0, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
+		const twelve = new Array(12).fill(100);
+		const m = {
+			nodes: [
+				n('g', 'gauge', { handsOffEwr: false, handsOffM3Day: null, divertMonthlyM3Day: null }),
+				n('ok', 'farm', { handsOffM3Day: twelve, handsOffEwr: true, divertMonthlyM3Day: twelve }),
+				n('u', 'user', { handsOffEwr: true }),
+				n('h', 'farm', { handsOffM3Day: [1, 2] }),
+				n('d', 'farm', { divertMonthlyM3Day: new Array(13).fill(0) })
+			],
+			crops: [],
+			cropAreas: [],
+			transfers: []
+		} as unknown as ProjectModel;
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['divertMonths:d', 'handsOffMonths:h', 'operatingKind:u']);
+	});
+
 	it('a scenario applied to a valid model leaves a model the backend would save', () => {
 		let checked = 0;
 		for (let seed = 1; checked < CASES && seed < CASES * 4; seed++) {

@@ -537,6 +537,22 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual([]);
 	});
 
+	it('lists a farm’s hands-off flow and River to dam by month changed, and not an older run’s absent fields (engine 1.31.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const winter = [0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500];
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, { handsOffM3Day: new Array(12).fill(300), handsOffEwr: true, divertMonthlyM3Day: winter });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: hands-off keeps the EWR no → yes',
+			'Rooikloof: hands-off flow none → 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 m³/day (Oct–Sep)',
+			'Rooikloof: River to dam by month the one diversion capacity → 0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500 m³/day (Oct–Sep)'
+		]);
+		// A run from before engine 1.31.0 has none of the fields: it reads as the defaults, so no change.
+		const c = copyWithFreshIds(a);
+		for (const n of c.model.nodes) Object.assign(n, { handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('lists individual boreholes added, changed and removed, matched across a copy by node and borehole name (WP-3.9)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

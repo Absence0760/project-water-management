@@ -153,6 +153,12 @@ const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
  * (modelRules.ts), so applyScenario reports an op that breaks one.
  */
 const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'] as const;
+/**
+ * A farm's other operating rules (engine ≥ 1.31.0, WP-3.8, issue #204,
+ * docs/model.md §2.7h): the hands-off flow by month, whether the EWR is kept
+ * too, and River to dam by month. Farms only (a model rule).
+ */
+const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -162,7 +168,7 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
 	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -218,6 +224,9 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	pumpCapacityM3Day: nullable(nonNeg),
 	supplyTriggerPct: frac,
 	supplyStopPct: frac,
+	handsOffM3Day: nullable(monthlyOf(nonNeg)),
+	handsOffEwr: boolean,
+	divertMonthlyM3Day: nullable(monthlyOf(nonNeg)),
 	ewrSite: boolean
 };
 
@@ -660,6 +669,7 @@ const NODE_OPTIONAL = new Set<string>([
 	'damAreaExponent',
 	'damSeepagePerDay',
 	...SUPPLY,
+	...OPERATING,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,

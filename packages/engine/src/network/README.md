@@ -59,7 +59,7 @@ day trace read.
 | L | `upstream_below_dam` | H − K — upstream inflow *below* the dam |
 | M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
 | N | `runoff_below_dam` | I − M — own runoff below the dam |
-| O | `diverted_to_dam` | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
+| O | `diverted_to_dam` | MIN(`divertCapacityM3Day` (the month's `divertMonthlyM3Day` when set, engine ≥ 1.31.0), L + N) — diverted back into the dam; cut for the senior users (§2.7c) and the hands-off flow (§2.7h) |
 | G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
 | – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
 | P | `interim_storage` | Qprev + rain on dam − evaporation − seepage + M + O + K + J − G |
