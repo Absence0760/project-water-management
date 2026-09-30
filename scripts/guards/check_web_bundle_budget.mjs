@@ -1513,6 +1513,11 @@
 //             by more than 0.35 KB. No new dependency. The worker ceiling
 //             follows the calibration worker down (17 KB + ~4). Headroom
 //             ~3 KB on the total.
+// 2026-09-30  total 1285 → 1289 KB (issue #71: measured 1286 with #224's
+//             pack screens merged, against their 1282): the issued pack's
+//             server PDF on its page (the state, the download link and an
+//             editor's "Try again") and the packs API client's two PDF calls.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

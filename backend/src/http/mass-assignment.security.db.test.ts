@@ -121,6 +121,31 @@ async function plantedPack() {
 }
 
 /**
+ * A pack that was issued and then withdrawn, planted past evidence_pack_guard
+ * (replica role, as jobs/trust.security.db.test.ts arranges its issued pack):
+ * issuing needs an issuable report, which the ladder has none of. Withdrawn so
+ * a new one each call doesn't meet evidence_pack_one_issued; POST …/pdf asks
+ * only that it was issued (issued_at) and has no PDF yet.
+ */
+async function plantedIssuedPack() {
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('SET LOCAL session_replication_role = replica');
+		const { rows } = await client.query<{ id: string }>(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, status, status_reason, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by)
+			 VALUES (gen_random_uuid(), $1, $2, 1, 'withdrawn', 'mass sweep', '{}', md5(random()::text) || md5(random()::text), 'evidence-1', '0.0.0', $3, now(), $3) RETURNING id::text`,
+			[ctx.projectId, ctx.runId, ctx.owner.id]
+		);
+		await client.query('COMMIT');
+		return rows[0]!.id;
+	} finally {
+		await client.end();
+	}
+}
+
+/**
  * Requests for the routes outside /projects/:id, and parameter overrides for
  * ones inside it; every other project route takes its role-ladder SAMPLE, as
  * the owner. Each is called afresh per request, so a token is new each time.
@@ -247,6 +272,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		};
 	},
 	'POST /projects/:id/packs/:packId/withdraw': async () => ({ params: { packId: await plantedPack() }, body: { reason: 'mass withdrawal' } }),
+	// An empty body only (strict); a pack that was issued, with no PDF yet, so the legit call queues its render (202).
+	'POST /projects/:id/packs/:packId/pdf': async () => ({ params: { packId: await plantedIssuedPack() } }),
 	'POST /projects/:id/series/:seriesId/revisions/:revId/restore': async () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i % 5 === 0 ? 10 + Math.random() : 0));
 		await ok(ctx.owner.call('PUT', `${at()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain }));

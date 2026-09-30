@@ -411,6 +411,26 @@ override_resource {
   }
 }
 
+# Evidence pack PDFs (packs.tf, 119_pack_render)
+override_resource {
+  target          = aws_s3_bucket.packs
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-packs-000000000000"
+    bucket = "water-management-packs-000000000000"
+    # The /packs/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-packs-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.packs
+  override_during = plan
+  values = {
+    id = "packs-oac-id"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
@@ -628,8 +648,8 @@ run "edge_behaviours" {
 
   # Every ordered behaviour is named here, so a new one needs its own checks.
   assert {
-    condition     = [for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b.path_pattern] == ["/api/*", "/reports/*"]
-    error_message = "The distribution has exactly two ordered behaviours, /api/* then /reports/*; a new one needs its cache and origin policies pinned here."
+    condition     = [for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b.path_pattern] == ["/api/*", "/reports/*", "/packs/*"]
+    error_message = "The distribution has exactly three ordered behaviours, /api/*, /reports/* then /packs/*; a new one needs its cache and origin policies pinned here."
   }
 
   # /api/*: nothing cached, so a response can never be served to another
@@ -663,6 +683,18 @@ run "edge_behaviours" {
       b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]),
     ]) if b.path_pattern == "/reports/*"])
     error_message = "/reports/* must go to the reports bucket with Managed-CachingDisabled, https-only, GET/HEAD only and signed URLs (the report-downloads key group)."
+  }
+
+  # /packs/*: issued evidence packs' PDFs, the same as /reports/* but their own bucket.
+  assert {
+    condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : alltrue([
+      b.target_origin_id == "s3-packs",
+      b.cache_policy_id == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      b.viewer_protocol_policy == "https-only",
+      b.allowed_methods == toset(["GET", "HEAD"]),
+      b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]),
+    ]) if b.path_pattern == "/packs/*"])
+    error_message = "/packs/* must go to the packs bucket with Managed-CachingDisabled, https-only, GET/HEAD only and signed URLs (the report-downloads key group)."
   }
 
   # The default (SPA) behaviour forwards no query string or cookie to S3:
@@ -723,6 +755,10 @@ run "missing_files_are_404" {
   assert {
     condition     = alltrue([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : !contains(s.actions, "s3:ListBucket")])
     error_message = "The private reports bucket keeps GetObject only: its misses stay 403 and reveal nothing about which reports exist."
+  }
+  assert {
+    condition     = alltrue([for s in data.aws_iam_policy_document.packs_bucket_policy.statement : !contains(s.actions, "s3:ListBucket")])
+    error_message = "The private packs bucket keeps GetObject only: its misses stay 403 and reveal nothing about which packs exist."
   }
   assert {
     condition     = length(aws_cloudfront_distribution.frontend.custom_error_response) == 0

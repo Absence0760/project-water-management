@@ -57,6 +57,11 @@ output "reports_bucket" {
   value       = aws_s3_bucket.reports.bucket
 }
 
+output "packs_bucket" {
+  description = "Private S3 bucket of issued evidence packs' PDFs (versioned, Object Lock GOVERNANCE for pack_retention_days, no lifecycle; packs.tf)."
+  value       = aws_s3_bucket.packs.bucket
+}
+
 # The database's names, for infra/scripts/restore-db.sh: a restore has to land
 # in this subnet group, security group and parameter group, and the parameter
 # group's name carries a generated suffix (name_prefix, rds.tf), so the script

@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
-| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run; both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -2027,11 +2027,13 @@ covers the manifest, the hash, the short code and the lifecycle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)). `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
+| POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
 | POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
 | GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
 
@@ -2043,8 +2045,14 @@ covers the manifest, the hash, the short code and the lifecycle).
   signoffs }`. `title` is the report's (the scenario's name, or the
   project's); `createdBy` and `issuedBy` are display names (null once the
   account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
-  `signoffs` is a count. The PDF and bundle fields stay `null` until they
-  are built.
+  `signoffs` is a count. `pdfSha256` and `pdfPages` are set once, when the
+  PDF is recorded (119_pack_render); the bundle fields stay `null` until it
+  is built.
+- `PackPdfState = { status: 'ready' | 'rendering' | 'failed' | 'none',
+  error }`: `ready` once the PDF is recorded; `rendering` while its render
+  job is queued, running, retrying or waiting for the renderer's answer;
+  `failed` when the last render gave up (`error` says why; an editor asks
+  again with `POST …/pdf`); `none` for a pack never issued.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.
@@ -2055,7 +2063,8 @@ covers the manifest, the hash, the short code and the lifecycle).
   `application: { runId, engineVersion } | null`; eleven confirmations, the
   run statement's ten and `pack`; `errata` of either run's engine.
 - `PackVerification = { status, version, issuedAt, catchment,
-  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256,
+  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256 (null
+  until the PDF is recorded),
   successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
@@ -2990,7 +2999,10 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   (never the baseline's own project or run); everything else, the
   run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
-  ([security.md § Render tokens](./security.md#render-tokens)).
+  ([security.md § Render tokens](./security.md#render-tokens)). A pack's
+  render session (an issued evidence pack's PDF, 119_pack_render) may `GET`
+  only `/auth/me`, `/projects/:id/packs/:packId` and its `/signoffs`, with
+  no query: not the project, its runs, the pack list or the pack's PDF.
 
 ## History
 

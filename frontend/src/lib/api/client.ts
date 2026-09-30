@@ -9,6 +9,7 @@ import type {
 	DailySeries,
 	DayBoundary,
 	EvidenceReport,
+	PackManifest,
 	InputChange,
 	FarmIndex,
 	FarmView,
@@ -57,6 +58,7 @@ import type {
 	HistoryRevision,
 	RestoreResult,
 	SeriesRevisionMeta,
+	PackPdfState,
 	Signoff,
 	SignoffList,
 	Pack,
@@ -591,7 +593,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			signoffs: (id: string, packId: string) => request<PackSignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
 			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
 			sign: (id: string, packId: string, body: SignoffRequest) =>
-				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff)
+				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff),
+			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready; viewer). */
+			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
+			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
+			renderPdf: (id: string, packId: string) =>
+				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf)
 		},
 		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
 		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),
