@@ -1618,9 +1618,9 @@
 //             triggers-to-rule mapping and the run comparison's lines), the
 //             Settings editor (its own chunk, also the scenario form's), the
 //             Units & supply tables (their own chunk and panel) and the
-//             outlook's "Use as the drought restriction rule". Rebased onto main's 1338 after
-//             #260, the pack share and Appendix C landed; to re-measure
-//             with them merged. Headroom ~3 KB.
+//             outlook's "Use as the drought restriction rule". Re-measured
+//             with main @ b88b7f4f's 1338 merged (#260, the pack share,
+//             Appendix C): 1350 locally, CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
