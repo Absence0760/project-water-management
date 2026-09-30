@@ -11,22 +11,22 @@
 // that didn't, naming what it left, rather than the later file that trips over
 // it. It then retires the leftovers itself, so only the leaking file fails.
 // docs/testing.md § DB tests share the job queue.
+//
+// Hook order: vitest runs after-hooks in reverse order of registration
+// (`sequence.hooks: 'stack'`, the default since vitest 2, set explicitly in
+// vitest.config.ts). A setup file registers before the test file, so this
+// afterAll runs after the file's own afterAll cleanup, never before it.
+// db-setup.db.test.ts checks that order (GUARD_RAN).
 import pg from 'pg';
 import { afterAll } from 'vitest';
-import { PENDING_JOBS_SQL, RETIRE_PENDING_JOBS_SQL } from './pendingJobs.js';
+import { assertNoPendingJobs, GUARD_RAN } from './pendingJobs.js';
 
 afterAll(async () => {
+	(globalThis as Record<symbol, unknown>)[GUARD_RAN] = true;
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();
 	try {
-		const { rows } = await client.query<{ kind: string; status: string; project: string; n: number }>(PENDING_JOBS_SQL);
-		if (!rows.length) return;
-		await client.query(RETIRE_PENDING_JOBS_SQL);
-		const list = rows.map((r) => `${r.n} × ${r.kind} (${r.status}) in project "${r.project}"`).join('; ');
-		throw new Error(
-			`this test file left pending jobs in the shared queue: ${list}. ` +
-				'Run them (runTick) or retire them (helpers.ts retirePendingJobs) before the file ends, or a later file’s tick claims them (src/__tests__/db-setup.ts).'
-		);
+		await assertNoPendingJobs(client);
 	} finally {
 		await client.end();
 	}

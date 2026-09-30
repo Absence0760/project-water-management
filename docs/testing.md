@@ -121,7 +121,9 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   `backend/src/__tests__/db-setup.ts`, a per-file setup of the `db` and
   `perf-db` projects: after every file it fails that file if any job is
   still queued, retrying or running, naming each kind and project, then
-  retires them so only the leaking file fails.
+  retires them so only the leaking file fails. It runs after the file's own
+  `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
+  `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.

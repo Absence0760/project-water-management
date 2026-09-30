@@ -41,6 +41,8 @@ export default defineConfig({
 					// db-setup.ts: each file must leave no pending job behind (the queue is global).
 					setupFiles: ['./src/__tests__/setup.ts', './src/__tests__/db-setup.ts'],
 					globalSetup: ['./src/__tests__/db-global-setup.ts'],
+					// After-hooks in reverse registration order, so db-setup.ts's afterAll runs after each file's own (the default, pinned).
+					sequence: { hooks: 'stack' },
 					include: ['src/**/*.db.test.ts'],
 					// Tests share one database; run files serially: the job/feed queue
 					// (feeds.db.test.ts, jobs.db.test.ts) uses claim/tick functions that are
@@ -81,6 +83,8 @@ export default defineConfig({
 					// db-setup.ts: each file must leave no pending job behind (the queue is global).
 					setupFiles: ['./src/__tests__/setup.ts', './src/__tests__/db-setup.ts'],
 					globalSetup: ['./src/__tests__/db-global-setup.ts'],
+					// After-hooks in reverse registration order, so db-setup.ts's afterAll runs after each file's own (the default, pinned).
+					sequence: { hooks: 'stack' },
 					include: ['src/**/*.db.perf.test.ts'],
 					// Serial for both reasons above: timings share the CPU, and files share one database.
 					fileParallelism: false,
