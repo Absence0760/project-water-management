@@ -307,9 +307,22 @@ export interface CheckPackBundleOptions {
 	rerun?: boolean;
 	/** The manifest hash the bundle must carry (from the verify lookup, or the pack row). */
 	expectManifestSha256?: string;
-	/** Largest bundle read, unpacked (default 2 GB in all, 512 MB an entry). */
+	/** Largest bundle read, unpacked (default BUNDLE_ZIP_LIMITS.maxTotalBytes). */
 	maxTotalBytes?: number;
 }
+
+/**
+ * What checkPackBundle reads of a bundle: sized to real bundles, so a hostile
+ * one is refused before much is read (ZipArchive.read allocates an entry's
+ * declared size before inflating it). A bundle has about a dozen fixed files
+ * and one CSV per distinct input series (a few dozen); the largest entries are
+ * the manifest (the whole evidence report) and a century of daily values as
+ * CSV (~1.5 MB).
+ */
+export const BUNDLE_ZIP_LIMITS = { maxEntries: 2_000, maxEntryBytes: 128 * 1024 * 1024, maxTotalBytes: 512 * 1024 * 1024 } as const;
+
+/** At most `n` names, then how many more, for a message. */
+const someNames = (names: readonly string[], n = 10) => `${names.slice(0, n).join(', ')}${names.length > n ? ` and ${names.length - n} more` : ''}`;
 
 /** Paths where two JSON values differ (at most `max`), for a mismatch message. */
 function differingPaths(a: unknown, b: unknown, max = 8, path = '', out: string[] = []): string[] {
@@ -352,24 +365,30 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 	const text = new Map<string, string>();
 	let index: PackBundleIndex;
 	try {
-		const archive = await ZipArchive.open(bytes, { maxEntries: 100_000, maxEntryBytes: 512 * 1024 * 1024, maxTotalBytes: opts.maxTotalBytes ?? 2 * 1024 * 1024 * 1024 });
-		if (!archive.names.includes('bundle.json')) throw new Error('it has no bundle.json');
+		const archive = await ZipArchive.open(bytes, { ...BUNDLE_ZIP_LIMITS, ...(opts.maxTotalBytes !== undefined ? { maxTotalBytes: opts.maxTotalBytes } : {}) });
+		// Sets, built once: `names` makes a new array on each read, and a lookup per entry must not be a scan.
+		const inArchive = new Set(archive.names);
+		if (!inArchive.has('bundle.json')) throw new Error('it has no bundle.json');
 		index = JSON.parse(dec.decode(await archive.read('bundle.json'))) as PackBundleIndex;
 		if (index.version !== PACK_BUNDLE_VERSION) throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSION}`);
 		const listed = Object.keys(index.files ?? {});
-		const unlisted = archive.names.filter((n) => n !== 'bundle.json' && !listed.includes(n));
-		const missing = listed.filter((n) => !archive.names.includes(n));
+		if (listed.length > BUNDLE_ZIP_LIMITS.maxEntries) throw new Error(`its bundle.json lists ${listed.length} files, more than a bundle holds (${BUNDLE_ZIP_LIMITS.maxEntries})`);
+		const inIndex = new Set(listed);
+		const unlisted = [...inArchive].filter((n) => n !== 'bundle.json' && !inIndex.has(n));
+		const missing = listed.filter((n) => !inArchive.has(n));
 		if (unlisted.length || missing.length)
-			throw new Error([unlisted.length ? `entries bundle.json doesn't list: ${unlisted.join(', ')}` : '', missing.length ? `listed entries missing: ${missing.join(', ')}` : ''].filter(Boolean).join('; '));
-		for (const need of ['manifest.json', 'README.md', 'runs/baseline/input.json', 'runs/baseline/results.json']) if (!listed.includes(need)) throw new Error(`it has no ${need}`);
-		add('archive', true, `${archive.names.length} entries, all listed in bundle.json`);
+			throw new Error(
+				[unlisted.length ? `entries bundle.json doesn't list: ${someNames(unlisted)}` : '', missing.length ? `listed entries missing: ${someNames(missing)}` : ''].filter(Boolean).join('; ')
+			);
+		for (const need of ['manifest.json', 'README.md', 'runs/baseline/input.json', 'runs/baseline/results.json']) if (!inIndex.has(need)) throw new Error(`it has no ${need}`);
+		add('archive', true, `${inArchive.size} entries, all listed in bundle.json`);
 		const bad: string[] = [];
 		for (const name of listed) {
 			const data = await archive.read(name);
 			if ((await hash(data)) !== index.files[name]) bad.push(name);
 			else if (name.endsWith('.json') || name.endsWith('.csv') || name.endsWith('.md')) text.set(name, dec.decode(data));
 		}
-		if (!add('files', bad.length === 0, bad.length ? `these don't match their SHA-256 in bundle.json: ${bad.join(', ')}` : `each of the ${listed.length} files matches its SHA-256`)) return result(index.pack ?? null, []);
+		if (!add('files', bad.length === 0, bad.length ? `these don't match their SHA-256 in bundle.json: ${someNames(bad)}` : `each of the ${listed.length} files matches its SHA-256`)) return result(index.pack ?? null, []);
 	} catch (e) {
 		add('archive', false, `the bundle can't be read: ${message(e)}`);
 		return result(null, []);

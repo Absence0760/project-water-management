@@ -10,8 +10,9 @@ import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
 import { packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
-import { zip, ZipArchive } from '../zip';
+import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
+	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
 	checkPackBundle,
 	PACK_BUNDLE_VERSION,
@@ -189,6 +190,41 @@ describe('buildPackBundle + checkPackBundle', () => {
 			(tampered.baseline.summary as Record<string, unknown>).tampered = 1;
 			const r = await checkPackBundle((await buildPackBundle(tampered, hash)).bytes, { hash });
 			expect(failing(r)).toEqual(['results:baseline', 'reproduce:baseline']);
+		});
+
+		it('a hostile many-entry zip is refused at its directory, beside a valid bundle (control)', async () => {
+			const enc = new TextEncoder();
+			const tiny = enc.encode('x');
+			const crc = crc32(tiny);
+			const many = storedZip([{ name: 'bundle.json', data: enc.encode('{}'), crc: crc32(enc.encode('{}')) }, ...Array.from({ length: 50_000 }, (_, i) => ({ name: `f${i}`, data: tiny, crc }))]);
+			const r = await checkPackBundle(many, { hash });
+			expect(failing(r)).toEqual(['archive']);
+			expect((await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash, rerun: false })).ok).toBe(true);
+		});
+
+		it('many unlisted entries within the cap, and an index listing more files than a bundle holds, fail with a short message', async () => {
+			const bytes = (await buildPackBundle(input, hash)).bytes;
+			const flooded = await rezip(
+				bytes,
+				(f) => {
+					for (let i = 0; i < BUNDLE_ZIP_LIMITS.maxEntries - 20; i++) f.set(`junk/${i}`, 'x');
+				},
+				true
+			);
+			const r = await checkPackBundle(flooded, { hash });
+			expect(failing(r)).toEqual(['archive']);
+			expect(r.checks[0]!.detail).toMatch(/and \d+ more/);
+			expect(r.checks[0]!.detail.length).toBeLessThan(500);
+			const bloated = await rezip(
+				bytes,
+				(f) => {
+					const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+					for (let i = 0; i <= BUNDLE_ZIP_LIMITS.maxEntries; i++) index.files[`ghost/${i}`] = 'a'.repeat(64);
+					f.set('bundle.json', canonicalJson(index));
+				},
+				true
+			);
+			expect(failing(await checkPackBundle(bloated, { hash }))).toEqual(['archive']);
 		});
 
 		it('not a zip: archive fails, never throws', async () => {
