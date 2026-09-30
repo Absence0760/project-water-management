@@ -11,6 +11,7 @@ import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
+import { runPublication } from './runPublication.js';
 
 export const publicationRoutes = new Hono<AuthEnv>()
 	.get('/:id/publication', async (c) =>
@@ -18,6 +19,18 @@ export const publicationRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, c.req.param('id'), 'farmer');
 			// The modeller's note is for the project's staff, not its farmers.
 			return c.json(await listPublications(db, c.req.param('id'), rank[role] >= rank.viewer));
+		})
+	)
+	// One run's publication and the changes since the one before (the printable report, issue #70).
+	// Viewer: the changes come from the change history, which farmers don't read.
+	.get('/:id/runs/:runId/publication', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const { id, runId } = c.req.param();
+			await requireRole(db, id, 'viewer');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			const { rows } = await db.query('SELECT 1 FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
+			if (!rows[0]) throw new ApiError(404, 'not found');
+			return c.json(await runPublication(db, id, runId));
 		})
 	)
 	.post('/:id/publication', async (c) => {

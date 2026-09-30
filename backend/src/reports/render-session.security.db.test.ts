@@ -38,7 +38,8 @@ const READS: Record<string, { why: string; query?: string }> = {
 	'GET /projects/:id/runs/:runId': { why: 'the run: summary, model, settings' },
 	'GET /projects/:id/runs/:runId/series': { why: 'the hydrograph and EWR charts', query: '?key=natural_flow' },
 	'GET /projects/:id/runs/:runId/day': { why: 'the self-checks panel’s day trace', query: '?date=2020-01-05' },
-	'GET /projects/:id/runs/:runId/signoffs': { why: 'the sign-off section' }
+	'GET /projects/:id/runs/:runId/signoffs': { why: 'the sign-off section' },
+	'GET /projects/:id/runs/:runId/publication': { why: 'the cover’s published-by line and notice, and the changes since the previous publication' }
 };
 
 const routes = [

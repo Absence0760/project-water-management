@@ -12,6 +12,9 @@
 //   GET /projects/<project>/runs/<run>/series  one of its series
 //   GET /projects/<project>/runs/<run>/day     the self-checks' day trace
 //   GET /projects/<project>/runs/<run>/signoffs  the sign-off section
+//   GET /projects/<project>/runs/<run>/publication  the cover's published-by line and
+//                                              notice, and the changes since the previous
+//                                              publication (issue #70)
 //
 // An impact report's session (082: `?against=<baseline project>:<run>`) makes
 // one more read, and only with exactly this pair, baseline first:
@@ -46,7 +49,7 @@ export interface RenderScope {
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 /** The run's sub-resources the report page reads (frontend/src/routes/projects/[id]/report/+page.svelte). */
-const RUN_READS = ['series', 'day', 'signoffs'];
+const RUN_READS = ['series', 'day', 'signoffs', 'publication'];
 const PROJECT_READ = new RegExp(`^/projects/(${UUID})(?:/series|/runs/(${UUID})(?:/(?:${RUN_READS.join('|')}))?)?/?$`);
 
 /** The impact section's one comparison: exactly `a` (the baseline) and `b` (the run), once each, nothing else. */

@@ -176,6 +176,23 @@ async function attribution(
 	return { revisions, truncated, changedBy: attributeChanges(changes, revisions) };
 }
 
+/**
+ * What changed in the inputs from run A to run B, and who changed it: the
+ * compare route's `changes` and `attribution`, for a caller that needs only
+ * those (the report's changes since the previous publication, publish/runPublication.ts).
+ */
+export async function compareInputs(
+	db: Db,
+	refA: { projectId: string; runId: string },
+	refB: { projectId: string; runId: string }
+): Promise<{ changes: InputChange[]; attribution: CompareAttribution | null }> {
+	const a = await loadSide(db, refA);
+	const b = await loadSide(db, refB);
+	const kinds = differingKinds(a.run.inputs, b.run.inputs);
+	const changes = diffInputs(a.run.inputs, b.run.inputs, { a: await storedValues(db, a.run.id, kinds), b: await storedValues(db, b.run.id, kinds) });
+	return { changes, attribution: await attribution(db, a, b, changes) };
+}
+
 export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 	const q = z.object({ a: RunRef, b: RunRef }).parse(c.req.query());
 	return withUser(c.get('userId'), async (db) => {
