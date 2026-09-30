@@ -4728,7 +4728,21 @@ read it before.
   series with the engine's `recessionPoints`, so the summary holds only the
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
-  those runs; an older run shows neither. The Compare page sets these checks side by side
+  those runs; an older run shows neither. From engine 1.50.0, after it,
+  **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
+  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
+  signatures*, CR-16): which record is scored (the outlet's gauge or logger
+  record, or the calibration site's, named) and on how many days; a verdict
+  line; a table with a row each for the base-flow index by the Hughes et al.
+  (2003) and the Eckhardt (2005) filters, the low-flow FDC's Q70–Q95 slope,
+  the low-flow volume bias (%BiasFLV) and the skill on held-out recessions
+  (observed = the river's own recession curve fitted on the other segments,
+  simulated = the model), each with its observed and simulated value, the
+  difference or bias, the indicative limit and *within* / *outside* / *not
+  judged* (a row outside its limit shaded); and a line on how the recessions
+  were held out. The check list gains a *Validation signatures* line and
+  the panel's intro counts six checks on those runs; an older run shows
+  neither. The Compare page sets these checks side by side
   ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final

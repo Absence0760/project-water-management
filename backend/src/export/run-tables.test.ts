@@ -1294,6 +1294,40 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
+	it('writes the validation signatures of the scored record (engine ≥ 1.50.0)', () => {
+		expect([...plausibilityLines(checks)]).toContain('Not computed: the run has no observed flow record');
+		const obs = Array.from({ length: days }, (_, t) => 0.05 + 0.04 * Math.sin(t / 20) ** 2);
+		const { checks: scored } = plausibilityChecks({
+			start,
+			days,
+			runoffModel: 'gr4j',
+			naturalM3Day: new Array(days).fill(10_000),
+			simulatedM3Day: new Array(days).fill(6_000),
+			observed: { flow_observed_m3s: obs },
+			calibrationKind: 'flow_observed_m3s',
+			excluded: new Uint8Array(days),
+			damsM3Day: new Array(days).fill(1_000),
+			landCoverM3Day: [],
+			rainMm: null,
+			station,
+			hasStation: false,
+			ewrShortfall: new Array(days).fill(0),
+			reserve: [],
+			areaKm2: 10,
+			scored: { flowKind: 'flow_observed_m3s', site: { nodeId: 'H', name: 'Upper weir' }, observedM3s: obs, simulatedM3Day: obs.map((q) => q * 86_400), segmentMask: new Uint8Array(days) }
+		});
+		const lines = [...plausibilityLines(scored)];
+		expect(lines).toContain('Validation signatures (the scored record against the simulated outflow on the same days)');
+		expect(lines).toContain('Record,observed gauge,at,gauge Upper weir');
+		expect(lines).toContain('Base-flow index,Parameters,Days,Stretches,Observed,Simulated,Difference (simulated − observed),Within ±0.15');
+		const h = scored.signatures!.baseflow!.hughes!;
+		expect(lines).toContain(`Hughes et al. (2003),α 0.995; β 0.5; 1 pass,730,1,${h.observed},${h.simulated},0,yes`);
+		expect(lines.some((l) => l.startsWith('Eckhardt (2005),a 0.98; BFImax 0.25,730,1,'))).toBe(true);
+		expect(lines.some((l) => l.startsWith('Low-flow FDC,Days,Observed Q70 (m³/s),Observed Q95 (m³/s)'))).toBe(true);
+		expect(lines.some((l) => l.startsWith(',730,') && l.endsWith(',0,0,yes'))).toBe(true);
+		expect(lines).toContain('Held-out recessions: not computed (no catchment rain)');
+	});
+
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
 		const without = [...plausibilityLines(checks)];
 		expect(without.some((l) => l.startsWith('At gauge'))).toBe(false);
@@ -1316,6 +1350,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
 		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
+		expect(none).toContain('Run made before engine 1.50.0: no validation signatures');
 		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
 			'Not checked: needs an observed flow record and catchment rain'
 		);

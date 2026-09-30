@@ -3,6 +3,7 @@
 import type { FlowBreakHint, LowFlowCurve, LowFlowCurves, PlausibilityChecks } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { describeMonths } from '$lib/format/months';
+import { signaturesOk } from './signatures';
 
 const RECORD: Record<string, string> = {
 	flow_observed_m3s: 'Gauge',
@@ -117,6 +118,8 @@ export function findings(p: PlausibilityChecks): { label: string; ok: boolean | 
 		{ label: 'Dry-season low flows', ok: lf ? lf.withinFactor : null },
 		// Engine ≥ 1.19.0: the recession diagnostics (absent on older runs, so their list is unchanged).
 		...(p.recession !== undefined ? [{ label: 'Recessions', ok: p.recession?.agrees ?? null }] : []),
+		// Engine ≥ 1.50.0: the validation signatures of the scored record.
+		...(p.signatures !== undefined ? [{ label: 'Validation signatures', ok: signaturesOk(p.signatures) }] : []),
 		// Engine ≥ 1.4.0: checks 1 and 4 at each gauge with a record of its own; only when there is one.
 		...(p.gauges?.length ? [{ label: 'At gauges in the network', ok: gaugesOk(p.gauges) }] : [])
 	];

@@ -8,7 +8,10 @@
 //      of ./season.ts;
 //   and, from engine 1.19.0, the recession diagnostics (../recession, CR-13):
 //   the calibration record's rain-free recessions against the simulated
-//   outflow's on the same days.
+//   outflow's on the same days; and, from engine 1.50.0, the validation
+//   signatures (./signatures.ts, CR-16) of the scored record: base-flow index
+//   by two filters, the low-flow FDC's slope and bias, and the skill on
+//   withheld recession segments.
 // They only report and warn: none changes a model result.
 //
 // Checks 1 and 4 also run at each gauge node inside the network that has an
@@ -21,6 +24,7 @@ import type { RunoffModelId } from '../runoff/types';
 import { flowDoubleMass, flowDoubleMassWarning, type FlowDoubleMass } from './flowDoubleMass';
 import { lowFlowCurves, lowFlowWarning, type LowFlowCurves } from './lowFlow';
 import { recessionCheck, recessionWarnings, type RecessionCheck } from '../recession/check';
+import { signatureWarnings, validationSignatures, type ValidationSignatures } from './signatures';
 import { naturalisedCheck, naturalisedWarning, type NaturalisedCheck } from './naturalised';
 import { rainSourceEwr, rainSourceWarnings, type RainSourceEwr } from './rainSource';
 import { drySeason, seasonMask, type DrySeason } from './season';
@@ -31,6 +35,7 @@ export * from './lowFlow';
 export * from './naturalised';
 export * from './rainSource';
 export * from './season';
+export * from './signatures';
 
 /** RunSummary.plausibility. Each part is null when the run lacks what it needs. */
 export interface PlausibilityChecks {
@@ -50,6 +55,13 @@ export interface PlausibilityChecks {
 	 * before 1.19.0.
 	 */
 	recession?: RecessionCheck | null;
+	/**
+	 * Validation signatures of the scored record (engine ≥ 1.50.0,
+	 * ./signatures.ts, CR-16): the calibration site's record when the run
+	 * scores a gauge inside the network, else the outlet's. null without an
+	 * observed record; absent on runs made before 1.50.0.
+	 */
+	signatures?: ValidationSignatures | null;
 	/**
 	 * Checks 1 and 4 at each gauge node with an observed record of its own
 	 * (engine ≥ 1.4.0), in node-id order; absent when none has one (every
@@ -119,10 +131,31 @@ export interface PlausibilityInput {
 	ewrShortfall: ArrayLike<number>;
 	reserve: readonly EwrAssuranceSite[];
 	areaKm2: number;
+	/**
+	 * The record the run's calibration statistics score (engine ≥ 1.50.0): the
+	 * calibration site's (settings.calibrationSiteNodeId) or the outlet's, with
+	 * the simulated outflow where it is and the recession segments' day mask
+	 * (the exclusions and that record's flagged days). Absent or null without
+	 * an observed record: no validation signatures.
+	 */
+	scored?: ScoredRecordInput | null;
 	/** Gauge nodes with a record of their own (engine ≥ 1.4.0), in node-id order; absent or empty = none. */
 	gauges?: readonly GaugePlausibilityInput[];
 	/** Warnings about gauge records the run can't place (a node gone, or no longer a gauge), in order. */
 	gaugeRecordWarnings?: readonly string[];
+}
+
+/** PlausibilityInput.scored. */
+export interface ScoredRecordInput {
+	flowKind: CalibrationFlowKind;
+	/** The calibration site; null at the outlet. */
+	site: { nodeId: string; name: string } | null;
+	/** m³/s aligned to the run (null = missing). */
+	observedM3s: ArrayLike<number | null>;
+	/** The simulated outflow at the record, m³/day. */
+	simulatedM3Day: ArrayLike<number>;
+	/** 1 on days the recession segments leave out: the calibration exclusions and the record's flagged days. */
+	segmentMask: Uint8Array;
 }
 
 /** 1 where either mask is; `a` itself without `b`. */
@@ -176,6 +209,7 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 		cal && obs && x.rainMm
 			? recessionCheck({ flowKind: cal, observedM3s: obs, simulatedM3Day: x.simulatedM3Day, rainMm: x.rainMm, excluded: orMask(x.excluded, x.flowFlagged) })
 			: null;
+	const signatures = x.scored ? validationSignatures({ ...x.scored, excluded: x.excluded, rainMm: x.rainMm }) : null;
 	const gauges = (x.gauges ?? []).map((g) => gaugeChecks(g, x, season, inSeason));
 	const atGauges = gauges.flatMap((g) => [naturalisedWarning(g.naturalised), lowFlowWarning(g.lowFlow)].flatMap((w) => (w ? [atGauge(g.name, w)] : [])));
 	const warnings = [
@@ -184,11 +218,12 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 		flowDoubleMassWarning(dm),
 		lowFlowWarning(lowFlow),
 		...recessionWarnings(recession),
+		...signatureWarnings(signatures),
 		...(x.gaugeRecordWarnings ?? []),
 		...atGauges
 	].filter((w): w is string => w !== null);
 	return {
-		checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow, recession, ...(gauges.length ? { gauges } : {}) },
+		checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow, recession, signatures, ...(gauges.length ? { gauges } : {}) },
 		warnings
 	};
 }

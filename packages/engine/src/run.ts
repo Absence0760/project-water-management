@@ -877,7 +877,9 @@ function runNetwork(
 		reserve: ewrAssurance.map((a) => a.report),
 		outflow: topo.outflow,
 		upstream: topo.upstream,
-		flowFill
+		flowFill,
+		// The scored record (engine ≥ 1.50.0): the validation signatures follow the calibration site.
+		scored: calKind ? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null } : null
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -1039,6 +1041,11 @@ function runPlausibility(r: {
 	upstream: readonly ArrayLike<number>[];
 	/** The gap-filled observed records (PreparedRun.flowFill, engine ≥ 1.23.0): their days are flagged infilled. */
 	flowFill?: PreparedRun['flowFill'];
+	/**
+	 * The record the run's calibration statistics score (engine ≥ 1.50.0): the calibration site's or the
+	 * outlet's, and the simulated outflow there (m³/day); null without an observed record.
+	 */
+	scored?: { kind: CalibrationFlowKind; observedM3s: (number | null)[]; simulatedM3Day: ArrayLike<number>; site: { nodeId: string; name: string } | null } | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -1077,6 +1084,15 @@ function runPlausibility(r: {
 				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(r.flowFill?.[kind]), dataQuality: settings.dataQuality })
 			)
 		: null;
+	// The scored record's flagged days (engine ≥ 1.50.0), for the validation signatures' recession segments: at the
+	// outlet the mask above; at a calibration site its own record's classes, without a gauged range or gap fill
+	// (those are the outlet record's settings).
+	const sc = r.scored;
+	const scoredFlagged = sc
+		? sc.site
+			? flaggedDayMask(flowDayFlags({ kind: sc.kind, series: series[calibrationSeriesKey(sc.kind, sc.site.nodeId)], start, days, dataQuality: settings.dataQuality }))
+			: flowFlagged
+		: null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -1099,7 +1115,16 @@ function runPlausibility(r: {
 		reserve: r.reserve,
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
-		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
+		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {}),
+		scored: sc
+			? {
+					flowKind: sc.kind,
+					site: sc.site,
+					observedM3s: sc.observedM3s,
+					simulatedM3Day: sc.simulatedM3Day,
+					segmentMask: scoredFlagged ? Uint8Array.from(excluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : excluded
+				}
+			: null
 	});
 }
 
