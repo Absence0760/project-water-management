@@ -1565,15 +1565,16 @@
 //             and four share-page lines in both catalogues; measured 1314
 //             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
 //             above that). Headroom ~3 KB.
-// 2026-09-30  total 1319 → 1332 KB (engine 1.46.0, WP-3.8's drought
-//             restriction rule: measured +12.6 KB on #252 @ 2ce0af99 (1311 →
-//             1324), raised by that rounded up over #252's 1319). The rule in the engine
-//             (network/restriction.ts, its daily step in simulate, the
-//             droughtRestriction self-check, the triggers-to-rule mapping and
-//             the run comparison's lines), the Settings editor (its own chunk,
-//             also the scenario form's), the Units & supply tables (their own
-//             chunk and panel) and the outlook's "Use as the drought
-//             restriction rule". Headroom ~2 KB.
+// 2026-09-30  total 1319 → 1336 KB (engine 1.52.0, WP-3.8's drought
+//             restriction rule: measured on #252 @ b0dc8b6d, 1,347,668 →
+//             1,365,024 gzip bytes, +16.9 KB, raised by that rounded up). The
+//             rule in the engine (network/restriction.ts with its bases,
+//             units, EWR trigger and the notice's rule, its daily step in
+//             simulate, the droughtRestriction self-check, the
+//             triggers-to-rule mapping and the run comparison's lines), the
+//             Settings editor (its own chunk, also the scenario form's), the
+//             Units & supply tables (their own chunk and panel) and the
+//             outlook's "Use as the drought restriction rule". Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1584,7 +1585,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1332,
+	totalCodeKb: 1336,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
