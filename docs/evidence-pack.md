@@ -113,13 +113,18 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   Re-running both runs to prove they reproduce is not done at issue: it
   takes as long as the runs; the reproduction bundle will carry it
   ([followups.md](./followups.md#evidence-report-issue-71)).
+- **One issued at a time.** An application (or the project's baseline
+  evidence) has at most one issued pack: a second is refused at issue
+  (`409`), and the database holds it at commit (`evidence_pack_one_issued`).
+  The chain of versions never forks.
 - **New version.** A change of evidence is a new pack that supersedes the
   issued one (`supersedesId`), for the same application (or baseline
   evidence again). The old one stays, marked superseded, and verify points to
   the new one. Nothing is edited.
 - **Withdraw.** An editor withdraws a pack, with a reason (1–1 000
   characters), from any status but withdrawn. Verify then says it is
-  withdrawn and why. A signed draft that shouldn't be issued is withdrawn,
+  withdrawn and why: the reason is public, so it is written for the
+  authority, not the team. A signed draft that shouldn't be issued is withdrawn,
   not deleted.
 - **Delete.** Only an unsigned draft is deleted. An issued (or superseded, or
   withdrawn) pack is never deleted, and a project that has one can't be
@@ -171,7 +176,9 @@ hashes verify returns; the verify page will do that in the browser.
   scenario, the version and its predecessor frozen from the insert, for every
   role, the schema owner included; the status moves only forward; the issue
   stamp is the database's; the reason, the successor, the PDF and the bundle
-  are each set once; who drafted and issued it clears only when that account
+  are each set once (the PDF and bundle only by the future renderer's
+  setter: `water_app` has no grant on them); the manifest must name the
+  row's own id, version, project and versions; who drafted and issued it clears only when that account
   is deleted.
 - `water_app` may `UPDATE` only the lifecycle columns (column grants), and
   RLS lets it delete only a draft.

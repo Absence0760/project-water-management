@@ -3722,7 +3722,8 @@ verify lookup, [evidence-pack.md](./evidence-pack.md)). Left:
       WP-2.15 Phase B's renderer (a render scope over the pack's two runs,
       ER1), store it under a `packs/` prefix with no expiry, versioning and
       object lock (D12, deployment.md), and record its hash before issue so
-      verify returns it. Trigger: before a pack goes to a real authority.
+      verify returns it, through a `SECURITY DEFINER` setter the renderer
+      calls (`water_app` has no grant on the PDF and bundle columns). Trigger: before a pack goes to a real authority.
 - [ ] **The reproduction bundle and `pnpm reproduce:pack`** (`bundle_key`,
       `bundle_sha256` exist, unset): `manifest.json`, the project's
       `export.json`, the scenario, the series CSVs and a README; a script

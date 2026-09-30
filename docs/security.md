@@ -2496,6 +2496,11 @@ nothing else.
   superseded or withdrawn; a draft may be withdrawn); the issue stamp is set
   by the trigger from the session, never by the caller; the reason and the
   successor are set once, with their move; the PDF and the bundle hashes once.
+  The manifest must name the row's own id, version, project and versions, and
+  a new version must be of the same application as its predecessor.
+  `water_app` has no grant on the PDF and bundle columns at all: those hashes
+  are printed by verify, so only the renderer's future `SECURITY DEFINER`
+  setter may write them.
   `water_app` can't even name a frozen column in an `UPDATE` (column grants;
   catalogue `COLUMN_ONLY_UPDATE`).
 - **Never deleted once issued.** RLS lets an editor delete a draft only, and
@@ -2521,6 +2526,10 @@ nothing else.
   text when it drafts, re-reads it from `jsonb` and hashes it again (a
   mismatch aborts the draft), and does so again before issuing; `GET …/packs/:packId`
   says `manifestMatches`.
+- **One issued pack per application** (or per project's baseline evidence):
+  the issue route refuses a second (`409`), and the deferred exclusion
+  constraint `evidence_pack_one_issued` holds it at commit, so the version
+  chain can't fork into two current packs.
 - **Issue re-checks the evidence.** The frozen report must be issuable, the
   live one still (the nomination, the declared rule, the cited ensemble), and
   both runs' server stamps must still match their rows ([§ Run stamps](#run-stamps)).
@@ -2532,7 +2541,9 @@ nothing else.
   pack. Contributors (applicants) and farmers read none and act on none
   (operator decision, 2026-09-29: issuing stays with the project's editors).
   The pack routes' bodies are strict where they create or issue.
-- **The public verify lookup** (`GET /verify/:code`, in the route
+- **The public verify lookup** (`GET /verify/:code`, one of the few
+  `withoutUser` callers besides pre-sign-in auth, the share links and the
+  job queue: it reads nothing but through `app_verify_pack`; in the route
   inventory's public allowlist) takes a short code or a full manifest hash,
   which are printed on the pack and not secrets (unlike a share link's
   token). `app_verify_pack` (`SECURITY DEFINER`, `search_path` pinned,
@@ -2540,7 +2551,9 @@ nothing else.
   version, issue date, catchment name, engine and report versions, the
   manifest and PDF hashes, the successor's hash, a withdrawal reason, the
   methodology cited, the errata recorded, and the signers' names and
-  registrations. No ids, inputs, results, accounts or emails. A draft, a
+  registrations. The withdrawal reason is the editor's own words and is
+  public too: the withdraw action must say so (it is printed where the pack
+  was). No ids, inputs, results, accounts or emails. A draft, a
   pack never issued, an unknown code and a malformed one are the same `404`.
   `Cache-Control: no-store`, so a withdrawal shows at once. It is
   rate-limited only by the WAF's rule on the whole API; enumerating 12-hex

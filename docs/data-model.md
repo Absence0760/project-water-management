@@ -1016,12 +1016,18 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   its columns (a draft has no issue date, successor or reason; issued and
   superseded have an issue date; superseded names its successor; withdrawn
   has a reason). Every foreign key has a covering index.
+  `evidence_pack_one_issued` (an exclusion constraint on the project and
+  `coalesce(scenario_id, project_id)` where `status = 'issued'`, deferred to
+  commit): one issued pack per application, and one for baseline evidence.
 - **Same project**: `evidence_pack_same_project`
   (`assert_same_project`, extended from 022 with `%pack_id` → `evidence_pack`
   and `%scenario_id` → `scenario`) on the scenario, both runs, the
   predecessor and the successor.
 - **Immutable** (`evidence_pack_guard`, BEFORE INSERT OR UPDATE): inserted
-  as a draft only; every column but the lifecycle frozen from then on; the
+  as a draft only, its manifest naming the row's own id, version, project,
+  engine and report versions (the hash is the backend's to check), and a new
+  version of the same application (or baseline evidence) as its
+  predecessor; every column but the lifecycle frozen from then on; the
   status moves draft → issued | withdrawn, issued → superseded | withdrawn,
   superseded → withdrawn; issuing needs a sign-off of the pack and stamps
   `issued_at` and `issued_by` from the session; `status_reason` is set once
@@ -1031,8 +1037,9 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   account is gone (the foreign key's SET NULL).
 - **Grants and RLS**: `water_app` has `SELECT, INSERT, DELETE` and
   `UPDATE` on the lifecycle columns only (`status`, `status_reason`,
-  `superseded_by_pack_id`, the PDF and bundle columns; catalogue
-  `COLUMN_ONLY_UPDATE`). `SELECT`: editors, and viewers for a baseline pack
+  `superseded_by_pack_id`; catalogue `COLUMN_ONLY_UPDATE`). The PDF and
+  bundle columns aren't granted: their hashes are verified publicly, so the
+  renderer will set them through a `SECURITY DEFINER` setter. `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
   `DELETE` editor, drafts only.
