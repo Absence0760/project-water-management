@@ -9,7 +9,7 @@ import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
-import { isRiverOfftake } from './network/offtake';
+import { isRiverOfftake, offtakeReturnAt } from './network/offtake';
 import { DEMAND_SCHEDULE_MAX_WINDOWS, scheduleWindowProblem } from './network/demandSchedule';
 
 /**
@@ -120,6 +120,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (n.kind === 'user') add(`caUser:${a.nodeId}`, `crop area on other water user "${n.name}": a user's demand is its monthly demand, not crops`);
 		if (!cropIds.has(a.cropId)) add(`caCrop:${a.nodeId}/${a.cropId}`, `crop area references unknown crop ${a.cropId}`);
 	}
+	const nodeIndex = new Map(m.nodes.map((n, i) => [n.id, i]));
 	for (const t of m.transfers) {
 		if (!byId.has(t.fromNodeId) || !byId.has(t.toNodeId)) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown node`);
 		// A user has no dam to send from or fill (WP-1.33).
@@ -138,6 +139,14 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			else if (t.enabled && a && b && a !== b && drainsInto(m, b.id, a.id, t.id)) add(`trRiverLoop:${t.id}`, `river off-take "${a.name}" → "${b.name}": its destination drains into its source (along the river or through other off-takes), so it would take water before it arrives`);
 			const loss = t.lossPct ?? 0;
 			if (!(loss >= 0 && loss < 1)) add(`trRiverLoss:${t.id}`, `river off-take ${t.id}: conveyance losses must be at least 0 % and below 100 %`);
+			// Canal seepage back to the river (engine ≥ 1.42.0): a share 0–100 %, rejoining below the source or a farm below it.
+			const back = t.lossReturnPct ?? 0;
+			if (!(back >= 0 && back <= 1)) add(`trRiverReturn:${t.id}`, `river off-take ${t.id}: the share of the losses seeping back must be between 0 % and 100 %`);
+			const at = t.lossReturnNodeId;
+			if (a && at !== null && at !== undefined) {
+				if (offtakeReturnAt(t, nodeIndex.get(a.id)!, m.nodes, nodeIndex) === undefined)
+					add(`trRiverReturnAt:${t.id}`, `river off-take ${t.id}: its seepage can rejoin the river only below "${a.name}" or a farm downstream of it`);
+			}
 		}
 	}
 
