@@ -2991,8 +2991,14 @@ from the WP:
       the fixed page-1 row *Registered vs modelled use* and its flag
       ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
       The issued pack (WP-3.14) freezes the document, so it carries § 5 once
-      the pack lands. An over/under-use chart on the Allocations tab itself
-      is not built.
+      the pack lands.
+- [x] **Over/under-use chart on the Allocations tab** (2026-09-29, issue #71
+      follow-up): the report's `UsePlot`, moved to `allocations/` and shared,
+      heads the tab's *Every hydrological unit and water year* for the
+      compared run (drawn at its box's width, labels on their own line on a
+      phone, the first ten rows until Show all), and both charts carry a
+      screen-reader description counting the whole years above the band
+      ([ui.md § Allocations](./ui.md#allocations-taballocations)).
 
 ## Crop factors (issue #54 item 1)
 

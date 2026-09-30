@@ -95,7 +95,7 @@ const CHARTS: Record<string, { prop: string } | { heading: true } | { svgName: R
 	// The evidence report's figures (issue #71): the SVG <title> is the `title` prop; each also has a caption and the numbers in a table.
 	'report/evidence/FdcPlot.svelte': { prop: 'title' },
 	'report/evidence/IntervalPlot.svelte': { prop: 'title' },
-	'report/evidence/UsePlot.svelte': { prop: 'title' },
+	'allocations/UsePlot.svelte': { prop: 'title' },
 	'settings/MonthlyBars.svelte': { prop: 'label' },
 	'series/CoverageStrip.svelte': { prop: 'label' },
 	'landing/MiniChart.svelte': { prop: 'label' },

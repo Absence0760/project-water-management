@@ -6,26 +6,9 @@
 import type { EvidenceAllocationCounts, EvidenceAllocations, EvidenceAllocationSource, EvidenceAllocationUnit } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 import { SOURCE_LABEL } from '$lib/components/allocations/allocations';
+import { useAxis, type UseMark, type UseRow } from '$lib/components/allocations/usePlot';
 
-/** The chart's axis runs to at least this share of the registered volume, and at most USE_AXIS_MAX; a year past the cap is drawn at the edge. */
-export const USE_AXIS_MIN = 1.5;
-export const USE_AXIS_MAX = 3;
-
-export interface UseMark {
-	waterYear: number;
-	run: 'baseline' | 'application';
-	/** Modelled ÷ registered, 0…; drawn at min(ratio, axis max). */
-	ratio: number;
-	/** Past the axis: drawn at the edge as an arrowhead. */
-	clipped: boolean;
-}
-
-export interface UseRow {
-	key: string;
-	/** "Upper, surface water"; the applicant's unit says so. */
-	label: string;
-	marks: UseMark[];
-}
+export { USE_AXIS_MAX, USE_AXIS_MIN, type UseMark, type UseRow } from '$lib/components/allocations/usePlot';
 
 /** A unit–source's row label. */
 export const unitSourceLabel = (u: Pick<EvidenceAllocationUnit, 'name' | 'own'>, s: Pick<EvidenceAllocationSource, 'waterSource'>) =>
@@ -38,35 +21,23 @@ export const unitSourceLabel = (u: Pick<EvidenceAllocationUnit, 'name' | 'own'>,
  * from 0 to the largest ratio, at least USE_AXIS_MIN, at most USE_AXIS_MAX.
  */
 export function useRows(al: Pick<EvidenceAllocations, 'units'>): { rows: UseRow[]; axisMax: number; clipped: number } {
-	let top = 0;
 	const raw = al.units.flatMap((u) =>
 		u.sources.map((s) => {
 			const marks: Omit<UseMark, 'clipped'>[] = [];
 			for (const y of s.years) {
-				for (const [run, reg, mod, part] of [
-					['baseline', y.registeredA, y.modelledA, y.partialA],
-					['application', y.registeredB, y.modelledB, y.partialB]
+				for (const [run, reg, mod, part, status] of [
+					['baseline', y.registeredA, y.modelledA, y.partialA, y.statusA],
+					['application', y.registeredB, y.modelledB, y.partialB, y.statusB]
 				] as const) {
 					if (part !== false || reg === null || mod === null || !(reg > 0)) continue;
-					const ratio = mod / reg;
-					top = Math.max(top, ratio);
-					marks.push({ waterYear: y.waterYear, run, ratio });
+					marks.push({ waterYear: y.waterYear, run, ratio: mod / reg, over: status === 'over' });
 				}
 			}
-			return { key: `${u.nodeId}:${s.waterSource}`, label: unitSourceLabel(u, s), marks };
+			const name = `${u.name}${u.own ? ' (the applicant’s)' : ''}`;
+			return { key: `${u.nodeId}:${s.waterSource}`, label: unitSourceLabel(u, s), name, suffix: `, ${SOURCE_LABEL[s.waterSource].toLowerCase()}`, marks };
 		})
 	);
-	const axisMax = Math.min(USE_AXIS_MAX, Math.max(USE_AXIS_MIN, Math.ceil(top * 10) / 10));
-	let clipped = 0;
-	const rows = raw.map((r) => ({
-		...r,
-		marks: r.marks.map((m) => {
-			const c = m.ratio > axisMax;
-			if (c) clipped++;
-			return { ...m, clipped: c };
-		})
-	}));
-	return { rows, axisMax, clipped };
+	return useAxis(raw);
 }
 
 /** A run's whole years for a unit–source, in words: "2 above, 1 within, 2 below, of 5"; "–" without a volume. */
