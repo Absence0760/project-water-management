@@ -28,9 +28,9 @@ import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
-import { chirpsColumns, pickObservedKind, runModelWithoutChecks } from '../run';
+import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
@@ -207,8 +207,12 @@ const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 
 
 /** The observed records with enough scored days to judge a member on (≥ 30, as calibration needs), primary first. */
 function usableRecords(input: ModelInput, run: PreparedRun, model: RunoffModelId): CalibrationFlowKind[] {
-	const primary = pickObservedKind(run.settings.calibrationFlowKind, input.series ?? {}, []);
-	const kinds = CALIBRATION_FLOW_KINDS.filter((k) => input.series?.[k]).sort((a, b) => (a === primary ? -1 : b === primary ? 1 : 0));
+	// The records at the calibration site (engine ≥ 1.41.0): the outlet's, or an inner gauge's.
+	const kinds = calibrationRecordsAt(input.series, run.settings.calibrationSiteNodeId);
+	// The record calibration fits first (pickObservedKind's choice): the one asked for, else the gauge, else the logger.
+	const wanted = run.settings.calibrationFlowKind;
+	const primary = wanted && kinds.includes(wanted) ? wanted : kinds[0];
+	kinds.sort((a, b) => (a === primary ? -1 : b === primary ? 1 : 0));
 	return kinds.filter((k) => {
 		try {
 			prepareCalibration({ ...input, settings: { ...input.settings, calibrationFlowKind: k } }, [], model);
@@ -367,6 +371,12 @@ export interface EnsembleContext {
 	chirps: ModelInput | null;
 	panRow: readonly number[];
 	records: Map<CalibrationFlowKind, RecordDays>;
+	/**
+	 * Where the records are and members are scored (engine ≥ 1.41.0,
+	 * settings.calibrationSiteNodeId): null = the outlet's simulated outflow,
+	 * else that gauge's outflow. Absent on a context from before: the outlet.
+	 */
+	siteNodeId?: string | null;
 	/** Day indices of each water-year month (0 = Oct). */
 	monthDays: Int32Array[];
 	waterYears: { waterYear: number; days: number; from: number; to: number }[];
@@ -428,6 +438,7 @@ export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOpti
 		chirps,
 		panRow: settings.panCoefficient,
 		records,
+		siteNodeId: settings.calibrationSiteNodeId ?? null,
 		monthDays: monthDays.map((d) => Int32Array.from(d)),
 		waterYears: [...byYear.values()],
 		wr2012Band,
@@ -460,6 +471,9 @@ export function memberInput(ctx: EnsembleContext, m: EnsembleMember): ModelInput
 // ---------------------------------------------------------------------------
 
 const catchmentSeries = (out: ModelOutput, key: string): number[] => out.series.find((s) => s.nodeId === null && s.key === key)?.values ?? [];
+/** The simulated flow a member's records are scored against: the outlet's, or the calibration site's (engine ≥ 1.41.0). */
+const scoredFlow = (ctx: Pick<EnsembleContext, 'siteNodeId'>, out: ModelOutput): number[] =>
+	ctx.siteNodeId ? (out.series.find((s) => s.nodeId === ctx.siteNodeId && s.key === 'outflow')?.values ?? []) : catchmentSeries(out, 'simulated_outflow');
 
 /** Weibull duration-curve value at exceedance p % of descending `x` (as reserve/assurance.ts durationQuantile). */
 function durationAt(x: Float64Array, p: number): number {
@@ -560,7 +574,7 @@ export function memberGroupSupply(x: MemberMetrics, nodeIds: readonly string[]):
 export function memberScores(ctx: EnsembleContext, m: EnsembleMember, out: ModelOutput): MemberScores {
 	const rec = ctx.records.get(m.record);
 	if (!rec) throw new Error(`the ${RECORD_LABELS[m.record]} is not part of this ensemble`);
-	const sim = catchmentSeries(out, 'simulated_outflow');
+	const sim = scoredFlow(ctx, out);
 	// Scored as the fit scores them: flagged days left out (the problem's days), censored ones met once the simulation reaches the highest gauging.
 	const obs = censoredObserved(rec.observed, sim, rec.accept, rec.censor);
 	const o = Float64Array.from(rec.accept, (t) => obs[t]!);
@@ -674,7 +688,7 @@ export function runEnsemble(
 		results.push(result);
 		if (result.accepted) {
 			accepted++;
-			const sim = catchmentSeries(output, 'simulated_outflow');
+			const sim = scoredFlow(ctx, output);
 			heldSims.push(Float64Array.from(heldDays, (t) => sim[t] ?? NaN));
 		}
 		if (opts.onProgress?.({ done: results.length, total: members.length, accepted }) === true) {

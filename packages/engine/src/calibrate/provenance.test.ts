@@ -231,7 +231,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, siteChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -240,14 +240,15 @@ describe('fit record', () => {
 				calibrationEnd: '2014-01-01',
 				calibrationExclusions: [],
 				calibrationFlowKind: 'flow_observed_m3s',
+				calibrationSiteNodeId: 'H',
 				panCoefficient: [0.9, ...s.panCoefficient.slice(1)] as unknown as ProjectSettings['panCoefficient'],
 				chirpsBiasCorrection: 'none'
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, siteChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
-		expect(caveats).toHaveLength(5);
+		expect(caveats).toHaveLength(6);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
 	});

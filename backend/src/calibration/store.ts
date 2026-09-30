@@ -14,6 +14,7 @@ import {
 	autoFitRecordOf,
 	ENGINE_VERSION,
 	finishAutoCalibration,
+	calibrationSeriesKey,
 	fitRecordFromReport,
 	planAutoCalibration,
 	resolveCalibrationRules,
@@ -65,7 +66,7 @@ export interface AutoCalibrationRow {
 	status: AutoCalibrationStatus;
 	rulesRevision: number;
 	rules: CalibrationRules;
-	plan: Pick<AutoCalibrationPlan, 'flowKind' | 'validationRecord' | 'years' | 'ruleExclusions' | 'notes'> & { cases: AutoCalibrationPlan['cases'] };
+	plan: Pick<AutoCalibrationPlan, 'flowKind' | 'siteNodeId' | 'validationRecord' | 'years' | 'ruleExclusions' | 'notes'> & { cases: AutoCalibrationPlan['cases'] };
 	cases: CaseBrief[];
 	/** The finished report's notes and verdicts (whether each case may be kept, and why not); null while running or when it failed. */
 	report: StoredReport | null;
@@ -305,6 +306,8 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	const fitSettings = { ...current, ...pan } as ProjectSettings;
 	const report: AutoCalibrationReport = finishAutoCalibration(a.plan, a.cases);
 	const flowKind = kept.report.flowKind as CalibrationFlowKind;
+	// The fitted record: the outlet's, or the calibration site's gauge record (engine ≥ 1.41.0).
+	const fitted = input.series[calibrationSeriesKey(flowKind, kept.report.siteNodeId ?? null)];
 	const apan = input.series.evap_apan_mm;
 	const record = fitRecordFromReport(kept.report, {
 		settings: fitSettings,
@@ -314,7 +317,7 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 		fittedAt: (a.completedAt ?? new Date()).toISOString(),
 		chirpsSource: input.series.rain_chirps_mm ? (input.series.rain_chirps_mm.provenance ?? null) : null,
 		apanDaily: apan ? { startDate: apan.startDate, length: apan.values.length, valuesSha256: seriesHash(apan.values) } : null,
-		...(input.series[flowKind]?.origin !== undefined ? { observedOrigin: input.series[flowKind]!.origin ?? null } : {}),
+		...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin ?? null } : {}),
 		auto: autoFitRecordOf({ ...report, chosen: a.chosen })
 	});
 	const gr4j = { ...current.gr4j, ...Object.fromEntries(kept.report.free.map((k) => [k, kept.report!.params[k]!])) };

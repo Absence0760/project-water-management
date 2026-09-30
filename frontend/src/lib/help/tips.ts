@@ -93,9 +93,9 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'calibration-window',
 		term: 'Calibration window',
-		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
+		short: 'The period, observed flow record and site (the outlet or an inner gauge) that score the fit. Empty = every day with an observation.',
 		category: 'fit',
-		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind']
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
 	},
 	{
 		id: 'gauge-logger-agreement',

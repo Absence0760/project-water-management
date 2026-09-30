@@ -17,7 +17,7 @@
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
+	import { calibrationSiteOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
@@ -85,10 +85,33 @@
 			});
 	});
 
+	// The calibration site's flows (engine ≥ 1.41.0): its record against the simulated flow there, the pair the
+	// run's calibration statistics score when they are scored at a gauge inside the network.
+	const siteId = $derived(calibrationSiteOf(refs));
+	let site = $state.raw<CatchmentFlows>({});
+	let siteError = $state<string | null>(null);
+	$effect(() => {
+		const id = runId;
+		const g = siteId;
+		site = {};
+		siteError = null;
+		if (!g) return;
+		Promise.all([get('observed_flow', g), get('outflow', g), has('observed_flow_other', g) ? get('observed_flow_other', g) : Promise.resolve(undefined)])
+			.then(([observed, simulated, observedOther]) => {
+				if (id === runId) site = { observed, simulated, ...(observedOther ? { observedOther } : {}) };
+			})
+			.catch((e) => {
+				if (id === runId) siteError = e instanceof Error ? e.message : String(e);
+			});
+	});
+
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
 	// Gauge or logger, and which one the run is scored against (issue #45).
 	const sources = $derived(observedSources(refs));
 	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
+	const siteSources = $derived(siteId ? observedSources(refs, siteId) : {});
+	const siteSeries = $derived(siteId ? hydrographSeries(site, conv, true, siteSources) : []);
+	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the calibration site') : '');
 	// The run's calibration exclusions over the hydrograph's days, each with its reason in the key under it.
 	const excluded = $derived(clipExclusions(exclusions, seriesSpan(hydroSeries)));
 	const excludedKey = $derived(excluded.length ? { label: 'Excluded from calibration', items: excluded.map(exclusionKeyText) } : undefined);
@@ -194,6 +217,28 @@
 				bind:ready={hydroReady}
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
+		{/if}
+		{#if siteId}
+			<!-- The calibration site (engine ≥ 1.41.0): the pair the run's calibration statistics score. -->
+			{#if siteError}
+				<div class="alert alert-error" role="alert">{siteError}</div>
+			{:else if siteSeries.length}
+				<LineChart
+					title="Flow at {siteName}, the calibration site: simulated and observed"
+					unit={flowUnit}
+					series={siteSeries}
+					logToggle
+					recentDays={RECENT}
+					recentLabel="Last 3 years"
+					toolbar={unitToggle}
+					{band}
+					shade={excluded}
+					shadeKey={excludedKey}
+					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Settings → Calibration record → Scored at)."
+				/>
+			{:else}
+				<div class="chart-ph" style:height="390px" role="status">Loading flows at the calibration site…</div>
+			{/if}
 		{/if}
 	</section>
 
