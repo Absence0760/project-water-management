@@ -6233,10 +6233,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     application run on the baseline), **Appendix B** (B.1 methodology,
     limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
     issued* for a draft), **Appendix C** (application only): the fixed prompts
-    first (`evidence-7`), each prompt's heading and question, then the
+    first (`evidence-8`), each prompt's heading and question, then the
     scenario's answer verbatim or *Not given.*; then the scenario's
     description and the run's notes, verbatim. The only free text. A pack
-    drafted before `evidence-7` froze no prompts, so its Appendix C says they
+    drafted before `evidence-8` froze no prompts, so its Appendix C says they
     aren't part of the pack rather than printing *Not given*.
 - **Evidence packs of this report** (screen only, under the checks): the
   packs of this run's report (an application pack by its scenario run, a

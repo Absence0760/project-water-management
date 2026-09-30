@@ -1,4 +1,4 @@
-// Appendix C's fixed prompts (evidence-7, issue #71 follow-up; docs/design/evidence-report.md
+// Appendix C's fixed prompts (evidence-8, issue #71 follow-up; docs/design/evidence-report.md
 // § 4.3): the three questions every application's statement answers, the same
 // wording where the scenario is edited and in the report. Each answer is the
 // applicant's (or modeller's) own words, printed verbatim, or "Not given" when

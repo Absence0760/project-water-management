@@ -738,7 +738,7 @@
 			{:else if s.id === 'applicantStatement' && report.applicantStatement}
 				{@const st = report.applicantStatement}
 				<p class="small muted">The applicant’s own words, verbatim: the only free text in this report (G13). Not checked by the app.</p>
-				<!-- evidence-7: the fixed prompts, each answered or "Not given"; a pack drafted before it froze none, and says so. -->
+				<!-- evidence-8: the fixed prompts, each answered or "Not given"; a pack drafted before it froze none, and says so. -->
 				{#if st.prompts}
 					{@const prompts = st.prompts}
 					<div class="prompts" data-testid="evidence-prompts">
@@ -753,7 +753,7 @@
 				{:else}
 					<p class="na" data-testid="evidence-prompts-absent">
 						The fixed prompts (purpose and need, mitigation, monitoring) are not part of this pack: it was drafted before the evidence report asked
-						them (report format evidence-7). A new version of the pack carries them.
+						them (report format evidence-8). A new version of the pack carries them.
 					</p>
 				{/if}
 				<h3>Description of “{st.scenarioName}”{st.ownerName ? `, by ${st.ownerName}` : ''}</h3>

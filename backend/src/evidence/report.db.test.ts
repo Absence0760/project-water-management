@@ -155,7 +155,7 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		expect(r.appendix.changes.some((c) => c.subject === 'Upper')).toBe(true);
 		expect(r.appendix.applicationRuns.map((x) => x.runId)).toEqual([appRun]);
 		expect(r.applicantStatement?.description).toBe('A 500 000 m³ dam on Upper.');
-		// Appendix C's fixed prompts (evidence-7), as the scenario holds them (trimmed); the unanswered one empty, for "Not given".
+		// Appendix C's fixed prompts (evidence-8), as the scenario holds them (trimmed); the unanswered one empty, for "Not given".
 		expect(r.applicantStatement?.prompts).toEqual({ purposeAndNeed: 'Winter storage for Upper’s orchards.', mitigation: '', monitoring: 'A weir below the dam, read weekly.' });
 		// Every input series with the run's recorded SHA-256.
 		expect(r.appendix.series.filter((s) => s.run === 'baseline').every((s) => /^[0-9a-f]{64}$/.test(s.sha256 ?? ''))).toBe(true);
@@ -228,7 +228,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-7');
+		expect(r.version).toBe('evidence-8');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;

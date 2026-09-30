@@ -59,7 +59,7 @@ The same holds for § 1's table of the paired change in the FDC check curve
 the warning that the two curve bands overlapping doesn't mean no change.
 
 Appendix C's fixed prompts (purpose and need, mitigation, monitoring;
-report format `evidence-7`, engine `evidence/prompts.ts`) are in the
+report format `evidence-8`, engine `evidence/prompts.ts`) are in the
 report as `applicantStatement.prompts`: the scenario's answers as they are
 when the draft is made, `''` for one not given. So the manifest freezes
 them and its hash covers them: an applicant who changes an answer afterwards
@@ -67,7 +67,7 @@ changes the live report, never the pack (`packs.db.test.ts` pins it). No
 new manifest version was needed: the manifest's shape (`pack-1`) is
 unchanged, the new field is inside `report`, whose own `version` says which
 format it is, and an issued pack's stored manifest (and so its hash) is
-never rebuilt. A pack drafted before `evidence-7` has no prompts in its
+never rebuilt. A pack drafted before `evidence-8` has no prompts in its
 manifest: its Appendix C says they aren't part of the pack, rather than
 printing *Not given* for answers it never asked, and a new version carries
 them.

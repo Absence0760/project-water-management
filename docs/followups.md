@@ -4099,7 +4099,7 @@ Left, from the design and the persona review (§11), each with its trigger.
       partial results would mean the browser writing them mid-run, which the
       report doesn't need: the cited ensemble is the first *complete* one on
       the declared rule (G4), so an abandoned start can't be cited either way.
-- [x] **Appendix C's fixed prompts.** Built (report version `evidence-7`):
+- [x] **Appendix C's fixed prompts.** Built (report version `evidence-8`):
       three fixed prompts, purpose and need, mitigation and monitoring
       (engine `evidence/prompts.ts`), answered on the scenario where it is
       edited (**Applicant's statement**, `ScenarioStatement.svelte`) and
@@ -4108,7 +4108,7 @@ Left, from the design and the persona review (§11), each with its trigger.
       a decision can't change them). Appendix C prints each with its question,
       the answer verbatim or *Not given*, before the description and run
       notes; a pack freezes them in its manifest, and one drafted before
-      `evidence-7` says they aren't part of it
+      `evidence-8` says they aren't part of it
       ([design/evidence-report.md § 4.2](./design/evidence-report.md)).
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
       issued* watermark (`position: fixed` in `@media print`, repeated on

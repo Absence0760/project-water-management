@@ -319,8 +319,8 @@ describe('evidenceReport: an application on the nominated run', () => {
 		expect(page1).not.toContain('V-notch');
 	});
 
-	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-7)', () => {
-		expect(r.version).toBe('evidence-7');
+	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
+		expect(r.version).toBe('evidence-8');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -674,7 +674,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-7');
+		expect(got.version).toBe('evidence-8');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1105,7 +1105,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-7');
+		expect(r.version).toBe('evidence-8');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});

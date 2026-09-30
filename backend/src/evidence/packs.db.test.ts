@@ -208,7 +208,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-7');
+		expect(manifest.report.version).toBe('evidence-8');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -218,7 +218,7 @@ describe('drafting a pack', () => {
 		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
 	});
 
-	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-7)', async () => {
+	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-8)', async () => {
 		const p = await draft(editor, appRun);
 		const sid = (await editor.call('GET', packPath(p.id))).body.pack.scenarioId as string;
 		const frozen = { purposeAndNeed: 'Winter storage.', mitigation: '', monitoring: '' };
