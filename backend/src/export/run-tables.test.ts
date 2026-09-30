@@ -701,7 +701,7 @@ describe('CHIRPS bias factors block', () => {
 			chirpsWetDays: 41,
 			chirpsWetMm: 2.5
 		}));
-		const quantileMap = { wetDayMm: 1, minWetDays: 30, months, mappedDays: 25, unmappedDays: 6, factorOnlyMm: 17 };
+		const quantileMap = { wetDayMm: 1, minWetDays: 30, months, mappedDays: 25, unmappedDays: 6, partialMonthDays: 2, factorOnlyMm: 17, mappedMm: 16.5 };
 		const lines = [...chirpsFactorLines({ ...corr, quantileMap })];
 		const at = lines.findIndex((l) => l.startsWith('CHIRPS quantile map,'));
 		expect(lines[at]).toMatch(/^CHIRPS quantile map,"wet days \(≥ 1 mm\) quantile-mapped onto the catchment rain's wet days over the fit period, CHIRPS' wet-day threshold raised/);
@@ -709,8 +709,8 @@ describe('CHIRPS bias factors block', () => {
 		expect(lines[at + 2]).toBe('Oct,own month,40,41,2.5');
 		expect(lines[at + 10]).toBe('Jun,not mapped (monthly factor alone),40,41,2.5');
 		expect(lines[at + 13]).toBe('Sep,3-month season,40,41,2.5');
-		expect(lines[at + 14]).toBe('Gap days the map changed,25,gap days left to the monthly factor alone,6');
-		expect(lines[at + 15]).toBe('Gap rain by the monthly factor alone (mm),17,after the map (mm),17');
+		expect(lines[at + 14]).toBe('Gap days the map changed,25,gap days left to the monthly factor alone,6,in a month CHIRPS does not yet cover whole,2');
+		expect(lines[at + 15]).toBe('Gap rain by the monthly factor alone (mm),17,after the map (mm),16.5');
 		// Positive control: off, no block.
 		expect([...chirpsFactorLines(corr)].some((l) => l.startsWith('CHIRPS quantile map'))).toBe(false);
 	});

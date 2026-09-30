@@ -19,7 +19,7 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
-import { chirpsFactorOn, chirpsQuantileMapper, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
+import { chirpsFactorOn, chirpsQuantileMapper, withChirpsGapMapLead, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
@@ -950,7 +950,8 @@ function runNetwork(
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
-				fits: prepared.fits!
+				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.47.0).
+				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: []
@@ -2279,10 +2280,10 @@ export function chirpsColumns(
 	return out;
 }
 
-/** The correction as a run summary keeps it: without the gap map's tables (they stay with the pinned fit, as a rain-source period's do). */
+/** The correction as a run summary keeps it: without the gap map's tables and a snapshot's lead (they stay with the pinned fit, as a rain-source period's tables do). */
 function summaryCorrection(c: ChirpsCorrection | null): ChirpsCorrection | null {
-	if (!c?.quantileMap?.tables) return c;
-	const { tables: _tables, ...qm } = c.quantileMap;
+	if (!c?.quantileMap?.tables && !c?.quantileMap?.lead) return c;
+	const { tables: _tables, lead: _lead, ...qm } = c.quantileMap;
 	return { ...c, quantileMap: qm };
 }
 

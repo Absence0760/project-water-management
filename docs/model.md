@@ -1047,12 +1047,23 @@ gives it, and in a month that is only partly a gap, the gap days carry
 their share of the mapped month. A month with rain but no day at its
 threshold keeps its factor values. A gap day reads its month's mapped value,
 and because the block is the whole stored month, not the run's days, a
-shorter run window, or a run resumed from a snapshot mid-month, gives the
-day the same rain.
+shorter run window gives the day the same rain. A model-state snapshot
+taken mid-month carries that month's CHIRPS before its day
+(`quantileMap.lead`, `withChirpsGapMapLead`), so a run resumed from it, even
+with the history left out of its input, maps the month from the same days.
+**A month is mapped only once the stored CHIRPS covers it from its 1st to
+its last day** (a snapshot's lead counts). Until then, typically the
+record's latest month while the feed is still adding days, its gap days take
+the monthly factor alone and the run says how many
+(`partialMonthDays`). Otherwise every day the feed appended would move the
+rain on the month's earlier gap days. The cost: when the month completes,
+its gap days change once, from factor alone to mapped, and a run made after
+that differs from one made before it on those days.
 
 **Properties** (`rain.quantileMap.test.ts`, and on every run with the map
 `checkChirpsGapMap` in the invariant checks): each whole calendar month of
-the mapped series totals the corrected series; the wet days keep their
+the mapped series totals the corrected series, and the rain a run used on
+each CHIRPS-filled day is the mapped series' value; the wet days keep their
 order within a month; unmapped months are the factor values exactly; the
 wet-day rate of the gap days moves to the catchment's, and their share of
 rain on heavy days (≥ 20 mm) moves most of the way to the catchment's.
@@ -1067,9 +1078,11 @@ hydrologist (followups.md § Hydrologist, as §2.4e's).
 threshold, the minimum, per calendar month the basis (`'month'`,
 `'season'` or null), the catchment and CHIRPS wet days behind it and
 `chirpsWetMm`, and the run counts: gap days the map changed
-(`mappedDays`), gap days left to the factor alone (`unmappedDays`) and the
-gap rain by the factor alone (`factorOnlyMm`; `fallbackCorrectedMm` is
-after the map). The tables stay with the fit: a warm-start snapshot pins
+(`mappedDays`), gap days left to the factor alone in a month the fit doesn't map
+(`unmappedDays`) or one CHIRPS doesn't yet cover whole
+(`partialMonthDays`), and the gap rain on the corrected days by the factor
+alone and after the map (`factorOnlyMm`, `mappedMm`). `mappedDays` counts
+wet days mapped and drizzle days dried alike. The tables stay with the fit: a warm-start snapshot pins
 them with the factors (`PreparedFits.chirpsCorrection`), and the run summary
 leaves them out, as a rain-source period's. The correction warning adds a
 sentence on the map; the daily series `rain_chirps_mapped` is CHIRPS after
@@ -5528,8 +5541,9 @@ it never changes a run's results.
     covering ≥ 99 % of the run: half the members use the rain as a run does
     (station rain, bias-corrected CHIRPS where it is blank, §2.4b), half use
     **CHIRPS alone**, every day bias-corrected by the run's own monthly
-    factors (the station series dropped, correction then off, the run
-    window pinned). The spread between them is the rain-data uncertainty
+    factors, and with the CHIRPS quantile map on (engine ≥ 1.47.0, §2.4b)
+    mapped as the run maps its gap days (the station series dropped,
+    correction and map then off, the run window pinned). The spread between them is the rain-data uncertainty
     the record can't settle.
   - **Observed record**, when both a gauge and a logger record have at least
     30 scored days: half the members are judged against each. A record that

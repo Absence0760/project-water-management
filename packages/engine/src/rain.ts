@@ -180,10 +180,26 @@ export interface ChirpsQuantileMapInfo {
 	 * (run.ts), as a rain-source period's tables are.
 	 */
 	tables?: ({ source: number[]; target: number[] } | null)[];
-	/** Run counts over the corrected gap days (applyChirpsCorrection): wet days the map changed, days in a month it doesn't map (the factor alone), and their total by the factor alone, mm. */
+	/**
+	 * A model-state snapshot taken mid-month (run.ts): the stored CHIRPS of
+	 * that month before the snapshot day, so a run resumed from it with the
+	 * history left out maps the month as the capture run did. Absent
+	 * otherwise.
+	 */
+	lead?: { startDate: string; values: (number | null)[] };
+	/**
+	 * Run counts over the corrected gap days (applyChirpsCorrection): days
+	 * whose rain the map changed (wet days mapped, drizzle days dried); days
+	 * left to the factor alone, in a month the fit doesn't map
+	 * (`unmappedDays`) or one the stored CHIRPS doesn't yet cover whole
+	 * (`partialMonthDays`); and the gap rain by the factor alone and after
+	 * the map on the same days, mm.
+	 */
 	mappedDays: number;
 	unmappedDays: number;
+	partialMonthDays: number;
 	factorOnlyMm: number;
+	mappedMm: number;
 }
 
 export interface ChirpsCorrection {
@@ -615,7 +631,9 @@ function fitChirpsQuantileMap(corr: ChirpsCorrection, days: readonly { day: numb
 		tables: fitted.tables,
 		mappedDays: 0,
 		unmappedDays: 0,
-		factorOnlyMm: 0
+		partialMonthDays: 0,
+		factorOnlyMm: 0,
+		mappedMm: 0
 	};
 }
 
@@ -626,7 +644,10 @@ function fitChirpsQuantileMap(corr: ChirpsCorrection, days: readonly { day: numb
  * month's threshold (below it dry, at or above it quantile-mapped) and
  * rescaled to the month's factor-corrected total (mapBlockDryBelow). null
  * where the map says nothing: no map or tables, a month it doesn't map, no
- * factor, or no reading. Blocks are worked out once per month.
+ * factor, or no reading; and a month the stored CHIRPS (with a snapshot's
+ * `lead`) doesn't cover from its 1st to its last day, so a feed appending
+ * the rest of the month never moves a day already filled: that month is
+ * mapped once it is whole. Blocks are worked out once per month.
  */
 export function chirpsQuantileMapper(corr: ChirpsCorrection | null, chirps: DailySeries | undefined): ((day: number) => number | null) | null {
 	const qm = corr?.quantileMap;
@@ -634,20 +655,36 @@ export function chirpsQuantileMapper(corr: ChirpsCorrection | null, chirps: Dail
 	const tables = qm.tables;
 	const c0 = toEpochDay(chirps.startDate);
 	const n = chirps.values.length;
-	const blocks = new Map<number, Map<number, number>>();
+	const blocks = new Map<number, Map<number, number> | null>();
+	const l0 = qm.lead ? toEpochDay(qm.lead.startDate) : 0;
+	const ln = qm.lead?.values.length ?? 0;
+	const inLead = (day: number) => day >= l0 && day < l0 + ln;
+	const covered = (day: number) => inLead(day) || (day >= c0 && day < c0 + n);
 	const valueOn = (day: number) => {
-		const v = day >= c0 && day < c0 + n ? chirps.values[day - c0] : null;
+		const v = inLead(day) ? qm.lead!.values[day - l0] : day >= c0 && day < c0 + n ? chirps.values[day - c0] : null;
 		return isReading(v) ? v : null;
 	};
+	// The month holding the last day asked for, so a run's consecutive days work out its 1st once.
+	let span = { from: 1, to: 0 };
 	return (day) => {
 		const m = monthOfEpochDay(day);
 		const t = tables[m - 1];
 		if (!t) return null;
 		const f = chirpsFactorOn(corr, day);
 		if (f === null || valueOn(day) === null) return null;
-		const first = toEpochDay(`${fromEpochDay(day).slice(0, 8)}01`);
+		if (day < span.from || day > span.to) {
+			const from = toEpochDay(`${fromEpochDay(day).slice(0, 8)}01`);
+			let to = from;
+			while (monthOfEpochDay(to + 1) === m) to++;
+			span = { from, to };
+		}
+		const first = span.from;
 		let b = blocks.get(first);
-		if (!b) {
+		if (b === undefined) {
+			if (!covered(first) || !covered(span.to)) {
+				blocks.set(first, null);
+				return null;
+			}
 			// Every day of the month shares the water year, so the factor.
 			const read: { day: number; mm: number }[] = [];
 			for (let d = first; monthOfEpochDay(d) === m; d++) {
@@ -662,8 +699,31 @@ export function chirpsQuantileMapper(corr: ChirpsCorrection | null, chirps: Dail
 			b = new Map(read.map((w, i) => [w.day, r.values[i]!]));
 			blocks.set(first, b);
 		}
-		return b.get(day)!;
+		return b === null ? null : b.get(day)!;
 	};
+}
+
+/**
+ * The correction a model-state snapshot pins (run.ts, engine ≥ 1.47.0):
+ * with the gap map on and the snapshot day not a 1st, a copy holding the
+ * stored CHIRPS of that month before the day (`quantileMap.lead`), so a run
+ * resumed from it maps the month from the same days even when its input
+ * leaves the history out. Otherwise the correction itself.
+ */
+export function withChirpsGapMapLead(corr: ChirpsCorrection | null, chirps: DailySeries | undefined, day: number): ChirpsCorrection | null {
+	if (!corr?.quantileMap?.tables || !chirps) return corr;
+	const first = toEpochDay(`${fromEpochDay(day).slice(0, 8)}01`);
+	if (first === day) return corr;
+	const c0 = toEpochDay(chirps.startDate);
+	// A correction pinned from an earlier snapshot keeps its own lead's days (a chain of resumes with the history left out).
+	const old = corr.quantileMap.lead;
+	const o0 = old ? toEpochDay(old.startDate) : 0;
+	const values: (number | null)[] = [];
+	for (let d = first; d < day; d++) {
+		const v = old && d >= o0 && d < o0 + old.values.length ? old.values[d - o0] : d >= c0 && d < c0 + chirps.values.length ? chirps.values[d - c0] : null;
+		values.push(v ?? null);
+	}
+	return { ...corr, quantileMap: { ...corr.quantileMap, lead: { startDate: fromEpochDay(first), values } } };
 }
 
 /**
@@ -711,8 +771,9 @@ export function applyChirpsCorrection(
 					if (y !== null) {
 						if (y !== out[t]) qm.mappedDays++;
 						out[t] = y;
-					}
+					} else if (isReading(v)) qm.partialMonthDays++;
 				}
+				qm.mappedMm += Math.max(0, out[t]!);
 			}
 			corr.correctedDays++;
 			if (seg) seg.correctedDays++;
@@ -935,7 +996,7 @@ function chirpsQuantileMapSentence(c: ChirpsCorrection): string {
 	if (!q) return '';
 	return (
 		` Quantile map (Settings → CHIRPS quantile map): ${chirpsQuantileMapText(q)}. ` +
-		`${plural(q.mappedDays, 'gap day')} changed (${Math.round(q.factorOnlyMm)} mm by the factor alone → ${Math.round(c.fallbackCorrectedMm)} mm).`
+		`${plural(q.mappedDays, 'gap day')} changed (${Math.round(q.factorOnlyMm)} mm by the factor alone → ${Math.round(q.mappedMm)} mm on the same days).`
 	);
 }
 
@@ -946,14 +1007,19 @@ function chirpsQuantileMapSentence(c: ChirpsCorrection): string {
  */
 export function chirpsQuantileMapFallbackWarning(c: ChirpsCorrection | null): string | null {
 	const q = c?.quantileMap;
-	if (!c || !q || q.unmappedDays === 0) return null;
+	const partial = q?.partialMonthDays ?? 0;
+	if (!c || !q || (q.unmappedDays === 0 && partial === 0)) return null;
 	const months = WY_MONTHS.filter((m) => q.months[m - 1]?.basis == null && (c.months[m - 1]?.fallbackDays ?? 0) > 0).map((m) => MONTH_ABBR[m]);
-	return (
-		`CHIRPS quantile map falls back to the monthly factor alone on ${plural(q.unmappedDays, 'gap day')}` +
-		(months.length ? ` (${months.join(', ')})` : '') +
-		`: those months have fewer than ${q.minWetDays} wet days (≥ ${q.wetDayMm} mm) on the catchment or the CHIRPS side over the fit period, even pooled over their 3-month season. ` +
-		'Their gap days keep CHIRPS’ own wet-day distribution, at the catchment’s level.'
-	);
+	const thin = q.unmappedDays
+		? `CHIRPS quantile map falls back to the monthly factor alone on ${plural(q.unmappedDays, 'gap day')}` +
+			(months.length ? ` (${months.join(', ')})` : '') +
+			`: those months have fewer than ${q.minWetDays} wet days (≥ ${q.wetDayMm} mm) on the catchment or the CHIRPS side over the fit period, even pooled over their 3-month season. ` +
+			'Their gap days keep CHIRPS’ own wet-day distribution, at the catchment’s level.'
+		: '';
+	const part = partial
+		? `${thin ? ' ' : 'CHIRPS quantile map: '}${plural(partial, 'gap day')} in a month the stored CHIRPS doesn't cover whole yet take the monthly factor alone; the month is mapped once CHIRPS covers it, so their rain changes then.`
+		: '';
+	return thin + part;
 }
 
 // ---------------------------------------------------------------------------

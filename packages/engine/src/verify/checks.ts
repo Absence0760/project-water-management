@@ -125,7 +125,9 @@ export function checkRainSource(out: ModelOutput): string | null {
  * `rain_chirps_corrected`: blank on exactly the same days, never below 0
  * where CHIRPS isn't, and over every calendar month the run holds whole,
  * the same total: the map moves rain between a month's days, never in or
- * out of the month (docs/model.md §2.4b *Quantile map*).
+ * out of the month (docs/model.md §2.4b *Quantile map*). And the rain the
+ * run used on a day CHIRPS filled (`rain_source` 2, `rain_final`) is the
+ * column's value: the fill and the column come from separate calls.
  */
 export function checkChirpsGapMap(out: ModelOutput): string | null {
 	const mapped = out.series.find((s) => s.nodeId === null && s.key === 'rain_chirps_mapped')?.values;
@@ -138,11 +140,18 @@ export function checkChirpsGapMap(out: ModelOutput): string | null {
 	let a = 0;
 	let b = 0;
 	const close = (t: number): string | null => {
-		// A month is whole when it starts on the 1st inside the run and ends before the run does.
-		const whole = from > 0 || monthOfEpochDay(d0 - 1) !== month;
-		if (whole && t < mapped.length && Math.abs(a - b) > 1e-9 * Math.max(1, Math.abs(b))) return `rain_chirps_mapped totals ${a} over days ${from}–${t - 1}, the corrected CHIRPS ${b}`;
+		// A month is whole when it starts on the 1st inside the run and its last day (t − 1) is the month's last.
+		const whole = (from > 0 || monthOfEpochDay(d0 - 1) !== month) && monthOfEpochDay(d0 + t) !== month;
+		if (whole && Math.abs(a - b) > 1e-9 * Math.max(1, Math.abs(b))) return `rain_chirps_mapped totals ${a} over days ${from}–${t - 1}, the corrected CHIRPS ${b}`;
 		return null;
 	};
+	const final = out.series.find((s) => s.nodeId === null && s.key === 'rain_final')?.values;
+	const source = out.series.find((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key)?.values;
+	if (final && source) {
+		for (let t = 0; t < mapped.length; t++) {
+			if (source[t] === RAIN_SOURCE_CODE.chirps && final[t] !== mapped[t]) return `rain_final[${t}] is ${final[t]} on a CHIRPS day, rain_chirps_mapped ${mapped[t]}`;
+		}
+	}
 	for (let t = 0; t < mapped.length; t++) {
 		const x = mapped[t]!;
 		const y = corrected[t]!;
@@ -164,7 +173,7 @@ export function checkChirpsGapMap(out: ModelOutput): string | null {
 			b += y;
 		}
 	}
-	return null;
+	return month === -1 ? null : close(mapped.length);
 }
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {

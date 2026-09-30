@@ -1554,9 +1554,10 @@
 //             map: its fit, month-block mapper and warnings in the engine's
 //             rain code, the shared month/season fit in quantileMap.ts,
 //             Settings' "CHIRPS quantile map" fieldset, the glossary entry,
-//             the fit-provenance line and the compare note). Measured
-//             against main @ ac3b2ef4: 1,338,970 → 1,342,201 gzip bytes
-//             (+3.16 KB), raised by that; headroom unchanged (~1.3 KB).
+//             the fit-provenance line and the compare note, the snapshot
+//             lead and whole-month rule). Measured against main @ ac3b2ef4:
+//             1,338,970 → 1,342,592 gzip bytes (+3.54 KB), raised by that
+//             rounded down; headroom ~0.9 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

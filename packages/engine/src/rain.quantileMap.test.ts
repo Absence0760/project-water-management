@@ -17,9 +17,12 @@ import {
 	chirpsQuantileMapFallbackWarning,
 	chirpsQuantileMapText
 } from './rain';
-import { runModel } from './run';
+import { captureModelState, runModel, runModelFrom } from './run';
 import { compareRuns, diffInputs } from './compare';
 import { checkInvariants } from './testing/invariants';
+import { tailDifference } from './testing/warmstartInvariants';
+import { openSnapshot } from './warmstart/snapshot';
+import { ensembleContext, memberInput, resolveEnsembleOptions } from './uncertainty/ensemble';
 import { checkChirpsGapMap } from './verify/checks';
 
 const S = '1989-10-01';
@@ -333,5 +336,86 @@ describe('CHIRPS gap map: invariants through a run', () => {
 		const t = col.values.findIndex((v, i) => i > 40 && v > 0);
 		col.values[t] = col.values[t]! + 1;
 		expect(checkChirpsGapMap(out)).toMatch(/^rain_chirps_mapped totals /);
+	});
+});
+
+describe('CHIRPS gap map: resumes, a month CHIRPS covers in part, and the ensemble', () => {
+	const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
+		id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 20, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null,
+		pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0,
+		irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
+	});
+	const networked = (extra: Partial<ModelInput['settings']>, series = SERIES): ModelInput => ({
+		...input(extra, series),
+		model: { nodes: [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 })], crops: [], cropAreas: [], transfers: [] }
+	});
+
+	it('a run resumed mid-month with the history left out fills the gap days as the full run does', () => {
+		const inp = networked({ ...MAP, simulationStart: '2002-10-01', simulationEnd: '2005-09-30' });
+		const full = runModel(inp);
+		for (const at of ['2004-01-17', '2004-03-01']) {
+			const snapshot = captureModelState(inp, at);
+			const tailOnly = structuredClone(inp);
+			for (const x of Object.values(tailOnly.series)) {
+				const cut = toEpochDay(at) - toEpochDay(x!.startDate);
+				x!.values = x!.values.slice(cut);
+				x!.startDate = at;
+			}
+			const k = toEpochDay(at) - toEpochDay(full.startDate);
+			expect(tailDifference(full, runModelFrom(snapshot, tailOnly), k), at).toBeNull();
+		}
+		// Only a mid-month snapshot carries the month's lead.
+		expect(openSnapshot(captureModelState(inp, '2004-01-17'), inp).pinned.fits.chirpsCorrection!.quantileMap!.lead!.values).toHaveLength(16);
+		expect(openSnapshot(captureModelState(inp, '2004-03-01'), inp).pinned.fits.chirpsCorrection!.quantileMap!.lead).toBeUndefined();
+	});
+
+	it('a month the stored CHIRPS covers in part takes the factor alone until CHIRPS covers it whole', () => {
+		// CHIRPS ends on 2005-01-20: January 2005 is mapped only once CHIRPS covers it whole.
+		const end = toEpochDay('2005-01-20');
+		const cut = (to: number) => ({ ...SERIES, rain_chirps_mm: { startDate: S, values: chirps.values.slice(0, to - d0 + 1) } });
+		const a = gapRain(input(MAP, cut(end)));
+		const b = gapRain(input(MAP, cut(end + 5)));
+		const whole = gapRain(input(MAP));
+		const jan = [...a.out.keys()].filter((d) => yearMonth(d) === '2005-01');
+		expect(jan).toHaveLength(20);
+		for (const d of jan) {
+			expect(a.out.get(d)).toBe(factorOnly(a.run.chirpsCorrection, d));
+			// Five more days of CHIRPS: still not whole, still the factor alone.
+			expect(b.out.get(d)).toBe(factorOnly(b.run.chirpsCorrection, d));
+		}
+		expect(jan.some((d) => whole.out.get(d) !== a.out.get(d))).toBe(true);
+		// The months before it are whole, so mapped.
+		expect([...a.out].some(([d, v]) => d < toEpochDay('2005-01-01') && v !== factorOnly(a.run.chirpsCorrection, d))).toBe(true);
+		const q = a.run.chirpsCorrection!.quantileMap!;
+		expect(q.partialMonthDays).toBe(20);
+		expect(chirpsQuantileMapFallbackWarning(a.run.chirpsCorrection)).toMatch(
+			/ 20 gap days in a month the stored CHIRPS doesn't cover whole yet take the monthly factor alone; the month is mapped once CHIRPS covers it, so their rain changes then\.$/
+		);
+	});
+
+	it('the check catches a run that used other rain than the mapped column on a CHIRPS day', () => {
+		const out = runModel(networked(MAP));
+		expect(checkChirpsGapMap(out)).toBeNull();
+		const src = out.series.find((x) => x.nodeId === null && x.key === 'rain_source')!.values;
+		const fin = out.series.find((x) => x.nodeId === null && x.key === 'rain_final')!.values;
+		const t = src.findIndex((v) => v === 2);
+		fin[t] = fin[t]! + 1;
+		expect(checkChirpsGapMap(out)).toMatch(/^rain_final\[\d+\] is .* on a CHIRPS day/);
+	});
+
+	it("the ensemble's CHIRPS-only members run on the mapped CHIRPS, with the map then off and no warning", () => {
+		const inp = networked({ ...MAP, simulationStart: '2000-10-01', simulationEnd: '2008-09-30' }, {
+			...SERIES,
+			flow_observed_m3s: { startDate: '2000-10-01', values: Array.from({ length: 2922 }, (_, i) => 1 + (i % 7) / 10) }
+		});
+		const { options } = resolveEnsembleOptions(inp, { members: 30, rainSources: ['chirps'] });
+		const ctx = ensembleContext(inp, options, false);
+		const m = memberInput(ctx, { index: 0, reference: true, params: ctx.startParams, panOffset: 0, rain: 'chirps', record: options.records[0]! });
+		expect(m.settings.chirpsQuantileMap).toBeNull();
+		expect(m.settings.chirpsBiasCorrection).toBe('none');
+		const base = runModel(inp);
+		const mapped = base.series.find((x) => x.key === 'rain_chirps_mapped')!.values;
+		expect(m.series.rain_chirps_mm!.values.map((v) => v ?? NaN)).toEqual(mapped);
+		expect(prepareRun(m).warnings.some((w) => /quantile/i.test(w))).toBe(false);
 	});
 });

@@ -289,8 +289,8 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 			const x = q.months[m - 1]!;
 			yield csvRow([MONTH_NAMES[m - 1]!, x.basis === 'month' ? 'own month' : x.basis === 'season' ? '3-month season' : 'not mapped (monthly factor alone)', x.catchmentWetDays, x.chirpsWetDays, x.chirpsWetMm]);
 		}
-		yield csvRow(['Gap days the map changed', q.mappedDays, 'gap days left to the monthly factor alone', q.unmappedDays]);
-		yield csvRow(['Gap rain by the monthly factor alone (mm)', q.factorOnlyMm, 'after the map (mm)', c.fallbackCorrectedMm]);
+		yield csvRow(['Gap days the map changed', q.mappedDays, 'gap days left to the monthly factor alone', q.unmappedDays, 'in a month CHIRPS does not yet cover whole', q.partialMonthDays]);
+		yield csvRow(['Gap rain by the monthly factor alone (mm)', q.factorOnlyMm, 'after the map (mm)', q.mappedMm]);
 	}
 
 	// Engine ≥ 0.29.0: the fit period and the reference window, then one block per listed range. Absent before: those runs fitted the whole record.

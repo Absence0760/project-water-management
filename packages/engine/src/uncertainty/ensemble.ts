@@ -185,13 +185,17 @@ const r6 = (v: number): number => (Number.isFinite(v) && v !== 0 ? Number(v.toPr
 // Options
 // ---------------------------------------------------------------------------
 
-/** CHIRPS on every run day (bias-corrected by the run's own factors), without the station rain: the 'chirps' rain source. */
+/**
+ * CHIRPS on every run day (bias-corrected by the run's own factors, and with
+ * the CHIRPS quantile map on, mapped as the run maps its gap days, engine ≥
+ * 1.47.0), without the station rain: the 'chirps' rain source.
+ */
 function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | null; reason: string | null } {
 	const chirps = input.series?.rain_chirps_mm;
 	if (!chirps) return { input: null, reason: 'the project has no CHIRPS series' };
 	if (!input.series?.rain_catchment_mm) return { input: null, reason: 'the project has no station rain, so CHIRPS is already the only source' };
 	const cols = chirpsColumns(chirps, run.chirpsCorrection, run.start, run.days, run.month);
-	const col = cols.find((c) => c.key === 'rain_chirps_corrected') ?? cols[0]!;
+	const col = cols.find((c) => c.key === 'rain_chirps_mapped') ?? cols.find((c) => c.key === 'rain_chirps_corrected') ?? cols[0]!;
 	const values = col.values.map((v) => (Number.isFinite(v) ? v : null));
 	const covered = values.filter((v) => v !== null).length / run.days;
 	if (covered < CHIRPS_ONLY_MIN_COVERAGE) {
@@ -199,7 +203,7 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	}
 	const series = { ...input.series, rain_chirps_mm: { startDate: run.startDate, values } };
 	delete series.rain_catchment_mm;
-	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none' }, series }, reason: null };
+	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series }, reason: null };
 }
 
 const isInt = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
