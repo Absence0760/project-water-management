@@ -1545,6 +1545,19 @@ export interface Transfer {
 	/** river: conveyance losses, the share 0 ≤ l < 1 of what is taken that never arrives (lost from the catchment). Absent = 0. */
 	lossPct?: number;
 	/**
+	 * river: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to
+	 * the river the same day (engine ≥ 1.42.0, docs/model.md §2.6a), like a
+	 * dam's seepage return (`damSeepageReturnPct`). Absent = 0: every loss
+	 * leaves the catchment, the conservative side for the EWR.
+	 */
+	lossReturnPct?: number;
+	/**
+	 * river: the unit whose outflow the returned seepage joins (engine ≥
+	 * 1.42.0): the source itself (null / absent, the river just below the
+	 * off-take) or a farm downstream of it along the river.
+	 */
+	lossReturnNodeId?: string | null;
+	/**
 	 * river: how much it takes. 'demand' (default): what the destination needs
 	 * today (its demand, plus its dam's room with `topUpDam`). 'capacity': up
 	 * to its capacity whatever the destination needs, like a canal that runs
@@ -1567,7 +1580,10 @@ export const OFFTAKE_DEFAULTS = {
 	handsOffEwr: false,
 	lossPct: 0,
 	sizing: 'demand',
-	topUpDam: false
+	topUpDam: false,
+	// Canal seepage back to the river (engine ≥ 1.42.0): none returns unless set.
+	lossReturnPct: 0,
+	lossReturnNodeId: null
 } as const;
 
 export interface ProjectModel {
@@ -2842,7 +2858,7 @@ export interface WaterBalanceRow {
 	damSeepageLostM3?: number;
 	/** Released below the dams before irrigation (WP-3.5); part of the outflow, shown for information. Absent without a release rule. */
 	damReleaseM3?: number;
-	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered, a loss from the catchment; absent without off-takes. */
+	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered − what seeped back to the river (engine ≥ 1.42.0), a loss from the catchment; absent without off-takes. */
 	conveyanceLossM3?: number;
 	spillM3: number;
 	outflowM3: number;

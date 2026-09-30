@@ -1539,11 +1539,16 @@
 //             calibration-site hydrograph and statistics line, the EWR test
 //             at each gauge EWR site with a record, the stale-site hint;
 //             measured 1304 with main @ 2f644d45). Headroom ~2 KB.
-// 2026-09-30  total 1306 → 1308 KB (engine 1.49.0, dam evaporation presets:
+// 2026-09-30  total 1306 → 1309 KB (engine 1.42.0, canal seepage back to the
+//             river: the Transfers tab's return share and unit, the inputs
+//             table's losses and return; measured 1305 locally with main @
+//             8266a682, CI runs ~2 KB above that). Headroom ~2 KB.
+// 2026-09-30  total 1309 → 1311 KB (engine 1.49.0, dam evaporation presets:
 //             the engine's lake-factor preset table and fill, Settings'
 //             preset picker, source note and stale-preset warning, the help
 //             article's paragraph; +1 976 bytes gzipped, measured 1306 with
-//             main @ 8266a682 and 1308 with the change). No headroom added.
+//             main @ 8266a682 and 1308 with the change, before merging #248's
+//             entry above). No headroom added.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1554,7 +1559,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1308,
+	totalCodeKb: 1311,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
