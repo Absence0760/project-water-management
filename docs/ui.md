@@ -292,7 +292,9 @@ English only: its readers are licensing assessors, like the methods page's.
   prints it (*self-declared*), with the professional body's register as a
   link and its address in full; the register URLs are the engine's, never the
   database's. **Errata recorded in the pack** are those the manifest
-  recorded when it was drafted.
+  recorded when it was drafted; under them, **Errata found since issue**
+  lists those added to the errata list later for the engines its runs (or
+  their fits) used (`errataFoundSince`, 132), or says none has been found.
 - **Check a PDF, reproduction bundle or manifest** (the heading names only
   what the pack has hashes for, `checkableFiles`). Choose or drop a file: it is hashed in the
   browser (WebCrypto SHA-256, `packs/pack.ts` `checkFile`) and compared with
@@ -6300,7 +6302,13 @@ pack.
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
   **Verify page** once issued, **Share link…** (an editor, once it was
   issued) and **Notes**, and the version, code, manifest hash, PDF hash
-  (or that none is recorded) and the bundle's hash.
+  (or that none is recorded) and the bundle's hash. When an erratum found
+  since the manifest was frozen applies to either run's engine or its fit's
+  (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
+  saying the pack never records them, or on a draft *Errata found since this
+  draft was made*, saying to draft the pack again (`packs/pack.ts`
+  `errataFoundSinceNote`). The report below, and so the PDF, prints only the
+  errata the manifest recorded.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
   link shows (verify's fields, and while it stands the river's figures, never

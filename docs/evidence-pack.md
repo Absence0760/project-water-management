@@ -240,6 +240,14 @@ the pack prints:
 - `withdrawnReason` (for a withdrawn pack, else null);
 - `methodology` `{ version, sha256 }`;
 - `errata` `[{ id, summary }]`, as the manifest recorded them;
+- `errataFoundSince` `[{ id, summary }]`: errata that apply now to the
+  engine of either run (or, for a `fit` erratum, of the automatic fit its
+  parameters came from) and that the manifest didn't record, found since
+  the pack was drafted (132). The current list
+  ([engine-errata.md](./engine-errata.md), `errataFor`) over the runs'
+  engines, less the recorded ids, in the list's order. The manifest, its
+  hash and `errata` never change: an erratum added to engine-errata.md
+  after issue shows here, apart and marked "found since issue";
 - `signers` `[{ fullName, registrationBody, registrationCategory,
   registrationField, registrationNo, signedAt }]`.
 
@@ -249,7 +257,19 @@ same answer. The response isn't cached (`Cache-Control: no-store`), so a
 withdrawal shows at once.
 
 The lookup is `app_verify_pack(code)`, a `SECURITY DEFINER` function that
-builds exactly that object; the route adds only `shortCode`.
+builds that object, plus `runs` (132: each run's `engine_version` and its
+fit's engine, `inputs.settings.fitRecord.engineVersion`, read from
+`model_run`), which never leaves the API: the route maps the object field by
+field (`toVerify`, backend/src/share/links.ts, the same mapping as a pack's
+share link) and turns `runs` into `errataFoundSince`
+(backend/src/evidence/errata.ts), and adds `shortCode`. The errata list is
+the engine's (`ENGINE_ERRATA`, generated from engine-errata.md), so a new
+erratum shows on verify once the API that carries it is deployed.
+
+The pack's own page (`GET …/packs/:packId`, `errataFoundSince`) lists them
+too, in its bar above the report, which is never printed: the pack and its
+PDF print only what the manifest recorded. On a draft they are the errata
+found since the draft was made; drafting the pack again records them.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's

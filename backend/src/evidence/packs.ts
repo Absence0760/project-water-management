@@ -39,7 +39,9 @@ import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { packBundleFileName, packDownloadUrl, packFileName } from '../reports/storage.js';
+import { toVerify } from '../share/links.js';
 import { issuePackBundle } from './bundle.js';
+import { errataFoundSince, type PackErratum, type PackRunEngines } from './errata.js';
 import { buildEvidenceReport } from './report.js';
 import { packPdfState, queuePackRender } from './packPdf.js';
 
@@ -175,6 +177,32 @@ async function packStatementFor(
 	return { statement, sha256: sha256(signoffStatementText(statement)), blocked, unverified: runs.some((r) => !r.verified) };
 }
 
+/**
+ * The errata found since the pack was drafted (evidence/errata.ts): the
+ * current list over its runs' engines and their fits' engines, less what the
+ * manifest recorded. A run the caller can't read counts by the engine the
+ * manifest names, without a fit.
+ */
+async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManifest): Promise<PackErratum[]> {
+	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
+	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersion: string | null }>(
+		`SELECT id, engine_version AS "engineVersion", inputs->'settings'->'fitRecord'->>'engineVersion' AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
+		[ids]
+	);
+	const identity = manifest.report.identity;
+	const named: Record<string, string | undefined> = {
+		[pack.baselineRunId]: identity.baseline.engineVersion,
+		...(pack.scenarioRunId ? { [pack.scenarioRunId]: identity.application?.engineVersion } : {})
+	};
+	const runs: PackRunEngines[] = ids.flatMap((id) => {
+		const r = rows.find((x) => x.id === id);
+		if (r) return [{ engineVersion: r.engineVersion, fitEngineVersion: r.fitEngineVersion }];
+		const v = named[id];
+		return v ? [{ engineVersion: v, fitEngineVersion: null }] : [];
+	});
+	return errataFoundSince(manifest.report.verification.errata ?? [], runs);
+}
+
 /** What still stands between a draft and its issue, from what is stored (the issue route checks the live report as well). */
 async function issueChecks(db: Db, projectId: string, pack: PackMeta, manifest: PackManifest) {
 	const { sha256: current, unverified } = await packStatementFor(db, projectId, pack);
@@ -275,6 +303,8 @@ export const packRoutes = new Hono<AuthEnv>()
 					manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
+					// Errata that apply to its runs now and that the manifest didn't record (132): shown beside the pack, never printed in it.
+					errataFoundSince: await packErrataFoundSince(db, pack, manifest),
 					signoffs,
 					// The server-rendered PDF of an issued pack (119_pack_render): ready, rendering, failed or none.
 					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
@@ -472,7 +502,13 @@ export interface PackVerification {
 	successorSha256: string | null;
 	withdrawnReason: string | null;
 	methodology: { version: string | null; sha256: string | null };
-	errata: { id: string; summary: string }[];
+	/** The errata the manifest recorded when the pack was drafted, as recorded. */
+	errata: PackErratum[];
+	/**
+	 * Errata that apply now to the runs' engines (or their fits') and that the
+	 * manifest didn't record: found since the pack was drafted (132; evidence/errata.ts).
+	 */
+	errataFoundSince: PackErratum[];
 	signers: {
 		fullName: string;
 		registrationBody: string;
@@ -487,14 +523,17 @@ export interface PackVerification {
  * GET /verify/:code — public: no session. The code is a pack's short code or
  * its full manifest hash, printed on the pack; it isn't a secret. 404 alike
  * for a malformed code, an unknown one, a draft and a pack never issued.
- * Nothing but the printed fields leaves (app_verify_pack). Not cached, so a
+ * Nothing but the printed fields leaves (app_verify_pack, mapped field by
+ * field), and the errata found since issue: the current list over the runs'
+ * engines, less what the manifest recorded (132). Not cached, so a
  * withdrawal shows at once. The WAF rate-limits it with the rest of the API.
  */
 export const verifyRoutes = new Hono().get('/:code', async (c) => {
 	const parsed = parsePackCode(c.req.param('code'));
 	c.header('Cache-Control', 'no-store');
 	if (!parsed) throw notFound();
-	const v = await withoutUser(async (db) => (await db.query<{ v: Omit<PackVerification, 'shortCode'> | null }>('SELECT app_verify_pack($1) AS v', [parsed.value])).rows[0]?.v);
+	const v = await withoutUser(async (db) => (await db.query<{ v: Record<string, unknown> | null }>('SELECT app_verify_pack($1) AS v', [parsed.value])).rows[0]?.v);
 	if (!v) throw notFound();
-	return c.json({ pack: { ...v, shortCode: packShortCode(v.manifestSha256) } satisfies PackVerification });
+	// Field by field, as a pack share link's (toVerify): the lookup's `runs` gives errataFoundSince and never leaves.
+	return c.json({ pack: toVerify(v) });
 });

@@ -1075,9 +1075,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
   refuses a project with a pack past draft (`restrict_violation`).
 - **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`; latest body:
-  122_pack_bundle, which adds `bundleSha256`): by short code or full hash,
+  132_verify_pack_run_engines, which adds `runs`; 122_pack_bundle added
+  `bundleSha256`): by short code or full hash,
   the printed fields of a pack that was issued, as `jsonb`, or NULL
   ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+  `runs` (each run's `engine_version` and its fit's engine, baseline first)
+  is for the API's errata found since issue and never returned as is.
 - **`app_record_pack_bundle(pack, sha256)`** (122_pack_bundle, `SECURITY
   DEFINER`, `EXECUTE` for `water_app`): records the reproduction bundle's key
   (`packs/<project>/<pack>/<sha256>.zip`, derived here) and SHA-256, for an

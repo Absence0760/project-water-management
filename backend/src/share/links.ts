@@ -3,8 +3,9 @@
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
 // reaches a server log.
-import { packShortCode, type RestrictionLevel, type CatchmentSite, type NoticeText } from '@water-management/engine';
+import { ENGINE_ERRATA, packShortCode, type CatchmentSite, type Erratum, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { z } from 'zod';
+import { errataFoundSince } from '../evidence/errata.js';
 import type { PackVerification } from '../evidence/packs.js';
 import { UUID } from '../projects/access.js';
 
@@ -499,9 +500,21 @@ function toBand(v: unknown): SharedBand | null {
 
 const sha = (v: unknown): string | null => (typeof v === 'string' && /^[0-9a-f]{64}$/.test(v) ? v : null);
 
-/** The verify object field by field (evidence/packs.ts PackVerification), so nothing the database adds later leaves by default. */
-function toVerify(raw: Record<string, unknown>): PackVerification {
+/**
+ * The verify object field by field (evidence/packs.ts PackVerification), so
+ * nothing the database adds later leaves by default. GET /verify/:code and
+ * POST /share/pack both answer through it. `runs` (132) never leaves: it
+ * gives the errata found since issue (evidence/errata.ts), over `errata`
+ * (the engine's current list unless a test passes one).
+ */
+export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[] = ENGINE_ERRATA): PackVerification {
 	const m = obj(raw.methodology);
+	const recorded = arr(raw.errata).map((e) => ({ id: str(obj(e).id) ?? '', summary: str(obj(e).summary) ?? '' }));
+	const runs = arr(raw.runs).flatMap((x) => {
+		const r = obj(x);
+		const engineVersion = str(r.engineVersion);
+		return engineVersion ? [{ engineVersion, fitEngineVersion: str(r.fitEngineVersion) }] : [];
+	});
 	const status = raw.status === 'superseded' || raw.status === 'withdrawn' ? raw.status : 'issued';
 	const manifest = sha(raw.manifestSha256) ?? '';
 	return {
@@ -518,7 +531,8 @@ function toVerify(raw: Record<string, unknown>): PackVerification {
 		successorSha256: sha(raw.successorSha256),
 		withdrawnReason: status === 'withdrawn' ? str(raw.withdrawnReason) : null,
 		methodology: { version: str(m.version), sha256: str(m.sha256) },
-		errata: arr(raw.errata).map((e) => ({ id: str(obj(e).id) ?? '', summary: str(obj(e).summary) ?? '' })),
+		errata: recorded,
+		errataFoundSince: errataFoundSince(recorded, runs, errata),
 		signers: arr(raw.signers).map((x) => {
 			const s = obj(x);
 			return {

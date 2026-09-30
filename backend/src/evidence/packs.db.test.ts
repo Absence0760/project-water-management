@@ -14,9 +14,15 @@
 //
 // REPORT_RENDERER is `sqs` for the PDF tests, with the queue send captured:
 // a render is the render_pack message it would send, with no Chromium.
+//
+// The engine's errata list (ENGINE_ERRATA) is a copy the tests may add to, so
+// an erratum can be "found" after a pack was issued (132, errataFoundSince);
+// only the backend's imports see it, never the engine's own.
 import {
 	checkPackBundle,
 	declaredRuleRequest,
+	ENGINE_VERSION,
+	type Erratum,
 	packManifestText,
 	runEnsemble,
 	runPairedEnsemble,
@@ -27,7 +33,12 @@ import {
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const { sent } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[] }));
+const { sent, errataList } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[], errataList: [] as Erratum[] }));
+vi.mock('@water-management/engine', async (orig) => {
+	const engine = await orig<typeof import('@water-management/engine')>();
+	errataList.push(...engine.ENGINE_ERRATA);
+	return { ...engine, ENGINE_ERRATA: errataList };
+});
 vi.mock('../jobs/transport.js', async (orig) => ({
 	...(await orig<typeof import('../jobs/transport.js')>()),
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
@@ -277,9 +288,18 @@ describe('drafting a pack', () => {
 describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	let v1: Awaited<ReturnType<typeof draft>>;
 	let v2: Awaited<ReturnType<typeof draft>>;
+	/** Errata "found" once v1 is issued: one for the runs' engine, and two that don't apply to them (a fit's, with no fit; one fixed before it). */
+	const LATER: Erratum[] = [
+		{ id: 'ER-991', keyedOn: 'run', firstAffected: ENGINE_VERSION, fixedIn: null, severity: 'High', appliesWhen: 'Always', summary: 'A bug found after issue', source: 'test' },
+		{ id: 'ER-992', keyedOn: 'fit', firstAffected: '0.0.1', fixedIn: null, severity: 'Low', appliesWhen: 'A fit', summary: 'A fit bug', source: 'test' },
+		{ id: 'ER-993', keyedOn: 'run', firstAffected: '0.0.1', fixedIn: ENGINE_VERSION, severity: 'Low', appliesWhen: 'Always', summary: 'Fixed before', source: 'test' }
+	];
 
 	beforeAll(async () => {
 		v1 = await draft(owner, baseRun);
+	});
+	afterAll(() => {
+		errataList.splice(0, errataList.length, ...errataList.filter((e) => !LATER.includes(e)));
 	});
 
 	it('refuses to issue without a sign-off of the current statement', async () => {
@@ -333,6 +353,26 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.bundleSha256).toBe(pack.bundleSha256);
 		const issued = (await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'pack.issued' AND subject->>'packId' = $2`, [projectId, v1.id]))[0]!;
 		expect(issued.subject.bundleSha256).toBe(pack.bundleSha256);
+	});
+
+	it('lists an erratum found after issue apart, on verify and the pack view, leaving what the manifest recorded and its hash as they were (132)', async () => {
+		const before = (await anon('GET', `/verify/${v1.shortCode}`)).body.pack;
+		expect(before.errataFoundSince).toEqual([]);
+		// The baseline's parameters were entered, not fitted: a fit erratum can't apply to it.
+		expect((await asOwner(`SELECT inputs->'settings'->'fitRecord' AS fit FROM model_run WHERE id = $1`, [baseRun]))[0]!.fit).toBeNull();
+		errataList.push(...LATER);
+		const res = await anon('GET', `/verify/${v1.shortCode}`);
+		expect(res.status).toBe(200);
+		expect(res.body.pack.errataFoundSince).toEqual([{ id: 'ER-991', summary: 'A bug found after issue' }]);
+		expect(res.body.pack.errata).toEqual(before.errata);
+		expect(res.body.pack.manifestSha256).toBe(v1.manifestSha256);
+		// The lookup's engines stay in the API.
+		expect(Object.keys(res.body.pack)).not.toContain('runs');
+		const detail = (await viewer.call('GET', packPath(v1.id))).body;
+		expect(detail.errataFoundSince).toEqual([{ id: 'ER-991', summary: 'A bug found after issue' }]);
+		expect((detail.manifest as PackManifest).report.verification.errata.map((e) => e.id)).not.toContain('ER-991');
+		expect(detail.manifestMatches).toBe(true);
+		// v2 (below) is drafted with ER-991 on the list, so records it: its verify lists it once, as recorded.
 	});
 
 	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
@@ -446,6 +486,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 				'catchment',
 				'engineVersion',
 				'errata',
+				'errataFoundSince',
 				'issuedAt',
 				'bundleSha256',
 				'manifestSha256',
@@ -663,6 +704,11 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(old).toMatchObject({ status: 'superseded', supersededById: v2.id });
 		const verified = await anon('GET', `/verify/${v1.shortCode}`);
 		expect(verified.body.pack).toMatchObject({ status: 'superseded', successorSha256: v2.manifestSha256 });
+		// An erratum on the list when v2 was drafted is recorded, so it isn't found since v2's issue; v1 still lists it as found since.
+		const v2Verified = (await anon('GET', `/verify/${v2.shortCode}`)).body.pack;
+		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toContain('ER-991');
+		expect(v2Verified.errataFoundSince).toEqual([]);
+		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991']);
 	});
 
 	it('withdraws an issued pack once, with its reason, and says so to verify', async () => {

@@ -1637,6 +1637,8 @@ export interface PackDetail {
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
 	issue: PackIssueChecks | null;
+	/** Errata that apply now to its runs' engines (or their fits') and that the manifest didn't record (132): found since it was drafted. */
+	errataFoundSince: { id: string; summary: string }[];
 }
 
 /** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts; docs/evidence-pack.md § The PDF). */
@@ -1662,7 +1664,10 @@ export interface PackVerification {
 	successorSha256: string | null;
 	withdrawnReason: string | null;
 	methodology: { version: string | null; sha256: string | null };
+	/** The errata the manifest recorded when the pack was drafted, as recorded. */
 	errata: { id: string; summary: string }[];
+	/** Errata that apply now to the runs' engines (or their fits') and that the manifest didn't record: found since issue (132). */
+	errataFoundSince: { id: string; summary: string }[];
 	signers: {
 		fullName: string;
 		registrationBody: string;

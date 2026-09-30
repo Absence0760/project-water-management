@@ -3,7 +3,8 @@
 // report, signed in Appendix B.2 (the dialog says the signer's name is
 // public), issued, stamped with its hash and code in every section and the
 // footer the server PDF prints; then the public verify page, signed out: the
-// verdict and signers, a wrong code, the downloaded manifest matching (as is
+// verdict and signers, the errata found since issue (none, then one the
+// API names), a wrong code, the downloaded manifest matching (as is
 // and pretty-printed) and a one-byte change refused; then withdrawn, with its
 // public reason. The reproduction bundle downloads from the pack and checks
 // on the verify page. An application's packs in the Applications tab and panel,
@@ -194,6 +195,24 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	const bundle = await readFile((await bundleDownload.path())!);
 	expect(createHash('sha256').update(bundle).digest('hex')).toBe(issued.bundleSha256);
 
+	// Errata found since issue show in the bar, never in the printed pack: none for this engine (the live answer) ...
+	await expect(page.getByTestId('pack-errata-since')).toHaveCount(0);
+	// ... and one the API names (132; the live answer with one added, as on the verify page below).
+	await page.route(packUrl, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		const res = await route.fetch();
+		const body = await res.json();
+		body.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
+		await route.fulfill({ response: res, json: body });
+	});
+	await page.reload();
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	const errataSince = page.getByTestId('pack-errata-since');
+	await expect(errataSince).toContainText('Errata found since issue:');
+	await expect(errataSince.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
+	await expectNoViolations(page);
+	await page.unroute(packUrl);
+
 	// The evidence report lists it now.
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);
 	await ready(page);
@@ -213,6 +232,25 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	// The code is read in any case, without dashes.
 	await pub.goto(`/verify/${code.replaceAll('-', '').toUpperCase()}`);
 	await expect(result).toHaveAttribute('data-status', 'issued');
+
+	// Errata found since issue, apart from those the pack recorded: none for this engine yet (the live answer) ...
+	const since = pub.getByTestId('verify-errata-since');
+	await expect(since.getByRole('heading', { name: 'Errata found since issue' })).toBeVisible();
+	await expect(since).toContainText('None: no erratum has been found since issue for the engines this pack’s runs used.');
+	// ... and one listed when the API names one (132): no real erratum can be added to docs/engine-errata.md from a test,
+	// so the answer is the live one with an entry added to errataFoundSince, which is all the page reads for it.
+	await pub.route(`${API_URL}/verify/**`, async (route) => {
+		const res = await route.fetch();
+		const body = await res.json();
+		body.pack.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
+		await route.fulfill({ response: res, json: body });
+	});
+	await pub.reload();
+	await expect(result).toHaveAttribute('data-status', 'issued');
+	await expect(since.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
+	await expect(since).toContainText('its manifest and hash are fixed');
+	await expectNoViolations(pub);
+	await pub.unroute(`${API_URL}/verify/**`);
 
 	// A copy checked in the browser: the manifest as downloaded, pretty-printed, and with one byte changed.
 	const check = pub.getByTestId('verify-check');
