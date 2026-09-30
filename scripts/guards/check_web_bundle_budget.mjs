@@ -1484,23 +1484,19 @@
 //             b72ba4eb merged). #229's share links and #204's hands-off flow
 //             now in main; nothing of the evidence measures changed, engine
 //             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
-// 2026-09-30  total 1235 → 1239 KB (issue #71: measured 1236 with #223's
-//             branch merged, against its 1232): the issued pack's PDF. Headroom
-//             ~3 KB.
-// 2026-09-30  total 1238 → 1244 KB (issue #71: measured 1241 with main @
-//             848000ac merged). The issued pack's PDF, on top of #223's
-//             evidence packs. Headroom ~3 KB.
-// 2026-09-30  total 1241 → 1247 KB (issue #71: measured 1244 with main @
-//             e8ebaf18 merged). #222's allocations chart now in main.
+// 2026-09-30  total 1267 → 1285 KB (issue #71, WP-3.14: the evidence pack's
+//             screens, measured 1282 with main @ 848000ac merged). Two new
+//             routes, each its own lazy chunk loaded only when opened: the
+//             pack view with its actions (~6 KB) and the public verify page
+//             with its in-browser file check (~6 KB); the pack helpers and
+//             badge (~2 KB) and the pack lists on the evidence report and
+//             the Applications tab and panel. No new dependency: the hash is
+//             WebCrypto, the canonical JSON the engine's. Headroom ~3 KB.
+// 2026-09-30  total 1285 → 1289 KB (issue #71: measured 1286 with #224's
+//             pack screens merged, against their 1282): the issued pack's
+//             server PDF on its page (the state, the download link and an
+//             editor's "Try again") and the packs API client's two PDF calls.
 //             Headroom ~3 KB.
-// 2026-09-30  total 1246 → 1250 KB (issue #71: measured 1247 with main @
-//             5502d0a6 merged). #225's evidence-report follow-ups now in
-//             main. Headroom ~3 KB.
-// 2026-09-30  total 1267 → 1273 KB (issue #71: measured 1268 with main @
-//             fe673f07 merged, against main's 1264; 1270 with main @
-//             ff62bc2d, #236's applicant results). The issued pack's page
-//             (routes/projects/[id]/packs/[packId], its own chunk; the PDF
-//             prints it) and the packs API client. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1511,7 +1507,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1273,
+	totalCodeKb: 1289,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

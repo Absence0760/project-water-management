@@ -123,7 +123,8 @@
 	// Language (WP-2.5, docs/ui.md § Language), on the translated surfaces
 	// only (sign-in pages, the farm view, the account and alert pages, the
 	// public /share page, the landing page): the modeller workspace is English and never loads
-	// the message catalogue.
+	// the message catalogue. So are the other public pages: the legal and methods pages, and an
+	// evidence pack's verify page (/verify, WP-3.14), which licensing assessors read.
 	// The i18n module is imported on the first translated route; the language
 	// is the account's when signed in and chosen, else this device's, else the
 	// browser's, re-resolved when the user signs in or out or changes it (the

@@ -87,6 +87,12 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	const verified = await page.request.get(`${API_URL}/verify/${pack.shortCode}`);
 	expect(((await verified.json()) as { pack: { pdfSha256: string } }).pack.pdfSha256).toBe(read.pack.pdfSha256);
 
+	// The pack's page offers the server PDF (not the browser's print), and no longer says it is printing.
+	await page.goto(`/projects/${project.id}/packs/${pack.id}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('pack-pdf-download')).toHaveAttribute('href', `${API_URL}/projects/${project.id}/packs/${pack.id}/pdf`);
+	await expect(page.getByTestId('pack-pdf-state')).toHaveCount(0);
+
 	// Printed once: a second request is refused.
 	expect((await page.request.post(`${at}/${pack.id}/pdf`, { data: {} })).status()).toBe(409);
 });

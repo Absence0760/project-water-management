@@ -31,6 +31,8 @@ import type {
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
 	SignoffStatement,
+	PackManifest,
+	PackSignoffStatement,
 	RegistrationBodyCode,
 	RunSummary,
 	ScenarioOp,
@@ -1496,9 +1498,19 @@ export interface SignoffList {
 	signoffs: Signoff[];
 }
 
-/** An evidence pack as the API returns it (docs/api.md § Evidence packs; backend/src/evidence/packs.ts PackMeta). */
-export interface PackMeta {
+/** GET /projects/:id/packs/:packId/signoffs: the pack statement in place of the run's (docs/api.md § Evidence packs). */
+export interface PackSignoffList extends Omit<SignoffList, 'statement'> {
+	statement: PackSignoffStatement;
+}
+
+// --- Evidence packs (WP-3.14, issue #71, docs/evidence-pack.md, docs/api.md § Evidence packs) ---
+
+export type PackStatus = 'draft' | 'issued' | 'superseded' | 'withdrawn';
+
+/** One evidence pack as the API returns it (backend evidence/packs.ts PackMeta). */
+export interface Pack {
 	id: string;
+	/** The report's title: the scenario's name, or the project's for baseline evidence. */
 	title: string;
 	mode: 'application' | 'baseline';
 	scenarioId: string | null;
@@ -1507,15 +1519,15 @@ export interface PackMeta {
 	version: number;
 	supersedesId: string | null;
 	supersededById: string | null;
-	status: 'draft' | 'issued' | 'superseded' | 'withdrawn';
+	status: PackStatus;
 	manifestSha256: string;
-	/** `xxxx-xxxx-xxxx`: the manifest hash's first 12 hex digits. */
+	/** The manifest hash's first 12 hex digits, `xxxx-xxxx-xxxx`. */
 	shortCode: string;
-	/** `/verify/<shortCode>`. */
+	/** The web page that verifies it, `/verify/<shortCode>`. */
 	verifyPath: string;
 	reportVersion: string;
 	engineVersion: string;
-	/** The server-rendered PDF's SHA-256, once recorded (116_pack_render). */
+	/** The server-rendered PDF's SHA-256, once recorded (116_pack_render); null until then. */
 	pdfSha256: string | null;
 	pdfPages: number | null;
 	bundleSha256: string | null;
@@ -1523,15 +1535,61 @@ export interface PackMeta {
 	createdBy: string | null;
 	issuedAt: string | null;
 	issuedBy: string | null;
+	/** Why it was withdrawn; null otherwise. */
 	statusReason: string | null;
+	/** How many sign-offs it has. */
 	signoffs: number;
 }
 
-/** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts). */
+/** What stands between a draft and its issue, as stored (an editor's read of a draft; else null). */
+export interface PackIssueChecks {
+	issuable: boolean;
+	signed: boolean;
+	runsVerified: boolean;
+}
+
+/** GET /projects/:id/packs/:packId. */
+export interface PackDetail {
+	pack: Pack;
+	manifest: PackManifest;
+	/** The stored manifest still hashes to its recorded SHA-256. */
+	manifestMatches: boolean;
+	signoffs: Signoff[];
+	/** Where its server-rendered PDF is (116_pack_render). */
+	pdf: PackPdfState;
+	issue: PackIssueChecks | null;
+}
+
+/** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts; docs/evidence-pack.md § The PDF). */
 export interface PackPdfState {
 	status: 'ready' | 'rendering' | 'failed' | 'none';
 	/** Why the last render gave up (`failed`). */
 	error: string | null;
+}
+
+/** GET /verify/:code (public): only what the pack prints (app_verify_pack). */
+export interface PackVerification {
+	status: Exclude<PackStatus, 'draft'>;
+	version: number;
+	issuedAt: string;
+	catchment: string;
+	engineVersion: string;
+	reportVersion: string;
+	manifestSha256: string;
+	shortCode: string;
+	pdfSha256: string | null;
+	successorSha256: string | null;
+	withdrawnReason: string | null;
+	methodology: { version: string | null; sha256: string | null };
+	errata: { id: string; summary: string }[];
+	signers: {
+		fullName: string;
+		registrationBody: string;
+		registrationCategory: string | null;
+		registrationField: string | null;
+		registrationNo: string;
+		signedAt: string;
+	}[];
 }
 
 /** POST /projects/:id/runs/:runId/signoffs. */

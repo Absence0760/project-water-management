@@ -8,6 +8,7 @@
 	import type { Signoff } from '$lib/api';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
+	import type { VerifyRef } from '$lib/components/packs/pack';
 	import LicenceImpactBoard from '../LicenceImpactBoard.svelte';
 	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
@@ -15,14 +16,18 @@
 	let {
 		report,
 		board = null,
+		boardNotFrozen = false,
 		signoffs,
 		verify
 	}: {
 		report: EvidenceReport;
 		/** Licence impact by year class (issue #53 R7), after the change table (§4.1); null for baseline evidence. */
 		board?: BoardView | null;
+		/** An evidence pack's application report: the board reads live series and settings a pack-1 manifest doesn't freeze, so it is left out and says so. */
+		boardNotFrozen?: boolean;
 		signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[];
-		verify: string | null;
+		/** An issued pack's manifest hash, short code and verify link; null for a draft. */
+		verify: VerifyRef | null;
 	} = $props();
 
 	const id = $derived(report.identity);
@@ -80,7 +85,7 @@
 	</div>
 	<div>
 		<dt>Verify</dt>
-		<dd>{#if verify}<span class="mono">{verify}</span>{:else}<span class="na">Given when a pack is issued</span>{/if}</dd>
+		<dd>{#if verify}<span class="mono">{verify.code}</span><span class="sub">{verify.url}</span>{:else}<span class="na">Given when a pack is issued</span>{/if}</dd>
 	</div>
 </dl>
 
@@ -152,6 +157,11 @@
 		<LicenceImpactBoard view={board} />
 		<p class="small muted">The two runs’ own numbers, no band: the ensemble doesn’t carry year classes.</p>
 	</div>
+{:else if boardNotFrozen}
+	<p class="small muted" data-testid="evidence-impact-board-omitted">
+		Licence impact by year class is not part of this pack: its manifest doesn’t freeze the daily series and year-class settings it reads. The workspace’s
+		evidence report shows it for the runs.
+	</p>
 {/if}
 
 <div class="two">

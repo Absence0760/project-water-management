@@ -8,14 +8,17 @@
 	// window and the rows scroll inside it; in a narrow column each row is a
 	// card. Opening one goes to the Scenarios tab, where an editor who didn't
 	// make it decides it. Drafts never appear: they are the applicant's alone
-	// (RLS, 045_contributor_scope). Each row has its comments (the notes
-	// drawer on the scenario, WP-3.15); its share links are in the scenario's
-	// Application panel. Evidence packs (WP-3.14) will be linked from here once
-	// they exist.
+	// (RLS, 045_contributor_scope). Each row lists the application's evidence
+	// packs (WP-3.14) with their status, newest version first, each linking to
+	// its page, and has its comments (the notes drawer on the scenario,
+	// WP-3.15); its share links are in the scenario's Application panel.
 	import { untrack } from 'svelte';
+	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, type Scenario } from '$lib/api';
+	import { api, type Pack, type Scenario } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import PackBadge from '$lib/components/packs/PackBadge.svelte';
+	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -40,6 +43,8 @@
 	let { projectId }: { projectId: string } = $props();
 
 	let items = $state<Scenario[] | null>(null);
+	/** The project's evidence packs by application; null when they couldn't be read (the list still shows). */
+	let packs = $state.raw<Map<string | null, Pack[]> | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let sort = $state<ApplicationSort>('date');
@@ -50,7 +55,9 @@
 		loading = true;
 		error = null;
 		try {
-			items = await api.scenarios.applications(projectId);
+			const [list, pk] = await Promise.all([api.scenarios.applications(projectId), api.packs.list(projectId).catch(() => null)]);
+			items = list;
+			packs = pk ? packsByScenario(pk) : null;
 			now = Date.now();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
@@ -160,6 +167,7 @@
 								<th scope="col">Submitted</th>
 								<th scope="col" class="num">Changes</th>
 								<th scope="col" class="num">Runs</th>
+								<th scope="col">Evidence packs</th>
 								<th scope="col"><span class="visually-hidden">Comments</span></th>
 							</tr>
 						</thead>
@@ -182,6 +190,19 @@
 									</td>
 									<td class="num c-ops">{a.ops.length}<span class="cell-label">{' '}change{a.ops.length === 1 ? '' : 's'}</span></td>
 									<td class="num c-runs">{a.runCount}<span class="cell-label">{' '}run{a.runCount === 1 ? '' : 's'}</span></td>
+									<td class="c-packs" data-testid="application-packs">
+										{#if packs === null}
+											<span class="sub">couldn’t be read</span>
+										{:else}
+											{@const list = packs.get(a.id) ?? []}
+											<span class="cell-label">Evidence packs:{' '}</span>
+											{#each list as p (p.id)}
+												<a class="pack-link" href={packHref(base, projectId, p.id)}><span class="visually-hidden">Evidence pack{' '}</span><PackBadge status={p.status} version={p.version} /></a>
+											{:else}
+												<span class="sub none">none</span>
+											{/each}
+										{/if}
+									</td>
 									<td class="c-notes"><NotesDrawer {projectId} compact target={{ kind: 'scenario', scenarioId: a.id, name: a.name, audiences: ASSESSOR_AUDIENCES }} /></td>
 								</tr>
 							{/each}
@@ -293,6 +314,18 @@
 	.wait {
 		font-weight: 600;
 	}
+	.c-packs {
+		white-space: normal;
+	}
+	.pack-link {
+		display: inline-block;
+		min-height: 24px;
+		margin: 0 0.25rem 0.25rem 0;
+		text-decoration: none;
+	}
+	.c-packs .none {
+		display: inline;
+	}
 	/* The status in words; the band colour repeats it. */
 	.pill {
 		display: inline-block;
@@ -376,6 +409,7 @@
 				'who who'
 				'when when'
 				'ops runs'
+				'packs packs'
 				'notes notes';
 			justify-content: start;
 			gap: 0.35rem 1rem;
@@ -412,6 +446,9 @@
 		}
 		.c-runs {
 			grid-area: runs;
+		}
+		.c-packs {
+			grid-area: packs;
 		}
 		.c-notes {
 			grid-area: notes;

@@ -58,10 +58,13 @@ import type {
 	HistoryRevision,
 	RestoreResult,
 	SeriesRevisionMeta,
-	PackMeta,
 	PackPdfState,
 	Signoff,
 	SignoffList,
+	Pack,
+	PackDetail,
+	PackSignoffList,
+	PackVerification,
 	SignoffRequest,
 	Member,
 	MyInvite,
@@ -563,23 +566,6 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			report: (id: string, runId: string) =>
 				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
 		},
-		/**
-		 * Evidence packs (issue #71, docs/api.md § Evidence packs): the reads the
-		 * pack's page makes, which are all a pack render session may make
-		 * (backend/src/reports/scope.ts).
-		 */
-		packs: {
-			/** One pack: its row, the frozen manifest, its sign-offs and its PDF's state (viewer). */
-			get: (id: string, packId: string) =>
-				request<{ pack: PackMeta; manifest: PackManifest; manifestMatches: boolean; signoffs: Signoff[]; pdf: PackPdfState }>(
-					'GET',
-					`${p(id)}/packs/${enc(packId)}`
-				),
-			/** The pack's sign-off statement and sign-offs (viewer); the same shape as a run's. */
-			signoffs: (id: string, packId: string) => request<SignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
-			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready). */
-			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`
-		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
 			list: (id: string, runId: string) => request<SignoffList>('GET', `${p(id)}/runs/${enc(runId)}/signoffs`),
@@ -587,6 +573,35 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			create: (id: string, runId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/runs/${enc(runId)}/signoffs`, body).then((r) => r.signoff)
 		},
+		/** Evidence packs (WP-3.14, issue #71, docs/api.md § Evidence packs): a report frozen, hashed, signed and issued. */
+		packs: {
+			/** The project's packs, newest first (viewer; no manifest). */
+			list: (id: string) => request<{ packs: Pack[] }>('GET', `${p(id)}/packs`).then((r) => r.packs),
+			/** One pack with its frozen manifest, its sign-offs and, for an editor's draft, what stands before its issue (viewer). */
+			get: (id: string, packId: string) => request<PackDetail>('GET', `${p(id)}/packs/${enc(packId)}`),
+			/** Draft a pack from a report that may be issued (editor); `supersedesId` makes it a new version of an issued pack. */
+			create: (id: string, runId: string, supersedesId?: string) =>
+				request<{ pack: Pack }>('POST', `${p(id)}/packs`, supersedesId ? { runId, supersedesId } : { runId }).then((r) => r.pack),
+			/** Delete an unsigned draft (editor). */
+			remove: (id: string, packId: string) => request<void>('DELETE', `${p(id)}/packs/${enc(packId)}`),
+			/** Issue a signed draft (editor): 409 with the reason when something stands in the way. */
+			issue: (id: string, packId: string) => request<{ pack: Pack }>('POST', `${p(id)}/packs/${enc(packId)}/issue`, {}).then((r) => r.pack),
+			/** Withdraw a pack, with a reason shown publicly on its verify page (editor). */
+			withdraw: (id: string, packId: string, reason: string) =>
+				request<{ pack: Pack }>('POST', `${p(id)}/packs/${enc(packId)}/withdraw`, { reason }).then((r) => r.pack),
+			/** The pack statement (with its hash), whether the caller may sign, and its sign-offs (viewer). */
+			signoffs: (id: string, packId: string) => request<PackSignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
+			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
+			sign: (id: string, packId: string, body: SignoffRequest) =>
+				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff),
+			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready; viewer). */
+			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
+			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
+			renderPdf: (id: string, packId: string) =>
+				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf)
+		},
+		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
+		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),
 		publication: {
 			/** The current publication (null when nothing is published) and the history, newest first (at most 12). */
 			get: (id: string) => request<{ current: Publication | null; history: PublicationMeta[] }>('GET', `${p(id)}/publication`),

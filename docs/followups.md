@@ -3862,7 +3862,8 @@ Left, from the design and the persona review (§11), each with its trigger.
       computed in the browser, not in the engine's document, so an issued
       pack can't freeze it yet; it moves into `evidenceReport` with the pack's
       manifest. Tracked under *The server-rendered evidence PDF* below
-      (WP-3.14).
+      (WP-3.14). Until then the pack's page leaves the board out and says
+      it isn't part of the pack (ui.md § Evidence pack).
 - [ ] **The server-rendered evidence PDF.** An *issued pack* is printed on
       the server now (116_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
       from its frozen manifest; the *draft* evidence report on the report
@@ -3883,13 +3884,16 @@ Left, from the design and the persona review (§11), each with its trigger.
 its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
 verify lookup; 2026-09-30: the server-rendered PDF, [evidence-pack.md](./evidence-pack.md)). Left:
 
-- [ ] **The pack view and the verify page** (`routes/projects/[id]/packs/[packId]`,
-      rendering the evidence components from the frozen manifest; `/verify/[code]`
-      with the in-browser PDF and manifest check; the Draft, Sign, Issue,
-      Supersede and Withdraw actions; axe on both). The pack sign-off dialog
-      must say the signer's name and registration are printed on the pack
-      and shown by the public verify lookup. Trigger: next (the second
-      PR of issue #71).
+- [x] **The pack view and the verify page.** Built 2026-09-30
+      ([ui.md § Evidence pack](./ui.md#evidence-pack),
+      [§ Verify page](./ui.md#verify-page)): `routes/projects/[id]/packs/[packId]`
+      renders the evidence report from the frozen manifest with the stamp and
+      verify line in every section and the footer; `/verify/[[code]]` with the
+      in-browser manifest (and, once recorded, PDF) check; Create, Sign,
+      Issue, New version, Withdraw and Delete draft; the pack lists on the
+      evidence report and the Applications tab and panel; the sign-off dialog
+      says the signer's name and registration are public. Axe on both
+      (`e2e/tests/evidence-pack.spec.ts`).
 - [x] **The server-rendered pack PDF and its hash.** Built 2026-09-30
       (116_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)):
       issuing queues a `pack_render` job that prints the pack's own page with

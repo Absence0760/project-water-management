@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { registrationAdvice, scrolledToEnd, shortHash, signoffBlockers, type SignoffFields } from './signoffForm';
+import { PACK_SIGNER_PUBLIC, registrationAdvice, scrolledToEnd, shortHash, signoffBlockers, statementEngines, type SignoffFields } from './signoffForm';
 
 const IDS = ['identity', 'competence', 'conflict', 'inputs', 'calibration', 'ewr', 'works', 'assurance', 'plausibility', 'limitations'];
 const full: SignoffFields = {
@@ -76,5 +76,21 @@ describe('scrolledToEnd', () => {
 describe('shortHash', () => {
 	it('keeps 12 hex digits', () => {
 		expect(shortHash('0123456789abcdef'.repeat(4))).toBe('0123456789ab');
+	});
+});
+
+describe('statementEngines (a run’s statement, or a pack’s two runs)', () => {
+	it('names one engine for a run, and for a pack whose runs share it', () => {
+		expect(statementEngines({ engineVersion: '1.33.0' })).toBe('1.33.0');
+		expect(statementEngines({ baseline: { engineVersion: '1.33.0' }, application: null })).toBe('1.33.0');
+		expect(statementEngines({ baseline: { engineVersion: '1.33.0' }, application: { engineVersion: '1.33.0' } })).toBe('1.33.0');
+	});
+
+	it('names both, each with its run, when a pack’s runs were made with different engines', () => {
+		expect(statementEngines({ baseline: { engineVersion: '1.32.0' }, application: { engineVersion: '1.33.0' } })).toBe('1.32.0 (baseline) and 1.33.0 (application)');
+	});
+
+	it('tells a pack’s signer, before signing, that what they sign with is public on the verify page', () => {
+		for (const what of ['full name', 'registration', 'publicly', 'verify page', 'even if it is withdrawn']) expect(PACK_SIGNER_PUBLIC).toContain(what);
 	});
 });
