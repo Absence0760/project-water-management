@@ -91,10 +91,10 @@ test('an application on the nominated run gives the full evidence report, draft 
 	const report = page.getByTestId('evidence-report');
 	await expect(report).toHaveAttribute('data-evidence-mode', 'application');
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper dam 300 000 m³' })).toBeVisible();
-	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
+	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
 	// G12: the draft stamp on every section.
-	await expect(page.getByTestId('evidence-stamp')).toHaveCount(9);
+	await expect(page.getByTestId('evidence-stamp')).toHaveCount(10);
 	for (const s of await page.getByTestId('evidence-stamp').all()) await expect(s).toHaveText('Draft · not issued');
 
 	// Page 1: the banner, the flags, and the fixed rows with paired bands and "worse in".
@@ -124,6 +124,8 @@ test('an application on the nominated run gives the full evidence report, draft 
 	// § 5 and its row: the project has no registered volumes, so both say so (G6); evidence-allocations.spec.ts has the assessed case.
 	await expect(table.getByRole('row', { name: /^Registered vs modelled use/ })).toContainText('Not assessed: the runs carry no registered volumes');
 	await expect(page.getByTestId('evidence-allocations-na')).toContainText('Not assessed: the runs carry no registered volumes');
+	// § 6: the dam adds no demand object and Upper farm has none, so it says so (evidence-demand-objects.spec.ts has the listed case).
+	await expect(page.getByTestId('evidence-demand-objects-na')).toContainText('Not assessed: no demand object is on the applicant’s units');
 
 	// § 1: the FDC check carries the baseline's band (ER5). § 4: each unit's change is banded, and the users served in full while the outlet fails.
 	await expect(report.getByTestId('fdc-band-a').first()).toBeVisible();

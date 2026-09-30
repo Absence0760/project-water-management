@@ -1619,6 +1619,13 @@
 //             Settings editor (its own chunk, also the scenario form's), the
 //             Units & supply tables (their own chunk and panel) and the
 //             outlook's "Use as the drought restriction rule". Headroom ~3 KB.
+// 2026-09-30  total 1352 → 1355 KB (report format evidence-9, issue #259: the
+//             evidence report's § 6, the applicant's demand objects with
+//             their sizing, source, note and demand, the by-source line
+//             (demandBySource moved to the engine, shared with the run's
+//             demand-objects table) and demandObjects.ts; ~1 KB). Measured
+//             1353 locally on feat/evidence-demand-source (stacked on
+//             feat/demand-source, #266); CI ~2 KB above. Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1629,7 +1636,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1352,
+	totalCodeKb: 1355,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

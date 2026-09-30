@@ -8,6 +8,7 @@
 	import {
 		ALLOCATION_MODE_LABEL,
 		APPLICANT_PROMPTS,
+		DEMAND_OBJECT_CATEGORY_LABEL,
 		declaredRuleText,
 		describeFitRecord,
 		ENSEMBLE_MEASURES_SINCE,
@@ -40,6 +41,8 @@
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
+	import { CHANGE_LABEL, sizingText } from './demandObjects';
+	import { sourceLabel, sourceLine } from '$lib/components/runs/demandSources';
 
 	let {
 		report,
@@ -622,6 +625,53 @@
 							</table>
 						</div>
 					{/if}
+				{/if}
+			{:else if s.id === 'demandObjects' && report.demandObjects}
+				<!-- evidence-9: the applicant's demand objects and where each one's number comes from; a pack drafted before it has no § 6. -->
+				{@const dob = report.demandObjects}
+				{#if dob.notAssessed}
+					<p class="na" data-testid="evidence-demand-objects-na">{dob.notAssessed}</p>
+				{:else}
+					<p class="small muted">
+						The demands that aren’t crops on the applicant’s units (a town, households, livestock, a bulk supply), as the application ran them, and one it removes as the
+						baseline did. Each is supplied from its unit’s dam, river pump and boreholes with its crops; demand is the daily mean over the run. Under each source, its
+						note as entered on the model, not checked by the app.
+					</p>
+					{#if dob.bySource.length}
+						<p class="small" data-testid="evidence-demand-sources">
+							{sourceLine(dob.bySource)} The rule: meter records where they exist, else the reconciliation strategy’s AADD, else population × litres a person a day.
+						</p>
+					{/if}
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-demand-objects">
+							<thead>
+								<tr>
+									<th scope="col">Unit</th>
+									<th scope="col">Demand object</th>
+									<th scope="col">In the application</th>
+									<th scope="col">Sizing</th>
+									<th scope="col">Source</th>
+									<th scope="col" class="num">Demand, baseline<br /><span class="u">m³/day</span></th>
+									<th scope="col" class="num">Demand, application<br /><span class="u">m³/day</span></th>
+									<th scope="col" class="num">Supplied, application</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each dob.objects as o (o.id)}
+									<tr>
+										<td>{o.unit}</td>
+										<th scope="row">{o.name}<span class="sub">{DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category}{o.enabled ? '' : ' · not modelled'}</span></th>
+										<td>{CHANGE_LABEL[o.change]}</td>
+										<td>{sizingText(o)}</td>
+										<td class:muted={!o.source}>{sourceLabel(o.source)}{#if o.note.trim()}<span class="sub">{o.note}</span>{/if}</td>
+										<td class="num">{o.demandA === null ? '–' : fmtNum(o.demandA, 1)}</td>
+										<td class="num">{o.demandB === null ? '–' : fmtNum(o.demandB, 1)}</td>
+										<td class="num">{pct(o.suppliedB)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				{/if}
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
