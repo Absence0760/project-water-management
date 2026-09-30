@@ -95,7 +95,7 @@ export interface CurtailmentRow {
 	/** How far the EWR supply cut exceeds the equitable share (m³/day); "" when it doesn't (audit Q13). */
 	beyondShare: string;
 	/**
-	 * What the basic-needs floor held back of the cut (engine ≥ 1.38.0, issue
+	 * What the basic-needs floor held back of the cut (engine ≥ 1.41.0, issue
 	 * #123), m³/day, and the floor itself; "" when it held nothing back (or
 	 * the unit has no floor, or the run is older).
 	 */

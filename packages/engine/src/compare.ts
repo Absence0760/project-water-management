@@ -1427,7 +1427,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [x, y] of objs.pairs) {
 			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
-			// The people it serves (engine ≥ 1.38.0): absent and null alike are none.
+			// The people it serves (engine ≥ 1.41.0): absent and null alike are none.
 			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
 			if (moved || scheduleChanged || populationChanged || fields.some((f) => !same(x[f], y[f])))

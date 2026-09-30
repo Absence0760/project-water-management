@@ -1221,7 +1221,7 @@ user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, and
 a negative population.
 
-A demand object's `population` (engine ≥ 1.38.0, migration 124, issue #123,
+A demand object's `population` (engine ≥ 1.41.0, migration 124, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
 floor of a domestic or municipal object (population × 25 l a day; read for
 those two categories only). Null = a per-unit object's `count`; a monthly one
@@ -1599,7 +1599,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
-  and the objects' together. The basic-needs floor (engine ≥ 1.38.0, issue
+  and the objects' together. The basic-needs floor (engine ≥ 1.41.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
   `avgBelowBasicNeedsM3Day` (days and mean volume supplied below the day's
@@ -1625,7 +1625,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewrSupplyCutM3Day` (the change in supply), `volumeLeftM3Day` is
   `MAX(target + ewrSupplyCutM3Day, 0)`, `fractionOfDemandLeft` is in 0–1, and
   `ewrCutBeyondShareM3Day` (≥ 0, also in `totals`) is how far the EWR supply
-  cut exceeds the equitable share. From 1.38.0 (issue #123) a unit with a
+  cut exceeds the equitable share. From 1.41.0 (issue #123) a unit with a
   basic-needs floor adds `basicNeedsM3Day` (the window mean of its
   `basic_needs`) and `basicNeedsHeldM3Day` (≥ 0, what the floor held back of
   the cut), both also in `totals` when a farm has them; its
@@ -1996,7 +1996,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-4`: § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-5`: page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2161,7 +2161,7 @@ whether a use is lawful.
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
 | GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison, capYears }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
@@ -2192,6 +2192,21 @@ whether a use is lawful.
   `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
   ([Projects](#projects)); `RunSummary.allocations` is the run's own
   comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+  In a cap run each of its sources carries `capReached: [{ waterYear,
+  budgetM3, usedM3 }]` (the years the volume was used up) and, engine ≥
+  1.40.0, `limitBound: [{ waterYear, days, volumeDays, rateDays, monthsDays
+  }]` (the days per year the licence limit held use back, by limit; only
+  years with one). A capped source whose licence states months or a rate has
+  the run series `allocation_left_surface` / `allocation_left_groundwater`
+  (what is left of the year's volume, m³, start of the day) beside
+  `allocation_room_*`. The summary CSV adds an "Allocation cap by water year"
+  block in a cap run.
+- `capYears` (the run comparison, `GET …/runs/:runId/allocations`): in a cap
+  run, one `{ nodeId, waterSource, capReached, limitBound }` per unit and
+  capped source of `RunSummary.allocations` (`limitBound` `null` on a run
+  before engine 1.40.0); `[]` for a run of another mode. Read from the run's
+  summary, not recomputed, so for a forecast run it covers the forecast days
+  too, unlike `comparison` (the page says so).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with

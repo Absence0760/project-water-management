@@ -3074,7 +3074,7 @@ regression suite is unchanged.
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
 | `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 105; below); null or empty = every day at its month's demand |
-| `population` | the people it serves, for the basic-needs floor of a domestic or municipal object (engine ≥ 1.38.0, migration 124; below); null = a `perUnit` object's `count`, and a `monthly` one without it has no floor |
+| `population` | the people it serves, for the basic-needs floor of a domestic or municipal object (engine ≥ 1.41.0, migration 124; below); null = a `perUnit` object's `count`, and a `monthly` one without it has no floor |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,
@@ -3159,7 +3159,7 @@ river pump and River to dam, §2.7h, doesn't switch demand objects).
   per-category restriction is planned. A scenario op to add or scale one
   object is a follow-up.
 
-**The basic-needs floor** (engine ≥ 1.38.0, issue #123, from issue #90 Q13,
+**The basic-needs floor** (engine ≥ 1.41.0, issue #123, from issue #90 Q13,
 `network/demandObjects.ts` `basicNeedsM3Day`). The client agreed that a
 restriction never cuts domestic supply below 25 litres per person per day
 (the Free Basic Water level), that cuts follow DWS's % restrictions, and that a
@@ -3206,7 +3206,7 @@ stages are shown as the supplied l per person per day, never applied.
 supplied, return and days short, and, on an object with a schedule, its
 days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so. An
-object with a basic-needs floor (engine ≥ 1.38.0) adds its people and floor
+object with a basic-needs floor (engine ≥ 1.41.0) adds its people and floor
 B_k, the days it got less than b_k(t) and the mean of MAX(b_k − G_k, 0) (the
 part of its deficit below basic needs, reported apart from the days short
 and the deficit), and what it got per person at the tap, G × (1 − losses) ×
@@ -3215,7 +3215,7 @@ and the deficit), and what it got per person at the tap, G × (1 − losses) ×
 which the curtailment report over any window reads.
 
 **Checks.** `checkWorkings` recomputes each object's demand from the model
-(its schedule included, and from engine 1.38.0 its basic-needs floor under
+(its schedule included, and from engine 1.41.0 its basic-needs floor under
 a restriction, with `basic_needs` = Σ MIN(B_k, o_k) exactly on a unit that has one),
 checks D = F / e + Σ o_k, 0 ≤ G_k ≤ o_k, Σ G_k ≤ G, the class order (no later
 class gets water while an earlier one is short) and equal shares within a
@@ -3228,7 +3228,7 @@ warning), and half the objects a schedule of up to four windows of every
 span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area law doubles the objects' demand too, since a
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction (and doubles an object's population, so a floor doubles with it). Half the fuzz's monthly objects name people
-(engine ≥ 1.38.0), so domestic and municipal ones have floors below and above
+(engine ≥ 1.41.0), so domestic and municipal ones have floors below and above
 their demand; `run.basicNeeds.test.ts` restricts every unit of the random
 networks (factors 0 to 1) and checks every invariant. Hand examples: `run.basicNeeds.test.ts`, `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
@@ -6113,10 +6113,10 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | – | `ewrChargeStorageM3Day` | – | `R − R_irr`: the part met by storing less or passing inflow |
 | – | `ewrSupplyCutM3Day`, `ewrSupplyCutLs` | – | `R_irr / (1 − β(1 − e))` (≤ 0): −ΔG, the cut in supply that removes R_irr of consumptive use (§2.7b); l/s = ÷ 86.4 |
 | – | `ewrBindingSiteId` | – | The EWR site that set most of the farm's charged volume over W; null when not charged |
-| S | `totalChangeM3Day` | Total reductions (m³/day) | Engine ≥ 0.17.0 (Q13): `N − ΔG`, the change in **supply** (the storage part of the charge is not a supply cut). The sheet and older engines: `N + R`. Engine ≥ 1.38.0, on a unit with a basic-needs floor B (§2.7f): `MAX(N − ΔG, B − I)` |
+| S | `totalChangeM3Day` | Total reductions (m³/day) | Engine ≥ 0.17.0 (Q13): `N − ΔG`, the change in **supply** (the storage part of the charge is not a supply cut). The sheet and older engines: `N + R`. Engine ≥ 1.41.0, on a unit with a basic-needs floor B (§2.7f): `MAX(N − ΔG, B − I)` |
 | T | `totalChangeLs` | Total reductions (l/s) | `S / 86.4` [sheet: `ROUNDDOWN(…, 1)`] |
-| U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | Engine ≥ 0.17.0 (Q13): `MAX(M − ΔG, 0)`, never below 0. The sheet and older engines: `M + R`, which went negative for a farm with little or no demand. Engine ≥ 1.38.0, on a unit with a basic-needs floor: `MAX(MAX(M − ΔG, 0), B)` |
-| – | `basicNeedsM3Day`, `basicNeedsHeldM3Day` | – | Engine ≥ 1.38.0 (issue #123, §2.7f), only on a unit with a domestic or municipal object with people: B = `AVERAGE(basic_needs over W)`, the unit's floor, and what it held back of the cut, `U − MAX(M − ΔG, 0)` ≥ 0 (in `totals` too). The EWR charge, its supply cut and the cut beyond the share are unchanged: the floor keeps water back, it doesn't hide the charge. So where held > 0 the table's cuts remove less of the unit's consumptive use than its irrigation charge asks, by held × k; nothing moves that onto other units, and the row's badge (and the board's note) says how much |
+| U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | Engine ≥ 0.17.0 (Q13): `MAX(M − ΔG, 0)`, never below 0. The sheet and older engines: `M + R`, which went negative for a farm with little or no demand. Engine ≥ 1.41.0, on a unit with a basic-needs floor: `MAX(MAX(M − ΔG, 0), B)` |
+| – | `basicNeedsM3Day`, `basicNeedsHeldM3Day` | – | Engine ≥ 1.41.0 (issue #123, §2.7f), only on a unit with a domestic or municipal object with people: B = `AVERAGE(basic_needs over W)`, the unit's floor, and what it held back of the cut, `U − MAX(M − ΔG, 0)` ≥ 0 (in `totals` too). The EWR charge, its supply cut and the cut beyond the share are unchanged: the floor keeps water back, it doesn't hide the charge. So where held > 0 the table's cuts remove less of the unit's consumptive use than its irrigation charge asks, by held × k; nothing moves that onto other units, and the row's badge (and the board's note) says how much |
 | V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", U / H)` [sheet: `ROUND(…, 3)`] (see quirk Q12); in 0–1 from engine 0.17.0 |
 | – | `ewrCutBeyondShareM3Day` | – | `MAX(ΔG − M, 0)` (engine ≥ 0.17.0, Q13): how far the EWR supply cut exceeds the farm's equitable share; flagged "EWR cut exceeds this farm's equitable share" when > 0 |
 
@@ -6422,7 +6422,9 @@ bits whatever order they came in).
   The run stores each capped source's room (`allocation_room_surface`,
   `allocation_room_groundwater`, m³ at the start of the day), and
   `RunSummary.allocations` lists per source the water years the cap bound
-  (`capReached`: use within 10⁻⁹ of the budget).
+  (`capReached`: use within 10⁻⁹ of the budget) and, per water year, the
+  days the limit held use back (`limitBound`, engine ≥ 1.40.0; see the
+  licence conditions below).
 
   The cap counts every draw from the dam as surface use, groundwater pumped
   into it included: §2.12's netting (a pumped m³ drawn back out isn't a
@@ -6492,6 +6494,33 @@ may take from April in any month at any rate. A full
 allocation doesn't apply them (it scales to the volume, keeping the unit's
 own seasonal shape), and the conditions in words are never applied.
 
+**Which limit bound** (engine ≥ 1.40.0, `allocations/mode.ts`
+`limitBoundKind`): `capReached` alone reads "never reached" for a run held
+to its rate all season or dry outside its months, so each capped source also
+carries, per water year, the days the limit bound (`limitBound`: `days`,
+split into `volumeDays`, `rateDays` and `monthsDays`, only years with such a
+day). A day counts when the source took all its room (use ≥ room − 10⁻⁹ of
+it) and the unit still went short (deficit > 10⁻⁹ of its demand), so a day
+with no demand, or one the river or dam couldn't fill anyway without the
+room being used, doesn't count. The day goes to `volumeDays` when what was
+left of the year's volume was no more than the limit (a year whose volume is
+used up counts as volume in every month), else to `monthsDays` on a day
+outside the months of use (some allocation of the source in force, none of
+them for this month: `outsideMonths`), else to `rateDays` (a stated rate of
+0 included). When a licence of the source states a month or a rate, the run
+also stores what is left of the year's volume at the start of each day
+(`allocation_left_surface`, `allocation_left_groundwater`, m³), so the room
+column no longer hides it on a day the limit binds: room = MIN(left,
+limit). A source without conditions has no such column (its room is what is
+left). The count says which limit set the room on a day the unit went short,
+not that the limit alone caused the shortfall: a day the river or dam had
+exactly the room left counts too, and outside the months every short day
+does. What is left is compared with the limit within 10⁻⁹ of the year's
+budget, so a volume used up to summing noise counts as volume. The days are
+the run's own: a run resumed inside a water year counts that year's days
+from the snapshot on (its `capReached` counts the use before it, as the cap
+does), and the whole run, a forecast tail included, is counted.
+
 **Warm starts** (§2.16): a snapshot keeps each capped unit's use so far in
 the water year (`allocationUsedM3`) and a full allocation's factor for the
 year in progress (`allocationFactor`), so a resumed run's days are the
@@ -6511,7 +6540,11 @@ volume, the licence limit recomputed from the input) and never more than the
 year's budget less its use on the run's days so far, the left part falling
 by exactly the day's use within a water year and starting again at the
 recomputed budget on 1 October, never below 0, and the day's use never above
-it; a full
+it; an `allocation_left_*` column exactly for a capped source with licence
+conditions (engine ≥ 1.40.0), within [0, the year's budget], starting at
+the budget on 1 October, falling by the day's use, with the room MIN(it, the
+limit); `limitBound` redone per day from those columns, the use, `demand` and
+`deficit` with `limitBoundKind`; a full
 allocation's factor constant within a year and each scaled unit's demand over
 the run's days of a year equal to the volume registered over them; no mode
 column in a run of another mode; and `RunSummary.allocations` equal to
@@ -6754,7 +6787,9 @@ changes, so `ENGINE_VERSION` doesn't move. Pure
 (`packages/engine/src/views/licenceImpact.ts`). The design is
 [design/planning-outputs.md §3.7](./design/planning-outputs.md#37-r7-licence-impact-by-year-class-m-inside-the-evidence-report)
 (sketch S4, finding 5); the board is on page 1 of the impact report
-([ui.md § Report](./ui.md#report)).
+([ui.md § Report](./ui.md#report)) and of the evidence report, where the
+engine's `evidenceReport` builds it into the document
+(`evidence/impact.ts`, report format `evidence-5`) so an issued pack freezes it.
 
 `licenceImpactByYearClass({ background, application, siteNodeId?, yearClassMethod? })`
 compares a **background** run (what the impact is judged against: the
@@ -7551,7 +7586,7 @@ text:
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
-| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R); from engine 1.38.0, on a unit with a basic-needs floor, B is the window mean of `basic_needs`, at most H, S = MAX(N − ΔG, B − I), U = MAX(M − ΔG, 0, B) and the held volume = U − MAX(M − ΔG, 0). |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R); from engine 1.41.0, on a unit with a basic-needs floor, B is the window mean of `basic_needs`, at most H, S = MAX(N − ΔG, B − I), U = MAX(M − ΔG, 0, B) and the held volume = U − MAX(M − ΔG, 0). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |

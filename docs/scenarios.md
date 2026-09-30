@@ -243,7 +243,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   month by month; there is no op for one object yet (followups.md). A cut
   (a factor below 1) never takes a domestic or municipal object with people
   below its basic-needs floor, MIN(people × 25 l a day, its demand)
-  (engine ≥ 1.38.0, issue #123), also under a full allocation.
+  (engine ≥ 1.41.0, issue #123), also under a full allocation.
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of

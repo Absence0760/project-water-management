@@ -196,6 +196,18 @@ describe('drafting a pack', () => {
 		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true });
 	});
 
+	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
+		const p = await draft(editor, appRun);
+		const read = await viewer.call('GET', packPath(p.id));
+		const manifest = read.body.manifest as PackManifest;
+		expect(read.body.manifestMatches).toBe(true);
+		expect(manifest.report.version).toBe('evidence-5');
+		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
+		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
+		expect(manifest.report.licenceImpact).toEqual((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.licenceImpact);
+		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+	});
+
 	it('drafts an application pack on the scenario run, naming its scenario', async () => {
 		const p = await draft(editor, appRun);
 		const read = (await editor.call('GET', packPath(p.id))).body;

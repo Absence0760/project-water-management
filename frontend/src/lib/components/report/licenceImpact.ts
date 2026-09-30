@@ -17,6 +17,8 @@ import {
 	describeLicenceImpact,
 	licenceImpactByYearClass,
 	type DailySeries,
+	type EvidenceLicenceImpact,
+	type EvidenceLicenceImpactUnavailable,
 	type LicenceImpact,
 	type LicenceImpactClass,
 	type LicenceImpactVerdict,
@@ -116,15 +118,13 @@ export interface BoardInput {
 /** The board for an impact report: its baseline as the background, this run as the application. */
 export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 	const { a, b } = input.data;
-	const background = `“${a.run.label || 'Untitled run'}”`;
 	const application = input.applicationName ?? 'this run';
-	const capitalised = application.charAt(0).toUpperCase() + application.slice(1);
-	if (!input.series.background.natural) return { status: 'unavailable', reason: 'The baseline has no natural flow series, so its water years cannot be classed.' };
+	if (!input.series.background.natural) return { status: 'unavailable', reason: UNAVAILABLE.noNaturalFlow };
 	const notes: string[] = [];
 	// A gauge needs its rule table in both runs; otherwise the outlet, said so (never the outlet's numbers in the gauge's name).
 	let site = input.site ?? OUTLET_SITE;
 	if (site.id !== null && ![a, b].every((s) => s.run.summary.ewrAssurance?.some((x) => x.nodeId === site.id))) {
-		notes.push(`The baseline or ${application} has no Reserve results at ${site.where}, so the board reads the outlet.`);
+		notes.push(siteFallbackNote(site.where, application));
 		site = OUTLET_SITE;
 	}
 	let impact: LicenceImpact;
@@ -137,15 +137,46 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 		});
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
-		return {
-			status: 'unavailable',
-			reason: /water account/.test(msg)
-				? 'One of the runs was made before the engine kept a water account (engine 0.32.0). Run the model again to see this board.'
-				: /ewr_shortfall/.test(msg)
-					? 'One of the runs has no EWR shortfall series, so its days below the EWR cannot be counted.'
-					: `The board could not be built: ${msg}`
-		};
+		return { status: 'unavailable', reason: /water account/.test(msg) ? UNAVAILABLE.noWaterAccount : /ewr_shortfall/.test(msg) ? UNAVAILABLE.noEwrShortfall : `${UNAVAILABLE.failed}: ${msg}` };
 	}
+	return boardOf(impact, { data: input.data, site, application, notes });
+}
+
+/** Why a board is missing, in words; `failed` is followed by the engine's message. */
+const UNAVAILABLE: Readonly<Record<EvidenceLicenceImpactUnavailable, string>> = Object.freeze({
+	notBuilt: 'This report was built without licence impact by year class.',
+	noNaturalFlow: 'The baseline has no natural flow series, so its water years cannot be classed.',
+	noWaterAccount: 'One of the runs was made before the engine kept a water account (engine 0.32.0). Run the model again to see this board.',
+	noEwrShortfall: 'One of the runs has no EWR shortfall series, so its days below the EWR cannot be counted.',
+	failed: 'The board could not be built'
+});
+
+const siteFallbackNote = (where: string, application: string) => `The baseline or ${application} has no Reserve results at ${where}, so the board reads the outlet.`;
+
+/**
+ * The evidence report's board (evidence-5): the engine built the numbers on
+ * the server (evidence/impact.ts), so a draft and an issued pack's frozen
+ * manifest word the same numbers; this only words them.
+ */
+export function evidenceBoard(li: EvidenceLicenceImpact, data: { a: BoardRun; b: BoardRun }): BoardView {
+	const application = 'the application';
+	if (li.result.status === 'unavailable') {
+		const r = li.result;
+		return { status: 'unavailable', reason: r.reason === 'failed' ? `${UNAVAILABLE.failed}: ${r.detail ?? 'unknown error'}` : UNAVAILABLE[r.reason] };
+	}
+	const site: MatrixSite = li.site ? { id: li.site.nodeId, label: `Gauge: ${li.site.name}`, where: `gauge ${li.site.name}` } : OUTLET_SITE;
+	const asked = li.requestedSite;
+	const notes = li.siteFellBack && asked ? [siteFallbackNote(asked.name ? `gauge ${asked.name}` : 'the chosen gauge', application)] : [];
+	return boardOf(li.result.impact, { data, site, application, notes });
+}
+
+/** Words an engine board: the baseline as the background, `application` as the compared run. */
+function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun }; site: MatrixSite; application: string; notes: string[] }): BoardView {
+	const { a, b } = ctx.data;
+	const { site, application } = ctx;
+	const notes = [...ctx.notes];
+	const background = `“${a.run.label || 'Untitled run'}”`;
+	const capitalised = application.charAt(0).toUpperCase() + application.slice(1);
 	// A full-allocation baseline (engine ≥ 1.18.0, settings.allocationMode, allocations.md) runs every holder at their registered volume: its use is existing *authorised* use.
 	const mode = (r: typeof a) => r.run.summary.allocations?.mode ?? 'none';
 	const authorised = mode(a) === 'fullAllocation';

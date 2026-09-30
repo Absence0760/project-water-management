@@ -186,7 +186,7 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	for (const o of x.model.demandObjects ?? []) {
 		if (o.monthlyM3Day) o.monthlyM3Day = o.monthlyM3Day.map((v) => v * 2);
 		if (o.count !== null) o.count *= 2;
-		// The basic-needs floor (engine ≥ 1.38.0) scales with the people, so a restricted object's demand doubles too.
+		// The basic-needs floor (engine ≥ 1.41.0) scales with the people, so a restricted object's demand doubles too.
 		if (o.population !== null && o.population !== undefined) o.population *= 2;
 	}
 	let o1: ModelOutput;
@@ -389,7 +389,7 @@ export function checkWaterAccount(out: ModelOutput): string | null {
 }
 
 /**
- * The oracle for a restriction with the basic-needs floor (engine ≥ 1.38.0,
+ * The oracle for a restriction with the basic-needs floor (engine ≥ 1.41.0,
  * docs/model.md §2.7f), worked from the model's fields, not the engine's
  * helpers: what a unit's demand on day t gains over f × its unrestricted
  * demand, Σ over its enabled domestic and municipal objects with people of

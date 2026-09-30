@@ -198,7 +198,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.max(DEMAND_SCHEDULE_MAX_WINDOWS)
 					.nullable()
 					.default(null),
-				// The people it serves, for the basic-needs floor (engine 1.38.0, issue #123). Null = a per-unit count.
+				// The people it serves, for the basic-needs floor (engine 1.41.0, issue #123). Null = a per-unit count.
 				population: nonNeg.nullable().default(null),
 				note: z.string().max(1000).default('')
 			})

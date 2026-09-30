@@ -206,7 +206,7 @@ bottom:
    *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
    *"Fit record: parameters edited since the fit (x1)"*.
    A demand object's line names its category, size, return, priority,
-   schedule and, from engine 1.38.0, the people it serves for its
+   schedule and, from engine 1.41.0, the people it serves for its
    basic-needs floor (*"…, serves 2 000 people"*), so a change of people
    is listed like any other field.
    **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list

@@ -237,7 +237,7 @@ describe('resolveReportWindow', () => {
 	});
 });
 
-describe('computeCurtailment — the basic-needs floor (engine 1.38.0, issue #123)', () => {
+describe('computeCurtailment — the basic-needs floor (engine 1.41.0, issue #123)', () => {
 	// A: demand 100, supplied 100, a heavy EWR charge; B: demand 100, supplied 20.
 	// Σ supplied / Σ demand = 0.6, so M_A = 60; A's supply cut −80 leaves MAX(60 − 80, 0) = 0.
 	const a = (basicNeeds?: number[]): CurtailmentInput => ({ ...farm('A', [100, 100], [100, 100], [-80, -80]), ...(basicNeeds ? { basicNeeds } : {}) });

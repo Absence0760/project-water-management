@@ -33,7 +33,7 @@
 	const PRIORITY: Record<string, string> = { first: 'first', shared: 'with the crops', last: 'last' };
 	// Days a schedule switched an object off (engine ≥ 1.17.0): a column only when one has a schedule.
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
-	// The basic-needs floor (engine ≥ 1.38.0, issue #123): its columns only when an object has one.
+	// The basic-needs floor (engine ≥ 1.41.0, issue #123): its columns only when an object has one.
 	const anyFloor = $derived(objects.some(({ o }) => o.basicNeedsM3Day !== undefined));
 </script>
 

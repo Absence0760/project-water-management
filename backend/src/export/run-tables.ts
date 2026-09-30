@@ -21,6 +21,7 @@ import {
 	RECESSION_MIN_SEGMENTS,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
+	waterYearLabel,
 	type CalibrationStats,
 	type EwrAgreement,
 	type EwrAgreementScores,
@@ -863,6 +864,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield '';
 		yield* groundwaterAnnualLines(summary.groundwaterAnnualUse);
 	}
+	if (summary.allocations?.mode === 'cap') {
+		yield '';
+		yield* allocationCapLines(summary.allocations);
+	}
 	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
 		yield '';
 		yield* otherUserLines(summary);
@@ -1000,7 +1005,7 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 	const names = new Map((c.ewrSites ?? []).map((s) => [s.nodeId, s.name]));
 	for (const f of c.farms) if (!names.has(f.nodeId)) names.set(f.nodeId, f.name);
 	const site = (id: string) => names.get(id) ?? id;
-	// The basic-needs floor (engine ≥ 1.38.0, issue #123): two columns at the end, only when a farm has one.
+	// The basic-needs floor (engine ≥ 1.41.0, issue #123): two columns at the end, only when a farm has one.
 	const floor = c.farms.some((f) => f.basicNeedsM3Day !== undefined);
 	const floorHeaders = floor ? ['Basic-needs floor (m³/day)', 'Held back of the cut for basic needs (m³/day)'] : [];
 	const floorCells = (f: CurtailmentRow): Cell[] => (floor ? [f.basicNeedsM3Day ?? null, f.basicNeedsHeldM3Day ?? null] : []);
@@ -1451,7 +1456,7 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
  * Each unit's demand objects over the whole run (engine ≥ 1.7.0, docs/model.md
  * §2.7f): demand, supply, deficit and days short, the days a schedule
  * switched one off (engine ≥ 1.17.0), and a domestic or municipal one's
- * basic-needs floor (engine ≥ 1.38.0, issue #123): the people it serves, the
+ * basic-needs floor (engine ≥ 1.41.0, issue #123): the people it serves, the
  * floor, the days and the volume supplied below it (apart from the
  * shortfall) and what it got per person. Only in runs with objects; the
  * floor columns only when an object has one.
@@ -1535,6 +1540,34 @@ export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwate
 		]);
 	yield csvRow(['Farm or user', 'Water year', 'Borehole', 'Pumped (m³)', 'Annual cap (m³)', 'Cap reached']);
 	for (const r of rows) for (const b of r.boreholes) yield csvRow([r.name, r.label, b.name, b.abstractionM3, b.annualCapM3, b.annualCapM3 === null ? null : b.capReached ? 'yes' : 'no']);
+}
+
+/**
+ * An allocation cap's water years per farm or user and water source (engine
+ * ≥ 1.18.0, docs/allocations.md § The cap): whether the use reached the
+ * registered volume, and (engine ≥ 1.40.0) the days the licence limit bound
+ * split by which limit: what was left of the volume, the maximum rate, or a
+ * month outside the months of use. One row per year either happened in; a
+ * run before 1.40.0 leaves the day columns blank. Only in cap runs.
+ */
+export function* allocationCapLines(a: NonNullable<RunSummary['allocations']>): Generator<string> {
+	yield csvRow(['Allocation cap by water year (modelled use held to the registered volume and the licence’s months and rate; not a decision on legality)']);
+	yield csvRow(['Farm or user', 'Water source', 'Water year', 'Registered volume (m³)', 'Used (m³)', 'Volume reached', 'Days the limit bound', 'Of which: volume used up', 'Of which: maximum rate', 'Of which: outside the months of use']);
+	let rows = 0;
+	for (const n of a.nodes)
+		for (const src of n.sources) {
+			const reached = new Map((src.capReached ?? []).map((y) => [y.waterYear, y]));
+			const bound = new Map((src.limitBound ?? []).map((y) => [y.waterYear, y]));
+			for (const wy of [...new Set([...reached.keys(), ...bound.keys()])].sort((x, y) => x - y)) {
+				const r = reached.get(wy);
+				const b = bound.get(wy);
+				const days: Cell[] = src.limitBound ? [b?.days ?? 0, b?.volumeDays ?? 0, b?.rateDays ?? 0, b?.monthsDays ?? 0] : [null, null, null, null];
+				yield csvRow([n.name, src.waterSource === 'surface' ? 'Surface water' : 'Groundwater', waterYearLabel(wy), r?.budgetM3 ?? null, r?.usedM3 ?? null, r ? 'yes' : 'no', ...days]);
+				rows++;
+			}
+		}
+	const counted = a.nodes.some((n) => n.sources.some((x) => x.limitBound));
+	if (!rows) yield csvRow([counted ? 'The cap never bound: no water year reached its registered volume, and the licence held no day back.' : 'No water year reached its registered volume.']);
 }
 
 /**

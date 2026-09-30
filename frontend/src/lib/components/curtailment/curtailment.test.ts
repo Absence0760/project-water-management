@@ -183,7 +183,7 @@ describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
 		expect(f).toMatchObject({ action: 'cut', demandLeftPct: '0%', beyondShare: '40' });
 	});
 
-	it('shows what the basic-needs floor keeps of the cut (engine 1.38.0), and nothing without a floor', () => {
+	it('shows what the basic-needs floor keeps of the cut (engine 1.41.0), and nothing without a floor', () => {
 		const [held, none, old] = curtailmentRows(
 			summary([
 				farm({ nodeId: 'h', totalChangeM3Day: -75, volumeLeftM3Day: 25, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 25 }),

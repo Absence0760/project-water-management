@@ -141,7 +141,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (full-allocation runs of a unit with a domestic or municipal demand object whose registered volume is below its demand)",
 		"title": "A full allocation rescales a domestic or municipal object below its basic-needs floor unless a restriction is in force that day",
-		"status": "Needs hydrologist (engine 1.38.0, issue #123)"
+		"status": "Needs hydrologist (engine 1.41.0, issue #123)"
 	},
 	{
 		"id": "Q3",

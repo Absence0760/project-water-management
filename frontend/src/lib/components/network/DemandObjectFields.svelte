@@ -7,7 +7,7 @@
 	// the crops, a destination and an on/off schedule by date
 	// (DemandScheduleFields, engine ≥ 1.17.0). A domestic or municipal one has
 	// a basic-needs floor of 25 l a person a day that a restriction never cuts
-	// through (engine ≥ 1.38.0, issue #123): its people are a per-unit count, or
+	// through (engine ≥ 1.41.0, issue #123): its people are a per-unit count, or
 	// entered here. The objects are the editor's own, so edits land in the model directly.
 	import {
 		BASIC_NEEDS_CATEGORIES,

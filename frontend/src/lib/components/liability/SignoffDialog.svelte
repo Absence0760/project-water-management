@@ -14,6 +14,7 @@
 	import { tick, untrack } from 'svelte';
 	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffList } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import {
 		BLOCKED_CATEGORIES_NOTE,
 		REGISTRATION_BODIES,
@@ -93,6 +94,22 @@
 		});
 	});
 
+	// Escape, the close button and Cancel ask before throwing away what was
+	// filled in: the form is long, and a stray Escape lost all of it.
+	const filledIn = $derived(!!(fullName.trim() || registrationNo.trim() || scope.trim() || registrationCategory || registrationField || ticked.size));
+	const mayClose = async () =>
+		!filledIn ||
+		(await confirmDialog({
+			title: 'Discard the sign-off?',
+			message: 'What you have filled in is lost. Nothing has been signed.',
+			confirmLabel: 'Discard',
+			cancelLabel: 'Keep editing',
+			danger: true
+		}));
+	async function cancel() {
+		if (await mayClose()) open = false;
+	}
+
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		if (blockers.length || busy) return;
@@ -121,7 +138,7 @@
 	}
 </script>
 
-<Dialog bind:open title={pack ? 'Sign off this evidence pack' : 'Sign off this run'} wide>
+<Dialog bind:open title={pack ? 'Sign off this evidence pack' : 'Sign off this run'} wide beforeclose={mayClose}>
 	<form id="{uid}-form" onsubmit={submit}>
 		{#if pack}
 			<p>
@@ -211,7 +228,7 @@
 		{#if blockers.length}<p class="muted small" id="{uid}-why">{blockers.join(' ')}</p>{/if}
 	</form>
 	{#snippet actions()}
-		<button type="button" class="btn" onclick={() => (open = false)}>Cancel</button>
+		<button type="button" class="btn" onclick={cancel}>Cancel</button>
 		<button
 			type="submit"
 			form="{uid}-form"

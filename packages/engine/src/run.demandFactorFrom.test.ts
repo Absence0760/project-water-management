@@ -40,7 +40,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!];
-				// The basic-needs floor (engine ≥ 1.38.0): exactly factor × the base's demand plus what the
+				// The basic-needs floor (engine ≥ 1.41.0): exactly factor × the base's demand plus what the
 				// floor holds on a cut (factor < 1), worked from the model (floorLift); nothing more.
 				for (let t = cut; t < D.length; t++) {
 					const want = factor * D0[t]! + floorLift(base, x, n.id, t, factor);

@@ -1659,7 +1659,7 @@ export interface DemandObject {
 	 */
 	schedule?: DemandScheduleWindow[] | null;
 	/**
-	 * The people it serves, for the basic-needs floor (engine ≥ 1.38.0, issue
+	 * The people it serves, for the basic-needs floor (engine ≥ 1.41.0, issue
 	 * #123, docs/model.md §2.7f): a domestic or municipal object is never cut
 	 * below population × 25 litres per person per day by a restriction.
 	 * Null or absent = a `perUnit` object's count; a `monthly` one without it
@@ -1671,7 +1671,7 @@ export interface DemandObject {
 }
 
 /**
- * The categories a basic-needs floor protects (engine ≥ 1.38.0, issue #123):
+ * The categories a basic-needs floor protects (engine ≥ 1.41.0, issue #123):
  * people's water, the NWA's basic human needs. The floor is
  * DEMAND_NORMS.basicLitresPerPersonDay (25 l per person per day, the Free
  * Basic Water level) × the object's population.
@@ -2000,7 +2000,7 @@ export interface DemandObjectSummary {
 	/** Days its schedule switched it off (factor 0; engine ≥ 1.17.0, only on an object with a schedule). Never counted as short. */
 	daysOff?: number;
 	/**
-	 * The basic-needs floor (engine ≥ 1.38.0, issue #123, docs/model.md
+	 * The basic-needs floor (engine ≥ 1.41.0, issue #123, docs/model.md
 	 * §2.7f), only on a domestic or municipal object with a population:
 	 * the people it serves and its floor, population × 25 l ÷ 1000 (÷ (1 −
 	 * losses) when sized per unit), m³/day abstracted. On a day the floor is
@@ -2332,7 +2332,7 @@ export interface CurtailmentFarm {
 	/** MAX(ΔG − target, 0) ≥ 0: how far the EWR supply cut exceeds the farm's equitable share (audit Q13); flagged when > 0. */
 	ewrCutBeyondShareM3Day?: number;
 	/**
-	 * The unit's basic-needs floor over the window (engine ≥ 1.38.0, issue
+	 * The unit's basic-needs floor over the window (engine ≥ 1.41.0, issue
 	 * #123, docs/model.md §2.11): the mean of its domestic and municipal
 	 * objects' daily floor. The volume left is never below it: U =
 	 * MAX(MAX(M − ΔG, 0), floor) and S = MAX(N − ΔG, floor − I). Absent on a
@@ -2400,7 +2400,7 @@ export interface CurtailmentSummary {
 		ewrCutBeyondShareM3Day?: number;
 		totalChangeM3Day: number;
 		volumeLeftM3Day: number;
-		/** Σ the farms' basic-needs floor and what it held back (engine ≥ 1.38.0); only when a farm has one. */
+		/** Σ the farms' basic-needs floor and what it held back (engine ≥ 1.41.0); only when a farm has one. */
 		basicNeedsM3Day?: number;
 		basicNeedsHeldM3Day?: number;
 	};
@@ -2495,6 +2495,28 @@ export interface RunAllocationSource {
 	 * use (m³). Empty when the cap never bound.
 	 */
 	capReached?: { waterYear: number; budgetM3: number; usedM3: number }[];
+	/**
+	 * 'cap' only (engine ≥ 1.40.0): per water year (part years included), the
+	 * days the licence limit bound: the source took all the room it had that
+	 * day and the unit still went short (its deficit > 0), split by which
+	 * limit set the room: `volumeDays` what was left of the year's volume,
+	 * `rateDays` the maximum rate, `monthsDays` a month outside the months of
+	 * use (the day's limit 0 with volume left). A year the volume is used up
+	 * counts as volume, whatever the month. The run's own days: a run resumed
+	 * inside a water year counts that year from the snapshot on. Only years
+	 * with a bound day; empty when the limit never bound. Absent on older runs.
+	 */
+	limitBound?: AllocationLimitBound[];
+}
+
+/** One water year of RunAllocationSource.limitBound (engine ≥ 1.40.0). */
+export interface AllocationLimitBound {
+	waterYear: number;
+	/** Days the limit bound; volumeDays + rateDays + monthsDays. */
+	days: number;
+	volumeDays: number;
+	rateDays: number;
+	monthsDays: number;
 }
 
 /** One node's groundwater abstraction in one water year (WP-3.9, RunSummary.groundwaterAnnualUse). */
