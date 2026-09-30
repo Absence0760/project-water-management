@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
-import { assuranceLabel, curveChart, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
+import { assuranceLabel, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -118,5 +118,19 @@ describe('the in-browser preview', () => {
 
 	it('offers none for a scenario given no base (an application: the server masks it)', () => {
 		expect(previewSource('s1', 'r1', null)).toBeNull();
+	});
+});
+
+describe('engineDiffersNote', () => {
+	it('says nothing when nothing is stored or the stored result is on the preview\'s engine', () => {
+		expect(engineDiffersNote('1.34.0', null)).toBeNull();
+		expect(engineDiffersNote('1.34.0', { engineVersion: '1.34.0' })).toBeNull();
+	});
+
+	it('names both engines when the stored result came from another one', () => {
+		const note = engineDiffersNote('1.34.0', { engineVersion: '1.33.0' });
+		expect(note).toBe(
+			'The stored yield below was worked out on engine 1.33.0 and this preview on engine 1.34.0, so the two can differ by what changed between those versions.'
+		);
 	});
 });

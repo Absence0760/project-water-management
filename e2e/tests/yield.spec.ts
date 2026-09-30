@@ -112,6 +112,11 @@ test('the in-browser preview shows the firm yield at once, follows the pattern, 
 	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
 	await runJobsTick({ schedule: false });
 	await expect(panel.getByTestId('yield-firm').locator('dd strong')).toHaveText(previewed);
+	// The preview names its engine: here the backend's too, so no note.
+	const worked = (await panel.getByTestId('yield-firm').getByText(/\(engine [\d.]+\)$/).textContent())!;
+	const engine = /\(engine ([\d.]+)\)$/.exec(worked)![1];
+	await expect(preview.getByTestId('yield-preview-engine')).toHaveText(`engine ${engine}`);
+	await expect(preview.getByTestId('yield-engine-differs')).toHaveCount(0);
 
 	// Another pattern: a new preview for it.
 	await panel.getByLabel('Draft pattern').selectOption('demand');
@@ -122,9 +127,24 @@ test('the in-browser preview shows the firm yield at once, follows the pattern, 
 	// A viewer previews too (nothing is stored), with no run buttons.
 	const viewer = await signIn('Yield preview viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	// As if the backend were released on another engine than this web build:
+	// the stored result says so, and the preview notes the difference.
+	await viewer.page.route(
+		(url) => url.pathname === `/projects/${project.id}/yield`,
+		async (route) => {
+			if (route.request().method() !== 'GET') return route.fallback();
+			const response = await route.fetch();
+			const body = (await response.json()) as { results: { engineVersion: string }[] };
+			await route.fulfill({ response, json: { results: body.results.map((r) => ({ ...r, engineVersion: '0.9.0' })) } });
+		}
+	);
 	const theirs = await openUpperFarm(viewer.page, project.id);
 	await expect(theirs.getByTestId('yield-preview')).toHaveAttribute('data-state', 'done');
 	await expect(theirs.getByTestId('yield-preview-value').locator('strong')).toHaveText(previewed);
+	await expect(theirs.getByTestId('yield-firm')).toContainText('(engine 0.9.0)');
+	await expect(theirs.getByTestId('yield-engine-differs')).toHaveText(
+		`The stored yield below was worked out on engine 0.9.0 and this preview on engine ${engine}, so the two can differ by what changed between those versions.`
+	);
 	await expect(theirs.getByRole('button', { name: 'Work out the yield' })).toHaveCount(0);
 });
 

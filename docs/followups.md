@@ -3363,23 +3363,27 @@ from the WP:
       only on the server) and not for the curve (see below). Bundle: total
       +5 KB; the calibration worker's own file 37 → 17 KB, since the run
       code both workers use moved to a shared chunk.
-- [ ] **The preview on an application, and across engine releases.** The
-      Yield preview isn't offered on an applicant's scenario: the job
-      applies its ops under `applicationMask` (backend
-      `scenarios/applicant.ts`), which can re-id and rename masked items, so
-      the browser can't reproduce the job's input, and a contributor can't
-      read the base run's input anyway. And the browser runs the web
-      build's engine while the job runs the backend's: they're released
-      separately, so between a `web@` and a `backend@` release the preview
-      can differ from the job by the engine change (the stored result names
-      its engine version; the preview doesn't yet). Durable fix: a
-      `GET …/scenarios/:sid/model-input` that returns the masked,
-      checked input the job would use (for an applicant only what the
-      projection lets them see, if the client wants them to preview), and
-      the preview showing "engine X" beside the stored result's, with a note
-      when they differ. Trigger: the applicant Yield panel (landed without
-      a preview) is asked to preview, or the first production release where web and
-      backend engine versions diverge.
+- [x] **The preview across engine releases.** The browser runs the web
+      build's engine and the job the backend's, released separately, so
+      between a `web@` and a `backend@` release the preview can differ from
+      the stored result by the engine change, and the preview didn't say
+      which engine it ran. Done: the preview names its engine ("on engine
+      X", `ENGINE_VERSION` from the engine's `version` module) beside the
+      stored result's, and when the newest stored firm yield came from
+      another engine it says so, naming both (`engineDiffersNote`, unit
+      `yield/yield.test.ts`, e2e `yield.spec.ts` with the stored result's
+      engine rewritten in the response).
+- [ ] **No preview on an application** (a deliberate decision, pending
+      #90). The Yield panel offers no preview on an applicant's scenario, on
+      the Applicant view or the owner's: the job applies its ops under
+      `applicationMask` (backend `scenarios/applicant.ts`), and the input
+      the preview would need includes the farms the mask hides from the
+      applicant (a contributor can't read the base run's input, by RLS), so
+      sending it to the browser would leak them. If the client wants
+      applicants to preview (their D2 answer, issue #90), the durable fix is
+      a server-side preview endpoint that runs the masked search and
+      returns only the yield number, never the input. Trigger: the client's
+      D2 answer asks for it.
 - [x] **A job started elsewhere.** The Yield panel followed only the jobs it
       queued itself, so after a reload or in another tab mid-job it showed
       the last stored result. Fixed: `GET /projects/:id/yield/jobs?nodeId=`
