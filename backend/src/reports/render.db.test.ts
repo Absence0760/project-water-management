@@ -21,20 +21,14 @@ import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
+import { minioUp as minioOk, S3_ENDPOINT } from '../__tests__/minio.js';
 import { createApp } from '../app.js';
 import { withUser } from '../db/tx.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { resetStorageClient } from './storage.js';
 
-const S3 = process.env.S3_ENDPOINT || 'http://127.0.0.1:9002';
-const minioUp = await fetch(`${S3}/minio/health/live`, { signal: AbortSignal.timeout(1500) })
-	.then((r) => r.ok)
-	.catch(() => false);
-if (!minioUp && process.env.CI) {
-	throw new Error(`render.db.test.ts: MinIO is not reachable at ${S3} under CI; the job must start it (.github/workflows/ci.yml db-test)`);
-}
-if (!minioUp) console.warn(`render.db.test.ts skipped: MinIO is not running at ${S3} (pnpm dev:s3:up)`);
+const minioUp = await minioOk('render.db.test.ts');
 
 let api: ReturnType<typeof serve>;
 let site: Server;
@@ -145,7 +139,7 @@ function renderEnv() {
 	vi.stubEnv('RENDER_SITE_URL', siteUrl);
 	vi.stubEnv('RENDER_API_URL', apiUrl);
 	vi.stubEnv('STORAGE', 'local');
-	vi.stubEnv('S3_ENDPOINT', S3);
+	vi.stubEnv('S3_ENDPOINT', S3_ENDPOINT);
 	vi.stubEnv('REPORTS_BUCKET', 'water-reports-test');
 	vi.stubEnv('REPORT_RENDER_TIMEOUT_MS', '60000');
 	resetStorageClient();

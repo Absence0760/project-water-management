@@ -3958,7 +3958,8 @@ Left, from the design and the persona review (§11), each with its trigger.
 
 **Evidence packs** (WP-3.14; built 2026-09-29: the table, the manifest and
 its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
-verify lookup; 2026-09-30: the server-rendered PDF, [evidence-pack.md](./evidence-pack.md)). Left:
+verify lookup; 2026-09-30: the server-rendered PDF and the reproduction
+bundle, [evidence-pack.md](./evidence-pack.md)). Left:
 
 - [x] **The pack view and the verify page.** Built 2026-09-30
       ([ui.md § Evidence pack](./ui.md#evidence-pack),
@@ -3989,13 +3990,30 @@ verify lookup; 2026-09-30: the server-rendered PDF, [evidence-pack.md](./evidenc
       the staging project and confirm the object's retention
       (`aws s3api get-object-retention`) and that the download's SHA-256
       equals verify's. Trigger: the first production deploy.
-- [ ] **The reproduction bundle and `pnpm reproduce:pack`** (`bundle_key`,
-      `bundle_sha256` exist, unset): `manifest.json`, the project's
-      `export.json`, the scenario, the series CSVs and a README; a script
-      that recomputes the results digest at the engine tag. With it, issue
-      should check that both runs reproduce (today it checks their server
-      stamps only; a full re-run is too slow for a request, so it belongs
-      in a `pack_build` job). Trigger: with the PDF.
+- [x] **The reproduction bundle and `pnpm reproduce:pack`** (built
+      2026-09-30, 122_pack_bundle, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+      issue builds a deterministic ZIP (`manifest.json`, each run's stored
+      inputs and results digest, the input series as CSV, the scenario, a
+      README), checks it, stores it under `packs/` and records its hash
+      through `app_record_pack_bundle`, which only the issuing transaction
+      may call; verify returns `bundleSha256`; `GET …/packs/:packId/bundle`
+      downloads it; `pnpm reproduce:pack` re-runs both runs offline and
+      compares their results digests. The bundle carries each run's own
+      stored inputs rather than the project's `export.json`: those are what
+      the runs used, where the export is the project as it is now.
+- [ ] **Re-run both runs on the server after issue.** Issue checks the
+      bundle's files, hashes and manifest but doesn't re-run the runs (it
+      takes as long as the runs, too long for a request); today the
+      assessor does that with `reproduce:pack`. Durable fix: a
+      `pack_reproduce` job queued at issue that runs `checkPackBundle` with
+      the re-run on the stored bundle and records the outcome and engine on
+      the pack (shown on the pack page, not on verify, since it is the
+      app's own claim). Trigger: with the pack view, or the first pack whose
+      runs don't reproduce. The same job is where the bundle's build would
+      move if a catchment's issue ever nears the API's 30 s (it is built in
+      the issue's transaction today, estimated 5–10 s at 300 outputs × 30
+      years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+      trigger for that part, an issue slower than 15 s in the API's logs.
 - [ ] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
       same engine version, isn't shown. Durable fix: the verify route adds

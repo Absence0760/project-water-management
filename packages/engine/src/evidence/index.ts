@@ -3,3 +3,4 @@
 export * from './types';
 export * from './report';
 export * from './pack';
+export * from './bundle';

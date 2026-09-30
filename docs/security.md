@@ -2137,7 +2137,7 @@ PDF someone else asked for kept the person as a recipient
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run or an evidence pack) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
-| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup | `evidence_pack` (`created_by`, `issued_by`), `signoff` | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
@@ -2606,7 +2606,7 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 ## Evidence packs
 
-Roadmap WP-3.14, 112_evidence_pack ([evidence-pack.md](./evidence-pack.md),
+Roadmap WP-3.14, 112_evidence_pack and 122_pack_bundle ([evidence-pack.md](./evidence-pack.md),
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql)).
 An issued pack is what an applicant attaches to a licence application, so it
 must not change, disappear or be forged, and its public check must give away
@@ -2629,6 +2629,12 @@ nothing else.
   transaction, never a route's), under the key it derives itself
   (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
   only once: a second recording changes nothing and returns false.
+  The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
+  must be an editor of the project and the pack issued by the caller *in
+  the same transaction* (`issued_at = now()`), so only the issue route
+  records it, never a later call; the key is derived in SQL from the ids and
+  the hash (`packs/<project>/<pack>/<sha256>.zip`), never named by the
+  caller, and the route checks it stored the object under that very key.
   `water_app` can't even name a frozen column in an `UPDATE` (column grants;
   catalogue `COLUMN_ONLY_UPDATE`).
 - **Never deleted once issued.** RLS lets an editor delete a draft only, and
@@ -2661,8 +2667,23 @@ nothing else.
 - **Issue re-checks the evidence.** The frozen report must be issuable, the
   live one still (the nomination, the declared rule, the cited ensemble), and
   both runs' server stamps must still match their rows ([§ Run stamps](#run-stamps)).
-  A full reproduction of both runs isn't run in the request; the reproduction
-  bundle will carry it ([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+  A full reproduction of both runs isn't run in the request (it takes as
+  long as the runs): the reproduction bundle carries it. Issue builds the
+  bundle from what is stored, checks it as `reproduce:pack --no-run` does
+  (every file, the manifest's hash, the inputs and stored results against
+  the manifest), stores it with its SHA-256 as the upload's checksum
+  (checking the checksum the store answers with before recording it), and
+  records it, all in the issue's transaction: no bundle, no issue. A put
+  followed by a rollback leaves an object nothing records, which the bucket's
+  Object Lock holds for the retention period: it is named by its own hash,
+  so it never stands in for a recorded bundle, and the put is conditional
+  (`If-None-Match: *`), so issuing again writes no second version
+  ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- **The bundle is for the project's readers.** `GET …/packs/:packId/bundle`
+  answers a viewer who reads the pack (RLS), with a one-minute signed URL,
+  as a report PDF ([§ Reports](#reports)); the bundle holds every input
+  series and setting, so it isn't public. Anyone it is handed to checks it
+  against the public `bundleSha256` and the manifest hash, offline.
 - **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
   delete drafts; viewers read a baseline pack, and an application pack when
   they read its scenario (`app_scenario_readable`, 045); editors read every
@@ -2677,7 +2698,7 @@ nothing else.
   token). `app_verify_pack` (`SECURITY DEFINER`, `search_path` pinned,
   `EXECUTE` for `water_app` only) returns only the printed fields: status,
   version, issue date, catchment name, engine and report versions, the
-  manifest and PDF hashes, the successor's hash, a withdrawal reason, the
+  manifest, PDF and bundle hashes, the successor's hash, a withdrawal reason, the
   methodology cited, the errata recorded, and the signers' names and
   registrations. The withdrawal reason is the editor's own words and is
   public too: the withdraw action must say so (it is printed where the pack

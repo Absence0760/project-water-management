@@ -3,8 +3,9 @@
 // an evidence report that may be issued, frozen as its manifest with the
 // manifest's SHA-256; a registered professional signs the draft (the pack
 // statement, bound to that hash); an editor issues it, which supersedes the
-// version it replaces in the same transaction; an issued pack is withdrawn,
-// never edited or deleted. GET /verify/:code (verifyRoutes) answers anyone
+// version it replaces in the same transaction, and builds, stores and records
+// its reproduction bundle there too (bundle.ts, 122_pack_bundle); an issued
+// pack is withdrawn, never edited or deleted. GET /verify/:code (verifyRoutes) answers anyone
 // with the public fields of a pack that was issued.
 //
 // Who: viewers and up read (RLS hides an application pack from a viewer who
@@ -37,7 +38,8 @@ import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
 import { wakeWorker } from '../jobs/wake.js';
-import { packDownloadUrl, packFileName } from '../reports/storage.js';
+import { packBundleFileName, packDownloadUrl, packFileName } from '../reports/storage.js';
+import { issuePackBundle } from './bundle.js';
 import { buildEvidenceReport } from './report.js';
 import { packPdfState, queuePackRender } from './packPdf.js';
 
@@ -368,13 +370,15 @@ export const packRoutes = new Hono<AuthEnv>()
 					`version ${current[0].version} of this ${pack.scenarioId ? 'application' : 'baseline evidence'} is issued; draft a new version of it (supersedesId) instead of a second pack`
 				);
 			mustChange(await db.query(`UPDATE evidence_pack SET status = 'issued' WHERE project_id = $1 AND id = $2`, [id, packId]));
+			// The reproduction bundle (122_pack_bundle), built, stored and recorded in this transaction: no bundle, no issue.
+			const bundle = await issuePackBundle(db, id, pack, manifest);
 			if (pred) {
 				mustChange(
 					await db.query(`UPDATE evidence_pack SET status = 'superseded', superseded_by_pack_id = $3 WHERE project_id = $1 AND id = $2`, [id, pred.id, packId])
 				);
 			}
 			const issued = await loadPack(db, id, packId);
-			await recordAudit(db, id, 'pack.issued', audit(issued, pred ? { supersedesId: pred.id, supersedesVersion: pred.version } : {}));
+			await recordAudit(db, id, 'pack.issued', audit(issued, { bundleSha256: bundle.sha256, ...(pred ? { supersedesId: pred.id, supersedesVersion: pred.version } : {}) }));
 			if (pred) await recordAudit(db, id, 'pack.superseded', audit(pred, { byPackId: issued.id, byVersion: issued.version }));
 			// Its PDF, printed from the issued pack's own page (119_pack_render), in the same transaction as the issue.
 			const render = await queuePackRender(db, id, packId);
@@ -418,6 +422,26 @@ export const packRoutes = new Hono<AuthEnv>()
 		await wakeWorker(jobId);
 		return c.json({ jobId, pdf: { status: 'rendering', error: null } }, 202);
 	})
+	.get('/:id/packs/:packId/bundle', async (c) => {
+		// The reproduction bundle (docs/evidence-pack.md § Reproduction): a 302 to a short-lived signed GET, as a report's PDF.
+		const { id, packId } = c.req.param();
+		const found = await withUser(
+			c.get('userId'),
+			async (db) => {
+				await requireRole(db, id, 'viewer');
+				const pack = await loadPack(db, id, packId);
+				const { rows } = await db.query<{ key: string | null }>('SELECT bundle_key AS key FROM evidence_pack WHERE project_id = $1 AND id = $2', [id, packId]);
+				return { pack, key: rows[0]?.key ?? null };
+			},
+			{ readOnly: true }
+		);
+		if (!found.key)
+			throw new ApiError(409, found.pack.status === 'draft' ? 'a draft pack has no reproduction bundle: it is built when the pack is issued' : 'this pack was issued without a reproduction bundle');
+		const url = await packDownloadUrl(found.key, packBundleFileName(found.pack.shortCode));
+		c.header('Cache-Control', 'no-store');
+		c.header('Referrer-Policy', 'no-referrer');
+		return c.redirect(url, 302);
+	})
 	.post('/:id/packs/:packId/withdraw', async (c) => {
 		const { id, packId } = c.req.param();
 		const body = PackWithdrawBody.parse(await readJson(c));
@@ -443,6 +467,8 @@ export interface PackVerification {
 	manifestSha256: string;
 	shortCode: string;
 	pdfSha256: string | null;
+	/** The reproduction bundle's SHA-256 (122_pack_bundle), or null for a pack issued before bundles. */
+	bundleSha256: string | null;
 	successorSha256: string | null;
 	withdrawnReason: string | null;
 	methodology: { version: string | null; sha256: string | null };

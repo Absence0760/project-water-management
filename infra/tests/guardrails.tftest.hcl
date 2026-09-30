@@ -2634,12 +2634,25 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 1 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 2 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn])
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[1].actions) == toset(["s3:PutObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[1].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*.zip"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn])
     )
-    error_message = "The worker reaches S3 through one interface endpoint whose policy allows only its read of packs/ in the packs bucket."
+    error_message = "The worker and the API reach S3 through one interface endpoint whose policy allows only the worker's read of packs/ and the API's put of a bundle (packs/*.zip) in the packs bucket."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.api_pack_bundles.statement) == 1 &&
+      toset(data.aws_iam_policy_document.api_pack_bundles.statement[0].actions) == toset(["s3:PutObject"]) &&
+      toset(data.aws_iam_policy_document.api_pack_bundles.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*.zip"]) &&
+      aws_iam_role_policy.api_pack_bundles.role == aws_iam_role.lambda.id &&
+      aws_lambda_function.backend.environment[0].variables["PACKS_BUCKET"] == aws_s3_bucket.packs.bucket
+    )
+    error_message = "The API may only put a pack's reproduction bundle (packs/*.zip) in the packs bucket: no read, list, delete or retention change; it knows the bucket (PACKS_BUCKET)."
   }
 }
 
@@ -3354,6 +3367,7 @@ run "network" {
       "vpce_ses <- api_lambda tcp/443-443",
       "vpce_ses <- worker_lambda tcp/443-443",
       "vpce_s3 <- worker_lambda tcp/443-443",
+      "vpce_s3 <- api_lambda tcp/443-443",
     ])
     error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf). A new edge is a deliberate change to this list."
   }
@@ -3381,6 +3395,7 @@ run "network" {
       "worker_lambda -> vpce_ses tcp/443-443",
       "worker_lambda -> vpce tcp/443-443",
       "worker_lambda -> vpce_s3 tcp/443-443",
+      "api_lambda -> vpce_s3 tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -3442,14 +3457,14 @@ run "network" {
       vpce_ses       = aws_security_group.vpce_ses.description
       vpce_s3        = aws_security_group.vpce_s3.description
       } == {
-      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
       migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
       worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
       rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
       vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
       vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
       vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
-      vpce_s3        = "S3 interface endpoint: 443 from the worker Lambda only."
+      vpce_s3        = "S3 interface endpoint: 443 from the API and worker Lambdas only."
     }
     error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
   }
