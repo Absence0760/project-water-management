@@ -5,6 +5,7 @@
 	// the summer months fills the dam in winter only. Unticked is null: the one
 	// value all year, as on a model from before 1.31.0.
 	import type { NetworkNode } from '@water-management/engine';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
 	import { divertMonthsPreview, divertMonthsTicked } from './supply';
@@ -12,6 +13,7 @@
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const label = $derived(node.name || 'this hydrological unit');
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	const months = $derived(node.divertMonthlyM3Day ?? null);
 	const preview = $derived(divertMonthsPreview(node));
 </script>
@@ -40,6 +42,7 @@
 		/>
 	{/if}
 	{#if preview}<p class="hint note" data-testid="river-to-dam-months-note">{preview}</p>{/if}
+	<FieldHistoryLine field="node:{node.id}:divertMonthlyM3Day" {unit} />
 </div>
 
 <style>

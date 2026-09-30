@@ -10,6 +10,7 @@
 	// object, so edits land in the model directly.
 	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { operatingIssues, supplyIssues } from '$lib/model/validate';
@@ -19,6 +20,8 @@
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `sp-${k}-${node.id}`;
+	// History's unit filter: a farm's own fields (a gauge or user keeps them only to clear).
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	const rule = $derived<SupplyRule>(node.supplyRule ?? SUPPLY_DEFAULTS.supplyRule);
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
 	const problems = $derived(supplyIssues(node));
@@ -50,6 +53,7 @@
 				{#each SUPPLY_RULES as r (r)}<option value={r}>{cap(SUPPLY_RULE_LABEL[r])}</option>{/each}
 			</select>
 			<span class="hint" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
+			<FieldHistoryLine field="node:{node.id}:supplyRule" {unit} />
 		</div>
 		{#if rule !== 'damFirst'}
 			{#if !readonly}
@@ -90,16 +94,19 @@
 						{readonly ? 'Pumps × m³/h per pump × 24 h.' : 'Or enter the pumps and their rate to work it out (pumps × m³/h × 24 h).'}
 					{/if}
 				</span>
+				<FieldHistoryLine field="node:{node.id}:pumpCapacityM3Day" {unit} />
 			</div>
 		{/if}
 		{#if rule === 'trigger'}
 			<div class="field">
 				<span class="lbl"><label for={id('trigger')}>Switch to river below <span class="u">(% of dam)</span></label><HelpTip key="node.supplyTriggerPct" /></span>
 				<NumberInput id={id('trigger')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct} onchange={(v) => (node.supplyTriggerPct = v ?? 0)} />
+				<FieldHistoryLine field="node:{node.id}:supplyTriggerPct" {unit} />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for={id('stop')}>Back to the dam at <span class="u">(% of dam)</span></label><HelpTip key="node.supplyStopPct" /></span>
 				<NumberInput id={id('stop')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct} onchange={(v) => (node.supplyStopPct = v ?? 0)} />
+				<FieldHistoryLine field="node:{node.id}:supplyStopPct" {unit} />
 			</div>
 		{/if}
 	</div>
@@ -119,6 +126,7 @@
 				onchange={(next) => (node.handsOffM3Day = next)}
 			/>
 		{/if}
+		<FieldHistoryLine field="node:{node.id}:handsOffM3Day" {unit} />
 		<div class="check-row">
 			<label class="check">
 				<input type="checkbox" disabled={readonly} checked={node.handsOffEwr === true} onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)} />
@@ -126,6 +134,7 @@
 			</label>
 			<HelpTip key="node.handsOffEwr" />
 		</div>
+		<FieldHistoryLine field="node:{node.id}:handsOffEwr" {unit} />
 		<p class="hint note" data-testid="hands-off-note">{handsOffPreview(node)}</p>
 	</div>
 	{#each problems as p (p)}
