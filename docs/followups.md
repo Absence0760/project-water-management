@@ -1182,7 +1182,7 @@ the suggested order (the IDs carry the detail):
       on every saved run by the `assurance` self-check, and in the opt-in
       stress test `backend/src/model/assurance-jit.perf.test.ts`
       (`pnpm test:backend:perf`).
-- [ ] **Report the V8 miscompile upstream** (issue #192): reduce it to a
+- [ ] **Report the V8 miscompile upstream** (issue #192; tracked in #232): reduce it to a
       standalone script for crbug.com/v8 (the Sandspruit stress reproduces
       it; a harness calling `supplyAssurance` alone never did, at 51
       deopt periods) and file it against Node 24's V8. The durable fix is
