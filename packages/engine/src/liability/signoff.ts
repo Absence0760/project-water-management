@@ -27,7 +27,8 @@ import { METHODOLOGY } from './methodology.generated';
 export const SIGNOFF_STATEMENT_VERSION = 'signoff-4';
 
 export interface SignoffConfirmation {
-	id: 'identity' | 'competence' | 'conflict' | 'inputs' | 'calibration' | 'ewr' | 'works' | 'assurance' | 'plausibility' | 'limitations';
+	/** `pack`: a pack sign-off's own confirmation (packSignoffStatement). */
+	id: 'identity' | 'competence' | 'conflict' | 'inputs' | 'calibration' | 'ewr' | 'works' | 'assurance' | 'plausibility' | 'limitations' | 'pack';
 	text: string;
 }
 
@@ -118,4 +119,77 @@ export function signoffStatement(
 }
 
 /** The text whose SHA-256 a sign-off records (RFC 8785, as a manifest; the caller hashes it). */
-export const signoffStatementText = (s: SignoffStatement): string => canonicalJson(s);
+export const signoffStatementText = (s: SignoffStatement | PackSignoffStatement): string => canonicalJson(s);
+
+/**
+ * The statement version of a sign-off on an evidence pack (WP-3.14), kept
+ * apart from the run statement's (SIGNOFF_STATEMENT_VERSION): the database
+ * ties a `pack-` version to a pack target and any other to a run (112).
+ * pack-signoff-1 (issue #71): the run statement's confirmations, the works
+ * one for the pack's application or baseline, plus the pack itself, bound by
+ * its manifest hash.
+ */
+export const PACK_SIGNOFF_STATEMENT_VERSION = 'pack-signoff-1';
+
+export interface PackSignoffStatement extends Omit<SignoffStatement, 'version' | 'runId' | 'engineVersion'> {
+	version: typeof PACK_SIGNOFF_STATEMENT_VERSION;
+	/** The pack signed: its id, version and the SHA-256 of its manifest (evidence/pack.ts). */
+	packId: string;
+	packVersion: number;
+	manifestSha256: string;
+	/** The runs the pack cites, with the engine that made each. */
+	baseline: { runId: string; engineVersion: string };
+	application: { runId: string; engineVersion: string } | null;
+}
+
+export interface SignoffPack {
+	id: string;
+	version: number;
+	manifestSha256: string;
+	baseline: SignoffRun;
+	/** The scenario run, for an application pack; null for baseline evidence. */
+	application: SignoffRun | null;
+}
+
+/**
+ * The statement a signer of an evidence pack is shown and confirms. The errata
+ * are those of either run's engine (or its fit's), deduplicated, from the
+ * current list: a pack is signed against what is known now, whatever its
+ * manifest froze.
+ */
+export function packSignoffStatement(
+	pack: SignoffPack,
+	limitations: readonly Limitation[] = KNOWN_LIMITATIONS,
+	errata: readonly Erratum[] = ENGINE_ERRATA
+): PackSignoffStatement {
+	const named = pack.application ?? pack.baseline;
+	const { version: _v, runId: _r, engineVersion: _e, ...base } = signoffStatement({ ...named, scenario: pack.application !== null }, limitations, errata);
+	void _v;
+	void _r;
+	void _e;
+	const seen = new Set<string>();
+	const allErrata = [pack.baseline, ...(pack.application ? [pack.application] : [])]
+		.flatMap((r) => errataFor(r.engineVersion, errata, r.fitEngineVersion ?? null))
+		.filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)));
+	return {
+		...base,
+		version: PACK_SIGNOFF_STATEMENT_VERSION,
+		packId: pack.id,
+		packVersion: pack.version,
+		manifestSha256: pack.manifestSha256,
+		baseline: { runId: pack.baseline.id, engineVersion: pack.baseline.engineVersion },
+		application: pack.application ? { runId: pack.application.id, engineVersion: pack.application.engineVersion } : null,
+		confirmations: [
+			...base.confirmations,
+			{
+				id: 'pack',
+				text: `I have read this evidence pack (version ${pack.version}, manifest SHA-256 ${pack.manifestSha256}) as a whole: its flags, its change table and its appendices are those of the runs I judged, and nothing in it misrepresents them.`
+			}
+		],
+		errata: allErrata,
+		notes: [
+			...base.notes.filter((n) => !n.startsWith('The signature covers this run only')),
+			'The signature covers this evidence pack only, identified by the manifest SHA-256 above. Another version of the pack, or a later run of the same inputs, is not signed.'
+		]
+	};
+}
