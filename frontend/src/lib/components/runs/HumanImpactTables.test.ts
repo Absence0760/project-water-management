@@ -27,7 +27,21 @@ const summary = (objects: DemandObjectSummary[]) =>
 		catchment: {},
 		warnings: []
 	}) as unknown as RunSummary;
-const text = (html: string) => html.replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+/** The rendered HTML as text: comments dropped, each tag a space, whitespace collapsed. A scan, not chained regex replaces (CodeQL js/incomplete-multi-character-sanitization). */
+const text = (html: string) => {
+	let out = '';
+	for (let i = 0; i < html.length; ) {
+		if (html.startsWith('<!--', i)) {
+			const end = html.indexOf('-->', i + 4);
+			i = end < 0 ? html.length : end + 3;
+		} else if (html[i] === '<') {
+			const end = html.indexOf('>', i);
+			out += ' ';
+			i = end < 0 ? html.length : end + 1;
+		} else out += html[i++];
+	}
+	return out.replace(/\s+/g, ' ');
+};
 
 describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', () => {
 	it('shows the floor, the days and volume below it and the litres per person, apart from the days short', () => {
