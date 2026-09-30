@@ -27,6 +27,8 @@
 		ALLOCATION_MODE_LABEL,
 		ALLOCATION_MODES,
 		CALIBRATION_FLOW_KINDS,
+		calibrationSeriesKey,
+		calibrationSites,
 		fitRecordCaveats,
 		fitRecordStatus,
 		hasPotentialEvaporation,
@@ -99,6 +101,7 @@
 		project,
 		editor,
 		seriesKinds = null,
+		gaugeRecords = null,
 		chirpsSource,
 		observedOrigins,
 		apanSeries,
@@ -109,10 +112,12 @@
 		editor?: ModelEditor;
 		/** Kinds of the project's input series, to limit the calibration flow choices. */
 		seriesKinds?: string[] | null;
+		/** The flow records attached to gauges inside the network (084_gauge_records), for the calibration site's choices; null = not known. */
+		gaugeRecords?: { kind: string; siteNodeId: string }[] | null;
 		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
-		/** Each observed record's source and given unit a run would read (107_series_source.sql); undefined when not known. */
-		observedOrigins?: Partial<Record<CalibrationFlowKind, SeriesOrigin | null>>;
+		/** Each observed record's source and given unit a run would read (107_series_source.sql), by model-input key; undefined when not known. */
+		observedOrigins?: Partial<Record<string, SeriesOrigin | null>>;
 		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		readonly: boolean;
@@ -325,6 +330,12 @@
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
 	// A daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
+	// Where calibration can score besides the outlet (engine ≥ 1.41.0): the inner gauges with a record,
+	// and the records at the chosen site (the outlet's otherwise), which decide what a fit can use.
+	const calSites = $derived(editor && gaugeRecords ? calibrationSites(editor.model, Object.fromEntries(gaugeRecords.map((r) => [calibrationSeriesKey(r.kind as CalibrationFlowKind, r.siteNodeId), true]))) : []);
+	const recordKinds = $derived(s.calibrationSiteNodeId ? (calSites.find((x) => x.nodeId === s.calibrationSiteNodeId)?.records ?? []) : seriesKinds);
+	const hasRecord = $derived(recordKinds === null || recordKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k)));
+	const nodeName = (id: string) => editor?.model.nodes.find((n) => n.id === id)?.name;
 	// The daily A-pan series now, as the fit record fingerprints it (issue #45): fetched and hashed only
 	// when the record tracked one, so "forcing changed since fit" can say whether it was replaced.
 	let apanNow = $state<ApanDailyFingerprint | null | undefined>(undefined);
@@ -856,9 +867,11 @@
 			bind:start={s.calibrationStart}
 			bind:end={s.calibrationEnd}
 			bind:flowKind={s.calibrationFlowKind}
+			bind:siteNodeId={s.calibrationSiteNodeId}
 			bind:error={calWindowError}
 			{readonly}
 			availableKinds={seriesKinds}
+			sites={calSites}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
 		<Lazy load={loadQualityFlags}>
@@ -879,8 +892,8 @@
 			{x2Open}
 			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
 			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
-			hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
-			{seriesKinds}
+			hasObserved={hasRecord}
+			seriesKinds={recordKinds}
 			calibrationFlowKind={s.calibrationFlowKind}
 			{readonly}
 			onApply={applyFit}
@@ -893,7 +906,8 @@
 				context="form"
 				{chirpsSource}
 				apanDaily={apanNow}
-				observedOrigin={observedOrigins ? (observedOrigins[s.fitRecord.flowKind as CalibrationFlowKind] ?? null) : undefined}
+				observedOrigin={observedOrigins ? (observedOrigins[calibrationSeriesKey(s.fitRecord.flowKind as CalibrationFlowKind, s.fitRecord.siteNodeId)] ?? null) : undefined}
+				{nodeName}
 			/>
 		{/if}
 		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
@@ -909,7 +923,7 @@
 						formRules={s.calibrationRules}
 						formDirty={dirty}
 						penalty={marPenaltyOn(s as unknown as ProjectSettings)}
-						hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+						hasObserved={hasRecord}
 						{readonly}
 						onApplied={reloadAfterApply}
 					/>

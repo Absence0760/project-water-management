@@ -1132,6 +1132,27 @@ describe('remapSettingNodeIds (project copy)', () => {
 		expect(remapSettingNodeIds(at(null), ids)).toEqual(at(null));
 		expect(remapSettingNodeIds(at('gone'), ids)).toEqual(at('gone'));
 	});
+
+	it('moves the calibration site and its fit record’s site (engine ≥ 1.41.0), leaving the outlet and an unknown site alone', () => {
+		const ids = new Map([['g1', 'new-g1']]);
+		const at = (site: string | null, fitted: string | null) => ({ calibrationSiteNodeId: site, fitRecord: { flowKind: 'flow_observed_m3s', siteNodeId: fitted } });
+		expect(remapSettingNodeIds(at('g1', 'g1'), ids)).toEqual(at('new-g1', 'new-g1'));
+		expect(remapSettingNodeIds(at(null, null), ids)).toEqual(at(null, null));
+		expect(remapSettingNodeIds(at('gone', 'gone'), ids)).toEqual(at('gone', 'gone'));
+		// A record from before the site existed has none.
+		expect(remapSettingNodeIds({ fitRecord: { flowKind: 'flow_observed_m3s' } }, ids)).toEqual({ fitRecord: { flowKind: 'flow_observed_m3s' } });
+	});
+});
+
+describe('SettingsPatch.calibrationSiteNodeId (engine ≥ 1.41.0)', () => {
+	const ok = (calibrationSiteNodeId: unknown) => SettingsPatch.safeParse({ calibrationSiteNodeId }).success;
+	it('takes a node id or null for the outlet', () => {
+		expect(ok(null)).toBe(true);
+		expect(ok('9b1d0c3e-1111-4222-8333-444455556666')).toBe(true);
+		expect(ok('')).toBe(false);
+		expect(ok('H')).toBe(false);
+		expect(ok(5)).toBe(false);
+	});
 });
 
 describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {

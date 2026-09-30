@@ -237,6 +237,22 @@ describe('summary sheet', () => {
 		expect(lines[at + 2]).toMatch(/^Water year,Days counted,Both below the EWR,/);
 		expect(lines[at + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
 		expect(lines[at + 4]!.startsWith('1999/00,100,')).toBe(true);
+		// Engine ≥ 1.41.0: the same test at each gauge EWR site with a record of its own, after the outlet's.
+		s.catchment.ewrAgreementSites = [{ nodeId: 'g1', name: 'Middle weir', flowKind: 'flow_logger_m3s', agreement: s.catchment.ewrAgreement! }];
+		const withSite = [...summaryCsvLines(meta, s)];
+		const site = withSite.findIndex((l) => l.startsWith('"EWR test at Middle weir'));
+		expect(site).toBeGreaterThan(withSite.findIndex((l) => l.startsWith('"Outlet EWR test')));
+		expect(withSite[site]).toContain('logger');
+		expect(withSite[site + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
+	});
+
+	it('names the calibration site when the statistics were scored at a gauge (engine ≥ 1.41.0)', () => {
+		const s = structuredClone(summary);
+		s.calibration!.siteNodeId = 'g1';
+		s.calibration!.siteName = 'Middle weir';
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines).toContain('Scored at the gauge (calibration site),Middle weir');
+		expect(lines.some((l) => l.startsWith('siteName,'))).toBe(false);
 	});
 });
 

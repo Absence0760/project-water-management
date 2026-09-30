@@ -66,8 +66,8 @@ export type ValueSpec =
 	| { t: 'bool' }
 	/** An ISO date; empty is null. */
 	| { t: 'date'; nullLabel: string }
-	/** A node of the model, by id. */
-	| { t: 'node' }
+	/** A node of the model, by id; with `nullLabel`, empty is null (shown as that). */
+	| { t: 'node'; nullLabel?: string }
 	/**
 	 * GR4J's potential-evaporation input (settings.pe, issue #39): pan
 	 * coefficient × A-pan, or a monthly row in mm with a required source.
@@ -198,7 +198,10 @@ export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 	handsOffEwr: { label: 'Off-take leaves the EWR in the river', spec: { t: 'bool' } },
 	lossPct: { label: 'Off-take conveyance losses', spec: pct() },
 	sizing: { label: 'Off-take takes', spec: { t: 'enum', options: [{ value: 'demand', label: 'What the destination needs' }, { value: 'capacity', label: 'Up to capacity' }] } },
-	topUpDam: { label: 'Off-take tops up the destination’s dam', spec: { t: 'bool' } }
+	topUpDam: { label: 'Off-take tops up the destination’s dam', spec: { t: 'bool' } },
+	// Canal seepage back to the river (engine ≥ 1.42.0).
+	lossReturnPct: { label: 'Off-take losses seeping back to the river', spec: pct() },
+	lossReturnNodeId: { label: 'Off-take seepage rejoins the river below', spec: { t: 'node', nullLabel: 'the source' } }
 };
 
 export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
@@ -407,7 +410,7 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			if (text === '') return { ok: true, value: null };
 			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
 		case 'node':
-			return text ? { ok: true, value: text } : { ok: false, error: 'pick a node' };
+			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick a node' };
 		case 'reductions': {
 			if (text === '') return { ok: true, value: null };
 			const parts = text.replace(/%/g, ' ').split(/\s*;\s*|,\s+|\s+/).filter(Boolean);
@@ -517,7 +520,7 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 		case 'date':
 			return typeof v === 'string' && v ? v : spec.nullLabel;
 		case 'node':
-			return typeof v === 'string' ? nodeName(v) : '–';
+			return typeof v === 'string' ? nodeName(v) : (spec.nullLabel ?? '–');
 		case 'text':
 			return typeof v === 'string' ? `“${v}”` : String(v);
 		case 'pe':

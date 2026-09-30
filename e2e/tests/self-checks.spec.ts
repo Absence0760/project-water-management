@@ -14,8 +14,8 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 12 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.18.0, issue #72); the 11th: operating rules (1.32.0, issue #204); the 12th: the assurance of supply (1.34.0, issue #192)
-	await expect(checks.getByRole('listitem')).toHaveCount(12);
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 13 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.18.0, issue #72); the 11th: operating rules (1.32.0, issue #204); the 12th: the assurance of supply (1.34.0, issue #192); the 13th: the drought restriction rule (1.46.0, WP-3.8)
+	await expect(checks.getByRole('listitem')).toHaveCount(13);
 	// The workspace's word: the engine's "farm" reads "unit" (#54), and the checks say which engine made them.
 	await expect(checks.getByRole('listitem').first()).toContainText('Every hydrological unit balances every day');
 	await expect(checks.getByRole('listitem').filter({ hasText: /\bfarms?\b/i })).toHaveCount(0);

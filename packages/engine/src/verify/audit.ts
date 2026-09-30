@@ -176,6 +176,7 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	['river_abstraction', 'a supply rule that pumps from the river'],
 	['offtake_in', 'river off-takes into it'],
 	['offtake_out', 'river off-takes from it'],
+	['offtake_loss_return', 'river off-takes’ seepage returning below it'],
 	['dam_storage_set', 'a dam storage reset'],
 	[ALLOCATION_SERIES.surfaceRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterRoom.key, 'an allocation cap'],

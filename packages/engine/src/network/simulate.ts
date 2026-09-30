@@ -318,6 +318,12 @@ export interface NodeResult {
 	/** Taken by river off-takes from the flow leaving this unit (engine ≥ 1.14.0), before losses; absent on a unit no off-take draws on. */
 	offtakeOut?: Float64Array;
 	/**
+	 * River off-takes' conveyance losses seeping back to the river below this
+	 * farm (engine ≥ 1.42.0), part of its outflow; absent on a unit no
+	 * off-take returns seepage to.
+	 */
+	offtakeReturn?: Float64Array;
+	/**
 	 * The storage reset's step (engine ≥ 0.46.0): on the reset day, the
 	 * storage set − the storage the day before left (m³, + added / − taken);
 	 * 0 on every other day. Absent on a dam without a reset.
@@ -616,6 +622,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
+		if (plan.offtakes?.some((o) => o.lossReturn > 0 && o.returnAt === i)) r.offtakeReturn = new Float64Array(days);
 		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
 		if (n.allocationCap) r.allocationRoom = { surface: n.allocationCap.surface ? new Float64Array(days) : null, groundwater: n.allocationCap.groundwater ? new Float64Array(days) : null };
 		// What is left of the year's volume, beside the room, for a source whose licence states conditions (engine ≥ 1.40.0).
@@ -724,6 +731,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Delivered into each unit today (after losses), the part from rules that top up the dam, and each demand-sized rule's share of its destination's need.
 	const otIn = new Float64Array(nodes.length);
+	// Conveyance losses seeping back to the river below each farm today (engine ≥ 1.42.0).
+	const otRet = new Float64Array(nodes.length);
 	const otInDam = new Float64Array(nodes.length);
 	const otShare = new Float64Array(offtakes.length);
 	const otWant = new Float64Array(offtakes.length);
@@ -907,6 +916,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// today, so the split never depends on which source is simulated first.
 		if (offtakes.length) {
 			otIn.fill(0);
+			otRet.fill(0);
 			otInDam.fill(0);
 			otCapInto.fill(0);
 			for (const o of offtakes) if (o.sizing === 0) otCapInto[o.to]! += o.capM3Day[month[t]!]!;
@@ -1250,12 +1260,22 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						Xout += v;
 						const got = v * (1 - o.loss);
 						otIn[o.to]! += got;
+						// A share of the losses seeps back to the river, below the source or a farm below it (engine ≥ 1.42.0).
+						if (o.lossReturn > 0) otRet[o.returnAt]! += v * o.loss * o.lossReturn;
 						if (o.topUpDam) otInDam[o.to]! += got;
 					}
 				}
 				// The shares of a level can add up one ulp past the flow they split; the river never goes below 0.
 				U = Math.max(0, U0 - Xout);
 				r.offtakeOut![t] = Xout;
+			}
+			// Canal seepage returning below this farm (engine ≥ 1.42.0, docs/model.md §2.6a): it joins the flow
+			// leaving it after its own off-takes, so no off-take takes back its own losses.
+			let Xret = 0;
+			if (r.offtakeReturn) {
+				Xret = otRet[i]!;
+				U += Xret;
+				r.offtakeReturn[t] = Xret;
 			}
 			if (r.offtakeIn) r.offtakeIn[t] = Xin;
 			r.groundwater[t] = Ggw;
@@ -1300,7 +1320,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				w.damSeepageLost[t] = SpLost;
 				w.damRelease[t] = Rel;
 				w.balanceResidual[t] =
-					Xin > 0 || Xout > 0 ? H + I + J + Pd + Ggw + Gd + Xin - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
+					Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
 				w.passedForSenior[t] = passed;
 				if (w.offtakeUsed) {
 					w.offtakeUsed[t] = Xused;

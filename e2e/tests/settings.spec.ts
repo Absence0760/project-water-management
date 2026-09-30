@@ -138,6 +138,7 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'Flow share',
 		'EWR',
 		'Reserve rules',
+		'Restrictions',
 		'Simulation period',
 		'Data quality',
 		'Outcome matrix',

@@ -214,9 +214,15 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			}
 			case 'transfer.set': {
 				const id = transfers.length && !g.bool(0.05) ? g.pick(transfers) : missing();
-				const field = g.pick(['months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority', 'toNodeId', 'monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam'] as const);
+				const field = g.pick(['months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority', 'toNodeId', 'monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam', 'lossReturnPct', 'lossReturnNodeId'] as const);
 				const value =
-					field === 'source'
+					field === 'lossReturnPct'
+						? g.frac()
+						: field === 'lossReturnNodeId'
+							? g.bool(0.3)
+								? null
+								: (node()?.id ?? missing())
+							: field === 'source'
 						? g.pick(['dam', 'river'] as const)
 						: field === 'handsOffM3Day'
 							? g.pick([null, g.logFloat(1, 1e5)])

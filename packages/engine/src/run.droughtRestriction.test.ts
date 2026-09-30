@@ -226,7 +226,7 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 				const noCut = cloneInput(base);
 				noCut.settings.droughtRestriction = { reviewDates: ['10-01', '04-01'], levels: [{ belowPct: 1, cuts: {} }] };
 				const on = runModel(noCut);
-				const extra = new Set([RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.restricted.key]);
+				const extra = new Set<string>([RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.restricted.key]);
 				const kept = on.series.filter((x) => !extra.has(x.key));
 				expect(kept.length, `seed ${seed}`).toBe(off.series.length);
 				kept.forEach((x, i) => {

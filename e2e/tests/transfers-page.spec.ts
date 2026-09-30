@@ -107,6 +107,11 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expect(page.getByLabel('Minimum source storage for transfer 1, %', { exact: true })).toHaveCount(0);
 	await page.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true }).fill('250');
 	await page.getByLabel('Conveyance losses of transfer 1, %', { exact: true }).fill('10');
+	// Canal seepage back to the river (engine 1.42.0): where it rejoins shows once a share is set, the source by default.
+	const rejoins = page.getByLabel('Where the seepage of transfer 1 rejoins the river', { exact: true });
+	await expect(rejoins).toHaveCount(0);
+	await page.getByLabel('Share of the losses of transfer 1 seeping back to the river, %', { exact: true }).fill('40');
+	await expect(rejoins).toHaveValue('');
 	await page.getByLabel('How much transfer 1 takes', { exact: true }).selectOption('capacity');
 	await page.getByLabel('transfer 1 leaves the EWR in the river', { exact: true }).check();
 	// The page has taken the save in (the bar goes once the editor holds what the server returned), so the
@@ -117,6 +122,8 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expect(page.getByLabel('Where transfer 1 takes its water', { exact: true })).toHaveValue('river');
 	await expect(page.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true })).toHaveValue('250');
 	await expect(page.getByLabel('Conveyance losses of transfer 1, %', { exact: true })).toHaveValue('10');
+	await expect(page.getByLabel('Share of the losses of transfer 1 seeping back to the river, %', { exact: true })).toHaveValue('40');
+	await expect(page.getByLabel('Where the seepage of transfer 1 rejoins the river', { exact: true })).toHaveValue('');
 	await expect(page.getByLabel('How much transfer 1 takes', { exact: true })).toHaveValue('capacity');
 	await expect(page.getByLabel('transfer 1 leaves the EWR in the river', { exact: true })).toBeChecked();
 	await expect(page.getByLabel('transfer 1 tops up the destination’s dam', { exact: true })).not.toBeChecked();

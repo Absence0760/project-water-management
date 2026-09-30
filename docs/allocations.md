@@ -222,6 +222,14 @@ existing lawful use beside the application's numbers.
   description counting the whole years above the band per run. The
   Allocations tab draws the same chart (`allocations/UsePlot.svelte`) for the
   run it compares, with the project's band now ([ui.md § Allocations](./ui.md#allocations-taballocations)).
+- **What the cap held back** (report version `evidence-6`): a run made with
+  the cap cites, per unit and water source it caps, the water years its use
+  reached the registered volume and the days the licence limit held use
+  back, split into volume used up, maximum rate and outside the months of
+  use (`capA` / `capB`, copied from the run's `RunSummary.allocations`, the
+  same words as the Allocations page). A source the run doesn't cap reads
+  "Not capped"; the table is left out when neither run is a cap run, and a
+  pack drafted before `evidence-6` has none.
 - **The page-1 row** sums the whole unit-years above the band over units and
   sources, baseline and application, with the run's own difference and no
   band (the ensemble doesn't carry it). It is a fixed row (G6): when the

@@ -731,7 +731,9 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },
 	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
-	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') }
+	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') },
+	// Engine ≥ 1.41.0; a snapshot without it calibrated at the outlet. Only calibration reads it, never the run.
+	calibrationSiteNodeId: { label: 'Calibration site', fmt: (v) => (v ? `gauge node ${String(v)}` : 'the outlet') }
 };
 /** Engine ≥ 0.31.0; a snapshot without settings.pe ran pan coefficient × A-pan. */
 const PE_LABEL = 'Potential evaporation (GR4J)';
@@ -1531,6 +1533,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const sizing = (t: Transfer) => (t.sizing === 'capacity' ? 'up to capacity' : "to the destination's need");
 		if ((x.sizing ?? 'demand') !== (y.sizing ?? 'demand')) parts.push(`sized ${sizing(x)} → ${sizing(y)}`);
 		if (!!x.topUpDam !== !!y.topUpDam) parts.push(y.topUpDam ? "now tops up the destination's dam" : "no longer tops up the destination's dam");
+		// Canal seepage back to the river (engine ≥ 1.42.0): the share, and where it rejoins (by name, A's in B's names).
+		if ((x.lossReturnPct ?? 0) !== (y.lossReturnPct ?? 0)) parts.push(`share of the losses seeping back to the river ${pct(x.lossReturnPct ?? 0)} → ${pct(y.lossReturnPct ?? 0)}`);
+		const backA = x.lossReturnNodeId ? (nodeRename.get(x.lossReturnNodeId) ?? na.node(x.lossReturnNodeId)) : null;
+		const backB = y.lossReturnNodeId ? nb.node(y.lossReturnNodeId) : null;
+		if (backA !== backB) parts.push(`seepage rejoins below ${backA ?? 'the source'} → ${backB ?? 'the source'}`);
 		return parts;
 	};
 	for (const t of transfers.onlyA) {

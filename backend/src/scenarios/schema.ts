@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Where each op keeps an id, as paths into the op (`transfer.set`'s `value` is an id only when it sets a transfer end). */
+/** Where each op keeps an id, as paths into the op (`transfer.set`'s `value` is an id only when it sets a transfer end or the unit its seepage rejoins below). */
 export function opIds(op: ScenarioOp): [string, unknown][] {
 	switch (op.op) {
 		case 'node.set':
@@ -41,10 +41,12 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			return [
 				['transfer.id', op.transfer.id],
 				['transfer.fromNodeId', op.transfer.fromNodeId],
-				['transfer.toNodeId', op.transfer.toNodeId]
+				['transfer.toNodeId', op.transfer.toNodeId],
+				// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0), when named.
+				...(op.transfer.lossReturnNodeId ? ([['transfer.lossReturnNodeId', op.transfer.lossReturnNodeId]] as [string, unknown][]) : [])
 			];
 		case 'transfer.set':
-			return [['transferId', op.transferId], ...(op.field === 'fromNodeId' || op.field === 'toNodeId' ? ([['value', op.value]] as [string, unknown][]) : [])];
+			return [['transferId', op.transferId], ...(op.field === 'fromNodeId' || op.field === 'toNodeId' || (op.field === 'lossReturnNodeId' && op.value !== null) ? ([['value', op.value]] as [string, unknown][]) : [])];
 		case 'transfer.remove':
 			return [['transferId', op.transferId]];
 		case 'landCover.add':

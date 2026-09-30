@@ -15,6 +15,7 @@ export * from './languages';
 export * from './legal';
 export * from './runoff';
 export * from './calibrate/calibrate';
+export * from './calibrate/site';
 export * from './calibrate/representativeness';
 export * from './calibrate/dayFlags';
 export * from './calibrate/params';
@@ -54,7 +55,7 @@ export { buildTopology, ewrSiteNodes, isEwrSite, type Topology } from './network
 export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRates, WATER_YEAR_MONTHS, withMonthlyRates } from './network/transferRates';
-export { isRiverOfftake, OFFTAKE_SERIES } from './network/offtake';
+export { isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt } from './network/offtake';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppliedKey, parseDemandObjectKey } from './network/demandObjects';
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';
 export {

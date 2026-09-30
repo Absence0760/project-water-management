@@ -2504,8 +2504,13 @@ The card's body holds three top-aligned groups:
   off-take)* ([model.md §2.6a](./model.md)), whose fields replace the minimum:
   how much it takes (*What the destination needs* or *Up to capacity*, like a
   canal that runs full), a hands-off flow (m³/day, blank = none), the losses on
-  the way (%), and switches for leaving the EWR in the river and topping up
-  the destination’s dam. The fields sit two to a row, not one tall column.
+  the way (%), the share of those losses seeping back to the river (%, engine
+  ≥ 1.42.0; 0 = none, the default) and, once that share is above 0, where it
+  rejoins the river (*The source* or a hydrological unit downstream of the
+  source along the river; a saved unit that no longer qualifies shows as *not
+  below the source*, and the model check refuses it), and switches for leaving
+  the EWR in the river and topping up the destination’s dam. The fields sit
+  two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip. The groups sit side by
 side where the card is 70rem wide (1280 and 1440 windows), beside the head
@@ -2700,9 +2705,12 @@ editors get a select (*At the outlet*, or *At gauge &lt;name&gt;* for each such
 gauge, `PATCH …/series/:id { siteNodeId }`), viewers the words. A record at a
 gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
-the outlet's record, whatever its name (calibration, the EWR test, the
-*What the model uses* badges, the setup checklist and the fit panel's
-records read only the outlet's). A record whose gauge has left the model says
+the outlet's record, whatever its name (the outlet's EWR test, the *What the
+model uses* badges and the setup checklist read only the outlet's; a gauge EWR
+site's own EWR test reads its record, engine ≥ 1.41.0). When Settings → Calibration record → *Scored at* picks its
+gauge (engine ≥ 1.41.0), it is badged *Gauge record (calibration site)*
+instead: Fit automatically and a run's calibration statistics score it ([model.md
+§2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
 so, until it is moved. **Source and unit** (issue #66, 107,
 [data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
 a row whose series records a source, or was converted at upload (uploaded in
@@ -3161,7 +3169,23 @@ which checks every catchment tab).
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
 - **Calibration record** (`#set-record`): the calibration window and flow
-  series (`calibration/CalibrationWindowFields.svelte`), and the
+  series (`calibration/CalibrationWindowFields.svelte`), with, when the
+  model has a gauge above the outlet with a flow record attached (or a site
+  is already set), **Scored at** (engine ≥ 1.41.0, `settings.calibrationSiteNodeId`,
+  model.md §2.10k): *The outlet* or each such gauge by name (engine
+  `calibrationSites`; a gauge without a record is not offered, and a stored
+  site that has lost its gauge or record shows as *A gauge no longer in the
+  model, or with no record*). Its hint says the fit then scores the simulated
+  flow at that gauge against its record, that the gauged ranges and gap
+  filling are the outlet records', and that a run's statistics are scored
+  there too while the outlet's EWR test stays the outlet's. A stored site
+  whose gauge has left the model or has no record attached any more gets a
+  warning under the select (runs score the outlet's record and warn, and Fit
+  automatically refuses the site). The site's records decide *Compare with*'s choices, Fit
+  automatically's validation record and whether a fit can start (a project
+  whose only record is at the site can fit); the fit record's *Fitted to*
+  names the gauge ("Gauge record at the gauge “Middle weir”") and says when
+  the site has changed since the fit. And the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
   "Exclude a water year" and "Exclude a date range" add a row, each with a
   required **Reason**. A water year shows the dates it covers ("WY 2015/16:
@@ -4065,7 +4089,12 @@ read it before.
      with a coloured edge and a link to its panel (not the calibration fit:
      it has no verdict and the NSE card below says it, issue #177).
   2. **Model quality**: the hydrograph with the flow-duration curve under it
-     (compared together on every calibration iteration), calibration (with
+     (compared together on every calibration iteration; a run scored at a
+     gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
+     hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
+     record against the simulated flow there, `runs/RunCharts.svelte` from
+     the node's `observed_flow` and `outflow` series), calibration (its
+     *Compared with* and the NSE card name the gauge when scored there; with
      where the parameters came from), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
@@ -4660,7 +4689,10 @@ read it before.
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
-  there is no table. The **Plausibility checks** (`#res-plausibility`,
+  there is no table. Under it, the same table for each gauge EWR site with a
+  record of its own (engine ≥ 1.41.0, `summary.catchment.ewrAgreementSites`,
+  "EWR test at &lt;gauge&gt;: model against its observed flow"; model.md
+  §2.10k). The **Plausibility checks** (`#res-plausibility`,
   `runs/PlausibilityPanel.svelte`, part of the Runs tab's chunk, helpers in
   `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
   only on runs that have them): the dry season in one sentence, a line per
@@ -5833,6 +5865,10 @@ baseline card links to the published run's report (**Report**, beside
   on one page, none across a page edge), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
+  The transfers table gives a river off-take's **Losses on the way** (%) and
+  what of them is **Seeping back to the river** ("40.0% of them, below Upper
+  farm", the source when no unit is named; "none" by default; engine ≥
+  1.42.0, [model.md §2.6a](./model.md)); a dam transfer shows "–" in both.
   The **Runoff model** row reads "GR4J", or for a run whose settings don't
   name GR4J (a stored run from before engine 1.0.0) "Legacy (b023 workbook,
   removed in engine 1.0.0): workbook comparison only", never today's default.
@@ -6130,9 +6166,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the band shaded, one neutral hue, a year past 300 % an arrowhead at the
     edge); the whole years above, within and below per unit and source with
     the mean volumes; and every water year's registered volume and modelled
-    use, part years listed but not counted. Units by their unit name, never
-    the holder's. *Not assessed* when the runs carry no volumes, or none on a
-    unit of theirs.
+    use, part years listed but not counted. In a cap run, *What the cap held
+    back* (`evidence-allocation-cap`, `evidence-6`): per unit and source it
+    caps, the days the licence limit held use back by limit and the years
+    the volume was used up, in the Allocations page's words (`capYearsText`),
+    "Not capped" for the run that doesn't cap it. Units by their unit name,
+    never the holder's. *Not assessed* when the runs carry no volumes, or
+    none on a unit of theirs.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every

@@ -43,7 +43,7 @@ export const KIND_ROLES: Record<string, KindRole> = {
 	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
-		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), never calibrated against.',
+		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), and calibrated against only when Settings → Calibration record scores the fit at that gauge.',
 		driver: false
 	},
 	flow_logger_m3s: {

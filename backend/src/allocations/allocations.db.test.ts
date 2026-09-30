@@ -299,6 +299,17 @@ describe('the run comparison', () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=2`)).status).toBe(400);
 		expect((await farmer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`)).status).toBe(403);
 	});
+
+	it('is a 404 for someone who isn’t a member, the same as a run that doesn’t exist, and never reads another project’s run', async () => {
+		// Positive control: a member reads it.
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`)).status).toBe(200);
+		const res = await stranger.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
+		expect(res.status).toBe(404);
+		expect(JSON.stringify(res.body)).not.toMatch(/Farm A|comparison|capYears/);
+		expect((await stranger.call('GET', `/projects/${projectId}/runs/${crypto.randomUUID()}/allocations`)).status).toBe(404);
+		// Their own project, this project's run: not found, not this run's comparison.
+		expect((await stranger.call('GET', `/projects/${otherProjectId}/runs/${runId}/allocations`)).status).toBe(404);
+	});
 });
 
 describe('the allocations export', () => {

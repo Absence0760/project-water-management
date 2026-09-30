@@ -80,7 +80,10 @@
 				</dd>
 			</div>
 			{#if calibration.flowKind}
-				<div><dt>Compared with</dt><dd>{FLOW_KIND_LABEL[calibration.flowKind] ?? calibration.flowKind}</dd></div>
+				<div data-testid="calibration-compared-with">
+					<dt>Compared with</dt>
+					<dd>{FLOW_KIND_LABEL[calibration.flowKind] ?? calibration.flowKind}{#if calibration.siteNodeId}, at the gauge “{calibration.siteName ?? calibration.siteNodeId}” (the calibration site){/if}</dd>
+				</div>
 			{/if}
 			{#if calibration.simulatedKey}
 				<div><dt>Scored against</dt><dd>{SIMULATED_LABEL[calibration.simulatedKey]}</dd></div>

@@ -271,3 +271,49 @@ describe('new data queues the calibration rules (after.onNewData)', () => {
 		expect(run.trigger).toBe('auto');
 	});
 });
+
+describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId)', () => {
+	it('fits the gauge’s own record, and the applied fit record names the site and that record’s source and unit, not the outlet’s', async () => {
+		const owner = await signUp('AutocalSite');
+		const projectId = (await owner.call('POST', '/projects', { name: 'Autocal site' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const weir = node('Weir', outlet.id, { kind: 'gauge', areaKm2: 0 });
+		const upper = node('Upper', weir.id, { areaKm2: 40, pctRunoffToDam: 0 });
+		const lower = node('Lower', outlet.id, { areaKm2: 20, pctRunoffToDam: 0 });
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, weir, upper, lower], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'gr4j', apanMm: monthly(150), gr4j: TRUTH } })).status).toBe(200);
+		const days = 4 * 365;
+		const rain = Array.from({ length: days }, (_, t) => (t % 5 === 0 ? 12 + (t % 37) : t % 11 === 0 ? 3 : 0));
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2010-10-01', values: rain })).status).toBe(200);
+		const input = (await owner.call('GET', `/projects/${projectId}/model-input`)).body.input as ModelInput;
+		const out = runModel(input);
+		const m3s = (key: string, nodeId: string | null) => out.series.find((s) => s.key === key && s.nodeId === nodeId)!.values.map((q) => Math.round(((q ?? 0) / 86_400) * 1e6) / 1e6);
+		const put = (body: Record<string, unknown>) => owner.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2010-10-01', ...body });
+		// The outlet's record and the weir's, each with its own source.
+		expect((await put({ name: 'Outlet record', source: 'Outlet gauge (synthetic)', values: m3s('simulated_outflow', null) })).status).toBe(200);
+		const weirRec = await put({ name: 'Weir record', source: 'Weir logger (synthetic)', values: m3s('outflow', weir.id) });
+		expect(weirRec.status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${projectId}/series/${weirRec.body.id}`, { siteNodeId: weir.id })).status).toBe(200);
+		const current = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings;
+		const patched = await owner.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibrationSiteNodeId: weir.id, gr4j: { ...TRUTH, x1: 350, x3: 90, x4: 1.7 }, calibrationRules: { ...quickRules(), revision: current.calibrationRules.revision } }
+		});
+		expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+
+		const res = await owner.call('POST', `/projects/${projectId}/auto-calibrations`, {});
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		expect(res.body.calibration.plan.siteNodeId).toBe(weir.id);
+		await drain();
+		const done = (await owner.call('GET', `/projects/${projectId}/auto-calibrations/${res.body.calibration.id}`)).body.calibration;
+		expect(done.status).toBe('complete');
+		expect(done.chosen).not.toBeNull();
+		const applied = await owner.call('POST', `/projects/${projectId}/auto-calibrations/${done.id}/apply`, {});
+		expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+		const record = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings.fitRecord;
+		expect(record.siteNodeId).toBe(weir.id);
+		expect(record.observedOrigin).toEqual({ source: 'Weir logger (synthetic)', unit: 'm3/s', factor: 1 });
+		// The run it made scores the same site, so its statistics are the fit's own days.
+		const run = (await owner.call('GET', `/projects/${projectId}/runs/${applied.body.runId}`)).body.run;
+		expect(run.summary.calibration).toMatchObject({ siteNodeId: weir.id, siteName: 'Weir', fitStatus: 'fitted' });
+	});
+});
