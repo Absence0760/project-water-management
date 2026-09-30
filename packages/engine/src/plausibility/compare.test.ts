@@ -11,6 +11,10 @@ import { runModelWith } from '../run';
 import { comparePlausibility } from './compare';
 import type { PlausibilityChecks } from './index';
 import type { NaturalisedCheck } from './naturalised';
+import type { RecessionCheck } from '../recession/check';
+import { RECESSION_DEFAULTS } from '../recession/segments';
+import { ECKHARDT_FILTER, HUGHES_FILTER } from '../reserve/baseflow';
+import { BFI_WARN_DIFF, FDC_LOW_WARN_PCT, type ValidationSignatures } from './signatures';
 
 const flat = (v: number) => new Array(12).fill(v) as unknown as Monthly;
 const days = 730;
@@ -101,6 +105,25 @@ describe('the plausibility checks in the run comparison', () => {
 		expect(c.flowDoubleMass).toBeNull();
 	});
 
+	it('sets each run’s stored recession diagnostics and validation signatures side by side, recomputing nothing', () => {
+		const a = gaugedRun(3);
+		const b = gaugedRun(1);
+		const c = compareRuns(a, b).plausibility!;
+		const sa = a.summary.plausibility!.signatures!;
+		const sb = b.summary.plausibility!.signatures!;
+		// Both runs score the outlet's gauge record: comparable, and every number is the run's own.
+		expect(c.signatures).toMatchObject({ comparable: true, missingA: null, missingB: null, flowKindA: 'flow_observed_m3s', siteNodeIdA: null, siteNodeIdB: null });
+		expect(c.signatures!.hughes.simulated).toEqual({ a: sa.baseflow!.hughes!.simulated, b: sb.baseflow!.hughes!.simulated, delta: sb.baseflow!.hughes!.simulated - sa.baseflow!.hughes!.simulated });
+		expect(c.signatures!.eckhardt.difference.a).toBe(sa.baseflow!.eckhardt!.difference);
+		expect(c.signatures!.slopeBiasPct.b).toBe(sb.lowFlowFdc!.slopeBiasPct);
+		expect(c.signatures!.lowVolumeBiasPct.a).toBe(sa.lowFlowFdc!.lowVolumeBiasPct);
+		// The outlet's record is the run's own outflow in both runs: the simulated BFI matches the observed.
+		expect(c.signatures!.hughes.difference.b).toBeCloseTo(0, 9);
+		expect(c.signatures!.hughes.withinB).toBe(true);
+		// The recession diagnostics: present in both (engine ≥ 1.19.0), on the same record.
+		expect(c.recession).toMatchObject({ comparable: true, missingA: null, missingB: null, agreesA: a.summary.plausibility!.recession!.agrees });
+	});
+
 	it('names a gauge’s own record by its gauge in the input changes', () => {
 		const snap = (keys: string[]): RunInputsSnapshot => ({
 			settings: {},
@@ -172,5 +195,154 @@ describe('comparePlausibility matching', () => {
 		const c = comparePlausibility(s(checks([], null)), s(checks([], null)))!;
 		expect(c.sites).toEqual([]);
 		expect(c.rainSource).toBeNull();
+	});
+});
+
+describe('comparePlausibility: the recession diagnostics and the validation signatures', () => {
+	const bare: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
+	const fit = (b: number) => ({ a: 0.05, b, points: 40, segments: 10, minQM3s: 0.1, maxQM3s: 3 });
+	const rec = (over: Partial<RecessionCheck> = {}): RecessionCheck => ({
+		flowKind: 'flow_observed_m3s',
+		options: { ...RECESSION_DEFAULTS },
+		segments: Array.from({ length: 10 }, (_, i) => [i * 20, i * 20 + 8] as [number, number]),
+		observed: fit(1.5),
+		simulated: fit(1.8),
+		referenceFlowM3s: 0.5,
+		observedRate: 0.04,
+		simulatedRate: 0.06,
+		rateRatio: 1.5,
+		bDiff: 0.3,
+		agrees: true,
+		...over
+	});
+	const sig = (over: { hughesDiff?: number; slope?: number | null; flv?: number | null; skill?: number | null; agrees?: boolean | null } & Partial<ValidationSignatures> = {}): ValidationSignatures => {
+		const { hughesDiff = 0.05, slope = 20, flv = -10, skill = 0.4, agrees = true, ...rest } = over;
+		return {
+			flowKind: 'flow_observed_m3s',
+			baseflow: {
+				hughesFilter: { ...HUGHES_FILTER },
+				eckhardtFilter: { ...ECKHARDT_FILTER },
+				days: 1000,
+				runs: 2,
+				hughes: { observed: 0.4, simulated: 0.4 + hughesDiff, difference: hughesDiff },
+				eckhardt: { observed: 0.2, simulated: 0.22, difference: 0.02 },
+				withinLimit: Math.abs(hughesDiff) <= BFI_WARN_DIFF
+			},
+			lowFlowFdc: {
+				days: 1000,
+				range: [70, 95],
+				observedQ70M3s: 0.5,
+				observedQ95M3s: 0.1,
+				simulatedQ70M3s: 0.5,
+				simulatedQ95M3s: 0.08,
+				observedSlope: 6.4,
+				simulatedSlope: 7.3,
+				slopeBiasPct: slope,
+				lowVolumeBiasPct: flv,
+				withinLimit: true
+			},
+			recessionHoldout: {
+				every: 3,
+				segments: 12,
+				heldOut: [],
+				law: null,
+				days: 30,
+				modelSegments: 4,
+				modelDays: 30,
+				modelSkill: skill,
+				lawSkill: 0.6,
+				modelLogRmse: 0.1,
+				lawLogRmse: 0.08,
+				agrees
+			},
+			...rest
+		};
+	};
+
+	it('gives each run’s rate ratio, b difference and verdict, and the change in each', () => {
+		const c = comparePlausibility({ ...bare, recession: rec({ rateRatio: 2.6, bDiff: 0.7, agrees: false }) }, { ...bare, recession: rec() })!;
+		expect(c.recession).toMatchObject({ comparable: true, agreesA: false, agreesB: true, simulatedFitA: true, minSegments: 8 });
+		expect(c.recession!.rateRatio.a).toBe(2.6);
+		expect(c.recession!.rateRatio.delta).toBeCloseTo(-1.1, 12);
+		expect(c.recession!.bDiff.delta).toBeCloseTo(-0.4, 12);
+		expect(c.recession!.segments).toEqual({ a: 10, b: 10, delta: 0 });
+	});
+
+	it('says why a side has no recession diagnostics: an older run, or none to make', () => {
+		// A run from engine 1.4.0 (checks, but no recession key) against a current one.
+		const older = comparePlausibility(bare, { ...bare, recession: rec() })!;
+		expect(older.recession).toMatchObject({ missingA: 'older', missingB: null, comparable: false, agreesA: null, simulatedFitA: null });
+		expect(older.recession!.rateRatio).toEqual({ a: null, b: 1.5, delta: null });
+		// A run before engine 0.25.0 has no checks at all: older too.
+		expect(comparePlausibility(undefined, { ...bare, recession: rec() })!.recession!.missingA).toBe('older');
+		// null: the run had no record or no rain.
+		expect(comparePlausibility({ ...bare, recession: null }, { ...bare, recession: rec() })!.recession!.missingA).toBe('none');
+		// Neither run has diagnostics: nothing to set side by side.
+		expect(comparePlausibility({ ...bare, recession: null }, bare)!.recession).toBeNull();
+	});
+
+	it('gives no change between two different kinds of record', () => {
+		const c = comparePlausibility({ ...bare, recession: rec({ flowKind: 'flow_logger_m3s' }) }, { ...bare, recession: rec() })!;
+		expect(c.recession).toMatchObject({ comparable: false, flowKindA: 'flow_logger_m3s', flowKindB: 'flow_observed_m3s' });
+		expect(c.recession!.rateRatio).toEqual({ a: 1.5, b: 1.5, delta: null });
+		expect(c.recession!.bDiff.delta).toBeNull();
+	});
+
+	it('sets the BFI by both filters, the low-flow biases and the held-out skill side by side, each with pass or fail', () => {
+		const c = comparePlausibility(
+			{ ...bare, signatures: sig({ hughesDiff: 0.2, slope: 70, flv: -60, skill: -0.2, agrees: false }) },
+			{ ...bare, signatures: sig() }
+		)!;
+		const s = c.signatures!;
+		expect(s).toMatchObject({ comparable: true, missingA: null, missingB: null, baseflowA: true, lowFlowFdcA: true, recessionHoldoutA: true });
+		// Positive control: B is within every limit; A outside the Hughes BFI, both low-flow limits and the held-out skill.
+		expect([s.hughes.withinA, s.hughes.withinB]).toEqual([false, true]);
+		expect([s.eckhardt.withinA, s.eckhardt.withinB]).toEqual([true, true]);
+		expect([s.slopeWithinA, s.slopeWithinB, s.lowVolumeWithinA, s.lowVolumeWithinB]).toEqual([false, true, false, true]);
+		expect([s.holdoutAgreesA, s.holdoutAgreesB]).toEqual([false, true]);
+		expect(s.hughes.difference.delta).toBeCloseTo(-0.15, 12);
+		expect(s.hughes.observed.delta).toBe(0);
+		expect(s.slopeBiasPct).toEqual({ a: 70, b: 20, delta: -50 });
+		expect(s.lowVolumeBiasPct).toEqual({ a: -60, b: -10, delta: 50 });
+		expect(s.holdoutModelSkill.delta).toBeCloseTo(0.6, 12);
+		expect(s.holdoutLawSkill).toEqual({ a: 0.6, b: 0.6, delta: 0 });
+		expect([s.bfiLimit, s.lowFlowLimitPct, s.holdoutMinSegments]).toEqual([BFI_WARN_DIFF, FDC_LOW_WARN_PCT, 8]);
+	});
+
+	it('leaves a slope bias the run couldn’t compute unjudged, not failed', () => {
+		const s = comparePlausibility({ ...bare, signatures: sig({ slope: null }) }, { ...bare, signatures: sig() })!.signatures!;
+		expect(s.slopeBiasPct).toEqual({ a: null, b: 20, delta: null });
+		expect([s.slopeWithinA, s.slopeWithinB]).toEqual([null, true]);
+	});
+
+	it('says why a side has no signatures, and gives no change against it', () => {
+		// Engine 1.54.0: checks, but no signatures key.
+		const older = comparePlausibility(bare, { ...bare, signatures: sig() })!.signatures!;
+		expect(older).toMatchObject({ missingA: 'older', missingB: null, comparable: false, baseflowA: null, lowFlowFdcA: null, recessionHoldoutA: null });
+		expect(older.hughes).toEqual({
+			observed: { a: null, b: 0.4, delta: null },
+			simulated: { a: null, b: 0.45, delta: null },
+			difference: { a: null, b: 0.05, delta: null },
+			withinA: null,
+			withinB: true
+		});
+		// null: no observed record to score.
+		const none = comparePlausibility({ ...bare, signatures: sig() }, { ...bare, signatures: null })!.signatures!;
+		expect(none).toMatchObject({ missingA: null, missingB: 'none', comparable: false });
+		expect(none.slopeBiasPct.delta).toBeNull();
+		// Neither: nothing to set side by side.
+		expect(comparePlausibility({ ...bare, signatures: null }, bare)!.signatures).toBeNull();
+	});
+
+	it('gives no change between signatures of different records: another kind, or another site', () => {
+		const kind = comparePlausibility({ ...bare, signatures: sig({ flowKind: 'flow_logger_m3s' }) }, { ...bare, signatures: sig() })!.signatures!;
+		expect(kind.comparable).toBe(false);
+		expect(kind.hughes.simulated).toEqual({ a: 0.45, b: 0.45, delta: null });
+		const site = comparePlausibility({ ...bare, signatures: sig() }, { ...bare, signatures: sig({ siteNodeId: 'w1', siteName: 'Middle weir' }) })!.signatures!;
+		expect(site).toMatchObject({ comparable: false, siteNodeIdA: null, siteNodeIdB: 'w1', siteNameB: 'Middle weir' });
+		expect(site.holdoutModelSkill.delta).toBeNull();
+		// The same gauge in both: comparable.
+		const same = comparePlausibility({ ...bare, signatures: sig({ siteNodeId: 'w1', siteName: 'Weir' }) }, { ...bare, signatures: sig({ siteNodeId: 'w1', siteName: 'Middle weir' }) })!;
+		expect(same.signatures!.comparable).toBe(true);
 	});
 });
