@@ -1322,6 +1322,31 @@
 //             errata table, keyed on the run's engine and its fit's) and the
 //             generated errata list it reads (engine liability/errata). No new
 //             dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, CHIRPS bounding box: the Data
+//             feeds panel's box fields took the Settings tab chunk to 61 KB,
+//             over its 60 KB ceiling). API keys render for owners only, so
+//             ApiKeysPanel is now a lazy chunk of its own: the Settings tab
+//             measures 58 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #69: measured 1202 with main @
+//             7b0d2a73 merged, against main's 1200). The CHIRPS feed's
+//             bounding-box fields in the Data feeds panel (south, west,
+//             north, east, the cell count they cover) and their checks in
+//             feeds/feeds.ts; the lazy API keys chunk above adds its
+//             loader. No new dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, bounding box: measured with
+//             main @ 675277da and the branch's API-keys split merged). The box
+//             fields and "Leave out sea cells" grew the Data feeds panel
+//             again, so it is a lazy chunk of its own too (DataFeedsPanel
+//             via Lazy in SettingsTab, 9.6 KB), and the Settings tab
+//             measures 50,314 bytes (50 KB of 60, from 58). The total stays
+//             1202 KB of 1205. No new dependency. Headroom ~10 KB tab chunk.
+// 2026-09-29  total 1205 → 1208 KB (issue #69: measured 1205 with main @
+//             b681786e merged, at the ceiling; main grew since the entry
+//             above). Nothing of the bounding box changed; the usual
+//             headroom back. Headroom ~3 KB.
+// 2026-09-29  total 1208 → 1210 KB (issue #69: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the bounding box changed. Headroom ~3 KB.
 // 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
 //             1200, the branch 1204). The report's publication cover,
 //             "Changes since the previous publication" (ChangesList and the
@@ -1335,6 +1360,9 @@
 // 2026-09-30  total 1206 → 1210 KB (issue #70: measured 1207 with main @
 //             327afa6e merged, #211's errata entry above included). Nothing
 //             of the report changed. Headroom ~3 KB.
+// 2026-09-30  total 1210 → 1214 KB (issue #70: measured 1211 with main @
+//             3f9b4c17 merged, #205's bounding box included). Nothing of the
+//             report changed. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1345,7 +1373,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1210,
+	totalCodeKb: 1214,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

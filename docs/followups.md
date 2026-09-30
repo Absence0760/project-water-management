@@ -2442,7 +2442,9 @@ role and not before it.
   - [x] A debounced re-run after new data (WP-2.11, built).
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
-  - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
+  - [x] CHIRPS by bounding box (the roadmap's `{ bbox }`): `config.bbox`, the
+        area-weighted mean of the 0.05° cells it overlaps, at most 100 cells in
+        25 rows (issue #69; architecture.md § Data feeds).
   - [x] ~~**Request volume grows with feeds.** Each CHIRPS feed re-reads its
         last 50 days daily (~200 range requests).~~ **Only what can change
         is read (#69):** the ingest keeps a checked final marker
