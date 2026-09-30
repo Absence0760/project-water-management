@@ -1905,9 +1905,31 @@ note's link on the Summary, `notes.ts` `noteHref`).
   pump capacity. A farm on river first or dam, river when low that also has
   **River to dam** (the diversion into the dam, under Routing) gets a note that
   the run counts the two as separate pumps, so one pump doing both jobs needs
-  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
-  while it still has supply settings, so they can be reset. Read-only for
-  viewers (no calculator).
+  its capacity split between them (`sharedPumpHint`; with River to dam by
+  month, any month above 0 counts, `diverts`). Under them, **Hands-off flow**
+  (engine ≥ 1.31.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
+  flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
+  **Use October’s flow for every month**; unticked = none), and **Also leave
+  the EWR in the river** keeps the EWR required at the farm too. A line under
+  them says in plain words what the farm leaves before the river pump or River
+  to dam takes anything (`handsOffPreview`): no hands-off flow (senior users
+  only, not the EWR), the amount or range with the months without one, the
+  EWR, or the larger of the two. The save rules (farms only, 12 values none
+  negative, `operatingIssues` in `lib/model/validate.ts`, a test holds its
+  kind rule to the engine's) show as alerts beside them. A farm turned into a
+  gauge or other user keeps the section while it still has supply or hands-off
+  settings (or River to dam by month, with a **Clear River to dam by month**
+  button), so they can be reset. Read-only for viewers (no calculator).
+- **River to dam by month** (engine ≥ 1.31.0, `RiverToDamFields.svelte`),
+  one-node form, farms, under **River to dam** in Routing: **Set River to dam
+  by month** opens twelve m³/day fields (started from the one value, with
+  **Use October’s capacity for every month**); while it is on, the one River
+  to dam field is read-only with the hint "Not used: River to dam is set by
+  month below", and a line names the months it takes nothing in
+  (`divertMonthsPreview`). Unticking it goes back to the one value. River to
+  dam's own hint says what it leaves in the river: senior users' demand, and
+  the hands-off flow under Supply when there is one. Not in the table (the
+  table's River to dam column edits the one value).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
