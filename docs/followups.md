@@ -249,6 +249,20 @@ collected as a checklist in issue #46; tick it there as they answer.
       already apply; (d) one % cut for every user with no floor, marked as
       unprotected. Trigger: a catchment where a municipal abstractor sits on
       the river as an other water user and is restricted in practice.
+- [ ] **A pump capacity on other water users (WP-3.8) to confirm** (engine
+      1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
+      #90 / #46). Built off by default (null = no limit) on these choices;
+      confirm or change each: the capacity caps only the **river take**, not
+      the user's boreholes; a **senior user's claim** on the farms upstream
+      is MIN(demand, capacity), so they pass no more than its pump can lift
+      (the alternative, passing the whole demand, leaves water flowing past
+      a pump that can't take it); **no capacity is silent** (a farm's
+      river-pumping rule without one warns; a user never had one); and the
+      reported **pump-limited** demand counts only what the river had within
+      the user's priority and allocation room, so a day the farms upstream
+      passed only the capped claim shows 0. Trigger: the client's pump
+      capacities for its municipal and industrial abstractors (issue #54 Q1),
+      or the hydrologist's answer.
 - [ ] **Which dam evaporation preset for the client's catchment** (engine
       1.49.0, [model.md §2.7a](./model.md) item 4). Built without changing
       the default (one flat 0.75 × A-pan): Settings → Demand → **Dam
@@ -3303,6 +3317,14 @@ from the WP:
       form's Demand objects section ([ui.md](./ui.md)); the b023 importers map
       a gross demand typed over the crop formula to one
       (scripts/wbt-import/README.md). No project's numbers change.
+- [x] **A pump capacity on other water users** (2026-09-30, engine 1.58.0,
+      no migration). The farm's `pumpCapacityM3Day` on a user node, no supply
+      rule; a senior user's claim capped to it; the `pump_limited` series and
+      summary means; the Other water users panel's
+      Pump capacity with the pumps × m³/h calculator, a scenario `node.set`,
+      the run comparison and the summary CSV ([model.md §2.7c](./model.md)).
+      No importer sets it: neither b023 importer creates user nodes. Its
+      policy choices are listed under § Hydrologist.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per

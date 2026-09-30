@@ -1199,7 +1199,10 @@ Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.m
 ≥ 0, water-year months, m³/day, or `null`), `userReturnPct` (0–1) and
 `userPriority` (`"senior"` | `"junior"`). A body without them gets `null`, 0
 and `"senior"`; the engine ignores them on farms and gauges. `PUT` refuses a
-crop area or a transfer on a user node.
+crop area or a transfer on a user node. A user's `pumpCapacityM3Day` (engine
+≥ 1.58.0, the supply fields' column below) is its river pump: ≥ 0, or `null`
+= no limit (the default); a supply rule other than `"damFirst"` on it is
+refused.
 
 Land cover (engine ≥ 0.24.0, migration 013, [model.md §2.5a](./model.md)):
 `ProjectModel.landCover` is `{ id, nodeId, coverClass, areaKm2, densityPct,
@@ -1309,7 +1312,8 @@ Supply rules and the river pump (engine ≥ 0.42.0, migration 060, WP-3.8,
 `pumpCapacityM3Day` (≥ 0 or `null` = no limit), `supplyTriggerPct` (0–1) and
 `supplyStopPct` (0–1). A body without them gets `"damFirst"`, `null`, 0.4
 and 0.6 (no change to any run). `PUT` refuses a rule other than
-`"damFirst"` or a pump capacity on a gauge or other user, `"trigger"` on a
+`"damFirst"` on a gauge or other user, a pump capacity on a gauge (an other
+user's is its own river pump from engine 1.58.0, [model.md §2.7c](./model.md)), `"trigger"` on a
 farm without a dam, `"runOfRiver"` on a farm with a dam capacity above 0, and
 a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
@@ -1610,7 +1614,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.users` (engine ≥ 0.22.0; only when the network has other water
   users) is `UserSummary[]`: per user its priority and whole-run means of
   demand, taken, deficit, fraction supplied, returned and EWR charge, and the
-  days it was charged. `summary.curtailment.otherUsers` has the same users over
+  days it was charged; a user with a pump capacity (engine ≥ 1.58.0) also
+  has `avgRiverAbstractionM3Day`, `avgPumpLimitedM3Day` (the demand its pump
+  left unmet although the river had it) and `daysPumpLimited`, beside its run
+  series `pump_limited` (its river take is `supplied` − `groundwater_used`;
+  `river_abstraction` stays a farm's). `summary.curtailment.otherUsers` has the same users over
   the reporting window with `curtailed` (junior), `supplyCutM3Day` (≤ 0) and
   `uncurtailedChargeM3Day` (the charge a cut doesn't remove; all of it for a
   senior user). User nodes have the run series `demand`, `supplied`,
