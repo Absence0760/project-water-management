@@ -196,7 +196,7 @@ export function assertDownloadSigner(): void {
 }
 
 /**
- * The object key of a pack's reproduction bundle (117_pack_bundle;
+ * The object key of a pack's reproduction bundle (120_pack_bundle;
  * docs/evidence-pack.md § Reproduction), beside its PDF in the packs bucket:
  * its ids and the zip's own SHA-256 (app_record_pack_bundle builds the same
  * key in SQL, and the issue route checks the two agree).
@@ -220,15 +220,21 @@ export async function putPackBundle(key: string, body: Uint8Array, sha256: strin
 	if (!SHA256.test(sha256)) throw new Error('putPackBundle: the hash must be a lowercase hex SHA-256');
 	await ensureBucket(packsBucket());
 	const { s3: c, sdk } = await s3();
-	await c.send(
-		new sdk.PutObjectCommand({
-			Bucket: packsBucket(),
-			Key: key,
-			Body: body,
-			ContentType: 'application/zip',
-			ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64')
-		})
+	const checksum = Buffer.from(sha256, 'hex').toString('base64');
+	const stored = await c.send(
+		new sdk.PutObjectCommand({ Bucket: packsBucket(), Key: key, Body: body, ContentType: 'application/zip', ChecksumSHA256: checksum })
 	);
+	assertStoredChecksum(key, checksum, stored.ChecksumSHA256);
+}
+
+/**
+ * The store answers a put with the SHA-256 it computed over the bytes it
+ * kept; before the hash is recorded (and published by verify) it must be the
+ * one the bytes were built with. S3 and MinIO refuse a put whose bytes don't
+ * match the checksum sent, so this catches a store that skipped the check.
+ */
+export function assertStoredChecksum(key: string, sent: string, stored: string | undefined): void {
+	if (stored !== sent) throw new Error(`the store answered ${key} with SHA-256 ${stored ?? '(none)'}, not the ${sent} sent: not recorded`);
 }
 
 /**

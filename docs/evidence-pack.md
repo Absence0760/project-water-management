@@ -224,7 +224,8 @@ both runs as the issuer (their stored inputs through `loadRunInput`, every
 series re-hashed, and their stored daily outputs), builds the bundle, checks
 it as `reproduce:pack --no-run` would, stores it in the packs bucket under
 `packs/<project>/<pack>/<sha256>.zip` with its SHA-256 as the upload's
-checksum, and records it through `app_record_pack_bundle` (120), which only
+checksum (the store refuses other bytes, and the route checks the checksum
+the store answers with is that one), and records it through `app_record_pack_bundle` (120), which only
 the transaction that issues the pack may call. All of it or none: a bundle
 that can't be stored fails the issue. The upload comes before the commit, so
 an issue that fails after it leaves an object nothing records: named by its

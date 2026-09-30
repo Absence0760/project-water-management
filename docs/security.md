@@ -2118,7 +2118,7 @@ PDF someone else asked for kept the person as a recipient
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run or an evidence pack) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
-| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 117) | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 120) | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
@@ -2587,7 +2587,7 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 ## Evidence packs
 
-Roadmap WP-3.14, 112_evidence_pack and 117_pack_bundle ([evidence-pack.md](./evidence-pack.md),
+Roadmap WP-3.14, 112_evidence_pack and 120_pack_bundle ([evidence-pack.md](./evidence-pack.md),
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql)).
 An issued pack is what an applicant attaches to a licence application, so it
 must not change, disappear or be forged, and its public check must give away
@@ -2604,7 +2604,7 @@ nothing else.
   a new version must be of the same application as its predecessor.
   `water_app` has no grant on the PDF and bundle columns at all: those hashes
   are printed by verify, so only `SECURITY DEFINER` setters write them. The
-  bundle's is `app_record_pack_bundle` (117): the caller must be an editor
+  bundle's is `app_record_pack_bundle` (120): the caller must be an editor
   of the project and the pack issued by the caller *in the same
   transaction* (`issued_at = now()`), so only the issue route records it,
   never a later call; the key is derived in SQL from the ids and the hash
@@ -2646,7 +2646,8 @@ nothing else.
   long as the runs): the reproduction bundle carries it. Issue builds the
   bundle from what is stored, checks it as `reproduce:pack --no-run` does
   (every file, the manifest's hash, the inputs and stored results against
-  the manifest), stores it with its SHA-256 as the upload's checksum, and
+  the manifest), stores it with its SHA-256 as the upload's checksum
+  (checking the checksum the store answers with before recording it), and
   records it, all in the issue's transaction: no bundle, no issue
   ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **The bundle is for the project's readers.** `GET …/packs/:packId/bundle`
