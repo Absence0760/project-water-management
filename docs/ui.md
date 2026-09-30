@@ -3576,7 +3576,7 @@ which checks every catchment tab).
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
-- **Drought restrictions** (`#set-restrict`, engine ≥ 1.52.0, WP-3.8): the
+- **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
   model's restriction rule, off by default; see
   [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
@@ -4041,7 +4041,7 @@ read it before.
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
   (`#res-assurance`), for a run with the drought restriction rule **Drought
-  restrictions** (`#res-restrictions`, engine ≥ 1.52.0,
+  restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
   [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
   demand-object and other-user tables, once under the run summary with no
@@ -5108,7 +5108,7 @@ axe on both, and withdrawing it).
 
 ### Drought restrictions
 
-WP-3.8, engine ≥ 1.52.0 ([model.md §2.7i](./model.md)): the model's
+WP-3.8, engine ≥ 1.54.0 ([model.md §2.7i](./model.md)): the model's
 drought restriction rule, `settings.droughtRestriction`. English, like the
 workspace; nothing of it reaches the farm view or the share page (a shared
 scenario's change reads *A catchment setting changed: droughtRestriction*,
@@ -5138,7 +5138,7 @@ see (WP-2.3); every place it shows says so.
   save bar links here); switching off saves null, and the rule switched off
   comes back until saved. Field history under it. A viewer reads it,
   disabled, and *Drought restrictions: off.* when there is none.
-  From engine 1.52.0: **Start from the published notice** (editors) reads
+  From engine 1.54.0: **Start from the published notice** (editors) reads
   the project's current publication and, after asking when a rule is set,
   fills the rule from its notice (one level below 100 % at the notice's %,
   from the day it was published to the next expected one), or says why it

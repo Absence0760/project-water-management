@@ -555,7 +555,7 @@ Filled values are derived in each run and never written to `time_series`, so
 turning it off undoes it; the run's own columns carry the filled days.
 
 **The drought restriction rule lives in `project.settings`** too
-(`settings.droughtRestriction`, engine ≥ 1.52.0, WP-3.8; no table, column or
+(`settings.droughtRestriction`, engine ≥ 1.54.0, WP-3.8; no table, column or
 migration): review and lift dates and up to six levels, each a storage
 threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
 One rule per project, not per node, so no node id to keep in step and no
@@ -565,7 +565,7 @@ whole; `null` or absent is off. A model input: runs snapshot it with their
 settings, and the run comparison and the settings history show changes.
 WP-3.8's design sketched a nullable `node.restriction jsonb` column; the
 rule's node ids (`damNodeIds`, `nodeIds`, the EWR trigger's site, engine ≥
-1.52.0) live in the one rule instead, so a per-node rule needs no column:
+1.54.0) live in the one rule instead, so a per-node rule needs no column:
 a project copy moves them to the copy's node ids (`remapSettingNodeIds`),
 and ids a model change removed are left out by the run with a warning.
 

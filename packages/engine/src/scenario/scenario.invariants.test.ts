@@ -130,7 +130,7 @@ describe('scenarios on random networks', () => {
 		const failures: string[] = [];
 		let changed = 0;
 		let objectChanges = 0;
-		// Drought restriction rules set or cleared (engine ≥ 1.52.0): the run comparison lists them too.
+		// Drought restriction rules set or cleared (engine ≥ 1.54.0): the run comparison lists them too.
 		let ruleChanges = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES * 4 && failures.length < 3; seed++) {
 			const base = baseFor(seed);

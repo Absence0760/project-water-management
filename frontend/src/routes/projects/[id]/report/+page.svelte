@@ -484,7 +484,7 @@
 								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
 								<!-- The land-cover, groundwater, demand-object and other-user tables: on Units & supply in the workspace (issue #137), here in their old place. -->
 								{#if summary.droughtRestriction}
-									<!-- The drought restriction rule's tables (engine ≥ 1.52.0, WP-3.8). -->
+									<!-- The drought restriction rule's tables (engine ≥ 1.54.0, WP-3.8). -->
 									<Lazy load={loadRestrictionTables}>
 										{#snippet children(RestrictionTables)}<RestrictionTables {summary} headingId="report-restrictions-h" level={3} />{/snippet}
 									</Lazy>

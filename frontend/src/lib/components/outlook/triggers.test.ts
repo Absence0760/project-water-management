@@ -63,7 +63,7 @@ describe('buildTriggersView', () => {
 	});
 });
 
-describe('triggerRuleView (engine 1.52.0, WP-3.8)', () => {
+describe('triggerRuleView (engine 1.54.0, WP-3.8)', () => {
 	const levels = [
 		{ id: '100', label: '100 %', ops: [{ op: 'demand.scale' as const, factor: 1 }] },
 		{ id: '70', label: '70 %', ops: [{ op: 'demand.scale' as const, factor: 0.7 }] }

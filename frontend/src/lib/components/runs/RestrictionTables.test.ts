@@ -1,4 +1,4 @@
-// The drought restriction tables (RestrictionTables.svelte, engine 1.52.0,
+// The drought restriction tables (RestrictionTables.svelte, engine 1.54.0,
 // WP-3.8), rendered to HTML with Svelte's server renderer.
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ const summary = (units = [unit(1, 20)], years = 1) =>
 		}
 	}) as unknown as RunSummary;
 
-describe('the drought restriction tables (engine 1.52.0, WP-3.8)', () => {
+describe('the drought restriction tables (engine 1.54.0, WP-3.8)', () => {
 	it('shows the rule in words, the days at each level per water year and over the run, and each unit’s cut, on restricted days too', () => {
 		const body = text(render(RestrictionTables, { props: { summary: summary() } }).body);
 		expect(body).toContain('Drought restrictions');

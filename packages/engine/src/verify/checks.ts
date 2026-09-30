@@ -563,7 +563,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
-	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.52.0).
+	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.54.0).
 	const farmD = farms.map((f) => get.get(`${f.id}|${RESTRICTION_SERIES.restricted.key}`) ?? get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
 	const farmRelease = farms.map((f) => resolveRelease(f, []));
@@ -1220,11 +1220,11 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (!!XIN !== !!XUSED || !!XIN !== !!XDAM) return `${n.id}: river off-take working columns (offtake_used, offtake_to_dam) ${XIN ? 'missing' : 'without an off-take in'}`;
 		const topUps = XIN ? offtakeInto(input, n.id, get) : null;
 		if (typeof topUps === 'string') return topUps;
-		// The drought restriction (engine ≥ 1.52.0): the unit's sources supply its demand after the day's cut, and
+		// The drought restriction (engine ≥ 1.54.0): the unit's sources supply its demand after the day's cut, and
 		// its objects and crops share by their cut demands (checkDroughtRestriction checks the cut itself).
 		const DR = g(RESTRICTION_SERIES.restricted.key);
 		const rule = DR ? resolveDroughtRestriction(input.settings.droughtRestriction, []) : null;
-		// The unit's own level under the 'own' basis (engine ≥ 1.52.0), else the catchment's.
+		// The unit's own level under the 'own' basis (engine ≥ 1.54.0), else the catchment's.
 		const LV = g(RESTRICTION_SERIES.level.key) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
 		if (DR && (!rule || !LV)) return `${n.id}: a restricted_demand column without a drought restriction rule and its level column`;
 		for (let t = 0; t < out.days; t++) {
@@ -1442,7 +1442,7 @@ function checkObjectsDay(
 	alloc = 1,
 	abstracts = true,
 	factors: { df: Float64Array; sc: Float64Array }[] | null = null,
-	/** The drought restriction's cut today (engine ≥ 1.52.0): each object shares by its cut demand, the crops by theirs. */
+	/** The drought restriction's cut today (engine ≥ 1.54.0): each object shares by its cut demand, the crops by theirs. */
 	restriction: { cut: (c: DemandObject['category']) => number; crop: number } | null = null
 ): string | null {
 	const n = objs.demand.length;
@@ -1455,7 +1455,7 @@ function checkObjectsDay(
 	const want = [0, crop, 0];
 	const gotBy = [0, 0, 0];
 	for (let k = 0; k < n; k++) {
-		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.52.0).
+		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.54.0).
 		const d = restriction ? restrictedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
@@ -2052,7 +2052,7 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, ../network/restriction.ts,
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, ../network/restriction.ts,
  * docs/model.md §2.7i), from the run's own columns and the input's rule:
  * - without the rule (or with one it can't use) no restriction column and no
  *   summary block;

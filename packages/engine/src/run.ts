@@ -339,7 +339,7 @@ function runNetwork(
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
-		// The drought restriction level held the day before (engine ≥ 1.52.0): only part-way through the capture run;
+		// The drought restriction level held the day before (engine ≥ 1.54.0): only part-way through the capture run;
 		// a snapshot of its first day holds none, so the resumed run decides that day as the capture run did.
 		if (plan.restriction && warm.continued) {
 			plan.restriction.initialLevels = Uint8Array.from(nodes, (_, i) => resume.restrictionLevels?.[i] ?? 0);
@@ -463,7 +463,7 @@ function runNetwork(
 		if (siteId === null) outletFlowFlags = flags;
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
-	// The drought restriction (engine ≥ 1.52.0, docs/model.md §2.7i): the level in force each day and, per part a
+	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
 	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
 	if (plan.restriction && sim.restrictionLevel) {
@@ -656,9 +656,9 @@ function runNetwork(
 		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
-		// The unit's demand after the drought restriction (engine ≥ 1.52.0): on every unit while the rule is on.
+		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit while the rule is on.
 		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
-		// Under the 'own' basis (engine ≥ 1.52.0) each unit's own level, beside its restricted demand.
+		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
 		const ul = sim.restrictionUnitLevel?.[i];
 		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
@@ -1414,7 +1414,7 @@ export function buildNetworkPlan(
 		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
-	// The drought restriction rule (engine ≥ 1.52.0, ./network/restriction.ts): its review and lift days need the run start.
+	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
 	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
 	const restriction = restrictionRule
@@ -1497,7 +1497,7 @@ export function buildNetworkPlan(
 }
 
 /**
- * RunSummary.droughtRestriction (engine ≥ 1.52.0, docs/model.md §2.7i): the
+ * RunSummary.droughtRestriction (engine ≥ 1.54.0, docs/model.md §2.7i): the
  * days at each level per water year and over the run, the days the level was
  * decided, and per unit (node-id order) its mean demand before and after the
  * cut and its mean supply.
@@ -1549,7 +1549,7 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 				daysByLevel: byLevel
 			};
 		});
-	// A resumed run (engine ≥ 1.52.0): the state its first day starts from, for the self-check.
+	// A resumed run (engine ≥ 1.54.0): the state its first day starts from, for the self-check.
 	const startState = resumed
 		? {
 				start: {

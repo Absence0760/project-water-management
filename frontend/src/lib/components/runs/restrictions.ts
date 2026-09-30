@@ -1,4 +1,4 @@
-// The drought restriction rule's results (engine ≥ 1.52.0, WP-3.8, docs/ui.md
+// The drought restriction rule's results (engine ≥ 1.54.0, WP-3.8, docs/ui.md
 // § Drought restrictions, RunSummary.droughtRestriction): what the tables on
 // Units & supply show. The days at each level per water year (October to
 // September) and over the run, and per unit its mean demand before and after
@@ -20,7 +20,7 @@ export interface RestrictionView {
 	years: { label: string; days: number; byLevel: number[]; restricted: number }[];
 	total: { days: number; byLevel: number[]; restricted: number };
 	reviews: number;
-	/** With an EWR trigger (engine ≥ 1.52.0): the reviews that followed a day its site's EWR wasn't met. */
+	/** With an EWR trigger (engine ≥ 1.54.0): the reviews that followed a day its site's EWR wasn't met. */
 	ewrReviews: number | null;
 	/**
 	 * Per unit, the most cut first: its means over the run (demand, after the

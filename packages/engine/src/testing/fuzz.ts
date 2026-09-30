@@ -379,7 +379,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
 	// Canal seepage back to the river (engine ≥ 1.42.0), from its own stream, last of all.
 	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
-	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8), from its own stream, last of all.
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8), from its own stream, last of all.
 	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
 	return {
 		settings,
@@ -398,7 +398,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md §2.7i)
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md §2.7i)
  * in 25 % of seeds: one to twelve review dates (now and then every month's
  * first), lift dates half the time, one to four levels from 100 % down (a
  * level at 100 % is in force whenever a dam isn't full), each cutting a
@@ -434,7 +434,7 @@ export function randomDroughtRestriction(g: Rng, nodes?: readonly NetworkNode[])
 	});
 	const rule: DroughtRestrictionRule = { reviewDates: reviews, ...(lifts.length ? { liftDates: lifts } : {}), levels };
 	if (!nodes) return rule;
-	// Engine ≥ 1.52.0, drawn after the rest so a rule's dates and levels are what they were: the storage read
+	// Engine ≥ 1.54.0, drawn after the rest so a rule's dates and levels are what they were: the storage read
 	// (every dam, some dams, or each unit's own), the units cut, and an EWR trigger; now and then an id the
 	// network hasn't got (the run leaves it out with a warning).
 	const farms = nodes.filter((n) => n.kind === 'farm');

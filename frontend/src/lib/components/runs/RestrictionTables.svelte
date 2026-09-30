@@ -1,5 +1,5 @@
 <!--
-	The drought restriction rule's results (engine ≥ 1.52.0, WP-3.8, docs/ui.md
+	The drought restriction rule's results (engine ≥ 1.54.0, WP-3.8, docs/ui.md
 	§ Drought restrictions): the days at each level per water year and over the
 	run, and per hydrological unit its demand before and after the cut. Its own
 	panel on Units & supply (#res-restrictions) and in the printable report;

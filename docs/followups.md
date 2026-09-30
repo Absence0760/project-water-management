@@ -213,7 +213,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
-- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.52.0,
+- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.54.0,
       [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
       #46). Built off by default on these choices; confirm or change each:
       one rule per project on the **total farm dam storage** (every farm dam,
@@ -228,7 +228,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       and firm yield run without the rule**; the Settings template's
       levels (60 / 40 / 25 % of capacity; irrigation 20 / 40 / 60 %,
       domestic and municipal 10 / 20 / 30 %) as a starting point only.
-      From engine 1.52.0 also: under the **own-dam basis** a unit without a
+      From engine 1.54.0 also: under the **own-dam basis** a unit without a
       dam isn't restricted by storage (only by the EWR trigger); the **EWR
       trigger** reads the site's pragmatic EWR shortfall on the **day
       before** a review only (not a count of recent days, not the Reserve
@@ -236,7 +236,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       own; a rule **from the published notice** is one level in force below
       100 % from the publication date to the next expected one.
 - [ ] **Drought restrictions on the other water users: decide whether and
-      how** (engine 1.52.0, [model.md §2.7i](./model.md)). The rule cuts
+      how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
       only hydrological units: an other water user's demand has no category
       and no population, so a cut on it could take a town below basic needs
       with nothing to stop it. Options, for the hydrologist and the client:
@@ -3367,7 +3367,7 @@ from the WP:
       below the floor apart from the shortfall, with the l/person/day
       supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
       stay one % for every category (#53 O4). WP-3.8's drought restriction
-      rule (a cut by dam level) holds the same floor: done (engine 1.52.0,
+      rule (a cut by dam level) holds the same floor: done (engine 1.54.0,
       2026-09-30, [model.md §2.7i](./model.md)), through `planObjects`'
       floor and `dayFloor`, checked by the `droughtRestriction` self-check.
 - [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
@@ -3392,7 +3392,7 @@ from the WP:
       stacks on the unit's own and goes through the same basic-needs floor
       (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
       below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
-- [x] **WP-3.8's drought restriction rule** (engine 1.52.0, 2026-09-30,
+- [x] **WP-3.8's drought restriction rule** (engine 1.54.0, 2026-09-30,
       [model.md §2.7i](./model.md)). `settings.droughtRestriction`: review
       and lift dates and up to six levels, each a storage threshold on the
       total farm dam storage and a % cut per part of demand (crops, each
@@ -3403,7 +3403,7 @@ from the WP:
       restrictions, the Units & supply tables and the outlook's "Use as the
       drought restriction rule" (the review triggers, R6); `settings.set`
       in scenarios and the run comparison's lines. No migration: the rule is
-      part of `project.settings` (jsonb). Also built (engine 1.52.0, the
+      part of `project.settings` (jsonb). Also built (engine 1.54.0, the
       same PR): the rule on some dams or each unit's own dam (`basis`,
       `damNodeIds`) and on some units (`nodeIds`), moved with a project
       copy; the EWR-failure trigger (`ewrTrigger`, the site's EWR not met

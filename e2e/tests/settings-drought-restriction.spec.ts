@@ -1,4 +1,4 @@
-// Settings › Drought restrictions (engine 1.52.0, WP-3.8, docs/ui.md §
+// Settings › Drought restrictions (engine 1.54.0, WP-3.8, docs/ui.md §
 // Drought restrictions): the model's restriction rule. Off by default;
 // switching it on starts from the three-level template; an editor changes a
 // cut, removes a level and adds a review date, the save stores the rule

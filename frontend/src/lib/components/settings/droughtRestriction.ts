@@ -1,4 +1,4 @@
-// Settings → Drought restrictions (engine ≥ 1.52.0, WP-3.8, docs/ui.md §
+// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8, docs/ui.md §
 // Drought restrictions, docs/model.md §2.7i): the model's drought
 // restriction rule, settings.droughtRestriction. The rule's own checks are
 // the engine's (droughtRestrictionIssues), so the form, the save and the run

@@ -51,7 +51,7 @@ export function checkYield(input: ModelInput, nodeId: string, tolerance = YIELD_
 
 	// 4. At capacity 0 the yield is the smallest daily supply reaching the dam
 	// site: K + M + O (no transfers, no storage), with no draft.
-	// Without the drought restriction rule, as firmYield runs (engine ≥ 1.52.0).
+	// Without the drought restriction rule, as firmYield runs (engine ≥ 1.54.0).
 	const { restriction: _restriction, ...plan } = p.plan;
 	const zeroPlan = { ...plan, nodes: p.plan.nodes.map((n, k) => (k === i ? { ...n, damCapacityM3: 0, initialStorageM3: 0, deadStorageM3: 0, demand: new Float64Array(p.days), borehole: undefined } : n)) };
 	const w = simulateNetwork(zeroPlan, { workings: true }).workings![i]!;

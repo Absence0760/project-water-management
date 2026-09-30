@@ -1576,7 +1576,7 @@ export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwate
 }
 
 /**
- * The drought restriction rule's effect (engine ≥ 1.52.0, WP-3.8, docs/model.md
+ * The drought restriction rule's effect (engine ≥ 1.54.0, WP-3.8, docs/model.md
  * §2.7i): the rule in words, the days at each level per water year and over
  * the run, and per unit its mean demand before and after the cut and what it
  * was supplied. Only in runs with the rule on.

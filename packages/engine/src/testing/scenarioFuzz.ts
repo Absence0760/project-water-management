@@ -570,7 +570,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			}
 		}
 	}
-	// The drought restriction rule (engine ≥ 1.52.0) as a settings.set, from its own stream so every seed's other ops are
+	// The drought restriction rule (engine ≥ 1.54.0) as a settings.set, from its own stream so every seed's other ops are
 	// what they were: in a fifth of the lists it takes the place of one op (the count stays), a rule, off (null), or now
 	// and then one the op must refuse.
 	const dr = new Rng(seed ^ 0x3243f6a8);

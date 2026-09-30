@@ -24,7 +24,7 @@
 	}: {
 		/** The input a new op meets: the base run with the listed ops applied. */
 		input: ModelInput;
-		/** The project, so the drought restriction rule can start from its published notice (engine ≥ 1.52.0). */
+		/** The project, so the drought restriction rule can start from its published notice (engine ≥ 1.54.0). */
 		projectId?: string | null;
 		onadd: (op: ScenarioOp) => Promise<boolean>;
 		disabled?: boolean;
@@ -45,7 +45,7 @@
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
 	// ewrRule.set (engine ≥ 1.6.0): the outlet and every gauge still marked as an EWR site; the table itself is the Settings tab's editor.
 	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
-	// settings.set droughtRestriction (engine ≥ 1.52.0, WP-3.8): the rule, in the Settings tab's own editor.
+	// settings.set droughtRestriction (engine ≥ 1.54.0, WP-3.8): the rule, in the Settings tab's own editor.
 	const loadRestrictionEditor = () => import('$lib/components/settings/DroughtRestrictionFields.svelte');
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));

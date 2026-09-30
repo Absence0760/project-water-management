@@ -280,7 +280,7 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	const o = rows[0];
 	if (!o || o.status === 'complete') return false;
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry), the outlook stays pending.
-	// Without the drought restriction rule (engine ≥ 1.52.0, withoutDroughtRestriction): the triggers become that
+	// Without the drought restriction rule (engine ≥ 1.54.0, withoutDroughtRestriction): the triggers become that
 	// rule, and a demand level on top of it would cut twice; the history and every member run unrestricted.
 	const base = withoutDroughtRestriction(await loadBaseInput(db, projectId, o.baseRunId));
 	const season: OutlookSeason = { decisionDate: o.decisionDate, seasonEnd: o.seasonEnd };

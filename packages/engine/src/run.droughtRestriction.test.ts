@@ -1,4 +1,4 @@
-// The drought restriction rule (engine 1.52.0, WP-3.8, docs/model.md §2.7i):
+// The drought restriction rule (engine 1.54.0, WP-3.8, docs/model.md §2.7i):
 // on each review date the level is decided from the farm dams' storage at the
 // start of the day, as a share of their capacity, and each part of every
 // unit's demand is cut by the level's share until the next review or lift
@@ -106,8 +106,8 @@ const passed = (out: ModelOutput) => expect(out.summary.verification?.passed, JS
 // Reviewed on 5 October: below 70 % of capacity the crops are cut by half.
 const halfBelow70: DroughtRestrictionRule = { reviewDates: ['10-05'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
 
-describe('the drought restriction rule (engine 1.52.0)', () => {
-	it('is engine 1.52.0 or later', () => {
+describe('the drought restriction rule (engine 1.54.0)', () => {
+	it('is engine 1.54.0 or later', () => {
 		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
 		expect(maj! > 1 || (maj === 1 && min! >= 52)).toBe(true);
 	});
@@ -306,7 +306,7 @@ describe('the drought restriction rule (engine 1.52.0)', () => {
 			// From the run's first day: no level held yet, so the resumed run decides it as the capture run did.
 			const first = runModelFrom(captureModelState(input, '2020-10-01'), input);
 			expect(get(first, null, RESTRICTION_SERIES.level.key)).toEqual(get(full, null, RESTRICTION_SERIES.level.key));
-			// The self-check holds on both (engine 1.52.0): it starts from the state the summary records.
+			// The self-check holds on both (engine 1.54.0): it starts from the state the summary records.
 			expect(tail.summary.droughtRestriction!.start).toEqual({ levelsBefore: { A: 1 }, ewrFailedBefore: false, damStorageBeforeM3: { A: get(full, 'A', 'dam_storage')[5] } });
 			expect(first.summary.droughtRestriction!.start!.levelsBefore).toBeNull();
 			expect(checkDroughtRestriction(input, tail)).toBeNull();
@@ -459,7 +459,7 @@ function twoUnits(rule: DroughtRestrictionRule, ewr = 0): ModelInput {
 	};
 }
 
-describe('which storage, which units, and the EWR trigger (engine 1.52.0)', () => {
+describe('which storage, which units, and the EWR trigger (engine 1.54.0)', () => {
 	const base: DroughtRestrictionRule = { reviewDates: ['10-01'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
 	const level = (out: ModelOutput, id: string | null) => get(out, id, RESTRICTION_SERIES.level.key);
 
@@ -540,7 +540,7 @@ describe('which storage, which units, and the EWR trigger (engine 1.52.0)', () =
 	});
 });
 
-describe('a rule from the published restriction notice (engine 1.52.0)', () => {
+describe('a rule from the published restriction notice (engine 1.54.0)', () => {
 	it('one level in force below 100 %, every part cut by the notice’s %, from the day it was published to the next', () => {
 		const { rule, reason } = restrictionRuleFromNotice({ level: 'restricted', pct: 30, publishedAt: '2026-11-03T08:00:00Z', nextExpectedOn: '2027-01-15' });
 		expect(reason).toBeNull();

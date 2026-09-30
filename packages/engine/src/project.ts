@@ -460,7 +460,7 @@ export interface ProjectSettings {
 	 */
 	damStorageReset?: { date: string; storageM3: Record<string, number> } | null;
 	/**
-	 * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md
 	 * §2.7i): on each review date the level is chosen from the total farm dam
 	 * storage at the start of the day (as a share of the total capacity, the
 	 * review triggers' basis) and cuts each part of every unit's demand by its
@@ -1695,7 +1695,7 @@ export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
 export type DemandPart = (typeof DEMAND_PARTS)[number];
 
 /**
- * One level of the drought restriction rule (engine ≥ 1.52.0, WP-3.8,
+ * One level of the drought restriction rule (engine ≥ 1.54.0, WP-3.8,
  * docs/model.md §2.7i): chosen on a review date when the total farm dam
  * storage is below `belowPct` of the total capacity (and above the next,
  * deeper level's), it cuts each part of a unit's demand by `cuts[part]`
@@ -1711,7 +1711,7 @@ export interface DroughtRestrictionLevel {
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md
  * §2.7i; settings.droughtRestriction): its review and lift dates as a
  * month and day ("MM-DD", never 29 February) and its levels, mildest
  * first. On a review date the level is decided from the storage at the
@@ -1726,7 +1726,7 @@ export interface DroughtRestrictionRule {
 	/** Where the levels come from (a WUA decision, the review triggers of an outlook); optional. */
 	source?: string;
 	/**
-	 * Which storage the level reads (engine ≥ 1.52.0): 'total' (the default,
+	 * Which storage the level reads (engine ≥ 1.54.0): 'total' (the default,
 	 * absent) every farm dam's, Σ storage ÷ Σ capacity, one level for every
 	 * unit; 'dams' the farm dams in `damNodeIds` only, one level for every
 	 * unit; 'own' each unit its own dam's, a level per unit (a unit without a
@@ -1738,7 +1738,7 @@ export interface DroughtRestrictionRule {
 	/** The units the rule cuts (farm node ids); absent = every unit. */
 	nodeIds?: string[];
 	/**
-	 * A second trigger (engine ≥ 1.52.0): on a review day, when the EWR at
+	 * A second trigger (engine ≥ 1.54.0): on a review day, when the EWR at
 	 * `siteNodeId` (null = the outlet; else a gauge) wasn't met the day before
 	 * (known at the start of the review day), the level is at least `level`
 	 * (1 = the first level).
@@ -1746,7 +1746,7 @@ export interface DroughtRestrictionRule {
 	ewrTrigger?: { siteNodeId: string | null; level: number };
 }
 
-/** The storage a drought restriction rule reads (engine ≥ 1.52.0; DroughtRestrictionRule.basis). */
+/** The storage a drought restriction rule reads (engine ≥ 1.54.0; DroughtRestrictionRule.basis). */
 export const DROUGHT_RESTRICTION_BASES = ['total', 'dams', 'own'] as const;
 export type DroughtRestrictionBasis = (typeof DROUGHT_RESTRICTION_BASES)[number];
 
@@ -2761,7 +2761,7 @@ export interface GroundwaterAnnualUse {
 	boreholes: { id: string | null; name: string; abstractionM3: number; annualCapM3: number | null; capReached: boolean }[];
 }
 
-/** RunSummary.droughtRestriction (engine ≥ 1.52.0, WP-3.8, docs/model.md §2.7i). */
+/** RunSummary.droughtRestriction (engine ≥ 1.54.0, WP-3.8, docs/model.md §2.7i). */
 export interface DroughtRestrictionSummary {
 	/** The rule as the run applied it. */
 	rule: DroughtRestrictionRule;
@@ -2776,10 +2776,10 @@ export interface DroughtRestrictionSummary {
 	daysByLevel: number[];
 	/** Days the level was decided (review dates in the run, and its first day when it starts inside a review period). */
 	reviews: number;
-	/** With an EWR trigger (engine ≥ 1.52.0): the reviews on which the site's EWR wasn't met the day before. */
+	/** With an EWR trigger (engine ≥ 1.54.0): the reviews on which the site's EWR wasn't met the day before. */
 	ewrReviews?: number;
 	/**
-	 * A run resumed from a model-state snapshot (engine ≥ 1.52.0): the state
+	 * A run resumed from a model-state snapshot (engine ≥ 1.54.0): the state
 	 * its first day starts from, so the self-check can redo it: the level each
 	 * unit held the day before (null when resumed at the capture run's first
 	 * day, which is decided as a fresh run's is), whether the EWR trigger's
@@ -2799,7 +2799,7 @@ export interface DroughtRestrictionSummary {
 		avgSuppliedM3Day: number;
 		/** The mean cut (demand − restricted demand) over the days a level was in force only, m³/day; null when none was. */
 		avgCutOnRestrictedDaysM3Day: number | null;
-		/** The unit's days at each level over the run (index 0 = none; engine ≥ 1.52.0): the catchment's under a shared basis, its own under 'own'. */
+		/** The unit's days at each level over the run (index 0 = none; engine ≥ 1.54.0): the catchment's under a shared basis, its own under 'own'. */
 		daysByLevel: number[];
 	}[];
 }
@@ -2829,7 +2829,7 @@ export interface RunSummary {
 	 */
 	groundwaterAnnualUse?: GroundwaterAnnualUse[];
 	/**
-	 * The drought restriction rule's effect (engine ≥ 1.52.0, WP-3.8,
+	 * The drought restriction rule's effect (engine ≥ 1.54.0, WP-3.8,
 	 * docs/model.md §2.7i): its levels, the days each level was in force per
 	 * water year and over the run, and per unit its mean demand before and
 	 * after the restriction. Absent when the rule is off.

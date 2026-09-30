@@ -5,7 +5,7 @@
 // tables, CHIRPS, zero runs and accumulations, both runoff models), with
 // demand factors from a date and storage resets, resumed at the first day,
 // the last, the day after, a 1 October and a 29 February when the run holds
-// them, and random days; and with a drought restriction rule (engine 1.52.0). Soak: WARM_CASES=500 pnpm -C packages/engine exec
+// them, and random days; and with a drought restriction rule (engine 1.54.0). Soak: WARM_CASES=500 pnpm -C packages/engine exec
 // vitest run src/warmstart/warmstart.invariants.test.ts (WARM_SEED picks the
 // first seed). A 550-seed soak of the same check (3 300 networks up to 1 200
 // days, 21 878 captures and resumes) found no difference, 2026-09-26.
@@ -41,7 +41,7 @@ function variantInput(seed: number, variant: Variant): { input: ModelInput; full
 		for (const n of input.model.nodes) if (n.kind === 'farm' && n.damCapacityM3 > 0 && rng.bool(0.7)) storageM3[n.id] = rng.float(0, n.damCapacityM3);
 		input.settings.damStorageReset = { date: fromEpochDay(s0 + rng.int(0, full.days - 1)), storageM3 };
 	} else if (variant === 'droughtRestriction') {
-		// The drought restriction rule (engine ≥ 1.52.0): the level held since the last review is part of the state.
+		// The drought restriction rule (engine ≥ 1.54.0): the level held since the last review is part of the state.
 		input.settings.droughtRestriction = randomDroughtRestriction(rng, input.model.nodes);
 	}
 	return { input, full: variant === 'plain' ? full : runModelWithoutChecks(input) };

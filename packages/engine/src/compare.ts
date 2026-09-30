@@ -975,7 +975,7 @@ function diffSettings(
 	// Automated calibration's rules (engine ≥ 1.25.0, issue #153): a snapshot without them ran the defaults.
 	for (const c of calibrationRulesChanges(resolveCalibrationRules(a.calibrationRules, []), resolveCalibrationRules(b.calibrationRules, []))) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
-	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8): a snapshot without one ran without it.
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a snapshot without one ran without it.
 	for (const t of droughtRestrictionChanges(a.droughtRestriction, b.droughtRestriction, (id) => siteName(id))) push(DROUGHT_RESTRICTION_LABEL, `${DROUGHT_RESTRICTION_LABEL}: ${t}`);
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([

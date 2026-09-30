@@ -245,14 +245,14 @@ bottom:
    none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
    a changed method and a reworded source.
    A change of the drought restriction rule (`settings.droughtRestriction`,
-   engine ≥ 1.52.0, [model.md §2.7i](./model.md)) is one settings line per
+   engine ≥ 1.54.0, [model.md §2.7i](./model.md)) is one settings line per
    change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;
    Level 1 (below 70 %): crops 50 %" when one side has none (a run saved
-   before 1.52.0 had none, and one the run couldn't use counts as off),
+   before 1.54.0 had none, and one the run couldn't use counts as off),
    else the review and lift dates, each level's threshold ("level 1 starts
    below 70 % → 60 %"), name and cut per part ("level 1 cut on municipal
    (town) demand objects 0 % → 10 %"), levels added or removed, and a
-   reworded source, and (engine ≥ 1.52.0) the storage read ("storage read
+   reworded source, and (engine ≥ 1.54.0) the storage read ("storage read
    every farm dam → the storage of Upper farm"), the units cut and the EWR
    trigger, nodes by name (engine `droughtRestrictionChanges`). A scenario that
    sets another rule shows here, so comparing two restriction policies
