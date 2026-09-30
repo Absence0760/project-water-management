@@ -5721,6 +5721,10 @@ baseline card links to the published run's report (**Report**, beside
   on one page, none across a page edge), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
+  The transfers table gives a river off-take's **Losses on the way** (%) and
+  what of them is **Seeping back to the river** ("40.0% of them, below Upper
+  farm", the source when no unit is named; "none" by default; engine ≥
+  1.42.0, [model.md §2.6a](./model.md)); a dam transfer shows "–" in both.
   The **Runoff model** row reads "GR4J", or for a run whose settings don't
   name GR4J (a stored run from before engine 1.0.0) "Legacy (b023 workbook,
   removed in engine 1.0.0): workbook comparison only", never today's default.
