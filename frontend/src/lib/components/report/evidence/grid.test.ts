@@ -2,7 +2,7 @@
 // failure, the failed month the heavier mark, changes outlined).
 import type { EvidenceSiteMonth } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { depthOf, reserveGrid, waterYearLabel } from './grid';
+import { depthOf, fdcMonths, reserveGrid, waterYearLabel } from './grid';
 
 const m = (year: number, month: number, over: Partial<EvidenceSiteMonth> = {}): EvidenceSiteMonth => ({
 	year,
@@ -54,5 +54,29 @@ describe('reserveGrid', () => {
 	it('shades by depth, the met month lightest', () => {
 		expect([depthOf(true, 0.1), depthOf(false, 0.9), depthOf(false, 0.6), depthOf(false, 0.3), depthOf(false, 0.1), depthOf(false, null)]).toEqual([0, 1, 2, 3, 4, 4]);
 		expect(waterYearLabel(1999)).toBe('1999/00');
+	});
+});
+
+describe('fdcMonths: the FDC checks § 1 plots', () => {
+	it('plots the driest month beside the largest-change month when they differ, the ranked one first', () => {
+		const got = fdcMonths({ fdcMonth: 5, fdcDriestMonth: 8 }, true);
+		expect(got.map((f) => [f.month, f.kind])).toEqual([
+			[5, 'change'],
+			[8, 'driest']
+		]);
+		expect(got[0]!.why).toMatch(/^the month the application loses most months met in/);
+		expect(got[1]!.why).toMatch(/lowest mean natural flow/);
+	});
+
+	it('plots one month once when they are the same, saying it is both', () => {
+		const got = fdcMonths({ fdcMonth: 8, fdcDriestMonth: 8 }, false);
+		expect(got).toHaveLength(1);
+		expect(got[0]).toMatchObject({ month: 8, kind: 'both' });
+		expect(got[0]!.why).toMatch(/^the month met least often, and the river’s driest month/);
+	});
+
+	it('plots whichever it has, and nothing without either', () => {
+		expect(fdcMonths({ fdcMonth: null, fdcDriestMonth: 7 }, true).map((f) => f.kind)).toEqual(['driest']);
+		expect(fdcMonths({ fdcMonth: null, fdcDriestMonth: null }, true)).toEqual([]);
 	});
 });

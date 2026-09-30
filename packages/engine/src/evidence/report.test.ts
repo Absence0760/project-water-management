@@ -18,8 +18,8 @@ import { runModel } from '../run';
 import { resolveEnsembleOptions, runEnsemble, summariseEnsemble } from '../uncertainty/ensemble';
 import type { DeclaredUncertaintyRule } from '../uncertainty/options';
 import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
-import { ALLOCATIONS_NOT_ASSESSED, BASIS_PRAGMATIC, citedEnsemble, evidenceChecks, evidenceReport, NO_BAND } from './report';
-import type { EvidenceEnsembleInput, EvidenceInput, EvidenceRunInput } from './types';
+import { ALLOCATIONS_NOT_ASSESSED, BASIS_PRAGMATIC, citedEnsemble, CUMULATIVE_BASIS, CUMULATIVE_NO_BAND, CUMULATIVE_NONE, CUMULATIVE_TRUNCATED, driestMonth, evidenceChecks, evidenceReport, NO_BAND } from './report';
+import type { EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -195,6 +195,8 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 		changes: [{ area: 'network', kind: 'changed', subject: 'Farm two', text: 'Farm two: dam capacity 0 → 1 500 000 m³' }],
 		history: null,
 		applicationRuns: [{ runId: 'app', label: 'app', scenarioName: 'Farm two dam', createdAt: '2026-09-03T00:00:00.000Z', createdBy: 'Applicant' }],
+		otherApplications: [],
+		otherApplicationsTruncated: false,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: 'd-1' },
 		...over
 	};
@@ -598,5 +600,124 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(canonicalJson(evidenceReport(withAllocations()))).toBe(canonicalJson(r));
 		const other = allocations.map((x, k) => (k === 1 ? { ...x, volumeM3PerYear: x.volumeM3PerYear * 3 } : x));
 		expect(canonicalJson(evidenceReport(withAllocations(other)))).not.toBe(canonicalJson(r));
+	});
+});
+
+describe('§ 1 the driest month’s FDC beside the largest-change month (evidence-3)', () => {
+	const r = evidenceReport(input());
+	const month = (m: number, natural: number) => ({ month: m, natural }) as never;
+	const byMonth = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((m) => ({ month: m }) as never);
+
+	it('is the calendar month with the lowest mean natural flow over its complete months', () => {
+		// August's mean is 1.5, September's 2: August, though September has the single lowest month.
+		const months = [month(8, 1), month(8, 2), month(9, 0.5), month(9, 3.5), month(1, 9)];
+		expect(driestMonth({ months, byMonth })).toBe(8);
+	});
+
+	it('breaks a tie by water-year order (October first), and is null without a complete month', () => {
+		expect(driestMonth({ months: [month(3, 1), month(11, 1)], byMonth })).toBe(11);
+		expect(driestMonth({ months: [], byMonth })).toBeNull();
+	});
+
+	it('reads the baseline’s natural flow at each site, whatever the application did', () => {
+		const site = baseOut.summary.ewrAssurance![0]!;
+		const means = new Map<number, number[]>();
+		for (const m of site.months) means.set(m.month, [...(means.get(m.month) ?? []), m.natural]);
+		const lowest = [...means].map(([m, v]) => ({ m, mean: v.reduce((a, x) => a + x, 0) / v.length })).sort((x, y) => x.mean - y.mean)[0]!.m;
+		expect(r.river[0]!.fdcDriestMonth).toBe(lowest);
+		// The application can't move it: baseline evidence gives the same month.
+		expect(evidenceReport(input({ application: null, changes: [] })).river[0]!.fdcDriestMonth).toBe(lowest);
+	});
+});
+
+describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
+	/** A second application: Farm one builds a dam, run on the same baseline. */
+	const otherInput: ModelInput = {
+		...base,
+		model: { ...base.model, nodes: base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, pctRunoffToDam: 1, pctUpstreamToDam: 0, damCapacityM3: 8e5, damAreaFullM2: 2e5 } : n)) }
+	};
+	const otherOut = runModel(otherInput);
+	const outletOf = (o: ModelOutput) => o.summary.ewrAssurance!.find((s) => s.isOutlet)!.overall;
+	const other = (over: Partial<EvidenceOtherApplicationInput> = {}): EvidenceOtherApplicationInput => ({
+		scenarioId: 'scn-2',
+		scenarioName: 'Farm one dam',
+		status: 'submitted',
+		outcome: null,
+		runId: 'run-2',
+		runCreatedAt: '2026-09-04T00:00:00.000Z',
+		engineVersion: '1.30.0',
+		runoffModel: 'gr4j',
+		startDate: START,
+		endDate: baseOut.summary.curtailment!.reportEnd,
+		ewrDaysNotMet: otherOut.summary.catchment.ewrDaysNotMet,
+		reserveOutlet: outletOf(otherOut),
+		...over
+	});
+	const days = (o: ModelOutput) => o.summary.catchment.ewrDaysNotMet;
+
+	it('lists each other application’s own change against the baseline, and sums them (not a combined run)', () => {
+		const second = other({ scenarioId: 'scn-3', scenarioName: 'Approved weir', status: 'decided', outcome: 'approved', runId: 'run-3', runCreatedAt: '2026-09-05T00:00:00.000Z' });
+		const r = evidenceReport(input({ otherApplications: [second, other()] }));
+		const c = r.cumulative;
+		// Oldest run first.
+		expect(c.applications.map((x) => x.scenarioName)).toEqual(['Farm one dam', 'Approved weir']);
+		expect(c.applications[0]!.ewrDays).toBe(days(otherOut) - days(baseOut));
+		expect(c.applications[0]!.reservePp).toBeCloseTo((outletOf(otherOut).rate! - outletOf(baseOut).rate!) * 100, 9);
+		expect(c.counted).toBe(2);
+		expect(c.total.ewrDays).toBe(2 * (days(otherOut) - days(baseOut)));
+		expect(c.withThis!.ewrDays).toBe(c.total.ewrDays! + (days(appOut) - days(baseOut)));
+		// Page 1: the last row, no band, its basis saying it is a sum and naming WP-3.11.
+		const row = r.rows.at(-1)!;
+		expect(row.id).toBe('otherApplications');
+		expect(row.basis).toBe(CUMULATIVE_BASIS);
+		expect(row.basis).toMatch(/not one combined run \(WP-3\.11\)$/);
+		expect(row.change).toEqual({ run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null });
+		expect(row.note).toMatch(/^2 applications: “Farm one dam”, “Approved weir”\./);
+	});
+
+	it('names at most three on page 1, so the row stays one row high; § 4 lists every one', () => {
+		const many = Array.from({ length: 5 }, (_, k) => other({ scenarioId: `s${k}`, scenarioName: `App ${k}`, runId: `r${k}`, runCreatedAt: `2026-09-0${k + 1}T00:00:00.000Z` }));
+		const r = evidenceReport(input({ otherApplications: many }));
+		expect(r.rows.at(-1)!.note).toMatch(/^5 applications: “App 0”, “App 1”, “App 2”, 2 more in § 4\./);
+		expect(r.cumulative.applications).toHaveLength(5);
+	});
+
+	it('leaves out of the sum an application run on another engine, period or runoff model, saying why', () => {
+		const r = evidenceReport(input({ otherApplications: [other(), other({ scenarioId: 'scn-4', runId: 'run-4', engineVersion: '1.29.0' }), other({ scenarioId: 'scn-5', runId: 'run-5', endDate: '1994-09-30' })] }));
+		const c = r.cumulative;
+		expect(c.applications.map((x) => x.comparable)).toEqual([true, false, false]);
+		expect(c.applications[1]!.reason).toMatch(/engine 1\.29\.0/);
+		expect(c.applications[2]!.reason).toMatch(/another period/);
+		// Positive control: the comparable one alone is summed.
+		expect(c.counted).toBe(1);
+		expect(c.total.ewrDays).toBe(days(otherOut) - days(baseOut));
+		expect(r.rows.at(-1)!.note).toMatch(/2 more not counted/);
+	});
+
+	it('says "None" when there is no other application, and baseline evidence has no row', () => {
+		const none = evidenceReport(input());
+		expect(none.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_NONE, change: null });
+		const baseline = evidenceReport(input({ application: null, changes: [], otherApplications: [other()] }));
+		expect(baseline.rows.some((x) => x.id === 'otherApplications')).toBe(false);
+		expect(baseline.cumulative.withThis).toBeNull();
+		expect(baseline.cumulative.counted).toBe(1);
+	});
+
+	it('does not sum a list the backend cut at its cap: the row says so, § 4 still lists each', () => {
+		const r = evidenceReport(input({ otherApplications: [other()], otherApplicationsTruncated: true }));
+		expect(r.cumulative.truncated).toBe(true);
+		expect(r.cumulative.applications).toHaveLength(1);
+		expect(r.cumulative.total).toEqual({ ewrDays: null, reservePp: null });
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_TRUNCATED(1), change: null, note: null });
+		// Control: the same list, not cut, is summed.
+		expect(evidenceReport(input({ otherApplications: [other()] })).cumulative.total.ewrDays).not.toBeNull();
+	});
+
+	it('has no Reserve change without a rule table at the outlet', () => {
+		const b = stored('base', base, { ...baseOut, summary: { ...baseOut.summary, ewrAssurance: [] } });
+		const c = evidenceReport(input({ baseline: b, otherApplications: [other()] })).cumulative;
+		expect(c.applications[0]!.reservePp).toBeNull();
+		expect(c.total.reservePp).toBeNull();
+		expect(c.total.ewrDays).not.toBeNull();
 	});
 });

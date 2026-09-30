@@ -211,6 +211,59 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 	};
 }
 
+/**
+ * § 4's cumulative table: every other scenario on the baseline that is
+ * submitted, or decided with approval, with its newest run of its current
+ * ops (the ops' hash the run recorded equals the scenario's) on this
+ * baseline. Under the reader's RLS: the scenario and run policies decide
+ * which applications appear (a submitted application to the project's
+ * editors, a draft to its applicant only), so the report never names one the
+ * reader couldn't open. The newest 50, and whether there were more. Only the two measures the table reads leave the
+ * database, not the runs' summaries.
+ */
+async function loadOtherApplications(db: Db, projectId: string, baselineRunId: string, ownScenarioId: string | null): Promise<Pick<EvidenceInput, 'otherApplications' | 'otherApplicationsTruncated'>> {
+	const { rows } = await db.query<{
+		scenarioId: string;
+		scenarioName: string;
+		status: 'submitted' | 'decided';
+		outcome: string | null;
+		runId: string;
+		runCreatedAt: Date;
+		engineVersion: string;
+		runoffModel: string;
+		startDate: string;
+		endDate: string;
+		ewrDaysNotMet: number | null;
+		reserveOutlet: { months: number; met: number; rate: number | null } | null;
+	}>(
+		`SELECT * FROM (SELECT DISTINCT ON (s.id) s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome,
+			r.id AS "runId", r.created_at AS "runCreatedAt", r.engine_version AS "engineVersion",
+			COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
+			to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", to_char(r.end_date, 'YYYY-MM-DD') AS "endDate",
+			(r.summary->'catchment'->>'ewrDaysNotMet')::float8 AS "ewrDaysNotMet",
+			jsonb_path_query_first(r.summary, '$.ewrAssurance[*] ? (@.isOutlet == true).overall') AS "reserveOutlet"
+		 FROM scenario s
+		 JOIN model_run r ON r.scenario_id = s.id AND r.project_id = s.project_id
+		 WHERE s.project_id = $1
+			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+			AND r.inputs->'scenario'->>'baseRunId' = $2
+			AND r.inputs->'scenario'->>'opsSha256' = s.ops_sha256
+		 ORDER BY s.id, r.created_at DESC, r.id) newest
+		 ORDER BY "runCreatedAt" DESC, "scenarioId"
+		 LIMIT $4`,
+		[projectId, baselineRunId, ownScenarioId, APPLICATION_RUNS_MAX + 1]
+	);
+	// One more than the cap is read, so a cut list says so rather than summing part of it silently.
+	const truncated = rows.length > APPLICATION_RUNS_MAX;
+	const otherApplications = rows.slice(0, APPLICATION_RUNS_MAX).map((r) => ({
+		...r,
+		runCreatedAt: iso(r.runCreatedAt)!,
+		reserveOutlet: r.reserveOutlet ? { months: r.reserveOutlet.months, met: r.reserveOutlet.met, rate: r.reserveOutlet.rate } : null
+	}));
+	return { otherApplications, otherApplicationsTruncated: truncated };
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
@@ -264,6 +317,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		applicationRuns = rows.map((r) => ({ runId: r.runId, label: r.label ?? '', scenarioName: r.scenarioName, createdAt: iso(r.createdAt)!, createdBy: r.createdBy }));
 	}
 
+	const others = await loadOtherApplications(db, projectId, baseline.id, recorded?.id ?? null);
+
 	const nominations = (await listNominations(db, projectId)).map((n) => ({
 		withdrawn: n.withdrawn,
 		runId: n.runId,
@@ -283,6 +338,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null),
 		changes,
 		applicationRuns,
+		...others,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version }
 	};
 }

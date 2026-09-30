@@ -3661,28 +3661,43 @@ Left, from the design and the persona review (§11), each with its trigger.
 - [ ] **Days a user is served in full while the site fails** (environmentalist).
       Durable fix: per unit, days fully supplied on days the outlet is below
       the EWR, in § 4 and as a count flag. Trigger: before the pilot.
-- [ ] **The driest month's FDC beside the largest-change month.** § 1 plots
-      one month (`fdcMonth`: the largest drop in months met, else the
-      driest). Durable fix: plot both when they differ. Trigger: the next
-      change to § 1.
-- [ ] **A cumulative row over other applications on the baseline**
-      (licensing authority, s27 "other water users"). A.6 lists the other
-      application runs but nothing sums them. Durable fix: a scenario that
-      applies every submitted application's ops, run on the baseline, as a
-      page-1 "all applications" row. Trigger: a second application on one
-      baseline.
-- [ ] **Cancelled ensembles' interim results.** The ledger lists a start
-      that never completed, but not what it had shown. Durable fix: store a
-      started ensemble's partial summary when it is abandoned and print it in
-      the ledger. Trigger: before issue (WP-3.14).
+- [x] **The driest month's FDC beside the largest-change month.** Built
+      (evidence-3): `EvidenceSite.fdcDriestMonth`, the calendar month with
+      the lowest mean natural flow over its complete months in the baseline
+      (a property of the river, so neither the requirement nor the
+      application moves it); § 1 plots its FDC beside `fdcMonth`'s, one plot
+      captioned as both when they coincide (`grid.ts` `fdcMonths`).
+- [x] **A cumulative row over other applications on the baseline**
+      (licensing authority, s27 "other water users"). Built (evidence-3) as
+      a sum, not a combined run: every other application submitted or
+      decided with approval, with its newest run of its current ops on the
+      baseline (read under the reader's RLS, so a viewer's report lists no
+      submitted application and nobody's a draft), each one's own change in
+      days below the pragmatic EWR and Reserve months met at the outlet, and
+      their sum over those on the baseline's engine, period and runoff model:
+      § 4's table and page 1's *Other applications on this baseline, summed*,
+      whose basis says it is a sum of separate runs. The durable fix, a
+      combined run of every application's ops, is WP-3.11
+      (`combineScenarios`, with its conflict rules); the row then reads that
+      run instead. Trigger: WP-3.11.
+- [x] **Cancelled ensembles' interim results.** Finding: there are none to
+      print. The browser runs an ensemble and stores it only when every set
+      has run; a `started` row of `run_uncertainty` holds no summary or result
+      (014's check requires both null until complete), so nothing interim
+      exists. The ledger now says so for each start not completed (*started,
+      not completed: no result stored*, with the note that the app keeps who,
+      when and its rule), rather than implying a result was hidden. Storing
+      partial results would mean the browser writing them mid-run, which the
+      report doesn't need: the cited ensemble is the first *complete* one on
+      the declared rule (G4), so an abandoned start can't be cited either way.
 - [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
       description and run notes as written. Durable fix: fixed prompts
       (purpose and need, mitigation, monitoring), each answered or *Not
       given*. Trigger: before the pilot.
-- [ ] **A diagonal draft stamp.** "Draft · not issued" is in each section
-      head and the footer; a cropped page can lose both. Durable fix: a
-      diagonal print watermark on every page until issued. Trigger: before
-      the pilot.
+- [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
+      issued* watermark (`position: fixed` in `@media print`, repeated on
+      every printed page by Chromium), `aria-hidden` beside the section heads'
+      text stamps, until a pack issues the report.
 - [ ] **Paired bands on each unit's supply (ER4 rest).** Rows 5 and 6 and
       § 4 carry the run's own difference only. Durable fix: a per-unit
       supplied fraction in `MemberMetrics`, banded in `summarisePaired` with
@@ -3700,15 +3715,21 @@ Left, from the design and the persona review (§11), each with its trigger.
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue
       #90).
-- [ ] **Licence impact by year class on page 1 (issue #53 R7).** The impact
-      report opens with `LicenceImpactBoard`; the evidence report doesn't
-      show it. Durable fix: build the board's view model in the engine
-      builder from the two runs' series and print it on page 1. Trigger:
-      before the pilot.
+- [x] **Licence impact by year class on page 1 (issue #53 R7).** Built: page
+      1 prints the impact report's `LicenceImpactBoard` after the change
+      table, the application named as such, from the three daily series the
+      page fetches before ready (`loadImpactSeries`), with the full-allocation
+      note as the impact report has it. Left: the board's view model is
+      computed in the browser, not in the engine's document, so an issued
+      pack can't freeze it yet; it moves into `evidenceReport` with the pack's
+      manifest. Tracked under *The server-rendered evidence PDF* below
+      (WP-3.14).
 - [ ] **The server-rendered evidence PDF.** Browser print only: no running
       footer, no "page x of y". Durable fix: `POST …/reports { runId,
       evidence: true }` and a render scope that reads the baseline (ER1),
-      with the pack. Trigger: WP-3.14.
+      with the pack; the pack's manifest also carries page 1's licence
+      impact board, built in the engine from the two runs' series (today the
+      browser builds it). Trigger: WP-3.14.
 - [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
       Trigger: before the first evidence pack (WP-3.14).
