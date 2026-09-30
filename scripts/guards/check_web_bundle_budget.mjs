@@ -1320,8 +1320,13 @@
 //             feeds panel's box fields took the Settings tab chunk to 61 KB,
 //             over its 60 KB ceiling). API keys render for owners only, so
 //             ApiKeysPanel is now a lazy chunk of its own: the Settings tab
-//             measures 58 KB. Total 1201 KB with main @ 3be3106b merged, at
-//             its ceiling: the next frontend change measures and raises it.
+//             measures 58 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #69: measured 1202 with main @
+//             7b0d2a73 merged, against main's 1200). The CHIRPS feed's
+//             bounding-box fields in the Data feeds panel (south, west,
+//             north, east, the cell count they cover) and their checks in
+//             feeds/feeds.ts; the lazy API keys chunk above adds its
+//             loader. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1332,7 +1337,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1201,
+	totalCodeKb: 1205,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
