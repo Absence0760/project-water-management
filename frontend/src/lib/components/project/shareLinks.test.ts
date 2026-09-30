@@ -87,4 +87,12 @@ describe('what a link opens', () => {
 		// The row carries both.
 		expect(linkRow(app({ name: 'X', status: 'withdrawn' }), NOW)).toMatchObject({ state: 'live', opens: 'Application “X”', canRevoke: true });
 	});
+
+	it('names an evidence pack with its version, and says when it shows only the pack’s standing (128)', () => {
+		const pack = (target: ShareLink['target']) => link({ targetKind: 'pack', targetId: 'p1', target });
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'issued', version: 2 }))).toEqual({ opens: 'Evidence pack “Raise my dam”, version 2', opensNothing: null });
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'withdrawn', version: 2 })).opensNothing).toMatch(/withdrawn: the link shows that and why, not its figures/);
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'superseded', version: 1 })).opensNothing).toMatch(/newer version/);
+		expect(linkTarget(pack(null))).toEqual({ opens: 'An evidence pack you can’t open', opensNothing: null });
+	});
 });

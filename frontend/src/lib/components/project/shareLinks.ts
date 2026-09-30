@@ -31,9 +31,9 @@ export interface LinkRow {
 	ends: string;
 	/** "2026-09-25 14:05", or "Never". */
 	lastUsed: string;
-	/** What it opens: "The published baseline", "Application “Raise my dam”" (the owner's inventory). */
+	/** What it opens: "The published baseline", "Application “Raise my dam”", "Evidence pack “Raise my dam”, version 2" (the owner's inventory). */
 	opens: string;
-	/** Why a live link opens nothing just now (its application withdrawn, or no longer readable); null when it opens. */
+	/** Why a live link opens nothing just now (its application withdrawn, or no longer readable), or shows only its pack's standing; null when it opens. */
 	opensNothing: string | null;
 	canRevoke: boolean;
 }
@@ -42,6 +42,14 @@ export interface LinkRow {
 export function linkTarget(link: Pick<ShareLink, 'targetKind' | 'target'>): { opens: string; opensNothing: string | null } {
 	if (link.targetKind === null) return { opens: 'The published baseline', opensNothing: null };
 	const t = link.target;
+	if (link.targetKind === 'pack') {
+		// An evidence pack (128): the link keeps working after a supersede or withdrawal, and then shows only that.
+		if (!t) return { opens: 'An evidence pack you can’t open', opensNothing: null };
+		const opens = `Evidence pack “${t.name}”${t.version ? `, version ${t.version}` : ''}`;
+		if (t.status === 'withdrawn') return { opens, opensNothing: 'The pack is withdrawn: the link shows that and why, not its figures.' };
+		if (t.status === 'superseded') return { opens, opensNothing: 'A newer version replaced the pack: the link shows that, not its figures.' };
+		return { opens, opensNothing: null };
+	}
 	if (!t) return { opens: 'An application you can’t open', opensNothing: 'Its application is a draft again or was deleted: the link opens nothing.' };
 	const opens = `Application “${t.name}”`;
 	if (t.status === 'submitted' || t.status === 'decided') return { opens, opensNothing: null };

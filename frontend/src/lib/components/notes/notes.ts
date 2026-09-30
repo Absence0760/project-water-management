@@ -15,7 +15,13 @@ export type NoteTarget =
 	 * caller may post with (the server holds the rule, 115_scenario_share_notes),
 	 * the first being the default.
 	 */
-	| { kind: 'scenario'; scenarioId: string; name: string; audiences: NoteVisibility[] };
+	| { kind: 'scenario'; scenarioId: string; name: string; audiences: NoteVisibility[] }
+	/**
+	 * An evidence pack's notes and public comments (128_pack_share_notes):
+	 * `team`, or `public_participation` while it has a live share link (the
+	 * server holds the rule); the first audience is the default.
+	 */
+	| { kind: 'pack'; packId: string; name: string; audiences: NoteVisibility[] };
 
 /** Who reads a scenario note, in the drawer's words (docs/data-model.md § Notes has the matrix). */
 export const AUDIENCE_LABEL: Record<NoteVisibility, string> = {
@@ -46,6 +52,18 @@ export function scenarioAudiences(who: { assessor: boolean; party: boolean }): N
 	if (who.party) return ['parties', 'assessors', 'public_participation'];
 	return ['public_participation'];
 }
+
+/**
+ * The audiences an editor or viewer of a pack may post with: the team first;
+ * public participation too while the pack is issued (the server refuses it
+ * when no share link is live, and says so).
+ */
+export function packAudiences(issued: boolean): NoteVisibility[] {
+	return issued ? ['team', 'public_participation'] : ['team'];
+}
+
+/** Whether a target's notes pick an audience and keep their edits (a scenario's or a pack's). */
+export const hasAudiences = (t: NoteTarget): t is Extract<NoteTarget, { kind: 'scenario' | 'pack' }> => t.kind === 'scenario' || t.kind === 'pack';
 
 /**
  * The settings groups that take notes, keyed as the note's setting_key (a
@@ -79,6 +97,8 @@ export function targetQuery(t: NoteTarget): NotesQuery {
 			return { settingKey: t.key };
 		case 'scenario':
 			return { scenarioId: t.scenarioId };
+		case 'pack':
+			return { packId: t.packId };
 	}
 }
 
@@ -96,6 +116,8 @@ export function createBody(t: NoteTarget, body: string, visibility: NoteVisibili
 			return { body: text, settingKey: t.key, visibility: 'team' };
 		case 'scenario':
 			return { body: text, scenarioId: t.scenarioId, visibility: t.audiences.includes(visibility) ? visibility : (t.audiences[0] ?? 'public_participation') };
+		case 'pack':
+			return { body: text, packId: t.packId, visibility: t.audiences.includes(visibility) ? visibility : (t.audiences[0] ?? 'team') };
 	}
 }
 
@@ -113,6 +135,8 @@ export function countFor(counts: NoteCounts | null, t: NoteTarget): number {
 			return Object.entries(counts.settings).reduce((n, [k, c]) => (k === t.key || k.startsWith(`${t.key}.`) ? n + c : n), 0);
 		case 'scenario':
 			return counts.scenarios?.[t.scenarioId] ?? 0;
+		case 'pack':
+			return counts.packs?.[t.packId] ?? 0;
 	}
 }
 
@@ -129,6 +153,8 @@ export function targetTitle(t: NoteTarget): string {
 			return `Notes on ${t.label}`;
 		case 'scenario':
 			return `Comments on “${t.name}”`;
+		case 'pack':
+			return `Notes and comments on ${t.name}`;
 	}
 }
 
@@ -138,6 +164,7 @@ export const notesButtonLabel = (count: number, about: string) => (count > 0 ? `
 /** A note's target in a mixed list (the Overview's recent notes). */
 export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): string {
 	if (n.target === 'scenario') return 'A scenario';
+	if (n.target === 'pack') return 'An evidence pack';
 	switch (n.target) {
 		case 'project':
 			return 'The project';
@@ -155,6 +182,9 @@ export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): 
 /** Where a note's target is shown in the workspace (the Overview's recent notes link there). */
 export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingKey'> & { scenarioId?: string | null }): string | null {
 	switch (n.target) {
+		case 'pack':
+			// The pack's own page is outside the workspace's tabs; its notes are there (the pack page's Notes).
+			return null;
 		case 'scenario':
 			return n.scenarioId ? `?tab=scenarios&scenario=${encodeURIComponent(n.scenarioId)}` : '?tab=scenarios';
 		case 'project':
