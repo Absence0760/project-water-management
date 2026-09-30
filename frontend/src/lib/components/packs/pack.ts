@@ -42,6 +42,25 @@ export function packStamp(p: Pick<Pack, 'status' | 'version' | 'issuedAt'>): str
 	}
 }
 
+/**
+ * How the pack view and the verify page name the errata found since a pack's
+ * manifest was frozen (errataFoundSince, 132): since issue once it was issued,
+ * since the draft before (a draft, or one withdrawn before it was issued).
+ * The manifest never changes, so an issued pack can't record them; a draft
+ * drafted again does.
+ */
+export function errataFoundSinceNote(p: { issuedAt: string | null }): { heading: string; note: string } {
+	return p.issuedAt
+		? {
+				heading: 'Errata found since issue',
+				note: 'Added to the engine’s errata list after this pack was issued, for the engine of one of its runs (or of the automatic fit its parameters came from). The pack doesn’t record them, and never will: its manifest and hash are fixed. Weigh them with its results.'
+			}
+		: {
+				heading: 'Errata found since this draft was made',
+				note: 'Added to the engine’s errata list after this draft froze its manifest, for the engine of one of its runs (or of the automatic fit its parameters came from). The draft doesn’t record them: draft the pack again to record them before it is issued.'
+			};
+}
+
 /** The public verify page of a short code, on this site: `{origin}{base}/verify/{code}`. */
 export const verifyUrl = (origin: string, base: string, shortCode: string) => `${origin}${base}/verify/${encodeURIComponent(shortCode)}`;
 

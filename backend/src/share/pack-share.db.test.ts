@@ -402,7 +402,7 @@ describe('comments on a pack', () => {
 
 	it('closes comment when no link is live: the applicant reads only their own, and posts nothing', async () => {
 		expect((await assessor.call('DELETE', `${P()}/share-links/${linkId}`)).status).toBe(204);
-		// The applicant reads no pack: with no live link it is not one they can comment on, so not found to them.
+		// The applicant reads no pack row (this one is the baseline's, not theirs): with no live link it is not one they can comment on, so not found to them.
 		expect((await post(applicant, 'public_participation')).status).toBe(404);
 		// A reader of the pack is told why.
 		const closed = await post(ngo, 'public_participation');

@@ -260,6 +260,12 @@ beforeAll(async () => {
 		[projectId, packId, subject.id, TYPED_NAME, `P-${tag}`, '0'.repeat(64)]
 	);
 	await withUser(subject.id, (tx) => tx.query(`UPDATE evidence_pack SET status = 'issued' WHERE id = $1`, [packId]));
+	// A "pack issued" email sent to them (133_pack_notices): as the schema owner, the pipeline isn't under test.
+	await asOwner(`INSERT INTO pack_notice (pack_id, user_id, event, project_id, status, sent_at, settled_at) VALUES ($1, $2, 'issued', $3, 'sent', now(), now())`, [
+		packId,
+		subject.id,
+		projectId
+	]);
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);

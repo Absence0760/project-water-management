@@ -6,7 +6,8 @@
 // whatever sneaks into the row, no `user_display`, e-mail, member or other
 // farm's name comes out. The database side is share/scenario-share.db.test.ts.
 import { describe, expect, it } from 'vitest';
-import { ListQuery, shareUrl, toLink, toSharePack, toShareScenario, type ShareLinkRow, type SharePackRow, type ShareScenarioRow } from './links.js';
+import type { Erratum } from '@water-management/engine';
+import { ListQuery, shareUrl, toLink, toSharePack, toShareScenario, toVerify, type ShareLinkRow, type SharePackRow, type ShareScenarioRow } from './links.js';
 
 const OWN = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -254,5 +255,34 @@ describe('toSharePack', () => {
 		const superseded = toSharePack(row({ verify: verify('superseded', { successorSha256: 'cd'.repeat(32), withdrawnReason: 'not shown' }) }));
 		expect(superseded.figures).toBeNull();
 		expect(superseded.verify).toMatchObject({ status: 'superseded', successorSha256: 'cd'.repeat(32), withdrawnReason: null });
+	});
+
+	it('lists the errata found since issue from the lookup’s runs, apart from the recorded ones, and never returns the runs (132)', () => {
+		const list: Erratum[] = [
+			{ id: 'ER-90', keyedOn: 'run', firstAffected: '1.40.0', fixedIn: null, severity: 'High', appliesWhen: 'always', summary: 'Recorded at draft', source: 's' },
+			{ id: 'ER-91', keyedOn: 'run', firstAffected: '1.50.0', fixedIn: null, severity: 'High', appliesWhen: 'always', summary: 'Found later', source: 's' },
+			{ id: 'ER-92', keyedOn: 'fit', firstAffected: '1.0.0', fixedIn: '1.45.0', severity: 'Low', appliesWhen: 'a fit', summary: 'Fit bug', source: 's' },
+			{ id: 'ER-93', keyedOn: 'run', firstAffected: '1.0.0', fixedIn: '1.50.0', severity: 'Low', appliesWhen: 'always', summary: 'Fixed before', source: 's' }
+		];
+		const raw = verify('issued', {
+			errata: [{ id: 'ER-90', summary: 'Recorded at draft' }],
+			runs: [
+				{ engineVersion: '1.50.0', fitEngineVersion: '1.44.0' },
+				{ engineVersion: '1.50.0', fitEngineVersion: null }
+			]
+		});
+		const out = toVerify(raw, list);
+		expect(out.errata).toEqual([{ id: 'ER-90', summary: 'Recorded at draft' }]);
+		expect(out.errataFoundSince).toEqual([
+			{ id: 'ER-91', summary: 'Found later' },
+			{ id: 'ER-92', summary: 'Fit bug' }
+		]);
+		expect(Object.keys(out)).not.toContain('runs');
+		expect(JSON.stringify(out)).not.toContain('1.44.0');
+		// The share link's verify is the same answer.
+		expect(toSharePack(row({ verify: raw })).verify).toEqual(toVerify(raw));
+		// No runs (a lookup from before 132, or a malformed row): nothing found since, never a throw.
+		expect(toVerify(verify('issued', { runs: [{ engineVersion: 7 }, null] }), list).errataFoundSince).toEqual([]);
+		expect(toVerify(verify(), list).errataFoundSince).toEqual([]);
 	});
 });
