@@ -5230,9 +5230,25 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
   values blank, so an op on one isn't described "from" a value). Their own
   farms are the proposer's nodes, set by the server (no checkbox list); no
-  rebase. **Run scenario** runs it; instead of the comparison, a note says
-  the assessors compare each run with the baseline (an applicant view of
-  results is a follow-up).
+  rebase. **Run scenario** runs it; instead of the comparison the
+  applicant gets **Your results against the baseline**
+  (`ApplicantResults.svelte`, `GET …/scenarios/:sid/results`,
+  [scenarios.md § Applications](./scenarios.md#applications-wp-33)): the
+  newest run's label and date (and "Your changes have been edited since this
+  run" when they have); the **Ecological Reserve** (the outlet's days not
+  met, and a table of each EWR site's months met, rate and longest run not
+  met, baseline beside theirs); **The catchment** (mean natural and outlet
+  flow and a chart of the outlet's flow and EWR, baseline against theirs, or
+  why not: fewer than five farm holders); **Your hydrological units**
+  (demand, supply, share met, the dam on the last day, baseline → theirs,
+  and what ran: crops with their areas and boreholes; a unit their changes
+  add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
+  supply −4 %", or "No other farm or water user lies downstream of your
+  units"). A run with a baseline assumption shows a note and the Reserve
+  only. Before a run: "Not run yet". Under it, **Yield under this
+  scenario** offers only their own units and the ones their changes add;
+  the applicant (not the people they share it with) queues a yield and
+  follows it on the job list, which shows them their own yield jobs only.
 - **The Application panel** (`ApplicationPanel.svelte`) under the changes:
   where it stands ("Draft: only you and the people you share it with can see
   it", "Submitted: the assessors can see it, and its changes are frozen", …),

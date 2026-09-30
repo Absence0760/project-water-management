@@ -1278,7 +1278,22 @@ enum value alone (it can't be used in the transaction that adds it);
 `046_contributor_runs.sql` takes every run row (and other farms' run series)
 away from a contributor. `049_applicant_oracles.sql` closes what they could
 learn by probing: who is a member (sharing), and whether a hidden
-application has a name.
+application has a name. `118_applicant_results.sql` adds the results
+projection's read and narrows their series further:
+
+- `app_application_run_results(project, scenario, run)`, `SECURITY
+  DEFINER`: one application run's recorded scenario, model and summary, its
+  base's start and summary (only when a publication of the project names
+  the base), `all_proposals` and the k rule (five farm holders, counted as
+  `app_share_series` counts them), for whoever reads the application as a
+  contributor or above. For the server only: `GET …/scenarios/:sid/results`
+  projects it (`scenarios/applicantResults.ts`).
+- `app_run_all_proposals(inputs)`, plain SQL: every op the run recorded is
+  classed `proposal` (one class per op). `app_contributor_scenario_runs`
+  and `app_contributor_run_nodes` (from 045 and 071) now keep only such
+  runs, so of an application run with a baseline assumption a contributor
+  reads no series at all (`run_series_select_contributor` is unchanged; it
+  calls them).
 
 - **Below viewer, like a farmer.** Every existing policy and every
   `requireRole(…, 'viewer')` refuses a contributor untouched (fail closed);

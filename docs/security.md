@@ -1551,11 +1551,21 @@ In short:
     DEFINER` `app_scenario_run_meta` (never `inputs` or `summary`), and the
     owner's run cap through `app_trim_application_runs`. Of an application
     run's series they read its own nodes' and the catchment allowlist
-    (under the share links' k), never another farm's. The one deliberate
-    path to a full input in a contributor's transaction is
-    `app_published_run_input` / `app_published_run_series`, which the
-    server needs to run the application and projects before anything
-    leaves.
+    (under the share links' k), never another farm's, and none at all of a
+    run whose ops weren't all proposals (118: a baseline assumption on a
+    hidden farm, its demand halved, would make the difference from the base
+    that farm's figures). The deliberate paths to a full input or summary in
+    a contributor's transaction are `app_published_run_input` /
+    `app_published_run_series`, which the server needs to run the
+    application, and `app_application_run_results` (118), which hands the
+    server an application run's summary and model and its base's summary for
+    `GET …/scenarios/:sid/results`; both are projected before anything
+    leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
+    EWR sites, the catchment under the k rule, their own units, other units
+    downstream only as "Farm 3" and a whole percentage, and nothing but the
+    EWR when an op was a baseline assumption). The DB test
+    (`scenarios/results.db.test.ts`) scans the answer for every other farm's
+    name and the hidden crop.
   - **Drafts are private, even from the assessors.** Who reads an
     application is one function (`app_scenario_visible`), and its runs and
     their series follow it; editors see it once submitted, viewers once

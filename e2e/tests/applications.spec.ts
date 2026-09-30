@@ -2,7 +2,9 @@
 // § Applications): an applicant (the contributor role), linked to the Upper
 // farm, opens the project and gets the Applicant view; starts an application
 // on the published baseline, sees their own farm in full and the other farm
-// only as "Farm 1", raises their dam, runs and submits it. The assessor (the
+// only as "Farm 1", raises their dam, runs it, sees their own view of the
+// results (their farm, nothing downstream, no catchment flows below five farm
+// holders), queues a yield of their own dam and submits it. The assessor (the
 // project's owner) finds it in the Applications tab and decides it; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
@@ -57,9 +59,25 @@ test('an applicant submits an application on the published baseline, and the ass
 	const changes = a.getByRole('list', { name: `Changes in ${NAME}` });
 	await expect(changes.getByRole('listitem')).toContainText('Proposal');
 
-	// Run it (the result is the assessors' to compare), then submit it.
+	// Run it: their own view of the results (the assessors compare it in full), then submit it.
+	await expect(a.getByTestId('applicant-results-empty')).toBeVisible();
 	await a.getByRole('button', { name: 'Run scenario' }).click();
-	await expect(a.getByTestId('applicant-results-note')).toBeVisible();
+	const results = a.getByTestId('applicant-results');
+	await expect(results.getByTestId('applicant-units').getByRole('rowheader', { name: 'Upper farm' })).toBeVisible();
+	// Both farms drain to the gauge: nothing lies below theirs. Two farm holders: no catchment flows.
+	await expect(results.getByTestId('applicant-downstream-empty')).toHaveText('No other farm or water user lies downstream of your units.');
+	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	await expect(results.getByTestId('applicant-results-stale')).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	// The Yield panel offers their own farm only, and they may queue a yield (096_contributor_yield): cancelled before a worker runs it.
+	const dam = a.getByLabel('Dam', { exact: true });
+	await expect(dam.getByRole('option', { name: 'Farm 1' })).toHaveCount(0);
+	await dam.selectOption({ label: 'Upper farm' });
+	const yieldPanel = a.getByRole('region', { name: 'Yield of Upper farm' });
+	await yieldPanel.getByRole('button', { name: 'Work out the yield' }).click();
+	await expect(yieldPanel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
+	await yieldPanel.getByRole('button', { name: 'Cancel' }).click();
+	await expect(yieldPanel.getByTestId('yield-status')).toHaveText('Cancelled.');
 	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
 	await answerConfirm(a, true, `Submit “${NAME}” to the assessors?`);
 	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
@@ -178,10 +196,13 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
 		});
 		const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+		// Run, so their view of the results is on the page axe checks.
+		expect((await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/runs`, { data: {} })).status()).toBe(201);
 		expect((await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/submit`, { data: {} })).status()).toBe(200);
 
 		await applicant.page.goto(`/projects/${project.id}?scenario=${sid}`);
 		await expect(applicant.page.getByTestId('application-panel')).toBeVisible();
+		await expect(applicant.page.getByTestId('applicant-units')).toBeVisible();
 		await expectNoViolations(applicant.page);
 
 		await page.goto(`/projects/${project.id}?tab=applications`);

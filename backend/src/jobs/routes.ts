@@ -20,10 +20,13 @@ const ListQuery = z.object({
 const EnqueueBody = z.object({ kind: z.literal('rerun'), label: RerunPayload.shape.label }).strict();
 
 export const jobRoutes = new Hono<AuthEnv>()
+	// A contributor (an applicant) lists only their own yield jobs (RLS,
+	// job_select_contributor, 096): how the Yield panel on the Applicant view
+	// follows the job it queued. Everyone else needs viewer.
 	.get('/:id/jobs', async (c) => {
 		const q = ListQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'viewer');
+			await requireRole(db, c.req.param('id'), 'contributor');
 			return c.json({ jobs: await listJobs(db, c.req.param('id'), q) });
 		});
 	})

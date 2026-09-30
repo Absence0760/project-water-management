@@ -146,6 +146,23 @@ describe('an applicant’s yield on their own application', () => {
 		await asOwner(`UPDATE job SET status = 'dead', finished_at = now() WHERE project_id = $1 AND status = 'queued'`, [projectId]);
 	});
 
+	it('follows and cancels their own yield job on the job list (GET …/jobs), which shows them no one else’s', async () => {
+		const mine = await ask(applicant, { scenarioId: sid, nodeId: rooikloof.id, kind: 'curve' });
+		expect(mine.status, JSON.stringify(mine.body)).toBe(202);
+		const listed = await applicant.call('GET', `${P()}/jobs`);
+		expect(listed.status).toBe(200);
+		expect(listed.body.jobs.map((j: { id: string }) => j.id)).toContain(mine.body.jobId);
+		expect(new Set(listed.body.jobs.map((j: { kind: string }) => j.kind))).toEqual(new Set(['yield']));
+		// The owner's yield (the test above) is there, unlisted to the applicant; the other applicant lists none of theirs.
+		const all = (await owner.call('GET', `${P()}/jobs`)).body.jobs.map((j: { id: string }) => j.id);
+		expect(all.length).toBeGreaterThan(listed.body.jobs.length);
+		expect((await other.call('GET', `${P()}/jobs`)).body.jobs).toEqual([]);
+		const cancel = await applicant.call('POST', `${P()}/yield/${mine.body.jobId}/cancel`, {});
+		expect(cancel.status).toBe(200);
+		const after = (await applicant.call('GET', `${P()}/jobs`)).body.jobs.find((j: { id: string }) => j.id === mine.body.jobId);
+		expect(after.status).toBe('dead');
+	});
+
 	it('doesn’t see a yield someone else stored on their application, even of their own dam', async () => {
 		const y = (await asOwner(
 			`INSERT INTO yield_result (project_id, scenario_id, node_id, kind, params, points, engine_version) VALUES ($1, $2, $3, 'firm', '{}', '{}', '0') RETURNING id`,
