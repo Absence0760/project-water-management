@@ -4110,6 +4110,19 @@ Left, from the design and the persona review (§11), each with its trigger.
       notes; a pack freezes them in its manifest, and one drafted before
       `evidence-8` says they aren't part of it
       ([design/evidence-report.md § 4.2](./design/evidence-report.md)).
+- [ ] **Appendix C's answers on the shared application page.** The scenario
+      share link (`app_share_scenario`, 115) shows the description to the
+      public but not the three fixed prompts' answers (purpose and need,
+      mitigation, monitoring). Showing them helps the public comment on an
+      application; it also publishes the applicant's own words beyond the
+      assessor. **Recommendation:** show them, since the description is
+      already public and the answers are the applicant's case. Durable fix:
+      redefine `app_share_scenario` from its latest body to add the three
+      fields, a `share.scenario` i18n round for their headings, and a
+      pack-share-style DB test. **Who:** operator, asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      **Trigger:** the answer, or the first application shared for public
+      comment.
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
       issued* watermark (`position: fixed` in `@media print`, repeated on
       every printed page by Chromium), `aria-hidden` beside the section heads'
