@@ -2225,7 +2225,8 @@ binds, the transfer brings enough that neither MIN bites.
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
-  not be applied to A-pan directly. 0 turns dam evaporation off.
+  not be applied to A-pan directly; the WR90 presets (item 4 below, engine
+  ≥ 1.49.0) convert them. 0 turns dam evaporation off.
 - `Apan` is `settings.apanMm[month] ÷ days in month`, or on a day the daily
   A-pan series covers (engine ≥ 0.38.0, §2.3a) that day's value. GR4J's own
   PE input (`settings.pe`, §2.4a, engine ≥ 0.31.0) never reaches the dams, so
@@ -2333,8 +2334,66 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
 month: `E = k_lake[month] × Apan[month] / daysInMonth / 1000 × A`. Open water
 lags the pan through the seasons (a deep dam stores heat in autumn and
 evaporates more relative to the pan in winter), which one factor can't show.
-Values are the modeller's; no preset is offered, pending the hydrologist.
-Twelve equal values give exactly the single-factor run.
+Values are the modeller's. Twelve equal values give exactly the
+single-factor run.
+
+*Presets* (engine ≥ 1.49.0, `LAKE_FACTOR_PRESETS`,
+`packages/engine/src/evaporation/lakeFactorPresets.ts`). Settings →
+Demand → **Dam evaporation preset** writes the 12 factors and a source note
+(`settings.lakeEvapFactorSource`, free text up to 600 characters, both
+still editable). Nothing is filled unless the user picks one, so no default
+changes: a project without the note, or with any note, runs bit-identically
+(`lakeFactorPresets.test.ts`).
+
+| Preset | Factors (× A-pan) | Source |
+| --- | --- | --- |
+| Flat 0.75 × A-pan (the default) | 0.75 every month | open water ≈ 0.7–0.8 × Class-A pan (Linsley, Kohler & Paulhus 1982) |
+| WR90 lake factors, WR90 pan conversion | `f_lake[m] × (0.8793 A[m] − 16.2354) ÷ A[m]` | lake factors: WR90 (Midgley, Pitman & Middleton 1994, WRC 298/1/94); pan equation: WR90's general monthly S-pan ← A-pan regression; both as reproduced in Taljaard (2023) Table 2-3 and Table 5-9 / Eq. 16 |
+| WR90 lake factors, Taljaard (2023) pan conversion | `f_lake[m] × (0.8706 A[m] − 11.1745) ÷ A[m]` | the same lake factors; Taljaard's new general monthly equation fitted to ten SA stations' paired pans (Table 5-10 / Eq. 33), which he recommends for monthly values |
+
+`f_lake` is WR90's lake evaporation ÷ **S-pan**, Oct–Sep: 0.81, 0.82,
+0.83, 0.84, 0.88, 0.88, 0.88, 0.87, 0.85, 0.83, 0.81, 0.81 (national
+monthly values, not per evaporation zone). `A[m]` is the project's monthly
+A-pan, `settings.apanMm` (mm/month). The conversion is affine, not a ratio,
+so the A-pan factor depends on the month's A-pan: with the negative
+intercept it falls in the low-evaporation months, which is where issue #46's
+~0.67 × A-pan a year and 0.5–0.6 in winter come from. The
+factors are rounded to 3 decimals; a month whose A-pan is at or below
+−intercept ÷ slope (18.5 mm or 12.8 mm) has no S-pan and gets 0. With the
+dam test's Western Cape-like A-pan (180, 230, 270, 285, 245, 210, 140, 90,
+60, 65, 90, 130 mm) the WR90 preset gives 0.639, 0.663, 0.680, 0.691,
+0.715, 0.706, 0.672, 0.608, 0.517, 0.523, 0.566, 0.611 (0.659 A-pan
+weighted over the year) and the Taljaard one 0.655 … 0.726 (0.678).
+
+Sources and caveats:
+
+- The WR90 volume itself isn't online. Both tables are quoted from
+  Taljaard, C.M.L. (2023), *A revision of evaporation and pan factors in use
+  in South Africa*, MEng thesis, Stellenbosch University
+  (http://hdl.handle.net/10019.1/127336), which reproduces them
+  ("redrawn from Midgley et al., 1994") and tests them. His dam-balance
+  check at three reservoirs found the lake factors "still accurate enough"
+  (§5.3.5); the WR90 pan equation "can only be used as written and cannot
+  be inverted" (§2.6.1.4), which is how it is used here (A-pan → S-pan).
+  WR2012's own lake factors were not checked: the WR2012 manuals (WRC TT
+  689/690-16) were unreachable.
+- The lake factors are for large reservoirs; a shallow farm dam heats and
+  cools faster and lags the pan less. The pan equations are national
+  regressions; station-specific ones differ (Taljaard Tables 5-8, 5-11).
+- The factors are computed at the monthly A-pan means. A daily A-pan series
+  (§2.3a) multiplies each day's value by them, so a month whose daily
+  total differs from the mean gets a proportionally scaled loss, not the
+  regression's. After changing the A-pan, fill the preset again: Settings
+  warns when the note names a preset whose values at the current A-pan no
+  longer match (`lakeFactorPresetStale`). A WR90 preset refuses a project
+  with any month's A-pan at 0 (not entered yet).
+- Which preset the client's catchment takes is the hydrologist's
+  ([followups.md § Hydrologist](./followups.md#hydrologist)).
+
+The source note is recorded with each run (its settings snapshot), so run
+comparison lists a change of it as its own line ("Dam evaporation factor
+source", [run-comparison.md](./run-comparison.md)) and the report's inputs
+name it beside the dam evaporation factor. The model never reads it.
 
 **5. Seepage destination** (`node.damSeepageReturnPct`, default 1). Seepage
 Sp is split: `Sp × return` joins U the same day, `Sp × (1 − return)` is

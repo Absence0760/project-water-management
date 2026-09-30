@@ -2993,6 +2993,20 @@ which checks every catchment tab).
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
+  below it the **Dam evaporation preset** picker (engine ≥ 1.49.0, "Fill
+  from a preset…": flat 0.75, or the WR90 monthly lake factors converted to
+  A-pan at this project's monthly A-pan by WR90's or Taljaard's 2023 pan
+  equation; model.md §2.7a item 4). Picking one ticks **Vary it by month**,
+  fills the monthly row and the **Dam evaporation factor source** note
+  (`settings.lakeEvapFactorSource`, up to 600 characters, with a
+  field-history line), then goes back to "Fill from a preset…"; all stay
+  editable and nothing is saved until Save. A WR90 preset with any month's
+  A-pan at 0 fills nothing and says "enter the monthly A-pan first". When
+  the note names a preset whose values at the current A-pan no longer
+  match the row (the A-pan or a factor changed since), an amber note says
+  so ("fill it again, or update the note"). The Pan-coefficient preset
+  picker goes back to "Choose a preset…" after a pick the same way (it used
+  to keep showing the preset),
   and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
   workbook parity and rarely changed), days in February. The closed
   disclosure's summary names the value ("Advanced: days in February,

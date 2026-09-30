@@ -570,6 +570,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
+	// Engine ≥ 1.49.0: where the dam evaporation factors came from (a lake-factor preset's note), provenance only.
+	s.lakeEvapFactorSource = typeof raw?.lakeEvapFactorSource === 'string' ? raw.lakeEvapFactorSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
 	if (s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);

@@ -701,6 +701,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
+	// Engine ≥ 1.49.0; provenance only (a lake-factor preset's note). A snapshot without it had none.
+	lakeEvapFactorSource: { label: 'Dam evaporation factor source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',

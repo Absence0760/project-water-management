@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/engine';
-import { withMonthlyRates } from '@water-management/engine';
+import { lakeFactorPresetFill, withMonthlyRates } from '@water-management/engine';
 import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from './inputs';
 
 const node = (id: string, name: string, over: Partial<NetworkNode> = {}) =>
@@ -103,6 +103,17 @@ describe('monthly dam evaporation factors (WP-3.5)', () => {
 		const one = effectiveSettings({});
 		expect(monthlyRows(one).map((r) => r.label)).not.toContain('Dam evaporation factor (× A-pan)');
 		expect(settingsRows(one, run).find((r) => r[0] === 'Dam evaporation factor')?.[1]).toBe('0.75');
+	});
+
+	it('shows a lake-factor preset’s factors to 3 decimals and names its source (engine ≥ 1.49.0)', () => {
+		const run = { startDate: '2020-10-01', endDate: '2021-09-30' };
+		const fill = lakeFactorPresetFill('wr90', [180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130]);
+		if (!fill.ok) throw new Error(fill.reason);
+		const s = effectiveSettings({ lakeEvapFactorMonthly: fill.values as never, lakeEvapFactorSource: fill.note });
+		expect(monthlyRows(s).find((r) => r.label === 'Dam evaporation factor (× A-pan)')?.values[3]).toBe('0.691');
+		expect(settingsRows(s, run).find((r) => r[0] === 'Dam evaporation factor')?.[1]).toBe(`by month (see the monthly table) (source: ${fill.note})`);
+		// A single factor with a note names it too; a run saved before the setting has none.
+		expect(settingsRows(effectiveSettings({ lakeEvapFactorSource: 'site study' }), run).find((r) => r[0] === 'Dam evaporation factor')?.[1]).toBe('0.75 (source: site study)');
 	});
 });
 
