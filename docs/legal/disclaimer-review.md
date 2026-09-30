@@ -32,7 +32,8 @@ Where it is shown:
   the site's own address, filled in where the report is shown, so the Terms
   URL prints in full.
 - Its key points on every report's cover, in a "Read this first" box, and on
-  every page of the server PDF, in a running footer (both below).
+  every printed page of the report (the server PDF, and the browser's own
+  print in Chromium-based browsers), in a running footer (both below).
 - One `#` line at the top of every CSV of a run's results, and a first
   "Read this first" sheet (all five paragraphs) in the run's .xlsx workbook.
 - The seasonal outlook panel on the River tab: paragraphs 1 and 3 only.
@@ -64,8 +65,10 @@ the report is an impact report:
 
 > Not signed off: not for use as evidence in a licence application.
 
-**PDF footer.** Every page of the server-rendered PDF, followed by
-"Page X of Y":
+**PDF footer.** Every page of the server-rendered PDF, and of the report
+printed from a Chromium-based browser (the footer is the page's own print
+CSS since issue #70; Firefox prints the pages without it), followed by
+"Page X of Y.":
 
 > {project} · {run} · Model estimates; see the Disclaimer (section {n}, version 2026-09-28.2). The operator of this software accepts no responsibility to anyone who relies on this report.
 

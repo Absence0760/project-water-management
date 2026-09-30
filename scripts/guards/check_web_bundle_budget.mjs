@@ -1394,8 +1394,31 @@
 //             page +0.1 KB (it fetches the board's three series). No new
 //             dependency. Headroom ~3 KB.
 // 2026-09-30  total 1241 → 1246 KB (issue #71: measured 1243 with main @
+// 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
+//             1200, the branch 1204). The report's publication cover,
+//             "Changes since the previous publication" (ChangesList and the
+//             attribution line in the report's chunk), its Assurance of
+//             supply section (the Runs tab's panel in print mode) and the
+//             @page footer; the compare and scenario views' assurance table
+//             (compare/assurance.ts, AssuranceDeltaTable.svelte); the farm
+//             view's share-received column and its Afrikaans. All in lazy
+//             route or tab chunks; the largest tab chunk stays within 60 KB.
+//             No new dependency. Headroom ~2 KB.
+// 2026-09-30  total 1206 → 1210 KB (issue #70: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the report changed. Headroom ~3 KB.
+// 2026-09-30  total 1210 → 1214 KB (issue #70: measured 1211 with main @
+//             3f9b4c17 merged, #205's bounding box included). Nothing of the
+//             report changed. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1244 KB (issue #70: measured 1241 with main @
+//             848000ac merged). The report's publication, assurance and build
+//             record on top of main's evidence report. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1246 KB (issue #70: measured 1243 with main @
 //             e8ebaf18 merged). #222's allocations chart now in main.
 //             Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1250 KB (issue #70: measured 1247 with main @
+//             5502d0a6 merged). #225's evidence-report follow-ups now in
+//             main. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1406,7 +1429,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1246,
+	totalCodeKb: 1250,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

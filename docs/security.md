@@ -463,7 +463,8 @@ buys a **render session** that can read one report and nothing else.
 - **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
   session may make **only `GET`** requests, and only to `/auth/me`,
   `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
-  `/series`, `/day` and `/signoffs`: exactly the reads the report route
+  `/series`, `/day`, `/signoffs` and `/publication` (the run's place in the
+  publications, issue #70): exactly the reads the report route
   makes. An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
   parameters, once each: the impact section's one read), and the

@@ -4,8 +4,8 @@
 // 13 px labels are never scaled down. The charts are decorative
 // (aria-hidden); the summary sentence and the "Show the numbers" table carry
 // the content, and both come from here too, in the active language ($lib/i18n).
-import type { MonthTotals } from '@water-management/engine';
-import { plural, t, tn } from '$lib/i18n/locale.svelte';
+import { STRESS_THRESHOLDS, stressClassOf, type MonthTotals, type StressClass } from '@water-management/engine';
+import { msg, plural, t, tn, type Msg } from '$lib/i18n/locale.svelte';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd, type VolumeUnit } from './format';
 
 import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP as TOP, niceMax } from './chartGeometry';
@@ -105,10 +105,41 @@ export function supplySummary(monthly: readonly MonthTotals[], dataUntil: string
 	return t('Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below.', { from: fmtMonthLongYear(monthly[0]!.month), to: end, short: shortText });
 }
 
-/** The "Show the numbers" rows: every month with its year, in the reader's unit (the chart's axis stays in ML). */
+/**
+ * The engine's stress classes (network/reliability.ts, docs/model.md §4) in a
+ * farmer's words (issue #70): how much of the month's need arrived, never
+ * "stress" or "reliability".
+ */
+const STRESS_WORDS: Record<StressClass, Msg> = {
+	low: msg('all or nearly all'),
+	moderate: msg('a little short'),
+	high: msg('short'),
+	severe: msg('very short'),
+	critical: msg('far too little')
+};
+
+/** The share of the month's need received and its class in words; '–' and '' without a need. */
+export function supplyLevel(m: MonthTotals): { share: string; level: string } {
+	const ratio = m.demandM3 > 0 ? m.suppliedM3 / m.demandM3 : null;
+	const cls = stressClassOf(ratio);
+	return cls === null || ratio === null ? { share: '–', level: '' } : { share: fmtPct(ratio), level: t(STRESS_WORDS[cls]) };
+}
+
+/** What each word under a month's received water means, from the engine's thresholds. */
+export function supplyLevelKey(): string {
+	const at = (cls: StressClass) => fmtPct(STRESS_THRESHOLDS.find((x) => x.cls === cls)!.min);
+	return t('All or nearly all is {low} or more of what you needed; a little short, {moderate} or more; short, {high} or more; very short, {severe} or more; far too little, less than {severe}.', {
+		low: at('low'),
+		moderate: at('moderate'),
+		high: at('high'),
+		severe: at('severe')
+	});
+}
+
+/** The "Show the numbers" rows: every month with its year, in the reader's unit (the chart's axis stays in ML), and the share received. */
 export function supplyRows(monthly: readonly MonthTotals[], dataUntil: string, unit: VolumeUnit) {
 	const labels = monthLabels(monthly, dataUntil);
-	return monthly.map((m, i) => ({ label: labels[i]!.row, need: fmtVolume(m.demandM3, unit), got: fmtVolume(m.suppliedM3, unit) }));
+	return monthly.map((m, i) => ({ label: labels[i]!.row, need: fmtVolume(m.demandM3, unit), got: fmtVolume(m.suppliedM3, unit), ...supplyLevel(m) }));
 }
 
 // ---- The dam's month-end line ------------------------------------------------
