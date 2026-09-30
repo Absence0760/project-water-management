@@ -835,8 +835,9 @@ scenario is `'team'`, and behaves exactly as above).
   can't read any run row, their own application's included (its `inputs`
   are the whole base): its metadata, the run count and the cap go through
   `app_scenario_run_meta` and `app_trim_application_runs`, and of its series
-  they read the application's own nodes and the catchment allowlist only
-  (046, [data-model.md § Applicants](./data-model.md#applicants-044045)).
+  they read the application's own nodes and the catchment allowlist only,
+  and nothing of a run whose ops weren't all proposals
+  (046, 118, [data-model.md § Applicants](./data-model.md#applicants-044045)).
   RLS still lets an applicant insert their own application's run rows
   (045), so the backend stamps every run it stores (077,
   [security.md § Run stamps](./security.md#run-stamps)): an application
@@ -853,11 +854,44 @@ scenario is `'team'`, and behaves exactly as above).
   scenario), and for an applicant it edits the applicant projection: the
   anonymised nodes' blanked values are what they see, and an edit to one is
   recorded like any `node.set` on it (a baseline assumption).
-- **Results for the applicant** are not built: the assessors compare a run
-  with its base (`/compare/runs` refuses a contributor, since it returns
-  `inputs`); the applicant projection of results (catchment series, their own
-  farm, anonymised downstream deltas) is a follow-up
-  ([followups.md § Applicants](./followups.md#applicants-wp-33)).
+- **Results for the applicant** (118, `GET …/scenarios/:sid/results`,
+  `scenarios/results.ts` and the pure `applicantResults.ts`; D2's
+  recommended default, **pending the client**). The assessors compare a run
+  with its base on the compare page (`/compare/runs` refuses a contributor,
+  since it returns `inputs`); the applicant gets a projection of the same
+  run against the same base, built on the server as the base's is. The
+  server reads the run's recorded scenario, model and summary and its
+  base's summary past RLS (`app_application_run_results`, for whoever reads
+  the application), rebuilds the check that made the run's input (the same
+  base, recorded ops and recorded own units give the same input, and so its
+  `reIds`), and returns:
+  - every **EWR site**'s months met, rate and longest run not met, base
+    beside application (the outlet unnamed, a gauge by name), and the
+    outlet's EWR days not met;
+  - the **catchment**'s mean natural and outlet flow and the outlet's daily
+    flow and EWR series, base beside application, only at five or more farm
+    holders (the k rule of the share links and the contributor's series),
+    read under the caller's own RLS; the EWR deficit volumes likewise;
+  - their **own units** (their farm links as they read them now) and the
+    units their `node.add` ops add, in full: demand, supply, share met, EWR
+    charge, the dam;
+  - every other farm or water user **downstream** of those units (along
+    `downstreamNodeId` in the run's network) under the anonymous name the
+    base projection gives it, with only the change in its mean supply as a
+    whole percentage ("Farm 3 downstream: supply −4 %");
+  - **what ran on their units**: their nodes, crops, crop areas, transfers,
+    land cover, boreholes and demand objects as the base projection shows
+    them, where an item an op added under a hidden item's id (the run holds
+    it under a fresh one) shows under the id the applicant gave it.
+
+  **Only when every op was a proposal** (`app_run_all_proposals`, the share
+  link's rule). A baseline assumption can change another unit's inputs (its
+  demand halved, its dam emptied), and every figure that moves with it (the
+  catchment's flow, their own supply, a neighbour's change) could read that
+  unit's values out, so such a run shows the EWR sites' months and the EWR
+  days only, and RLS hands a contributor none of its series (118). The
+  percentage is rounded to a whole number and never comes with a volume. The
+  Applicant view shows it all under the changes (ui.md § Applications).
 - **The log.** `scenario.created / changed / submitted / withdrawn /
   reopened / decided / shared / unshared / deleted` and `run.created` carry
   `application: true` and no name until the application is decided (every
@@ -911,6 +945,12 @@ redaction, the note matrix and revisions), e2e
 comments; the assessor sees it; axe),
 the applicant's `ewrRule.set` in `applications.db.test.ts` (accepted,
 applied, classed baseline beside their own farm's proposal), e2e
-`e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's
+`e2e/tests/applications.spec.ts` (the applicant's flow and their view of
+the results, their Yield panel, the assessor's
 decision, the owner's party and the applicant's share picker, axe in both
-themes).
+themes). The results: `applicantResults.test.ts` (the projection: names as
+the base projection gives them, the rounded percentage, what's left out
+after a baseline assumption and below five farm holders, the `reIds` mapped
+back, each with its positive control) and `results.db.test.ts` (118 end to
+end: the string scan, who may ask, the definer function's readers, RLS on a
+baseline-assumption run's series).

@@ -935,6 +935,82 @@ export interface ScenarioBase {
 	anonymisedNodeIds: string[];
 }
 
+/** One EWR site's months, base or application (ApplicantResults). */
+export interface ApplicantEwrFigures {
+	months: number;
+	met: number;
+	rate: number | null;
+	longestNotMetRun: number;
+	/** Only with the catchment figures (k and every change a proposal); else null. */
+	deficitM3: number | null;
+}
+
+export interface ApplicantCatchmentFigures {
+	meanNaturalFlowM3Day: number;
+	meanSimulatedOutflowM3Day: number;
+	ewrDaysNotMet: number;
+	ewrFractionDaysNotMet: number;
+}
+
+export interface ApplicantUnitFigures {
+	avgDemandM3Day: number;
+	avgSuppliedM3Day: number;
+	avgDeficitM3Day: number;
+	fractionSupplied: number;
+	avgEwrChargeM3Day: number;
+	daysEwrNotMet: number;
+	damEndM3: number | null;
+	damLowM3: number | null;
+}
+
+/** Why the catchment figures or the per-unit figures are left out. */
+export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
+
+interface ApplicantSeriesPair {
+	base: { startDate: string; values: (number | null)[] };
+	application: { startDate: string; values: (number | null)[] };
+}
+
+/**
+ * GET …/scenarios/:sid/results (WP-3.3, D2's default, pending the client): a
+ * run of an application as its applicant sees it against its base. Every
+ * other farm or water user only downstream of theirs, by the anonymous name
+ * the base gives it ("Farm 3") and a whole percentage.
+ */
+export interface ApplicantResults {
+	allProposals: boolean;
+	ewrSites: { nodeId: string | null; name: string | null; isOutlet: boolean; base: ApplicantEwrFigures | null; application: ApplicantEwrFigures | null }[];
+	catchment: {
+		ewrDaysNotMet: { base: number; application: number };
+		ewrFractionDaysNotMet: { base: number; application: number };
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
+		series: { outflow: ApplicantSeriesPair; ewr: ApplicantSeriesPair } | null;
+		withheld: ApplicantWithheld | null;
+	};
+	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
+	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePct: number | null }[];
+	unitsWithheld: ApplicantWithheld | null;
+	/** What ran on their units, by the ids they gave. */
+	model: {
+		nodes: { id: string; name: string; kind: string }[];
+		crops: { id: string; name: string }[];
+		cropAreas: { nodeId: string; cropId: string; areaM2: number }[];
+		boreholes?: { id: string; nodeId: string; name: string }[];
+	};
+}
+
+export interface ApplicantResultsRun {
+	id: string;
+	label: string;
+	engineVersion: string;
+	startDate: string;
+	endDate: string;
+	createdAt: string;
+	baseRunId: string;
+	/** Made from the application's changes and base as they are now. */
+	current: boolean;
+}
+
 /**
  * The scenario's ops applied to its base run: which applied (`applied[].index`
  * into ops, with notes on side effects), which don't (`problems`, one line

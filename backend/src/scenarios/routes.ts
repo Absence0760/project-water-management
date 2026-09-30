@@ -18,6 +18,7 @@
 //    curates), never by probing an address;
 //  - farmers: 403, like every viewer route.
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
@@ -38,6 +39,7 @@ import {
 	type ScenarioCheck,
 	type ScenarioRow
 } from './execute.js';
+import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 
@@ -207,6 +209,23 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
 			const view = role === 'contributor' ? projectBaseForApplicant(base, s.ownedNodeIds) : { settings: base.settings, model: base.model, anonymisedNodeIds: [] };
 			return c.json({ baseRunId: s.baseRunId, ...view });
+		});
+	})
+	// An application run's results as its applicant sees them against its base
+	// (results.ts, applicantResults.ts: D2's default): EWR sites, the catchment
+	// under the k rule, their own units, other units downstream anonymous. The
+	// newest run by default. For any reader of the application; a team
+	// scenario's runs are compared on the compare page instead.
+	.get('/:id/scenarios/:sid/results', async (c) => {
+		const { id, sid } = c.req.param();
+		const q = z.object({ runId: z.string().uuid().optional() }).parse(c.req.query());
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (!isApplication(s)) throw new ApiError(409, "a team scenario's runs are compared with their base on the compare page");
+			const runId = q.runId ?? (await newestApplicationRun(db, id, s.id));
+			if (!runId) return c.json({ run: null, results: null });
+			return c.json(await loadApplicantResults(db, id, s, runId));
 		});
 	})
 	.patch('/:id/scenarios/:sid', async (c) => {

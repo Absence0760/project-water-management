@@ -92,6 +92,8 @@ import type {
 	Scenario,
 	ScenarioCheck,
 	ScenarioBase,
+	ApplicantResults,
+	ApplicantResultsRun,
 	ScenarioOutcome,
 	ScenarioStatus,
 	ScenarioWithCheck,
@@ -718,6 +720,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun }),
 			/** The base's model and settings as you may see them (an applicant's is anonymised past their own farms). */
 			base: (id: string, sid: string) => request<ScenarioBase>('GET', `${p(id)}/scenarios/${enc(sid)}/base`),
+			/** An application run's results as its applicant sees them (the newest run unless runId); both null before any run. */
+			results: (id: string, sid: string, runId?: string) =>
+				request<{ run: ApplicantResultsRun | null; results: ApplicantResults | null }>(
+					'GET',
+					`${p(id)}/scenarios/${enc(sid)}/results${runId ? `?runId=${enc(runId)}` : ''}`
+				),
 			/** The application workflow (WP-3.3): submit freezes the ops; a submit whose ops don't all apply answers 422 with `problems`. */
 			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
