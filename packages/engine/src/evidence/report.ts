@@ -23,6 +23,7 @@ import {
 	type EvidenceAllocationCounts,
 	type EvidenceAllocations,
 	type EvidenceAllocationSource,
+	type EvidenceCapYears,
 	type EvidenceAllocationUnit,
 	type EvidenceAllocationYear,
 	type EvidenceChange,
@@ -1267,7 +1268,9 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 				meanModelledA: sa ? sa.meanModelledM3PerYear : null,
 				meanRegisteredA: sa ? sa.meanRegisteredM3PerYear : null,
 				meanModelledB: sb ? sb.meanModelledM3PerYear : null,
-				meanRegisteredB: sb ? sb.meanRegisteredM3PerYear : null
+				meanRegisteredB: sb ? sb.meanRegisteredM3PerYear : null,
+				capA: capOf(b, nodeId, src),
+				capB: a ? capOf(a, nodeId, src) : null
 			});
 		}
 		const n = (nb ?? na)!;
@@ -1284,6 +1287,20 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 		notMatchedA: ca ? ca.unmatchedAllocationIds.length + ca.notInRunAllocationIds.length : 0,
 		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null
 	};
+}
+
+/**
+ * A cap run's cap on one unit and source (evidence-6): the years its use
+ * reached the registered volume and the days the licence limit held use back
+ * (RunSummary.allocations; `limitBound` null before engine 1.40.0). null when
+ * the run isn't a cap run or doesn't cap that source.
+ */
+function capOf(run: Pick<EvidenceRunInput, 'summary'>, nodeId: string, source: AllocationWaterSource): EvidenceCapYears | null {
+	const s = run.summary.allocations;
+	if (s?.mode !== 'cap') return null;
+	const src = s.nodes.find((n) => n.nodeId === nodeId)?.sources.find((x) => x.waterSource === source);
+	if (!src?.capReached) return null;
+	return { capReached: src.capReached, limitBound: src.limitBound ?? null };
 }
 
 /** Σ over units and sources of a run's whole years over, and of those judged. */
