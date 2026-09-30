@@ -394,7 +394,7 @@ describe('dam storage (WP-3.5)', () => {
 	});
 });
 
-describe('the drought restriction rule (engine 1.46.0, WP-3.8)', () => {
+describe('the drought restriction rule (engine 1.52.0, WP-3.8)', () => {
 	it('is saved with the settings, reaches a run (its level, cuts and restricted demand, the summary, the self-check), and is refused when malformed', async () => {
 		const u = await signUp('Drought');
 		const projectId = await project(u, 'With restrictions');

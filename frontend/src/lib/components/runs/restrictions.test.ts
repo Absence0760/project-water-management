@@ -16,7 +16,7 @@ const summary: NonNullable<RunSummary['droughtRestriction']> = {
 	]
 };
 
-describe('restrictionView (engine 1.46.0, WP-3.8)', () => {
+describe('restrictionView (engine 1.52.0, WP-3.8)', () => {
 	it('is null for a run without the rule', () => {
 		expect(restrictionView(undefined)).toBeNull();
 	});

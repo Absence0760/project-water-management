@@ -555,7 +555,7 @@ Filled values are derived in each run and never written to `time_series`, so
 turning it off undoes it; the run's own columns carry the filled days.
 
 **The drought restriction rule lives in `project.settings`** too
-(`settings.droughtRestriction`, engine ≥ 1.46.0, WP-3.8; no table, column or
+(`settings.droughtRestriction`, engine ≥ 1.52.0, WP-3.8; no table, column or
 migration): review and lift dates and up to six levels, each a storage
 threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
 One rule per project, not per node, so no node id to keep in step and no

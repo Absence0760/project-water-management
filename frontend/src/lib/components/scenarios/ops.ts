@@ -328,7 +328,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
 			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
-			// So has no drought restriction rule (engine ≥ 1.46.0): off.
+			// So has no drought restriction rule (engine ≥ 1.52.0): off.
 			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe' || f?.spec.t === 'restriction';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
 			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
@@ -450,7 +450,7 @@ export interface OpDraft {
 	months: number[];
 	/** settings.set pe: the PE input being written. */
 	pe: PeDraft;
-	/** settings.set droughtRestriction (engine ≥ 1.46.0): the rule being written, null = off. */
+	/** settings.set droughtRestriction (engine ≥ 1.52.0): the rule being written, null = off. */
 	restriction: DroughtRestrictionRule | null;
 	cropId: string;
 	areaHa: string;

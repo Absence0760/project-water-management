@@ -13,7 +13,7 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-share', label: 'Flow share' },
 	{ id: 'set-ewr', label: 'EWR' },
 	{ id: 'set-reserve', label: 'Reserve rules' },
-	// The drought restriction rule (engine ≥ 1.46.0, WP-3.8): a model input, off by default.
+	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8): a model input, off by default.
 	{ id: 'set-restrict', label: 'Drought restrictions' },
 	{ id: 'set-period', label: 'Simulation period' },
 	// Its zero-rain and low-vs-CHIRPS limits change results (issue #66), so it is a model input (issue #173).

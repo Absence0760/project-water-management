@@ -1,4 +1,4 @@
-// Drought restrictions in use (engine 1.46.0, WP-3.8, docs/ui.md § Drought
+// Drought restrictions in use (engine 1.52.0, WP-3.8, docs/ui.md § Drought
 // restrictions): a scenario sets a restriction rule through "Change a
 // setting"; an editor saves an outlook's review triggers as the project's
 // rule (and the panel then says it is the rule); a run under it shows the

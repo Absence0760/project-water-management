@@ -216,7 +216,7 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
 `fullAllocation`: a full-allocation scenario on a base run is the "every
 registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
-and from engine 1.46.0 (WP-3.8) `droughtRestriction`: the drought
+and from engine 1.52.0 (WP-3.8) `droughtRestriction`: the drought
 restriction rule, whole (review and lift dates, levels with a threshold and
 a % cut per part of demand), or `null` for off, checked by the engine's
 `droughtRestrictionIssues` as a settings save is ([model.md §2.7i](./model.md));
@@ -764,7 +764,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
 - **The drought restriction rule** (`settings.set droughtRestriction`,
-  engine ≥ 1.46.0) is edited whole in the Settings tab's own editor
+  engine ≥ 1.52.0) is edited whole in the Settings tab's own editor
   (`settings/DroughtRestrictionFields.svelte`, loaded when picked),
   starting from the rule the scenario meets (or off); its first problem
   blocks Add, in the same words as Settings. Described as "Drought

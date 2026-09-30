@@ -171,7 +171,7 @@
 	// users unless the curtailment table lists them already (one copy on the page).
 	const otherUsers = $derived(summary ? usersTableOnSupply(summary) : false);
 	const otherUses = $derived(summary ? hasHumanImpacts(summary, otherUsers) : false);
-	// The drought restriction rule's tables (engine ≥ 1.46.0, WP-3.8): a panel of their own for a run with the rule.
+	// The drought restriction rule's tables (engine ≥ 1.52.0, WP-3.8): a panel of their own for a run with the rule.
 	const restrictions = $derived(!!summary?.droughtRestriction);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 	const names = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.name] as [string, string])));

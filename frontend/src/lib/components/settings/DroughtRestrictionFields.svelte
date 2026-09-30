@@ -1,5 +1,5 @@
 <!--
-	The drought restriction rule's editor (engine ≥ 1.46.0, WP-3.8, docs/ui.md
+	The drought restriction rule's editor (engine ≥ 1.52.0, WP-3.8, docs/ui.md
 	§ Drought restrictions, docs/model.md §2.7i): Settings → Drought
 	restrictions, and the scenario form's "Change a setting" for comparing
 	restriction policies. On each review date the model reads the total farm

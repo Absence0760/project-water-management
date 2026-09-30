@@ -9,7 +9,7 @@
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
 	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
-	// Settings → Drought restrictions (engine ≥ 1.46.0, WP-3.8): its own chunk, for the same reason.
+	// Settings → Drought restrictions (engine ≥ 1.52.0, WP-3.8): its own chunk, for the same reason.
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
@@ -1105,7 +1105,7 @@
 		/>
 	</div>
 
-	<!-- Drought restrictions (engine ≥ 1.46.0, WP-3.8) ---------------------------------------->
+	<!-- Drought restrictions (engine ≥ 1.52.0, WP-3.8) ---------------------------------------->
 	<section class="panel" id="set-restrict" aria-labelledby="restrict-h">
 		<div class="panel-head">
 			<h2 id="restrict-h">Drought restrictions <HelpTip key="settings.droughtRestriction" /></h2>

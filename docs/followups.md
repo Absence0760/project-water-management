@@ -213,7 +213,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
-- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.46.0,
+- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.52.0,
       [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
       #46). Built off by default on these choices; confirm or change each:
       one rule per project on the **total farm dam storage** (every farm dam,
@@ -3271,7 +3271,7 @@ from the WP:
       below the floor apart from the shortfall, with the l/person/day
       supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
       stay one % for every category (#53 O4). WP-3.8's drought restriction
-      rule (a cut by dam level) holds the same floor: done (engine 1.46.0,
+      rule (a cut by dam level) holds the same floor: done (engine 1.52.0,
       2026-09-30, [model.md §2.7i](./model.md)), through `planObjects`'
       floor and `dayFloor`, checked by the `droughtRestriction` self-check.
 - [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
@@ -3296,7 +3296,7 @@ from the WP:
       stacks on the unit's own and goes through the same basic-needs floor
       (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
       below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
-- [x] **WP-3.8's drought restriction rule** (engine 1.46.0, 2026-09-30,
+- [x] **WP-3.8's drought restriction rule** (engine 1.52.0, 2026-09-30,
       [model.md §2.7i](./model.md)). `settings.droughtRestriction`: review
       and lift dates and up to six levels, each a storage threshold on the
       total farm dam storage and a % cut per part of demand (crops, each

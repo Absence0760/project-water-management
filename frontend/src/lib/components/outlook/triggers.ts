@@ -85,7 +85,7 @@ export function buildTriggersView(outlook: Pick<Outlook, 'triggers'>): TriggersV
 
 /**
  * An outlook's trigger table as the drought restriction rule (engine ≥
- * 1.46.0, WP-3.8, docs/model.md §2.15a, §2.7i): the engine's
+ * 1.52.0, WP-3.8, docs/model.md §2.15a, §2.7i): the engine's
  * restrictionRuleFromTriggers over the outlook's own levels, in words, with
  * what it couldn't carry. null without a table, or when no band's level cuts
  * demand (then `notes` says so and there is nothing to save).

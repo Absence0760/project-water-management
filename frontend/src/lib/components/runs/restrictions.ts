@@ -1,4 +1,4 @@
-// The drought restriction rule's results (engine ≥ 1.46.0, WP-3.8, docs/ui.md
+// The drought restriction rule's results (engine ≥ 1.52.0, WP-3.8, docs/ui.md
 // § Drought restrictions, RunSummary.droughtRestriction): what the tables on
 // Units & supply show. The days at each level per water year (October to
 // September) and over the run, and per unit its mean demand before and after

@@ -42,7 +42,7 @@ describe('links', () => {
 		expect(supplyNav(false).flatMap((g) => g.sections.map((s) => s.id))).toEqual(SUPPLY_ANCHORS.filter((a) => a !== 'res-other-uses' && a !== 'res-restrictions'));
 	});
 
-	it('lists Drought restrictions before Other uses, only for a run with the rule (engine 1.46.0)', () => {
+	it('lists Drought restrictions before Other uses, only for a run with the rule (engine 1.52.0)', () => {
 		const ids = (o: boolean, r: boolean) => supplyNav(o, r).flatMap((g) => g.sections.map((s) => s.id));
 		expect(ids(false, true).at(-1)).toBe('res-restrictions');
 		expect(ids(true, true).slice(-2)).toEqual(['res-restrictions', 'res-other-uses']);

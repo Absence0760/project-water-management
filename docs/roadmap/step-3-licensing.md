@@ -1050,7 +1050,7 @@ must build WP-2.15 Phase B.
 > (issue #54 item 2d) once the hydrologist confirms. Drought restrictions
 > are built (below).
 >
-> **Drought restrictions built 2026-09-30 (engine 1.46.0), off by default;
+> **Drought restrictions built 2026-09-30 (engine 1.52.0), off by default;
 > pending the hydrologist.** One rule per project,
 > `settings.droughtRestriction` (no migration: project settings are
 > jsonb), rather than `NetworkNode.restriction`: the review triggers
@@ -1139,7 +1139,7 @@ must build WP-2.15 Phase B.
   - **Pump capacity** m³/day (pumps × m³/h × 24).
   - **Hands-off flow**: river abstraction only above a threshold at the
     node (a fixed m³/day by month, or its EWR share).
-  - **Drought restrictions** (built for storage, engine 1.46.0; the EWR
+  - **Drought restrictions** (built for storage, engine 1.52.0; the EWR
     trigger is a follow-up): cut demand by *x* % when storage < *y* % or
     when the downstream EWR site failed yesterday. This is a **model
     rule**, distinct from WP-2.3's published `restriction_level` /

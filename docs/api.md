@@ -366,7 +366,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
-  `settings.droughtRestriction` (engine ≥ 1.46.0, WP-3.8,
+  `settings.droughtRestriction` (engine ≥ 1.52.0, WP-3.8,
   [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
   is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
   (1–12), liftDates?: ['MM-DD', …] (0–12, none a review date), levels: [{
@@ -1586,7 +1586,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
-- `summary.droughtRestriction` (engine ≥ 1.46.0, WP-3.8; only with
+- `summary.droughtRestriction` (engine ≥ 1.52.0, WP-3.8; only with
   `settings.droughtRestriction`): `{ rule (as applied), years: [{
   waterYear, days, daysByLevel: [none, level 1, …] }], daysByLevel (the
   whole run), reviews (days the level was decided), units: [{ nodeId, name,

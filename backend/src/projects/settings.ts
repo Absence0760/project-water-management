@@ -147,7 +147,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
  * own source. The declared uncertainty rule (issue #71) is one rule: a patch
  * that changed one threshold must not keep another from an older one. So is
- * the drought restriction rule (engine ≥ 1.46.0): a level left out is gone.
+ * the drought restriction rule (engine ≥ 1.52.0): a level left out is gone.
  */
 const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction']);
 
@@ -922,7 +922,7 @@ export const SettingsPatch = z
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.
 		ewrChargeSource: z.enum(EWR_CHARGE_SOURCES),
 		lowFlowMeasure: z.enum(LOW_FLOW_MEASURES),
-		// The drought restriction rule (engine ≥ 1.46.0, WP-3.8, network/restriction.ts): replaced whole, null = off.
+		// The drought restriction rule (engine ≥ 1.52.0, WP-3.8, network/restriction.ts): replaced whole, null = off.
 		// The engine's own checks (droughtRestrictionIssues), so the form, the save and the run agree.
 		droughtRestriction: z
 			.unknown()

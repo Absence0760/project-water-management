@@ -3257,7 +3257,7 @@ floor either (the unit's demand over the year is then its registered volume
 plus what the floor holds). A full allocation alone is not a restriction and
 rescales the object, floor included; whether it should hold the floor too is
 [audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
-too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.46.0, §2.7i) holds
+too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.52.0, §2.7i) holds
 the same floor, with the object's floor and `dayFloor`: MIN(floor, the
 demand before the restriction). A municipality's own restriction
 stages are shown as the supplied l per person per day, never applied.
@@ -3466,7 +3466,7 @@ Hand examples: `network/handsOff.test.ts`.
 **Outputs.** No new series: the columns O, S and `river_abstraction` carry
 it, and the summary's farm figures follow.
 
-### 2.7i Drought restrictions (engine ≥ 1.46.0, roadmap WP-3.8)
+### 2.7i Drought restrictions (engine ≥ 1.52.0, roadmap WP-3.8)
 
 **Why.** The last of WP-3.8's operating rules: "cut demand by x % when
 storage falls below y %". A WUA restricts its members in a drought by
@@ -6918,7 +6918,7 @@ the draft, and runs `simulateNetwork` on it. Other nodes keep their own
 demand. The dam's **boreholes are removed** for the search, those that pump
 into the dam (WP-3.9) included, pending the hydrologist: the yield is
 the dam's, not the dam's plus groundwater. The drought restriction rule
-(engine ≥ 1.46.0, §2.7i) is dropped too, on every node: the yield is what
+(engine ≥ 1.52.0, §2.7i) is dropped too, on every node: the yield is what
 the dam can give, not what a restriction policy asks of it (pending the
 hydrologist). When no transfer touches the dam
 or anything upstream of it, a probe simulates only the dam and the nodes
@@ -7217,7 +7217,7 @@ publishes one level to farmers, and each farm page shows that farm's own
 figures at it, *This season* (`views/farmOutlook.ts`, migration 106, issues
 #53 R5 and #122; [ui.md § Farmer view](./ui.md#farmer-view-farm)).
 
-**Without the drought restriction rule** (engine ≥ 1.46.0, §2.7i). The
+**Without the drought restriction rule** (engine ≥ 1.52.0, §2.7i). The
 outlook and its review triggers (§2.15a) run the project without
 `settings.droughtRestriction` (`withoutDroughtRestriction`, in the engine's
 entry points and the backend job): the triggers are what that rule is made
@@ -7556,7 +7556,7 @@ median, 2026-09-26; `outlook.perf.test.ts` holds it under 250 ms and at
 least 8× the older path). The history is shared by every band, level and
 year, since a band changes only the dams' storage on the review date.
 
-**WP-3.8's drought restriction rule** (engine ≥ 1.46.0, §2.7i).
+**WP-3.8's drought restriction rule** (engine ≥ 1.52.0, §2.7i).
 `restrictionRuleFromTriggers(table, levels)` turns a table into the rule's
 parameters: the review date's month and day as the review date, the day
 after the season end as the lift date (the table's level applies from the
@@ -7634,7 +7634,7 @@ can store one per base run. The state holds:
   use so far this water year (`allocationUsedM3`) and a full allocation's
   demand factor for the water year in progress (`allocationFactor`), each
   left out without one;
-- from engine 1.46.0 (§2.7i), the drought restriction level held the day
+- from engine 1.52.0 (§2.7i), the drought restriction level held the day
   before (`restrictionLevel`), left out without the rule; a run resumed
   part-way keeps it until its next review or lift date, one resumed on the
   capture run's first day decides that day as the capture run did;
@@ -7821,7 +7821,7 @@ table is already general enough to hold such nodes.
   not (the pump takes the flow below the dam that need not pass, up to its
   capacity).
 - **Drought restrictions** (curtail demand when storage falls low, WP-3.8):
-  **ported** (engine ≥ 1.46.0, §2.7i) as one rule per project on the total
+  **ported** (engine ≥ 1.52.0, §2.7i) as one rule per project on the total
   farm dam storage, decided on review dates, with a % cut per part of
   demand per level and the basic-needs floor kept.
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
@@ -7932,7 +7932,7 @@ text:
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
-| `checkDroughtRestriction` | Engine ≥ 1.46.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the farm dams' storage at the start of that day (0 from a lift date, else held); each part's cut column is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's days per level and unit means add up to the columns. Without the rule, no restriction column or summary. |
+| `checkDroughtRestriction` | Engine ≥ 1.52.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the farm dams' storage at the start of that day (0 from a lift date, else held); each part's cut column is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's days per level and unit means add up to the columns. Without the rule, no restriction column or summary. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
@@ -8012,7 +8012,7 @@ through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
 `checkBalance`, `checkWorkings`, `checkSoilWater`, `checkRunoffBalance`, `checkTransferLimits`,
 `checkReportTotals`, (engine ≥ 0.17.0) `checkEwrAttribution`, `checkGroundwater`, `checkLandCover`,
-`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules`, (engine ≥ 1.46.0) `checkDroughtRestriction` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
+`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules`, (engine ≥ 1.52.0) `checkDroughtRestriction` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
 ids `balance` … `allocations`, `operatingRules`, `droughtRestriction` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
 another, and a check that throws counts as failed with the reason. The result
 is `RunSummary.verification`: pass/fail per check, the first broken property

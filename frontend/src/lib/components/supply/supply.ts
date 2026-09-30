@@ -213,7 +213,7 @@ export function cardFacts(c: UnitCard, weekDays: number, weekEnd: DataEnd | null
  * (links.ts SUPPLY_ANCHORS), in page order. `otherUses`: the run has land
  * cover, boreholes, demand objects or other users to show (runs/humanImpacts.ts
  * hasHumanImpacts), their section last (issue #137). `restrictions`: the run
- * has the drought restriction rule's tables (engine ≥ 1.46.0), before them.
+ * has the drought restriction rule's tables (engine ≥ 1.52.0), before them.
  */
 export function supplyNav(otherUses: boolean, restrictions = false): NavGroup[] {
 	return [
@@ -224,7 +224,7 @@ export function supplyNav(otherUses: boolean, restrictions = false): NavGroup[] 
 				{ id: 'res-farms', label: 'Hydrological unit results' },
 				{ id: 'res-curtailment', label: 'Curtailment' },
 				{ id: 'res-assurance', label: 'Assurance of supply' },
-				// The drought restriction rule's tables (engine ≥ 1.46.0, WP-3.8), for a run with the rule.
+				// The drought restriction rule's tables (engine ≥ 1.52.0, WP-3.8), for a run with the rule.
 				...(restrictions ? [{ id: 'res-restrictions', label: 'Drought restrictions' }] : []),
 				...(otherUses ? [{ id: 'res-other-uses', label: 'Other uses' }] : [])
 			]

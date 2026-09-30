@@ -96,7 +96,7 @@ const RUN_KEYS = [
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)
 	'river_abstraction',
-	// The drought restriction rule (engine 1.46.0, WP-3.8)
+	// The drought restriction rule (engine 1.52.0, WP-3.8)
 	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',

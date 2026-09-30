@@ -1276,7 +1276,7 @@ describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
 	});
 });
 
-describe('settings.droughtRestriction (engine 1.46.0, WP-3.8)', () => {
+describe('settings.droughtRestriction (engine 1.52.0, WP-3.8)', () => {
 	const rule = { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3 } }, { belowPct: 0.3, cuts: { crops: 0.6, domestic: 0.2 } }] };
 	it('takes a rule or null, checked by the engine’s own rule checks', () => {
 		expect(SettingsPatch.safeParse({ droughtRestriction: rule }).success).toBe(true);
