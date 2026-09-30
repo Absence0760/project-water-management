@@ -4,7 +4,8 @@
 // (supplyIssues). Pure: no Svelte.
 import { SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-management/engine';
 import { describeMonths, WATER_YEAR_CALENDAR } from '$lib/format/months';
-import { fmtNum } from '$lib/format/number';
+import { groupedText } from '$lib/components/common/numberText';
+import { monthsOf } from './monthFields';
 
 /** What each rule does, under the form's select. */
 export const SUPPLY_RULE_HELP: Record<SupplyRule, string> = {
@@ -75,12 +76,19 @@ export function diverts(n: Pick<NetworkNode, 'divertCapacityM3Day' | 'divertMont
 	return Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0;
 }
 
-/** "120 m³/day" when every month is the same, else "0–120 m³/day"; over the months above 0 when `positive`. */
-function amountRange(row: readonly number[], positive: boolean): string {
+/** A value as its field shows it (12 345.5, 0.0129): every figure entered, thousands grouped. */
+const asEntered = (v: number) => groupedText(v);
+
+/**
+ * "120 m³/day" when every month counted is the same, else "between 80 and
+ * 12 345.5 m³/day by month"; over the months above 0 when `positive`. With
+ * `upTo`, the one amount reads "up to 120 m³/day" (a capacity).
+ */
+function amountRange(row: readonly number[], positive: boolean, upTo = false): string {
 	const vals = positive ? row.filter((v) => v > 0) : row;
 	const lo = Math.min(...vals);
 	const hi = Math.max(...vals);
-	return lo === hi ? `${fmtNum(lo, 2, true)} m³/day` : `${fmtNum(lo, 2, true)}–${fmtNum(hi, 2, true)} m³/day`;
+	return lo === hi ? `${upTo ? 'up to ' : ''}${asEntered(lo)} m³/day` : `between ${asEntered(lo)} and ${asEntered(hi)} m³/day by month`;
 }
 
 /** The water-year months (as "Oct–Mar", describeMonths) whose value is 0. */
@@ -88,26 +96,65 @@ function zeroMonths(row: readonly number[]): string {
 	return describeMonths(WATER_YEAR_CALENDAR.filter((_, i) => !(row[i]! > 0)));
 }
 
+/** A monthly row the run reads (12 values), or null. */
+const monthRow = (v: readonly number[] | null | undefined): readonly number[] | null => (Array.isArray(v) && v.length === 12 ? v : null);
+
+type HandsOffNode = Pick<
+	NetworkNode,
+	| 'handsOffM3Day'
+	| 'handsOffEwr'
+	| 'supplyRule'
+	| 'pumpCapacityM3Day'
+	| 'damCapacityM3'
+	| 'pctUpstreamToDam'
+	| 'pctRunoffToDam'
+	| 'divertCapacityM3Day'
+	| 'divertMonthlyM3Day'
+>;
+
+/**
+ * What the hands-off flow holds back on this farm, as the run reads it
+ * (engine network/simulate.ts, docs/model.md §2.7h): the river pump (any rule
+ * but the dam only, unless its capacity is 0), and River to dam (O) on a farm
+ * with a dam. A farm with no dam irrigates what is routed to its dam (K, M
+ * and O) straight from the river, so there the hands-off flow limits that
+ * (engine ≥ 1.31.0). Run of river routes nothing to the dam. The dam's own
+ * split (K, M) into a real dam is not a pump, so it isn't held back. Reads
+ * the entered capacity: a dam not yet in service, or silted to nothing, runs
+ * as no dam on those days (§2.7g), which a one-line preview doesn't split.
+ */
+export function handsOffTakers(n: Partial<HandsOffNode>): { pump: boolean; riverToDam: boolean; noDamRouting: boolean } {
+	const rule = n.supplyRule ?? SUPPLY_DEFAULTS.supplyRule;
+	const pump = rule !== 'damFirst' && n.pumpCapacityM3Day !== 0;
+	const routes = rule !== 'runOfRiver';
+	const dam = (n.damCapacityM3 ?? 0) > 0;
+	const div = diverts({ divertCapacityM3Day: n.divertCapacityM3Day ?? 0, divertMonthlyM3Day: n.divertMonthlyM3Day });
+	const noDamRouting = routes && !dam && ((n.pctUpstreamToDam ?? 0) > 0 || (n.pctRunoffToDam ?? 0) > 0 || div);
+	return { pump, riverToDam: routes && dam && div, noDamRouting };
+}
+
 /**
  * The hands-off flow in plain words under its fields (engine ≥ 1.31.0, issue
- * #204, docs/model.md §2.7h): what the farm leaves in the river before its
- * river pump and River to dam take anything. Reads the node as the run does
+ * #204, docs/model.md §2.7h): what the farm leaves in the river, and before
+ * which of its takes (handsOffTakers), named only where they apply; where
+ * none does, it says the flow changes nothing. Reads the node as the run does
  * (engine operatingOf): an amount of 0 in every month without the EWR is none.
  */
-export function handsOffPreview(n: Pick<NetworkNode, 'handsOffM3Day' | 'handsOffEwr'>): string {
-	const row = Array.isArray(n.handsOffM3Day) && n.handsOffM3Day.length === 12 ? n.handsOffM3Day : null;
+export function handsOffPreview(n: Partial<HandsOffNode>): string {
+	const row = monthRow(n.handsOffM3Day);
 	const some = row !== null && row.some((v) => v > 0);
 	const ewr = n.handsOffEwr === true;
 	if (!some && !ewr)
 		return 'No hands-off flow: the river pump and River to dam leave in the river only what senior water users downstream need, not the EWR.';
-	const what: string[] = [];
-	if (some) {
-		const off = row!.some((v) => !(v > 0));
-		what.push(`${amountRange(row!, true)}${off ? ` (none in ${zeroMonths(row!)})` : ''}`);
-	}
-	if (ewr) what.push('the EWR required here (this unit’s share and upstream shares)');
-	const keep = what.length === 2 ? `the larger of ${what[0]} and ${what[1]}` : what[0];
-	return `Leaves ${keep} in the river before the river pump or River to dam takes anything. When less flows, neither takes anything.`;
+	const flow = some ? `${amountRange(row!, true)}${row!.some((v) => !(v > 0)) ? `; none in ${zeroMonths(row!)}` : ''}` : '';
+	const EWR = 'the EWR required here (this unit’s share and upstream shares)';
+	const keep = some && ewr ? `the larger of the set flow (${flow}) and ${EWR}` : some ? (flow.includes(';') ? `the set flow (${flow})` : flow) : EWR;
+	const t = handsOffTakers(n);
+	const names = [t.pump ? 'the river pump' : null, t.riverToDam ? 'River to dam' : null, t.noDamRouting ? 'its irrigation straight from the river' : null].filter((x): x is string => x !== null);
+	if (names.length === 0)
+		return `Would leave ${keep} in the river, but it changes nothing here: this hydrological unit takes nothing from the river past its dam (no river pump, no River to dam).`;
+	const noDam = t.noDamRouting ? ' It has no dam, so what is routed to its dam (upstream inflow, runoff, River to dam) is irrigated straight from the river.' : '';
+	return `Leaves ${keep} in the river before ${names.join(' or ')} takes anything.${noDam} When less flows, ${names.length === 2 ? 'neither takes anything' : 'nothing is taken'}.`;
 }
 
 /**
@@ -115,9 +162,15 @@ export function handsOffPreview(n: Pick<NetworkNode, 'handsOffM3Day' | 'handsOff
  * diverts in and the months it doesn't; null when it isn't set by month.
  */
 export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>): string | null {
-	const row = Array.isArray(n.divertMonthlyM3Day) && n.divertMonthlyM3Day.length === 12 ? n.divertMonthlyM3Day : null;
+	const row = monthRow(n.divertMonthlyM3Day);
 	if (row === null) return null;
 	if (!row.some((v) => v > 0)) return 'River to dam is 0 in every month: it diverts nothing.';
 	const off = row.some((v) => !(v > 0));
-	return `River to dam takes up to ${amountRange(row, true)}${off ? `; nothing in ${zeroMonths(row)}` : ' in every month'}. The one value above is not used.`;
+	return `River to dam takes ${amountRange(row, true, true)}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
 }
+
+/** The hands-off flow's row when its box is ticked (0 in every month, to fill in) or null when unticked. */
+export const handsOffTicked = (checked: boolean): number[] | null => (checked ? monthsOf(0) : null);
+
+/** River to dam by month when its box is ticked: the one value in every month, so the run is unchanged until a month is edited; null when unticked. */
+export const divertMonthsTicked = (checked: boolean, divertCapacityM3Day: number): number[] | null => (checked ? monthsOf(divertCapacityM3Day) : null);

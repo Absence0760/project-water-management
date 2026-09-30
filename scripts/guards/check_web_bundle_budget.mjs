@@ -1324,8 +1324,12 @@
 //             workers that bundle the engine, and in the one-node form the
 //             Supply section's hands-off months and EWR tick, the new
 //             RiverToDamFields, their plain-words lines and save rules
-//             (network/supply.ts, model/validate.ts operatingIssues). No
-//             new dependency. Headroom ~3 KB.
+//             (network/supply.ts, model/validate.ts operatingIssues). The
+//             review's fixes held it at 1204: every twelve-month row of the
+//             one-node form is now one MonthFields component (network/
+//             MonthFields.svelte + monthFields.ts; five callers' tables and
+//             setMonth/fillAll folded into it), and the engine's dam-less
+//             hands-off cut. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

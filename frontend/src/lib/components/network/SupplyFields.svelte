@@ -11,17 +11,18 @@
 	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
 	import { operatingIssues, supplyIssues } from '$lib/model/validate';
-	import { handsOffPreview, noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
+	import MonthFields from './MonthFields.svelte';
+	import { handsOffPreview, handsOffTicked, noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `sp-${k}-${node.id}`;
 	const rule = $derived<SupplyRule>(node.supplyRule ?? SUPPLY_DEFAULTS.supplyRule);
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
-	const problems = $derived([...supplyIssues(node), ...operatingIssues(node)]);
+	const problems = $derived(supplyIssues(node));
+	const operating = $derived(operatingIssues(node));
 	const noDam = $derived(noDamSupplyHint(node));
 	const shared = $derived(sharedPumpHint(node));
 
@@ -39,14 +40,6 @@
 	// The hands-off flow by month (water-year order); null = no set flow.
 	const label = $derived(node.name || 'this hydrological unit');
 	const handsOff = $derived(node.handsOffM3Day ?? null);
-	function setHandsOff(i: number, v: number | null) {
-		const next = [...(handsOff ?? new Array<number>(12).fill(0))];
-		next[i] = v ?? 0;
-		node.handsOffM3Day = next;
-	}
-	function fillHandsOff() {
-		node.handsOffM3Day = new Array(12).fill(handsOff?.[0] ?? 0);
-	}
 </script>
 
 <div class="supply" data-testid="supply-{node.id}">
@@ -113,46 +106,38 @@
 	<div class="hands-off" data-testid="hands-off-{node.id}">
 		<h3 class="sub">Hands-off flow <HelpTip key="node.handsOffM3Day" /></h3>
 		<label class="check">
-			<input
-				type="checkbox"
-				disabled={readonly}
-				checked={handsOff !== null}
-				onchange={(e) => (node.handsOffM3Day = e.currentTarget.checked ? new Array(12).fill(0) : null)}
-			/>
+			<input type="checkbox" disabled={readonly} checked={handsOff !== null} onchange={(e) => (node.handsOffM3Day = handsOffTicked(e.currentTarget.checked))} />
 			Leave a set flow in the river, by month
 		</label>
 		{#if handsOff !== null}
-			<table class="data compact months">
-				<caption>Hands-off flow, m³/day, per month</caption>
-				<thead>
-					<tr>{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}</tr>
-				</thead>
-				<tbody>
-					<tr>
-						{#each WATER_YEAR_MONTHS as m, i (m)}
-							<td>
-								<NumberInput label="Hands-off flow of {label} in {m}, m³/day" min={0} grouped={readonly} disabled={readonly} value={handsOff[i] ?? 0} onchange={(v) => setHandsOff(i, v)} />
-							</td>
-						{/each}
-					</tr>
-				</tbody>
-			</table>
-			{#if !readonly}
-				<button type="button" class="btn btn-sm" onclick={fillHandsOff}>Use October’s flow for every month</button>
-			{/if}
+			<MonthFields
+				values={handsOff}
+				label={(m) => `Hands-off flow of ${label} in ${m}, m³/day`}
+				caption="Hands-off flow, m³/day, per month"
+				fillLabel="Use October’s flow for every month"
+				{readonly}
+				onchange={(next) => (node.handsOffM3Day = next)}
+			/>
 		{/if}
-		<label class="check">
-			<input type="checkbox" disabled={readonly} checked={node.handsOffEwr === true} onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)} />
-			Also leave the EWR in the river
+		<div class="check-row">
+			<label class="check">
+				<input type="checkbox" disabled={readonly} checked={node.handsOffEwr === true} onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)} />
+				Also leave the EWR in the river
+			</label>
 			<HelpTip key="node.handsOffEwr" />
-		</label>
+		</div>
 		<p class="hint note" data-testid="hands-off-note">{handsOffPreview(node)}</p>
-		{#if node.kind !== 'farm' && node.divertMonthlyM3Day != null && !readonly}
-			<button type="button" class="btn btn-sm" onclick={() => (node.divertMonthlyM3Day = null)}>Clear River to dam by month</button>
-		{/if}
 	</div>
 	{#each problems as p (p)}
 		<p class="problem" role="alert">{cap(p)}</p>
+	{/each}
+	{#each operating as p (p)}
+		<div class="problem-row">
+			<p class="problem" role="alert">{cap(p)}</p>
+			{#if node.kind !== 'farm' && node.divertMonthlyM3Day != null && !readonly}
+				<button type="button" class="btn btn-sm" onclick={() => (node.divertMonthlyM3Day = null)}>Clear River to dam by month</button>
+			{/if}
+		</div>
 	{/each}
 	{#if noDam}<p class="hint note" role="note">{noDam}</p>{/if}
 	{#if shared}<p class="hint note" role="note" data-testid="shared-pump-note">{shared}</p>{/if}
@@ -201,25 +186,20 @@
 		font-size: 0.85rem;
 		margin-bottom: 0.5rem;
 	}
-	.months {
-		display: block;
-		overflow-x: auto;
-		margin: 0.5rem 0;
+	.check-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
 	}
-	.months caption {
-		text-align: left;
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: var(--text-2);
-		padding-bottom: 0.25rem;
+	.check-row .check {
+		margin-bottom: 0;
 	}
-	.months td {
-		min-width: 76px;
-	}
-	.months td :global(input) {
-		width: 100%;
-		text-align: right;
-		font-variant-numeric: tabular-nums;
+	.problem-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
 	}
 	.problem {
 		margin: 0.25rem 0;
@@ -233,7 +213,7 @@
 	@media (max-width: 640px) {
 		.field :global(input),
 		.field select,
-		.hands-off .btn {
+		.problem-row .btn {
 			min-height: 44px;
 		}
 	}
