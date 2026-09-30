@@ -3062,16 +3062,14 @@ from the WP:
       A source whose licence states conditions stores `allocation_left_*`
       beside the room. Checked from the columns by `checkAllocations`; shown
       under the picked unit on the Allocations page, in the compare
-      endpoint's `capYears` and the summary CSV's *Allocation cap by water
-      year* ([allocations.md](./allocations.md), [model.md § Which limit
+      endpoint's `capYears`, the summary CSV's *Allocation cap by water
+      year* and the evidence report's § 5 ([allocations.md](./allocations.md), [model.md § Which limit
       bound](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
-- [ ] **Cite the cap's limit days in the evidence report.** The report's
-      § 5 (#71) reads the comparison (`compareAllocations` of the run's
-      series) and the mode, never `RunSummary.allocations`, so a capped run
-      doesn't say which limit held use back there. The durable fix: carry
-      each run's `capReached` / `limitBound` into `EvidenceAllocationSource`
-      and one line per source in § 5 (a bumped evidence version). Trigger:
-      an evidence pack issued for a capped run.
+- [x] **Cite the cap's limit days in the evidence report** (2026-09-30,
+      report version `evidence-6`). § 5 carries each cap run's
+      `capReached` / `limitBound` per unit and source
+      (`EvidenceAllocationSource.capA` / `capB`) and prints them in *What the
+      cap held back* ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
