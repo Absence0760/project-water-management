@@ -67,6 +67,7 @@ import {
 	ON_NEW_DATA,
 	SIGNED_OFF_BY_MAX,
 	declaredRuleError,
+	droughtRestrictionIssues,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -140,9 +141,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * over a stored monthly row would keep a stale `mm` and `source`), and an
  * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
  * own source. The declared uncertainty rule (issue #71) is one rule: a patch
- * that changed one threshold must not keep another from an older one.
+ * that changed one threshold must not keep another from an older one. So is
+ * the drought restriction rule (engine ≥ 1.46.0): a level left out is gone.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules', 'evidenceUncertaintyRule']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -913,6 +915,14 @@ export const SettingsPatch = z
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.
 		ewrChargeSource: z.enum(EWR_CHARGE_SOURCES),
 		lowFlowMeasure: z.enum(LOW_FLOW_MEASURES),
+		// The drought restriction rule (engine ≥ 1.46.0, WP-3.8, network/restriction.ts): replaced whole, null = off.
+		// The engine's own checks (droughtRestrictionIssues), so the form, the save and the run agree.
+		droughtRestriction: z
+			.unknown()
+			.superRefine((v, ctx) => {
+				if (v === null) return;
+				for (const i of droughtRestrictionIssues(v)) ctx.addIssue({ code: 'custom', message: `drought restriction rule: ${i.field ? `${i.field} ` : ''}${i.message}` });
+			}),
 		simulationStart: isoDate.nullable(),
 		simulationEnd: isoDate.nullable(),
 		reportStart: isoDate.nullable(),

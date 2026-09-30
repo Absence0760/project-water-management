@@ -5,6 +5,7 @@ import {
 	chirpsFactorLines,
 	curtailmentLines,
 	demandObjectLines,
+	droughtRestrictionLines,
 	ewrAssuranceLines,
 	otherUserLines,
 	landCoverLines,
@@ -355,6 +356,35 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		// In the summary sheet of a cap run only.
 		expect([...summaryCsvLines(meta, { ...summary, allocations: a })]).toContain('Farm A,Surface water,2003/04,120,120,yes,40,30,4,6');
 		expect([...summaryCsvLines(meta, { ...summary, allocations: { ...a, mode: 'none' } })].some((l) => l.startsWith('Allocation cap by water year'))).toBe(false);
+	});
+
+	it('WP-3.8: the drought restriction rule in words, the days per level per water year and over the run, and each unit’s cut', () => {
+		const r: NonNullable<RunSummary['droughtRestriction']> = {
+			rule: { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3 } }, { belowPct: 0.3, cuts: { crops: 0.6, domestic: 0.2 } }], source: 'WUA, 2026' },
+			years: [
+				{ waterYear: 2003, days: 365, daysByLevel: [300, 65, 0] },
+				{ waterYear: 2004, days: 100, daysByLevel: [60, 20, 20] }
+			],
+			daysByLevel: [360, 85, 20],
+			reviews: 2,
+			units: [{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75 }]
+		};
+		const lines = [...droughtRestrictionLines(r)];
+		expect(lines).toEqual([
+			'Drought restrictions (the model rule; not the published restriction notice)',
+			'Rule,"reviewed 1 Jan, lifted 1 May; Level 1 (below 60 %): crops 30 %; Level 2 (below 30 %): crops 60 %, domestic demand objects 20 %"',
+			'Source,"WUA, 2026"',
+			'Reviews in the run,2',
+			'Water year,Days,Days: No restriction,Days: Level 1 (below 60 %): crops 30 %,"Days: Level 2 (below 30 %): crops 60 %, domestic demand objects 20 %"',
+			'2003/04,365,300,65,0',
+			'2004/05,100,60,20,20',
+			'Whole run,465,360,85,20',
+			'Unit,Mean demand (m³/day),Mean demand after the restriction (m³/day),Cut (m³/day),Mean supplied (m³/day)',
+			'Farm A,100,80,20,75'
+		]);
+		// In the summary sheet of a run with the rule only.
+		expect([...summaryCsvLines(meta, { ...summary, droughtRestriction: r })]).toContain('Whole run,465,360,85,20');
+		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Drought restrictions'))).toBe(false);
 	});
 
 	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 volume, then per borehole', () => {

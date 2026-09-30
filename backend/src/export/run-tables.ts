@@ -22,6 +22,8 @@ import {
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
 	waterYearLabel,
+	describeDroughtRestriction,
+	describeRestrictionLevel,
 	type CalibrationStats,
 	type EwrAgreement,
 	type EwrAgreementScores,
@@ -868,6 +870,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield '';
 		yield* allocationCapLines(summary.allocations);
 	}
+	if (summary.droughtRestriction) {
+		yield '';
+		yield* droughtRestrictionLines(summary.droughtRestriction);
+	}
 	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
 		yield '';
 		yield* otherUserLines(summary);
@@ -1540,6 +1546,25 @@ export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwate
 		]);
 	yield csvRow(['Farm or user', 'Water year', 'Borehole', 'Pumped (m³)', 'Annual cap (m³)', 'Cap reached']);
 	for (const r of rows) for (const b of r.boreholes) yield csvRow([r.name, r.label, b.name, b.abstractionM3, b.annualCapM3, b.annualCapM3 === null ? null : b.capReached ? 'yes' : 'no']);
+}
+
+/**
+ * The drought restriction rule's effect (engine ≥ 1.46.0, WP-3.8, docs/model.md
+ * §2.7i): the rule in words, the days at each level per water year and over
+ * the run, and per unit its mean demand before and after the cut and what it
+ * was supplied. Only in runs with the rule on.
+ */
+export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestriction']>): Generator<string> {
+	yield csvRow(['Drought restrictions (the model rule; not the published restriction notice)']);
+	yield csvRow(['Rule', describeDroughtRestriction(r.rule)]);
+	if (r.rule.source?.trim()) yield csvRow(['Source', r.rule.source.trim()]);
+	yield csvRow(['Reviews in the run', r.reviews]);
+	const levels = ['No restriction', ...r.rule.levels.map((l, i) => describeRestrictionLevel(l, i))];
+	yield csvRow(['Water year', 'Days', ...levels.map((l) => `Days: ${l}`)]);
+	for (const y of r.years) yield csvRow([waterYearLabel(y.waterYear), y.days, ...y.daysByLevel]);
+	yield csvRow(['Whole run', r.daysByLevel.reduce((a, b) => a + b, 0), ...r.daysByLevel]);
+	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Cut (m³/day)', 'Mean supplied (m³/day)']);
+	for (const u of r.units) yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgSuppliedM3Day]);
 }
 
 /**

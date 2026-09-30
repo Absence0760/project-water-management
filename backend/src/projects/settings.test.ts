@@ -1254,3 +1254,29 @@ describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
 		});
 	});
 });
+
+describe('settings.droughtRestriction (engine 1.46.0, WP-3.8)', () => {
+	const rule = { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3 } }, { belowPct: 0.3, cuts: { crops: 0.6, domestic: 0.2 } }] };
+	it('takes a rule or null, checked by the engine’s own rule checks', () => {
+		expect(SettingsPatch.safeParse({ droughtRestriction: rule }).success).toBe(true);
+		expect(SettingsPatch.safeParse({ droughtRestriction: null }).success).toBe(true);
+		const bad = SettingsPatch.safeParse({ droughtRestriction: { reviewDates: ['02-29'], levels: [{ belowPct: 0.5, cuts: { crops: 0.2 } }, { belowPct: 0.6, cuts: { crops: 0.1 } }] } });
+		expect(bad.success).toBe(false);
+		const messages = bad.error!.issues.map((i) => i.message).join('\n');
+		expect(messages).toMatch(/drought restriction rule: reviewDates\[0\] .*29 February/);
+		expect(messages).toMatch(/levels\[1\]\.belowPct level 2 must start below level 1's 50 %/);
+		expect(messages).toMatch(/levels\[1\]\.cuts\.crops level 2 cuts crops less than level 1/);
+		// No field the engine doesn't read gets through (mass assignment).
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, extra: 1 } }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, levels: [{ ...rule.levels[0], extra: 1 }] } }).success).toBe(false);
+	});
+	it('is replaced whole: a level left out of a save is gone', () => {
+		const stored = patchSettings({}, { droughtRestriction: rule });
+		expect(stored.droughtRestriction).toEqual(rule);
+		const one = { reviewDates: ['10-01'], levels: [{ belowPct: 0.5, cuts: { crops: 0.5 } }] };
+		expect(patchSettings(stored, { droughtRestriction: one }).droughtRestriction).toEqual(one);
+		expect(patchSettings(stored, { droughtRestriction: null }).droughtRestriction).toBeNull();
+		// Off by default: a project that never set it has none.
+		expect(mergeSettings({}).droughtRestriction).toBeUndefined();
+	});
+});

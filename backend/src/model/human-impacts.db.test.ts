@@ -393,3 +393,40 @@ describe('dam storage (WP-3.5)', () => {
 		await asOwner(`UPDATE node SET hands_off_m3_day = array_fill(0::float8, ARRAY[12]) WHERE id = $1`, [farm.id]);
 	});
 });
+
+describe('the drought restriction rule (engine 1.46.0, WP-3.8)', () => {
+	it('is saved with the settings, reaches a run (its level, cuts and restricted demand, the summary, the self-check), and is refused when malformed', async () => {
+		const u = await signUp('Drought');
+		const projectId = await project(u, 'With restrictions');
+		const outlet = node('Outlet', null, { kind: 'gauge', areaKm2: 0 });
+		const farm = node('Upper', outlet.id, { damCapacityM3: 20_000, damInitialPct: 0.5 });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 20_000 }], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		// Reviewed on the 1st of every month: below 60 % the crops lose 40 %.
+		const rule = { reviewDates: Array.from({ length: 12 }, (_, m) => `${String(m + 1).padStart(2, '0')}-01`), levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.4 } }] };
+		const bad = await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: { ...rule, levels: [{ belowPct: 1.5, cuts: {} }] } } });
+		expect(bad.status).toBe(400);
+		expect(JSON.stringify(bad.body)).toMatch(/drought restriction rule: levels\[0\]\.belowPct/);
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: rule } })).status).toBe(200);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.droughtRestriction).toEqual(rule);
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'restricted' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.verification.checks.map((c: { id: string }) => c.id)).toContain('droughtRestriction');
+		expect(summary.droughtRestriction.rule).toEqual(rule);
+		// Half full from the start: level 1 from the first day.
+		expect(summary.droughtRestriction.daysByLevel[1]).toBeGreaterThan(0);
+		expect(await seriesKeys(u, projectId, run.body.run.id, null, ['restriction_level', 'restriction_cut@crops'])).toEqual(['restriction_level', 'restriction_cut@crops']);
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['restricted_demand'])).toEqual(['restricted_demand']);
+
+		// Off again: the next run has none of it.
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: null } })).status).toBe(200);
+		const off = await u.call('POST', `/projects/${projectId}/runs`, { label: 'off' });
+		const offSummary = (await u.call('GET', `/projects/${projectId}/runs/${off.body.run.id}`)).body.run.summary;
+		expect(offSummary.droughtRestriction).toBeUndefined();
+		expect(await seriesKeys(u, projectId, off.body.run.id, null, ['restriction_level'])).toEqual([]);
+	});
+});
