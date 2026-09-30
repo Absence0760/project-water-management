@@ -1860,7 +1860,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
  * The assurance of supply (RunSummary.supplyAssurance, engine ≥ 0.32.0,
  * ../network/reliability.ts) against each demand node's own daily columns,
  * read here from the output's series, not from the path that built it
- * (engine ≥ 1.31.0, issue #192, docs/engine-audit.md V1):
+ * (engine ≥ 1.32.0, issue #192, docs/engine-audit.md V1):
  * - its reliability lists every farm and water user once, with its kind;
  * - each node's Σ demand, Σ supplied and demand days over the reporting
  *   window, overall and per water-year month, and the met days and ratios
