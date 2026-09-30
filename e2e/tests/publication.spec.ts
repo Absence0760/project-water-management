@@ -65,6 +65,19 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await expect(panel).toContainText('This run is not published.');
 	await expect(panel.getByRole('button', { name: 'Publish this run' })).toBeVisible();
 
+	// The edit form and the publish dialog each keep their own notice: opening
+	// one doesn't throw the other's typing away, and a cancelled publish leaves
+	// nothing behind in the edit form.
+	await panel.getByRole('button', { name: 'Edit notice' }).click();
+	await form.getByLabel(/^Cut/).fill('30');
+	await panel.getByRole('button', { name: 'Publish this run' }).click();
+	await expect(dialog.getByLabel(/^Cut/)).toHaveValue('25');
+	await dialog.getByLabel(/^Cut/).fill('40');
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(form.getByLabel(/^Cut/)).toHaveValue('30');
+	await form.getByRole('button', { name: 'Cancel' }).click();
+
 	// A farmer linked to the upper farm reads the published figures and the notice (the farm page itself is WP-2.6's).
 	const farmer = await signIn('Publication farmer');
 	const upper = model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
@@ -78,4 +91,30 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	expect(body.publication.restriction).toEqual({ level: 'restricted', pct: 25, notice: { en: 'The river is low. Please irrigate at night.' } });
 	expect(body.publication.nextExpectedOn).toBe('2022-02-15');
 	expect(JSON.stringify(body)).not.toContain('Lower farm');
+});
+
+// The publish went through but the history fetch after it failed: the dialog
+// closes as published, and the panel says to reload rather than showing a
+// publish error that invites a second publish.
+test('a publish whose history refresh fails still closes as published', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Publish, refresh fails');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const panel = page.getByRole('region', { name: /^Publication/ });
+	await expect(panel).toContainText('Nothing is published yet');
+
+	const publicationUrl = `${API_URL}/projects/${project.id}/publication`;
+	await page.route(publicationUrl, (route) =>
+		route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) }) : route.fallback()
+	);
+	await panel.getByRole('button', { name: 'Publish this run' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Publish this run?' });
+	await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+	await expect(dialog).toBeHidden();
+	await expect(panel.getByRole('status')).toHaveText(/^Published\. \d+ farmer views? updated\. The publication history couldn’t be refreshed: reload the page to see it\.$/);
+	await expect(panel.getByRole('alert')).toHaveCount(0);
+	await expect(panel.getByRole('heading', { name: /Publication/ }).getByText('Published', { exact: true })).toBeVisible();
+	await expect(panel.getByRole('button', { name: 'Publish this run' })).toHaveCount(0);
+	await page.unroute(publicationUrl);
 });

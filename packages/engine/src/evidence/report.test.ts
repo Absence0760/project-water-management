@@ -20,6 +20,7 @@ import { resolveEnsembleOptions, runEnsemble, summariseEnsemble } from '../uncer
 import type { DeclaredUncertaintyRule } from '../uncertainty/options';
 import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
 import { band as bandOf } from '../uncertainty/bands';
+import { licenceImpactByYearClass } from '../views/licenceImpact';
 import {
 	ALLOCATIONS_NOT_ASSESSED,
 	BASIS_NO_FLOW,
@@ -999,5 +1000,26 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		expect(c.applications[0]!.reservePp).toBeNull();
 		expect(c.total.reservePp).toBeNull();
 		expect(c.total.ewrDays).not.toBeNull();
+	});
+});
+
+describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
+	const catchment = (out: ModelOutput, key: string) => out.series.find((s) => s.nodeId === null && s.key === key)!.values.map((v) => (Number.isNaN(v) ? null : v));
+	const impact = {
+		yearClassMethod: 'auto' as const,
+		siteNodeId: null,
+		series: { backgroundNatural: catchment(baseOut, 'natural_flow'), backgroundEwrShortfall: catchment(baseOut, 'ewr_shortfall'), applicationEwrShortfall: catchment(appOut, 'ewr_shortfall') }
+	};
+
+	it('carries the engine’s board for the two runs, built from their stored series', () => {
+		const r = evidenceReport(input({ impact }));
+		expect(r.version).toBe('evidence-5');
+		expect(r.licenceImpact?.result.status).toBe('ok');
+		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
+	});
+
+	it('says the board wasn’t built without its inputs, and has none for baseline evidence', () => {
+		expect(evidenceReport(input()).licenceImpact?.result).toEqual({ status: 'unavailable', reason: 'notBuilt', detail: null });
+		expect(evidenceReport(input({ application: null, changes: [], impact })).licenceImpact).toBeNull();
 	});
 });

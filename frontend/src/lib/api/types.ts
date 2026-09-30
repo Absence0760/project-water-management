@@ -1617,6 +1617,19 @@ export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'indus
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';
 
+/**
+ * A cap run's water years for one unit and source (GET …/runs/:runId/allocations
+ * `capYears`, from RunSummary.allocations): the years the registered volume was
+ * used up, and the days per year the licence limit held use back, by limit
+ * (engine ≥ 1.40.0; null on an older run).
+ */
+export interface AllocationCapYears {
+	nodeId: string;
+	waterSource: AllocationWaterSourceKind;
+	capReached: { waterYear: number; budgetM3: number; usedM3: number }[];
+	limitBound: { waterYear: number; days: number; volumeDays: number; rateDays: number; monthsDays: number }[] | null;
+}
+
 /** A registered or licensed volume (GET /projects/:id/allocations). */
 export interface Allocation {
 	id: string;

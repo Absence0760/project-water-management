@@ -88,22 +88,56 @@ look there first when a spec only times out in a parallel run.
 
 ### CI: 14 shards
 
-`ci.yml` runs the suite as 14 parallel jobs, `E2E (Playwright) 1/14 … 14/14`
-(`playwright test --shard=N/14`; `fullyParallel` splits by test, not by file):
+`ci.yml` runs the suite as 14 parallel jobs, `E2E (Playwright) 1/14 … 14/14`,
+balanced by time rather than by count:
 
 1. **`e2e-build`** builds the site once (`pnpm -C e2e build:site`) and uploads
    it. Every CI runner is slot 0, so the build's API URL is :3101 for all.
 2. **Each shard** gets its own Postgres service, downloads the site and runs
    with `E2E_PREBUILT=1` (serve that build, don't rebuild). The config refuses a
    prebuilt site whose stamp (`e2e-api-url.txt`) names another API URL.
+   It plans its tests first (`support/shard-list.ts N/14 <file>`, then
+   `playwright test --test-list <file>`; see "Balancing the shards" below).
    Chromium is cached by Playwright version; only its apt libraries install on
-   every run. `E2E_BLOB=1` writes a blob report, and failure traces upload as
+   every run, from `.deb`s cached per runner image (`apt-debs-e2e-…`), since
+   Azure's Ubuntu mirror throttles 14 shards fetching them at once (one took
+   7 min 21 s for 32 MB). `E2E_BLOB=1` writes a blob report, and failure traces upload as
    `playwright-results-<shard>`.
 3. **`e2e-report`** merges the blobs into one HTML report
-   (`playwright-report` artifact), whether or not a shard failed.
+   (`playwright-report` artifact), whether or not a shard failed. When every
+   shard passed it also checks that each test in the suite ran on exactly one
+   shard, and uploads the run's per-test timings as the `e2e-timings`
+   artifact (30 days).
 
 All three are in the `CI gate`'s `needs`. To reproduce one shard locally:
-`pnpm -C e2e exec playwright test --shard=3/14`.
+`node support/shard-list.ts 3/14 /tmp/shard.txt && pnpm exec playwright test --test-list /tmp/shard.txt`
+(from `e2e/`).
+
+#### Balancing the shards
+
+Playwright's `--shard=N/14` cuts the suite into equal counts of tests in
+file order, so the shard that drew the slow a11y and phone-layout specs took
+four times as long as the lightest (39 s to 165 s of test time in September
+2026). Instead every shard plans the whole suite (`support/shards.ts`):
+`playwright test --list`, each test's duration from the committed
+`shard-timings.json`, then largest first onto the lightest shard. A file
+with `test.describe.configure({ mode: 'serial' })` or `'default'` anywhere
+stays whole on one shard. A test with no timing yet is planned at the
+median, so a new spec costs a little balance, never coverage; the plan is
+deterministic, so the 14 shards agree without talking to each other.
+
+When the shards drift apart (compare the `E2E tests` step times on a run;
+each shard's `Plan this shard` step prints the planned range across all
+shards), refresh the timings from the newest green run on main and commit
+the file:
+
+```bash
+pnpm gen:e2e:timings
+```
+
+`--test-list` splits a line on `›` and trims each part, so a test title
+can't contain `›` or start or end with a space; the plan refuses such a
+title rather than silently dropping the test.
 
 Only Chromium is configured. On Fedora, Playwright prints "your OS is not
 officially supported" and downloads its Ubuntu build, which runs fine here.
@@ -135,6 +169,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`) |
 | `support/env.ts` | The checkout's slot, and from it the ports and database URLs (dev-only docker credentials); `env.test.ts` tests the slot (`pnpm test`) |
 | `support/build-site.ts` | Builds the site under test with the checkout's API URL baked in (`pnpm -C e2e build:site`) |
+| `support/shards.ts`, `shard-list.ts`, `shard-timings.ts`, `../shard-timings.json` | CI's time-balanced shards: the packing (tested by `shards.test.ts`), one shard's `--test-list`, the report job's check and timings, and `pnpm gen:e2e:timings` (§ CI) |
 | `support/global-setup.ts` | Rebuilds the checkout's e2e database |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make |

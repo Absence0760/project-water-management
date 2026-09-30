@@ -9,7 +9,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations } from '@water-management/engine';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -547,9 +547,11 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null;
 				mode: string | null;
 				settings: unknown;
+				summaryAllocations: RunAllocations | null;
 			}>(
 				`SELECT r.label, r.start_date AS "startDate", r.end_date AS "endDate", r.summary->'forecast'->>'from' AS "forecastFrom",
-					r.inputs->'model'->'nodes' AS nodes, r.inputs->'settings'->>'allocationMode' AS mode, p.settings
+					r.inputs->'model'->'nodes' AS nodes, r.inputs->'settings'->>'allocationMode' AS mode, p.settings,
+					r.summary->'allocations' AS "summaryAllocations"
 				 FROM model_run r JOIN project p ON p.id = r.project_id WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId]
 			);
@@ -575,6 +577,14 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			});
 			// What the run's allocation mode did to its use (engine ≥ 1.18.0; a run before it compared only).
 			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
-			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom, allocationMode }, comparison });
+			// A cap run's water years per unit and source (engine ≥ 1.18.0): the years the volume was used up and
+			// (engine ≥ 1.40.0; null before) the days the licence limit bound, by limit. From the run's own summary.
+			const capYears =
+				allocationMode === 'cap'
+					? (r.summaryAllocations?.nodes ?? []).flatMap((n) =>
+							n.sources.map((x) => ({ nodeId: n.nodeId, waterSource: x.waterSource, capReached: x.capReached ?? [], limitBound: x.limitBound ?? null }))
+						)
+					: [];
+			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom, allocationMode }, comparison, capYears });
 		});
 	});

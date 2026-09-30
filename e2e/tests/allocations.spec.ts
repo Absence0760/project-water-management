@@ -41,6 +41,13 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await wizard.getByLabel('File (CSV, up to 2 MB)').setInputFiles({ name: 'allocations.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
 	const summary = page.getByTestId('allocation-preview-summary');
 	await expect(summary).toHaveText("allocations.csv: 3 rows, 1 matched to a hydrological unit, 1 not matched, 1 with problems (they won't be imported).");
+	// Choose another file drops the preview and goes back to the picker, keeping the kind and the reference.
+	await page.getByRole('button', { name: 'Choose another file' }).click();
+	await expect(summary).toBeHidden();
+	await expect(wizard.getByLabel('What the file is')).toHaveValue('csv');
+	await expect(wizard.getByLabel('Reference (optional)')).toHaveValue('e2e synthetic');
+	await wizard.getByLabel('File (CSV, up to 2 MB)').setInputFiles({ name: 'allocations.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
+	await expect(summary).toHaveText("allocations.csv: 3 rows, 1 matched to a hydrological unit, 1 not matched, 1 with problems (they won't be imported).");
 	// The row with a problem first, then the unmatched one.
 	const previewRows = page.getByTestId('allocation-preview').locator('tbody tr');
 	await expect(previewRows.nth(0)).toContainText('unknown water source “lake”');
@@ -126,4 +133,7 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	const capped = await createRun(page.request, project.id, 'Capped');
 	await page.goto(`/projects/${project.id}?tab=allocations&run=${capped}`);
 	await expect(page.getByTestId('allocation-mode-note')).toContainText('This run capped each unit’s use at its registered volume per water year');
+	// And, for the picked unit, on how many days each limit held its use back (engine 1.40.0): 1000 m³ is used up
+	// before the months end, so the volume binds.
+	await expect(page.getByTestId('allocation-cap-years')).toHaveText('The cap held use back on 80 days in 1 water year: 80 with the volume used up. The registered volume was used up in 2021/22.');
 });

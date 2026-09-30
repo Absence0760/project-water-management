@@ -19,6 +19,7 @@
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { kindLabel } from '$lib/series/kinds';
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import type { Daily } from './coverage';
 	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag } from './preview';
@@ -30,6 +31,7 @@
 		settings,
 		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview all data" button) shows every column. */
 		focusSeriesId = null,
+		failed = {},
 		onRetry
 	}: {
 		open?: boolean;
@@ -37,6 +39,8 @@
 		values: Record<string, Daily>;
 		settings: ProjectSettings | null;
 		focusSeriesId?: string | null;
+		/** Series whose values failed to load, with the error (SeriesTab's loadValues). */
+		failed?: Record<string, string>;
 		onRetry?: () => void;
 	} = $props();
 
@@ -53,15 +57,22 @@
 	const visibleColumns = $derived(columns.filter((c) => !hidden.has(c.id)));
 	const visibleSeriesIds = $derived(visibleColumns.filter((c) => c.group === 'series').map((c) => c.seriesId!));
 	const missingIds = $derived(list.filter((s) => !values[s.id]).map((s) => s.id));
-	const missingNames = $derived(
+	const failedIds = $derived(missingIds.filter((id) => id in failed));
+	const pendingIds = $derived(missingIds.filter((id) => !(id in failed)));
+	const namesOf = (ids: string[]) =>
 		list
-			.filter((s) => missingIds.includes(s.id))
-			.map((s) => s.name || s.kind)
-			.join(', ')
-	);
+			.filter((s) => ids.includes(s.id))
+			.map((s) => s.name || kindLabel(s.kind))
+			.join(', ');
+	const failedNames = $derived(namesOf(failedIds));
+	const pendingNames = $derived(namesOf(pendingIds));
+	// The first error, as the server or the network gave it (one is enough: they are usually the same).
+	const failedReason = $derived(failedIds.length ? failed[failedIds[0]!] : '');
 
 	const rows = $derived(settings ? buildPreviewRows(list, values, settings) : []);
-	const loading = $derived(rows.length === 0 && list.length > 0 && missingIds.length === list.length);
+	const noValues = $derived(rows.length === 0 && list.length > 0 && missingIds.length === list.length);
+	// Still waiting on at least one series and none has failed; once one fails, the error shows instead.
+	const loading = $derived(noValues && failedIds.length === 0);
 	const filtered = $derived(filterPreviewRows(rows, { query, missingOnly, flaggedOnly, visibleSeriesIds }));
 
 	// Un-hide (never re-hide other columns) the focused series on open; the
@@ -138,12 +149,18 @@
 
 	{#if loading}
 		<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading…</div>
+	{:else if noValues}
+		<div class="alert alert-error" role="alert">
+			Couldn't load the values of {failedNames} ({failedReason}).{pendingIds.length ? ` Still loading: ${pendingNames}.` : ''}
+			{#if onRetry}<button type="button" class="btn btn-sm" onclick={onRetry}>Try again</button>{/if}
+		</div>
 	{:else if rows.length === 0}
 		<p class="muted">No series data loaded yet.</p>
 	{:else}
 		{#if missingIds.length > 0}
 			<div class="alert alert-warning" role="status">
-				{missingIds.length} series {missingIds.length === 1 ? "isn't" : "aren't"} loaded yet and show{missingIds.length === 1 ? 's' : ''} blank: {missingNames}.
+				{#if failedIds.length}{failedIds.length} series couldn't be loaded and show{failedIds.length === 1 ? 's' : ''} blank: {failedNames} ({failedReason}).{/if}
+				{#if pendingIds.length}{pendingIds.length} series {pendingIds.length === 1 ? "isn't" : "aren't"} loaded yet and show{pendingIds.length === 1 ? 's' : ''} blank: {pendingNames}.{/if}
 				{#if onRetry}<button type="button" class="btn btn-sm" onclick={onRetry}>Try again</button>{/if}
 			</div>
 		{/if}

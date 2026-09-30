@@ -73,6 +73,31 @@ test('opened while the values still load, the preview focuses its search once th
 	await expect(dialog.getByLabel('Search by date or value')).toBeFocused();
 });
 
+test('values that fail to load show an error with Try again, never an endless Loading…', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview failed');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: [1, 2, 3] });
+	// Every request for the series' values fails at the network until the route is lifted.
+	let fail = true;
+	await page.route(/\/series\/[^/?]+$/, async (route) => {
+		if (route.request().method() !== 'GET' || !fail) return route.fallback();
+		await route.abort('connectionrefused');
+	});
+	await page.goto(`/projects/${project.id}?tab=series`);
+
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const alert = dialog.getByRole('alert');
+	await expect(alert).toContainText("Couldn't load the values of Rainfall — catchment (");
+	await expect(dialog.getByRole('status').filter({ hasText: 'Loading…' })).toHaveCount(0);
+
+	// Try again loads them once the network is back.
+	fail = false;
+	await alert.getByRole('button', { name: 'Try again' }).click();
+	await expect(dialog).toContainText('3 of 3 days shown');
+	await expect(dialog.getByRole('alert')).toHaveCount(0);
+});
+
 test('the card header’s "Preview all data" opens with every column, the column picker can hide one, and Escape returns focus to the header button', async ({
 	page,
 	owner
