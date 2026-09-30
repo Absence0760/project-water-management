@@ -222,7 +222,7 @@ describe("allocationMode 'fullAllocation'", () => {
 	});
 });
 
-describe("allocationMode 'cap': licence conditions (engine 1.34.0, issue #72)", () => {
+describe("allocationMode 'cap': licence conditions (engine 1.37.0, issue #72)", () => {
 	// A volume far above any year's use, so only the conditions bind.
 	const volume = meanA * 10;
 	const summer = [10, 11, 12, 1, 2, 3];
@@ -363,6 +363,36 @@ describe("allocationMode 'cap': licence conditions (engine 1.34.0, issue #72)", 
 		const list: AllocationEntry[] = [{ id: 'z', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100, maxRateM3s: 0 }];
 		expect(runModelWithoutChecks(withAllocations(list, 'cap')).summary.warnings.some((w) => /maximum rate is 0/.test(w))).toBe(true);
 		expect(runModelWithoutChecks(withAllocations(list, 'none')).summary.warnings.some((w) => /maximum rate is 0/.test(w))).toBe(false);
+	});
+
+	it('a scenario’s allocation.set brings its months of use and maximum rate into the cap, and allocation.remove takes them out', () => {
+		const rate = Math.max(...col(base, 'a', 'supplied')!) / 2 / 86_400;
+		const bare: AllocationEntry = { id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume };
+		const licensed: AllocationEntry = { ...bare, months: [3, 1, 2, 12, 11, 10], maxRateM3s: rate };
+		const x = withAllocations([bare], 'cap');
+		const set = applyScenario(x, [{ op: 'allocation.set', allocation: licensed }]);
+		expect(set.problems).toEqual([]);
+		// The months as a sorted set, as the backend stores them; the run is the one on the same licence entered directly.
+		expect(set.input.model.allocations).toEqual([{ ...licensed, months: summer.slice().sort((p, q) => p - q) }]);
+		const viaScenario = runModelChecked(set.input);
+		expect(viaScenario.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const direct = runModelWithoutChecks(withAllocations([licensed], 'cap'));
+		expect(col(viaScenario, 'a', 'supplied')).toEqual(col(direct, 'a', 'supplied'));
+		const G = col(viaScenario, 'a', 'supplied')!;
+		for (let t = 0; t < G.length; t++) {
+			if (!summer.includes(monthOf(viaScenario, t))) expect(G[t], `day ${t}`).toBe(0);
+			expect(G[t]!, `day ${t}`).toBeLessThanOrEqual(rate * 86_400 * (1 + 1e-12));
+		}
+		// Positive control: without the conditions the farm takes water outside those months.
+		const free = runModelWithoutChecks(x);
+		expect(col(free, 'a', 'supplied')!.some((g, t) => g > 0 && !summer.includes(monthOf(free, t)))).toBe(true);
+		// Removing the licensed volume leaves the farm uncapped: the base run's supply.
+		const removed = applyScenario(withAllocations([licensed], 'cap'), [{ op: 'allocation.remove', allocationId: 's' }]);
+		expect(removed.problems).toEqual([]);
+		expect(col(runModelWithoutChecks(removed.input), 'a', 'supplied')).toEqual(col(base, 'a', 'supplied'));
+		// A condition that doesn't read is refused, not dropped.
+		expect(applyScenario(x, [{ op: 'allocation.set', allocation: { ...bare, months: [13] } }]).problems[0]).toMatch(/months/);
+		expect(applyScenario(x, [{ op: 'allocation.set', allocation: { ...bare, maxRateM3s: -1 } }]).problems[0]).toMatch(/maxRateM3s/);
 	});
 
 	describe('dailyLimits', () => {
