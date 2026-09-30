@@ -21,6 +21,7 @@ import type { SeriesProvenance } from './seriesProvenance';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
+import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
 import type { SupplyAssurance } from './network/reliability';
 import type { AllocationEntry, AllocationWaterSource } from './allocations/compare';
 import type { AllocationMode } from './allocations/mode';
@@ -2507,6 +2508,12 @@ export interface RunSummary {
 		 * on older runs.
 		 */
 		ewrAgreement?: EwrAgreement | null;
+		/**
+		 * Days the simulated outflow at the outlet is below 1 L/s (engine ≥
+		 * 1.32.0, issue #71, ./reserve/riverMeasures.ts, docs/model.md §2.9e),
+		 * over every day of the run. Absent without an outlet, and on older runs.
+		 */
+		noFlow?: NoFlowSummary;
 	};
 	calibration: CalibrationStats | null;
 	/**
@@ -2523,6 +2530,14 @@ export interface RunSummary {
 	 * and on older runs.
 	 */
 	ewrAssurance?: EwrAssuranceSite[];
+	/**
+	 * Per EWR site (outlet first, then gauges by node id), the days each farm
+	 * or water user upstream got its whole demand while the site's EWR (the
+	 * daily requirement its charge follows) was not met (engine ≥ 1.32.0,
+	 * issue #71, ./reserve/riverMeasures.ts, docs/model.md §2.9e). Absent
+	 * without an EWR site, and on older runs.
+	 */
+	servedWhileEwrFails?: ServedWhileEwrFailsSite[];
 	/**
 	 * Simulated natural flow against the entered WR2012 reference (engine ≥
 	 * 0.6.0); absent when the project has no reference, and on older runs.

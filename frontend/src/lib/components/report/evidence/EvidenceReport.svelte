@@ -5,7 +5,7 @@
 	// there is one layout. Everything comes from one EvidenceReport document
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
-	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
+	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, ENSEMBLE_MEASURES_SINCE, type Band, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
 	import type { SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -24,7 +24,7 @@
 	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
-	import { bandRange, bandText, pct, signed, worseText } from './format';
+	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 
 	let {
@@ -65,12 +65,22 @@
 		return report.ops.map((o, i) => ({ index: o.index, cls: o.class, text: describeOp(o.op, before[i] ?? null, names) }));
 	});
 
-	/** A site's FDC points for one calendar month, both runs. */
+	/** A site's FDC points for one calendar month, both runs, with each run's 5–95 % band where the report has one (ER5). */
 	function fdcPoints(key: string, month: number) {
 		const find = (list: EwrAssuranceSite[] | undefined) => (list ?? []).find((s) => (s.nodeId ?? 'outlet') === key);
 		const a = find(report.summaries.baseline.ewrAssurance)?.byMonth.find((m) => m.month === month);
 		const b = find(report.summaries.application?.ewrAssurance)?.byMonth.find((m) => m.month === month);
-		return (a?.fdc ?? []).map((p, i) => ({ point: p.point, required: p.required, a: p.impacted, b: b?.fdc[i]?.impacted ?? null, natural: p.natural ?? null }));
+		const bands = report.river.find((s) => s.key === key)?.fdcBands?.find((m) => m.month === month) ?? null;
+		const range = (bd: Band | null | undefined) => (bd && bd.p5 !== null && bd.p95 !== null ? { lo: bd.p5, hi: bd.p95 } : null);
+		return (a?.fdc ?? []).map((p, i) => ({
+			point: p.point,
+			required: p.required,
+			a: p.impacted,
+			b: b?.fdc[i]?.impacted ?? null,
+			natural: p.natural ?? null,
+			bandA: range(bands?.a[i]),
+			bandB: range(bands?.b?.[i])
+		}));
 	}
 
 	const cov = $derived(report.uncertainty.baseline?.coverage ?? []);
@@ -131,7 +141,7 @@
 								<FdcPlot
 									title="{monthName(site.fdcMonth)} flow-duration curve at {site.name} against the EWR curve"
 									unit={site.unit}
-									caption="{monthName(site.fdcMonth)}: {app ? 'the month the application loses most months met in, or else' : ''} the month met least often. The simulated curve should lie on or above the EWR curve."
+									caption="{monthName(site.fdcMonth)}: {app ? 'the month the application loses most months met in, or else' : ''} the month met least often. The simulated curve should lie on or above the EWR curve.{site.fdcBands ? ' Shaded: the range of the kept parameter sets (R1; the application’s under R2, not a difference). Overlapping ranges don’t mean no change: the paired change is in the rows above and in § 2.' : ` Curve band: ${site.fdcBandNote ?? 'no band'}.`}{site.fdcBands && site.fdcBandNote ? ` ${site.fdcBandNote}` : ''}"
 									points={fdcPoints(site.key, site.fdcMonth)}
 								/>
 							{/if}
@@ -210,6 +220,7 @@
 							<tbody>
 								<tr><th scope="row">Days below the pragmatic EWR</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.ewrDaysNotMet)}</td><td class="num">{bandRange(bandsA.ewrDaysNotMet, 0)}</td></tr>
 								<tr><th scope="row">Shortfall against the EWR (Mm³)</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.shortfallMm3, 2)}</td><td class="num">{bandRange(bandsA.shortfallMm3, 2)}</td></tr>
+								<tr><th scope="row">No-flow days at the outlet</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.noFlowDays)}</td><td class="num">{bandsA.noFlowDays ? bandRange(bandsA.noFlowDays, 0) : `no band (an ensemble from before engine ${ENSEMBLE_MEASURES_SINCE})`}</td></tr>
 								<tr><th scope="row">Natural MAR (Mm³/a)</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.marNaturalMm3, 3)}</td><td class="num">{bandRange(bandsA.marNaturalMm3, 3)}</td></tr>
 								<tr><th scope="row">Outflow MAR (Mm³/a)</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.marOutflowMm3, 3)}</td><td class="num">{bandRange(bandsA.marOutflowMm3, 3)}</td></tr>
 								{#each bandsA.reserve as r (r.key)}
@@ -232,6 +243,9 @@
 									<tr><th scope="row">Days below the pragmatic EWR</th><td class="num">{bandText(paired.ewrDaysNotMet, 0)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: paired.ewrDaysNotMetWorse === null ? null : { k: Math.round(paired.ewrDaysNotMetWorse * paired.members), n: paired.members } })}</td></tr>
 									<tr><th scope="row">Shortfall against the EWR (Mm³)</th><td class="num">{bandText(paired.shortfallMm3, 2)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: paired.shortfallWorse === null ? null : { k: Math.round(paired.shortfallWorse * paired.members), n: paired.members } })}</td></tr>
 									<tr><th scope="row">Outflow MAR (Mm³/a)</th><td class="num">{bandText(paired.marOutflowMm3, 3)}</td><td class="num">—</td></tr>
+									{#each report.rows.filter((r) => r.id === 'noFlowDays' || r.id === 'applicantSupply') as r (r.id)}
+										<tr><th scope="row">{r.label}{r.unit.startsWith('%') ? ' (pp)' : ''}</th><td class="num">{changeText(r, r.change).main}{#if changeText(r, r.change).sub}<span class="sub">{changeText(r, r.change).sub}</span>{/if}</td><td class="num">{worseText(r.change)}</td></tr>
+									{/each}
 									{#each paired.reserve as r (r.key)}
 										<tr><th scope="row">Reserve months met, {r.name} (pp)</th><td class="num">{bandText(r.band && { ...r.band, p5: r.band.p5 === null ? null : r.band.p5 * 100, p50: r.band.p50 === null ? null : r.band.p50 * 100, p95: r.band.p95 === null ? null : r.band.p95 * 100 }, 1)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: r.worse === null || r.worse === undefined ? null : { k: Math.round(r.worse * paired.members), n: paired.members } })}</td></tr>
 									{/each}
@@ -310,7 +324,7 @@
 							<tr>
 								<th scope="col">Unit</th>
 								<th scope="col" class="num">Supply, baseline</th>
-								{#if app}<th scope="col" class="num">Application</th><th scope="col" class="num">Change</th>{/if}
+								{#if app}<th scope="col" class="num">Application</th><th scope="col" class="num">Change (R2)<span class="sub">median, 5–95 %</span></th><th scope="col" class="num">Worse in</th>{/if}
 								<th scope="col" class="num">Days fully met{app ? ', baseline → application' : ''}</th>
 								<th scope="col" class="num">Years met{app ? ', baseline → application' : ''}</th>
 							</tr>
@@ -322,18 +336,50 @@
 									<td class="num">{pct(u.suppliedA)}</td>
 									{#if app}
 										<td class="num">{pct(u.suppliedB)}</td>
-										<td class="num">{u.suppliedA === null || u.suppliedB === null ? '–' : `${signed((u.suppliedB - u.suppliedA) * 100, 1)} pp`}</td>
+										{@const c = changeText({ unit: '% of demand' }, u.change)}
+										<td class="num" class:na={!c.banded}>{c.main}{#if c.sub}<span class="sub">{c.sub}</span>{/if}</td>
+										<td class="num">{worseText(u.change)}</td>
 									{/if}
 									<td class="num">{pct(u.timeReliabilityA)}{app ? ` → ${pct(u.timeReliabilityB)}` : ''}</td>
 									<td class="num">{pct(u.annualReliabilityA)}{app ? ` → ${pct(u.annualReliabilityB)}` : ''}</td>
 								</tr>
 							{:else}
-								<tr><td colspan={app ? 6 : 4} class="na">The network has no unit with demand.</td></tr>
+								<tr><td colspan={app ? 7 : 4} class="na">The network has no unit with demand.</td></tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
-				<p class="small muted">Supply is the share of demand supplied over the whole run; days and years fully met are over the reporting window (assurance of supply, model.md §2.11a). No change here carries a band: the ensemble doesn’t carry supply per unit yet.</p>
+				<p class="small muted">Supply is the share of demand supplied over the whole run; days and years fully met are over the reporting window (assurance of supply, model.md §2.11a). The change is the paired band on each unit’s share supplied (R2), with the run’s own difference.</p>
+				<h3>Served in full while an EWR site below fails</h3>
+				{#if report.servedWhileFailing.notAssessed}
+					<p class="na" data-testid="evidence-served-na">{report.servedWhileFailing.notAssessed}</p>
+				{:else}
+					<p class="small muted">
+						Days a farm or water user got its whole demand while an EWR site below it was not met, every day of the run: the river’s shortfall on those days was not shared with them. Each
+						site is judged on the daily requirement its EWR charge follows.
+					</p>
+					{#each report.servedWhileFailing.sites as site (site.key)}
+						<div class="table-wrap">
+							<table class="data compact" data-testid="evidence-served">
+								<caption class="small">
+									{site.isOutlet ? `${site.name} (the catchment outlet)` : site.name}: {site.basis}, not met on {fmtNum(site.daysNotMetA)} days{app ? ` → ${site.daysNotMetB === null ? '–' : fmtNum(site.daysNotMetB)}` : ''}
+								</caption>
+								<thead><tr><th scope="col">Unit upstream</th><th scope="col" class="num">Days served in full, baseline</th>{#if app}<th scope="col" class="num">Application</th>{/if}</tr></thead>
+								<tbody>
+									{#each site.units as u (u.nodeId)}
+										<tr>
+											<th scope="row">{u.name}{u.own ? ' (the applicant’s)' : ''}</th>
+											<td class="num">{u.daysA === null ? '–' : fmtNum(u.daysA)}</td>
+											{#if app}<td class="num">{u.daysB === null ? '–' : fmtNum(u.daysB)}</td>{/if}
+										</tr>
+									{:else}
+										<tr><td colspan={app ? 3 : 2} class="na">No unit with demand upstream of this site.</td></tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/each}
+				{/if}
 			{:else if s.id === 'allocations'}
 				{#if al.notAssessed}
 					<p class="na" data-testid="evidence-allocations-na">{al.notAssessed}</p>

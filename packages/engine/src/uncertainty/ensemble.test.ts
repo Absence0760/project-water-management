@@ -11,11 +11,13 @@ import {
 	ensembleMembers,
 	memberInput,
 	memberMetrics,
+	memberSupplyFraction,
 	rejectReasons,
 	resolveEnsembleOptions,
 	runEnsemble,
 	shiftPan,
 	summariseEnsemble,
+	type MemberMetrics,
 	type MemberScores
 } from './ensemble';
 import { pairedRefusal, runPairedEnsemble, summarisePaired } from './paired';
@@ -423,6 +425,31 @@ describe('runEnsemble on a synthetic catchment', () => {
 		expect(memberMismatches(ctx, flipped, [kept]).join(' ')).toMatch(/kept false, recomputed true/);
 	});
 
+	it('carries the evidence measures (engine ≥ 1.32.0) as the run’s summary has them, and the server catches a member without them', () => {
+		const out = runModel(input);
+		const m = result.members[0]!.metrics!;
+		expect(m.noFlowDays).toBe(out.summary.catchment.noFlow!.days);
+		expect(m.ewrSiteDaysNotMet).toEqual({ outlet: out.summary.catchment.ewrDaysNotMet });
+		expect(Object.keys(m.unitDemandM3Day!)).toEqual(['F1', 'F2']);
+		expect(memberSupplyFraction(m, 'F1')).toBeCloseTo(out.summary.farms[0]!.fractionSupplied, 5);
+		expect(result.header.units).toEqual([
+			{ nodeId: 'F1', name: 'Farm one' },
+			{ nodeId: 'F2', name: 'Farm two' }
+		]);
+		expect(result.header.ewrSites).toEqual([{ key: 'outlet', name: 'Gauge' }]);
+		expect(summary.bands.noFlowDays!.n).toBe(summary.accepted);
+		expect(summary.bands.ewrSites!.map((x) => [x.key, x.band.n])).toEqual([['outlet', summary.accepted]]);
+		expect(summary.bands.supply!.map((x) => x.nodeId)).toEqual(['F1', 'F2']);
+		// No rule table: no Reserve FDC.
+		expect(summary.bands.reserveFdc).toEqual([]);
+		// A client can't drop a measure from a checked member.
+		const ctx = ensembleContext(input, options);
+		const kept = result.members.findIndex((x, i) => i > 0 && x.accepted);
+		const { noFlowDays: _drop, ...rest } = result.members[kept]!.metrics!;
+		const thinned = result.members.map((x, i) => (i === kept ? { ...x, metrics: rest } : x));
+		expect(memberMismatches(ctx, thinned, [kept]).join(' ')).toMatch(/noFlowDays/);
+	});
+
 	it('picks distinct members to check, kept ones first', () => {
 		const picks = pickCheckedMembers(result.members, 3, new Rng(4).next.bind(new Rng(4)));
 		expect(new Set(picks).size).toBe(3);
@@ -490,6 +517,33 @@ describe('paired bands on the difference between a run and its baseline', () => 
 		expect(verified.header).toEqual(paired.header);
 		const forged = paired.members.map((p) => ({ ...p, metrics: { ...p.metrics, ewrDaysNotMet: 0 } }));
 		expect(verifyPaired(application, options, baseline.header, kept, forged, 1, () => 0).mismatches.join(' ')).toMatch(/ewrDaysNotMet/);
+	});
+
+	it('band the evidence measures member by member, and give no pairs where the baseline’s members predate them (engine < 1.32.0)', () => {
+		const paired = runPairedEnsemble(application, baseline);
+		const s = summarisePaired(baseline, paired, { own: ['F2'] });
+		const kept = baseline.members.filter((m) => m.accepted);
+		expect(s.noFlowDays).toEqual(band(paired.members.map((p, i) => p.metrics.noFlowDays! - kept[i]!.metrics!.noFlowDays!)));
+		expect(s.ewrSites!.map((x) => x.key)).toEqual(['outlet']);
+		expect(s.ewrSites![0]!.band).toEqual(band(paired.members.map((p, i) => p.metrics.ewrSiteDaysNotMet!.outlet! - kept[i]!.metrics!.ewrSiteDaysNotMet!.outlet!)));
+		expect(s.ewrSites![0]!.worse).toBe(s.ewrDaysNotMetWorse);
+		expect(s.supply!.map((x) => x.nodeId)).toEqual(['F1', 'F2']);
+		// No crops here: every unit is "supplied" in full (no demand), so the change is 0 and the own group has no demand.
+		expect(s.supply![0]!.band.p50).toBe(0);
+		expect(s.ownSupply!.band.n).toBe(0);
+		expect(summarisePaired(baseline, paired).ownSupply).toBeUndefined();
+		// Members stored before engine 1.32.0: no measure, so no pairs and no worse-share, never a zero.
+		const strip = (m: MemberMetrics): MemberMetrics => {
+			const { noFlowDays: _a, ewrSiteDaysNotMet: _b, unitDemandM3Day: _c, unitSuppliedM3Day: _d, reserveFdc: _e, ...old } = m;
+			return old;
+		};
+		const { units: _u, ewrSites: _w, ...oldHeader } = baseline.header;
+		const old = { ...baseline, header: oldHeader, members: baseline.members.map((m) => (m.metrics ? { ...m, metrics: strip(m.metrics) } : m)) };
+		const o = summarisePaired(old, paired, { own: ['F2'] });
+		expect([o.noFlowDays!.n, o.noFlowDaysWorse, o.ewrSites![0]!.band.n, o.ewrSites![0]!.worse, o.supply![0]!.band.n]).toEqual([0, null, 0, null, 0]);
+		expect([s.carriesMeasures, o.carriesMeasures]).toEqual([true, false]);
+		// The measures it always had are unchanged.
+		expect(o.ewrDaysNotMet).toEqual(summarisePaired(baseline, paired).ewrDaysNotMet);
 	});
 
 	it('refuse two runoff models (never pooled) and two different periods', () => {

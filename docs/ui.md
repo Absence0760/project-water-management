@@ -5635,7 +5635,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     before caution before counts, each saying which way it pushes the
     numbers), the change table (fixed rows, each with its basis: Reserve
     months met per rule-table site, days below the pragmatic EWR, shortfall
-    volume, outflow MAR with % of natural MAR, the applicant's own supply,
+    volume, *No-flow days at the outlet* (below 1 L/s, with the longest
+    spell), *Days below the EWR, first site below the works* (one row per EWR
+    site that is the first below one of the application's storage or
+    abstraction works, or *Not assessed* naming the works with no site
+    between them and the outlet), outflow MAR with % of natural MAR, the
+    applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply),
     with the paired band and "worse in k of n", *Where
@@ -5648,7 +5653,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
-    the FDC check of one month against the EWR curve (`FdcPlot`) and the
+    the FDC check of one month against the EWR curve (`FdcPlot`: from engine
+    1.32.0 the baseline's 5–95 % band shaded behind its line and the
+    application's hatched, or the caption says why there is none) and the
     compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
@@ -5658,7 +5665,11 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
-    days and years fully met, baseline and application.
+    days and years fully met, baseline and application, the change with its
+    paired band and "worse in"; then *Served in full while an EWR site below
+    fails*: per EWR site, the days each unit upstream got its whole demand on
+    the site's failing days (`data-testid="evidence-served"`), and a "read
+    these first" count naming them.
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the

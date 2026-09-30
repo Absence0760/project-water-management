@@ -1337,6 +1337,18 @@
 //             b681786e merged; main grew ~2 KB since the entry above, #206's
 //             CHIRPS final-day marker and #212's Summary readiness signal).
 //             Nothing of the evidence report changed. Headroom ~3 KB.
+// 2026-09-29  total 1231 → 1233 KB (issue #71, the evidence measures,
+//             engine 1.32.0: measured 1233 against 1231 on its base
+//             e1d60130, +1.97 KB gzipped). The evidence report's lazy chunk
+//             +1.31 KB (§ 4's "served in full while a site fails" tables and
+//             banded Change column, § 2's two new rows, the FDC chart's
+//             bands) and its CSS +0.1 KB; the calibration worker +0.55 KB
+//             (reserve/riverMeasures.ts in every member run, the new member
+//             measures and their bands). Trimmed first: the report named the
+//             engine version that added them by importing it from
+//             uncertainty/ensemble.ts, which (as in the entry above) moved the
+//             worker's engine into a chunk the report page loaded; the
+//             constant now lives in version.ts. No new dependency. Headroom 0.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1347,7 +1359,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1231,
+	totalCodeKb: 1233,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

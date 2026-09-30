@@ -106,6 +106,20 @@ export interface MemberMetrics {
 	reserveRate: Record<string, number | null>;
 	/** Simulated outflow's flow-duration curve per water-year month, at FDC_POINTS, m³/day; [] for a month the run has no day in. */
 	fdcM3Day: number[][];
+	// Engine ≥ 1.32.0 (ENSEMBLE_MEASURES_SINCE, issue #71): absent on members stored before, whose bands then say so.
+	/** Days the outlet's simulated outflow is below NO_FLOW_M3_DAY (summary.catchment.noFlow). */
+	noFlowDays?: number;
+	/** Days each EWR site's daily EWR was not met ('outlet' or the gauge's id; summary.servedWhileEwrFails). */
+	ewrSiteDaysNotMet?: Record<string, number>;
+	/** Each farm's and water user's mean demand and supply over the run, m³/day (their share supplied is supplied ÷ demand, 1 without demand). */
+	unitDemandM3Day?: Record<string, number>;
+	unitSuppliedM3Day?: Record<string, number>;
+	/**
+	 * The Reserve's FDC check per site with a rule table (ER5): per water-year
+	 * month (0 = Oct), the impacted flow-duration curve at the table's points,
+	 * in the table's unit (null for a point without a complete month).
+	 */
+	reserveFdc?: Record<string, (number | null)[][]>;
 }
 
 export interface MemberResult extends EnsembleMember {
@@ -124,6 +138,10 @@ export interface EnsembleHeader {
 	waterYears: { waterYear: number; days: number }[];
 	farms: { nodeId: string; name: string }[];
 	reserveSites: { key: string; name: string }[];
+	/** Every farm and water user (engine ≥ 1.32.0; absent on older headers). */
+	units?: { nodeId: string; name: string }[];
+	/** Every EWR site, outlet first (engine ≥ 1.32.0; absent on older headers). */
+	ewrSites?: { key: string; name: string }[];
 	fdcPoints: number[];
 	/** Run days in each water-year month (0 = Oct): a month without any has no flow-duration curve. */
 	monthDays: number[];
@@ -486,6 +504,18 @@ export function memberMetrics(ctx: EnsembleContext, out: ModelOutput): MemberMet
 			.reverse();
 		return FDC_POINTS.map((p) => r6(durationAt(x, p)));
 	});
+	// The run's own count (summary.catchment.noFlow); a run without an outlet has none, and neither has the member.
+	const noFlow = s.catchment.noFlow?.days;
+	const siteDays: Record<string, number> = {};
+	for (const site of s.servedWhileEwrFails ?? []) siteDays[site.nodeId ?? 'outlet'] = site.daysNotMet;
+	const demand: Record<string, number> = {};
+	const supplied: Record<string, number> = {};
+	for (const u of [...s.farms, ...(s.users ?? [])]) {
+		demand[u.nodeId] = r6(u.avgDemandM3Day);
+		supplied[u.nodeId] = r6(u.avgSuppliedM3Day);
+	}
+	const reserveFdc: Record<string, (number | null)[][]> = {};
+	for (const site of s.ewrAssurance ?? []) reserveFdc[site.nodeId ?? 'outlet'] = site.byMonth.map((m) => m.fdc.map((p) => (p.impacted === null ? null : r6(p.impacted))));
 	return {
 		ewrDaysNotMet: s.catchment.ewrDaysNotMet,
 		ewrDaysNotMetByMonth: byMonth,
@@ -496,8 +526,34 @@ export function memberMetrics(ctx: EnsembleContext, out: ModelOutput): MemberMet
 		annualOutflowMm3: annual(outflow),
 		curtailmentM3Day: curtailment,
 		reserveRate: reserve,
-		fdcM3Day: fdc
+		fdcM3Day: fdc,
+		...(noFlow === undefined ? {} : { noFlowDays: noFlow }),
+		ewrSiteDaysNotMet: siteDays,
+		unitDemandM3Day: demand,
+		unitSuppliedM3Day: supplied,
+		reserveFdc
 	};
+}
+
+/** A unit's share of demand supplied in a member (as FarmSummary.fractionSupplied: 1 without demand); null when the member lacks it. */
+export function memberSupplyFraction(x: MemberMetrics, nodeId: string): number | null {
+	const d = x.unitDemandM3Day?.[nodeId];
+	const g = x.unitSuppliedM3Day?.[nodeId];
+	if (typeof d !== 'number' || typeof g !== 'number') return null;
+	return d > 0 ? g / d : 1;
+}
+
+/** Σ supplied ÷ Σ demand over `nodeIds` present in a member; null without demand among them or when the member lacks the measure. */
+export function memberGroupSupply(x: MemberMetrics, nodeIds: readonly string[]): number | null {
+	if (!x.unitDemandM3Day || !x.unitSuppliedM3Day) return null;
+	let d = 0;
+	let g = 0;
+	for (const id of nodeIds) {
+		const dd = x.unitDemandM3Day[id];
+		const gg = x.unitSuppliedM3Day[id];
+		if (typeof dd === 'number' && typeof gg === 'number') ((d += dd), (g += gg));
+	}
+	return d > 0 ? g / d : null;
 }
 
 /** A member's acceptance scores, from its run. */
@@ -574,6 +630,8 @@ export function ensembleHeader(ctx: EnsembleContext, first: ModelOutput): Ensemb
 		waterYears: ctx.waterYears.map(({ waterYear, days }) => ({ waterYear, days })),
 		farms: (first.summary.curtailment?.farms ?? []).map((f) => ({ nodeId: f.nodeId, name: f.name })),
 		reserveSites: (first.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name })),
+		units: unitsOf(first),
+		ewrSites: ewrSitesOf(first),
 		fdcPoints: [...FDC_POINTS],
 		monthDays: ctx.monthDays.map((idx) => idx.length),
 		ewrByMonthM3Day: ctx.monthDays.map((idx) => (idx.length ? r6(idx.reduce((a, t) => a + (ewr[t] ?? 0), 0) / idx.length) : 0)),
@@ -582,6 +640,13 @@ export function ensembleHeader(ctx: EnsembleContext, first: ModelOutput): Ensemb
 		hasWr2012: ctx.hasWr2012
 	};
 }
+
+/** Every farm and water user of a run, farms first (a header's `units`). */
+export const unitsOf = (out: ModelOutput): { nodeId: string; name: string }[] =>
+	[...out.summary.farms, ...(out.summary.users ?? [])].map((u) => ({ nodeId: u.nodeId, name: u.name }));
+/** Every EWR site of a run, outlet first (a header's `ewrSites`). */
+export const ewrSitesOf = (out: ModelOutput): { key: string; name: string }[] =>
+	(out.summary.servedWhileEwrFails ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name }));
 
 /**
  * Run the ensemble: member 0, then every sampled member, each a full model
@@ -668,6 +733,15 @@ export interface EnsembleBands {
 	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order, at `fdcPoints` exceedance %; only months the run has days in. */
 	fdc: { month: number; ewrM3Day: number; points: Band[] }[];
 	fdcPoints: number[];
+	// Engine ≥ 1.32.0 (ENSEMBLE_MEASURES_SINCE): absent on summaries stored before.
+	/** Days the outlet's flow is below NO_FLOW_M3_DAY. */
+	noFlowDays?: Band;
+	/** Days each EWR site's daily EWR is not met, outlet first. */
+	ewrSites?: { key: string; name: string; band: Band }[];
+	/** Each farm's and water user's share of demand supplied, 0–1. */
+	supply?: { nodeId: string; name: string; band: Band }[];
+	/** The Reserve's FDC check (ER5): per site with a rule table, per water-year month (0 = Oct), a band at each of the table's points, table unit. */
+	reserveFdc?: { key: string; name: string; months: Band[][] }[];
 }
 
 export interface EnsembleSummary {
@@ -688,6 +762,15 @@ export interface EnsembleSummary {
 	/** The rule a member had to pass, in words: printed next to every band. */
 	decisionRule: string;
 	notes: string[];
+}
+
+/** Bands of the Reserve FDC check at one site: 12 water-year months × the table's points (as many as any member carries). */
+export function reserveFdcBands(members: readonly MemberMetrics[], key: string, b: (f: (x: MemberMetrics) => number | null | undefined) => Band): Band[][] {
+	return Array.from({ length: 12 }, (_, i) => {
+		let points = 0;
+		for (const x of members) points = Math.max(points, x.reserveFdc?.[key]?.[i]?.length ?? 0);
+		return Array.from({ length: points }, (_, j) => b((x) => x.reserveFdc?.[key]?.[i]?.[j]));
+	});
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -733,7 +816,11 @@ export function summariseEnsemble(r: Pick<EnsembleResult, 'options' | 'header' |
 		fdc: h.ewrByMonthM3Day.flatMap((ewrM3Day, i) =>
 			h.monthDays[i] ? [{ month: calendarMonthOf(i), ewrM3Day, points: h.fdcPoints.map((_, j) => b((x) => x.fdcM3Day[i]?.[j])) }] : []
 		),
-		fdcPoints: [...h.fdcPoints]
+		fdcPoints: [...h.fdcPoints],
+		noFlowDays: b((x) => x.noFlowDays),
+		ewrSites: (h.ewrSites ?? []).map((site) => ({ ...site, band: b((x) => x.ewrSiteDaysNotMet?.[site.key]) })),
+		supply: (h.units ?? []).map((u) => ({ ...u, band: b((x) => memberSupplyFraction(x, u.nodeId)) })),
+		reserveFdc: h.reserveSites.map((site) => ({ ...site, months: reserveFdcBands(kept, site.key, (f) => b(f)) }))
 	};
 	const gated = kept.length < o.minMembers;
 	const reference = r.members.find((m) => m.reference);

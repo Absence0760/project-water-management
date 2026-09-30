@@ -27,6 +27,7 @@ export * from './reference/wr2012Settings';
 export { resolveWr2012 } from './reference/wr2012Resolve';
 export * from './reserve/rules';
 export * from './reserve/assurance';
+export * from './reserve/riverMeasures';
 export * from './calibrate/provenance';
 export * from './calibrate/rulesSettings';
 export * from './calibrate/rules';

@@ -133,9 +133,19 @@ const ENSEMBLE_COLUMNS = `u.id, u.run_id AS "runId", u.baseline_id AS "baselineI
  * application whose baseline is one of them. A paired row's bands are
  * recomputed from both rows' stored members (summarisePaired), so a band
  * stored before a summary field existed (the Reserve's "worse in", ER4)
- * carries it too; the members themselves were verified when stored.
+ * carries it too; the members themselves were verified when stored. A
+ * measure the members don't carry (no-flow days, EWR days per site, supply
+ * per unit and the Reserve FDC on members stored before engine 1.32.0)
+ * comes out as a band of no pairs, which the report prints as "no band".
  */
-async function loadEnsembles(db: Db, projectId: string, baselineRunId: string, applicationRunId: string | null): Promise<EvidenceInput['ensembles']> {
+async function loadEnsembles(
+	db: Db,
+	projectId: string,
+	baselineRunId: string,
+	applicationRunId: string | null,
+	/** The application's own units: its paired band on the applicant's own supply (page 1, ER4). */
+	own: readonly string[] = []
+): Promise<EvidenceInput['ensembles']> {
 	const { rows: base } = await db.query<EnsembleRow>(
 		`SELECT ${ENSEMBLE_COLUMNS} FROM run_uncertainty u LEFT JOIN app_user au ON au.id = u.created_by
 		 WHERE u.project_id = $1 AND u.run_id = $2 AND u.baseline_id IS NULL ORDER BY u.created_at DESC, u.id`,
@@ -174,7 +184,7 @@ async function loadEnsembles(db: Db, projectId: string, baselineRunId: string, a
 	}
 	const paired = pairedRows.map((p) => {
 		const b = p.baselineId ? results.get(p.baselineId) : undefined;
-		const summary = p.status === 'complete' && p.result && b ? summarisePaired({ options: p.options, header: b.header, members: b.members }, p.result) : null;
+		const summary = p.status === 'complete' && p.result && b ? summarisePaired({ options: p.options, header: b.header, members: b.members }, p.result, { own }) : null;
 		return toInput(p, null, summary);
 	});
 	return { baseline, paired };
@@ -280,7 +290,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		application,
 		nominations,
 		...(await loadPublications(db, projectId, baseRow)),
-		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null),
+		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null, application?.scenario.ownedNodeIds ?? []),
 		changes,
 		applicationRuns,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version }
