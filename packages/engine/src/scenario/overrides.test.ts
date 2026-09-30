@@ -1528,6 +1528,22 @@ describe('demand-object ops (engine ≥ 1.45.0)', () => {
 		expect(scenarioSteps(withObject(), [set('sizing', 'perUnit')]).after.model.demandObjects![0]!.sizing).toBe('perUnit');
 	});
 
+	it('demandObject.set source (engine ≥ 1.56.0): one of the sources, fitting the sizing, or null', () => {
+		const r = one(set('source', 'meter'), withObject());
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.demandObjects![0]!.source).toBe('meter');
+		// Clearing a source the object hasn't got leaves it as it is (not recorded either way).
+		expect('source' in one(set('source', null), withObject()).input.model.demandObjects![0]!).toBe(false);
+		expect(one(set('source', 'guess'), withObject()).problems).toEqual(['op 1 (demandObject.set): source must be one of meter, aadd, perCapita, other']);
+		// A per-capita source on a monthly object breaks the model rule; with the sizing switched in the same group it doesn't.
+		expect(one(set('source', 'perCapita'), withObject()).problems).toEqual([expect.stringMatching(/^op 1 \(demandObject\.set\): demand object "Town": a demand from population × litres a day is sized per unit/)]);
+		const toNorm = [set('source', 'perCapita'), set('sizing', 'perUnit'), set('count', 2000), set('litresPerUnitDay', 230), set('monthlyM3Day', null)];
+		expect(applyScenario(withObject(), toNorm).problems).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.set', demandObjectId: 'do1', field: 'source', value: 'aadd' }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), source: 'meter' } }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), source: 'survey' } }]).errors).toEqual(['ops[0].demandObject.source: must be one of meter, aadd, perCapita, other']);
+	});
+
 	it('demandObject.remove takes the object out; a removed node takes its objects with it', () => {
 		expect(one({ op: 'demandObject.remove', demandObjectId: 'do1' }, withObject()).input.model.demandObjects).toEqual([]);
 		expect(one({ op: 'demandObject.remove', demandObjectId: 'zz' }, withObject()).problems).toEqual(['op 1 (demandObject.remove): demand object zz not found']);
