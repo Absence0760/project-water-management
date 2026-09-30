@@ -34,7 +34,11 @@ const PUBLIC = new Set([
 	// credential, and it can only turn off the one subscription it names,
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
 	// route exempt from the CSRF check (app.ts): a mail client form-posts it.
-	'POST /alerts/unsubscribe'
+	'POST /alerts/unsubscribe',
+	// Verify an evidence pack (WP-3.14): the code is printed on the pack, not
+	// a secret; app_verify_pack returns only a pack's printed fields, and
+	// nothing for a draft (evidence/packs.db.test.ts).
+	'GET /verify/:code'
 ]);
 
 const app = createApp();
@@ -61,6 +65,25 @@ describe('route auth inventory', () => {
 	it('inventories the import-report route as auth-gated', () => {
 		expect(routes).toContain('GET /projects/:id/import-report');
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
+	});
+
+	// Evidence packs (WP-3.14): auth-gated like every project route; only verify is public.
+	it('inventories the evidence pack routes as auth-gated, and verify as public', () => {
+		for (const r of [
+			'POST /projects/:id/packs',
+			'GET /projects/:id/packs',
+			'GET /projects/:id/packs/:packId',
+			'DELETE /projects/:id/packs/:packId',
+			'GET /projects/:id/packs/:packId/signoffs',
+			'POST /projects/:id/packs/:packId/signoffs',
+			'POST /projects/:id/packs/:packId/issue',
+			'POST /projects/:id/packs/:packId/withdraw'
+		]) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('GET /verify/:code');
+		expect(PUBLIC.has('GET /verify/:code')).toBe(true);
 	});
 
 	// Reproduction (WP-3.1): auth-gated like every project route.

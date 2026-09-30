@@ -9,7 +9,7 @@ import { errataFor, type Erratum } from './errata';
 import { ENGINE_ERRATA } from './errata.generated';
 import { METHODOLOGY } from './methodology.generated';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
-import { signoffStatement, signoffStatementText } from './signoff';
+import { packSignoffStatement, signoffStatement, signoffStatementText, type SignoffPack } from './signoff';
 import { moriasiNse, moriasiPbias, parseEngineBuild, validationStatement } from './validation';
 
 const bare = (over: Partial<RunSummary> = {}): RunSummary =>
@@ -202,6 +202,50 @@ describe('signoffStatement', () => {
 		expect(signoffStatement(run, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([ERRATUM]);
 		expect(signoffStatement({ ...run, engineVersion: '0.40.0' }, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([]);
 		expect(signoffStatement(run).confirmations.at(-1)!.text).toMatch(/methodology statement cited below, and the known limitations and the errata/);
+	});
+});
+
+describe('packSignoffStatement (WP-3.14)', () => {
+	const run = { id: '00000000-0000-4000-8000-000000000001', engineVersion: '0.31.2', scenario: false };
+	const pack: SignoffPack = {
+		id: '00000000-0000-4000-8000-0000000000a1',
+		version: 1,
+		manifestSha256: 'a'.repeat(64),
+		baseline: run,
+		application: { id: '00000000-0000-4000-8000-000000000002', engineVersion: '0.40.0', scenario: true }
+	};
+
+	it('has its own version, binds the manifest hash, and adds the pack confirmation to the run statement\'s', () => {
+		const s = packSignoffStatement(pack);
+		expect(s.version).toBe('pack-signoff-1');
+		expect(s).toMatchObject({ packId: pack.id, packVersion: 1, manifestSha256: 'a'.repeat(64) });
+		expect(s.baseline).toEqual({ runId: run.id, engineVersion: '0.31.2' });
+		expect(s.application).toEqual({ runId: pack.application!.id, engineVersion: '0.40.0' });
+		expect(s.confirmations.map((c) => c.id)).toEqual([...signoffStatement(run).confirmations.map((c) => c.id), 'pack']);
+		expect(s.confirmations.at(-1)!.text).toContain('a'.repeat(64));
+		// An application pack confirms the proposed works; a baseline pack the existing ones.
+		expect(s.confirmations.find((c) => c.id === 'works')!.text).toMatch(/proposed works/);
+		expect(packSignoffStatement({ ...pack, application: null }).confirmations.find((c) => c.id === 'works')!.text).toMatch(/existing works/);
+		expect(s.notes.join(' ')).toMatch(/covers this evidence pack only/);
+		expect(s.notes.join(' ')).not.toMatch(/covers this run only/);
+		// The run statement is unchanged (signoff-4).
+		expect(signoffStatement(run).version).toBe('signoff-4');
+	});
+
+	it('changes its text when the manifest hash, the version or a run changes', () => {
+		const text = signoffStatementText(packSignoffStatement(pack));
+		expect(signoffStatementText(packSignoffStatement({ ...pack }))).toBe(text);
+		expect(signoffStatementText(packSignoffStatement({ ...pack, manifestSha256: 'b'.repeat(64) }))).not.toBe(text);
+		expect(signoffStatementText(packSignoffStatement({ ...pack, version: 2 }))).not.toBe(text);
+		expect(signoffStatementText(packSignoffStatement({ ...pack, baseline: { ...run, engineVersion: '0.31.3' } }))).not.toBe(text);
+		expect(signoffStatementText(packSignoffStatement(pack, KNOWN_LIMITATIONS.slice(1)))).not.toBe(text);
+	});
+
+	it('lists the errata of either run once', () => {
+		// ER-99 affects 0.30.0–0.31.x: the baseline, not the application (0.40.0).
+		expect(packSignoffStatement(pack, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([ERRATUM]);
+		expect(packSignoffStatement({ ...pack, application: { ...pack.application!, engineVersion: '0.31.0' } }, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([ERRATUM]);
+		expect(packSignoffStatement({ ...pack, baseline: { ...run, engineVersion: '0.40.0' } }, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([]);
 	});
 });
 

@@ -105,6 +105,22 @@ async function scenario(steps: string[]) {
 }
 
 /**
+ * A draft evidence pack on the ladder's run, planted as the schema owner: the
+ * ladder has no nominated run with a cited ensemble, so POST …/packs can't
+ * draft one (NOT_REACHED). Its manifest is a stand-in; the pack routes that
+ * take a body (sign, withdraw) read only its row.
+ */
+async function plantedPack() {
+	const id = crypto.randomUUID();
+	await asOwner(
+		`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+		 VALUES ($1::uuid, $2::uuid, $3, 1, jsonb_build_object('pack', jsonb_build_object('id', $1::text, 'version', 1), 'project', jsonb_build_object('id', $2::text), 'engine', jsonb_build_object('version', '0.0.0'), 'report', jsonb_build_object('version', 'evidence-1')), md5(random()::text) || md5(random()::text), 'evidence-1', '0.0.0', $4)`,
+		[id, ctx.projectId, ctx.runId, ctx.owner.id]
+	);
+	return id;
+}
+
+/**
  * Requests for the routes outside /projects/:id, and parameter overrides for
  * ones inside it; every other project route takes its role-ladder SAMPLE, as
  * the owner. Each is called afresh per request, so a token is new each time.
@@ -211,6 +227,24 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 			}
 		};
 	},
+	'POST /projects/:id/packs/:packId/signoffs': async () => {
+		const packId = await plantedPack();
+		const { statement, statementSha256 } = await ok(ctx.owner.call('GET', `${at()}/packs/${packId}/signoffs`));
+		return {
+			params: { packId },
+			body: {
+				fullName: 'Mass Signer',
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationField: 'water_resources',
+				registrationNo: '1',
+				scope: 'mass',
+				confirmed: statement.confirmations.map((k: { id: string }) => k.id),
+				statementSha256
+			}
+		};
+	},
+	'POST /projects/:id/packs/:packId/withdraw': async () => ({ params: { packId: await plantedPack() }, body: { reason: 'mass withdrawal' } }),
 	'POST /projects/:id/series/:seriesId/revisions/:revId/restore': async () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i % 5 === 0 ? 10 + Math.random() : 0));
 		await ok(ctx.owner.call('PUT', `${at()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain }));
@@ -260,6 +294,17 @@ const NO_WRITE = new Map<string, string>([
 
 /** Routes the owner's sample can't reach past a business rule, and why (their body never gets that far). */
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
+	[
+		'POST /projects/:id/packs',
+		{
+			why: 'a strict body; the ladder has no nominated run with a declared rule and a cited ensemble, so no report there may become a pack (evidence/packs.db.test.ts drafts one)',
+			legit: 409
+		}
+	],
+	[
+		'POST /projects/:id/packs/:packId/issue',
+		{ why: 'takes an empty body only (strict); a pack is issued only from an issuable report, which the ladder has none of (evidence/packs.db.test.ts)', legit: 404 }
+	],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[
 		'POST /projects/:id/auto-calibrations/:cid/apply',

@@ -1247,7 +1247,7 @@ In short:
   `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
   rewrite a run's inputs, outputs or label after the fact; who last changed
   the note is stamped by a trigger. The catalogue test pins that column list.
-- **Tamper evidence for the nominated evidence run** (010_run_nomination).
+- <a id="tamper-evidence"></a>**Tamper evidence for the nominated evidence run** (010_run_nomination).
   Which run, and so which runoff model, a project stands behind is kept as an
   append-only history, so an applicant can't quietly switch to whichever model
   is kindest and pretend it was the choice all along:
@@ -1281,8 +1281,10 @@ In short:
     TRIGGER project_evidence_guard; DELETE FROM project WHERE id = '…';
     ALTER TABLE project ENABLE TRIGGER project_evidence_guard;`. Record why
     in the operator log; the app has no path to it.
-  - Limits: an issued, hashed evidence pack that survives outside the
-    database is roadmap WP-3.14. The schema owner (`water`, migrations only)
+  - A project with an evidence pack past draft is kept too
+    (112_evidence_pack, `project_pack_guard`, [§ Evidence packs](#evidence-packs)).
+  - Limits: an issued pack's PDF and reproduction bundle, which survive
+    outside the database, are not built yet (WP-3.14, [evidence-pack.md](./evidence-pack.md)). The schema owner (`water`, migrations only)
     is not bound by the grants. A nomination proves what the project said and
     when, not that the run is right: that is the assessor's review.
 - **Uncertainty bands can't be cherry-picked or forged** (014_run_uncertainty,
@@ -2017,7 +2019,8 @@ PDF someone else asked for kept the person as a recipient
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
-| Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination holds the project |
+| Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run or an evidence pack) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup | `evidence_pack` (`created_by`, `issued_by`), `signoff` | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
@@ -2469,6 +2472,10 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     would pass for a run of the project's own inputs. Deleting the whole
     project still takes its sign-offs with it (cascade), unless it has an
     evidence nomination (035). Each sign-off is in the audit log.
+  - *A pack sign-off* (112) signs an evidence pack rather than a run: the
+    same checks, with the pack statement (`pack-signoff-1`, the run
+    statement's confirmations plus one naming the pack's manifest hash), on a
+    draft only ([§ Evidence packs](#evidence-packs)).
   - *Limits, stated on the report and in the dialog:* the registration
     details are the **signer's own declaration** (not checked against the
     ECSA or SACNASP register, and printed "self-declared"; the report prints
@@ -2479,6 +2486,92 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
     with the account cleared ([§ Personal information](#personal-information-popia)).
+
+## Evidence packs
+
+Roadmap WP-3.14, 112_evidence_pack ([evidence-pack.md](./evidence-pack.md),
+[data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql)).
+An issued pack is what an applicant attaches to a licence application, so it
+must not change, disappear or be forged, and its public check must give away
+nothing else.
+
+- **Immutable once drafted, whoever writes.** `evidence_pack_guard` (BEFORE
+  INSERT OR UPDATE, `SECURITY DEFINER`) freezes the manifest, its SHA-256,
+  both runs, the scenario, the version and its predecessor from the insert,
+  for the schema owner too. The status moves only forward (draft → issued →
+  superseded or withdrawn; a draft may be withdrawn); the issue stamp is set
+  by the trigger from the session, never by the caller; the reason and the
+  successor are set once, with their move; the PDF and the bundle hashes once.
+  The manifest must name the row's own id, version, project and versions, and
+  a new version must be of the same application as its predecessor.
+  `water_app` has no grant on the PDF and bundle columns at all: those hashes
+  are printed by verify, so only the renderer's future `SECURITY DEFINER`
+  setter may write them.
+  `water_app` can't even name a frozen column in an `UPDATE` (column grants;
+  catalogue `COLUMN_ONLY_UPDATE`).
+- **Never deleted once issued.** RLS lets an editor delete a draft only, and
+  a signed draft is held by its sign-off's foreign key (it is withdrawn
+  instead). No trigger refuses the delete, so the project's own cascade
+  still works; instead the **project is kept**: `project_pack_guard` (BEFORE
+  DELETE on `project`) refuses deleting a project with a pack past draft, for
+  every role and path, and the project `DELETE` route answers `409` first
+  (operator decision, 2026-09-29). A project with a pack has nominated a run,
+  so 035's guard holds it too. The operator's out-of-band removal is as for
+  035 ([§ Tamper evidence](#tamper-evidence)), disabling both triggers.
+- **Its runs and scenario are kept.** Both runs are cited
+  (`model_run_cited`), so the storage cap, the unpin and the run `DELETE`
+  keep them; the scenario can't be deleted (`scenario_signed_run_guard`, now
+  with the pack clause; the route answers `409`).
+- **Bound to its signers, and they to it.** A pack is issued only with a
+  sign-off whose statement (`pack-signoff-1`) names the pack's manifest hash;
+  the route requires a sign-off of the *current* statement, and the trigger
+  refuses an issue with no sign-off at all. A sign-off of a pack is made only
+  on a draft (`signoff_pack_draft`). The statement kinds can't be mixed: a
+  `pack-` version signs a pack and any other a run (`signoff_statement_target`).
+- **The hash survives storage.** The server hashes the manifest's RFC 8785
+  text when it drafts, re-reads it from `jsonb` and hashes it again (a
+  mismatch aborts the draft), and does so again before issuing; `GET …/packs/:packId`
+  says `manifestMatches`.
+- **One issued pack per application** (or per project's baseline evidence):
+  the issue route refuses a second (`409`), and the deferred exclusion
+  constraint `evidence_pack_one_issued` holds it at commit, so the version
+  chain can't fork into two current packs.
+- **Issue re-checks the evidence.** The frozen report must be issuable, the
+  live one still (the nomination, the declared rule, the cited ensemble), and
+  both runs' server stamps must still match their rows ([§ Run stamps](#run-stamps)).
+  A full reproduction of both runs isn't run in the request; the reproduction
+  bundle will carry it ([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+- **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
+  delete drafts; viewers read a baseline pack, and an application pack when
+  they read its scenario (`app_scenario_readable`, 045); editors read every
+  pack. Contributors (applicants) and farmers read none and act on none
+  (operator decision, 2026-09-29: issuing stays with the project's editors).
+  The pack routes' bodies are strict where they create or issue.
+- **The public verify lookup** (`GET /verify/:code`, one of the few
+  `withoutUser` callers besides pre-sign-in auth, the share links and the
+  job queue: it reads nothing but through `app_verify_pack`; in the route
+  inventory's public allowlist) takes a short code or a full manifest hash,
+  which are printed on the pack and not secrets (unlike a share link's
+  token). `app_verify_pack` (`SECURITY DEFINER`, `search_path` pinned,
+  `EXECUTE` for `water_app` only) returns only the printed fields: status,
+  version, issue date, catchment name, engine and report versions, the
+  manifest and PDF hashes, the successor's hash, a withdrawal reason, the
+  methodology cited, the errata recorded, and the signers' names and
+  registrations. The withdrawal reason is the editor's own words and is
+  public too: the withdraw action must say so (it is printed where the pack
+  was). No ids, inputs, results, accounts or emails. A draft, a
+  pack never issued, an unknown code and a malformed one are the same `404`.
+  `Cache-Control: no-store`, so a withdrawal shows at once. It is
+  rate-limited only by the WAF's rule on the whole API; enumerating 12-hex
+  codes (2⁴⁸) through it is not practical.
+- **Personal data.** The signers' typed names and registrations are public
+  on verify, as they are printed on the pack (a professional signature is
+  made to be read by others; the pack sign-off dialog, with the pack view,
+  must say so: [followups.md § Evidence report](./followups.md#evidence-report-issue-71)). Who drafted and issued a
+  pack is the project's record; an account deletion clears it (the guard
+  allows only that change, only once the account is gone). The signer's
+  data export lists their pack sign-offs (`packId`); the drafting and issue
+  are exported as their audit events.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 

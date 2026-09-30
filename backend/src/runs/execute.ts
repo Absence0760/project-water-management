@@ -190,8 +190,9 @@ export const RUN_KEPT_SQL = `app_run_kept(r.id)`;
  * `{ kind, id, name }`, oldest first, of the citations the caller can see
  * (RLS): publications (022_publication.sql; `name` is the day it was
  * published, YYYY-MM-DD, in the project's time zone, 058/059), scenarios (024_scenarios.sql) and sign-offs
- * (036_signoff.sql; `name` is the signer's full name). Evidence packs and
- * assessments add their kinds here with their migrations. `model_run_cited`
+ * (036_signoff.sql; `name` is the signer's full name) and evidence packs
+ * (112_evidence_pack.sql; `name` is `version N`). Assessments add their kind
+ * here with their migration. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */
 export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', c.kind, 'id', c.id, 'name', c.name) ORDER BY c.at, c.id), '[]'::jsonb) FROM (
@@ -200,11 +201,13 @@ export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind
 		SELECT 'scenario', s.id, s.name, s.created_at FROM scenario s WHERE s.base_run_id = r.id
 		UNION ALL
 		SELECT 'signoff', so.id, so.full_name, so.signed_at FROM signoff so WHERE so.run_id = r.id
+		UNION ALL
+		SELECT 'pack', ep.id, 'version ' || ep.version, ep.created_at FROM evidence_pack ep WHERE ep.baseline_run_id = r.id OR ep.scenario_run_id = r.id
 	) c)`;
 
 /** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, in the project's time zone). */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
 	id: string;
 	name: string;
 }
@@ -218,7 +221,7 @@ export async function citedMessage(db: Db, projectId: string, runId: string, tai
 	const { rows } = await db.query<{ cited: RunCitation[] }>(`SELECT ${CITED_BY_SQL} AS cited FROM model_run r WHERE r.project_id = $1 AND r.id = $2`, [projectId, runId]);
 	const cited = rows[0]?.cited ?? [];
 	if (!cited.length) return `this run is cited, ${tail}`;
-	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : c.kind === 'signoff' ? `the sign-off by ${c.name}` : `${c.kind} "${c.name}"`));
+	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : c.kind === 'signoff' ? `the sign-off by ${c.name}` : c.kind === 'pack' ? `the evidence pack ${c.name}` : `${c.kind} "${c.name}"`));
 	const more = cited.length > 3 ? ` and ${cited.length - 3} more` : '';
 	return `this run is cited by ${names.join(', ')}${more}, ${tail}`;
 }

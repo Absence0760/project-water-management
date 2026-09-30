@@ -155,6 +155,16 @@ function evidenceKept(run: { runId: string | null; runLabel: string | null; nomi
 	);
 }
 
+/** Why a project with an issued evidence pack can't be deleted (112_evidence_pack, project_pack_guard). */
+function packKept(n: number) {
+	return new ApiError(
+		409,
+		`this project can't be deleted: it has ${n === 1 ? 'an evidence pack' : `${n} evidence packs`} past draft (issued, superseded or withdrawn), ` +
+			'and a project keeps its issued packs for good so their verify links keep answering; copy the project to start again without them.',
+		{ packs: n }
+	);
+}
+
 async function getProject(db: import('../db/tx.js').Db, id: string) {
 	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
@@ -343,6 +353,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireRole(db, id, 'owner');
+			// A project with an evidence pack past draft (issued, superseded or
+			// withdrawn) is kept: its verify link must keep answering (operator
+			// decision, 2026-09-29). The project_pack_guard trigger (112) refuses
+			// the DELETE too, whoever runs it.
+			const { rows: packs } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM evidence_pack WHERE project_id = $1 AND status <> 'draft'`, [id]);
+			if (packs[0]!.n > 0) throw packKept(packs[0]!.n);
 			// A project that has nominated an evidence run keeps it and its
 			// nomination history for good (issue #43); the project_evidence_guard
 			// trigger (035) refuses the DELETE too, whoever runs it.
@@ -356,7 +372,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			try {
 				mustChange(await db.query('DELETE FROM project WHERE id = $1', [id]));
 			} catch (err) {
-				// A nomination that landed after the check above.
+				// A nomination, or an issued pack, that landed after the checks above.
 				if ((err as { code?: string }).code === PG_RESTRICT) throw evidenceKept(null);
 				throw err;
 			}
