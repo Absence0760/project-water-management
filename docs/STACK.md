@@ -232,6 +232,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
+- `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/testing.md`: which test command when, and how long each takes
 - `docs/contributing.md`: the git workflow for sessions sharing a checkout, code organization, the root scripts format, and which files the templates repo owns; `.claude/README.md`: the Claude agents and commands

@@ -3588,11 +3588,12 @@ Left, each with its trigger:
       sign-off statement (`signoff-4`) cite the methodology by version and
       hash and list the errata of the run's engine version. The pack records
       the same (WP-3.14).
-- [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
-      'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
-      `pack_id` column with a check that exactly one target is set. A
-      scenario is signed through its run (`model_run.scenario_id`), and the
-      works statement words itself for a scenario.
+- [x] **Pack sign-off** (issue #71, 2026-09-29, 112_evidence_pack):
+      `signoff.pack_id` beside a now-nullable `run_id`, exactly one set; the
+      pack statement `pack-signoff-1` (the run statement's confirmations plus
+      one binding the pack's manifest hash), on a draft pack only
+      ([evidence-pack.md](./evidence-pack.md)). A scenario is still signed
+      through its run, and the works statement words itself for a scenario.
 - [x] **Validation statement panel on the run and the scenario** (WP-3.13
       UI; done 2026-09-27, issue #17): the report's `ValidationStatement`,
       folded shut, in the run's Record group (`#res-validation`) and under
@@ -3704,6 +3705,48 @@ Left, from the design and the persona review (§11), each with its trigger.
 - [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
       Trigger: before the first evidence pack (WP-3.14).
+
+**Evidence packs** (WP-3.14; built 2026-09-29: the table, the manifest and
+its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
+verify lookup, [evidence-pack.md](./evidence-pack.md)). Left:
+
+- [ ] **The pack view and the verify page** (`routes/projects/[id]/packs/[packId]`,
+      rendering the evidence components from the frozen manifest; `/verify/[code]`
+      with the in-browser PDF and manifest check; the Draft, Sign, Issue,
+      Supersede and Withdraw actions; axe on both). The pack sign-off dialog
+      must say the signer's name and registration are printed on the pack
+      and shown by the public verify lookup. Trigger: next (the second
+      PR of issue #71).
+- [ ] **The server-rendered pack PDF and its hash** (`pdf_key`,
+      `pdf_sha256`, `pdf_pages` exist, unset): render the pack route with
+      WP-2.15 Phase B's renderer (a render scope over the pack's two runs,
+      ER1), store it under a `packs/` prefix with no expiry, versioning and
+      object lock (D12, deployment.md), and record its hash before issue so
+      verify returns it. Trigger: before a pack goes to a real authority.
+- [ ] **The reproduction bundle and `pnpm reproduce:pack`** (`bundle_key`,
+      `bundle_sha256` exist, unset): `manifest.json`, the project's
+      `export.json`, the scenario, the series CSVs and a README; a script
+      that recomputes the results digest at the engine tag. With it, issue
+      should check that both runs reproduce (today it checks their server
+      stamps only; a full re-run is too slow for a request, so it belongs
+      in a `pack_build` job). Trigger: with the PDF.
+- [ ] **Errata found after issue on verify.** Verify lists the errata the
+      manifest recorded when the pack was drafted; one found later, for the
+      same engine version, isn't shown. Durable fix: the verify route adds
+      `errataFor` over the current list for the runs' engine versions (and
+      the fit's), marked "found since issue". Trigger: the first erratum
+      added while an issued pack exists, or the verify page, whichever is
+      first.
+- [ ] **Applicants' access to their own application's packs** (WP-3.15).
+      Contributors read no pack today (operator decision, 2026-09-29:
+      issuing stays with editors). Durable fix: a read policy for the
+      scenario's owner and members on packs of their application once
+      issued, with the D2 anonymising applied to the manifest they see.
+      Trigger: WP-3.15, or the first applicant who needs the pack itself
+      rather than its verify link.
+- [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
+      project's editors and the scenario's owner. Trigger: with the pack
+      view.
 
 ## Alerts (WP-2.13)
 

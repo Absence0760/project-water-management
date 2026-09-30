@@ -262,7 +262,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
-| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
+| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { packs } }` for a project with an evidence pack past draft (issued, superseded or withdrawn: its verify link must keep answering; 112, [Evidence packs](#evidence-packs)), checked first; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
@@ -1959,6 +1959,56 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   row on the application against it. Every other start is in
   `uncertainty.ledger` with how it departs from the declared rule.
 
+## Evidence packs
+
+A licensing evidence report frozen as a hashed, versioned, signed pack
+(roadmap WP-3.14, issue #71, migration 112; [evidence-pack.md](./evidence-pack.md)
+covers the manifest, the hash, the short code and the lifecycle).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
+| GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `issue` (a draft only, else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
+| GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
+| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction. `409` when: it isn't a draft; the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
+| GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
+
+- `Pack = { id, title, mode: 'application' | 'baseline', scenarioId,
+  baselineRunId, scenarioRunId, version, supersedesId, supersededById,
+  status: 'draft' | 'issued' | 'superseded' | 'withdrawn', manifestSha256,
+  shortCode, verifyPath, reportVersion, engineVersion, pdfSha256, pdfPages,
+  bundleSha256, createdAt, createdBy, issuedAt, issuedBy, statusReason,
+  signoffs }`. `title` is the report's (the scenario's name, or the
+  project's); `createdBy` and `issuedBy` are display names (null once the
+  account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
+  `signoffs` is a count. The PDF and bundle fields stay `null` until they
+  are built.
+- `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
+  pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
+  { id, name }, engine: { version, build }, report: EvidenceReport }`.
+  `manifestSha256` is the SHA-256 of `packManifestText(manifest)` (RFC 8785).
+- `PackSignoffStatement` (`pack-signoff-1`, `packSignoffStatement`): the run
+  statement's fields less `runId` and `engineVersion`, plus `packId`,
+  `packVersion`, `manifestSha256`, `baseline: { runId, engineVersion }` and
+  `application: { runId, engineVersion } | null`; eleven confirmations, the
+  run statement's ten and `pack`; `errata` of either run's engine.
+- `PackVerification = { status, version, issuedAt, catchment,
+  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256,
+  successorSha256, withdrawnReason, methodology: { version, sha256 },
+  errata: { id, summary }[], signers: { fullName, registrationBody,
+  registrationCategory, registrationField, registrationNo, signedAt }[] }`,
+  and nothing else (`app_verify_pack`, security.md § Evidence packs).
+- A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
+  can't be deleted or trimmed, and the scenario can't be deleted. A project
+  with a pack past draft can't be deleted (`409`, [Projects](#projects)).
+- Each step is in the history: `pack.drafted`, `pack.deleted`,
+  `pack.issued`, `pack.superseded`, `pack.withdrawn`, and `signoff.created`
+  with `packId`.
+
 ## Sign-offs
 
 A registered professional signs a run (roadmap WP-3.13, migration 036;
@@ -1993,7 +2043,9 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   sign-off keeps the `statementVersion` and `statementSha256` it recorded
   (earlier ones say `signoff-1` or `signoff-2`), and is listed beside newer
   ones unchanged.
-- `Signoff = { id, runId, fullName, registrationBody, registrationCategory,
+- A sign-off of an evidence pack goes through [Evidence packs](#evidence-packs)
+  (`…/packs/:packId/signoffs`), with the pack statement (`pack-signoff-1`).
+- `Signoff = { id, runId, packId, fullName, registrationBody, registrationCategory,
   registrationField, registrationNo, scope, statementVersion,
   statementSha256, disclaimerVersion, signedAt, mine }`. On a `signoff-1` or
   `-2` sign-off `registrationBody` is the signer's free text and category
