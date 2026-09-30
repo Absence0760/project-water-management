@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf, type Monthly } from './calendar';
 import { prepareRun } from './prepare';
-import { chirpsQuantileMapError, defaultProjectSettings, resolveChirpsQuantileMap, type DailySeries, type ModelInput, type SeriesKind } from './project';
+import { chirpsQuantileMapError, defaultProjectSettings, resolveChirpsQuantileMap, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind } from './project';
 import { heavyDayShare, QM_MIN_WET_DAYS } from './quantileMap';
 import {
 	chirpsCorrectionWarning,
@@ -311,7 +311,7 @@ describe('CHIRPS gap map: invariants through a run', () => {
 		...input(extra),
 		model: {
 			nodes: [node('A', { downstreamNodeId: 'G', damCapacityM3: 50_000 }), node('G', { kind: 'gauge', areaKm2: 0 })],
-			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(0.8) as unknown as Monthly }],
+			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array<number>(12).fill(0.8) }],
 			cropAreas: [{ nodeId: 'A', cropId: 'c', areaM2: 200_000 }],
 			transfers: []
 		}
