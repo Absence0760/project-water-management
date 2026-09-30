@@ -3,7 +3,7 @@
 // reserve per water year, the panels moved from Runs & results, the run picker, the links in from
 // the Summary and Runs & results (old #res-… links included), the empty state and a viewer.
 import type { Page } from '@playwright/test';
-import { addMember, createProject, createRun, updateSettings } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -327,7 +327,8 @@ test('twenty water years with a rule table: every table grows with the page, and
 	});
 	await createRun(page.request, id, 'Long record');
 	await openRiver(page, id);
-	const years = page.getByRole('region', { name: 'Days below the reserve, each water year' });
+	// A rule table: the bars count the pragmatic EWR, so they say so (issue #177).
+	const years = page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' });
 	await expect(years.getByRole('img', { name: /in 20 water years\.$/ })).toBeVisible();
 	const reserve = page.getByRole('region', { name: /^Reserve compliance by month/ });
 	await expect(reserve.getByRole('table', { name: /^Each month at the outlet/ }).locator('tbody tr')).toHaveCount(20);
@@ -368,4 +369,55 @@ test('twenty water years with a rule table: every table grows with the page, and
 	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
 	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('with a Reserve rule table the panels that count the pragmatic EWR name it, not the reserve; the flow chart keeps its name while it draws the rule (issue #177)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River with rules');
+	// A synthetic table at the outlet that asks for nothing but in January.
+	const table = (siteNodeId: string | null) => ({
+		siteNodeId,
+		source: 'Synthetic rule table',
+		component: 'total',
+		unit: 'mcm',
+		points: POINTS,
+		ewr: MONTHS.map((m) => POINTS.map(() => (m === 'Jan' ? 1000 : 0))),
+		naturalSource: 'run',
+		natural: null,
+		scale: 1
+	});
+	await updateSettings(page.request, id, { ewrRules: [table(null)] });
+	await createRun(page.request, id, 'At the outlet');
+	await openRiver(page, id);
+	const menu = page.getByRole('navigation', { name: 'River sections' });
+	// The water-year bars are the pragmatic EWR's days, in the heading, the drawing's name and its table.
+	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' })).toHaveCount(0);
+	const years = page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' });
+	await expect(years.getByRole('img', { name: /^Days below the pragmatic EWR per water year\. At the outlet: \d+ days below in 3 water years\.$/ })).toBeVisible();
+	await years.getByText('Show as a table').click();
+	await expect(years.getByRole('table', { name: 'Days below the pragmatic EWR per water year' })).toBeVisible();
+	// The flow chart draws the outlet's rule requirement, the line the Reserve is judged by: still "Flow vs reserve".
+	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
+	await expect(flow.locator('figure.chart')).toContainText('The Reserve rule requirement line');
+	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toBeVisible();
+	await expectNoViolations(page);
+
+	// The table moves to a gauge upstream: the Reserve is judged there, and the chart draws only the pragmatic EWR.
+	const model = sampleModel();
+	const outlet = model.nodes[0]!;
+	const gauge = { ...outlet, id: crypto.randomUUID(), name: 'Upper gauge', downstreamNodeId: outlet.id, sortOrder: 4 };
+	model.nodes[1]!.downstreamNodeId = gauge.id;
+	model.nodes.push(gauge);
+	await putModel(page.request, id, model);
+	await updateSettings(page.request, id, { ewrRules: [table(gauge.id)] });
+	await createRun(page.request, id, 'At the gauge');
+	await page.goto(`/projects/${id}?tab=river`);
+	await expect(page.getByTestId('river-context')).toContainText('At the gauge');
+	const pragmatic = page.getByRole('region', { name: 'Flow vs pragmatic EWR' });
+	await expect(pragmatic.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	await expect(pragmatic.locator('figure.chart')).not.toContainText('Reserve rule requirement');
+	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+	await expect(menu.getByRole('link', { name: 'Flow vs pragmatic EWR' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' }).getByRole('img')).toBeVisible();
 });

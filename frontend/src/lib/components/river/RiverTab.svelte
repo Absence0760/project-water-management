@@ -26,6 +26,8 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { historyDays } from '$lib/components/overview/latestRun';
+	import { hasRuleLine } from '$lib/components/overview/summaryChart';
+	import { headlineSite } from '$lib/components/runs/ewrAssurance';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -36,7 +38,7 @@
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
 	import { riverAnchor } from './links';
-	import { ewrRuleText, pickRiverRun, riverKpis, riverNavGroups } from './river';
+	import { ewrRuleText, pickRiverRun, reserveYearsWords, riverKpis, riverNavGroups } from './river';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
@@ -135,6 +137,12 @@
 	/** The record shown: only once it is the run picked, never a stale one while the next loads. */
 	const shown = $derived(detail && detail.run.id === pick?.run.id ? detail : null);
 	const summary = $derived(shown?.run.summary ?? null);
+	// A Reserve rule table judges the Reserve (the tile's rule months, Reserve compliance), so the panels that count
+	// the pragmatic EWR are named for it, not "the reserve" (issue #177); the flow chart keeps its name when it
+	// draws the outlet's rule requirement.
+	const ruleTable = $derived(!!summary && headlineSite(summary) !== null);
+	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
+	const yearsWords = $derived(reserveYearsWords(ruleTable));
 	const kpis = $derived(
 		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null) : []
 	);
@@ -227,7 +235,7 @@
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
 	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
 	     the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" />{/if}
+	{#if shown && summary}<SectionNav groups={riverNavGroups(ruleTable, ruleLine)} label="River sections" />{/if}
 	<div class="first" bind:clientWidth={firstW}>
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>
@@ -257,17 +265,18 @@
 				<div class="flow-cell" id="res-ewr">
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} height={flowH} units pannable />
+							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} height={flowH} units pannable {ruleTable} />
 						{/snippet}
 					</Lazy>
 				</div>
 				<section class="panel years" id="res-reserve-years" aria-labelledby="years-h">
-					<h2 id="years-h">Days below the reserve, each water year</h2>
+					<h2 id="years-h">{yearsWords.heading}</h2>
 					<Lazy load={loadReserveYears}>
 						{#snippet children(ReserveYearsChart)}
 							<ReserveYearsChart
 								runs={[{ name: name(shown!.run), projectId, runId: shown!.run.id, colour: 'var(--series-2)', forecastFrom: shown!.run.summary.forecast?.from ?? null }]}
 								minHeight={240}
+								below={yearsWords.below}
 							/>
 						{/snippet}
 					</Lazy>

@@ -8,8 +8,9 @@ import { metricDelta, type MetricDelta, type RunSummary } from '@water-managemen
 import type { RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
-import { ewrNotMet } from '$lib/components/ewr/notMet';
+import { daysBelowTest, ewrNotMet } from '$lib/components/ewr/notMet';
 import { headlines } from '$lib/components/overview/latestRun';
+import { flowHeading } from '$lib/components/overview/summaryChart';
 import { fmtNum } from '$lib/format/number';
 
 const created = (r: RunMeta) => {
@@ -122,17 +123,30 @@ export function ewrRuleText(s: Pick<RunSummary, 'ewrAssurance'>): string {
 }
 
 /**
+ * The water-year panel's heading: it counts the days below the pragmatic EWR
+ * (ReserveYearsChart), so beside a Reserve rule table it names that test, not
+ * "the reserve" (ewr/notMet.ts daysBelowTest, issue #177). `below` is the
+ * test's name for the chart's own labels.
+ */
+export function reserveYearsWords(ruleTable: boolean): { heading: string; below: string } {
+	const below = daysBelowTest(ruleTable);
+	return { heading: `Days below ${below}, each water year`, below };
+}
+
+/**
  * The page's "On this page" menu (common/SectionNav): every panel in page
  * order, by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
  * it answers. Reserve compliance only when the run has it, as the page shows
- * the panel only then.
+ * the panel only then; that is also when the project has a rule table.
+ * `ruleLine`: the run stored the outlet's rule requirement, so the flow chart
+ * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
  */
-export function riverNavGroups(hasReserveCompliance: boolean): NavGroup[] {
+export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean): NavGroup[] {
 	return [
 		{
 			label: 'The reserve',
 			sections: [
-				{ id: 'res-ewr', label: 'Flow vs reserve' },
+				{ id: 'res-ewr', label: flowHeading(hasReserveCompliance, ruleLine) },
 				{ id: 'res-reserve-years', label: 'Days below, by year' },
 				...(hasReserveCompliance ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
 				{ id: 'res-ewr-grid', label: 'EWR by month' }

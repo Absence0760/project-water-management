@@ -937,8 +937,9 @@ put the results first; its first screen follows board A1 of the redesign
   region and month list named the same, a month "below the pragmatic EWR on
   12 of 31 days"), and the line under the heading adds "The Reserve rules
   card above judges whole months by the rule table instead."
-  (`stripWords`/`stripWhat`, `reserveStrip.ts`; OverviewTab passes
-  `ruleTable` from `headlineSite`). It keeps counting the pragmatic EWR
+  (`stripWords`/`stripWhat`, `reserveStrip.ts`, its name from
+  `ewr/notMet.ts` `daysBelowTest`, which River & reserve's panels share;
+  OverviewTab passes `ruleTable` from `headlineSite`). It keeps counting the pragmatic EWR
   rather than switching to the table's test: the table gives one verdict
   per complete month, not a count of days, so there is no "days below"
   to draw from it, and its months are already the card's figure (and
@@ -3742,7 +3743,15 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   (`overview/summaryChart.ts` `belowReserve`: negative on a day the engine
   counted as EWR not met), so the caption's count is the *EWR not met*
   tile's; with a Reserve rule table at the outlet it also draws the
-  requirement (`EWR_RULE_KEY`) as a second step line (issue #51). It keeps
+  requirement (`EWR_RULE_KEY`) as a second step line (issue #51). Its
+  heading is **Flow vs reserve** when the reserve it names is on it: the
+  pragmatic EWR without a rule table, the rule requirement line with the
+  outlet's table. With rule tables only at other sites the Reserve is judged
+  there and the chart draws only the pragmatic EWR, so it is headed **Flow
+  vs pragmatic EWR** (issue #177; `summaryChart.ts` `flowHeading`, the
+  rule line known from the run's `ewr_rule` series, `hasRuleLine`, before
+  it loads; the menu entry below matches). The shading is always the
+  pragmatic EWR's, which its caption says. It keeps
   the two controls the Runs tab's EWR chart had
   (`FlowVsReserve` `units` and `pannable`): the **m³/s ↔ m³/day** switch
   (the shading is days, so it is the same in both units) and **◀ Earlier /
@@ -3755,7 +3764,11 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   a table behind *Show as a table*; about six years labelled, always the
   last, and a label near an edge moved in so it is never cut off,
   `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
-  "2024/2…"). From 1100 px wide the two sit side by side, the bars as tall
+  "2024/2…"). With a Reserve rule table (`headlineSite`) the bars are
+  headed **Days below the pragmatic EWR, each water year**, their drawing
+  and table named the same (`river.ts` `reserveYearsWords`, the chart's
+  `below` prop), since the Reserve is then the table's monthly test and the
+  bars count the daily pragmatic one (issue #177). From 1100 px wide the two sit side by side, the bars as tall
   as the chart (the row stretches them); narrower, they stack. The chart's
   plot is a fixed 420 px tall on a page 640 px or wider and 280 px on a
   phone (`FlowVsReserve` `height`), never sized to the window: until
@@ -3785,7 +3798,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **On this page.** A **River sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one row
   from 1280 px), and sticks down the
-  panels: **Flow vs reserve**, **Days below, by year**, **Reserve
+  panels: **Flow vs reserve** (**Flow vs pragmatic EWR** when its heading
+  is), **Days below, by year**, **Reserve
   compliance** (with a rule table), **EWR by month**, **Uncertainty**,
   **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
   above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
@@ -4957,6 +4971,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   a note and **Show as a table**. Its value axis is labelled "days below";
   when every year is 0 the plot says "No day below the reserve in any
   year" rather than showing empty bars. It fills the height of its row.
+  The bars always count the pragmatic EWR, so once any compared run has a
+  rule table the heading and the chart's labels say "the pragmatic EWR"
+  instead of "the reserve" (`daysBelowTestOf`, issue #177); that is true of
+  every run in a mixed set.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
   a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,
   then every panel of the two-run comparison, unchanged.

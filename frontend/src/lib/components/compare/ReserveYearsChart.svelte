@@ -17,7 +17,9 @@
 	// 2). Counted from each run's `ewr_shortfall` series by the engine's
 	// reserveDaysByWaterYear, the same test as the summary's EWR days not met.
 	// Its own chunk (CompareView loads it lazily); series come through the
-	// Runs tab's cache.
+	// Runs tab's cache. `below` names the test in its labels: "the reserve", or
+	// "the pragmatic EWR" on River & reserve beside a rule table (river.ts
+	// reserveYearsWords, issue #177); Compare keeps the default.
 	import { reserveDaysByWaterYear, waterYearLabel, type ReserveYear } from '@water-management/engine';
 	import { api, ApiError } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -25,7 +27,7 @@
 	import { labelX, yearLabelIndices } from './yearAxis';
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
-	let { runs, minHeight = 240 }: { runs: ChartRun[]; minHeight?: number } = $props();
+	let { runs, minHeight = 240, below = 'the reserve' }: { runs: ChartRun[]; minHeight?: number; below?: string } = $props();
 
 	// $state.raw: plain arrays, no deep proxies.
 	let years = $state.raw<(ReserveYear[] | null)[]>([]);
@@ -96,7 +98,7 @@
 		</ul>
 		<div class="plot" bind:clientWidth={width} bind:clientHeight={height} style:min-height="{minHeight}px">
 			{#if width > 0 && height > 0}
-				<svg {width} {height} role="img" aria-label="Days below the reserve per water year. {summary}.">
+				<svg {width} {height} role="img" aria-label="Days below {below} per water year. {summary}.">
 					<g class="grid">
 						{#each ticks as t (t)}
 							<line x1={pad.l} x2={width - pad.r} y1={y(t)} y2={y(t)} class:base={t === 0} />
@@ -106,7 +108,7 @@
 					</g>
 					{#if maxBelow === 0}
 						<!-- Every bar is 0: say so on the plot, where empty bars would read as "no data". -->
-						<text class="none" x={pad.l + plotW / 2} y={pad.t + plotH / 2} text-anchor="middle" data-testid="reserve-years-none">No day below the reserve in any year</text>
+						<text class="none" x={pad.l + plotW / 2} y={pad.t + plotH / 2} text-anchor="middle" data-testid="reserve-years-none">No day below {below} in any year</text>
 					{/if}
 					{#each allYears as wy, gi (wy)}
 						{@const gx = pad.l + gi * groupW + (groupW - (barW * runs.length + 2 * (runs.length - 1))) / 2}
@@ -139,7 +141,7 @@
 			<summary>Show as a table</summary>
 			<div class="table-wrap">
 				<table class="data compact">
-					<caption class="visually-hidden">Days below the reserve per water year</caption>
+					<caption class="visually-hidden">Days below {below} per water year</caption>
 					<thead>
 						<tr>
 							<th scope="col">Water year</th>

@@ -10,7 +10,7 @@
 // table gives a verdict per month, not a count of days, so it can't be drawn
 // as days below.
 import type { EwrCompliance } from '@water-management/engine';
-import { EWR_NOT_MET } from '$lib/components/ewr/notMet';
+import { EWR_NOT_MET, daysBelowTest } from '$lib/components/ewr/notMet';
 import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
 
 export interface StripMonth {
@@ -79,15 +79,11 @@ export interface StripWords {
  */
 export function stripWords(ruleTable: boolean): StripWords {
 	const what = `Days each month the outflow was below the pragmatic EWR (${EWR_NOT_MET})`;
+	const heading = `Days below ${daysBelowTest(ruleTable)}`;
+	const list = `${heading} by month`;
 	return ruleTable
-		? {
-				heading: 'Days below the pragmatic EWR',
-				list: 'Days below the pragmatic EWR by month',
-				what,
-				note: 'The Reserve rules card above judges whole months by the rule table instead.',
-				test: 'the pragmatic EWR'
-			}
-		: { heading: 'Days below the reserve', list: 'Days below the reserve by month', what, note: '', test: 'the EWR' };
+		? { heading, list, what, note: 'The Reserve rules card above judges whole months by the rule table instead.', test: 'the pragmatic EWR' }
+		: { heading, list, what, note: '', test: 'the EWR' };
 }
 
 /** The line under the heading: what it counts and the span. */

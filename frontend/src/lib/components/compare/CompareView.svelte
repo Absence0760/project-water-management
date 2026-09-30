@@ -57,6 +57,7 @@
 	import PairedUncertaintyPanel from '$lib/components/uncertainty/PairedUncertaintyPanel.svelte';
 	import CompareOverlay from '$lib/components/compare/CompareOverlay.svelte';
 	import ReserveYearsChart from '$lib/components/compare/ReserveYearsChart.svelte';
+	import { daysBelowTestOf } from '$lib/components/ewr/notMet';
 	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
 	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
@@ -350,6 +351,8 @@
 				]
 			: []
 	);
+	// What the water-year bars count, named as River & reserve names it (issue #177).
+	const yearsBelow = $derived(daysBelowTestOf(whatIfs.flatMap((s) => [cmp[s].data!.a.run.summary, cmp[s].data!.b.run.summary])));
 	const H = $derived(`h${level}`);
 
 	// --- the action: Export impact report ------------------------------------------
@@ -560,8 +563,8 @@
 					{/if}
 				</section>
 				<section class="panel years" aria-labelledby="years-h">
-					<h2 id="years-h">Days below the reserve, each year</h2>
-					<ReserveYearsChart runs={chartRuns} />
+					<h2 id="years-h">Days below {yearsBelow}, each year</h2>
+					<ReserveYearsChart runs={chartRuns} below={yearsBelow} />
 				</section>
 			</div>
 		{/if}

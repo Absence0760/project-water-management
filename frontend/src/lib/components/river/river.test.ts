@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
-import { ewrRuleText, perYear, pickRiverRun, riverKpis, riverNavGroups, type RiverKpi } from './river';
+import { ewrRuleText, perYear, pickRiverRun, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -56,13 +56,28 @@ describe('riverHref and riverAnchor', () => {
 });
 
 describe('riverNavGroups', () => {
-	const ids = (hasReserve: boolean) => riverNavGroups(hasReserve).flatMap((g) => g.sections.map((s) => s.id));
+	const ids = (hasReserve: boolean) => riverNavGroups(hasReserve, hasReserve).flatMap((g) => g.sections.map((s) => s.id));
+	const flowLabel = (hasReserve: boolean, ruleLine: boolean) => riverNavGroups(hasReserve, ruleLine)[0]!.sections.find((s) => s.id === 'res-ewr')!.label;
 	it('links every panel in page order, and only panels the page anchors', () => {
 		expect(ids(true)).toEqual([...RIVER_ANCHORS]);
 		for (const id of ids(true)) expect(riverAnchor(id)).toBe(true);
 	});
 	it('leaves out Reserve compliance when the run has none (the page has no such panel then)', () => {
 		expect(ids(false)).toEqual(RIVER_ANCHORS.filter((id) => id !== 'res-reserve'));
+	});
+	it('names the flow chart as its heading does: "Flow vs reserve" unless a rule table elsewhere leaves it only the pragmatic EWR (issue #177)', () => {
+		expect(flowLabel(false, false)).toBe('Flow vs reserve');
+		expect(flowLabel(true, true)).toBe('Flow vs reserve');
+		expect(flowLabel(true, false)).toBe('Flow vs pragmatic EWR');
+	});
+});
+
+describe('reserveYearsWords (issue #177: "reserve" named two different tests)', () => {
+	it('without a rule table the pragmatic EWR is the reserve, so the panel is "Days below the reserve"', () => {
+		expect(reserveYearsWords(false)).toEqual({ heading: 'Days below the reserve, each water year', below: 'the reserve' });
+	});
+	it('beside a rule table it names the test it counts, the pragmatic EWR', () => {
+		expect(reserveYearsWords(true)).toEqual({ heading: 'Days below the pragmatic EWR, each water year', below: 'the pragmatic EWR' });
 	});
 });
 
