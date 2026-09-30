@@ -825,6 +825,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
+	'scenarios/routes.ts:runId':
+		'a read filter within the application (GET …/scenarios/:sid/results): app_application_run_results answers only a run of that scenario in that project, so another project’s run matches nothing (scenarios/results.db.test.ts)',
 	'share/links.ts:targetId': ['POST /projects/:id/share-links targetId'],
 	'history/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'jobs/handlers/feed-fetch.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts holds every payload to its job’s project',
