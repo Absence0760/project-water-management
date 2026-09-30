@@ -58,6 +58,17 @@ const LOADERS: Partial<Record<string, () => Promise<Catalogue>>> = Object.fromEn
 	})
 );
 
+/**
+ * A language's catalogue without switching to it ({} for English or a
+ * language with no catalogue file). The landing page's load reads it
+ * (routes/welcome/[[lang=locale]]), then hands it to setLocale while it
+ * renders, so the prerender and the hydration are in the URL's language.
+ */
+export async function loadCatalogue(locale: Locale): Promise<Catalogue> {
+	const load = locale === 'en' ? undefined : LOADERS[locale];
+	return load ? load() : {};
+}
+
 /** The languages that have a site catalogue file. */
 export const catalogueLanguages = (): string[] => Object.keys(LOADERS);
 

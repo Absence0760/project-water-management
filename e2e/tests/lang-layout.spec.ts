@@ -113,9 +113,10 @@ for (const code of ['en', ...LANGS.map((l) => l.code)]) {
 		await page.addInitScript((c) => localStorage.setItem('wm.locale', c), code);
 		/** The language pair's buttons all sit on one row. */
 		const oneRow = () =>
-			page.locator('.lang.compact').evaluate((el) => new Set([...el.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top))).size);
+			page.locator('.lang.compact').evaluate((el) => new Set([...el.querySelectorAll('button, a')].map((b) => Math.round(b.getBoundingClientRect().top))).size);
 
-		for (const path of ['/login', '/welcome']) {
+		// The landing page in that language has its own address (issue #137); its switch is a pair of links.
+		for (const path of ['/login', code === 'en' ? '/welcome' : `/welcome/${code}`]) {
 			await page.goto(path);
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 			expect(await oneRow(), path).toBe(1);

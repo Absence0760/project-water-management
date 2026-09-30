@@ -4,6 +4,7 @@
 // formulas), so the UI and the CSV column guide say the same thing.
 import { FARM_COLUMNS, GAUGE_COLUMNS, GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, USER_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import type { RunCatchmentDay, RunDay } from '$lib/api';
+import { fmtNum } from '$lib/format/number';
 
 export type Tone = 'ok' | 'bad' | 'none';
 
@@ -80,6 +81,29 @@ export const balanceTableRows = (wb: WaterBalance | undefined): WaterBalanceRow[
 export function residualIsNoise(r: WaterBalanceRow): boolean {
 	const scale = Math.max(1, r.openingStorageM3, r.farmRunoffM3, r.outflowM3, r.closingStorageM3, r.suppliedM3);
 	return Math.abs(r.residualM3) <= 1e-9 * scale;
+}
+
+/** How many open water years the closure line names before "and N more" (a 30-year run could have them all). */
+const CLOSURE_NAMED = 5;
+
+/**
+ * The water balance's closure check, by water year, for the Self-checks panel
+ * on Runs & results: the table itself has its own section (Model quality ›
+ * Water balance), so the checks say only whether each year's residual is
+ * float noise and name the years that aren't (docs/ui.md § Self-checks).
+ */
+export function balanceClosure(wb: WaterBalance | undefined): { tone: Tone; text: string } {
+	if (!wb || wb.years.length === 0) return { tone: 'none', text: 'This run has no water balance by water year (engine 0.12.0). Run it again to check it.' };
+	const n = wb.years.length;
+	const open = wb.years.filter((r) => !residualIsNoise(r));
+	const totalCloses = residualIsNoise(wb.total);
+	const years = n === 1 ? 'its one water year' : `all ${n} water years`;
+	if (open.length === 0 && totalCloses) return { tone: 'ok', text: `The water balance closes in ${years} and over the whole run: each residual is float noise.` };
+	const named = open.slice(0, CLOSURE_NAMED).map((r) => `${waterYearLabel(r.waterYear)} (${fmtNum(r.residualM3, 1, true)} m³)`);
+	const more = open.length > CLOSURE_NAMED ? `, and ${open.length - CLOSURE_NAMED} more` : '';
+	const yearsPart = open.length ? `${open.length} of ${n} water year${n === 1 ? '' : 's'} ${open.length === 1 ? 'doesn’t' : 'don’t'} close: ${named.join(', ')}${more}` : `Every water year closes`;
+	const totalPart = totalCloses ? '' : `${open.length ? '; nor does' : ', but not'} the whole run (${fmtNum(wb.total.residualM3, 1, true)} m³)`;
+	return { tone: 'bad', text: `${yearsPart}${totalPart}. Each residual should be float noise: that is a bug in the model, not in your data, so please report it.` };
 }
 
 export interface TraceRow {

@@ -35,8 +35,15 @@ export const CreateBody = z
 	.strict()
 	.refine((b) => (b.targetKind === undefined) === (b.targetId === undefined), 'a targeted link needs both targetKind and targetId');
 
-/** GET /projects/:id/share-links: the catchment links (owner), or the links to one scenario. */
-export const ListQuery = z.object({ scenarioId: z.string().regex(UUID, 'not a valid id').optional() }).strict();
+/**
+ * GET /projects/:id/share-links: the catchment links (owner), every link in
+ * the project (`scope=all`, the owner's inventory), or the links to one
+ * scenario (`scenarioId`).
+ */
+export const ListQuery = z
+	.object({ scenarioId: z.string().regex(UUID, 'not a valid id').optional(), scope: z.enum(['baseline', 'all']).optional() })
+	.strict()
+	.refine((q) => !(q.scenarioId && q.scope), 'give scenarioId or scope, not both');
 
 /** A token as the client sent it; anything malformed is simply not a live link. */
 export const ViewBody = z.object({ token: z.string().max(200) }).strict();
@@ -63,14 +70,21 @@ export interface ShareLinkRow {
 	last_used_at: Date | null;
 	target_kind: ShareTargetKind | null;
 	target_id: string | null;
+	target_name: string | null;
+	target_status: string | null;
 	mine: boolean;
 }
 
+// The target's name and status come through the caller's RLS on scenario: a
+// target they can't read (a withdrawn application is a draft again, which
+// only its parties read; a deleted one) is null, and so is its name.
 export const SELECT_LINKS = `
 	SELECT s.id, s.label, s.created_at, cu.display_name AS created_by_name, s.expires_at, s.revoked_at,
 		ru.display_name AS revoked_by_name, s.last_used_at, s.target_kind, s.target_id,
+		sc.name AS target_name, sc.status AS target_status,
 		s.created_by IS NOT DISTINCT FROM app_current_user_id() AS mine
 	FROM share_link s
+	LEFT JOIN scenario sc ON s.target_kind = 'scenario' AND sc.id = s.target_id
 	LEFT JOIN app_user cu ON cu.id = s.created_by
 	LEFT JOIN app_user ru ON ru.id = s.revoked_by`;
 
@@ -87,6 +101,12 @@ export interface ShareLink {
 	/** null: the published baseline. */
 	targetKind: ShareTargetKind | null;
 	targetId: string | null;
+	/**
+	 * The target's name and status as the caller reads them; null for the
+	 * baseline, and for a target they can't read now (withdrawn, so a draft
+	 * again, or deleted): such a link opens nothing.
+	 */
+	target: { name: string; status: string } | null;
 	/** The caller made it. */
 	mine: boolean;
 }
@@ -104,6 +124,7 @@ export const toLink = (r: ShareLinkRow): ShareLink => ({
 	lastUsedAt: iso(r.last_used_at),
 	targetKind: r.target_kind,
 	targetId: r.target_id,
+	target: r.target_name !== null && r.target_status !== null ? { name: r.target_name, status: r.target_status } : null,
 	mine: r.mine
 });
 

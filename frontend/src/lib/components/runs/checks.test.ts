@@ -1,7 +1,7 @@
 import { FARM_COLUMNS, type RunVerification, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunCatchmentDay, RunDay } from '$lib/api';
-import { BALANCE_COLUMNS, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+import { BALANCE_COLUMNS, balanceClosure, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed, detail: passed ? null : 'broken' });
 
@@ -61,6 +61,26 @@ describe('water balance table', () => {
 		expect(residualIsNoise(row({ residualM3: 1e-4 }))).toBe(true); // 1e-4 m³ against 2e6 m³
 		expect(residualIsNoise(row({ residualM3: 10 }))).toBe(false);
 		expect(residualIsNoise(row({ residualM3: -10 }))).toBe(false);
+	});
+
+	it('says whether each water year closes, naming only the years that don’t', () => {
+		const years = Array.from({ length: 30 }, (_, i) => row({ waterYear: 1994 + i }));
+		const wb = (ys: WaterBalanceRow[], total = row({ waterYear: null })) => ({ areaKm2: 10, years: ys, total });
+		expect(balanceClosure(undefined).tone).toBe('none');
+		expect(balanceClosure(wb([]))).toEqual({ tone: 'none', text: 'This run has no water balance by water year (engine 0.12.0). Run it again to check it.' });
+		expect(balanceClosure(wb(years))).toEqual({ tone: 'ok', text: 'The water balance closes in all 30 water years and over the whole run: each residual is float noise.' });
+		expect(balanceClosure(wb(years.slice(0, 1))).text).toBe('The water balance closes in its one water year and over the whole run: each residual is float noise.');
+		// Two years open, and so the whole run: named with their residuals.
+		const two = years.map((r, i) => (i === 3 ? { ...r, residualM3: 12.34 } : i === 10 ? { ...r, residualM3: -4 } : r));
+		expect(balanceClosure(wb(two, row({ waterYear: null, residualM3: 8.34 })))).toEqual({
+			tone: 'bad',
+			text: '2 of 30 water years don’t close: 1997/98 (12.3 m³), 2004/05 (-4 m³); nor does the whole run (8.3 m³). Each residual should be float noise: that is a bug in the model, not in your data, so please report it.'
+		});
+		// A long list is cut after five.
+		const many = years.map((r, i) => (i < 8 ? { ...r, residualM3: 100 } : r));
+		expect(balanceClosure(wb(many)).text).toMatch(/^8 of 30 water years don’t close: 1994\/95 \(100 m³\), .*1998\/99 \(100 m³\), and 3 more\. /);
+		// Every year closes but the total doesn't.
+		expect(balanceClosure(wb(years, row({ waterYear: null, residualM3: 50 }))).text).toMatch(/^Every water year closes, but not the whole run \(50 m³\)\. /);
 	});
 
 	it('shows a network’s optional terms only when a row has them, so the columns add up to the residual', () => {

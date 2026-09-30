@@ -2,8 +2,8 @@
 	// Your teams (docs/ui.md § Teams): each as a card with the numbers that
 	// matter (projects, members, farms short this week, the last run) and its
 	// projects' EWR traffic lights, worst first. The numbers come from each
-	// team's portfolio (GET /teams/:id/portfolio, the same request the
-	// portfolio page makes), fetched once the list is in; a card shows its
+	// team's portfolio (GET /teams/:id/portfolio, the team's figures), fetched
+	// once the list is in; a card shows its
 	// counts straight away and fills in the rest when its portfolio arrives.
 	// Beside the cards, what a team is and what each role may do.
 	import { onMount } from 'svelte';
@@ -18,7 +18,7 @@
 	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	let teams = $state<Team[]>([]);
-	/** Projects listed on a card (more when it's your only team: its card is the page); the rest are one click away on the portfolio. */
+	/** Projects listed on a card (more when it's your only team: its card is the page); the rest are one click away in the project list. */
 	const LISTED = $derived(teams.length === 1 ? 10 : 5);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -118,14 +118,14 @@
 						{/each}
 					</ul>
 					{#if rows.length > LISTED}
-						<p class="more small"><a href="{base}/teams/{t.id}/portfolio">{plural(rows.length - LISTED, 'more project')} on the portfolio</a></p>
+						<p class="more small"><a href="{base}/?owner=team:{t.id}&sort=status">{plural(rows.length - LISTED, 'more project')} in the project list</a></p>
 					{/if}
 				</div>
 			{/if}
 		</div>
 		<div class="card-foot">
 			<a class="btn btn-sm" href="{base}/teams/{t.id}">Open team</a>
-			<a class="btn btn-sm" href="{base}/teams/{t.id}/portfolio">Portfolio</a>
+			<a class="btn btn-sm" href="{base}/?owner=team:{t.id}&sort=status">Project list</a>
 		</div>
 	</li>
 {/snippet}
