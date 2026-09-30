@@ -6867,7 +6867,9 @@ bits whatever order they came in).
 
   over the run's days *D(y)* of the year (a part year asks for the prorated
   volume; the year a forecast tail starts in, over its historical days, the
-  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f), so it asks for exactly its registered volume and keeps its own
+  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f; a later water
+  year the tail runs into is a part year of its own, over its tail days,
+  verify/ probe `full-allocation-tail-new-year`), so it asks for exactly its registered volume and keeps its own
   seasonal shape; the crop requirement F and every demand object scale by the
   same *k*, and the soil-water store and effective rain are untouched (they
   set the shape). A senior water user is scaled before its demand is passed
@@ -6877,7 +6879,10 @@ bits whatever order they came in).
   names them). What the unit is then supplied is the model's, as always. The
   run stores *k* as `allocation_demand_factor`, and `RunSummary.allocations`
   lists per unit and year the demand before and the volume it was scaled to
-  (`scaled`).
+  (`scaled`). A year with no demand lists the volume registered over its
+  run days, except the year a forecast tail starts in, which lists k × its
+  demand, 0 (verify/ probe `scaled-no-demand-tail-year`; the two readings
+  disagree, followups.md § Verification).
 
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
@@ -8031,11 +8036,18 @@ series to float noise (`pnpm test:verify`, the CI job `verify`). A mutation
 self-test breaks the Python one documented rule at a time and requires each
 break to show. Where this document was too thin to write a step, the engine's
 output settled it and the text above now says so (the probes named in
-§2.4a, §2.4b, §2.4d, §2.6 and §2.10a). On engine 1.36.0 it found no
-departure from this document; what it doesn't cover yet (boreholes,
-allocations, demand objects, off-takes, rule tables, forecast mode,
-calibration, land cover, time-varying development and the other optional
-inputs) is its phase 2 ([followups.md](./followups.md) § Verification).
+§2.4a, §2.4b, §2.4d, §2.6, §2.10a and §2.12a). Phase 2a (engine 1.53.0)
+added boreholes and stream depletion, allocations and the licence cap, demand
+objects and the basic-needs floor, river off-takes and canal seepage, other
+water users, supply rules and the river pump, dam survey curves and releases,
+and hands-off flows. On engine 1.36.0 it found no departure from this
+document; on 1.53.0 one, on a few random networks: a float-noise demand
+switches on a primary or emergency dam-target borehole (§2.7d), and drops a
+day from `limitBound` (§2.12a) (followups.md § Verification). What it doesn't
+cover yet (rule tables, forecast mode, calibration, land cover, time-varying
+development, drought restrictions, `demand.scale` by part and the other
+optional inputs) is its phase 2b ([followups.md](./followups.md) §
+Verification).
 
 **Recomputed outside the engine (issue #68).** The checks show the model
 agrees with itself; the **Excel audit workbook** shows it agrees with its
