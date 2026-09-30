@@ -375,6 +375,43 @@ describe('claiming', () => {
 	});
 });
 
+describe('a tick scoped to some projects (123_scoped_job_claim.sql, the e2e tick)', () => {
+	it('runs its own projects’ due jobs and leaves another project’s due job queued', async () => {
+		const u = await signUp('Scoped');
+		const mine = await project(u, 'Mine');
+		const theirs = await project(u, 'Theirs');
+		const { job: own } = await enqueue(u, { projectId: mine, kind: 'rerun' });
+		const { job: other } = await enqueue(u, { projectId: theirs, kind: 'rerun' });
+
+		const r = await runTick({ projectIds: [mine], handlers: { rerun: noop }, feeds: false, reports: false, alerts: false });
+		// Positive control: its own job ran.
+		expect(await jobRow(own.id)).toMatchObject({ status: 'done', attempts: 1 });
+		expect(r.claimed).toBe(1);
+		// The other project's job is untouched: still queued, never claimed.
+		expect(await jobRow(other.id)).toMatchObject({ status: 'queued', attempts: 0, locked_until: null, lease_token: null });
+
+		// An unscoped claim (production's) still takes it.
+		expect((await withoutUser((db) => claimJobs(db, 10, 60))).map((j) => j.id)).toContain(other.id);
+		await asOwner('DELETE FROM job WHERE project_id IN ($1, $2)', [mine, theirs]);
+	});
+
+	it('marks dead only its own projects’ expired jobs with no attempts left', async () => {
+		const u = await signUp('ScopedDead');
+		const mine = await project(u, 'Mine');
+		const theirs = await project(u, 'Theirs');
+		const { job: own } = await enqueue(u, { projectId: mine, kind: 'rerun', maxAttempts: 1 });
+		const { job: other } = await enqueue(u, { projectId: theirs, kind: 'rerun', maxAttempts: 1 });
+		const claimed = (await withoutUser((db) => claimJobs(db, 10, 60, [mine, theirs]))).map((j) => j.id);
+		expect(claimed.sort()).toEqual([own.id, other.id].sort());
+		await asOwner(`UPDATE job SET locked_until = now() - interval '1 second' WHERE id = ANY($1)`, [[own.id, other.id]]);
+
+		expect(await withoutUser((db) => claimJobs(db, 10, 60, [mine]))).toEqual([]);
+		expect(await jobRow(own.id)).toMatchObject({ status: 'dead' });
+		expect(await jobRow(other.id)).toMatchObject({ status: 'running' });
+		await asOwner('DELETE FROM job WHERE project_id IN ($1, $2)', [mine, theirs]);
+	});
+});
+
 describe('the tick', () => {
 	it('an enqueue NOTIFYs job_queued at commit (what wakes the local worker)', async () => {
 		const u = await signUp('Notify');

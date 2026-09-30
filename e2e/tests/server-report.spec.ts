@@ -59,7 +59,7 @@ test('Email me the PDF: the worker renders the report, the page offers the downl
 	await expect(page.getByRole('status').filter({ hasText: 'PDF queued: waiting for the background worker…' })).toBeVisible();
 
 	// The background worker's tick: renders in its own Chromium, stores, mails.
-	await runJobsTick();
+	await runJobsTick({ projects: [projectId], schedule: false });
 
 	// The page follows the job's status (the API's, a real signal) to "done".
 	await expect(control).toHaveAttribute('data-state', 'done');
@@ -99,7 +99,7 @@ test('an impact report’s server PDF prints the impact against its baseline, th
 	const control = page.locator('.server-pdf');
 	await page.getByRole('button', { name: 'Email me the PDF' }).click();
 	await expect(control).toHaveAttribute('data-state', 'queued');
-	await runJobsTick();
+	await runJobsTick({ projects: [projectId], schedule: false });
 	await expect(control).toHaveAttribute('data-state', 'done');
 
 	const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download the generated PDF' }).click()]);

@@ -111,7 +111,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await panel.getByRole('button', { name: 'Run seasonal outlook' }).click();
 	await expect(panel).toHaveAttribute('data-state', 'pending');
 	await expect(panel.getByTestId('outlook-status')).toHaveText('Queued: waiting for the background worker.');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(panel).toHaveAttribute('data-state', 'complete');
 
 	// What it should say, re-summarised from the stored result's per-year values.
@@ -223,7 +223,7 @@ test('the review triggers show for the review date, and a level published to far
 		data: { name: 'This season', baseRunId: runId, levels: [100, 85, 70].map((p) => ({ label: `${p} %`, ops: [{ op: 'demand.scale', factor: p / 100 }] })) }
 	});
 	expect(made.status()).toBe(202);
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 
 	type Stat = { p10: number; p50: number; p90: number };
 	type Full = {

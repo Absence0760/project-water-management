@@ -116,6 +116,13 @@ export interface TickOptions {
 	reports?: boolean;
 	/** Queue scheduled alert checks and purge old alerts first (default true; `--no-schedule` turns it off). Alert mails are sent either way. */
 	alerts?: boolean;
+	/**
+	 * Claim only these projects' jobs (the e2e suite's tick, `worker.ts --once
+	 * --project <id>`, so one test's tick never runs another's job). Unset in
+	 * production: the worker Lambda and the local loop claim every project's.
+	 * The purges, the schedules and the alert sends stay global either way.
+	 */
+	projectIds?: readonly string[];
 }
 
 export interface TickResult {
@@ -173,7 +180,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	}
 	// One at a time, so a job's lease starts when it does, not when a batch was claimed.
 	while (result.claimed < maxJobs && Date.now() - started < budgetMs) {
-		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds));
+		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds, o.projectIds));
 		if (!job) break;
 		result.claimed++;
 		result[await runJob(job, o.handlers)]++;

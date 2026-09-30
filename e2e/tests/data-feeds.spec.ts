@@ -15,10 +15,11 @@ import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
-// One at a time: runJobsTick runs the whole e2e database's worker tick, and a
-// tick also queues every due feed (a new feed is due at once), so a tick in
-// one test would fetch another test's feed mid-test ("The last 2 fetches
-// failed", a feed no longer Waiting). No other spec ticks the worker.
+// One at a time: these ticks run the feed schedule, which looks at every
+// project (a new feed is due at once), so a tick in one test would queue
+// another test's feed mid-test (a feed no longer Waiting). The tick claims
+// only this test's project's jobs (runJobsTick's `projects`), so it never
+// runs that fetch; every other spec's tick is `schedule: false`.
 test.describe.configure({ mode: 'default' });
 
 const MONTHS =['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -78,7 +79,7 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 
 	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
@@ -126,7 +127,7 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 	await expect(feed).toContainText('box -20.20, 25.10 to -20.10, 25.20 · CHIRPS sat v3.0 · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
@@ -154,7 +155,7 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 	await expect(feed).toContainText('box -20.30, 25.30 to -20.20, 25.40, sea cells left out · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
@@ -175,7 +176,7 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'failing');
@@ -283,7 +284,7 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 
 	// The first fetch stages the new record (2001 onwards is a long backfill): the card says how far it has got,
 	// and the Data and Runs tabs say runs keep the current series until it completes.
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 	await page.reload();
 	await expect(feed.getByRole('paragraph').filter({ hasText: /^Replacing the series: the new record runs 1 Jan 2001 to 30 Apr 2001 so far\./ })).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=runs`);
@@ -461,7 +462,7 @@ test('with automatic runs on, new data runs the model without anyone pressing Ru
 	await expect(page.getByTestId('rerun-queued')).toHaveText('An automatic re-run is due now.');
 	await expect(page.getByRole('button', { name: 'Re-run model' })).toHaveCount(0);
 
-	await runJobsTick();
+	await runJobsTick({ projects: [project.id] });
 
 	// The run is there, labelled and tagged as automatic, without anyone pressing Run.
 	await page.goto(`/projects/${project.id}?tab=runs`);

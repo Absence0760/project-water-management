@@ -132,7 +132,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await panel.getByRole('button', { name: 'Run demand sweep' }).click();
 	await expect(panel).toHaveAttribute('data-state', 'pending');
 	await expect(panel.getByTestId('sweep-status')).toHaveText('Queued: waiting for the background worker.');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(panel).toHaveAttribute('data-state', 'complete');
 
 	// What it should say, from the stored sweep and the base run's natural flow.
@@ -271,7 +271,7 @@ test('the matrix reads the Reserve rule table at a chosen gauge, saved for the p
 	await expect(site.locator('option:checked')).toHaveText('Outlet (Outflow gauge)');
 	await panel.getByRole('button', { name: 'Run demand sweep' }).click();
 	await expect(panel).toHaveAttribute('data-state', 'pending');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(panel).toHaveAttribute('data-state', 'complete');
 	// The outlet has no rule table: days below the pragmatic EWR.
 	await expect(panel.getByTestId('outcome-metric')).toHaveText('Measure: Days below the pragmatic EWR at the outlet');

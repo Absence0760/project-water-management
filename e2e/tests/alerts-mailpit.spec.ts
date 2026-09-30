@@ -136,7 +136,7 @@ for (const L of LANGUAGES) {
 		await setLevel(level);
 
 		// One tick of the worker: the alert check the rule queued, then the send.
-		await runJobsTick({ schedule: false });
+		await runJobsTick({ projects: [project.id], schedule: false });
 
 		const mails = await mailsTo(farmer.user.email);
 		expect(mails, 'one alert email for the farmer in Mailpit').toHaveLength(1);
@@ -172,10 +172,10 @@ for (const L of LANGUAGES) {
 		// again (a new event, as a recovery and a fall would make). The owner is
 		// mailed again; the farmer, who stopped these emails, isn't.
 		await setLevel(level, false);
-		await runJobsTick({ schedule: false });
+		await runJobsTick({ projects: [project.id], schedule: false });
 		const ownerBefore = (await mailsTo(owner.email)).length;
 		await setLevel(level);
-		await runJobsTick({ schedule: false });
+		await runJobsTick({ projects: [project.id], schedule: false });
 		expect(await mailsTo(owner.email)).toHaveLength(ownerBefore + 1);
 		expect(await mailsTo(farmer.user.email)).toHaveLength(1);
 	});
