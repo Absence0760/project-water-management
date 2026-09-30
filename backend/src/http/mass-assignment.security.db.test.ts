@@ -153,6 +153,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	},
 	'POST /share/view': () => ({ as: null, body: { token: ctx.shareToken } }),
 	'POST /share/series': () => ({ as: null, body: { token: ctx.shareToken, key: 'simulated_outflow' } }),
+	// A baseline link's token: the scenario read answers it 404 (a link opens only its own target).
+	'POST /share/scenario': () => ({ as: null, body: { token: ctx.shareToken } }),
 	'POST /ingest/v1/series/merge': () => ({
 		as: null,
 		headers: { authorization: `Bearer ${ctx.apiKey}` },
@@ -260,6 +262,7 @@ const NO_WRITE = new Map<string, string>([
 
 /** Routes the owner's sample can't reach past a business rule, and why (their body never gets that far). */
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
+	['POST /share/scenario', { why: 'a read (app_share_scenario); the ladder link is a baseline link, which opens no scenario', legit: 404 }],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[
 		'POST /projects/:id/auto-calibrations/:cid/apply',

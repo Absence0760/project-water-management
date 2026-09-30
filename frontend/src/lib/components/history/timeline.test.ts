@@ -155,6 +155,12 @@ describe('what an item says', () => {
 		expect(eventLine(ev('something.new'))).toBe('something.new');
 	});
 
+	it('says when a share link was to one scenario (WP-3.15)', () => {
+		expect(eventLine({ kind: 'share_link.created', subject: { linkId: 'l', label: 'Forum', expiresInDays: 30 } })).toBe('Created a share link');
+		expect(eventLine({ kind: 'share_link.created', subject: { linkId: 'l', label: 'Forum', targetKind: 'scenario', targetId: 's' } })).toBe('Created a share link to a scenario');
+		expect(eventLine({ kind: 'share_link.revoked', subject: { linkId: 'l', targetKind: 'scenario' } })).toBe('Revoked a share link to a scenario');
+	});
+
 	it('writes the allocation events (WP-3.10) without holder names', () => {
 		expect(eventLine(ev('allocation.created', { registrationNo: 'R-1' }))).toBe('Added a registered volume (R-1)');
 		expect(eventLine(ev('allocation.changed', { registrationNo: '' }))).toBe('Changed a registered volume');

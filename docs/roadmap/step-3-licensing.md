@@ -1797,6 +1797,14 @@ must build WP-2.15 Phase B.
 > G13–G15, and G7 and G16 in part ([design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)).
 > Assessor and NGO access, comments on a pack and refusing an *issued* pack
 > remain with this WP.
+>
+> **Scenario half built (issue #71, `113_scenario_share_notes`):** share links
+> to a submitted or decided scenario (`app_share_scenario`, the EWR per site
+> first), scenario notes with the `assessors`, `parties` and
+> `public_participation` audiences and `note_revision`, the Share dialog and
+> the `/share` scenario view, with the tests below for scenarios. The pack
+> targets (`'pack'`, `app_share_pack`, `note.pack_id`) wait for
+> `evidence_pack` ([followups.md](../followups.md#applicants-wp-33)).
 
 > **Gaming rules designed** (issue #15): [design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)
 > keeps items 1–8 below and adds G1, G4–G9 and G13–G16 (nomination-only

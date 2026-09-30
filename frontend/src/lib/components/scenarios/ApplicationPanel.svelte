@@ -3,8 +3,14 @@
 	// stands, the owner's Submit / Withdraw / Reopen, the assessor's decision,
 	// and who it is shared with. The server holds every rule (who may move it,
 	// that a submit freezes the ops, that no one decides their own); this
-	// offers only the moves it would allow.
+	// offers only the moves it would allow. Its comments (WP-3.15: the notes
+	// drawer with an audience picker) and, for the applicant and the
+	// assessors, its read-only share links (the Share dialog).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import Dialog from '$lib/components/common/Dialog.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { scenarioAudiences } from '$lib/components/notes/notes';
+	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import { api, OUTCOME_LABEL, scenarioProblems, SCENARIO_OUTCOMES, type Scenario, type ScenarioOutcome, type ScenarioWithCheck } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -148,6 +154,13 @@
 		}
 	}
 
+	// --- comments and share links (WP-3.15) -------------------------------------------
+	const party = $derived(isOwner || s.members.some((m) => m.userId === session.user?.id));
+	const audiences = $derived(scenarioAudiences({ assessor: canDecide, party }));
+	/** The applicant or an assessor shares it, once submitted or decided (the API holds the rule). */
+	const canShare = $derived(isOwner || canDecide);
+	let shareOpen = $state(false);
+
 	const STAGE: Record<Scenario['status'], string> = {
 		draft: 'Draft: only you and the people you share it with can see it.',
 		submitted: 'Submitted: the assessors can see it, and its changes are frozen.',
@@ -169,6 +182,13 @@
 			{#if s.decisionNote}<p class="reasons">{s.decisionNote}</p>{/if}
 		</div>
 	{/if}
+
+	<div class="actions talk">
+		<NotesDrawer {projectId} target={{ kind: 'scenario', scenarioId: s.id, name: s.name, audiences }} />
+		{#if canShare}
+			<button type="button" class="btn btn-sm" onclick={() => (shareOpen = true)} data-testid="scenario-share-open">Share link…</button>
+		{/if}
+	</div>
 
 	{#if isOwner}
 		<div class="actions">
@@ -202,7 +222,8 @@
 			</fieldset>
 			<div class="field">
 				<label for="decide-note">Reasons and conditions</label>
-				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons}></textarea>
+				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons} aria-describedby="decide-note-help"></textarea>
+				<p id="decide-note-help" class="hint">Shown on the application’s read-only share links, which the applicant can make too.</p>
 			</div>
 			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || unverifiedRuns > 0}>Record the decision</button>
 			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
@@ -252,6 +273,15 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<p class="visually-hidden" role="status">{note}</p>
 </section>
+
+{#if canShare}
+	<Dialog bind:open={shareOpen} title="Share “{s.name}” read-only" side>
+		{#if shareOpen}<ShareLinksPanel {projectId} scenario={{ id: s.id, name: s.name, status: s.status }} />{/if}
+		{#snippet actions()}
+			<button type="button" class="btn" onclick={() => (shareOpen = false)}>Close</button>
+		{/snippet}
+	</Dialog>
+{/if}
 
 <style>
 	.app {

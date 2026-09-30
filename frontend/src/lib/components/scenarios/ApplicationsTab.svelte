@@ -8,12 +8,16 @@
 	// window and the rows scroll inside it; in a narrow column each row is a
 	// card. Opening one goes to the Scenarios tab, where an editor who didn't
 	// make it decides it. Drafts never appear: they are the applicant's alone
-	// (RLS, 045_contributor_scope). Evidence packs (WP-3.14) will be linked
-	// from here once they exist.
+	// (RLS, 045_contributor_scope). Each row has its comments (the notes
+	// drawer on the scenario, WP-3.15); its share links are in the scenario's
+	// Application panel. Evidence packs (WP-3.14) will be linked from here once
+	// they exist.
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type Scenario } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
@@ -63,6 +67,8 @@
 	const counts = $derived(applicationCounts(items ?? []));
 	const shown = $derived(sortApplications(filterApplications(items ?? [], filter), sort));
 	const next = $derived(longestWaiting(items ?? []));
+	// The assessors' list: they write to the assessors by default.
+	const ASSESSOR_AUDIENCES = scenarioAudiences({ assessor: true, party: false });
 	const scenarioHref = (id: string) => `?tab=scenarios&scenario=${encodeURIComponent(id)}`;
 	const filterHref = (f: ApplicationFilter) => (f === 'all' ? withoutParam(page.url, 'status') : withParam(page.url, 'status', f));
 	const EMPTY_FILTER: Record<ApplicationFilter, string> = {
@@ -154,6 +160,7 @@
 								<th scope="col">Submitted</th>
 								<th scope="col" class="num">Changes</th>
 								<th scope="col" class="num">Runs</th>
+								<th scope="col"><span class="visually-hidden">Comments</span></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -175,6 +182,7 @@
 									</td>
 									<td class="num c-ops">{a.ops.length}<span class="cell-label">{' '}change{a.ops.length === 1 ? '' : 's'}</span></td>
 									<td class="num c-runs">{a.runCount}<span class="cell-label">{' '}run{a.runCount === 1 ? '' : 's'}</span></td>
+									<td class="c-notes"><NotesDrawer {projectId} compact target={{ kind: 'scenario', scenarioId: a.id, name: a.name, audiences: ASSESSOR_AUDIENCES }} /></td>
 								</tr>
 							{/each}
 						</tbody>
@@ -367,7 +375,8 @@
 				'status status'
 				'who who'
 				'when when'
-				'ops runs';
+				'ops runs'
+				'notes notes';
 			justify-content: start;
 			gap: 0.35rem 1rem;
 			padding: 0.75rem;
@@ -403,6 +412,9 @@
 		}
 		.c-runs {
 			grid-area: runs;
+		}
+		.c-notes {
+			grid-area: notes;
 		}
 		.c-status .sub {
 			display: inline;

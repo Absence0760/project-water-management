@@ -85,7 +85,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * revision also through its retention trim (030_history.sql). A sign-off
  * is a professional's signature on a run, never changed (036_signoff.sql).
  * A farm's figures in an outlook publication are what its farmers were
- * shown (106_outlook_triggers_publication.sql).
+ * shown (106_outlook_triggers_publication.sql). A note's earlier text is the
+ * participation record (113_scenario_share_notes.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',
@@ -99,7 +100,8 @@ const APPEND_ONLY = new Set([
 	'series_revision',
 	'audit_event',
 	'signoff',
-	'outlook_publication_farm'
+	'outlook_publication_farm',
+	'note_revision'
 ]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
@@ -128,9 +130,10 @@ const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_s
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
  * from its text, so no caller can choose it (074_series_blob_digest,
- * app_store_series_blob).
+ * app_store_series_blob). A note's earlier text is written by its trigger
+ * on every edit, never by the caller (113_scenario_share_notes, note_write_revision).
  */
-const NO_INSERT = new Set(['series_blob']);
+const NO_INSERT = new Set(['series_blob', 'note_revision']);
 /**
  * Reference data water_app only reads: the languages a person or an invite
  * can have, written by the migration runner from the engine's language table
@@ -188,6 +191,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'model_run.notes_updated_by': 'set null',
 	'note.author_id': 'set null',
 	'note.deleted_by': 'set null',
+	'note_revision.edited_by': 'set null',
 	'project.created_by': 'restrict',
 	'project_import.imported_by': 'restrict',
 	'project_member.user_id': 'cascade',

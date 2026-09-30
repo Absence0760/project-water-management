@@ -89,7 +89,7 @@ describe('owning share links', () => {
 		const list = await owner.call('GET', `/projects/${projectId}/share-links`);
 		expect(list.status).toBe(200);
 		const listed = list.body.links.find((l: { id: string }) => l.id === link.id);
-		expect(listed).toEqual({ id: link.id, label: 'Catchment forum', createdAt: link.createdAt, createdBy: 'Sowner', expiresAt: link.expiresAt, revokedAt: null, revokedBy: null, lastUsedAt: null });
+		expect(listed).toEqual({ id: link.id, label: 'Catchment forum', createdAt: link.createdAt, createdBy: 'Sowner', expiresAt: link.expiresAt, revokedAt: null, revokedBy: null, lastUsedAt: null, targetKind: null, targetId: null, mine: true });
 		// The list never carries the token or its hash.
 		expect(JSON.stringify(list.body)).not.toContain(tokenOf(link.url));
 		expect(Object.keys(listed)).not.toContain('url');
@@ -158,7 +158,9 @@ describe('owning share links', () => {
 		const text = JSON.stringify(row, (_k, v) => (v && v.type === 'Buffer' ? Buffer.from(v.data).toString('base64url') : v));
 		expect(text).not.toContain(token);
 		const cols = await asOwner("SELECT column_name FROM information_schema.columns WHERE table_name = 'share_link' ORDER BY column_name");
-		expect(cols.map((c) => c.column_name)).toEqual(['created_at', 'created_by', 'expires_at', 'id', 'label', 'last_used_at', 'project_id', 'revoked_at', 'revoked_by', 'token_hash']);
+		expect(cols.map((c) => c.column_name)).toEqual(['created_at', 'created_by', 'expires_at', 'id', 'label', 'last_used_at', 'project_id', 'revoked_at', 'revoked_by', 'target_id', 'target_kind', 'token_hash']);
+		// A catchment link names no target (113_scenario_share_notes).
+		expect([row.target_kind, row.target_id]).toEqual([null, null]);
 	});
 });
 

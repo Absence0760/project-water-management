@@ -85,7 +85,8 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	['POST /projects/:id/scenarios/:sid/withdraw', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/reopen', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/members', { why: 'an applicant shares their own application; a team scenario has nothing to share', viewer: 409 }],
-	['DELETE /projects/:id/scenarios/:sid/members/:userId', { why: 'an applicant unshares their own application; only they remove someone else', viewer: 403 }]
+	['DELETE /projects/:id/scenarios/:sid/members/:userId', { why: 'an applicant unshares their own application; only they remove someone else', viewer: 403 }],
+	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }]
 ]);
 
 /** Routes only an owner may call, and why. */
@@ -103,7 +104,6 @@ const OWNER_ONLY = new Map<string, string>([
 	['DELETE /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['GET /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
-	['DELETE /projects/:id/share-links/:linkId', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in']
@@ -132,6 +132,11 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['POST /projects/:id/notes', { min: 'farmer', why: 'a farmer writes a farm note on their own farm only (note_insert, the route)' }],
 	['PATCH /projects/:id/notes/:noteId', { min: 'farmer', why: "only the author edits a note's body (note_guard)" }],
 	['DELETE /projects/:id/notes/:noteId', { min: 'farmer', why: 'the author, or an editor, deletes a note' }],
+	['GET /projects/:id/notes/:noteId/revisions', { min: 'farmer', why: "a note's earlier texts, read as the note is (note_revision_select)" }],
+	[
+		'DELETE /projects/:id/share-links/:linkId',
+		{ min: 'contributor', why: 'RLS: the owner revokes any link, an assessor a link to a scenario they read, an applicant a link they made; else 403' }
+	],
 	// Alerts (WP-2.13): RLS limits a farmer to their farms' events and the notices; a contributor gets none.
 	['GET /projects/:id/alert-events', { min: 'farmer', why: "alert events RLS lets the caller read: their farms' and the notices" }],
 	['PUT /me/alerts/:projectId', { min: 'farmer', why: "the caller's own alert preferences, limited to the kinds their role gets" }],

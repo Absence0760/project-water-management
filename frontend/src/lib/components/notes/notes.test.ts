@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { NOTE_MAX, type NoteCounts } from '$lib/api/types';
-import { bodyProblem, countFor, createBody, normaliseBody, noteAbout, noteHref, notesButtonLabel, settingTarget, targetQuery, targetTitle, type NoteTarget } from './notes';
+import {
+	AUDIENCE_BADGE,
+	AUDIENCE_LABEL,
+	bodyProblem,
+	countFor,
+	createBody,
+	normaliseBody,
+	noteAbout,
+	noteHref,
+	notesButtonLabel,
+	scenarioAudiences,
+	settingTarget,
+	targetQuery,
+	targetTitle,
+	type NoteTarget
+} from './notes';
 
 const farm: NoteTarget = { kind: 'node', nodeId: 'n1', name: 'Farm A', isFarm: true };
 const gauge: NoteTarget = { kind: 'node', nodeId: 'g1', name: 'Weir', isFarm: false };
@@ -26,7 +41,7 @@ describe('createBody', () => {
 });
 
 describe('countFor', () => {
-	const counts: NoteCounts = { project: 2, nodes: { n1: 3 }, runs: { r1: 1 }, settings: { flow: 1, 'flow.a': 2, flowshare: 5 } };
+	const counts: NoteCounts = { project: 2, nodes: { n1: 3 }, runs: { r1: 1 }, settings: { flow: 1, 'flow.a': 2, flowshare: 5 }, scenarios: { s1: 4 } };
 	it('reads each target, and adds up a settings group by whole path segment', () => {
 		expect(countFor(counts, { kind: 'project' })).toBe(2);
 		expect(countFor(counts, farm)).toBe(3);
@@ -64,5 +79,37 @@ describe('bodyProblem', () => {
 		expect(bodyProblem(` ${'x'.repeat(NOTE_MAX)} `)).toBeNull();
 		expect(bodyProblem('x'.repeat(NOTE_MAX + 1))).toMatch(/Too long/);
 		expect(normaliseBody('a\r\nb\rc')).toBe('a\nb\nc');
+	});
+});
+
+describe('a scenario’s comments (WP-3.15)', () => {
+	const scen = (audiences = scenarioAudiences({ assessor: false, party: true })): NoteTarget => ({ kind: 'scenario', scenarioId: 's1', name: 'Raise the dam', audiences });
+
+	it('offers each caller the audiences the server lets them post to, their natural one first', () => {
+		expect(scenarioAudiences({ assessor: true, party: false })).toEqual(['assessors', 'parties', 'public_participation', 'team']);
+		expect(scenarioAudiences({ assessor: false, party: true })).toEqual(['parties', 'assessors', 'public_participation']);
+		expect(scenarioAudiences({ assessor: false, party: false })).toEqual(['public_participation']);
+	});
+
+	it('asks for, counts, titles and links the scenario’s notes', () => {
+		expect(targetQuery(scen())).toEqual({ scenarioId: 's1' });
+		expect(countFor({ project: 0, nodes: {}, runs: {}, settings: {}, scenarios: { s1: 4 } }, scen())).toBe(4);
+		expect(targetTitle(scen())).toBe('Comments on “Raise the dam”');
+		expect(noteAbout({ target: 'scenario', nodeName: null, settingKey: null })).toBe('A scenario');
+		expect(noteHref({ target: 'scenario', nodeId: null, runId: null, settingKey: null, scenarioId: 's1' })).toBe('?tab=scenarios&scenario=s1');
+	});
+
+	it('posts with the chosen audience only when the caller has it, else their first', () => {
+		expect(createBody(scen(), ' x ', 'assessors')).toEqual({ body: 'x', scenarioId: 's1', visibility: 'assessors' });
+		expect(createBody(scen(['public_participation']), 'x', 'assessors')).toEqual({ body: 'x', scenarioId: 's1', visibility: 'public_participation' });
+		expect(createBody(scen(), 'x', 'farm')).toEqual({ body: 'x', scenarioId: 's1', visibility: 'parties' });
+	});
+
+	it('words every audience, for the picker and the badge', () => {
+		for (const v of ['team', 'farm', 'assessors', 'parties', 'public_participation'] as const) {
+			expect(AUDIENCE_LABEL[v]).toBeTruthy();
+			expect(AUDIENCE_BADGE[v]).toBeTruthy();
+		}
+		expect(AUDIENCE_LABEL.public_participation).toMatch(/your name/);
 	});
 });
