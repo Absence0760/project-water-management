@@ -46,7 +46,10 @@ test('the evidence report compares modelled use with the registered volumes, by 
 	// § 5: the chart and both tables.
 	const section = page.locator('#ev-allocations');
 	await expect(section.getByRole('heading', { level: 2, name: '5. Registered water use' })).toBeVisible();
-	await expect(section.getByRole('img', { name: /^Modelled use as a share of the registered volume/ })).toBeVisible();
+	const chart = section.getByRole('img', { name: /^Modelled use as a share of the registered volume/ });
+	await expect(chart).toBeVisible();
+	// A screen reader hears the count the chart shows: Upper farm's two years above the band, of four drawn.
+	await expect(chart).toHaveAccessibleDescription(/^2 of 4 whole water years are above the ±10\s% band \(over 110\s% of the registered volume\), in 1 of 2 units and water sources\.$/);
 	const summary = section.getByTestId('evidence-allocations');
 	await expect(summary.getByRole('row', { name: /^Upper farm, surface water/ })).toContainText('2 above, 0 within, 0 below, of 2');
 	await expect(summary.getByRole('row', { name: /^Lower farm, surface water/ })).toContainText('0 above, 0 within, 2 below, of 2');
