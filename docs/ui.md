@@ -878,10 +878,10 @@ put the results first; its first screen follows board A1 of the redesign
    the columns; `overview.spec.ts` checks the seeded catchment fits). Before
    the first run, when there is no first screen, the active alerts sit
    beside the baseline, two columns once the tab is 56rem wide (a container
-   query; stacked below that). The links are **Dam levels for each dam →
-   Dams** (once the latest run has dams; the table moved to the
-   [Dams](#dams) page) and **Model facts, details, team and sharing →
-   Project**. The
+   query; stacked below that). The link is **Model facts, details, team
+   and sharing → Project**. A second, **Dam levels for each dam → Dams**,
+   was removed in issue #177: the **Dams today** card and the sidebar
+   already open the [Dams](#dams) page. The
    model's headline facts, project details, import record, recent notes,
    team, members, farmers and share links moved to the [Project](#project)
    page (2026-09-27, issue #17). A link to one of their panels' old
@@ -929,6 +929,20 @@ put the results first; its first screen follows board A1 of the redesign
   so. Beside its heading, **More on River & reserve** opens [River &
   reserve](#river--reserve) for that run (`riverHref`, `river/links.ts`),
   where the **Flow vs reserve** chart is.
+  **With a Reserve rule table** (issue #177) the headline card is
+  *Reserve rules met*, judged by the table (whole months at a site,
+  `headlineSite`), while the strip still counts days below the pragmatic
+  EWR at the outlet, so "the reserve" would name two different tests on one
+  screen. There the strip is headed **Days below the pragmatic EWR** (its
+  region and month list named the same, a month "below the pragmatic EWR on
+  12 of 31 days"), and the line under the heading adds "The Reserve rules
+  card above judges whole months by the rule table instead."
+  (`stripWords`/`stripWhat`, `reserveStrip.ts`; OverviewTab passes
+  `ruleTable` from `headlineSite`). It keeps counting the pragmatic EWR
+  rather than switching to the table's test: the table gives one verdict
+  per complete month, not a count of days, so there is no "days below"
+  to draw from it, and its months are already the card's figure (and
+  River & reserve's Reserve compliance by month).
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
   % of its demand supplied, emptiest first (fullest first until 2026-09-29;
@@ -1016,21 +1030,20 @@ put the results first; its first screen follows board A1 of the redesign
   warnings" in Settings; nothing here publishes.
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): a card per item, hidden when there is nothing.
-  Each card has a short title ("1 of 2 farms below 95%"), a one- or two-line
-  detail and its link; the link covers the whole card, and a second link sits
-  above it. The card is coloured by its `tone`: red when the worst short farm
-  is below `LOW_SUPPLY`, amber for a short farm above it, run warnings and
-  stale data, grey for new rainfall and unplanted farms (the title always says
-  what's wrong, so colour is never the only cue). Items: farms below `SUPPLY_TARGET` in the latest run (the
-  worst named, links to [Hydrological units](#hydrological-units) for the run with the
-  worst unit picked (`?tab=supply&run=<id>&unit=<nodeId>`), and, while it is still a farm in the model,
-  a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
-  the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
+  Each card has a short title ("The latest run has 2 warnings"), a one- or
+  two-line detail and its link; the link covers the whole card. The card is
+  coloured by its `tone`: amber for run warnings and stale data, grey for new
+  rainfall and unplanted farms (the title always says what's wrong, so colour
+  is never the only cue). Items: the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
   (`newDataSinceRun`, links to Runs to re-run), input data older than
   `STALE_DAYS` (`freshness`, links to Data), and farms with no planted area
   once anything is planted (one farm: **Set its planted areas**, the farm
   drawer; several: Crops; before anything is planted the checklist's crops
-  step covers it). Run items wait for the run's summary.
+  step covers it). Run items wait for the run's summary. Units below
+  `SUPPLY_TARGET` were an item too ("1 of 2 hydrological units below 95%",
+  red or amber, with a second link to the worst unit's planted areas) until
+  issue #177: the same fact is the Irrigation supplied card's sub-line and
+  Supply by hydrological unit's first rows, on the same screen.
 
 ## Dams
 
@@ -2338,8 +2351,8 @@ opens over the Scenarios tab, even when the URL names a farm: it edits and
 saves the catchment's model, and override mode there edits the scenario's
 ([§ Scenarios](#scenarios-tabscenarios)).
 
-- **From:** the Summary's Needs attention (a farm below the supply target, a
-  single farm with nothing planted), the Network (on the Map, a farm's card
+- **From:** the Summary's Needs attention (a single farm with nothing
+  planted) and Supply by hydrological unit (a unit's name), the Network (on the Map, a farm's card
   links its irrigated area, "20.00 ha, 1 crop", `farmPlanting`) and Crops &
   demand (a farm's name beside its planted-area bar). The
   link keeps the page's other parameters (`withParam`), so closing the drawer
@@ -3702,20 +3715,24 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Tiles** (`riverKpis`), each with its change from the previous run where
   both runs have the figure (`Delta`, as on the Summary):
   *EWR not met* (share of days the outflow was below the pragmatic EWR at
-  the outflow gauge, "N of M days", and with a rule table "Reserve rules: x%
-  of months"; flagged above 5 % of days; a fall is the better change). It
+  the outflow gauge, "N of M days", how many in an average year ("37 days
+  in an average year", one decimal under 10), and with a rule table
+  "Reserve rules: x% of months", which is the rule table's test and named
+  as such; flagged above 5 % of days; a fall is the better change). It
   is the Summary's *EWR not met* card word for word: both take their term,
   value and count from `ewr/notMet.ts` `ewrNotMet`, since until issue #162
   this tile framed the same figure the other way round ("Reserve met 21.2%"
   against the Summary's "EWR not met 78.8%"). "Not met" is the framing the
-  flow chart's shading, the EWR by month grid and the projects list use; *Days below the reserve* (the
-  count, and how many in an average year; the change compares the per-year
-  figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
-  % of natural, the Summary's line until it was dropped there, same
-  figure as `overview/latestRun.ts`). A fourth tile, *Worst month*, was
-  removed on 2026-09-29 (issue #175): it restated the largest figure of the
-  EWR by month grid's "All years" row. Three tiles sit in one row, and on a
-  narrow screen two over the outflow.
+  flow chart's shading, the EWR by month grid and the projects list use;
+  *Mean simulated outflow* (m³/s and % of natural, the Summary's line until
+  it was dropped there, same figure as `overview/latestRun.ts`). A third
+  tile, *Days below the reserve*, was folded into *EWR not met* as its
+  average-year line (issue #177): its value was that tile's count, and its
+  per-year change was the share's change × 365.25, which the share (run
+  length free) already shows. A fourth, *Worst month*, was removed on
+  2026-09-29 (issue #175): it restated the largest figure of the EWR by
+  month grid's "All years" row. The two tiles sit side by side at every
+  width.
 - **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
@@ -4285,31 +4302,37 @@ read it before.
   *Curtailment targets* heading and period line, over the same reporting
   window (it follows the [picker](#report-window)); the per-farm table
   follows under a *Per hydrological unit* heading. The printable report leaves the board
-  out (`CurtailmentTable`'s `board` prop). Three stages, side by side, each
-  as a share of the group's own demand: **1. Today** (supplied ÷ demand),
-  **2. Equitable share** (equitable share volume ÷ demand: the same % for
-  every farm, marked * for the fixed `EQUITABLE_SHARE_FOOTNOTE`, plus a line
-  that SA restrictions are set per user category), **3. EWR met** (volume
-  left ÷ demand: the equitable share less the farm's EWR supply cut). A row
-  of three cards gives the farm totals per stage; the table has one row per
-  farm (a bar, the whole %, the m³/day), an **All hydrological units** total row, then
-  **Other water users (outside the equitable share)**: each user its own
-  row with a *senior, not curtailed* or *junior, curtailed* badge, *not in
-  the share* at stage 2, and at stage 3 what it takes after its supply cut
-  (junior) or all it takes (senior), with an **All other users** total.
+  out (`CurtailmentTable`'s `board` prop). Two stages, side by side, each
+  as a share of the group's own demand: **1. Today** (supplied ÷ demand)
+  and **2. EWR met** (volume left ÷ demand: the equitable share less the
+  farm's EWR supply cut). The equitable share is not a stage: it is the same
+  % for every farm and its total always equals *Today*'s, so the intro says
+  it once ("At the equitable share every hydrological unit would get the
+  same K % of its demand*: the same water in total as today, shared
+  equally", or "nothing to share" with no farm demand; issue #177), marked *
+  for the fixed `EQUITABLE_SHARE_FOOTNOTE`, with a line that SA restrictions
+  are set per user category. A row of two cards gives the farm totals per
+  stage; the table has one row per farm (a bar, the whole %, the m³/day), an
+  **All hydrological units** total row, then **Other water users (outside
+  the equitable share)**: each user its own row with a *senior, not
+  curtailed* or *junior, curtailed* badge, and at stage 2 what it takes
+  after its supply cut (junior) or all it takes (senior), with an **All
+  other users** total. Each farm's equitable share volume stays in the
+  per-farm table below.
   Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
   The % uses *Demand left %*'s rules (`fmtDemandLeft`): bounded to 0–100 %,
   "no demand" for a group with no demand (never a negative demand, which the
-  client's sketch showed), "—" under 1 m³/day. A note under stage 3 names
+  client's sketch showed), "—" under 1 m³/day. A note under stage 2 names
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
   cut beyond its equitable share, a senior user's charge that stands, or a
-  junior user's charge beyond what it takes. The middle stage is a
-  `ShareRule` (`{ kind: 'equal' }`): every category is cut by the same %,
-  which the client confirmed (O4, issue #90,
+  junior user's charge beyond what it takes. The share is the engine's
+  equal one: every category is cut by the same %, which the client
+  confirmed (O4, issue #90,
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
   the client: whether the town's uses count as domestic or irrigation.
   Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
-  equal share, and seeded engine runs whose totals match the engine's),
+  equal share's %, and seeded engine runs whose totals match the engine's
+  and whose equal share is today's total %),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
   `e2e/tests/share-the-pain.spec.ts` (the rendered board against the tables
   under it, the window picker, axe in both themes and on a phone).

@@ -1,21 +1,20 @@
 // Overview → "Needs attention": the few things worth acting on, gathered from
 // signals the app already computes (the latest run's summary, the series
 // freshness checks, the model being edited). Each item links to the tab where
-// it is fixed or read. An empty list hides the panel.
+// it is fixed or read. An empty list hides the panel. Hydrological units short
+// of water aren't an item: the Irrigation supplied card above and Supply by
+// hydrological unit beside it already say so (issue #177).
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
-import { supplyHref } from '$lib/components/supply/links';
-import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { dateAge } from '$lib/format/age';
 import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import { fmtNum } from '$lib/format/number';
 
-export type AttentionId = 'short-farms' | 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
+export type AttentionId = 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
 
 /** How much it matters: the card's colour (never alone: the title says what's wrong). */
-export type AttentionTone = 'danger' | 'warning' | 'info';
+export type AttentionTone = 'warning' | 'info';
 
 export interface AttentionItem {
 	id: AttentionId;
@@ -28,8 +27,6 @@ export interface AttentionItem {
 	action: string;
 	/** `?tab=…` (and `&run=…` for a run), or `?farm=…` for the farm drawer. */
 	href: string;
-	/** A second link, after the first: the one farm's planted areas (the farm drawer, issue #17). */
-	also?: { action: string; href: string };
 }
 
 export interface AttentionInput {
@@ -59,29 +56,6 @@ export function attention(input: AttentionInput): AttentionItem[] {
 	const out: AttentionItem[] = [];
 
 	if (latest && summary) {
-		const farms = summary.farms ?? [];
-		const short = farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET);
-		if (short.length) {
-			const worst = short.reduce((a, f) => (f.fractionSupplied < a.fractionSupplied ? f : a));
-			const target = fmtPct(SUPPLY_TARGET, 0);
-			const worstText = `${worst.name || 'An unnamed hydrological unit'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
-			// Its planted areas, when it is still a farm in the model (the run may be older than an edit).
-			const inModel = model.nodes.some((n) => n.id === worst.nodeId && n.kind === 'farm');
-			out.push({
-				id: 'short-farms',
-				title: `${fmtNum(short.length)} of ${plural(farms.length, 'hydrological unit')} below ${target}`,
-				// Red when the worst is in the lowest supply band (network/supplyColour.ts), amber otherwise.
-				tone: worst.fractionSupplied < LOW_SUPPLY ? 'danger' : 'warning',
-				text:
-					short.length === 1
-						? `${worstText}, below the ${target} target.`
-						: `${worstText}, the least of the ${fmtNum(short.length)} hydrological units below ${target} (of ${fmtNum(farms.length)}).`,
-				// Units & supply for the run, opened on the worst unit (issue #17).
-				action: 'See the hydrological unit results',
-				href: supplyHref(latest.id, { unit: worst.nodeId }),
-				...(inModel ? { also: { action: 'Its planted areas', href: farmDrawerHref(null, worst.nodeId) } } : {})
-			});
-		}
 		const warnings = summary.warnings?.length ?? 0;
 		if (warnings) {
 			const first = summary.warnings[0]!;

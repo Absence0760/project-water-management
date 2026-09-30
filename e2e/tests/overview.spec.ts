@@ -2,7 +2,7 @@
 // page loads (series, runs) and the model being edited. The headline facts, details and who has access moved to
 // the Project page (project-page.spec.ts).
 import type { Page } from '@playwright/test';
-import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { seedSupplyProject } from '../support/supply.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -168,9 +168,9 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Setup complete' })).toBeVisible();
 	await expect(setup(page)).toHaveCount(0);
-	// Each dam's level lives on the Dams page's cards; the Summary links there.
-	const damsLink = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
-	await expect(damsLink).toBeVisible();
+	// Each dam's level lives on the Dams page's cards, which the Dams today card and the sidebar open: no
+	// third link to it here (issue #177).
+	await expect(page.getByRole('link', { name: /^Dam levels for each dam/ })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 	// The bars' % says what it measures.
@@ -200,18 +200,17 @@ test('the Summary leads with the results once there is a run, the setup checklis
 		expect(sh, name).toBeLessThanOrEqual(ch);
 	}
 
-	// Under Supply by unit, in its column (usually the shorter): the published baseline, then the links (the Dams
-	// page, the Project page). Nothing else: the rest is on the Project page, and a complete setup is the header's pill.
+	// Under Supply by unit, in its column (usually the shorter): the published baseline, then the link to the
+	// Project page. Nothing else: the rest is on the Project page, and a complete setup is the header's pill.
 	await expect(page.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
 	const baseline = await box('Published baseline');
 	expect(baseline.y).toBeGreaterThan(supply.y + supply.height - 1);
 	expect(Math.round(baseline.x)).toBe(Math.round(supply.x));
 	expect(Math.abs(baseline.width - supply.width)).toBeLessThan(2);
 	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
-	const links = (await damsLink.boundingBox())!;
+	const links = (await projectLink.boundingBox())!;
 	expect(links.y).toBeGreaterThan(baseline.y + baseline.height);
 	expect(Math.round(links.x)).toBe(Math.round(supply.x));
-	expect((await projectLink.boundingBox())!.y).toBeGreaterThanOrEqual(links.y);
 	// So the whole Summary fits a 1440 × 960 window: no page scroll.
 	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(960);
 	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toHaveCount(0);
@@ -248,7 +247,33 @@ test('the reserve strip: the days below the EWR in each month of the run, adding
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 });
 
-test('needs attention cards and supply by hydrological unit: coloured by how much it matters, each hydrological unit opens its drawer, and both lead to Hydrological units', async ({ page, owner }) => {
+test('with a Reserve rule table the card judges the Reserve by the table, and the strip is named for the test it counts, the pragmatic EWR', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary strip with rules');
+	// A synthetic table that asks for nothing: the Reserve rules card is the table's, not the pragmatic EWR's.
+	const points = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+	await updateSettings(page.request, project.id, {
+		ewrRules: [
+			{ siteNodeId: null, source: 'Synthetic rule table for tests', component: 'total', unit: 'mcm', points, ewr: Array.from({ length: 12 }, () => points.map(() => 0)), naturalSource: 'run', natural: null, scale: 1 }
+		]
+	});
+	await createRun(page.request, project.id, 'With rules');
+	await page.goto(`/projects/${project.id}`);
+	const kpis = page.getByRole('region', { name: 'Latest run', exact: true });
+	await expect(kpis.locator('[data-headline="reserve"] dt')).toContainText('Reserve rules met');
+	await expect(kpis.locator('[data-headline="ewr"]')).toHaveCount(0);
+	// No "Days below the reserve": that would call the pragmatic count the Reserve the card beside it judges.
+	await expect(page.getByRole('region', { name: 'Days below the reserve' })).toHaveCount(0);
+	const strip = page.getByRole('region', { name: 'Days below the pragmatic EWR' });
+	await expect(strip.getByRole('list', { name: 'Days below the pragmatic EWR by month, Oct 2021 – Jan 2022' })).toBeVisible();
+	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
+		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022. The Reserve rules card above judges whole months by the rule table instead.'
+	);
+	await expect(strip.getByRole('listitem').nth(3)).toContainText(/^Jan 2022: (pragmatic EWR met every day \(28 days\)|below the pragmatic EWR on \d+ of 28 days)/);
+	await expectNoViolations(page);
+});
+
+test('needs attention cards and supply by hydrological unit: coloured by how much it matters, each hydrological unit opens its drawer, and a link to Hydrological units', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary side column');
 	// Plant far more on Lower farm than its water can serve, so it comes up short.
@@ -257,12 +282,14 @@ test('needs attention cards and supply by hydrological unit: coloured by how muc
 	await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}`);
 
+	// The short unit is the Irrigation supplied card's sub-line and Supply by unit's first row, not a Needs
+	// attention card as well (issue #177); the stale rain still is one.
 	const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
-	const short = attention.locator('[data-attention="short-farms"]');
-	await expect(short).toContainText('1 of 2 hydrological units below 95%');
-	await expect(short).toContainText(/Lower farm got \d+% of its demand in the latest run/);
-	await expect(short).toHaveAttribute('data-tone', /^(danger|warning)$/);
 	await expect(attention.locator('[data-attention="stale-data"]')).toHaveAttribute('data-tone', 'warning');
+	await expect(attention.locator('[data-attention]')).toHaveCount(2);
+	expect(await attention.locator('[data-attention]').evaluateAll((lis) => lis.map((li) => li.getAttribute('data-attention')))).toEqual(['run-warnings', 'stale-data']);
+	await expect(attention).not.toContainText('below 95%');
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="supply"]')).toContainText('1 of 2 hydrological units below 95%');
 
 	const supply = page.getByRole('region', { name: 'Supply by hydrological unit' });
 	const rows = supply.getByRole('listitem');
@@ -286,10 +313,9 @@ test('needs attention cards and supply by hydrological unit: coloured by how muc
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 
-	// The whole card is the link: a click on its detail follows the main action, Units & supply on the worst unit (issue #17).
-	await short.click({ position: { x: 16, y: 34 } });
-	await expect(page).toHaveURL(new RegExp(`[?&]tab=supply&run=[0-9a-f-]{36}&unit=${project.model.nodes[2]!.id}$`));
-	await expect(page.getByRole('region', { name: 'Hydrological unit detail: Lower farm' })).toBeVisible();
+	// The whole card is the link: a click on its detail follows the main action (Add data for the stale rain).
+	await attention.locator('[data-attention="stale-data"]').click({ position: { x: 16, y: 34 } });
+	await expect(page).toHaveURL(/[?&]tab=series$/);
 });
 
 test('a catchment with many units: Supply by unit shows the eight emptiest and opens the rest in place, with no card scrolling inside itself', async ({ page, owner }) => {
@@ -356,7 +382,7 @@ test.describe('the first screen has no accessibility violations', () => {
 	}
 });
 
-test('Dams today is every dam together, and it and the one-line link open the Dams page', async ({ page, owner }) => {
+test('Dams today is every dam together, and the card opens the Dams page', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary dams');
 	await createRun(page.request, project.id, 'Baseline');
@@ -375,23 +401,15 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	expect(damSeries).toEqual([]);
 	// The table moved to the Dams page (dams-page.spec.ts checks it, and that this figure is its capacity-weighted total).
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
-	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
-	await expect(link).toHaveAttribute('href', '?tab=dams');
-	// Below the reserve strip, under the published baseline (measured once the page has stopped growing).
-	await summaryReady(page);
-	const strip = (await page.getByRole('region', { name: 'Days below the reserve' }).boundingBox())!;
-	expect((await link.boundingBox())!.y).toBeGreaterThan(strip.y);
-	const baseline = (await page.getByRole('region', { name: 'Published baseline' }).boundingBox())!;
-	expect((await link.boundingBox())!.y).toBeGreaterThan(baseline.y + baseline.height);
-	await link.click();
-	await expect(page).toHaveURL(/\?tab=dams$/);
-	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	// The card and the sidebar open the Dams page; the one-line link that did too went in issue #177.
+	await expect(page.getByRole('link', { name: /^Dam levels for each dam/ })).toHaveCount(0);
 
-	// The card is a link to the same page, from anywhere on it.
-	await page.goBack();
-	await expect(today).toContainText('full');
+	// The card is a link to the Dams page, from anywhere on it.
 	await today.click({ position: { x: 20, y: 60 } });
 	await expect(page).toHaveURL(/\?tab=dams$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	await page.goBack();
+	await expect(today).toContainText('full');
 	await expectNoViolations(page);
 });
 
