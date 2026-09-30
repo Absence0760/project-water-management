@@ -67,7 +67,7 @@ interface ObjectColumns {
 	monthly: Float64Array[];
 	/** Each object's schedule factor per day (engine ≥ 1.17.0), recomputed from the model; null without one. */
 	schedule: (Float64Array | null)[];
-	/** Each object's basic-needs floor (engine ≥ 1.41.0), recomputed from the model; null without one. */
+	/** Each object's basic-needs floor (engine ≥ 1.44.0), recomputed from the model; null without one. */
 	floor: (number | null)[];
 }
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
@@ -802,7 +802,7 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 					(row.basicNeedsM3Day === undefined
 						? id(row, row.totalChangeM3Day, row.reduceGainM3Day + cut, 'S ≠ N − ΔG', row.reduceGainM3Day, cut) ??
 							id(row, row.volumeLeftM3Day, Math.max(M + cut, 0), 'U ≠ MAX(M − ΔG, 0)', M, cut)
-						: // The basic-needs floor (engine ≥ 1.41.0): the window mean of basic_needs, the volume left never below it.
+						: // The basic-needs floor (engine ≥ 1.44.0): the window mean of basic_needs, the volume left never below it.
 							id(row, row.basicNeedsM3Day, sum(get.get(`${row.nodeId}|${BASIC_NEEDS_SERIES.key}`) ?? [NaN], from, to) / n, 'floor ≠ the window mean of basic_needs') ??
 							id(row, row.totalChangeM3Day, Math.max(row.reduceGainM3Day + cut, row.basicNeedsM3Day - row.suppliedM3Day), 'S ≠ MAX(N − ΔG, floor − I)', row.reduceGainM3Day, cut, row.suppliedM3Day) ??
 							id(row, row.volumeLeftM3Day, Math.max(M + cut, 0, row.basicNeedsM3Day), 'U ≠ MAX(M − ΔG, 0, floor)', M, cut) ??
@@ -1036,7 +1036,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
-		// The basic-needs floor (engine ≥ 1.41.0): the scenario's restriction alone (a floor holds against it), and
+		// The basic-needs floor (engine ≥ 1.44.0): the scenario's restriction alone (a floor holds against it), and
 		// the unit's basic_needs column, Σ MIN(floor, demand) over its floored objects, exactly when it has one.
 		const SC = objs && objs.floor.some((f) => f !== null) ? dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay : null;
 		const abstractFrom = SC ? abstractionStartDay(n, day0, out.days, []) : 0;
@@ -1264,7 +1264,7 @@ function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volum
  * (the scenario's restriction `sc` × a full allocation's factor `alloc`, 0
  * before the unit abstracts), where a restriction (sc < 1) never takes an
  * object with a basic-needs floor below MIN(floor, its unrestricted demand),
- * nor does a full allocation's factor on a restricted day (engine ≥ 1.41.0);
+ * nor does a full allocation's factor on a restricted day (engine ≥ 1.44.0);
  * each gets between 0 and its demand, together no more than G; classes are
  * served in order (a later class, or the crops after class 0, gets water
  * only once every earlier one is met), and within a class every member
@@ -1891,7 +1891,7 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  * - a full allocation ('fullAllocation'): the demand factor is one number per
  *   water year, and a scaled unit's demand over the run's days of a year adds
  *   up to the volume registered for it over them (none when it had no demand),
- *   plus what a restriction's basic-needs floor holds above it (engine ≥ 1.41.0);
+ *   plus what a restriction's basic-needs floor holds above it (engine ≥ 1.44.0);
  *   the year a forecast tail starts in (summary.historyDays, engine ≥
  *   1.28.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
@@ -1901,7 +1901,7 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  */
 /**
  * What the basic-needs floor holds of a full allocation's rescaling on a
- * restricted day (engine ≥ 1.41.0, allocations/mode.ts planAllocations), per
+ * restricted day (engine ≥ 1.44.0, allocations/mode.ts planAllocations), per
  * run day: Σ over the unit's objects with a floor of MAX(KF × r, MIN(floor,
  * r)) − KF × r, where r is the object's restricted demand, recomputed from the
  * model as checkObjectsDay does. Null when none is held.
@@ -2032,7 +2032,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			if (!D) return `${n.id}: demand series missing`;
 			// Before a forecast tail (engine ≥ 1.28.0): the year it starts in is fitted on its historical days.
 			const history = out.summary.historyDays ?? out.days;
-			// A restriction what-if's basic-needs floor (engine ≥ 1.41.0) holds some demand above the registered volume.
+			// A restriction what-if's basic-needs floor (engine ≥ 1.44.0) holds some demand above the registered volume.
 			const held = allocationFloorHeld(input, n, get, out, KF);
 			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
 			const span = (a: number, b: number, wy: number, reg: number): string | null => {

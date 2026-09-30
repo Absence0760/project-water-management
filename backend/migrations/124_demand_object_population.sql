@@ -1,5 +1,5 @@
 -- 124_demand_object_population — the people a demand object serves, for the
--- basic-needs floor (engine 1.41.0, issue #123, docs/model.md §2.7f).
+-- basic-needs floor (engine 1.44.0, issue #123, docs/model.md §2.7f).
 --
 -- The client agreed (issue #90, Q13) that a restriction never cuts domestic
 -- supply below 25 litres per person per day. The engine's floor is
@@ -18,4 +18,4 @@ ALTER TABLE demand_object
 		CONSTRAINT demand_object_population_nonneg CHECK (population IS NULL OR (population >= 0 AND population < 'Infinity'::double precision));
 
 COMMENT ON COLUMN demand_object.population IS
-	'People served, for the basic-needs floor (population x 25 l/person/day) of a domestic or municipal object. NULL = a perUnit object''s count, else no floor. Engine >= 1.41.0, docs/model.md 2.7f.';
+	'People served, for the basic-needs floor (population x 25 l/person/day) of a domestic or municipal object. NULL = a perUnit object''s count, else no floor. Engine >= 1.44.0, docs/model.md 2.7f.';

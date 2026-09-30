@@ -650,7 +650,7 @@ describe('diffInputs', () => {
 		]);
 	});
 
-	it('lists a demand object’s people served, and reads none and null alike (engine 1.41.0)', () => {
+	it('lists a demand object’s people served, and reads none and null alike (engine 1.44.0)', () => {
 		const a = snapshot();
 		const town = {
 			id: 'do',

@@ -1221,7 +1221,7 @@ user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, and
 a negative population.
 
-A demand object's `population` (engine ≥ 1.41.0, migration 124, issue #123,
+A demand object's `population` (engine ≥ 1.44.0, migration 124, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
 floor of a domestic or municipal object (population × 25 l a day; read for
 those two categories only). Null = a per-unit object's `count`; a monthly one
@@ -1599,7 +1599,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
-  and the objects' together. The basic-needs floor (engine ≥ 1.41.0, issue
+  and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
   `avgBelowBasicNeedsM3Day` (days and mean volume supplied below the day's
@@ -1625,7 +1625,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewrSupplyCutM3Day` (the change in supply), `volumeLeftM3Day` is
   `MAX(target + ewrSupplyCutM3Day, 0)`, `fractionOfDemandLeft` is in 0–1, and
   `ewrCutBeyondShareM3Day` (≥ 0, also in `totals`) is how far the EWR supply
-  cut exceeds the equitable share. From 1.41.0 (issue #123) a unit with a
+  cut exceeds the equitable share. From 1.44.0 (issue #123) a unit with a
   basic-needs floor adds `basicNeedsM3Day` (the window mean of its
   `basic_needs`) and `basicNeedsHeldM3Day` (≥ 0, what the floor held back of
   the cut), both also in `totals` when a farm has them; its

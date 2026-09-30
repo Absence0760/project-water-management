@@ -330,7 +330,7 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), destination: 'external', returnPct: 0.2 }))).join()).toMatch(/nothing returns/);
 	});
 
-	it('takes the people an object serves for its basic-needs floor (engine 1.41.0), none by default, never negative', () => {
+	it('takes the people an object serves for its basic-needs floor (engine 1.44.0), none by default, never negative', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
 		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.population).toBeNull();
 		expect(ModelBody.parse(body({ ...monthly, population: 2000 })).demandObjects![0]!.population).toBe(2000);

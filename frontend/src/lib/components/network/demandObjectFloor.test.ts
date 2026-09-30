@@ -21,7 +21,7 @@ const o = (over: Partial<DemandObject> = {}): DemandObject => ({
 	...over
 });
 
-describe('the node form’s basic-needs floor line (engine 1.41.0)', () => {
+describe('the node form’s basic-needs floor line (engine 1.44.0)', () => {
 	it('says there is none until a monthly object has people, and nothing on other categories', () => {
 		expect(floorLine(o())).toMatch(/^No basic-needs floor: enter the people it serves/);
 		expect(floorLine(o({ category: 'industrial', population: 2000 }))).toBeNull();

@@ -89,7 +89,7 @@ describe('the reporting window, worked out by the engine', () => {
 		expect(checked).toBeGreaterThan(0);
 	});
 
-	it('holds a unit’s basic-needs floor over a picked window as runModel does (engine 1.41.0)', () => {
+	it('holds a unit’s basic-needs floor over a picked window as runModel does (engine 1.44.0)', () => {
 		let floored = 0;
 		for (let seed = 1; seed <= 120 && floored < 3; seed++) {
 			const input = randomInput(seed, { maxDays: 300 });

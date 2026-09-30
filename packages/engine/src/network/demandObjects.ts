@@ -104,7 +104,7 @@ export function objectMonthlyM3Day(o: DemandObject, warnings: string[]): Float64
 }
 
 /**
- * The unit-level series of the basic-needs floor (engine ≥ 1.41.0, issue
+ * The unit-level series of the basic-needs floor (engine ≥ 1.44.0, issue
  * #123, docs/model.md §2.7f): Σ its floored objects' floor each day, stored
  * only on a unit with one, so the curtailment report over any window of a
  * saved run (views/farmProjection.ts) holds the same floor runModel did.
@@ -116,7 +116,7 @@ export const BASIC_NEEDS_SERIES = {
 } as const;
 
 /**
- * The people a demand object's basic-needs floor counts (engine ≥ 1.41.0,
+ * The people a demand object's basic-needs floor counts (engine ≥ 1.44.0,
  * issue #123): null unless it is domestic or municipal; else its
  * `population` when entered, or a `perUnit` object's count. Null too for a
  * population that isn't a number > 0 (a `monthly` object without one has
@@ -129,7 +129,7 @@ export function basicNeedsPopulation(o: Pick<DemandObject, 'category' | 'sizing'
 }
 
 /**
- * A demand object's basic-needs floor, m³/day abstracted (engine ≥ 1.41.0,
+ * A demand object's basic-needs floor, m³/day abstracted (engine ≥ 1.44.0,
  * issue #123, docs/model.md §2.7f): population × 25 l ÷ 1000, grossed up
  * for distribution losses (÷ (1 − losses)) when it is sized per unit, as its
  * demand is, so the floor reaches the tap. Null without a floor.
@@ -189,13 +189,13 @@ export interface PlanObjects {
 	/** Σ of the objects' demand per day. */
 	total: Float64Array;
 	/**
-	 * Each object's basic-needs floor, m³/day (engine ≥ 1.41.0, basicNeedsM3Day);
+	 * Each object's basic-needs floor, m³/day (engine ≥ 1.44.0, basicNeedsM3Day);
 	 * null for one without. The day's floor is MIN(floor, its demand that day).
 	 */
 	floor: (number | null)[];
 	/**
 	 * The days a restriction (the demand factor below 1) applies on the unit
-	 * (engine ≥ 1.41.0): a full allocation's rescaling holds the floor on
+	 * (engine ≥ 1.44.0): a full allocation's rescaling holds the floor on
 	 * these days too (allocations/mode.ts). Null when no day is restricted or
 	 * no object has a floor.
 	 */
@@ -210,7 +210,7 @@ export interface PlanObjects {
  * (engine ≥ 1.17.0; `day0` = the run's first epoch day, needed only when an
  * object has a schedule). A demand factor below 1 never takes a domestic or
  * municipal object below MIN(its basic-needs floor, its unrestricted
- * demand) (engine ≥ 1.41.0). Warnings name what runs differently from what was
+ * demand) (engine ≥ 1.44.0). Warnings name what runs differently from what was
  * entered.
  */
 export function planObjects(objects: readonly DemandObject[], days: number, wy: ArrayLike<number>, factor: Float64Array | null, factorFrom: number, warnings: string[], day0?: number): PlanObjects {
@@ -235,7 +235,7 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 			const m = wy[t]!;
 			const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
 			d[t] = s ? v * s[t]! : v;
-			// A restriction never below the floor (engine ≥ 1.41.0); the schedule applies first, so a day off stays off.
+			// A restriction never below the floor (engine ≥ 1.44.0); the schedule applies first, so a day off stays off.
 			if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) {
 				d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
 				(restricted ??= new Uint8Array(days))[t] = 1;
@@ -257,7 +257,7 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 }
 
 /**
- * A unit's basic-needs floor per day (engine ≥ 1.41.0, BASIC_NEEDS_SERIES):
+ * A unit's basic-needs floor per day (engine ≥ 1.44.0, BASIC_NEEDS_SERIES):
  * Σ over its objects with a floor of MIN(floor, the object's demand that
  * day); null when none of its objects has one.
  */

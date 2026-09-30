@@ -1,4 +1,4 @@
-// The basic-needs floor as the node form states it (engine ≥ 1.41.0, issue
+// The basic-needs floor as the node form states it (engine ≥ 1.44.0, issue
 // #123, docs/model.md §2.7f): which number of people it counts, and the
 // floor, never shown as more than the object asks for (the engine's day floor
 // is MIN(floor, the day's demand)). Pure, so it is unit-tested without Svelte.

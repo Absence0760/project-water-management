@@ -212,7 +212,7 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 					continue;
 				}
 				targeted++;
-				// The basic-needs floor (engine ≥ 1.41.0): a full cut leaves each domestic and municipal
+				// The basic-needs floor (engine ≥ 1.44.0): a full cut leaves each domestic and municipal
 				// object with people exactly MIN(floor, its demand), worked from the model (floorLift).
 				const lifted = D!.map((_, t) => floorLift(base, x, n.id, t, 0));
 				if (lifted.some((v) => v > 0)) {
@@ -243,7 +243,7 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D, G] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!, col(y, n.id, 'supplied')!];
-				// The basic-needs floor (engine ≥ 1.41.0): exactly k × the base's demand plus what the floor
+				// The basic-needs floor (engine ≥ 1.44.0): exactly k × the base's demand plus what the floor
 				// holds on a cut (k < 1), worked from the model (floorLift); nothing more.
 				for (let t = 0; t < D.length; t++) {
 					const k = months.includes(monthOfEpochDay(day0 + t)) ? factor : 1;

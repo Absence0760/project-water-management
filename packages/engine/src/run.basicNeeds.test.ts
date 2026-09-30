@@ -1,4 +1,4 @@
-// The basic-needs floor (engine 1.41.0, issue #123, docs/model.md §2.7f): a
+// The basic-needs floor (engine 1.44.0, issue #123, docs/model.md §2.7f): a
 // restriction (the demand.scale factor) never cuts a domestic or municipal
 // demand object below population × 25 l per person a day; days and volume
 // supplied below the floor are reported apart from the ordinary shortfall;
@@ -93,10 +93,10 @@ function get(out: { series: RunSeries[] }, nodeId: string | null, key: string): 
 }
 const passed = (out: ReturnType<typeof run>) => expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
 
-describe('the basic-needs floor of a demand object (engine 1.41.0)', () => {
-	it('is engine 1.41.0 or later', () => {
+describe('the basic-needs floor of a demand object (engine 1.44.0)', () => {
+	it('is engine 1.44.0 or later', () => {
 		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
-		expect(maj! > 1 || (maj === 1 && min! >= 41)).toBe(true);
+		expect(maj! > 1 || (maj === 1 && min! >= 44)).toBe(true);
 	});
 
 	it('is population × 25 l a day, from a per-unit count or an entered population, on domestic and municipal objects only', () => {
@@ -181,7 +181,7 @@ describe('the basic-needs floor of a demand object (engine 1.41.0)', () => {
 		expect(bad.summary.warnings.join()).toMatch(/population -5 is not a number ≥ 0; it has no basic-needs floor/);
 	});
 
-	describe('with a full allocation (engine 1.41.0)', () => {
+	describe('with a full allocation (engine 1.44.0)', () => {
 		// 3 days of October: the restricted unit wants 10 (crops, 200 × 0.05) + 25 (the village at its floor) = 105 m³.
 		const withAllocation = (volumeM3PerYear: number, factor: number | null) => {
 			const m = model([village()], [400, 400, 400], factor);
@@ -232,7 +232,7 @@ describe('the basic-needs floor of a demand object (engine 1.41.0)', () => {
 		expect(row.basicNeedsHeldM3Day).toBe(0);
 	});
 
-	it('reads the floor back from a saved run for the curtailment over any window, and none from a run before 1.41.0', () => {
+	it('reads the floor back from a saved run for the curtailment over any window, and none from a run before 1.44.0', () => {
 		// The restricted village run: the saved run's series re-windowed over the whole run give the stored row.
 		const m = model([village()], natural, 0.1);
 		const input = m.input;
@@ -240,7 +240,7 @@ describe('the basic-needs floor of a demand object (engine 1.41.0)', () => {
 		expect(keys).toContainEqual({ nodeId: 'A', key: BASIC_NEEDS_SERIES.key });
 		const noFloor = model([village({ category: 'livestock' })], natural, 0.1).input;
 		expect(curtailmentSeriesKeys(noFloor.model.nodes, noFloor.model.transfers, { demandObjects: noFloor.model.demandObjects! })).not.toContainEqual({ nodeId: 'A', key: BASIC_NEEDS_SERIES.key });
-		// A run that stores no basic_needs column (before 1.41.0): `has` says so, and the key isn't asked for.
+		// A run that stores no basic_needs column (before 1.44.0): `has` says so, and the key isn't asked for.
 		expect(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects! }, (_, key) => key !== BASIC_NEEDS_SERIES.key)).not.toContainEqual({
 			nodeId: 'A',
 			key: BASIC_NEEDS_SERIES.key

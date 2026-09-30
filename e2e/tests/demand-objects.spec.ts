@@ -43,7 +43,7 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	await expect(group.getByLabel('Share returned (%)')).toHaveValue('0');
 	await group.getByLabel('Destination').selectOption('internal');
 	await group.getByLabel('Share returned (%)').fill('40');
-	// The basic-needs floor (engine 1.41.0, issue #123): a town given in m³/day has none until its people are entered.
+	// The basic-needs floor (engine 1.44.0, issue #123): a town given in m³/day has none until its people are entered.
 	await expect(group.getByTestId(/^demand-object-floor-/)).toHaveText(/^No basic-needs floor/);
 	await group.getByLabel('People served').fill('2000');
 	await expect(group.getByTestId(/^demand-object-floor-/)).toHaveText(/^Basic-needs floor 50 m³\/day \(2\D000 people served\), 25 litres a person a day: a restriction never cuts it below that/);
@@ -77,7 +77,7 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	const supplied = ungroup(await row.getByRole('cell').nth(3).innerText());
 	expect(supplied).toBeGreaterThan(0);
 	expect(supplied).toBeLessThanOrEqual(400);
-	// Its floor, and what it got per person, in their own columns (engine 1.41.0).
+	// Its floor, and what it got per person, in their own columns (engine 1.44.0).
 	const table = uses.getByTestId('demand-objects-table');
 	const col = async (name: string) => (await table.getByRole('columnheader').allInnerTexts()).findIndex((h) => h.replace(/\s+/g, ' ').startsWith(name));
 	const floorAt = await col('Basic-needs floor');

@@ -108,7 +108,7 @@ describe('modelRuleIssues', () => {
 				// A schedule (engine 1.17.0): one good window and one bad; and one with too many windows.
 				o('sched', 'f', { schedule: [win({ weekdays: [6, 7] }), win({ span: 'yearly', from: '12-01', to: null })] }),
 				o('many', 'f', { schedule: Array.from({ length: 25 }, () => win()) }),
-				// The people it serves (engine 1.41.0): a number ≥ 0 or none.
+				// The people it serves (engine 1.44.0): a number ≥ 0 or none.
 				o('people', 'f', { category: 'municipal', population: 2000 }),
 				o('noPeople', 'f', { category: 'municipal', population: -3 })
 			]

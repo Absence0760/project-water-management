@@ -11,7 +11,7 @@
 // client-catchment and blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
 // formulas and the quirks this mirrors. Unlike the sheet nothing is rounded
 // or truncated (docs/engine-audit.md R1, Q14, Q15): the UI rounds for display.
-// From engine 1.41.0 (issue #123) a unit's basic-needs floor bounds the volume
+// From engine 1.44.0 (issue #123) a unit's basic-needs floor bounds the volume
 // left from below (docs/model.md §2.7f, §2.11).
 import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser, EwrSiteSummary } from '../project';
 
@@ -66,7 +66,7 @@ export interface CurtailmentInput {
 	ewrBindingSiteId?: string | null;
 	/**
 	 * The unit's basic-needs floor each day, m³/day [basic_needs] (engine ≥
-	 * 1.41.0, issue #123): the volume left never goes below its window mean.
+	 * 1.44.0, issue #123): the volume left never goes below its window mean.
 	 * Absent = no floor (a unit without a domestic or municipal object with people).
 	 */
 	basicNeeds?: ArrayLike<number>;
@@ -159,7 +159,7 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 		// charge is a store-less / pass-inflow condition, shown on its own. The
 		// volume left never goes below 0, and a cut beyond the equitable share is
 		// flagged instead.
-		// Engine ≥ 1.41.0 (issue #123): a restriction never cuts the unit's domestic
+		// Engine ≥ 1.44.0 (issue #123): a restriction never cuts the unit's domestic
 		// and municipal objects below their basic-needs floor B, so the volume left
 		// is at least B and the total change no deeper than B − I; what the floor
 		// holds back of the cut is reported, not dropped.

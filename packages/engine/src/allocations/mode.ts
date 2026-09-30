@@ -277,7 +277,7 @@ export function fullAllocationFactors(
 interface ModePlanNode {
 	demand: Float64Array;
 	irrigationEfficiency: number;
-	/** `floor` and `restricted` (engine ≥ 1.41.0): a restricted day's rescaling never takes an object below its basic-needs floor. */
+	/** `floor` and `restricted` (engine ≥ 1.44.0): a restricted day's rescaling never takes an object below its basic-needs floor. */
 	objects?: { demand: Float64Array[]; total: Float64Array; floor?: readonly (number | null)[]; restricted?: Uint8Array | null };
 	borehole?: unknown;
 	allocationCap?: AllocationCap;
@@ -403,7 +403,7 @@ export function planAllocations(
 		const factor = scaleDemandToAllocation(ap, i, D, start, days, nodes[i]!.name, warnings)!;
 		p.demand = Float64Array.from(p.demand, (v, t) => v * factor[t]!);
 		if (p.objects) {
-			// A restriction what-if on a full-allocation run (engine ≥ 1.41.0, issue #123): on a day the unit is
+			// A restriction what-if on a full-allocation run (engine ≥ 1.44.0, issue #123): on a day the unit is
 			// restricted, an object with a basic-needs floor keeps MIN(floor, its restricted demand), as the
 			// restriction alone would leave it; the rest of its demand, and every other day, scale as before.
 			const { floor, restricted } = p.objects;

@@ -297,7 +297,7 @@ describe('validateModel', () => {
 			[{ sizing: 'perUnit', monthlyM3Day: null }, true],
 			[{ sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, false],
 			[{ destination: 'external', returnPct: 0.2 }, true],
-			// The people it serves, for the basic-needs floor (engine 1.41.0): none, a number, never negative.
+			// The people it serves, for the basic-needs floor (engine 1.44.0): none, a number, never negative.
 			[{ population: null }, false],
 			[{ population: 2000 }, false],
 			[{ population: -1 }, true],
