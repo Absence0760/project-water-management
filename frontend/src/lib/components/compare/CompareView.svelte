@@ -31,6 +31,7 @@
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
 	import EwrFdcCompare from '$lib/components/compare/EwrFdcCompare.svelte';
+	import AssuranceDeltaTable from '$lib/components/compare/AssuranceDeltaTable.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
@@ -725,6 +726,13 @@
 					<div class="panel-head"><h2 id="farms-h">Hydrological units</h2></div>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
+
+				{#if data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance}
+					<section class="panel" aria-labelledby="assurance-h">
+						<div class="panel-head"><h2 id="assurance-h">Assurance of supply</h2></div>
+						<AssuranceDeltaTable a={data.a.run.summary.supplyAssurance} b={data.b.run.summary.supplyAssurance} />
+					</section>
+				{/if}
 
 				<section class="panel" aria-labelledby="chart-h">
 					<div class="panel-head"><h2 id="chart-h">Daily series</h2></div>

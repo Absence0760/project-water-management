@@ -12,6 +12,9 @@
 //   GET /projects/<project>/runs/<run>/series  one of its series
 //   GET /projects/<project>/runs/<run>/day     the self-checks' day trace
 //   GET /projects/<project>/runs/<run>/signoffs  the sign-off section
+//   GET /projects/<project>/runs/<run>/publication  the cover's published-by line and
+//                                              notice, and the changes since the previous
+//                                              publication (issue #70)
 //
 // An impact report's session (082: `?against=<baseline project>:<run>`) makes
 // one more read, and only with exactly this pair, baseline first:
@@ -38,7 +41,7 @@
 // underneath: the session is the requesting user's, so it can never see more
 // than they can.
 //
-// An evidence pack's session (114_pack_render: the pack_render job prints an
+// An evidence pack's session (116_pack_render: the pack_render job prints an
 // issued pack's own page, frontend/src/routes/projects/[id]/packs/[packId])
 // reads the pack and nothing else. The frozen manifest holds the whole
 // evidence report, so the page reads no run, no series and not even the
@@ -69,7 +72,7 @@ export const isPackScope = (s: RenderScope): s is PackScope => 'packId' in s;
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 /** The run's sub-resources the report page reads (frontend/src/routes/projects/[id]/report/+page.svelte). */
-const RUN_READS = ['series', 'day', 'signoffs'];
+const RUN_READS = ['series', 'day', 'signoffs', 'publication'];
 const PROJECT_READ = new RegExp(`^/projects/(${UUID})(?:/series|/runs/(${UUID})(?:/(?:${RUN_READS.join('|')}))?)?/?$`);
 
 /** The impact section's one comparison: exactly `a` (the baseline) and `b` (the run), once each, nothing else. */

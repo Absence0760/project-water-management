@@ -30,6 +30,10 @@ const PUBLIC = new Set([
 	// (share/share.db.test.ts).
 	'POST /share/view',
 	'POST /share/series',
+	// A link to one submitted or decided scenario (WP-3.15): the same token
+	// model, read only through app_share_scenario's redacted projection; a
+	// link opens only its own target (share/scenario-share.db.test.ts).
+	'POST /share/scenario',
 	// One-click unsubscribe from alert emails (WP-2.13): the token is the
 	// credential, and it can only turn off the one subscription it names,
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
@@ -67,7 +71,7 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
-	// Evidence packs (WP-3.14), their PDF (114_pack_render) included: auth-gated like every project route; only verify is public.
+	// Evidence packs (WP-3.14), their PDF (116_pack_render) included: auth-gated like every project route; only verify is public.
 	it('inventories the evidence pack routes as auth-gated, and verify as public', () => {
 		for (const r of [
 			'POST /projects/:id/packs',
@@ -227,6 +231,7 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/publication',
 			'POST /projects/:id/publication',
 			'PATCH /projects/:id/publication/:pubId',
+			'GET /projects/:id/runs/:runId/publication',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
 			'GET /projects/:id/farm/:nodeId/export.csv',
@@ -280,7 +285,8 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/notes/counts',
 			'POST /projects/:id/notes',
 			'PATCH /projects/:id/notes/:noteId',
-			'DELETE /projects/:id/notes/:noteId'
+			'DELETE /projects/:id/notes/:noteId',
+			'GET /projects/:id/notes/:noteId/revisions'
 		];
 		for (const r of notes) {
 			expect(routes).toContain(r);
@@ -316,6 +322,8 @@ describe('route auth inventory', () => {
 		}
 		expect(routes).toContain('POST /share/view');
 		expect(routes).toContain('POST /share/series');
+		expect(routes).toContain('POST /share/scenario');
+		expect(PUBLIC.has('POST /share/scenario')).toBe(true);
 	});
 
 	// API keys (WP-2.9): the owner's routes need a session; the ingest routes

@@ -565,6 +565,12 @@ writes its canonical link, `og:url` and `og:image` as absolute URLs from it
 (`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
 `/welcome` from `welcome.html` (`spa_rewrite`).
 
+The same build bakes in `ENGINE_BUILD`, the engine's build record
+(`scripts/release/engine-build.mjs`, run just before it: version, git SHA,
+invariants passed, soak cases), which the report's validation statement
+prints ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
+A local or e2e build has none and says *Not recorded for this build*.
+
 ### State of the Terraform before the first deploy
 
 Written and tested (plan-only, mocked providers), **nothing applied**:
@@ -840,7 +846,7 @@ Each deployable has its own release line, named `<component>@<semver>`
 | Tag | Workflow | Deploys |
 | --- | --- | --- |
 | `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's image (pushed to ECR; the renderer moved to it once it exists), then the health check |
-| `web@X.Y.Z` | `deploy-frontend.yml` | the static build to S3, then a CloudFront invalidation |
+| `web@X.Y.Z` | `deploy-frontend.yml` | the engine suite and a 1 600-case soak (a failure stops the release; the result is the build record the report's validation statement prints, model.md §2.10f), then the static build to S3, then a CloudFront invalidation |
 
 **Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
 nothing. Step by step:
@@ -889,7 +895,9 @@ nothing. Step by step:
      `export-tf-vars.sh`). Until the account
      is bootstrapped and `export-tf-vars.sh` has run, **every release stops
      here** with a pointer to the runbook, before anything is built.
-6. **build** installs dependencies and builds the artifact. It has no
+6. **build** installs dependencies, runs the engine suite and soak for the
+   [engine build record](#engine-build-record) (a failure stops the release
+   here), and builds the artifact with that record in it. It has no
    environment and no AWS credentials, so third-party npm code never runs
    next to them.
 7. **deploy** waits in `environment: production` until the operator opens
@@ -900,6 +908,28 @@ nothing. Step by step:
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
    ECR, tagged with the version.
+
+### Engine build record
+
+Every report's validation statement names the engine build's own test results
+(model.md §2.10f, roadmap WP-3.13), and the evidence pack manifests will too
+(WP-3.14). The build job of both release workflows makes that record before it
+builds, with `scripts/release/engine-build.mjs --soak-cases N` (1 600 cases for
+the web, 2 000 for the backend): the engine's unit suite with its random-network
+soak widened to N, on this commit. A failing suite fails the release. The
+script puts the record (`{version, gitSha, invariantsPassed, soakCases}`) in
+`$GITHUB_ENV` as `ENGINE_BUILD`:
+
+- **web**: `frontend/vite.config.ts` injects it as `__ENGINE_BUILD__` for the
+  validation statement (below).
+- **backend**: `infra/scripts/package-lambdas.sh` passes it to every Lambda
+  bundle as the esbuild define `__ENGINE_BUILD_JSON__`;
+  `backend/src/release/engineBuild.ts` `engineBuild()` reads it, and is null
+  without one or for a record made for another `ENGINE_VERSION`. It is not an
+  environment variable of the Lambdas.
+
+Unset, both inject an empty string: dev, the e2e build and any local build say
+*Not recorded for this build*.
 
 ### The production environment's branch and tag policy
 

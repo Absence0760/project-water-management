@@ -20,7 +20,7 @@ import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf } from '../network/offtake';
 import { cmpStr } from '../order';
-import { supplyOf, type PlanSupply } from '../network/supply';
+import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
@@ -898,7 +898,8 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   (checkSoilWater checks where the effective rain used came from), and the
  *   abstraction demand D = F / e (audit N1);
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
- *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
+ *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity (the month's, when set by
+ *   month, engine ≥ 1.32.0), L + N);
  * - the dam's surface A = A_full × (Q[t−1] / capacity)^b (A_full as entered,
  *   or capacity ÷ 3 m), or linear in the survey curve when there is one
  *   (WP-3.5); rain on it Pd = rain × A / 1000; evaporation
@@ -919,7 +920,7 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   the river (always under river first and run of river; under trigger from
  *   the day the start-of-day storage falls below the trigger until the day it
  *   is back at the stop level) Gr = MIN(pump capacity, MAX(0, S − MAX(Zs,
- *   a pass-inflow release's target)), demand) taken before the dam, or after
+ *   a pass-inflow release's target, the hands-off flow)), demand) taken before the dam, or after
  *   it under run of river, and 0 otherwise; run of river sends everything
  *   below the dam (K = M = O = 0); the dam gives G − Gr;
  * - P = S0 + M + O + K + J − X − (G − Gr), Q = MIN(P, capacity), R = MAX(P − capacity, 0);
@@ -970,6 +971,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (!!rel !== !!REL) return `${n.id}: dam_release column ${REL ? 'without' : 'missing for'} a release rule`;
 		// Supply rule and river pump (WP-3.8).
 		const sup = supplyOf(n, []).supply;
+		// Hands-off flow and River to dam by month (engine ≥ 1.32.0).
+		const ops = operatingOf(n, []);
+		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		const RA = g('river_abstraction');
 		if (!!sup !== !!RA) return `${n.id}: river_abstraction column ${RA ? 'without' : 'missing for'} a supply rule that pumps from the river`;
 		let onRiver = false;
@@ -1029,7 +1033,24 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			} else if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
-			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
+			const divCap = divertCapacityToday(divertOf, monthOfEpochDay(day0 + t));
+			if (o < 0 || o > Math.min(divCap, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity ${divCap}, L + N)]`;
+			{
+				// River to dam's replay (docs/model.md §2.7c, §2.7h): O₀ = MIN(capacity, L + N), then the senior
+				// users' pass and the hands-off flow cut it, so S = MAX(L + N − O₀, MIN(Zs, H + I), MIN(L + N, keep)).
+				// They cut K and M only once O is 0 (the pass, and the hands-off flow on a farm with no dam today).
+				const ror = sup !== undefined && sup.rule === 3;
+				const K0 = ror ? 0 : Math.min(h * n.pctUpstreamToDam, h);
+				const M0 = ror ? 0 : Math.min(i * n.pctRunoffToDam, i);
+				const hk = ops.handsOff ? handsOffToday(ops.handsOff, monthOfEpochDay(day0 + t), Zc[t]!) : 0;
+				const zs = ZS?.[t] ?? 0;
+				if (k === K0 && m === M0) {
+					const o0 = ror ? 0 : Math.min(divCap, l + nn);
+					const wantO = Math.max(0, Math.min(o0, l + nn - Math.max(Math.min(zs, h + i), Math.min(l + nn, hk))));
+					if (!near(o, wantO, Math.max(l, nn, zs, hk)))
+						return `${where}: diverted ${o} ≠ ${wantO} (MIN(capacity ${divCap}, L + N) less what passes for ${zs > 0 ? `the senior requirement ${zs}${hk > 0 ? ' and ' : ''}` : ''}${hk > 0 ? `the hands-off flow ${hk}` : ''})`;
+				} else if (o !== 0) return `${where}: took less of K or M into the dam (${k} of ${K0}, ${m} of ${M0}) while still diverting ${o}`;
+			}
 			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
 			const c = curve && cap > 0 && qPrev > 0 ? curveAreaAt(curve, kd === 1 ? qPrev : qPrev / kd) : null;
 			const onCurve = c && kd !== 1 ? { area: c.area, slope: c.slope / kd } : c;
@@ -1101,7 +1122,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
 				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
-				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0);
+				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
 				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
 				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
@@ -1703,6 +1724,69 @@ function checkRuleVolumes(
 	return null;
 }
 
+/**
+ * A farm's operating rules (engine ≥ 1.32.0, WP-3.8, issue #204, docs/model.md
+ * §2.7h), every farm, every day, from the published columns and the node's
+ * rules as runModel resolves them:
+ * - the river pump never takes more than its capacity: 0 ≤ Gr ≤ pump capacity;
+ * - the flow left after the pump is at least MIN(the flow before it, the
+ *   hands-off keep): S − Gr ≥ MIN(S, keep);
+ * - on a farm with a dam today, the flow left after River to dam is at least
+ *   MIN(the flow before it, the hands-off keep): S = L + N − O ≥ MIN(L + N, keep);
+ * - on a farm without one (capacity 0 today), where K, M and O are irrigated
+ *   straight from the river, the flow left after all three is at least
+ *   MIN(the farm's inflow, the keep): S = H + I − (K + M + O) ≥ MIN(H + I, keep);
+ * - no diversion above the month's capacity: 0 ≤ O ≤ River to dam's
+ *   capacity that month (by month when set, else the one value);
+ * with keep = MAX(the month's hands-off amount, the EWR required here Z when
+ * kept); 0 without a hands-off flow, where the two keep checks hold trivially.
+ */
+export function checkOperatingRules(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const day0 = toEpochDay(out.startDate);
+	for (const n of input.model.nodes) {
+		if (n.kind !== 'farm') continue;
+		const g = (k: string) => get.get(`${n.id}|${k}`);
+		const sup = supplyOf(n, []).supply;
+		const ops = operatingOf(n, []);
+		const L = g('upstream_below_dam');
+		const N = g('runoff_below_dam');
+		const O = g('diverted_to_dam');
+		const S = g('below_dam_not_diverted');
+		const Z = g('ewr_cumulative');
+		const GR = g('river_abstraction');
+		if (!L || !N || !O || !S || !Z) return `${n.id}: the columns L, N, O, S and Z are needed to check its operating rules`;
+		if (sup && !GR) return `${n.id}: river_abstraction column missing for a supply rule that pumps from the river`;
+		const H = g('inflow_upstream');
+		const I = g('runoff');
+		if (!H || !I) return `${n.id}: the columns H and I are needed to check its operating rules`;
+		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
+		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.
+		const ks = capacityScaleOf(n, day0, out.days, []);
+		for (let t = 0; t < out.days; t++) {
+			const where = `${n.id} day ${t}`;
+			const month = monthOfEpochDay(day0 + t);
+			const l = L[t]!, nn = N[t]!, o = O[t]!, ss = S[t]!;
+			const keep = ops.handsOff ? handsOffToday(ops.handsOff, month, Z[t]!) : 0;
+			const cap = divertCapacityToday(divertOf, month);
+			if (o < -tol(0) || o > cap + tol(cap)) return `${where}: River to dam diverted ${o}, outside [0, its capacity that month ${cap}]`;
+			if (n.damCapacityM3 * (ks ? ks[t]! : 1) > 0) {
+				if (ss < Math.min(l + nn, keep) - tol(Math.max(l + nn, keep))) return `${where}: River to dam left ${ss} below it, less than MIN(the ${l + nn} before it, the hands-off flow ${keep})`;
+			} else {
+				const hi = H[t]! + I[t]!;
+				if (ss < Math.min(hi, keep) - tol(Math.max(hi, keep)))
+					return `${where}: with no dam, what it took into the dam and River to dam left ${ss} in the river, less than MIN(the ${hi} reaching it, the hands-off flow ${keep})`;
+			}
+			if (sup) {
+				const gr = GR![t]!;
+				if (gr < -tol(0) || gr > sup.pumpM3Day + tol(gr)) return `${where}: the river pump took ${gr}, outside [0, its capacity ${sup.pumpM3Day}]`;
+				if (ss - gr < Math.min(ss, keep) - tol(Math.max(ss, keep))) return `${where}: the river pump left ${ss - gr} in the river, less than MIN(the ${ss} before it, the hands-off flow ${keep})`;
+			}
+		}
+	}
+	return null;
+}
+
 /** Every per-run invariant. */
 export function checkInvariants(input: ModelInput, out: ModelOutput): string | null {
 	return (
@@ -1715,7 +1799,8 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkEwrAttribution(input, out) ??
 		checkGroundwater(input, out) ??
 		checkLandCover(input, out) ??
-		checkAllocations(input, out)
+		checkAllocations(input, out) ??
+		checkOperatingRules(input, out)
 	);
 }
 

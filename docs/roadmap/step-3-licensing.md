@@ -1040,10 +1040,32 @@ must build WP-2.15 Phase B.
 > target ([model.md §2.7e](../model.md), which lists the decisions taken).
 > Default output is byte-identical (tests on random networks and an example;
 > the examples and the client catchment regression suite unchanged).
-> **Still to do:** hands-off flow, drought restrictions (`restricted_demand`),
+> **Still to do:** drought restrictions (`restricted_demand`),
 > a pump capacity on other water users (issue #54
 > item 2b), and moving an imported workbook's probable run-of-river units
 > (issue #54 item 2d) once the hydrologist confirms.
+>
+> **Hands-off flow and River to dam by month: engine, backend and UI built
+> 2026-09-29 (engine 1.32.0, issue #204), off by default; pending the
+> hydrologist.**
+> Per farm: `handsOffM3Day` (12 values by water-year month, null = none),
+> `handsOffEwr` (also keep the EWR required at the farm, Z) and
+> `divertMonthlyM3Day` (River to dam's capacity by month, replacing the one
+> `divertCapacityM3Day`; 0 in summer = winter-only filling). keep =
+> MAX(hands-off, EWR when kept), the river off-takes' rule (§2.6a): the river
+> pump takes only S above MAX(Zs, a pass-inflow release's target, keep), and
+> River to dam leaves MIN(L + N, keep) below the dam. This spec named the
+> river pump only; River to dam is the same river taken below the dam, so the
+> hands-off flow binds it too (a decision of issue #204). It cuts only the
+> diversion O, not the dam split's K and M (the on-channel dam). New
+> self-check `checkOperatingRules`, scenario `node.set` fields and the run
+> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 114
+> (`node.hands_off_m3_day`, `hands_off_ewr`, `divert_monthly_m3_day`, farms
+> only, [data-model.md](../data-model.md)), saved and read by the model API
+> with the engine's save rules ([api.md](../api.md)), set in the one-node form
+> (Supply's **Hands-off flow** and Routing's **Set River to dam by month**,
+> [ui.md](../ui.md)) and by the scenario `node.set` ops
+> ([scenarios.md](../scenarios.md)). Answers issue #90 Q15.
 >
 > **Scenario ops for the supply fields built 2026-09-26.** `node.set` takes
 > `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct` and `supplyStopPct`
@@ -1521,7 +1543,8 @@ must build WP-2.15 Phase B.
   to the statement's SHA-256, `signoff.created` in the audit log, the run
   cited so kept), with the dialog. Engine 0.31.2. Left
   ([followups.md § Liability and sign-off](../followups.md#liability-and-sign-off-wp-313)):
-  `ENGINE_BUILD` from CI, the methodology statement and errata docs, the
+  the methodology statement and errata docs (`ENGINE_BUILD` from the web
+  release is done, issue #70, [model.md §2.10f](../model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)), the
   pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
   sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
   scenario is signed through its run, which is what a pack cites.
@@ -1804,6 +1827,14 @@ must build WP-2.15 Phase B.
 > G13–G15, and G7 and G16 in part ([design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)).
 > Assessor and NGO access, comments on a pack and refusing an *issued* pack
 > remain with this WP.
+>
+> **Scenario half built (issue #71, `115_scenario_share_notes`):** share links
+> to a submitted or decided scenario (`app_share_scenario`, the EWR per site
+> first), scenario notes with the `assessors`, `parties` and
+> `public_participation` audiences and `note_revision`, the Share dialog and
+> the `/share` scenario view, with the tests below for scenarios. The pack
+> targets (`'pack'`, `app_share_pack`, `note.pack_id`) wait for
+> `evidence_pack` ([followups.md](../followups.md#applicants-wp-33)).
 
 > **Gaming rules designed** (issue #15): [design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)
 > keeps items 1–8 below and adds G1, G4–G9 and G13–G16 (nomination-only

@@ -97,7 +97,7 @@ export const RenderResultMessage = z
 	.strict();
 export type RenderResultMessage = z.output<typeof RenderResultMessage>;
 
-// An evidence pack's PDF (114_pack_render; docs/evidence-pack.md § The PDF)
+// An evidence pack's PDF (116_pack_render; docs/evidence-pack.md § The PDF)
 // goes the same way on the same two queues: a PackRenderRequestMessage asks
 // the renderer to print the pack's page; it stores the PDF under the key
 // derived from the ids and the PDF's SHA-256 (reports/storage.ts packPdfKey)

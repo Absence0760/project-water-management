@@ -61,7 +61,7 @@ export const REPORT_RETENTION_DAYS = 7;
 export const reportsBucket = () => process.env.REPORTS_BUCKET?.trim() || 'water-reports';
 
 /**
- * Issued evidence packs' PDFs (114_pack_render; docs/evidence-pack.md § The
+ * Issued evidence packs' PDFs (116_pack_render; docs/evidence-pack.md § The
  * PDF): their own bucket, because a pack's PDF is kept for good. Production's
  * is versioned with an Object Lock default retention and no lifecycle
  * (infra/packs.tf), so an object can't be deleted or overwritten while the

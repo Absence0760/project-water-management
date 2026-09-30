@@ -90,7 +90,11 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   `fuzz/shard.ts`); the pinned regression seeds stay in
   `run.invariants.test.ts`. Soak with
   `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
-  (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`). The
+  (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`).
+  The web release runs it at 1 600 cases (`scripts/release/engine-build.mjs`,
+  `deploy-frontend.yml`), under the shards' time budget of about 0.2 s a
+  case (`fuzz/shard.ts`): raise that budget before raising the release's
+  count. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,

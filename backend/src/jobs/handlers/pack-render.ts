@@ -1,7 +1,7 @@
 // `pack_render`: print an issued evidence pack's own page to a PDF, store it
 // for good, and record its SHA-256 and page count on the pack once (roadmap
 // WP-3.14 "Rendering: reuse WP-2.15", issue #71; docs/evidence-pack.md § The
-// PDF, 114_pack_render.sql). Queued by POST …/packs/:packId/issue (and
+// PDF, 116_pack_render.sql). Queued by POST …/packs/:packId/issue (and
 // POST …/packs/:packId/pdf, an editor's retry while none is recorded), as the
 // editor who asked, deduplicated per pack.
 //

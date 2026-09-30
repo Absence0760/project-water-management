@@ -1,4 +1,4 @@
-// An issued evidence pack's PDF from the API's side (114_pack_render;
+// An issued evidence pack's PDF from the API's side (116_pack_render;
 // docs/evidence-pack.md § The PDF): queue its render, say how far it is, and
 // the download. The render itself is jobs/handlers/pack-render.ts.
 import type { Db } from '../db/tx.js';

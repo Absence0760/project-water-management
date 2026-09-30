@@ -57,6 +57,8 @@ interface World {
 	scheduleId: string;
 	scenarioId: string;
 	applicationId: string;
+	/** A submitted application: only an application past draft is shared by link (share/routes.ts shareableScenario). */
+	submittedApplicationId: string;
 	sweepId: string;
 	outlookId: string;
 	/** A complete outlook with one level, "0", and its current publication to farmers (106). */
@@ -158,6 +160,11 @@ async function world(name: string): Promise<World> {
 			scheduleId: await one(`INSERT INTO report_schedule (project_id, frequency, weekday, hour, timezone, acting_user_id, created_by) VALUES ($1, 'weekly', 1, 6, 'UTC', $2, $2)`, [projectId, u]),
 			scenarioId: await one(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin) VALUES ($1, 'Team scenario', $2, repeat('a', 64), $3, 'team')`, [projectId, runId, u]),
 			applicationId: await one(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin) VALUES ($1, 'Application', $2, repeat('a', 64), $3, 'applicant')`, [projectId, runId, u]),
+			submittedApplicationId: await one(
+				`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin, status, submitted_at)
+				 VALUES ($1, 'Submitted application', $2, repeat('a', 64), $3, 'applicant', 'submitted', now())`,
+				[projectId, runId, u]
+			),
 			sweepId: await one(`INSERT INTO scenario_sweep (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Sweep', $3, 'pending')`, [projectId, runId, u]),
 			outlookId: await one(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels, created_by, status) VALUES ($1, $2, 'Outlook', '2012-10-01', '2013-04-30', '[{}]', $3, 'pending')`,
@@ -259,6 +266,10 @@ const FK_SQL = `
  * with the reason. The inventory test checks each reason's premise.
  */
 const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
+	'note_revision.note_id': {
+		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (115)',
+		premise: 'not writable'
+	},
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },
 	'data_feed_run_now.feed_id': { reason: 'no project_id of its own: the row is its feed’s “Run now” bucket, written only by app_feed_take_run_now', premise: 'no project_id' },
 	'report_schedule_recipient.schedule_id': {
@@ -386,6 +397,10 @@ const CASES: Record<string, Case> = {
 	},
 	'note.node_id': { ref: (w) => w.farmId, insert: (h, ref) => [`INSERT INTO note (project_id, author_id, body, node_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, u(), ref]] },
 	'note.run_id': { ref: (w) => w.runId, insert: (h, ref) => [`INSERT INTO note (project_id, author_id, body, run_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, u(), ref]] },
+	'note.scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: (h, ref) => [`INSERT INTO note (project_id, author_id, body, scenario_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, u(), ref]]
+	},
 	'publication_farm.node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [`INSERT INTO publication_farm (publication_id, project_id, node_id, view) VALUES ($1, $2, $3, '{}')`, [h.publicationId, h.projectId, ref]]
@@ -738,6 +753,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
 	'POST /projects/:id/notes nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a farm', nodeId: r.farmId }),
+	'POST /projects/:id/notes scenarioId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a scenario', scenarioId: r.scenarioId }),
+	'POST /projects/:id/share-links targetId': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/share-links`, { label: 'Assessor', expiresInDays: 7, targetKind: 'scenario', targetId: r.submittedApplicationId }),
 	'PUT /projects/:id/alert-rules nodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: r.farm2Id, threshold: 0.3, enabled: true }] }),
 	'PUT /projects/:id/alert-rules feedId': (h, r) => dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'data_stale', feedId: r.feedId, threshold: 5, enabled: true }] }),
@@ -806,6 +824,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
+	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
+	'share/links.ts:targetId': ['POST /projects/:id/share-links targetId'],
 	'history/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'jobs/handlers/feed-fetch.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts holds every payload to its job’s project',
 	'jobs/handlers/feed-ingest.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts',
@@ -825,6 +845,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'model/validate.ts:toNodeId': ['PUT /projects/:id/model transfers.toNodeId'],
 	'notes/routes.ts:nodeId': ['POST /projects/:id/notes nodeId'],
 	'notes/routes.ts:runId': ['POST /projects/:id/notes runId'],
+	'notes/routes.ts:scenarioId': ['POST /projects/:id/notes scenarioId'],
 	'outlooks/routes.ts:baseRunId': 'a read filter within the project',
 	'outlooks/schema.ts:baseRunId': 'checked by seasonal_outlook_guard (the SQL case) and outlooks.db.test.ts; the route needs a multi-year record',
 	'outlooks/schema.ts:outlookId': 'a job payload: jobs/trust.security.db.test.ts',

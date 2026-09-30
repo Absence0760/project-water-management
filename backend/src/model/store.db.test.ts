@@ -90,6 +90,10 @@ describe('model store', () => {
 			pumpCapacityM3Day: 1234.5,
 			supplyTriggerPct: 0.35,
 			supplyStopPct: 0.65,
+			// Hands-off flow and River to dam by month (engine 1.32.0, 114_node_operating_rules, issue #204), awkward numbers.
+			handsOffM3Day: [0.1 + 0.2, 0, 0, 1e-7, 250.5, 250.5, 250.5, 250.5, 250.5, 250.5, 123_456.789, 0],
+			handsOffEwr: true,
+			divertMonthlyM3Day: [4320, 4320, 4320, 4320, 4320, 4320, 0, 0, 0, 0, 0, 1 / 3],
 			// Development over the run (engine 1.30.0, 110_node_development): a leap day survives as a date.
 			damSurveyDate: '2012-02-29',
 			damSedimentPctPerYear: 0.0125,
@@ -185,6 +189,9 @@ describe('model store', () => {
 			pumpCapacityM3Day: null,
 			supplyTriggerPct: 0.4,
 			supplyStopPct: 0.6,
+			handsOffM3Day: null,
+			handsOffEwr: false,
+			divertMonthlyM3Day: null,
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null,

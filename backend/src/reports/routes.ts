@@ -301,7 +301,7 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
  * the credential. It is consumed whatever happens next, and the session it
  * gives reads one project and one run as the requester (reports/scope.ts),
  * who must still be able to see both (and an impact report's baseline), or,
- * for a pack token (114), one evidence pack past draft.
+ * for a pack token (116), one evidence pack past draft.
  */
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));

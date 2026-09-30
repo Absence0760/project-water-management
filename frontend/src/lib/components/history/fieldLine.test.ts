@@ -1,6 +1,6 @@
 // The field history line's words and link (docs/ui.md § Field history).
 import { afterEach, describe, expect, it } from 'vitest';
-import { fieldHistoryHref, fieldHistoryText } from './fieldLine';
+import { compactMonths, fieldHistoryHref, fieldHistoryText } from './fieldLine';
 
 const f = { count: 3, lastAt: '2026-08-12T10:00:00.000Z', lastBy: 'Ann', change: '40% → 60%', filter: 'Hilltop: irrigation efficiency' };
 
@@ -25,6 +25,28 @@ describe('fieldHistoryText', () => {
 
 	it('names a deleted account as such', () => {
 		expect(fieldHistoryText({ ...f, lastBy: null, count: 1 })).toBe('Changed 1× · last by a deleted account, 12 Aug 2026: 40% → 60%');
+	});
+});
+
+describe('compactMonths', () => {
+	const row = (vals: string[], unit = ' m³/day') => `${vals.join(', ')}${unit} (Oct–Sep)`;
+	const winter = ['0', '0', '0', '0', '0', '0', '0', '800', '800', '800', '800', '12\u202f345.5'];
+
+	it('reads a monthly row set or cleared as its range, or one value every month', () => {
+		expect(compactMonths(`none → ${row(winter)}`)).toBe('none → by month: 0–12\u202f345.5 m³/day');
+		expect(compactMonths(`${row(new Array(12).fill('300'))} → none`)).toBe('300 m³/day every month → none');
+		expect(compactMonths(`the one diversion capacity → ${row(['0.0129', ...new Array(11).fill('800')])}`)).toBe('the one diversion capacity → by month: 0.0129–800 m³/day');
+		// A row with no unit, and negative values, compare as numbers, not text.
+		expect(compactMonths(`none → ${row(['-5', '10', '9', ...new Array(9).fill('2')], '')}`)).toBe('none → by month: -5–10');
+	});
+
+	it('leaves every other change as it is', () => {
+		for (const c of ['40% → 60%', 'Oct 300 → 400, Nov 300 → 400 m³/day', 'changed in 5 months', '150\u202f000 m³ → 200\u202f000 m³', 'no → yes', row(['1', '2', '3'])])
+			expect(compactMonths(c)).toBe(c);
+	});
+
+	it('reaches the history line', () => {
+		expect(fieldHistoryText({ ...f, change: `none → ${row(new Array(12).fill('300'))}` })).toBe('Changed 3× · last by Ann, 12 Aug 2026: none → 300 m³/day every month');
 	});
 });
 

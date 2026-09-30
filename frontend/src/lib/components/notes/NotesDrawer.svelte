@@ -23,7 +23,17 @@
 	let open = $state(false);
 	const counts = $derived(noteCounts(projectId));
 	const count = $derived(countFor(counts.counts, target));
-	const about = $derived(target.kind === 'project' ? 'the project' : target.kind === 'node' ? target.name || 'this node' : target.kind === 'run' ? 'this run' : target.label);
+	const about = $derived(
+		target.kind === 'project'
+			? 'the project'
+			: target.kind === 'node'
+				? target.name || 'this node'
+				: target.kind === 'run'
+					? 'this run'
+					: target.kind === 'scenario'
+						? `“${target.name}”`
+						: target.label
+	);
 
 	$effect(() => {
 		counts.ensure();

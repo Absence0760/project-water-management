@@ -13,7 +13,7 @@
 //                        records the answer, as the report's requester.
 //   acceptPackRenderResult  the same for an evidence pack's answer: the
 //                        follow-up pack_render job, as the acting user of the
-//                        pack's render request (114_pack_render).
+//                        pack's render request (116_pack_render).
 //   purgeReports         every tick: rows older than 8 days (a day past the
 //                        bucket's lifecycle); locally their PDFs too.
 import { withoutUser, withUser } from '../db/tx.js';

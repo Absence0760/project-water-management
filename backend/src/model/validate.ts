@@ -74,6 +74,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
+				// Hands-off flow and River to dam by month (engine ≥ 1.32.0, issue #204), m³/day by water-year
+				// month; null = none / the one divertCapacityM3Day. Farms only is a model rule (operatingKind).
+				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				handsOffEwr: z.boolean().default(false),
+				divertMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
 				ewrSite: z.boolean().default(true),
 				// GN 538 context (engine ≥ 1.12.0): the property's size and its quaternary's Table 2 rate; null = unknown.

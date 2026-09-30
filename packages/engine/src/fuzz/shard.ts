@@ -50,6 +50,6 @@ export function fuzzShard(i: number, n = SHARDS): void {
 				failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
 			}
 			expect(failures.join('\n\n')).toBe('');
-		}, Math.max(120_000, (to - from) * 200));
+		}, Math.max(120_000, (to - from) * 600)); // ~0.2 s a case alone, 3x for a loaded machine (a release soak runs 500 a shard)
 	});
 }
