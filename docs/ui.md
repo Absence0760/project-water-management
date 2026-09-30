@@ -6311,8 +6311,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
   saying the pack never records them, or on a draft *Errata found since this
-  draft was made*, saying to draft the pack again (`packs/pack.ts`
-  `errataFoundSinceNote`). The report below, and so the PDF, prints only the
+  draft was made*, saying it can't be issued until the pack is drafted again
+  (`packs/pack.ts` `errataFoundSinceNote`); the draft's checklist then fails
+  its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
+  API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a

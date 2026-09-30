@@ -1671,6 +1671,8 @@ export interface PackIssueChecks {
 	issuable: boolean;
 	signed: boolean;
 	runsVerified: boolean;
+	/** No erratum found since the draft was made applies to its runs (errataFoundSince is empty); issue refuses otherwise (pack_errata_since_draft). */
+	errataRecorded: boolean;
 }
 
 /** GET /projects/:id/packs/:packId. */

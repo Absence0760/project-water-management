@@ -124,6 +124,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	const checklist = page.getByTestId('pack-checklist');
 	await expect(checklist).toContainText('The frozen report may be issued');
 	await expect(checklist).toContainText('Not signed under the current pack statement');
+	await expect(checklist).toContainText('Its manifest records every known erratum of its runs’ engines.');
 	await expect(actions.getByRole('button', { name: 'Issue pack' })).toBeDisabled();
 	await expect(page.locator('main')).toHaveAttribute('data-report-footer', /^Draft pack · not issued · /);
 	await expectNoViolations(page);

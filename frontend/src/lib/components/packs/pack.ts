@@ -47,7 +47,7 @@ export function packStamp(p: Pick<Pack, 'status' | 'version' | 'issuedAt'>): str
  * manifest was frozen (errataFoundSince, 132): since issue once it was issued,
  * since the draft before (a draft, or one withdrawn before it was issued).
  * The manifest never changes, so an issued pack can't record them; a draft
- * drafted again does.
+ * can't be issued until it is drafted again, which records them.
  */
 export function errataFoundSinceNote(p: { issuedAt: string | null }): { heading: string; note: string } {
 	return p.issuedAt
@@ -57,7 +57,7 @@ export function errataFoundSinceNote(p: { issuedAt: string | null }): { heading:
 			}
 		: {
 				heading: 'Errata found since this draft was made',
-				note: 'Added to the engine’s errata list after this draft froze its manifest, for the engine of one of its runs (or of the automatic fit its parameters came from). The draft doesn’t record them: draft the pack again to record them before it is issued.'
+				note: 'Added to the engine’s errata list after this draft froze its manifest, for the engine of one of its runs (or of the automatic fit its parameters came from). The draft doesn’t record them, so it can’t be issued: draft the pack again, which records them, and sign and issue that draft.'
 			};
 }
 
@@ -183,6 +183,12 @@ export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks;
 			ok: c.runsVerified,
 			done: 'Both runs still carry the server’s stamp.',
 			todo: 'A run it cites no longer matches the server’s stamp, so it can’t be signed or issued.'
+		},
+		{
+			id: 'errataRecorded',
+			ok: c.errataRecorded,
+			done: 'Its manifest records every known erratum of its runs’ engines.',
+			todo: 'An erratum found since this draft was made applies to its runs, and the manifest doesn’t record it, so it can’t be issued. Draft the pack again to record it.'
 		},
 		{
 			id: 'signed',

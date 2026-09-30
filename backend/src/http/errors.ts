@@ -72,15 +72,20 @@ export const ERROR_CODES = [
 ] as const;
 
 /**
- * Codes only a machine client reads, never a translated page, so they have
- * no words in the frontend's `CODES` (docs/api.md § Errors). The same
+ * Codes a translated page never meets (a machine client reads them, or the
+ * English workspace, which shows the server's message as it is), so they
+ * have no words in the frontend's `CODES` (docs/api.md § Errors). The same
  * contract: add new ones, rename none.
  *   render_token_refused: POST /auth/render-session refused the token (used,
  *     expired, or the requester lost access). The report renderer
  *     (reports/render.ts) treats only this as final; any other refusal (a
  *     WAF or CloudFront 403, a 429, a 5xx) is retried.
+ *   pack_errata_since_draft: POST …/packs/:packId/issue refused a draft
+ *     because an erratum found since it was drafted applies to its runs'
+ *     engines (or their fits') and its manifest doesn't record it: draft the
+ *     pack again (evidence/packs.ts).
  */
-export const MACHINE_ERROR_CODES = ['render_token_refused'] as const;
+export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');

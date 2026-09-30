@@ -4309,7 +4309,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `errataFoundSince` (`errataFor` over the current list, less the
       recorded ids) and never returns itself; the verify page lists them
       under "Errata found since issue", and the pack's page in its unprinted
-      bar (on a draft, "found since this draft was made"). The manifest, its
+      bar (on a draft, "found since this draft was made"). Issue refuses a
+      draft with any (`409` `pack_errata_since_draft`, the checklist's
+      `errataRecorded`): draft it again, which records them. The manifest, its
       hash and `errata` are unchanged
       ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
 - [x] **Applicants' access to their own application's packs** (WP-3.15):

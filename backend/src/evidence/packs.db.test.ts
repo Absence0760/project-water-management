@@ -221,7 +221,7 @@ describe('drafting a pack', () => {
 		expect(read.body.manifestMatches).toBe(true);
 		// The issue checklist is an editor's (only editors issue); a viewer gets null.
 		expect(read.body.issue).toBeNull();
-		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true });
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true, errataRecorded: true });
 	});
 
 	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
@@ -308,8 +308,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	beforeAll(async () => {
 		v1 = await draft(owner, baseRun);
 	});
+	/** Found after a draft was made and before its issue: the draft can't be issued (pack_errata_since_draft). */
+	const SINCE_DRAFT: Erratum = { id: 'ER-994', keyedOn: 'run', firstAffected: ENGINE_VERSION, fixedIn: null, severity: 'High', appliesWhen: 'Always', summary: 'A bug found before issue', source: 'test' };
 	afterAll(() => {
-		errataList.splice(0, errataList.length, ...errataList.filter((e) => !LATER.includes(e)));
+		errataList.splice(0, errataList.length, ...errataList.filter((e) => !LATER.includes(e) && e !== SINCE_DRAFT));
 	});
 
 	it('refuses to issue without a sign-off of the current statement', async () => {
@@ -703,6 +705,25 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		});
 	});
 
+	it('refuses to issue a signed draft missing an erratum found since it was drafted (409 pack_errata_since_draft); drafted again, it issues (below)', async () => {
+		const stale = await draft(editor, baseRun, v1.id);
+		await sign(editor, stale.id);
+		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({ issuable: true, signed: true, runsVerified: true, errataRecorded: true });
+		errataList.push(SINCE_DRAFT);
+		const detail = (await editor.call('GET', packPath(stale.id))).body;
+		expect(detail.issue).toMatchObject({ signed: true, errataRecorded: false });
+		expect(detail.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-994']);
+		const res = await issue(editor, stale.id);
+		expect(res.status).toBe(409);
+		expect(res.body.code).toBe('pack_errata_since_draft');
+		expect(res.body.error).toMatch(/ER-994.*Draft the pack again/);
+		// Nothing changed: still a draft, no bundle, v1 still the issued one.
+		expect((await editor.call('GET', packPath(stale.id))).body.pack).toMatchObject({ status: 'draft', bundleSha256: null, issuedAt: null });
+		expect((await editor.call('GET', packPath(v1.id))).body.pack.status).toBe('issued');
+		// A signed draft is kept; it is withdrawn, and the next test drafts afresh (the positive control).
+		expect((await editor.call('POST', `${packPath(stale.id)}/withdraw`, { reason: 'drafted again to record ER-994' })).status).toBe(200);
+	});
+
 	it('issues a new version, which supersedes the old one in the same step', async () => {
 		v2 = await draft(editor, baseRun, v1.id);
 		expect(v2).toMatchObject({ version: 2, supersedesId: v1.id });
@@ -720,9 +741,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(verified.body.pack).toMatchObject({ status: 'superseded', successorSha256: v2.manifestSha256 });
 		// An erratum on the list when v2 was drafted is recorded, so it isn't found since v2's issue; v1 still lists it as found since.
 		const v2Verified = (await anon('GET', `/verify/${v2.shortCode}`)).body.pack;
-		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toContain('ER-991');
+		// Drafted afresh after ER-994 was found, it records it, so it issued (the refusal's positive control).
+		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toEqual(expect.arrayContaining(['ER-991', 'ER-994']));
 		expect(v2Verified.errataFoundSince).toEqual([]);
-		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991']);
+		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991', 'ER-994']);
 		// Issued by the editor this time: the owner is told (the notice names the version it replaces); the superseded pack gets no notice of its own.
 		expect(await notices(v2.id)).toEqual([{ user_id: owner.id, event: 'issued', status: 'pending' }]);
 		expect((await notices(v1.id)).map((n) => n.event)).toEqual(['issued']);
