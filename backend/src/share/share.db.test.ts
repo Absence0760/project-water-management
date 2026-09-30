@@ -89,7 +89,7 @@ describe('owning share links', () => {
 		const list = await owner.call('GET', `/projects/${projectId}/share-links`);
 		expect(list.status).toBe(200);
 		const listed = list.body.links.find((l: { id: string }) => l.id === link.id);
-		expect(listed).toEqual({ id: link.id, label: 'Catchment forum', createdAt: link.createdAt, createdBy: 'Sowner', expiresAt: link.expiresAt, revokedAt: null, revokedBy: null, lastUsedAt: null, targetKind: null, targetId: null, mine: true });
+		expect(listed).toEqual({ id: link.id, label: 'Catchment forum', createdAt: link.createdAt, createdBy: 'Sowner', expiresAt: link.expiresAt, revokedAt: null, revokedBy: null, lastUsedAt: null, targetKind: null, targetId: null, target: null, mine: true });
 		// The list never carries the token or its hash.
 		expect(JSON.stringify(list.body)).not.toContain(tokenOf(link.url));
 		expect(Object.keys(listed)).not.toContain('url');

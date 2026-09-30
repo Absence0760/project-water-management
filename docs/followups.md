@@ -3706,12 +3706,14 @@ Applicant view and the Applications tab. Left:
       if the client accepts that they could then file applications).
       Trigger: the first real NGO invited to comment (client decision,
       step-3 D5).
-- [ ] **The owner's inventory of every public link.** The Project page's
-      Share links list shows the baseline links only; scenario links are
-      listed per application (its Share dialog), made by assessors and
-      applicants. Durable fix: list every live link for the owner with its
-      target, and revoke from there. Trigger: before the first scenario
-      link is used with a real catchment.
+- [x] **The owner's inventory of every public link.** Done 2026-09-30:
+      the Project page's Share links list is every link in the project
+      (`GET …/share-links?scope=all`, owner only), the baseline's and each
+      application's, with what it opens, who made it, its dates and a
+      Withdraw behind a confirm ([ui.md § Project](./ui.md#project), [security.md §
+      Scenario links](./security.md#scenario-links-wp-315-115_scenario_share_notessql)).
+      Pack links join the same list once packs are a share-link target (the
+      item under § Evidence report).
 - [ ] **Afrikaans for the shared application page** (WP-3.15): the
       `share.scenario` strings are on the translation sheet
       (docs/i18n/af-translation-sheet.md). If they are not translated in the

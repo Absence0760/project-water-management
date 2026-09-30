@@ -6,7 +6,7 @@
 // whatever sneaks into the row, no `user_display`, e-mail, member or other
 // farm's name comes out. The database side is share/scenario-share.db.test.ts.
 import { describe, expect, it } from 'vitest';
-import { shareUrl, toShareScenario, type ShareScenarioRow } from './links.js';
+import { ListQuery, shareUrl, toLink, toShareScenario, type ShareLinkRow, type ShareScenarioRow } from './links.js';
 
 const OWN = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -116,5 +116,42 @@ describe('shareUrl', () => {
 	it('keeps the baseline link as it was, and names a targeted link’s kind in the fragment', () => {
 		expect(shareUrl('tok')).toMatch(/\/share#t=tok$/);
 		expect(shareUrl('tok', 'scenario')).toMatch(/\/share#t=tok&k=scenario$/);
+	});
+});
+
+describe('the link list', () => {
+	const linkRow = (over: Partial<ShareLinkRow> = {}): ShareLinkRow => ({
+		id: OWN,
+		label: 'Forum',
+		created_at: new Date('2026-09-29T10:00:00Z'),
+		created_by_name: 'Jo',
+		expires_at: new Date('2026-10-29T10:00:00Z'),
+		revoked_at: null,
+		revoked_by_name: null,
+		last_used_at: null,
+		target_kind: null,
+		target_id: null,
+		target_name: null,
+		target_status: null,
+		mine: true,
+		...over
+	});
+
+	it('takes a scope or a scenario, not both', () => {
+		expect(ListQuery.parse({ scope: 'all' })).toEqual({ scope: 'all' });
+		expect(ListQuery.parse({})).toEqual({});
+		expect(() => ListQuery.parse({ scope: 'every' })).toThrow();
+		expect(() => ListQuery.parse({ scope: 'all', scenarioId: OTHER })).toThrow(/not both/);
+	});
+
+	it('names a target only when the caller read it', () => {
+		expect(toLink(linkRow()).target).toBeNull();
+		expect(toLink(linkRow({ target_kind: 'scenario', target_id: OTHER, target_name: 'Raise', target_status: 'submitted' }))).toMatchObject({
+			targetKind: 'scenario',
+			targetId: OTHER,
+			target: { name: 'Raise', status: 'submitted' }
+		});
+		// A target the caller can't read (RLS): kind and id stay, the name doesn't.
+		expect(toLink(linkRow({ target_kind: 'scenario', target_id: OTHER })).target).toBeNull();
 	});
 });

@@ -1292,6 +1292,12 @@ export interface ShareLink {
 	/** null: the published baseline; 'scenario': one scenario (WP-3.15). */
 	targetKind: ShareTargetKind | null;
 	targetId: string | null;
+	/**
+	 * The target's name and status as the caller reads them (RLS): null for the
+	 * baseline, and for a target they can't read now (an application reopened
+	 * as a draft, or deleted), which the link opens nothing of.
+	 */
+	target: { name: string; status: ScenarioStatus } | null;
 	/** The caller made it. */
 	mine: boolean;
 }
