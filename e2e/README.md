@@ -150,16 +150,18 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 
 ### Fonts: the same on every machine
 
-The browser sees only the DejaVu fonts in `e2e/fonts/` (`fonts.conf`, passed
-to Chromium as `FONTCONFIG_FILE` in `playwright.config.ts`), so a laptop lays
-text out exactly as CI does. The body text is `system-ui`, which is a
-different font on each machine (Noto Sans on Fedora, DejaVu Sans on the
-Ubuntu runner, which sets text wider), and layout checks such as "one row",
-"the bar has no More" or "the page doesn't scroll" used to pass locally and
-fail in CI (issue #162). `tests/fonts.spec.ts` fails if the pin stops reaching
-the browser. Nothing to install: the font files are committed (DejaVu's
-licence is `fonts/LICENSE-DejaVu`). The display face, Outfit, is a web font
-and the same everywhere anyway. When a layout check fails, fix the layout or
+Body text is the app's own web font, Inter (`frontend/static/fonts`,
+`brand/build.py`), so a Mac, a Fedora laptop and the Ubuntu runner lay it out
+alike. It used to be `system-ui`, a different font on each machine (SF Pro,
+Noto Sans, DejaVu Sans, which sets text wider), and layout checks such as "one
+row", "the bar has no More" or "the page doesn't scroll" passed locally and
+failed in CI (issues #162, #258). Everything else (monospace, and any fallback)
+comes from the DejaVu fonts in `e2e/fonts/` (`fonts.conf`, passed to Chromium
+as `FONTCONFIG_FILE` in `playwright.config.ts`); macOS Chromium doesn't read
+fontconfig, so there monospace is the Mac's own. `tests/fonts.spec.ts` fails if
+body text isn't Inter, or (on Linux) the pin stops reaching the browser.
+Nothing to install: the font files are committed (DejaVu's licence is
+`fonts/LICENSE-DejaVu`). The display face, Outfit, is a web font too. When a layout check fails, fix the layout or
 measure what fits; don't widen a margin until it passes on one machine.
 
 ## Layout

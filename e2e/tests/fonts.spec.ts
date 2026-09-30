@@ -1,11 +1,13 @@
 import { expect, test } from '../support/fixtures.ts';
 
-// The e2e browser lays text out in the pinned DejaVu fonts (e2e/fonts/fonts.conf,
-// playwright.config.ts), on a laptop as in CI. Before the pin the body text was
-// Noto Sans on a Fedora laptop and DejaVu Sans on the Ubuntu runner, and layout
-// checks passed locally and failed in CI (issue #162). This fails if the pin
-// stops reaching the browser: Chromium reports the platform font it drew with.
-test('the browser draws body and monospace text in the pinned DejaVu fonts', async ({ page }) => {
+// Every machine lays text out in the same fonts. Body text is the self-hosted
+// Inter (app.css, brand/build.py), a web font, so a Mac, a Fedora laptop and the
+// Ubuntu runner draw it alike; before, it was system-ui (SF Pro, Noto Sans,
+// DejaVu Sans), and layout checks passed on one and failed on another (issues
+// #162, #258). Monospace is still the platform's, pinned in e2e to DejaVu Sans
+// Mono (e2e/fonts/fonts.conf, playwright.config.ts; Linux only, since macOS
+// Chromium doesn't read fontconfig). Chromium reports the font it drew with.
+test('the browser draws body text in the self-hosted Inter and monospace in the pinned DejaVu', async ({ page }) => {
 	await page.goto('/login');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	const cdp = await page.context().newCDPSession(page);
@@ -18,8 +20,10 @@ test('the browser draws body and monospace text in the pinned DejaVu fonts', asy
 		const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
 		return fonts.map((f) => f.familyName);
 	};
-	// A label is body text (system-ui); the display face (Outfit) is a web font and not pinned.
-	expect(await fontsOf('label')).toEqual(['DejaVu Sans']);
+	// A label is body text: the web font, never a fallback (a missing file or a
+	// broken @font-face would draw the system's face and pass on no machine).
+	await page.evaluate(() => document.fonts.ready);
+	expect(await fontsOf('label')).toEqual(['Inter Variable']);
 	await page.evaluate(() => {
 		const code = document.createElement('code');
 		code.id = 'font-probe';

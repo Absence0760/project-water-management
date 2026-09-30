@@ -1,5 +1,26 @@
 /* Design tokens + base styles. Calm, data-dense scientific-tool look.
-   Brand (brand/README.md): Outlet mark, Outfit display, navy + cyan. */
+   Brand (brand/README.md): Outlet mark, Outfit display, Inter body, navy + cyan. */
+/* The body face, self-hosted so every platform lays text out in the same
+   metrics: system-ui was SF Pro on a Mac and DejaVu Sans in CI, so a layout
+   that fit one wrapped on the other (#258). Weights 400-700 (brand/build.py). */
+@font-face {
+	font-family: 'Inter';
+	src: url('/fonts/inter-variable.woff2') format('woff2');
+	font-weight: 400 700;
+	font-style: normal;
+	font-display: swap;
+}
+/* Until Inter arrives: Arial scaled to Inter's width and line metrics, so the
+   swap doesn't move the layout (size-adjust from the two fonts' letter-weighted
+   average advance; the overrides are Inter's ascent and descent ÷ that). */
+@font-face {
+	font-family: 'Inter fallback';
+	src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('Arimo');
+	size-adjust: 107.48%;
+	ascent-override: 90.13%;
+	descent-override: 22.44%;
+	line-gap-override: 0%;
+}
 @font-face {
 	font-family: 'Outfit';
 	src: url('/fonts/outfit-600.woff2') format('woff2');
@@ -10,7 +31,7 @@
 
 :root {
 	color-scheme: light;
-	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--font-sans: 'Inter', 'Inter fallback', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 	--font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 	--font-display: 'Outfit', system-ui, sans-serif;
 

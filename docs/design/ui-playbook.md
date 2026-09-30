@@ -483,9 +483,12 @@ section it belongs to, with the example that taught it.
   - **Reserve the text as drawn, not as estimated.** Room for a label comes
     from its width in the font it is drawn in (the schematic measures on a
     canvas, `measuredWidths`), with the per-character estimate only as the
-    floor: the system sans varies, and DejaVu Sans (Linux, CI) draws ~15 %
+    floor: DejaVu Sans (the old body font on Linux and CI) drew ~15 %
     wider than the estimate, which ran names into the next node and put a
-    transfer through "Melkhout Gauge".
+    transfer through "Melkhout Gauge". A canvas measures in whatever face has
+    loaded, so the schematic measures again when the page's fonts finish
+    loading (`document.fonts`), or a drawing made before Inter arrived keeps
+    the fallback's widths.
   - **Three steps of hierarchy:** the name (12.5 px, 600, `--text`), its
     figure (11 px, 400, `--text-muted`), and the line's own key (the legend,
     not a label on every line). Both text colours are ≥ 4.5:1 on the ground
@@ -911,15 +914,20 @@ Interaction details that bit:
   (`e2e/art/landing-screens.spec.ts`). A generated picture that runs off its
   frame fails its generator rather than a reviewer: `scripts/landing-art/modules.mjs`
   refuses a hero with anything on its edge.
-- **Size text for the widest common sans, not this laptop's.** `system-ui`
-  is Noto Sans on the Fedora workstation but DejaVu Sans on CI's Ubuntu
-  runner (and most Debian/Ubuntu desktops), about 12 % wider. The crop
-  list's phone sparkline column was 6rem, which held "Oct max 1.10 Sep" in
-  Noto with 0.1 px to spare and cut it to "max …" in DejaVu, so the spec
-  passed here and failed on CI. Give a fixed column that holds text the
-  DejaVu width, and check a layout spec under it locally by running
-  Playwright with `FONTCONFIG_FILE` pointing at a fontconfig file whose
-  `system-ui` and `sans-serif` aliases prefer DejaVu Sans.
+- **Body text is one font everywhere: the self-hosted Inter.** It used to be
+  `system-ui`, which is SF Pro on a Mac, Noto Sans on the Fedora workstation
+  and DejaVu Sans on CI's Ubuntu runner (about 12 % wider than Noto), so a
+  layout that fit one machine wrapped on another: the crop list's phone
+  sparkline column cut "Oct max 1.10 Sep" to "max …" only in CI, and #258's
+  Settings bar put two links in More only in CI. `--font-sans` is now
+  `'Inter'` (`frontend/static/fonts/inter-variable.woff2`, built by
+  `brand/build.py body-font`), with an Arial fallback scaled to Inter's
+  metrics for the moment before it loads, so a layout spec that passes on a
+  laptop passes in CI and on every reader's device. Still size a fixed
+  column for the text it holds with room to spare, not to the pixel: a
+  reader's browser can refuse web fonts. Monospace is still the platform's
+  (pinned to DejaVu Sans Mono in e2e on Linux; macOS Chromium ignores that
+  pin).
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

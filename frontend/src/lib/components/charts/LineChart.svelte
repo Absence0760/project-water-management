@@ -396,7 +396,7 @@
 		ctx.lineTo(x0, bbox.top + bbox.height);
 		ctx.stroke();
 		ctx.fillStyle = text;
-		ctx.font = `${12 * k}px system-ui, sans-serif`;
+		ctx.font = `${12 * k}px ${token('--font-sans', 'system-ui')}`;
 		ctx.textBaseline = 'top';
 		if (x1 - x0 > 40 * k) ctx.fillText(band.label, x0 + 4 * k, bbox.top + 4 * k);
 		ctx.restore();
