@@ -891,10 +891,21 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
-| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
+- **A bounding box** (`config.bbox`, `{ south, west, north, east }` in
+  degrees; `feeds/config.ts` `bboxCells`) is expanded, before every fetch, into
+  the 0.05° cells it overlaps. CHIRPS cell edges fall on multiples of 0.05°
+  (the grid starts at 180° W and 60° N / S), so a box edge on a grid line adds
+  no sliver cell (a 1e-6-cell tolerance absorbs float error). Each cell is read
+  at its centre and weighted by the share of it inside the box × cos(its
+  latitude), so the mean is area weighted. At most 100 cells in 25 rows: a
+  fetch reads one strip per grid row per day, so the worst case costs what 25
+  listed cells in 25 rows do; a bigger box is a `400`. A sea cell inside the
+  box fails the fetch, as a listed one does, rather than shrink the area the
+  mean covers; its message says to shrink the box or list cells.
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;
@@ -1080,8 +1091,7 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   keyed by its issue) refuses the answer whole as a failed fetch.
 
 Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
-audit event per merge (WP-2.4), the debounced re-run after new data (WP-2.11),
-and a bounding-box config for CHIRPS (cells only).
+audit event per merge (WP-2.4) and the debounced re-run after new data (WP-2.11).
 
 ## Server-side reports
 

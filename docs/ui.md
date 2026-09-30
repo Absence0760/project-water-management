@@ -3388,9 +3388,15 @@ part of the Settings tab's chunk; WP-2.10,
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
-  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either **Grid cells**
-  (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either an
+  **Area** (CHIRPS and the forecast) or a **DWS station** code. The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
+  east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
+  area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
+  rows, the server's limits mirrored so a box too big is explained before
+  anything is sent). The card says where a feed reads: "cell -20.12, 25.17",
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (`describePlace`). The station code (checked as `A2H012`; only river gauges, H codes).
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
   days*, the default, or *rnl: from 1981, final days only*: one product end
   to end, never one spliced onto the other) and an optional **Start date**,
@@ -3423,14 +3429,14 @@ part of the Settings tab's chunk; WP-2.10,
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by
-  the message and focuses it; busy buttons are `aria-disabled` so they keep
+  the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
   focus; after **Remove**, focus goes to the section heading. Messages land
   in a live region that is always in the page. A failed action re-reads the
   list (it was usually changed elsewhere), and a failed refresh keeps the
   list shown.
 - When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
-  default in dev and CI), a **Sample data** badge says so, and the cells hint
-  names the sample grid's extent.
+  default in dev and CI), a **Sample data** badge says so, and the cells and box hints
+  name the sample grid's extent (the box hint with a sample box inside it).
 - Viewers see the list and the health, with no buttons. Tested by
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).

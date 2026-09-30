@@ -1381,7 +1381,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Fixtures** are JSON (`chirps-sample.json`, `gefs-sample.json`) encoded
 >   into real LZW GeoTIFFs at request time, plus `dws-sample.html`, all
 >   re-dated to today, so a dev feed shows healthy.
-> - **Config**: cells only (1–25, weighted), no `bbox` yet. Optional
+> - **Config**: cells (1–25, weighted) or, since issue #69, a `bbox`
+>   (`{ south, west, north, east }`, the area-weighted mean of the 0.05° cells
+>   it overlaps, at most 100 cells in 25 rows). Optional
 >   `startDate` and `staleAfterDays`. One feed per series (unique target).
 > - **RLS**: as designed (viewer reads, owner writes), plus: the health
 >   columns can't be written directly (a trigger keeps them; a `SECURITY
