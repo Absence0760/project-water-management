@@ -1586,8 +1586,18 @@ note's link on the Summary, `notes.ts` `noteHref`).
     the sheet. With no nodes the map card is an empty panel with **Add
     outflow gauge**.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
-    filling the card, and one legend line under it. Colouring by supply is
+    filling the card, and the map key under it. Colouring by supply is
     **on by default** once the project has a run.
+  - **Map key** (`mapKey` in `NetworkSchematic.svelte`, also under the
+    report's drawing): headed groups, **Nodes** (the shapes), **Lines** (the
+    river, drawn thickening, "thicker with more area upstream", and
+    transfers) and **Colour: supply** / **Colour: dam level** (the bands),
+    then the run caption and the drag hint. Each swatch uses the map's own
+    shapes and classes (the dam square with its wave), and a colour band shows
+    a unit and a unit with a dam side by side, since the colour fills either
+    shape. It lists only what the drawing has (no Gauge entry without a
+    gauge, no Transfer without one). The drawing's colour tokens sit on the
+    box around map and key, so the key follows light and dark as the map does.
   - **Screen use:** from 900 px the layout is exactly the height left in the
     window below its top edge, less the page's 1rem gutter and the save bar
     while it shows (`--dock-h`; at least 520 px), the top measured on load and

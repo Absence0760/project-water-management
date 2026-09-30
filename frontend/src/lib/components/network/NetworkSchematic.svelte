@@ -81,6 +81,16 @@
 
 	const supplyOf = (id: string) => colouring?.byNode.get(id);
 	const legend = $derived(colouring?.legend ?? []);
+	// The map key lists only what the drawing has, so no entry sends the eye looking for a shape that isn't there.
+	const has = $derived({
+		unit: nodes.some((n) => n.kind === 'farm' && !hasDam(n)),
+		dam: nodes.some((n) => n.kind === 'farm' && hasDam(n)),
+		gauge: nodes.some((n) => n.kind === 'gauge' && n.downstreamNodeId !== null),
+		outlet: nodes.some((n) => n.kind === 'gauge' && n.downstreamNodeId === null),
+		user: nodes.some((n) => n.kind === 'user'),
+		transfer: transfers.length > 0
+	});
+	const COLOUR_HEADING = { supply: 'Colour: supply', dam: 'Colour: dam level' } as const;
 
 	const name = (n: NetworkNode) => n.name || '(unnamed)';
 	// Names as drawn: at most 17 characters, and never two different names cut to the same text.
@@ -311,6 +321,48 @@
 
 <svelte:window onkeydown={onKey} />
 
+<!-- The map key, in groups (the shapes, the lines, what the colour means), each
+     swatch drawn with the map's own shapes and classes so it looks like what it
+     names. A colour band shows a unit and a unit with a dam side by side: the
+     colour fills either shape. Hidden from assistive tech: each node's name,
+     kind and band are in the drainage tree and its label line. -->
+{#snippet mapKey()}
+	<div class="key" aria-hidden="true" data-testid="map-key">
+		<ul class="legend">
+			<li class="key-h">Nodes</li>
+			{#if has.unit}<li><svg width="18" height="18" viewBox="-10 -10 20 20"><circle class="farm" r="8" /></svg> Hydrological unit</li>{/if}
+			{#if has.dam}
+				<li>
+					<svg width="18" height="18" viewBox="-10 -10 20 20"><rect class="farm dam" x="-9" y="-9" width="18" height="18" rx="3" /><path class="dam-water" d="M-6,1 q3,-3 6,0 t6,0" /></svg>
+					Hydrological unit with a dam
+				</li>
+			{/if}
+			{#if has.gauge}<li><svg width="18" height="18" viewBox="-10 -10 20 20"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>{/if}
+			{#if has.outlet}<li><svg width="20" height="18" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow gauge</li>{/if}
+			{#if has.user}<li><svg width="18" height="18" viewBox="-11 -11 22 22"><path class="user" d="M0,-10 L10,0 L0,10 L-10,0 Z" /></svg> Other water user</li>{/if}
+		</ul>
+		<ul class="legend">
+			<li class="key-h">Lines</li>
+			<li>
+				<svg width="34" height="12" viewBox="0 0 34 12"><path class="arrow-river" d="M1,5.3 L25,3.6 L25,1.5 L33,6 L25,10.5 L25,8.4 L1,6.7 Z" /></svg>
+				River, thicker with more area upstream
+			</li>
+			{#if has.transfer}<li><svg width="30" height="12" viewBox="0 0 30 12"><path class="transfer" d="M1,6 H22" /><path class="arrow-transfer" d="M22,2 L29,6 L22,10 z" /></svg> Transfer</li>{/if}
+		</ul>
+		{#if colouring && legend.length}
+			<ul class="legend">
+				<li class="key-h">{COLOUR_HEADING[colouring.mode]}</li>
+				{#each legend as l (l.band)}
+					<li data-supply={l.band}>
+						<svg width="36" height="18" viewBox="-10 -10 38 20"><circle class="farm" r="8" /><rect class="farm" x="10" y="-8" width="16" height="16" rx="3" /></svg>
+						{l.label}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</div>
+{/snippet}
+
 {#snippet drawing(v: View, id: string)}
 	<svg
 		bind:this={svgEl}
@@ -409,7 +461,8 @@
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
-	<div class="sch" class:fill>
+	<!-- The drawing's tokens sit on this box, so the map key under the drawing is drawn in the same colours (and hatch) as the map. -->
+	<div class="sch" class:fill style:--sch-hatch="url(#{views.length > 1 ? `${uid}-0` : uid}-hatch)">
 	<!-- data-fit: the box size (and the media state) the drawing on screen was laid out for. A resize
 	     reaches the layout a frame or more later (the box's ResizeObserver, the media query's change
 	     event), so the drawing is settled only once this matches the box as it is now (e2e waits on
@@ -443,17 +496,7 @@
 		     they come from, then the drag hint. While dragging, the hint is the
 		     live drop status instead. -->
 		<div class="legend-line">
-			<ul class="legend" aria-hidden="true">
-				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Hydrological unit</li>
-				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><rect class="farm dam" x="-8" y="-8" width="16" height="16" rx="3" /></svg> With dam</li>
-				<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
-				<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow</li>
-				{#if nodes.some((n) => n.kind === 'user')}<li><svg width="16" height="16" viewBox="-11 -11 22 22"><path class="user" d="M0,-9 L9,0 L0,9 L-9,0 Z" /></svg> Other user</li>{/if}
-				<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
-				{#each legend as l (l.band)}
-					<li data-supply={l.band}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {l.label}</li>
-				{/each}
-			</ul>
+			{@render mapKey()}
 			{#if colouring}
 				<p class="supply-run">
 					{colouring.caption}
@@ -501,18 +544,7 @@
 		</p>
 	{/if}
 
-	<ul class="legend" aria-hidden="true">
-		<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Hydrological unit</li>
-		<li>
-			<svg width="16" height="16" viewBox="-9 -9 18 18"><rect class="farm dam" x="-8" y="-8" width="16" height="16" rx="3" /></svg>
-			Hydrological unit with dam
-		</li>
-		<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
-		<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow gauge</li>
-		{#if nodes.some((n) => n.kind === 'user')}<li><svg width="16" height="16" viewBox="-11 -11 22 22"><path class="user" d="M0,-9 L9,0 L0,9 L-9,0 Z" /></svg> Other water user</li>{/if}
-		<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
-		<li class="muted">Line width grows with upstream area; labels show area incl. upstream.</li>
-	</ul>
+	{@render mapKey()}
 	{#if colouring}
 		<!-- Read out (not aria-hidden): what the colours show and from which run.
 		     The bands themselves are also in each node's label and the drainage tree. -->
@@ -521,11 +553,6 @@
 				{colouring.caption}
 				{#if colouring.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
 			</p>
-			<ul class="legend" aria-hidden="true">
-				{#each legend as l (l.band)}
-					<li data-supply={l.band}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {l.label}</li>
-				{/each}
-			</ul>
 		</div>
 	{/if}
 
@@ -557,7 +584,9 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface-sunken);
-		/* Tokens for the drawing, following light/dark mode. */
+	}
+	/* Tokens for the drawing and its key, following light/dark mode. */
+	.sch {
 		--sch-river: var(--brand-outlet);
 		--sch-node: var(--text);
 		--sch-fill: var(--surface);
@@ -566,11 +595,11 @@
 		--sch-ground: var(--surface-sunken);
 	}
 	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) .scroller {
+		:global(:root:not([data-theme='light'])) .sch {
 			--sch-transfer: #b79cf0;
 		}
 	}
-	:global(:root[data-theme='dark']) .scroller {
+	:global(:root[data-theme='dark']) .sch {
 		--sch-transfer: #b79cf0;
 	}
 	.schematic {
@@ -823,10 +852,24 @@
 	}
 	.legend svg {
 		overflow: visible;
-		--sch-river: var(--brand-outlet);
-		--sch-node: var(--text);
-		--sch-fill: var(--surface);
-		--sch-transfer: #7a4fc4;
+		flex: none;
+	}
+	/* The key: one group per row on a phone, side by side when there is room,
+	   each led by its heading so shapes and colours don't read as one list. */
+	.key {
+		flex-basis: 100%;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 2rem;
+		margin-top: 0.6rem;
+	}
+	.key .legend {
+		margin: 0;
+		gap: 0.3rem 0.9rem;
+	}
+	.key-h {
+		font-weight: 600;
+		color: var(--text);
 	}
 	/* Paper bands (taller than a page): each prints whole, its notes with it,
 	   in a box of its own rather than one box broken across the pages. */
