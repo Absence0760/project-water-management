@@ -28,6 +28,8 @@
 		caption,
 		shade = [],
 		shadeKey,
+		lanes = [],
+		lanesLabel = 'Flagged days',
 		band,
 		pannable = true,
 		print = false,
@@ -66,6 +68,16 @@
 		 * hydrograph's calibration exclusions).
 		 */
 		shadeKey?: { label: string; items: string[] };
+		/**
+		 * Daily charts: day ranges drawn as thin strips along the foot of the
+		 * plot, one strip per entry (top strip first), behind the lines, with a
+		 * key under the plot listing each strip's `text` beside its swatch, so
+		 * a strip reads by its place and its words as well as its colour (the
+		 * observed flow's per-day quality flags, calibration/flowFlags.ts).
+		 */
+		lanes?: readonly { label: string; color: string; ranges: readonly { start: string; end: string }[]; text: string }[];
+		/** The lanes key's heading. */
+		lanesLabel?: string;
 		/**
 		 * Daily charts: one labelled band behind the lines from `from` (to `to`,
 		 * else the end), hatched, named on the plot and in a text key under it,
@@ -187,11 +199,12 @@
 			...(print ? { select: { show: false, left: 0, top: 0, width: 0, height: 0 } } : {}),
 			hooks: {
 				draw: [() => (ready = true)],
-				...(isTime && (shade.length || band)
+				...(isTime && (shade.length || band || lanes.length)
 					? {
 							drawClear: [
 								(u: uPlot) => {
 									if (shade.length) drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16));
+									if (lanes.length) drawLanes(u);
 									if (band) drawBand(u, token('--series-4', '#7a4fc4'), token('--text', '#1f2421'));
 								}
 							]
@@ -327,6 +340,30 @@
 		ctx.restore();
 	}
 
+	/** A lane's height in CSS pixels (a 1 px gap above each strip keeps neighbours apart). */
+	const LANE_H = 6;
+
+	/** Each lane a strip LANE_H high along the plot's foot, the first on top, its ranges a day wide at each end. */
+	function drawLanes(u: uPlot) {
+		const { ctx, bbox } = u;
+		// Canvas pixels: the print box's scale, else the screen's pixel ratio (uPlot draws at it).
+		const px = print ? k : uPlot.pxRatio;
+		const h = LANE_H * px;
+		const top = bbox.top + bbox.height - lanes.length * h;
+		ctx.save();
+		lanes.forEach((lane, i) => {
+			ctx.fillStyle = withAlpha(token(lane.color, '#6c706c'), 0.75);
+			const y = top + i * h;
+			for (const r of lane.ranges) {
+				const x0 = Math.max(bbox.left, u.valToPos(epochSec(r.start), 'x', true));
+				const x1 = Math.min(bbox.left + bbox.width, u.valToPos(epochSec(r.end) + 86_400, 'x', true));
+				// At least a device pixel, so a lone flagged day shows on a decades-long view.
+				if (x1 > bbox.left && x0 < bbox.left + bbox.width) ctx.fillRect(x0, y + px, Math.max(x1 - x0, px), h - px);
+			}
+		});
+		ctx.restore();
+	}
+
 	/** The labelled band: a light tint with diagonal hatching (so it reads without colour), a dashed edge, its label at the top. */
 	function drawBand(u: uPlot, color: string, text: string) {
 		const span = band ? bandSpan(band, aligned.x) : null;
@@ -421,7 +458,7 @@
 
 	// Rebuild when data, unit, scale, height or theme change…
 	$effect(() => {
-		void [plotted, unit, height, themeTick, hasData, host, log, series, shade, band];
+		void [plotted, unit, height, themeTick, hasData, host, log, series, shade, band, lanes];
 		untrack(build);
 	});
 	// …and only resize in place when the container width changes.
@@ -444,6 +481,7 @@
 <figure
 	class="chart"
 	data-shaded={shade.length || undefined}
+	data-lanes={(isTime && lanes.length) || undefined}
 	data-band-from={band && isTime && bandSpan(band, aligned.x) ? band.from : undefined}
 	data-view-start={isTime && view ? isoDay(view.min) : undefined}
 	data-view-end={isTime && view ? isoDay(view.max) : undefined}
@@ -510,6 +548,14 @@
 			<p><i aria-hidden="true"></i><strong>{shadeKey.label}</strong> (tinted)</p>
 			<ul>
 				{#each shadeKey.items as item (item)}<li>{item}</li>{/each}
+			</ul>
+		</div>
+	{/if}
+	{#if lanes.length && isTime && hasData}
+		<div class="lane-key">
+			<p><strong>{lanesLabel}</strong> (strips along the foot of the plot, top to bottom)</p>
+			<ul>
+				{#each lanes as lane (lane.label)}<li><i aria-hidden="true" style:background="var({lane.color})"></i>{lane.text}</li>{/each}
 			</ul>
 		</div>
 	{/if}
@@ -635,6 +681,30 @@
 		margin: 0.1rem 0 0 1.5rem;
 		padding: 0 0 0 1rem;
 		color: var(--text-2);
+	}
+	.lane-key {
+		margin: 0.25rem 0 0;
+		font-size: 0.8125rem;
+	}
+	.lane-key p {
+		margin: 0;
+	}
+	.lane-key ul {
+		margin: 0.1rem 0 0;
+		padding: 0;
+		list-style: none;
+		color: var(--text-2);
+	}
+	.lane-key li {
+		display: flex;
+		gap: 0.4rem;
+		align-items: baseline;
+	}
+	.lane-key i {
+		flex: none;
+		display: inline-block;
+		width: 1.1rem;
+		height: 0.35rem;
 	}
 	.band-key {
 		margin: 0.25rem 0 0;

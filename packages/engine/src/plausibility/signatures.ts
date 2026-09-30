@@ -31,7 +31,8 @@
 // extrapolated flood is still a flood), and the days below the lowest gauging
 // are the low-flow curve itself. The recession segments leave out the days
 // the record's quality flags mark (CR-18), as the recession check does: the
-// caller passes that mask, so a run that stores the flags passes its own.
+// caller passes that mask (a run: the exclusions and the scored record's
+// flagged days, the classes it stores as observed_flow_quality).
 import type { CalibrationFlowKind } from '../project';
 import { fdcSignatures } from '../calibrate/objective';
 import { ECKHARDT_FILTER, HUGHES_FILTER, filterBaseflow, type BaseflowFilter, type EckhardtFilter, type QuickflowFilter } from '../reserve/baseflow';

@@ -36,6 +36,7 @@ const lucerne = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(
 const T_HIDDEN = crypto.randomUUID();
 const LC_HIDDEN = crypto.randomUUID();
 const BH_HIDDEN = crypto.randomUUID();
+const DO_HIDDEN = crypto.randomUUID();
 
 const P = () => `/projects/${projectId}`;
 const rename = (value: string) => ({ op: 'node.set', nodeId: rooikloof.id, field: 'name', value });
@@ -62,7 +63,8 @@ beforeAll(async () => {
 		],
 		transfers: [{ id: T_HIDDEN, fromNodeId: kalkoenkrans.id, toNodeId: bergvliet.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }],
 		landCover: [{ id: LC_HIDDEN, nodeId: kalkoenkrans.id, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null }],
-		boreholes: [{ id: BH_HIDDEN, nodeId: bergvliet.id, name: 'Bergvliet BH', capacityM3Day: 100, annualCapM3: null }]
+		boreholes: [{ id: BH_HIDDEN, nodeId: bergvliet.id, name: 'Bergvliet BH', capacityM3Day: 100, annualCapM3: null }],
+		demandObjects: [{ id: DO_HIDDEN, nodeId: bergvliet.id, name: 'Bergvliet village', category: 'municipal', sizing: 'monthly', monthlyM3Day: monthly(50) }]
 	};
 	const put = await owner.call('PUT', `${P()}/model`, model);
 	expect(put.status, JSON.stringify(put.body)).toBe(200);
@@ -243,6 +245,8 @@ describe('ids and counts of what the applicant can’t see', () => {
 		[T_HIDDEN, (id) => ({ op: 'transfer.remove', transferId: id })],
 		[LC_HIDDEN, (id) => ({ op: 'landCover.remove', patchId: id })],
 		[BH_HIDDEN, (id) => ({ op: 'borehole.remove', boreholeId: id })],
+		[DO_HIDDEN, (id) => ({ op: 'demandObject.remove', demandObjectId: id })],
+		[DO_HIDDEN, (id) => ({ op: 'demandObject.set', demandObjectId: id, field: 'returnPct', value: 0.1 })],
 		[lucerne.id, (id) => ({ op: 'cropArea.set', nodeId: rooikloof.id, cropId: id, areaM2: 10 })]
 	];
 
@@ -283,7 +287,7 @@ describe('ids and counts of what the applicant can’t see', () => {
 	});
 
 	it('counts nothing a hidden farm carries when an application removes it', async () => {
-		// Kalkoenkrans carries a crop area, a transfer and land cover; Bergvliet the transfer's other end and a borehole.
+		// Kalkoenkrans carries a crop area, a transfer and land cover; Bergvliet the transfer's other end, a borehole and a demand object.
 		const k = await probe([{ op: 'node.remove', nodeId: kalkoenkrans.id }]);
 		const b = await probe([{ op: 'node.remove', nodeId: bergvliet.id }]);
 		expect(k.check.applied).toEqual([{ index: 0, op: { op: 'node.remove', nodeId: kalkoenkrans.id }, notes: [] }]);

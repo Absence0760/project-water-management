@@ -4,7 +4,8 @@
 // the edited copy back into ScenarioOps: node fields → node.set, a crop area →
 // cropArea.set, a new node → node.add (or node.insert, when existing nodes now
 // drain into it), what a node drains into → node.move, a crop's factors →
-// crop.set, a borehole → borehole.add, and so on. Each op is checked with the
+// crop.set, a borehole → borehole.add, a demand object → demandObject.add /
+// .set / .remove, and so on. Each op is checked with the
 // "Add a change" form's own check (ops.ts checkOp: the engine's
 // validateScenarioOps), and the whole list is then applied to the model it
 // was diffed from (the engine's applyScenario): it must apply cleanly and give
@@ -12,11 +13,14 @@
 // an edit no op can express is named rather than dropped. No Svelte, no API.
 import {
 	CROP_SET_FIELDS,
+	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
 	TRANSFER_SET_FIELDS,
 	applyScenario,
 	type CropArea,
+	type DemandObject,
+	type DemandObjectSetField,
 	type ModelInput,
 	type NetworkNode,
 	type NodeSetField,
@@ -26,13 +30,13 @@ import {
 	type ScenarioOp,
 	type TransferSetField
 } from '@water-management/engine';
-import { CROP_FIELD_SPECS, LAND_COVER_FIELD_SPECS, NODE_FIELD_SPECS, TRANSFER_FIELD_SPECS } from './fields';
+import { CROP_FIELD_SPECS, DEMAND_OBJECT_FIELD_SPECS, LAND_COVER_FIELD_SPECS, NODE_FIELD_SPECS, TRANSFER_FIELD_SPECS, type DemandObjectFormField } from './fields';
 import { checkOp, nameIds, namesOf } from './ops';
 
 export interface OverrideDiff {
 	/** The edits as ops, in an order that applies (new crops and nodes before what refers to them). */
 	ops: ScenarioOp[];
-	/** Edits no op can express (a node's kind, the outflow moved, a demand object…), in words. Nothing is recorded while there are any. */
+	/** Edits no op can express (a node's kind, the outflow moved…), in words. Nothing is recorded while there are any. */
 	unsupported: string[];
 	/** An op the engine refuses, or a list that doesn't apply or doesn't give back the edited model. */
 	problems: string[];
@@ -230,10 +234,18 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	for (const id of bBores.keys()) if (!aBores.has(id) || changedBores.some((x) => x.id === id)) ops.push({ op: 'borehole.remove', boreholeId: id });
 	for (const x of aBores.values()) if (!bBores.has(x.id) || changedBores.includes(x)) ops.push({ op: 'borehole.add', borehole: plain(x) });
 
-	// --- demand objects (engine ≥ 1.7.0): no scenario op adds, changes or removes one yet (a follow-up), so an edit can't be recorded
-	{
-		const key = (xs: readonly { nodeId: string }[] | undefined) => JSON.stringify((xs ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => plain(x)).sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1)));
-		if (key(b.demandObjects) !== key(after.demandObjects)) unsupported.push("Adding, changing or removing a demand object: a scenario can't change demand objects yet. Change them on the catchment.");
+	// --- demand objects (engine ≥ 1.45.0): as land cover, removed, added (one moved to another unit is removed and
+	// added again), and an object changed in place is demandObject.set per changed field, its ops next to each other
+	// (one edit group, checked against the save rules once after the last: a sizing switched with its count and litres)
+	const bObjs = new Map((b.demandObjects ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => [x.id, x]));
+	const aObjs = new Map((after.demandObjects ?? []).map((x) => [x.id, x]));
+	const movedObjs = [...aObjs.values()].filter((x) => bObjs.has(x.id) && bObjs.get(x.id)!.nodeId !== x.nodeId);
+	for (const id of bObjs.keys()) if (!aObjs.has(id) || movedObjs.some((x) => x.id === id)) ops.push({ op: 'demandObject.remove', demandObjectId: id });
+	for (const x of aObjs.values()) if (!bObjs.has(x.id) || movedObjs.includes(x)) ops.push({ op: 'demandObject.add', demandObject: plain(x) });
+	for (const x of aObjs.values()) {
+		const was = bObjs.get(x.id);
+		if (!was || movedObjs.includes(x)) continue;
+		for (const f of DEMAND_OBJECT_SET_FIELDS) if (!same(objectField(was, f), objectField(x, f))) ops.push({ op: 'demandObject.set', demandObjectId: x.id, field: f, value: plain(objectField(x, f)) } as ScenarioOp);
 	}
 
 	// --- each op through the form's check, then the whole list against the model it came from
@@ -250,7 +262,9 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 						? CROP_FIELD_SPECS[op.field as CropSetField]?.spec
 						: op.op === 'landCover.set'
 							? LAND_COVER_FIELD_SPECS[op.field as LandCoverSetField]?.spec
-							: null;
+							: op.op === 'demandObject.set'
+								? DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField]?.spec
+								: null;
 		const c = checkOp(op, spec ?? null);
 		if (!c.ok) problems.push(`${whereOf(op, names)}: ${c.error}`);
 	}
@@ -261,6 +275,20 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			problems.push("These edits don't come out the same when recorded as changes, so they can't be recorded. Discard them and make them one at a time.");
 	}
 	return { ops, unsupported, problems };
+}
+
+/**
+ * A demand object's field as a scenario compares and records it: no
+ * schedule, null and an empty one run the same (engine ≥ 1.17.0), a note
+ * left out is empty, and a name and a note are trimmed as a save trims them.
+ */
+function objectField(o: DemandObject, f: DemandObjectSetField): unknown {
+	// Each window in the engine's key order, as a model read back from jsonb or an op rebuilt by the engine has it.
+	if (f === 'schedule')
+		return o.schedule?.length ? o.schedule.map((w) => ({ label: w.label.trim(), span: w.span, from: w.from, to: w.to, easterFrom: w.easterFrom, easterTo: w.easterTo, weekdays: w.weekdays, factor: w.factor })) : null;
+	if (f === 'note' || f === 'name') return (o[f] ?? '').trim();
+	if (f === 'population') return o.population ?? null;
+	return o[f];
 }
 
 /** A plain deep copy (JSON: what the API stores anyway). */
@@ -293,14 +321,18 @@ function whereOf(op: ScenarioOp, names: ReadonlyMap<string, string>): string {
 			return `A land-cover patch, ${LAND_COVER_FIELD_SPECS[op.field as LandCoverSetField]?.label ?? op.field}`;
 		case 'borehole.add':
 			return `The borehole “${op.borehole.name || 'unnamed'}” on ${nm(op.borehole.nodeId)}`;
+		case 'demandObject.add':
+			return `The demand object “${op.demandObject.name || 'unnamed'}” on ${nm(op.demandObject.nodeId)}`;
+		case 'demandObject.set':
+			return `The demand object ${nm(op.demandObjectId)}, ${op.field === 'schedule' ? 'Schedule' : (DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField]?.label ?? op.field)}`;
 		default:
 			return 'A change';
 	}
 }
 
 /**
- * The same model for a scenario's purposes: the same nodes, crops, transfers
- * and land cover by id with the same values, crop areas summed per farm and
+ * The same model for a scenario's purposes: the same nodes, crops, transfers,
+ * land cover, boreholes and demand objects by id with the same values, crop areas summed per farm and
  * crop, months as sets. Array order and sortOrder (display only) are ignored.
  */
 function sameModel(x: ProjectModel, y: ProjectModel): boolean {
@@ -319,7 +351,8 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
 			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
-			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1)))
+			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1))),
+			objects: byId(m.demandObjects ?? [], (x) => [x.id, x.nodeId, ...DEMAND_OBJECT_SET_FIELDS.map((f) => objectField(x, f))])
 		});
 	};
 	return norm(x) === norm(y);

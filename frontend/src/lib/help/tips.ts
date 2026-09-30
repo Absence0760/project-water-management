@@ -432,10 +432,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-factor',
 		term: 'Demand factor',
-		short: 'A scenario’s multiplier on what a hydrological unit or other water user would take, per month: 0.85 is 85 % of it.',
+		short: 'A scenario’s multiplier on what a unit or water user would take, per month (0.85 = 85 %); on a unit also per part (crops, a category).',
 		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
 		category: 'farm',
-		fields: ['node.demandFactor']
+		fields: ['node.demandFactor', 'node.partDemandFactor']
 	},
 	{
 		id: 'return-flow',
@@ -748,7 +748,7 @@ export const TIPS: HelpTipText[] = [
 		term: 'Quality flags (per-day)',
 		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
 		category: 'fit',
-		fields: ['settings.qualityFlags']
+		fields: ['settings.qualityFlags', 'run.observed_flow_quality']
 	},
 	{
 		id: 'calibration-rules',

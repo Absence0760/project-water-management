@@ -24,8 +24,11 @@ import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSup
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
+import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
+import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
+import { FLOW_FILL_COLUMNS } from '../flowGapFill';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
 
@@ -52,7 +55,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+// observed_flow_filled / observed_flow_other_filled (engine ≥ 1.23.0) are NaN on every day the gap fill didn't fill.
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -69,11 +73,13 @@ interface ObjectColumns {
 	schedule: (Float64Array | null)[];
 	/** Each object's basic-needs floor (engine ≥ 1.44.0), recomputed from the model; null without one. */
 	floor: (number | null)[];
+	/** Each object's category, for its part's demand factor (engine ≥ 1.45.0). */
+	category: DemandObject['category'][];
 }
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
 	const list = demandObjectsByNode(input.model, []).get(n.id);
 	if (!list) return null;
-	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [] };
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [], category: [] };
 	for (const o of list) {
 		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
 		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
@@ -85,6 +91,7 @@ function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: P
 		out.monthly.push(objectMonthlyM3Day(o, []));
 		out.schedule.push(scheduleFactors(o.schedule, toEpochDay(run.startDate), run.days, [], ''));
 		out.floor.push(basicNeedsM3Day(o));
+		out.category.push(o.category);
 	}
 	return out;
 }
@@ -122,6 +129,59 @@ export function checkRainSource(out: ModelOutput): string | null {
 	return null;
 }
 
+/**
+ * The `observed_flow_quality` column (engine ≥ 1.48.0, ../calibrate/dayFlags.ts
+ * recordFlowFlags) against the record it flags: stored once, beside the
+ * scored `observed_flow` (the calibration site's node, else the catchment's),
+ * as many days long, each day a class code; missing exactly where the record
+ * has no reading and no gap fill, infilled exactly on the filled days, and
+ * the gauged-range classes agreeing with the record's rating (settings
+ * .qualityFlags; a gauge inside the network has none, and no fill). Human
+ * use is never set. A run with filled days stores the column (they are
+ * flagged). A column with no flagged day is allowed: a run resumed from a
+ * snapshot keeps its capture run's column whatever its own days hold.
+ */
+export function checkFlowQuality(input: ModelInput, out: ModelOutput): string | null {
+	const cols = out.series.filter((s) => s.key === FLOW_QUALITY_COLUMN.key);
+	const site = out.summary.calibration?.siteNodeId ?? null;
+	const fillCode = out.series.find((s) => s.nodeId === site && s.key === FLOW_FILL_COLUMNS.observed_flow.code.key)?.values;
+	if (!cols.length) {
+		if (out.summary.calibration && fillCode?.some((v) => v !== 0)) return `the scored record has gap-filled days but no ${FLOW_QUALITY_COLUMN.key} column`;
+		return null;
+	}
+	if (cols.length > 1) return `${cols.length} ${FLOW_QUALITY_COLUMN.key} columns; one is stored, beside the scored record`;
+	const q = cols[0]!;
+	if (q.nodeId !== site) return `${FLOW_QUALITY_COLUMN.key} is stored at ${q.nodeId ?? 'the catchment'}, but the run scores ${site ?? 'the outlet'}`;
+	const obsCol = out.series.find((s) => s.nodeId === site && s.key === 'observed_flow');
+	if (!obsCol) return `${FLOW_QUALITY_COLUMN.key} has no observed_flow beside it`;
+	const obs = obsCol.values;
+	if (q.values.length !== obs.length) return `${FLOW_QUALITY_COLUMN.key} has ${q.values.length} days, observed_flow ${obs.length}`;
+	// The scored record's kind (summary.calibration is set whenever the column is).
+	const kind = out.summary.calibration?.flowKind;
+	const rating = site === null && kind ? resolveQualityFlags(input.settings.qualityFlags).ratings[kind] : undefined;
+	const hi = rating?.gaugedMaxM3s ?? null;
+	const lo = rating?.gaugedMinM3s ?? null;
+	const SEC = 86_400;
+	for (let t = 0; t < obs.length; t++) {
+		const c = q.values[t]!;
+		const f = FLOW_DAY_FLAGS[c];
+		if (!Number.isInteger(c) || !f) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${c}, not a class code`;
+		if (f === 'humanUse') return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is human use, which no run sets`;
+		const filled = !!fillCode?.[t];
+		const reading = Number.isFinite(obs[t]!);
+		if ((f === 'infilled') !== filled) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${f} where the gap fill ${filled ? 'filled the day' : 'filled nothing'}`;
+		if (!filled && (f === 'missing') === reading) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${f} where observed_flow is ${obs[t]}`;
+		if (!reading) continue;
+		const m3s = obs[t]! / SEC;
+		const above = hi !== null && m3s > hi * (1 + 1e-12);
+		if (f === 'aboveRating' && (hi === null || m3s <= hi * (1 - 1e-12))) return `day ${t} is flagged above the highest gauging, but reads ${m3s} m³/s (highest gauging ${hi ?? 'none'})`;
+		if (f === 'belowRating' && (lo === null || !(m3s > 0) || m3s >= lo * (1 + 1e-12))) return `day ${t} is flagged below the lowest gauging, but reads ${m3s} m³/s (lowest gauging ${lo ?? 'none'})`;
+		if (f === 'inRange' && (above || (lo !== null && m3s > 0 && m3s < lo * (1 - 1e-12))))
+			return `day ${t} reads ${m3s} m³/s, outside the gauged range ${lo ?? '0'} … ${hi ?? '∞'} m³/s, but is flagged in range`;
+	}
+	return null;
+}
+
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
@@ -134,6 +194,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	}
 	const rainSourceProblem = checkRainSource(out);
 	if (rainSourceProblem) return rainSourceProblem;
+	const flowQualityProblem = checkFlowQuality(input, out);
+	if (flowQualityProblem) return flowQualityProblem;
 	const nodes = input.model.nodes;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null)!;
 	let totIn = 0;
@@ -1051,13 +1113,18 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
-		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF);
+		// On F, the crops' own factor too (engine ≥ 1.45.0, demand.scale with part 'crops').
+		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF, 'crops');
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		// The basic-needs floor (engine ≥ 1.44.0): the scenario's restriction alone (a floor holds against it), and
 		// the unit's basic_needs column, Σ MIN(floor, demand) over its floored objects, exactly when it has one.
 		const SC = objs && objs.floor.some((f) => f !== null) ? dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay : null;
+		// Each object's own factor (engine ≥ 1.45.0): the unit's × its category's, with and without a full allocation's.
+		const objFactors = objs
+			? objs.category.map((c) => ({ df: dailyDemandFactor(input.settings, n, day0, out.days, KF, c).perDay, sc: dailyDemandFactor(input.settings, n, day0, out.days, undefined, c).perDay }))
+			: null;
 		const abstractFrom = SC ? abstractionStartDay(n, day0, out.days, []) : 0;
 		const BN = g(BASIC_NEEDS_SERIES.key);
 		if (!!BN !== !!SC) return `${n.id}: ${BN ? 'a basic_needs column without a domestic or municipal object with people' : 'no basic_needs column for its basic-needs floor'}`;
@@ -1107,7 +1174,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${scaled ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${scaled ? ')' : ''}`;
 			if (objs) {
-				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom);
+				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom, objFactors);
 				if (bad) return bad;
 				let od = 0;
 				for (const x of objs.demand) od += x[t]!;
@@ -1292,7 +1359,19 @@ function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volum
  * only once every earlier one is met), and within a class every member
  * (the crops, demand `crop`, in class 1) gets the same share of its demand.
  */
-function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number, crop: number, G: number, where: string, sc = df, alloc = 1, abstracts = true): string | null {
+function checkObjectsDay(
+	objs: ObjectColumns,
+	t: number,
+	wy: number,
+	unitDf: number,
+	crop: number,
+	G: number,
+	where: string,
+	unitSc = unitDf,
+	alloc = 1,
+	abstracts = true,
+	factors: { df: Float64Array; sc: Float64Array }[] | null = null
+): string | null {
 	const n = objs.demand.length;
 	let got = 0;
 	let scale = Math.max(G, crop);
@@ -1306,6 +1385,9 @@ function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number,
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
 		const fl = objs.floor[k];
+		// Its own factor (engine ≥ 1.45.0): the unit's × its category's.
+		const df = factors ? factors[k]!.df[t]! : unitDf;
+		const sc = factors ? factors[k]!.sc[t]! : unitSc;
 		const floored = fl !== null && abstracts && sc < 1;
 		// Restricted: MAX(demand × sc, MIN(floor, demand)); a full allocation's factor then scales it, holding that floor too.
 		const pre = floored ? Math.max(objs.monthly[k]![wy]! * sc * sf, dayFloor(fl!, objs.monthly[k]![wy]! * sf)) : 0;

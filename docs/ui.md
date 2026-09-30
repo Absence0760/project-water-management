@@ -2735,7 +2735,15 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). The alternative catchment gauge and the reanalysis (engine ≥
+was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+flags**: on a flow record a run reads (the outlet's gauge or logger record,
+or the calibration site's record when calibration scores a gauge inside the
+network), the days Fit automatically would flag (above
+or below the record's gauged range, suspect, infilled; model.md §2.10h) are
+strips along the foot of the chart with a key in words, as on the Runs
+hydrograph, computed from the stored record under the current settings
+(`recordFlowFlags`, so a gauge's record has no gauged range and no fill) and
+naming what Fit automatically does with each class now. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -4484,7 +4492,20 @@ read it before.
   its calibration statistics applied), never the project's current ones, so
   an old run shows what it was fitted and scored with. Each is clipped to the
   hydrograph's days; one that runs past them says "(partly outside the run)",
-  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). **The
+  observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
+  run's `observed_flow_quality` column, stored only when a day is flagged)
+  are thin strips along the foot of the plot, behind the lines, one strip
+  per flagged class (above the highest gauging, below the lowest, suspect,
+  infilled; top to bottom in that order, each in its own `--series-*`
+  colour), so a class reads by its place as well as its colour. A key under
+  the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
+  with its days and what Fit automatically does with them under the run's
+  own settings snapshot: "Above the highest gauging: 14 days; Fit
+  automatically: censored at the highest gauging" (`calibration/flowFlags.ts`). They
+  follow the scored record: on a run scored at a gauge inside the network
+  they are on the calibration site's hydrograph, not the outlet's. The figure
+  carries `data-lanes`. A plain
   drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
@@ -5135,7 +5156,10 @@ them scenarios).
   or remove a transfer, add or remove land cover, change a setting, scale
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
-  months; none ticked is all; `demand.scale`, issue #53 R1), set an EWR
+  months; none ticked is all; `demand.scale`, issue #53 R1; for units, from
+  engine 1.45.0, **Part of their demand**: all of it, the crops, or the
+  demand objects of one category, DWS's % per category, never below a
+  domestic or municipal object's basic-needs floor), set an EWR
   site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
   gauge marked as an EWR site, then the Settings tab's own table editor,
   starting from the site's table; always a baseline assumption,
@@ -5144,7 +5168,12 @@ them scenarios).
   reach (ticking the nodes draining there that will drain into it), change
   or remove a crop, change a land-cover patch (its reductions typed as
   "MAR %; low-flow %"), remove an EWR site's rule table, and set (new, or an
-  existing one filled in) or remove a registered volume
+  existing one filled in) or remove a registered volume; from engine 1.45.0
+  add a demand object (unit, name, category, and m³/day by month or a count
+  × litres a day, the rest at the category's defaults), change one field of
+  one (every field, labelled as on the Network tab's form; its on/off
+  schedule with the Network tab's own schedule editor, recorded whole) or
+  remove one
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
@@ -5189,9 +5218,11 @@ them scenarios).
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
-  change can express (a node's kind, the outlet moved, a demand object…) is
+  change can express (a node's kind, the outlet moved…) is
   listed there and disables Record until it is undone (a crop's factors, a
-  crop removed and what a node drains into record from engine 1.35.0); the
+  crop removed and what a node drains into record from engine 1.35.0, and a
+  demand object added, changed or removed, its schedule and people served
+  included, from engine 1.45.0); the
   tables' own problems ("Fix before saving") block it too. While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an

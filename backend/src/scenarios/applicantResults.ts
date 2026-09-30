@@ -304,7 +304,8 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 		cropAreas: ran.cropAreas.map((a) => (cropBack.has(a.cropId) ? { ...a, cropId: cropBack.get(a.cropId)! } : a)),
 		transfers: unReId(ran.transfers, 'transfer', back),
 		landCover: unReId(ran.landCover ?? [], 'landCover', back),
-		boreholes: unReId(ran.boreholes ?? [], 'borehole', back)
+		boreholes: unReId(ran.boreholes ?? [], 'borehole', back),
+		demandObjects: unReId(ran.demandObjects ?? [], 'demandObject', back)
 	};
 
 	return {

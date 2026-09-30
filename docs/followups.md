@@ -1042,8 +1042,22 @@ the suggested order (the IDs carry the detail):
       `qualityFlags.infilled` is the one control for scoring them (the run's
       statistics, the EWR test and the plausibility checks follow it). The
       defaults are open questions on issue #66.
-- [ ] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
-      The flags exist per day in the engine (`flowDayFlags`) and drive the
+- [x] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
+      **Done (engine 1.48.0, model.md §2.10h):** a run stores the scored
+      record's classes as `observed_flow_quality` (`FLOW_QUALITY_COLUMN`,
+      codes as `FLOW_DAY_FLAGS`, only when a day is flagged), beside the
+      scored `observed_flow`, so at the calibration site's node when the run
+      scores a gauge inside the network; the fit and the column read one
+      function (`recordFlowFlags`), `verify/columns.ts`
+      `OBSERVED_FLOW_COLUMNS` describes it for the summary CSV's column
+      guide, and the self-checks hold it to its record (`checkFlowQuality`).
+      The Runs hydrograph (and the calibration site's) draws each flagged
+      class as a strip along the foot of the plot with a key in words naming
+      its days and what Fit automatically does with them under the run's
+      settings; the Data tab's flow chart shows the same classes under the
+      current settings; the daily CSV carries the column. The same change
+      fixed the self-check failing every run with a gap-filled record
+      (`observed_flow_filled` was not allowed blank days). The flags exist per day in the engine (`flowDayFlags`) and drive the
       fit and its panel, but a run doesn't store them, so the hydrograph and
       the Data tab can't shade the days above the gauged range or those the
       fit left out. Durable fix: a run column (`observed_flow_quality`,
@@ -2463,8 +2477,8 @@ role and not before it.
         the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
         list re-applied to prove it gives back the edited model. Edits no op
         can express are named and block recording (a node's kind, the outlet
-        moved, demand objects); crop edits and removals, moves and inserts
-        record since the later ops below (engine 1.35.0).
+        moved); crop edits and removals, moves and inserts record since the
+        later ops below (engine 1.35.0), demand objects since engine 1.45.0.
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -3281,14 +3295,28 @@ from the WP:
       stay one % for every category (#53 O4). Still to do when it is built:
       WP-3.8's drought restriction rule (a cut by dam level) has to hold the
       same floor; it doesn't exist yet, so there is nothing to wire.
-- [ ] **A scenario op for demand objects.** Scenarios can't add, change or
-      remove one (`demand.scale` on a unit scales its crops and objects
-      together); override mode says an object edit can't be recorded. Durable
-      fix: `demandObject.add` / `.remove` / `.set` ops (like `borehole.*`),
-      classified proposal / baseline by the object's unit, with a mask kind
-      for applicants, and per-category scaling for #53 R3's restriction
-      what-ifs. Trigger: the first licensing or restriction what-if that
-      needs a non-crop demand changed.
+- [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
+      related: issue #73 "Later scenario ops"). `demandObject.add` /
+      `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
+      add checks every field and puts the object on a unit only; set changes
+      one field (every one but `id` and `nodeId`, the schedule rebuilt from
+      its windows' fields), consecutive sets on one object are one edit
+      group (a sizing switched with its count and litres); the save rules
+      apply after each group. Classified by the object's unit (proposal on
+      an owned unit, as a borehole). Applicants: a `demandObjects` mask kind
+      (opaque id and name, `applicationMask`, the results' `reIds`), and
+      `node.remove` counts only objects they see. Override mode records an
+      object added, changed (per field, schedule included) or removed, and
+      "Add a change" has the three ops, the schedule included. Run comparison now lists a changed object note. The fuzz
+      generator and the invariants cover them.
+- [x] **Per-category scaling of demand** (engine 1.45.0, 2026-09-30; issue
+      #123's DWS % restrictions per category). `demand.scale` takes an
+      optional `part`: `crops` (a unit's crop water requirement) or a demand
+      object category (`domestic`, `municipal`, …), so a what-if cuts
+      domestic by 10 % and irrigation by 30 % as two ops. A part's factor
+      stacks on the unit's own and goes through the same basic-needs floor
+      (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
+      below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.
