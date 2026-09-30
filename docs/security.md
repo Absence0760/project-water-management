@@ -1347,6 +1347,19 @@ In short:
   queue an auto re-run (`POST /jobs` takes a label only), and an auto run
   never publishes itself unless the project opted in to "if no new
   warnings", never for the first publication.
+- **The evidence report is a viewer read, and adds nothing a viewer can't
+  already see** (issue #71, `GET /projects/:id/runs/:runId/evidence-report`,
+  `backend/src/evidence/report.ts`). `requireRole(…, 'viewer')`, so a
+  contributor or farmer gets `403` (the role ladder lists it with the other
+  viewer reads). It runs in one `withUser` transaction opened read-only, so
+  building the report can't write, and RLS decides every row it reads: the
+  named run, the base run it recorded (`404` if the reader can't see it),
+  the scenario, nominations, publications, history and ensembles. What it
+  returns is what `/compare/runs` and the Runs tab already show a viewer
+  (the two runs' summaries and inputs, the input diff with stored values,
+  every farm by name), assembled by the pure engine builder; Step 3 D2's
+  anonymising is for what an applicant holds (ER10), and a contributor gets
+  none of it.
 - **An import report can't be forged or rewritten** (017_project_import). What
   the importer flagged is the audit trail of a workbook's mistakes, so only the
   import that created the project may write it (the insert trigger checks the
@@ -1904,6 +1917,11 @@ database:
   an applicant's projection of a published base keeps only the allocations on
   their own units (`scenarios/applicant.ts`), and a contributor never reads a
   run's summary, whose comparison names every unit.
+- The **evidence report's § 5** (issue #71) compares each run's *stored*
+  allocations, so it carries volumes by unit and never a holder's name or
+  registration number, for every reader (viewers and up) and in an issued
+  pack an applicant later holds (`evidence/report.db.test.ts` fails if either
+  appears).
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to

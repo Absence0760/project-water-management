@@ -525,6 +525,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['auto-calibration', 'wr2012-check', 'calibration-bounds'],
 		source: 'Beven & Binley (1992); McKay et al. (1979); docs/model.md §2.10e; issue #4 phase 9'
 	},
+	'evidence-uncertainty-rule': {
+		long: 'An ensemble’s bands depend on its rule: how many parameter sets it samples, how far it may roam, how far it shifts the pan coefficient, and the skill score, WR2012 flag and low-flow bias a set must pass to be kept. Tried after the bands are seen, those choices could be tuned until a band looks kind to an application. So the project declares the rule first, under Settings › Evidence. An evidence report then cites the first complete ensemble whose options match the rule exactly, and names it; with no rule declared it cites none. The History tab records who declared or changed the rule and when, and a change means a new ensemble must be run to it before a report can cite one. The rule starts from the ensemble’s own defaults: 300 members, typical bounds, pan ±0.1, KGE′ at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %.',
+		aliases: ['evidence rule', 'declared rule', 'pre-declared thresholds', 'acceptance thresholds'],
+		related: ['uncertainty-bands', 'calibration-rules', 'calibration-bounds'],
+		source: 'docs/design/evidence-report.md ER3, G4; issue #71'
+	},
 	'calibration-bounds': {
 		long: 'A short or drought-heavy record often can’t pin down X1 (production store) and X3 (routing store): the fit lands outside where GR4J parameters usually sit, because too little of the record constrains them. "Typical" restricts the search to Perrin et al.’s (2003) 80 % range over 429 catchments (X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9 days), which can make an under-constrained fit land somewhere plausible instead of at an extreme of the wide range. It is a constraint on the search, not evidence the catchment truly falls inside it: read the fit and validation scores either way, and prefer the wide range when the record constrains the parameters well. Recorded with the fit record.',
 		aliases: ['typical range', 'Perrin range', 'wide bounds', 'X1 range', 'X3 range'],

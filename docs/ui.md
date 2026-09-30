@@ -2835,14 +2835,14 @@ section header, which it fills (`fillHeader`) like the other sections.
 - **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
+  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-evidence`, `#set-auto`, then after the
   form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
   listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
   named for screen readers only, its links evenly spaced (the names on the
   bar would push links into More at 1280 px, issue #162): **Model inputs**
   (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
   results, issue #173), **How results are read** (Outcome matrix, Seasonal
-  outlook: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
+  outlook, Evidence: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links
@@ -3318,7 +3318,9 @@ which checks every catchment tab).
   table (a group headed "Rule table at …") has the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
   desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
-  line), what **the table covers** (total flow, or low flows
+  line), the optional **Recommended ecological category (REC)** (ER9: A to
+  F or a band like B/C, upper-cased as typed, blank = not given; a label for
+  the evidence report, no result depends on it), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -3433,6 +3435,26 @@ which checks every catchment tab).
   (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`, `defaultReviewDate`),
   confirmed by the client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
+- **Evidence** (`#set-evidence`, issue #71, `settings.evidenceUncertaintyRule`;
+  `settings/EvidenceRuleFields.svelte`, its own chunk, part of the form;
+  [design/evidence-report.md](./design/evidence-report.md) ER3 and G4): the
+  uncertainty rule the project declares for its licensing evidence. Off by
+  default: **Declare an uncertainty rule for evidence** fills the form with
+  the ensemble's defaults (`ENSEMBLE_DEFAULTS`: 300 members, typical bounds,
+  pan ±0.1, KGE′ at least 0.5, WR2012 flags up to “query”, low-flow bias
+  within ±50 %); unticking it saves `null` (the hint then says an evidence
+  report cites no ensemble). Fields: **Members** (30–1000), **Bounds**
+  (typical or wide), **Pan-coefficient shift** (± 0–0.3), and under *A
+  parameter set is kept when it passes*: **Skill score**, **Lowest skill
+  kept**, **Worst WR2012 flag kept** (*No check* switches it off) and
+  **Largest low-flow bias kept** (± %, blank = no check). The hint says why
+  it is declared first: an evidence report's bands come only from an
+  ensemble run to this rule (the first complete one whose options match it
+  exactly), and a later change is recorded in the History tab and needs a
+  new ensemble run to it. The rule shows in one line under the form
+  (`declaredRuleText`), with its field-history line. An invalid rule blocks
+  Save (the engine's `declaredRuleError`, as the API checks it). Viewers see
+  it read-only.
 
 ### Data feeds
 
@@ -5645,6 +5667,101 @@ exists, says so with a link to Runs & results.
   `e2e/tests/report-pages.spec.ts` (queued and failed states planted with
   `support/db.ts` `holdReportJob` / `failReport`, a viewer, not found, axe in
   both themes at desktop and phone).
+
+### Evidence report
+
+`/projects/:id/report?run=<runId>&evidence` (issue #71, WP-2.15 Phase C;
+`report/evidence/EvidencePage.svelte`, the report itself
+`EvidenceReport.svelte` in its own chunk;
+[design/evidence-report.md](./design/evidence-report.md)): the licensing
+evidence report of one run. `&evidence` swaps the catchment report for this
+page; the rest of the route is unchanged. The server builds the whole
+document (`GET …/runs/:runId/evidence-report`,
+[api.md § Evidence report](./api.md#evidence-report)); the page only draws it.
+Viewer role and up; a contributor or farmer is told it needs the viewer role.
+
+- **Two modes**, from the run named. An **application** report: a scenario
+  run, reported against the base run it recorded. A **baseline** report: the
+  nominated run on its own (no change column, no Appendix C).
+- **Entry links.** **Evidence report** on the Runs tab, beside **Report**,
+  for the current nominated run or a scenario run; and in the head of a
+  scenario's comparison (`ScenarioCompare`), for the scenario's last run.
+- **Board 1, the checks** (screen only, open by default): every check the
+  engine makes (`evidenceChecks`), failures first, each marked *stops
+  issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Then **Expect questions about:** what an assessor will ask for, with the
+  way out (failed checks, "Not assessed" rows, a site without a REC, no stored
+  fit, a flagged WR2012 check).
+- **Board 2, the refusal.** When a refusing check fails (not the current
+  nominated run, a legacy runoff model, a forecast run, another base run,
+  another engine version, period or runoff model), the page shows only
+  *This run can't be reported as evidence*, the failed checks with their
+  ways out, and a link to the ordinary catchment report. Print is disabled.
+  A changed baseline assumption doesn't refuse: the report shows as a
+  preview under a red banner.
+- **Sections**, fixed (`report/evidence/sections.ts`); a section with nothing
+  to show prints *Not assessed* and why, never disappears:
+  - **Summary** (page 1, `EvidenceSummary.svelte`): identity (the runs, the
+    baseline's nomination and whether it is the published run, signers,
+    verify), the banner (red when a baseline assumption changed, else "No
+    baseline assumption changed"), **Read these first** (the flags, red
+    before caution before counts, each saying which way it pushes the
+    numbers), the change table (fixed rows, each with its basis: Reserve
+    months met per rule-table site, days below the pragmatic EWR, shortfall
+    volume, outflow MAR with % of natural MAR, the applicant's own supply,
+    *Registered vs modelled use* (unit-years above a registered volume,
+    summed, no band; *Not assessed* without volumes), other users' supply),
+    with the paired band and "worse in k of n", *Where
+    the river loses most* (the three worst months by paired median, the
+    longest run of Reserve months missed, the worst month-year) and *This
+    report does not decide*.
+  - **1 The river**: per rule-table site, the site strip (source, component,
+    unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
+    against the determination's, and, when there are any, the months whose
+    natural flow is drier than the table's driest point, where the
+    requirement is scaled with the flow: G16, also a caution flag on page 1),
+    the two heat maps (`grid.ts`, month × water year,
+    shaded by the share of the requirement delivered, failures the heavier
+    mark, lost and gained months outlined, the number in each cell), the
+    paired extra days below the EWR by month (`IntervalPlot`, outlet only),
+    the FDC check of one month against the EWR curve (`FdcPlot`) and the
+    compliance table. Then the application's EWR charge.
+  - **2 Uncertainty**: the coverage banner, the declared rule and the cited
+    ensemble, the ledger of every ensemble started on the baseline (and how
+    each departs from the rule), the baseline's bands (R1), the paired bands
+    (R2) and the printed rules.
+  - **3 Model and data**: calibration record, validation (`FitProvenance`, or
+    *Not assessed* without a stored fit), WR2012, the validation statement,
+    and the nomination history.
+  - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
+    days and years fully met, baseline and application.
+  - **5 Registered water use** (WP-3.10,
+    [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
+    the allocation mode each run ran with, the band, volumes on no unit; the
+    over/under-use chart (`UsePlot`, `registeredUse.ts`: a row per unit and
+    water source, a mark per whole water year at modelled ÷ registered,
+    hollow for the baseline, filled for the application, the 100 % line and
+    the band shaded, one neutral hue, a year past 300 % an arrowhead at the
+    edge); the whole years above, within and below per unit and source with
+    the mean volumes; and every water year's registered volume and modelled
+    use, part years listed but not counted. Units by their unit name, never
+    the holder's. *Not assessed* when the runs carry no volumes, or none on a
+    unit of theirs.
+  - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
+    their class and the input diff; A.3 series and SHA-256; A.4 baseline
+    history since the previous publication; A.5 warnings verbatim; A.6 every
+    application run on the baseline), **Appendix B** (B.1 methodology,
+    limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
+    issued* for a draft), **Appendix C** (application only): the scenario's
+    description and the run's notes, verbatim, the only free text.
+- **Draft stamp.** Every section head and the footer (`data-report-footer`)
+  read *Draft · not issued* until an evidence pack issues it (WP-3.14).
+- **Ready and print.** `data-report-ready` follows the catchment report's
+  contract (every fetch in, every chart drawn). **Download draft PDF** is the
+  browser's print (always light, A4). There is no server-rendered evidence
+  PDF yet: it comes with the issued pack (WP-3.14).
+- Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
+  `e2e/tests/evidence-allocations.spec.ts`.
 
 ## Help (`/help`)
 

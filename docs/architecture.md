@@ -1290,6 +1290,27 @@ Where the render runs (`REPORT_RENDERER`, `jobs/transport.ts`):
   feeds' fetcher: the one part that needs the internet sits outside the VPC
   and never touches the database.
 
+### The evidence report
+
+The report route has two modes. Plain (`?run=`), it assembles the catchment
+report in the browser from the ordinary API reads. With `&evidence` (issue
+#71, [ui.md § Evidence report](./ui.md#evidence-report)) it shows the
+licensing evidence report, and the data comes from one server call:
+`GET /projects/:id/runs/:runId/evidence-report`
+(`backend/src/evidence/report.ts`) reads the named run, its recorded base,
+the scenario, nominations, publications, history and ensembles in one
+read-only `withUser` transaction, recomputes the paired bands from the
+stored members, and hands it all to the engine's pure builder
+(`evidenceReport`, `packages/engine/src/evidence/`). The builder does no I/O
+and nothing time-dependent, so the same input always gives the same
+document: the refusal checks, the flags, page 1's rows and every section's
+figures are decided there, and the frontend
+(`lib/components/report/evidence/`, its own chunk) only draws them. One
+builder is what lets an issued pack (WP-3.14) freeze the document as its
+manifest and rebuild it to check the hash. The evidence report prints from
+the browser only; `report_render` doesn't render it yet (that comes with
+the pack, so no render session needs a second run).
+
 ## Key choices
 
 ## Key choices

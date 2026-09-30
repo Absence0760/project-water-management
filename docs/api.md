@@ -364,6 +364,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
+  `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
+  ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
+  evidence report's cited ensemble must follow: `{ members, bounds:
+  'wide' | 'typical', panOffset, thresholds: { objective, minSkill,
+  wr2012MaxLevel: 'ok' | 'note' | 'query' | 'unusable', maxLowFlowBiasPct:
+  number | null } }`, or `null` / absent for none declared (then a report
+  cites no ensemble). It is replaced whole, never merged, and `null`
+  withdraws it; the engine's `declaredRuleError` checks it (`400 evidence
+  uncertainty rule: …`: members a whole number 30–1000, `panOffset` 0–0.3,
+  `minSkill` −10 to 1, the bias above 0 and at most 1000 %, no other field).
+  Runs record it with their settings, and the History tab shows who
+  declared or changed it and when. It changes no result, but unlike
+  `autoRun` it is part of the run's recorded settings (a report reads the
+  rule from the baseline run itself), so saving it moves `updatedAt`: the
+  latest run shows as stale and, with automatic runs on, a re-run is queued.
   `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
@@ -439,7 +454,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
   outlet, else a gauge's node id; checked by the run, not here), `source`
   1–500 chars, optional `sourceKind` (engine ≥ 1.5.0: `gazetted` | `desktop`
-  | `other` | `null`, absent = not stated), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
+  | `other` | `null`, absent = not stated), optional `category` (ER9, issue
+  #71: the REC, `A` … `F` or a band of two neighbouring classes like `B/C`,
+  `null`/absent = not given; a label, no result depends on it), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
@@ -1916,6 +1933,42 @@ below work on it too, for an editor.
   answer them `403`.
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
+
+## Evidence report
+
+The licensing evidence report of a run (issue #71, WP-2.15 Phase C "evidence
+mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
+[ui.md § Evidence report](./ui.md#evidence-report)).
+
+| Method | Path | Body | Returns | Role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-2`: § 5 registered water use, `allocations`) | viewer |
+
+- **Which report.** An application run (a scenario run) is reported against
+  the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
+  run is reported alone (baseline evidence, `mode: 'baseline'`). `404` when
+  the reader can't see the run or its base; contributors and farmers get `403`
+  (the report names every farm; an applicant's view is Step 3 D2's).
+- **Built by the engine** (`evidenceReport`), from what the backend reads in
+  one read-only `withUser` transaction: both runs (summary, settings, model,
+  series hashes, notes), the nomination history, the current and previous
+  publications, every ensemble started on the baseline and every paired one on
+  the application (a paired band's summary recomputed from both rows' stored
+  members, so `reserve[].worse` is there for bands stored before it existed),
+  the input diff (`diffInputs` with stored values, as compare), the revisions
+  since the previous publication, up to 50 other scenario runs on the same
+  baseline, and the engine's methodology, limitations and errata.
+- **Always answers.** A run that isn't evidence still gets `200` with
+  `refused: true` and the failed checks (`checks[]`: nominated, legacy,
+  forecast, base, engine, period, runoff model refuse; baseline assumptions,
+  declared rule, cited ensemble and paired band block issue only; coverage is
+  printed and blocks nothing). `issuable` is true when no issue-blocking check
+  failed.
+- **The cited ensemble** is the first complete unpaired ensemble on the
+  baseline whose options match `settings.evidenceUncertaintyRule` (members,
+  bounds, pan shift, thresholds); the paired band is the first complete paired
+  row on the application against it. Every other start is in
+  `uncertainty.ledger` with how it departs from the declared rule.
 
 ## Sign-offs
 

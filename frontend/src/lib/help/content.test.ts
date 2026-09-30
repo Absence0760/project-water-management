@@ -7,6 +7,7 @@ import {
 	type DemandObject,
 	type FarmSummary,
 	type NetworkNode,
+	type ProjectSettings,
 	type RunSummary,
 	type Transfer
 } from '@water-management/engine';
@@ -110,13 +111,15 @@ const PREVIEW_KEYS = [
 ];
 
 const settings = defaultProjectSettings();
+// Settings with no default (absent until someone sets them): typed, so each is a real field.
+const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule'];
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
 	crop: new Set(Object.keys(CROP)),
 	cropArea: new Set(Object.keys(CROP_AREA)),
 	transfer: new Set(Object.keys(TRANSFER)),
 	demandObject: new Set(Object.keys(DEMAND_OBJECT)),
-	settings: new Set(Object.keys(settings)),
+	settings: new Set([...Object.keys(settings), ...OPTIONAL_SETTINGS]),
 	calibration: new Set(Object.keys(settings.calibration)),
 	series: new Set(SERIES_KINDS),
 	summary: new Set(Object.keys(SUMMARY)),

@@ -1180,6 +1180,24 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('notes a declared uncertainty rule set, changed or withdrawn, and nothing between absent and null (issue #71)', () => {
+		const rule = { members: 300, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: 0.5, wr2012MaxLevel: 'query', maxLowFlowBiasPct: 50 } };
+		const text = 'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1';
+		const withRule = (r: unknown) => snapshot({ settings: { ...snapshot().settings, evidenceUncertaintyRule: r } as never });
+		const absent = snapshot();
+		expect('evidenceUncertaintyRule' in absent.settings).toBe(false);
+		// Positive control for the "no line" cases below: absent → a rule is seen.
+		expect(texts(absent, withRule(rule))).toEqual([`Declared uncertainty rule (evidence): not declared → ${text}`]);
+		expect(texts(withRule(null), withRule(rule))).toEqual([`Declared uncertainty rule (evidence): not declared → ${text}`]);
+		expect(texts(withRule(rule), withRule(null))).toEqual([`Declared uncertainty rule (evidence): ${text} → not declared`]);
+		expect(texts(withRule(rule), withRule({ ...rule, members: 500 }))).toEqual([
+			`Declared uncertainty rule (evidence): ${text} → ${text.replace('members 300', 'members 500')}`
+		]);
+		expect(texts(absent, withRule(null))).toEqual([]);
+		expect(texts(withRule(null), absent)).toEqual([]);
+		expect(texts(withRule(rule), withRule({ ...rule, thresholds: { ...rule.thresholds } }))).toEqual([]);
+	});
+
 	it('compares the days both runs cover from their stored values, so an edit cannot hide behind a date change', () => {
 		// The licensing-authority finding: rain cut 15 % and one day added read only "series extended".
 		const rain = Array.from({ length: 366 }, (_, i) => (i % 7 === 0 ? 20 : 0));
@@ -1422,6 +1440,20 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: kind of source Desktop estimate, low confidence → Gazetted Reserve']);
 		const d = structuredClone(a);
 		d.settings.ewrRules![0]!.sourceKind = null;
+		expect(texts(a, d)).toEqual([]);
+	});
+
+	it('lists a rule table’s REC changing (ER9); absent and null are both not given', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.category = 'B/C';
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) not given → B/C']);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.category = 'C';
+		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) B/C → C']);
+		const d = structuredClone(a);
+		d.settings.ewrRules![0]!.category = null;
 		expect(texts(a, d)).toEqual([]);
 	});
 

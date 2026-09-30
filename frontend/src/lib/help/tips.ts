@@ -702,6 +702,13 @@ export const TIPS: HelpTipText[] = [
 		category: 'fit'
 	},
 	{
+		id: 'evidence-uncertainty-rule',
+		term: 'Declared uncertainty rule (evidence)',
+		short: 'The ensemble an evidence report may cite: its size, bounds, pan shift and the tests a set must pass, declared before any band is seen.',
+		category: 'fit',
+		fields: ['settings.evidenceUncertaintyRule']
+	},
+	{
 		id: 'calibration-bounds',
 		term: 'Bounds (automatic calibration)',
 		short: 'How far the search may roam per parameter: wide (each parameter’s full calibration range) or typical (Perrin et al.’s published 80 % range).',

@@ -20,6 +20,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-outcomes', label: 'Outcome matrix' },
 	// The season and planning share of the Runs tab's seasonal outlook (issue #53 R5); changes no result.
 	{ id: 'set-outlook', label: 'Seasonal outlook' },
+	// The uncertainty rule an evidence report's cited ensemble must follow (issue #71 ER3); changes no result.
+	{ id: 'set-evidence', label: 'Evidence' },
 	// When the project re-runs itself after new data (WP-2.11); last in the form: it changes no result.
 	{ id: 'set-auto', label: 'Automatic runs' },
 	// After the settings form, saved on its own (feeds/DataFeedsPanel.svelte).

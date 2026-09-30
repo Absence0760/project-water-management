@@ -848,6 +848,24 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 		expect(text.problems).toEqual([expect.stringMatching(/naturalMarMcm must be a finite number/)]);
 	});
 
+	it('carries the REC (ER9) when set, drops a null one, and refuses a malformed one', () => {
+		const r = applyScenario(withWeir(), [set(table('W', { category: 'B/C' })), set(table(null, { category: null }))]);
+		expect(r.problems).toEqual([]);
+		const [outlet, weir] = r.input.settings.ewrRules!;
+		expect(weir!.category).toBe('B/C');
+		expect(outlet).not.toHaveProperty('category');
+		expect(applyScenario(withWeir(), [set(table('W', { category: 'b/c' }))]).problems).toEqual([expect.stringMatching(/category The REC is one category A to F/)]);
+		expect(applyScenario(withWeir(), [set(table('W', { category: 2 as never }))]).problems).toEqual([expect.stringMatching(/category must be text/)]);
+	});
+
+	it('changes no result: the REC is a label (ER9, no ENGINE_VERSION bump)', () => {
+		const plain = runModel(one(set(table(null)), withWeir()).input);
+		const rec = runModel(one(set(table(null, { category: 'D' })), withWeir()).input);
+		expect(plain.summary.ewrAssurance).toHaveLength(1);
+		expect(rec.summary).toEqual(plain.summary);
+		expect(rec.series).toEqual(plain.series);
+	});
+
 	it('is used by the run: the scenario’s table is the one assessed at the site', () => {
 		const r = one(set(table(null, { naturalSource: 'run' })), withWeir());
 		const sites = runModel(r.input).summary.ewrAssurance ?? [];

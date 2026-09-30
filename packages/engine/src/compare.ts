@@ -23,6 +23,7 @@ import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } fro
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
+import { declaredRuleText } from './uncertainty/options';
 import {
 	defaultProjectSettings,
 	RETIRED_CALIBRATION_KEYS,
@@ -685,6 +686,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Engine ≥ 1.18.0 (issue #72); a snapshot without them compared only, at ±10 %.
 	allocationMode: { label: 'Allocation mode', fmt: (v) => ALLOCATION_MODE_LABEL[(v ?? 'none') as AllocationMode] ?? String(v) },
 	allocationTolerance: { label: 'Allocation comparison band', fmt: (v) => `±${pct(v)}` },
+	// Issue #71 (ER3): the rule an evidence report's cited ensemble must follow; never changes a result. Absent = not declared.
+	evidenceUncertaintyRule: { label: 'Declared uncertainty rule (evidence)', fmt: declaredRuleText },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
 	ewrChargeSource: {
@@ -826,6 +829,7 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		assuranceAnnualThreshold: r.assuranceAnnualThreshold ?? DEFAULT_ANNUAL_THRESHOLD,
 		allocationMode: r.allocationMode ?? 'none',
 		allocationTolerance: r.allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE,
+		evidenceUncertaintyRule: r.evidenceUncertaintyRule ?? null,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
@@ -1046,6 +1050,8 @@ const RULE_FIELDS: Record<string, ScalarField> = {
 	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
 	// Engine ≥ 1.5.0: gazetted, desktop estimate or other; absent = not stated.
 	sourceKind: { label: 'kind of source', fmt: (v) => ewrSourceConfidence(v as EwrRuleSourceKind | null | undefined) ?? 'not stated' },
+	// ER9: the recommended ecological category, a label (no result depends on it); absent = not given.
+	category: { label: 'recommended ecological category (REC)', fmt: (v) => (v ? String(v) : 'not given') },
 	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
 	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },

@@ -153,3 +153,89 @@ export function diffEnsembleOptions(a: ResolvedEnsembleOptions, b: ResolvedEnsem
 		return x === y ? [] : [{ label, a: x, b: y }];
 	});
 }
+
+// ---------------------------------------------------------------------------
+// The project's declared rule (issue #71, docs/design/evidence-report.md ER3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The uncertainty rule a project declares for its evidence
+ * (`settings.evidenceUncertaintyRule`; design ER3, gaming measure G4): the
+ * sample size, bounds, pan-coefficient shift and acceptance thresholds an
+ * evidence report's cited ensemble must have run with. Declared before anyone
+ * sees a band, and versioned with the settings (the change history names who
+ * set it and when), so an applicant can't try thresholds until a band is kind.
+ * Absent or null = not declared: an evidence report then cites no ensemble.
+ */
+export interface DeclaredUncertaintyRule {
+	members: number;
+	bounds: CalibrationBounds;
+	panOffset: number;
+	thresholds: AcceptanceThresholds;
+}
+
+const RULE_BOUNDS: readonly CalibrationBounds[] = ['wide', 'typical'];
+
+/** Why `v` isn't a declared rule, or null when it is one (the settings route's check). */
+export function declaredRuleError(v: unknown): string | null {
+	if (v === null) return null;
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected an object or null';
+	const r = v as Record<string, unknown>;
+	const extra = Object.keys(r).filter((k) => !['members', 'bounds', 'panOffset', 'thresholds'].includes(k));
+	if (extra.length) return `unknown field ${extra[0]}`;
+	if (!Number.isInteger(r.members) || (r.members as number) < ENSEMBLE_MEMBERS_MIN || (r.members as number) > ENSEMBLE_MEMBERS_MAX)
+		return `members must be a whole number from ${ENSEMBLE_MEMBERS_MIN} to ${ENSEMBLE_MEMBERS_MAX}`;
+	if (!RULE_BOUNDS.includes(r.bounds as CalibrationBounds)) return 'bounds must be wide or typical';
+	if (typeof r.panOffset !== 'number' || !Number.isFinite(r.panOffset) || r.panOffset < 0 || r.panOffset > PAN_OFFSET_MAX)
+		return `pan offset must be from 0 to ${PAN_OFFSET_MAX}`;
+	const t = r.thresholds as Record<string, unknown> | null | undefined;
+	if (!t || typeof t !== 'object' || Array.isArray(t)) return 'thresholds are required';
+	const textra = Object.keys(t).filter((k) => !['objective', 'minSkill', 'wr2012MaxLevel', 'maxLowFlowBiasPct'].includes(k));
+	if (textra.length) return `unknown threshold ${textra[0]}`;
+	if (typeof t.objective !== 'string' || !Object.hasOwn(OBJECTIVE_LABELS, t.objective)) return 'unknown skill score';
+	if (typeof t.minSkill !== 'number' || !Number.isFinite(t.minSkill) || t.minSkill < -10 || t.minSkill > 1) return 'the lowest skill kept must be from −10 to 1';
+	if (!WR2012_LEVELS.includes(t.wr2012MaxLevel as Wr2012FlagLevel)) return 'the worst WR2012 flag kept must be ok, note, query or unusable';
+	if (t.maxLowFlowBiasPct !== null && (typeof t.maxLowFlowBiasPct !== 'number' || !Number.isFinite(t.maxLowFlowBiasPct) || t.maxLowFlowBiasPct <= 0 || t.maxLowFlowBiasPct > 1000))
+		return 'the largest low-flow bias kept must be above 0 and at most 1000 %, or none';
+	return null;
+}
+
+const ruleRows: [string, (r: DeclaredUncertaintyRule) => string][] = [
+	['Skill score', (r) => objectiveShortLabel(r.thresholds.objective)],
+	['Lowest skill kept', (r) => String(r.thresholds.minSkill)],
+	['Worst WR2012 flag kept', (r) => (r.thresholds.wr2012MaxLevel === 'unusable' ? 'no check' : r.thresholds.wr2012MaxLevel)],
+	['Largest low-flow bias kept', (r) => (r.thresholds.maxLowFlowBiasPct === null ? 'no check' : `±${r.thresholds.maxLowFlowBiasPct} %`)],
+	['Members', (r) => String(r.members)],
+	['Bounds', (r) => r.bounds],
+	['Pan coefficient shift', (r) => (r.panOffset > 0 ? `±${r.panOffset}` : 'not varied')]
+];
+
+/** A declared rule in one line, for the settings diff and the report. */
+export function declaredRuleText(v: unknown): string {
+	if (v === null || v === undefined) return 'not declared';
+	if (declaredRuleError(v)) return 'not a valid rule';
+	return ruleRows.map(([label, f]) => `${label.toLowerCase()} ${f(v as DeclaredUncertaintyRule)}`).join(', ');
+}
+
+/**
+ * Where an ensemble's resolved options depart from the declared rule, as
+ * rows `{ label, a: declared, b: the ensemble's }`; empty when it follows the
+ * rule. The ensemble's own seed, records and rain sources are not part of the
+ * rule (the database draws the seed; the records are the project's).
+ */
+export function declaredRuleMismatches(rule: DeclaredUncertaintyRule, o: ResolvedEnsembleOptions): OptionChange[] {
+	const asRule: DeclaredUncertaintyRule = { members: o.members, bounds: o.bounds, panOffset: o.panOffset, thresholds: o.thresholds };
+	return ruleRows.flatMap(([label, f]) => {
+		const a = f(rule);
+		const b = f(asRule);
+		return a === b ? [] : [{ label, a, b }];
+	});
+}
+
+/** The request an editor's "start the declared ensemble" sends (resolveEnsembleOptions fills the rest). */
+export const declaredRuleRequest = (r: DeclaredUncertaintyRule): EnsembleRequest => ({
+	members: r.members,
+	bounds: r.bounds,
+	panOffset: r.panOffset,
+	thresholds: { ...r.thresholds }
+});

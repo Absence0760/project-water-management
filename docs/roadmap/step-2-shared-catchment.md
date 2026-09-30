@@ -2062,9 +2062,15 @@ for alert counts.
 > pre-signed URL (which lasts an hour); `POST /reports` also takes `email`,
 > and viewers may ask for a PDF (the job table's insert policy is widened for
 > `report_render` only); farmers get `403` on all of it (WP-2.1 landed
-> first). Not deployed: plan only. **Phase C, evidence mode: designed, not
-> built** ([design/evidence-report.md](../design/evidence-report.md), issue
-> #15; plan below).
+> first). Not deployed: plan only. **Phase C, evidence mode: built
+> (issue #71, 2026-09-29)** ([ui.md § Evidence report](../ui.md#evidence-report),
+> [design/evidence-report.md §12](../design/evidence-report.md#12-changes-to-the-roadmap-the-wp-215-build-plan)).
+> It is one run-scoped endpoint (`GET …/runs/:runId/evidence-report`) drawn
+> by the route's `&evidence` mode, printed from the browser only. Left: the
+> server-rendered evidence PDF and `POST …/reports { evidence: true }` (with
+> the pack, WP-3.14, so ER1 isn't needed yet), per-unit supply bands (ER4
+> rest), the REC (ER9), the banded FDC (ER5) and page x of y footers
+> ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
 consultant copy-pasting from Excel.
@@ -2113,8 +2119,9 @@ consultant copy-pasting from Excel.
     a PDF library. That's two chart implementations to keep in step, against
     the "one implementation" principle behind the engine.
 
-- **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).**
-  The licensing evidence report on the same route:
+- **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).
+  Built (issue #71), except item 4 and the parts of 1–3 the status note
+  above lists.** The licensing evidence report on the same route:
   `/projects/:id/report?run=<applicationRun>&evidence`, built only from
   the project's current nominated evidence run and a scenario run on it
   (or the nominated run alone, for baseline evidence), refused otherwise.
@@ -2141,7 +2148,10 @@ consultant copy-pasting from Excel.
 Phase B: `POST /projects/:id/reports { runId? }` → `202 { jobId }`, and
 `GET /projects/:id/reports/:jobId` → `{ status, url? }` (viewer).
 Phase C: `POST /projects/:id/reports { runId, evidence: true }`, refused
-with `409` and the failed checks when the run isn't evidence.
+with `409` and the failed checks when the run isn't evidence. As built:
+`GET /projects/:id/runs/:runId/evidence-report` (viewer) returns the whole
+document, a refused one included (`refused: true` with its checks); the
+`POST` waits for the pack.
 
 **UI**
 - A "Report" button in the Runs tab and on the Overview published card.

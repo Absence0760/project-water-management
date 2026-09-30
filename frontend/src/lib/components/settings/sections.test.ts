@@ -10,9 +10,11 @@ describe('SETTINGS_SECTIONS', () => {
 		expect(ids.at(-1)).toBe('set-feeds');
 		expect(ids.at(-2)).toBe('set-auto');
 		// The outcome matrix's reading of a sweep and the seasonal outlook's season: after the model's inputs (data quality last), they change no result.
-		expect(ids.at(-3)).toBe('set-outlook');
-		expect(ids.at(-4)).toBe('set-outcomes');
-		expect(ids.at(-5)).toBe('set-quality');
+		// The declared uncertainty rule for evidence (issue #71): how results are reported, never a model input.
+		expect(ids.at(-3)).toBe('set-evidence');
+		expect(ids.at(-4)).toBe('set-outlook');
+		expect(ids.at(-5)).toBe('set-outcomes');
+		expect(ids.at(-6)).toBe('set-quality');
 	});
 });
 
@@ -23,7 +25,7 @@ describe('settingsNavGroups', () => {
 		expect(owner.flatMap((g) => g.ids)).toEqual([...SETTINGS_SECTIONS.map((s) => s.id), 'set-api-keys', 'set-report-schedules']);
 		// Data quality is a model input: its zero-rain and low-vs-CHIRPS limits change results (issue #173).
 		expect(owner[0]!.ids.at(-1)).toBe('set-quality');
-		expect(owner[1]!.ids).toEqual(['set-outcomes', 'set-outlook']);
+		expect(owner[1]!.ids).toEqual(['set-outcomes', 'set-outlook', 'set-evidence']);
 		for (const id of ['set-api-keys', 'set-report-schedules']) expect(AFTER_FORM_LABELS[id]).toBeTruthy();
 	});
 
