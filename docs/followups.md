@@ -647,16 +647,31 @@ collected as a checklist in issue #46; tick it there as they answer.
       days), keeping every year-month's total. The default (no map) runs
       exactly as before ([model.md §2.4e *Daily
       intensity*](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+- [x] **CR-23: quantile-map the CHIRPS gap fill (done, engine 1.53.0).**
+      Opt-in `settings.chirpsQuantileMap`: fitted with the monthly factors
+      on the §2.4b fit period's shared days, CHIRPS' wet-day rate matched to
+      the catchment's and its wet days mapped onto the catchment's, per
+      calendar month (else season, else the factor alone, with a warning),
+      each calendar month's corrected total kept. Pinned with the factors,
+      recorded in a fit's forcing, compared in "What changed". Off by
+      default: a run without it is unchanged ([model.md §2.4b *Quantile
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [ ] **Confirm the daily-intensity defaults with the hydrologist (issue
-      #66).** Built on documented defaults: a heavy day is ≥ 20 mm; the
-      check warns beyond 5 share points; a wet day is ≥ 1 mm; the map works
-      by calendar month, pooling the 3-month season below 30 wet days on
-      either side and leaving a thinner season unmapped. Also whether the
-      map should adjust wet-day frequency (it doesn't: it keeps each month's
-      wet days and total, so a gauge wet on fewer days keeps part of its
-      heavy-day excess). Trigger: the hydrologist's answer, or the first
-      client period with the map on. Each is a constant in
-      `packages/engine/src/rainSourcePeriods.ts`.
+      #66, and CR-23's CHIRPS gap map, engine 1.53.0).** Built on documented
+      defaults: a heavy day is ≥ 20 mm; the check warns beyond 5 share
+      points; a wet day is ≥ 1 mm; both maps work by calendar month, pooling
+      the 3-month season below 30 wet days on either side and leaving a
+      thinner season unmapped (the CHIRPS map then takes the monthly factor
+      alone and warns). Also whether a replacement gauge's map should
+      adjust wet-day frequency as the CHIRPS map does (it doesn't: it keeps
+      each month's wet days and total, so a gauge wet on fewer days keeps
+      part of its heavy-day excess; the CHIRPS map dries CHIRPS' extra wet
+      days, since CHIRPS is the one wet too often), and whether the CHIRPS
+      map should be on by default once confirmed. Trigger: the
+      hydrologist's answer, or the first client run with either map on. The
+      shared constants are in `packages/engine/src/quantileMap.ts`, the
+      heavy-day ones in `rainSourcePeriods.ts` ([model.md §2.4b *Quantile
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;
@@ -1188,11 +1203,7 @@ the suggested order (the IDs carry the detail):
       CR-34, the dry → wet ranking), are in issue #90.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
-      uncertainty and BFI, CR-23 CHIRPS quantile mapping (the pure mapper
-      exists since engine 1.21.0, `packages/engine/src/quantileMap.ts`: fit
-      CHIRPS' wet days against the catchment's over the §2.4b fit period and
-      apply it to the gap days with the monthly factor as the fallback),
-      CR-24 alternative
+      uncertainty and BFI, CR-24 alternative
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
@@ -4117,14 +4128,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %
       band (R1) and hatches the application's own curve's (R2), or says why
       there is none.
-- [ ] **The paired change of the FDC check curve** (engine review of ER5).
+- [x] **The paired change of the FDC check curve** (engine review of ER5).
       § 1's chart bands each run's own curve (R1 shaded, R2 hatched); the two
       come from the same parameter sets, so they overlap even when every
-      pair shifts the curve the same way, and the caption says so. Durable
-      fix: band the per-pair difference of the impacted curve at each table
-      point with its worse-share in `summarisePaired`, printed as a small
-      table under the chart. Trigger: an assessor reads the FDC chart for
-      the application's effect, or the next change to § 1.
+      pair shifts the curve the same way, and the caption said so. Built
+      (report format `evidence-7`): `summarisePaired` bands the per-pair
+      difference of the impacted curve at each table point with the share of
+      pairs in which the application's flow is lower
+      (`PairedSummary.reserveFdcChange`); the evidence document carries it
+      per month and point with the runs' own difference and "worse in k of
+      n" (`EvidenceSite.fdcChange`), and § 1 prints it as a table under each
+      FDC plot (screen and the server-rendered PDF alike), the caption no
+      longer apologising for the overlap. A pack issued before `evidence-7`
+      keeps its frozen document, with no table and the old caption. No
+      `ENGINE_VERSION` bump: no run's output changes.
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue

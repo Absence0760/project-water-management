@@ -154,6 +154,11 @@ test('an application on the nominated run gives the full evidence report, draft 
 	const driest = page.getByTestId(site.fdcDriestMonth === site.fdcMonth ? 'evidence-fdc-both' : 'evidence-fdc-driest');
 	await expect(driest.getByRole('img', { name: new RegExp(`^${MONTHS[site.fdcDriestMonth! - 1]} flow-duration curve at .+ against the EWR curve$`) })).toBeVisible();
 	await expect(driest.locator('figcaption')).toContainText('the river’s driest month (the lowest mean natural flow in the baseline)');
+	// Under the plot, the paired change in the curve at each of the table's points (evidence-7): each set on both runs, with the sets in which the flow is lower.
+	const moved = driest.getByTestId('evidence-fdc-change');
+	await expect(driest.locator('figcaption')).toContainText('The table below pairs them');
+	await expect(moved.getByRole('rowheader')).toHaveText(POINTS.map((p) => `${p} % of the time`));
+	await expect(moved.getByRole('row', { name: /^10 % of the time/ }).getByRole('cell').nth(1)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
 
 	// Board 1: nothing stops the report being issued.
 	await expect(page.getByTestId('evidence-checks')).toContainText('Every check that stops a pack being issued passes.');

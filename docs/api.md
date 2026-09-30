@@ -502,6 +502,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   two ranges overlapping), replaced whole by a `PATCH`. Anything else is a
   `400`; settings stored before it read back as `all`.
   [model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40).
+  `chirpsQuantileMap` (engine ≥ 1.53.0, CR-23) is `null` (the default: the
+  CHIRPS that fills a gap takes the monthly factor alone) or `{ wetDayMm }`
+  (0.1–10 mm; no other key), replaced whole by a `PATCH`. It only acts with
+  `chirpsBiasCorrection: monthly` (a run under `none` ignores it and warns).
+  Anything else is a `400` (the engine's `chirpsQuantileMapError`, which a
+  table test holds to the schema); settings stored before it read back as
+  `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
   `rainSource` (engine ≥ 0.30.0, issue #40 (b)) is a list (0–100, default
   `[]`) of periods whose catchment rain comes from another series, replaced
   whole by a `PATCH`: `{ start, end, series, factors, provenance?,
@@ -647,7 +654,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   and `fittedOn` the reference window in words: the factors per fit range the
   fit's rain used; from engine 0.30.0 optional `rainSource`, validated like
   the setting, absent = none; from engine 0.31.0 optional `pe`, validated like
-  the setting, absent = `{ kind: 'pan' }`) is the
+  the setting, absent = `{ kind: 'pan' }`; from engine 1.53.0 optional
+  `chirpsQuantileMap`, validated like the setting, present only when the fit
+  ran with the CHIRPS gap map on, absent = off) is the
   pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
@@ -1898,7 +1907,9 @@ the result is stored only after the server has checked it.
   `PairedSummary` (difference bands, `ewrDaysNotMetWorse`, `shortfallWorse`,
   `unpaired`, `decisionRule`; from engine 1.33.0 also `noFlowDays` with
   `noFlowDaysWorse`, `ewrSites[]` and `supply[]` each with `worse`,
-  `reserveFdc[]` and `carriesMeasures`, model.md §2.10e); `null` until
+  `reserveFdc[]` and `carriesMeasures`, and `reserveFdcChange[]`: per site,
+  12 water-year months × the table's points of `{ band, worse }`, the paired
+  change in the Reserve FDC check curve, model.md §2.10e); `null` until
   complete. From engine 1.33.0 an `EnsembleSummary`'s `bands` also has
   `noFlowDays`, `ewrSites`, `supply` and `reserveFdc`; one stored before
   lacks them. A band is
@@ -2044,7 +2055,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-6`: § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-7`: § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other

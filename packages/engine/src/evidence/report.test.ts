@@ -659,7 +659,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-6');
+		expect(got.version).toBe('evidence-7');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -867,6 +867,60 @@ describe('the evidence measures (engine 1.33.0): no-flow days, EWR below the wor
 		}
 	});
 
+	it('tables the paired change in the FDC check curve per month and point, with the runs’ own difference and "worse in" (evidence-7)', () => {
+		const site = r.river[0]!;
+		const pr = r.uncertainty.paired!.reserveFdcChange!.find((x) => x.key === 'outlet')!;
+		const own = baseOut.summary.ewrAssurance![0]!;
+		const theirs = appOut.summary.ewrAssurance![0]!;
+		expect(site.fdcChange!.map((m) => m.month)).toEqual([10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+		// A member's curve is in water-year order, each index the calendar month the table labels it with: the reference member (the run's own parameters) is the run's curve, to six figures.
+		const ref = ensemble.members.find((m) => m.reference)!.metrics!.reserveFdc!.outlet!;
+		expect(ref).toHaveLength(12);
+		const six = (v: number | null) => (v === null || v === 0 ? v : Number(v.toPrecision(6)));
+		for (const [i, m] of site.fdcChange!.entries()) expect(ref[i]).toEqual(own.byMonth.find((x) => x.month === m.month)!.fdc.map((pt) => six(pt.impacted)));
+		for (const [i, m] of site.fdcChange!.entries()) {
+			expect(m.points).toHaveLength(own.points.length);
+			const fa = own.byMonth.find((x) => x.month === m.month)!.fdc;
+			const fb = theirs.byMonth.find((x) => x.month === m.month)!.fdc;
+			for (const [j, c] of m.points.entries()) {
+				const want = pr.months[i]![j]!;
+				expect(c.band).toEqual(want.band);
+				expect(c.bandNote).toBeNull();
+				expect(c.worse).toEqual({ k: Math.round(want.worse! * want.band.n), n: want.band.n });
+				expect(c.run).toBeCloseTo(fb[j]!.impacted! - fa[j]!.impacted!, 12);
+			}
+		}
+		// Baseline evidence has no change to table.
+		expect(evidenceReport(input({ application: null, changes: [] })).river[0]!.fdcChange).toBeNull();
+	});
+
+	it('the application run on the baseline’s own inputs: every point of the change table is zero, no set worse', () => {
+		const same = summarisePaired(ensemble, runPairedEnsemble(base, ensemble), { own: ['F2'] });
+		const i = input();
+		const got = evidenceReport(input({ application: { ...i.application!, ...stored('app', base, baseOut) }, ensembles: { baseline: [ens({})], paired: [{ ...PAIRED, paired: same }] } }));
+		const points = got.river[0]!.fdcChange!.flatMap((m) => m.points);
+		expect(points.length).toBeGreaterThan(0);
+		for (const c of points) {
+			expect(c.run).toBe(0);
+			expect(c.band).toMatchObject({ p5: 0, p50: 0, p95: 0 });
+			expect(c.worse).toEqual({ k: 0, n: c.band!.n });
+		}
+	});
+
+	it('no change table when the two runs read the site against different table points', () => {
+		const i = input();
+		const moved = { ...appOut.summary, ewrAssurance: appOut.summary.ewrAssurance!.map((x) => ({ ...x, points: x.points.map((pt, j) => (j === 0 ? pt + 1 : pt)) })) };
+		const got = evidenceReport(input({ application: { ...i.application!, summary: moved } }));
+		expect(got.river[0]!.fdcChange).toBeNull();
+		expect(got.river[0]!.fdcBandNote).toMatch(/different table points or units/);
+		expect(got.river[0]!.fdcBands).not.toBeNull();
+		// Same points, another unit (m³/s against Mm³): a difference across units would read as a change, so none is tabled either.
+		const otherUnit = { ...appOut.summary, ewrAssurance: appOut.summary.ewrAssurance!.map((x) => ({ ...x, unit: x.unit === 'm3s' ? 'mcm' : 'm3s' })) } as typeof appOut.summary;
+		expect(evidenceReport(input({ application: { ...i.application!, summary: otherUnit } })).river[0]!.fdcChange).toBeNull();
+		// Positive control: the application's own summary tables it.
+		expect(evidenceReport(input()).river[0]!.fdcChange).not.toBeNull();
+	});
+
 	it('an ensemble stored before engine 1.33.0: every new measure says "no band" with the reason, never a zero', () => {
 		const strip = (m: MemberMetrics): MemberMetrics => {
 			const { noFlowDays: _a, ewrSiteDaysNotMet: _b, unitDemandM3Day: _c, unitSuppliedM3Day: _d, reserveFdc: _e, ...old } = m;
@@ -888,7 +942,7 @@ describe('the evidence measures (engine 1.33.0): no-flow days, EWR below the wor
 		const note = NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE);
 		for (const id of ['noFlowDays', 'applicantSupply'] as const) expect(got.rows.find((x) => x.id === id)!.change, id).toMatchObject({ band: null, bandNote: note, worse: null });
 		expect(got.users.find((u) => u.nodeId === 'F1')!.change).toMatchObject({ band: null, bandNote: note });
-		expect(got.river[0]!).toMatchObject({ fdcBands: null, fdcBandNote: note });
+		expect(got.river[0]!).toMatchObject({ fdcBands: null, fdcBandNote: note, fdcChange: null });
 		// The measures the old ensemble has keep their bands.
 		expect(got.rows.find((x) => x.id === 'ewrDays')!.change!.band).not.toBeNull();
 	});
@@ -1036,7 +1090,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-6');
+		expect(r.version).toBe('evidence-7');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});

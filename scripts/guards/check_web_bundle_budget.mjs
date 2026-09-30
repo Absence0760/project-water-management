@@ -1586,6 +1586,15 @@
 //             portfolio page's removal). Measured 1322 locally on the combined
 //             branch with main @ 3571e104; CI runs ~2 KB above that. Headroom
 //             ~3 KB.
+// 2026-09-30  total 1327 → 1330 KB (engine 1.53.0, CR-23, the CHIRPS gap
+//             map: its fit, month-block mapper and warnings in the engine's
+//             rain code, the shared month/season fit in quantileMap.ts,
+//             Settings' "CHIRPS quantile map" fieldset, the glossary entry,
+//             the fit-provenance line and the compare note, the snapshot
+//             lead and whole-month rule). Measured against main @ ac3b2ef4:
+//             1,338,970 → 1,342,592 gzip bytes (+3.54 KB); measured 1323
+//             locally with main @ b124834c (#263) merged, CI ~2 KB above.
+//             Headroom ~5 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1596,7 +1605,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1327,
+	totalCodeKb: 1330,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
