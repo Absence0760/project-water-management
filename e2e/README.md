@@ -205,7 +205,7 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   no worker; `runJobsTick({ projects: [project.id], schedule: false })`
   (`support/jobs.ts`) runs one tick of `backend/src/jobs/worker.ts` that
   claims only the named projects' jobs (`--project`, `app_claim_jobs`'
-  scope, 122_scoped_job_claim.sql). `projects` is required: a tick that
+  scope, 123_scoped_job_claim.sql). `projects` is required: a tick that
   claimed every due job in the shared database ran other tests' freshly
   queued jobs, so a test asserting "Queued" (a yield, a sweep, an outlook, a
   due re-run) saw "Running…". Pass `schedule: false` unless the test needs

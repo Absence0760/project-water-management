@@ -18,7 +18,7 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * claimed every due job ran another test's freshly queued job, and that test
  * saw "Running…" where it asserted "Queued" (yield.spec.ts, while another
  * yield test ticked). `worker.ts --once --project <id>` claims only those
- * projects' jobs (122_scoped_job_claim.sql); pass every project whose jobs
+ * projects' jobs (123_scoped_job_claim.sql); pass every project whose jobs
  * the test waits on. The purges and the alert sends stay global.
  *
  * A report_render job prints this checkout's e2e site (RENDER_SITE_URL /

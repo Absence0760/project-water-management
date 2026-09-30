@@ -89,7 +89,7 @@ export async function listJobs(db: Db, projectId: string, { status, limit = 50 }
 
 /**
  * Claim up to `limit` due jobs for `leaseSeconds` (app_claim_jobs). With
- * `projectIds`, only those projects' jobs (122_scoped_job_claim.sql: the e2e
+ * `projectIds`, only those projects' jobs (123_scoped_job_claim.sql: the e2e
  * suite's tick); without, every project's (production).
  */
 export async function claimJobs(db: Db, limit: number, leaseSeconds: number, projectIds?: readonly string[]): Promise<ClaimedJob[]> {

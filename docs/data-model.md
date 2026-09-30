@@ -2104,7 +2104,7 @@ The background job queue's source of truth ([architecture.md § Background work]
     dedupe key has one running; sets `running`, bumps `attempts`, draws a new
     `lease_token`. Returns routing columns only (id, project, kind, acting
     user, lease, attempts), never the payload. A lease that ran out with no
-    attempts left becomes `dead` instead. With `projects` (122), only those
+    attempts left becomes `dead` instead. With `projects` (123), only those
     projects' jobs are claimed or marked dead: the e2e suite's tick, so
     parallel tests never run each other's jobs. Production passes none.
   - `app_finish_job(id, lease, ok, error, retry)`: only with the current

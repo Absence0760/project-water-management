@@ -375,7 +375,7 @@ describe('claiming', () => {
 	});
 });
 
-describe('a tick scoped to some projects (122_scoped_job_claim.sql, the e2e tick)', () => {
+describe('a tick scoped to some projects (123_scoped_job_claim.sql, the e2e tick)', () => {
 	it('runs its own projects’ due jobs and leaves another project’s due job queued', async () => {
 		const u = await signUp('Scoped');
 		const mine = await project(u, 'Mine');
