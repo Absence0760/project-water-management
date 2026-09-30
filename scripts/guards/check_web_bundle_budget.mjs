@@ -1595,6 +1595,14 @@
 //             1,338,970 → 1,342,592 gzip bytes (+3.54 KB); measured 1323
 //             locally with main @ b124834c (#263) merged, CI ~2 KB above.
 //             Headroom ~5 KB.
+// 2026-09-30  total 1330 → 1336 KB (issue #71, WP-3.15 the pack half: the
+//             /share page's evidence pack view (PackView, share/pack.ts and
+//             its 44 share.pack messages with their Afrikaans), the pack
+//             page's Share link… dialog and Notes drawer, ShareLinksPanel and
+//             the notes components taking a pack, the API client's pack
+//             share calls, the privacy notice's longer §5 bullet). Measured
+//             locally: main @ 5604071e 1326, this branch merged with it 1332
+//             (+6 KB); CI ~2 KB above. Headroom ~4 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1605,7 +1613,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1330,
+	totalCodeKb: 1336,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
