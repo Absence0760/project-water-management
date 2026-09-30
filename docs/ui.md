@@ -2676,9 +2676,12 @@ editors get a select (*At the outlet*, or *At gauge &lt;name&gt;* for each such
 gauge, `PATCH …/series/:id { siteNodeId }`), viewers the words. A record at a
 gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
-the outlet's record, whatever its name (calibration, the EWR test, the
-*What the model uses* badges, the setup checklist and the fit panel's
-records read only the outlet's). A record whose gauge has left the model says
+the outlet's record, whatever its name (the run's calibration statistics, the
+EWR test, the *What the model uses* badges and the setup checklist read only
+the outlet's). When Settings → Calibration record → *Scored at* picks its
+gauge (engine ≥ 1.41.0), it is badged *Gauge record (calibration site)*
+instead: Fit automatically scores the fit there ([model.md
+§2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
 so, until it is moved. **Source and unit** (issue #66, 107,
 [data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
 a row whose series records a source, or was converted at upload (uploaded in
@@ -3134,7 +3137,20 @@ which checks every catchment tab).
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
 - **Calibration record** (`#set-record`): the calibration window and flow
-  series (`calibration/CalibrationWindowFields.svelte`), and the
+  series (`calibration/CalibrationWindowFields.svelte`), with, when the
+  model has a gauge above the outlet with a flow record attached (or a site
+  is already set), **Scored at** (engine ≥ 1.41.0, `settings.calibrationSiteNodeId`,
+  model.md §2.10k): *The outlet* or each such gauge by name (engine
+  `calibrationSites`; a gauge without a record is not offered, and a stored
+  site that has lost its gauge or record shows as *A gauge no longer in the
+  model, or with no record*). Its hint says the fit then scores the simulated
+  flow at that gauge against its record, that the gauged ranges and gap
+  filling are the outlet records', and that a run's statistics and EWR test
+  stay at the outlet. The site's records decide *Compare with*'s choices, Fit
+  automatically's validation record and whether a fit can start (a project
+  whose only record is at the site can fit); the fit record's *Fitted to*
+  names the gauge ("Gauge record at the gauge “Middle weir”") and says when
+  the site has changed since the fit. And the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
   "Exclude a water year" and "Exclude a date range" add a row, each with a
   required **Reason**. A water year shows the dates it covers ("WY 2015/16:

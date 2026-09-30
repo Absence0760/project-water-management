@@ -3268,13 +3268,39 @@ from the WP:
       dam's seepage return (WP-3.5), with the balance and the attribution
       following. Trigger: a hydrologist wanting canal seepage credited, or a
       measured loss split.
-- [ ] **Calibrating at a gauge inside the network.** Calibration and the
-      observed-flow EWR test read the outlet's record only; a record
-      attached to an inner gauge (084) feeds the plausibility checks
-      (model.md §2.10d). Durable fix: `calibrationSiteNodeId` (null = the
-      outlet), with calibrate() scoring that gauge's simulated flow and the
-      fit record recording the site. Trigger: a project whose calibration
-      record sits at an inner gauge.
+- [x] **Calibrating at a gauge inside the network.** Done 2026-09-30,
+      engine 1.41.0: `settings.calibrationSiteNodeId` (null = the outlet,
+      the default, so nothing changes for a project that never sets it).
+      calibrate() scores the gauge's simulated flow (its outflow) against
+      the gauge's own record, `calibrationFlowKind` and the
+      independent-record test pick among the gauge's records, and the
+      report, the fit record (`siteNodeId`, flagged `siteChanged` when the
+      settings move) and automated calibration's plan carry the site; the
+      server's rules and the uncertainty ensemble follow it. A gauge's
+      record has no gauged range and no gap filling (those settings are the
+      outlet records'). The API checks a new site is a gauge above the
+      outlet with a record, and a copy or import moves it. Settings →
+      Calibration record → *Scored at* picks it. Decision: the observed-flow
+      EWR test stays at the outlet, since its requirement is the outlet's
+      pragmatic EWR and a gauge's flow can't be judged against it
+      ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
+  - [ ] **The run's calibration statistics at the calibration site.** A
+        run's `summary.calibration` (NSE, KGE, the annual volume table) and
+        its observed/simulated outflow chart stay the outlet's, so after a
+        fit at a gauge they are out of sample (`otherPeriod`) and a project
+        whose only record is at the gauge shows none. Durable fix: runModel
+        scores `summary.calibration` at the site (the gauge's outflow
+        against its record, with `siteNodeId` on the summary), and the
+        Results chart and the run comparison say where; an ENGINE_VERSION
+        bump. Trigger: a project calibrated at a gauge whose hydrologist
+        reads the run's statistics rather than the fit's.
+  - [ ] **EWR agreement at a gauge EWR site with its own record.** §2.9b's
+        observed-flow EWR test runs at the outlet only. Durable fix: the
+        same 2×2 table per EWR site with a record, against that site's own
+        requirement (its scaled pragmatic EWR or rule table, §2.7b), beside
+        the outlet's in `RunSummary`; an ENGINE_VERSION bump. Trigger: a
+        project with an EWR site at a gauge that has a record, whose
+        Reserve compliance there is in question.
 - [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
       is typed; `arealFactorFromMap` (engine) needs the forcing's values,
       which Settings doesn't load. Durable fix: a small panel that fetches

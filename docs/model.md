@@ -4106,7 +4106,10 @@ picked by default and that the record should be chosen in Settings →
 calibration flow series (`pickObservedKind`, `DEFAULT_GAUGE_PICK_WARNING` in
 `run.ts`; issue #1). A project with only one of the two, or with the kind set,
 gets no such warning. The setting only picks which record the statistics are
-scored against; results change only when the parameters are re-tuned.
+scored against; results change only when the parameters are re-tuned. Where
+automatic calibration scores (the outlet, or a gauge inside the network with a
+record of its own) is `settings.calibrationSiteNodeId` (engine ≥ 1.41.0,
+§2.10k); the run's own statistics below are always the outlet's.
 
 **Both records in the run (engine ≥ 0.39.0, issue #45).** The run writes the
 calibration record as `observed_flow` and, when the project also has the other
@@ -5235,9 +5238,10 @@ naturalised, lowFlow }`. At the gauge:
 Each finding warns as the outlet's does, prefixed `At gauge "<name>": …`. A
 record whose node is gone from the model, is not a gauge, or is the outlet is
 left out with a warning naming it. Checks 2 and 3 stay catchment-wide (the rain
-is the catchment's), and calibration, the EWR test against observed flow
+is the catchment's), and the run's calibration statistics, the EWR test against observed flow
 (§2.10a) and every other use of an observed record read the outlet's records
-only. A project without a gauge record runs exactly as before: no `gauges`
+only. Calibration itself can be scored at such a gauge instead (engine ≥
+1.41.0, §2.10k). A project without a gauge record runs exactly as before: no `gauges`
 key, no new warning (`gauges.test.ts` pins that the rest of the summary and
 every series are unchanged). The run comparison sets both runs' checks side
 by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
@@ -6015,6 +6019,81 @@ account in the project's history (`calibration_rules.signed_off`, and
 `calibration_rules.sign_off_withdrawn`), so who signed off is the account
 that did, not a name anyone could type (docs/security.md § Calibration rules
 sign-off).
+
+### 2.10k Calibrating at a gauge inside the network (engine ≥ 1.41.0)
+
+Not in the workbook. By default calibration scores the model at the outlet:
+the outlet's gauge or logger record against the simulated outflow (§2.10,
+§2.10b). A project whose trusted record sits at a gauge **above** the outlet
+(a weir partway down the river, attached with `time_series.site_node_id`,
+§2.10d, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql))
+can calibrate there instead: `settings.calibrationSiteNodeId` names the gauge
+node, and null (the default, every engine before) is the outlet, so a project
+that never sets it fits exactly as before.
+
+**What changes at a gauge** (`calibrate/calibrate.ts` `prepareCalibration`,
+`calibrate/site.ts`):
+
+- **The record** is the gauge's own (`series['<kind>@<node id>']`,
+  `calibrationSeriesKey`). `calibrationFlowKind` picks among *its* records as
+  it does at the outlet (the one asked for, else the gauge record, else the
+  logger), and the independent-record test (`validationRecord`) validates
+  against the gauge's other record, never the outlet's.
+- **The simulated series** is the gauge's outflow (U at that node), what its
+  record measures: the natural flow of the gauge's sub-catchment with every
+  use, dam and transfer above it. Nothing below the gauge can change a score.
+  The fitted parameters are still the catchment's GR4J parameters: one runoff
+  model runs for the whole catchment and the flow shares (§2.5) route it to
+  each node, so a fit at a gauge assumes the sub-catchment above it responds
+  as the whole catchment does.
+- **No gauged range and no gap filling.** `settings.qualityFlags.ratings` and
+  `settings.flowGapFill` are the outlet records' settings, so a gauge's record
+  has neither: no day of it is flagged extrapolated or censored, and none is
+  filled. The data checks' suspect days (outliers, flat stretches) still
+  apply, as the quality flags treat them. A fit record at a gauge stores a
+  null fill spec, and a later change of the outlet records' ratings or fill
+  is no change to it.
+- **Everything else is the same:** the calibration window and exclusions, the
+  objective, the multi-start search, the split-sample and dry → wet tests,
+  the benchmarks and intervals, and the WR2012 MAR penalty (which reads the
+  catchment's natural flow, not the scored series).
+
+The report (`CalibrationReport.siteNodeId`) and the fit record
+(`FitRecord.siteNodeId`, absent on a record from before = the outlet) say
+where the fit was scored, and a note names the gauge and what doesn't apply
+there. A fit record whose site differs from the settings' is flagged
+(`siteChanged`, "The calibration site has changed since the fit"). Automated
+calibration (§2.10j) runs its rules at the site (the plan and report carry
+`siteNodeId`), and the uncertainty ensemble (§2.10e) judges its members on the
+site's records against the simulated flow at the site.
+
+**Refusals.** A site that is gone from the model, is not a gauge, or is the
+outlet node is refused with a message saying so (`calibrationSiteError`); so is
+a gauge with no record of the kind wanted. The API checks a new site when it is
+saved (api.md § Projects); a stored site that later loses its node or record
+blocks nothing but the fit.
+
+**What stays at the outlet, and why.** The site is a *calibration* setting.
+A run never reads it:
+
+- The run's **calibration statistics** (§2.10, `RunSummary.calibration`) stay
+  the outlet's record against the simulated outflow, because the run's
+  outputs (the Results chart's observed and simulated outflow, the annual
+  volume table) are the outlet's. After a fit at a gauge they are out of
+  sample: `calibrationFitStatus` says `otherPeriod`. Scoring them at the site
+  is a tracked follow-up ([followups.md](./followups.md), *Calibrating at a
+  gauge inside the network*).
+- The **EWR agreement with the observed record** (§2.9b) stays at the outlet.
+  It asks whether the model's "below the EWR" at the outlet matches the
+  river's on observed days, and its requirement is the outlet's pragmatic EWR
+  (`ewrDaysNotMet`). A gauge's record measures another point of the river,
+  with another requirement (if the gauge is an EWR site at all, §2.7b), so
+  moving the test with the calibration site would compare the gauge's flow
+  with the outlet's EWR. It needs the outlet's record, whatever the
+  calibration site; a per-site agreement at each EWR site with a record is a
+  separate test, also tracked in [followups.md](./followups.md).
+- The **plausibility checks** (§2.10d) run at every gauge with a record as
+  before, whatever the calibration site.
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
