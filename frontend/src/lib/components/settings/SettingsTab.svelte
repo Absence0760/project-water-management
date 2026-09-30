@@ -7,6 +7,8 @@
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
+	// API keys render for owners only, so the rest of the team never downloads them.
+	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 </script>
@@ -86,7 +88,6 @@
 	// (R5) settings are part of the form.
 	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
 	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
-	import ApiKeysPanel from '$lib/components/apiKeys/ApiKeysPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 
@@ -1205,7 +1206,9 @@
 </div>
 
 {#if project.role === 'owner'}
-	<ApiKeysPanel projectId={project.id} />
+	<Lazy load={loadApiKeys}>
+		{#snippet children(ApiKeysPanel)}<ApiKeysPanel projectId={project.id} />{/snippet}
+	</Lazy>
 {/if}
 
 <ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />

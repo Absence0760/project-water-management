@@ -164,11 +164,11 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Grids** and **+ Add node**; Crops & demand **Grids** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Tables** and **+ Add node**; Crops & demand **Tables** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Grids** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
+						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
 					},
 					{
 						type: 'note',
@@ -285,7 +285,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
-							'Press **+ Add node** for each hydrological unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
+							'Press **+ Add node** for each hydrological unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Tables** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every hydrological unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
 							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
@@ -296,7 +296,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each hydrological unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour hydrological units by** › **Supply, latest run**, on by default); a hydrological unit added since the run is hatched. The same menu colours the hydrological units by their dam level at the end of the latest run. A name longer than 17 characters is shortened on the map, keeping the ending when two names would otherwise look alike (hover a node, or read the list beside the map, for its full name); a transfer that can’t curve clear of the names is drawn round them.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Tables** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each hydrological unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour hydrological units by** › **Supply, latest run**, on by default); a hydrological unit added since the run is hatched. The same menu colours the hydrological units by their dam level at the end of the latest run. A name longer than 17 characters is shortened on the map, keeping the ending when two names would otherwise look alike (hover a node, or read the list beside the map, for its full name); a transfer that can’t curve clear of the names is drawn round them.'
 					}
 				]
 			},
@@ -375,7 +375,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
