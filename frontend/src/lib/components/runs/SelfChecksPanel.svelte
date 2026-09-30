@@ -1,7 +1,8 @@
 <!--
 	What the model says about its own run (engine ≥ 0.12.0): the self-checks,
-	the water balance per water year (its own section on Runs & results,
-	WaterBalanceTable; here in the printable report), and a trace of one farm's day with every
+	the water balance per water year (on Runs & results only its closure check,
+	each year's residual, with a link to the table's own section in Model
+	quality; the table itself here in the printable report), and a trace of one farm's day with every
 	intermediate column and its formula, or of the catchment's day in the
 	runoff model (docs/ui.md § Self-checks).
 -->
@@ -11,7 +12,7 @@
 	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
+	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 
 	let {
@@ -43,6 +44,7 @@
 	const uid = $props.id();
 	const v = $derived(summary.verification);
 	const headline = $derived(checksHeadline(v));
+	const closure = $derived(balanceClosure(summary.waterBalance));
 
 	// Trace: start on the farm and day with the largest balance residual, else the first farm on the first day.
 	let nodeId = $state('');
@@ -63,7 +65,7 @@
 	let traceError = $state<string | null>(null);
 	let tracing = $state(false);
 	const rows = $derived(!day ? [] : day.kind === 'catchment' ? catchmentTraceRows(day) : traceRows(day));
-	const closure = $derived(day && day.kind !== 'catchment' ? dayClosure(day) : null);
+	const dayBalance = $derived(day && day.kind !== 'catchment' ? dayClosure(day) : null);
 	const storeClosure = $derived(day?.kind === 'catchment' ? catchmentClosure(day) : null);
 
 	async function trace(e: SubmitEvent) {
@@ -116,9 +118,11 @@
 </section>
 
 {#if balanceHref}
-	<!-- The water balance has its own section in Model quality (issue #137); the report keeps it here. -->
-	<p class="muted small balance-link" data-testid="checks-balance-link">
-		The water balance by water year is under Model quality: <a href={balanceHref}>Water balance</a>.
+	<!-- The water balance has its own section in Model quality (issue #137): here only its closure check, each water
+	     year's residual, and a link to the table (followups § UI, issue #175's overlap check). The report keeps the table here. -->
+	<p class="balance-link small" class:bad={closure.tone === 'bad'} data-testid="checks-balance-link">
+		{#if closure.tone !== 'none'}<span class="mark" aria-hidden="true">{closure.tone === 'ok' ? '✓' : '✗'}</span><span class="visually-hidden">{closure.tone === 'ok' ? 'Passed:' : 'Failed:'}</span>{/if}
+		{closure.text} The balance itself, term by term: <a href={balanceHref}>Water balance</a>.
 	</p>
 {:else}
 	<div class="wb"><WaterBalanceTable {summary} /></div>
@@ -185,10 +189,10 @@
 			{:else}
 				<p class="muted small">This run didn't record every store for this day, so its balance can't be worked out here.</p>
 			{/if}
-		{:else if closure}
+		{:else if dayBalance}
 			<p class="closure small">
-				In (H + I + J + rain on dam) {fmtValue(closure.inflow)} − used (G − T) {fmtValue(closure.consumptive)} − evaporated {fmtValue(closure.evaporation)} − stored (Q − Q[t−1]) {fmtValue(closure.storageChange)}
-				− out (U) {fmtValue(closure.outflow)} = <strong>{fmtValue(closure.residual)}</strong> m³
+				In (H + I + J + rain on dam) {fmtValue(dayBalance.inflow)} − used (G − T) {fmtValue(dayBalance.consumptive)} − evaporated {fmtValue(dayBalance.evaporation)} − stored (Q − Q[t−1]) {fmtValue(dayBalance.storageChange)}
+				− out (U) {fmtValue(dayBalance.outflow)} = <strong>{fmtValue(dayBalance.residual)}</strong> m³
 			</p>
 		{:else if day.kind === 'farm'}
 			<p class="muted small">This run was made before the working columns were recorded (engine 0.12.0); run the model again to trace it in full.</p>
@@ -222,7 +226,8 @@
 		color: var(--success);
 		font-weight: 700;
 	}
-	.failed .mark {
+	.failed .mark,
+	.bad .mark {
 		color: var(--danger);
 	}
 	.detail {
@@ -233,6 +238,9 @@
 	}
 	.balance-link {
 		margin: 0.75rem 0 0;
+	}
+	.balance-link.bad {
+		color: var(--danger);
 	}
 	.trace-form {
 		display: flex;

@@ -174,15 +174,15 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 const GUIDES = ['the-whole-process', 'build-the-network', 'how-the-model-works', 'a-day-on-a-farm', 'how-gr4j-works', 'how-calibration-works', 'rain-gap-filling'];
 const ALL_DIAGRAMS = ['workflow', 'network', 'pipeline', 'farm-day', 'gr4j', 'calibration-loop', 'validation', 'rain-sources'];
 
-test('every help diagram: labels clear of each other, lines and box edges, and never drawn smaller than 9.5 px', async ({ page, owner }) => {
+test('every help diagram: labels clear of each other, lines and box edges, never drawn smaller than 9.5 px, and whole from 1280 px', async ({ page, owner }) => {
 	void owner;
 	test.setTimeout(60_000);
 	const seen = new Set<string>();
 	for (const guide of GUIDES) {
 		await page.goto(`/help/guides/${guide}`);
 		await expect(page.locator('figure.diagram').first()).toBeVisible();
-		for (const width of [1440, 390]) {
-			await resizeTo(page, { width, height: width === 390 ? 844 : 960 });
+		for (const { width, height } of SIZES) {
+			await resizeTo(page, { width, height });
 			const figures = page.locator('figure.diagram');
 			for (let i = 0; i < (await figures.count()); i++) {
 				const fig = figures.nth(i);
@@ -193,9 +193,9 @@ test('every help diagram: labels clear of each other, lines and box edges, and n
 				const r = await checkDiagramLabels(fig.locator('svg'), { boxes: 'rect.box' });
 				expect(r.problems, `${id} at ${width}`).toEqual([]);
 				expect(r.smallestPx, `${id} at ${width}`).toBeGreaterThanOrEqual(9.49);
-				// The 660-wide diagrams fit the guide's column whole at 1440.
-				if (width === 1440 && (id === 'farm-day' || id === 'gr4j'))
-					expect(await fig.locator('.scroll').evaluate((el) => el.scrollWidth - el.clientWidth), id).toBeLessThanOrEqual(0);
+				// Every diagram fits the guide's column whole from 1280 px: none scrolls sideways (five did until they
+				// were redrawn 660 wide; the text floor above still holds). On a phone they scroll, as they must.
+				if (width >= 1280) expect(await fig.locator('.scroll').evaluate((el) => el.scrollWidth - el.clientWidth), `${id} at ${width}`).toBeLessThanOrEqual(0);
 			}
 		}
 	}

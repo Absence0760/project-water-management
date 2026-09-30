@@ -2054,13 +2054,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       Home/End step the read-out and the dot (`keyStep` in
       `charts/sparkline.ts`), with the point in words as `aria-valuetext`. A
       mouse press doesn't focus it. ui-playbook § 3; `sparklines.spec.ts`.
-- [ ] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
-      diagram labels work). The help `Diagram` never draws text under
+- [x] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
+      diagram labels work; done 2026-09-30). The help `Diagram` never draws text under
       9.5 px, so at column width the model pipeline, workflow, calibration
       loop, validation and rain-sources diagrams scroll a little sideways
-      instead of shrinking. Durable fix: redraw those five narrower (fewer
-      boxes per row, or stacked) so they fit the column whole at 1280 and
-      up. Waits on the operator's choice (keep the scroll, or redraw).
+      instead of shrinking (measured: the pipeline 53 px at 1440; at 1280 all
+      five, 40 to 213 px). Redrawn, text floor kept: every diagram is at most
+      660 units wide, which fits the 582 px column at 1280 (the pipeline top
+      to bottom, the workflow in two rows, the other three tighter).
+      `help/diagrams/width.test.ts` holds the width, and
+      `diagram-labels.spec.ts` checks none scrolls at 1440 or 1280 (ui.md §
+      Help).
 - [x] **Deleting a scenario's released base run sometimes answers 404**
       (issue #77, found 2026-09-28, fixed 2026-09-28): the scenarios e2e
       failed ~1 in 15. The cause was in the browser, not RLS (an editor's
@@ -2158,8 +2162,9 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       the self-checks used), and the self-checks link to it; the printable
       report keeps it under the checks. `self-checks.spec.ts` and
       `runs.spec.ts` pin it.
-- [ ] **The same water balance by water year in two places, and the
-      catchment's in a third** (issue #175's overlap check, 2026-09-29).
+- [x] **The same water balance by water year in two places, and the
+      catchment's in a third** (issue #175's overlap check, 2026-09-29; the
+      UI half done 2026-09-30, the choice of table still open, below).
       Model quality's *Water balance* (`#res-water-balance`, issue #137) and
       Dig deeper › Self-checks both draw the per-unit column-V balance by
       water year (`runs/WaterBalanceTable.svelte`, `runs/checks.ts`
@@ -2186,6 +2191,22 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       **Who:** operator (which table is the client's).
       **Trigger:** the next change to the Water account, the Water balance
       section or the Self-checks panel, or a client asking for the table.
+      **Done (2026-09-30), the part that doesn't wait on that choice:** on
+      Runs & results the Self-checks panel is now only the closure check
+      (one line: the balance closes in every water year and the whole run,
+      or the years that don't with their residuals; `runs/checks.ts`
+      `balanceClosure`) and a link to the table; the Water balance and the
+      Water account link to each other for the same run, each saying what
+      the other adds, instead of one repeating the other
+      (`self-checks.spec.ts` follows both links and Back). The printable
+      report still draws the table under its self-checks, its only copy
+      there.
+      - [ ] **Still open: which table is the client's** (operator). Then
+            either the Water account gains rain (mm), the runoff
+            coefficient, start and end storage and an m³ / Mm³ switch and
+            Model quality's Water balance becomes a link, or the account
+            becomes the link; the report prints the chosen one, and the
+            summary CSV and `.xlsx` keep both. Trigger unchanged.
 
 ## Roles and what each member sees
 

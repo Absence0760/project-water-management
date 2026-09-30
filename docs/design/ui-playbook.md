@@ -520,7 +520,14 @@ section it belongs to, with the example that taught it.
     drawing scaled to its column is never drawn with its smallest text under
     9.5 px (help `Diagram` sets its `min-width` from the viewBox); past that
     it scrolls sideways, as on a phone. The model pipeline, 920 units wide,
-    drew its notes at 7 px at 1440.
+    drew its notes at 7 px at 1440. **Then draw it to fit, rather than
+    letting the floor make it scroll:** with the floor, five help diagrams
+    720–920 wide scrolled 40–213 px sideways in the 582 px guide column at
+    1280. Work out the widest drawing the column holds (column px × smallest
+    text px ÷ 9.5: 673 for 11 px text at 1280) and redraw to it: a long
+    chain runs top to bottom (the pipeline), a row of seven steps becomes
+    two rows (the workflow). `help/diagrams/width.test.ts` holds help
+    diagrams to 660.
 - **Label every chart.** Every chart, sparkline, bar, band or mini-plot says
   what it shows without the reader guessing. The Crops list's factor
   sparklines had no title, axis, units or months, and the operator's

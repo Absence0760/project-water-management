@@ -4107,7 +4107,9 @@ read it before.
      where the parameters came from), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
-     described under [Self-checks](#self-checks)), runoff model, WR2012
+     described under [Self-checks](#self-checks); a line under its equation
+     links to River & reserve's **Water account** for the same run, the
+     catchment's own), runoff model, WR2012
      check, EWR vs observed, plausibility checks.
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
@@ -4319,8 +4321,16 @@ read it before.
   made the run and ran its checks, and the largest daily balance error of any
   unit (column V). Second, the **water balance by water year**
   (`runs/WaterBalanceTable.svelte`): on Runs & results its own Model quality
-  section (`#res-water-balance`, issue #137), which the self-checks link to;
-  in the printable report here, under the checks. Rain,
+  section (`#res-water-balance`, issue #137), and the self-checks keep only
+  its closure check: one line, ✓ or ✗ in text, saying the balance closes in
+  every water year and over the whole run, or naming the years whose
+  residual isn't float noise with their residuals (the first five, then "and
+  N more"; `balanceClosure`), and a link to the table
+  (`checks-balance-link`). In the printable report the table is here, under
+  the checks. The table says, under its equation, where the catchment's own
+  account is (River & reserve's **Water account**, from natural flow, in m³;
+  `balance-account-link`), and the account links back: the two cover the
+  same water years (Water account, below). Rain,
   runoff coefficient, start storage, unit runoff, transfers, rain on dams,
   consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
   outflow and end storage in Mm³, and the residual in m³. A network's
@@ -4797,7 +4807,14 @@ read it before.
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
   residual (to two significant figures, float noise). Runs before engine
-  0.32.0 show *Not computed by engine x.y* in both panels. The **EWR required
+  0.32.0 show *Not computed by engine x.y* in both panels. A line under the
+  introduction links to Runs & results' **Water balance** for the same run
+  (`?tab=runs&run=<id>#res-water-balance`, `account-balance-link`): the same
+  water years summed over the hydrological units, with rain, the runoff
+  coefficient and start and end storage, in Mm³. The two tables share about
+  ten terms; which one is the client's, with the other becoming a link, is
+  the operator's call (followups.md § UI), so for now each links to the
+  other instead of repeating the other's words. The **EWR required
   vs met** table (each site's share of the required volume that passed it,
   the volume and the days short, per water year and the whole run) closed
   this panel until 2026-09-29; it is not part of the balance, so issue #175
@@ -6325,9 +6342,16 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   drawing is never drawn so small that its smallest text is under 9.5 px
   (`Diagram` sizes its `min-width` from the SVG's viewBox and smallest font
   once it is on the page); narrower than that it scrolls sideways (a
-  `data-scroll-region`): on a phone, or in a column too narrow for the
-  widest drawings (the model pipeline, 920 units wide, shrank its notes to
-  7 px in the old 42rem guide column). It is also never drawn wider than 1.3
+  `data-scroll-region`), which only a phone should need. Every drawing is
+  at most 660 units wide, so it fits the guide's column whole from 1280 px
+  (582 px there; 660 × 9.5 / 11 = 570): the model pipeline (920, which
+  shrank its notes to 7 px in the old 42rem column) now runs top to bottom,
+  the workflow's seven steps sit in two rows, and the calibration loop, the
+  validation tests and the rain sources (720) were drawn tighter
+  (2026-09-30; at 720 and wider they scrolled up to 213 px sideways at
+  1280). `help/diagrams/width.test.ts` holds the 660 and forbids a text size
+  of a diagram's own; `diagram-labels.spec.ts` checks none scrolls at 1440
+  or 1280. It is also never drawn wider than 1.3
   times its viewBox, centred in its frame, now that a guide's figures span
   the Help column. A label
   on the figure's ground beside a wire (not in a box) is `.lbl`: a halo in
