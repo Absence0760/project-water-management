@@ -248,6 +248,10 @@
 		min-height: 100vh;
 		background: var(--bg);
 	}
+	/* Every link here sits in running text or a value (the register's address): underlined, not colour alone (WCAG 1.4.1). */
+	.verify-main a:not(:global(.btn)) {
+		text-decoration: underline;
+	}
 	.verify-header {
 		padding: 0.6rem var(--gutter, 1rem);
 		border-bottom: 1px solid var(--border);
