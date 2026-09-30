@@ -3,8 +3,68 @@
 // run code: only the worker may import this module (a page importing it would
 // ship the model in a page chunk; the bundle guard's worker checks and
 // src/lib/preview/compute.test.ts's import scan say so).
-import { applyScenario, firmYield, prepareYield, type YieldPoint } from '@water-management/engine';
+import { applyScenario, firmYield, prepareYield, validateScenarioOps, type ModelInput, type YieldPattern, type YieldPoint } from '@water-management/engine';
 import type { FromWorker, ToWorker, YieldPreviewRequest } from './messages';
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const inRange = (v: unknown, lo: number, hi: number): v is number => isNum(v) && v >= lo && v <= hi;
+const isId = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= 100;
+const NODE_KINDS: readonly unknown[] = ['farm', 'gauge', 'user'];
+const MESSAGE_KEYS = ['type', 'id', 'request'];
+const REQUEST_KEYS = ['input', 'ops', 'nodeId', 'pattern', 'assurance', 'tolerance'];
+const onlyKeys = (o: Obj, keys: readonly string[]) => Object.keys(o).every((k) => keys.includes(k));
+
+/** A draft shape as the backend's YieldParams takes it (backend/src/yield/store.ts). */
+function pattern(v: unknown): YieldPattern | null {
+	if (v === 'constant' || v === 'demand') return v;
+	return Array.isArray(v) && v.length === 12 && v.every((x) => inRange(x, 0, 1e6)) ? [...(v as number[])] : null;
+}
+
+/** The input's outline: the parts the engine indexes by, each of the kind it expects. The engine checks the rest. */
+function inputShapeError(v: unknown): string | null {
+	if (!isObj(v) || !isObj(v.settings) || !isObj(v.model) || !isObj(v.series)) return 'input must be a run input { settings, model, series }';
+	const m = v.model;
+	for (const k of ['nodes', 'crops', 'cropAreas', 'transfers']) if (!Array.isArray(m[k])) return `input.model.${k} must be a list`;
+	for (const n of m.nodes as unknown[]) {
+		if (!isObj(n) || !isId(n.id) || !NODE_KINDS.includes(n.kind)) return 'input.model.nodes must each have an id and a kind (farm, gauge or user)';
+	}
+	return null;
+}
+
+/**
+ * The worker's message, checked at the boundary as the backend checks a
+ * request body (YieldParams, validateScenarioOps): the known keys only, each
+ * of its kind and range, and a scenario's ops rebuilt from their allowlisted
+ * fields. A message is untrusted data even from the page that made the
+ * worker. `id` is the request's when it has a usable one, so the error can
+ * go back to it; null means the message isn't a preview request at all.
+ */
+export function parseMessage(data: unknown): { ok: true; msg: ToWorker } | { ok: false; id: number | null; message: string } {
+	if (!isObj(data) || data.type !== 'yield') return { ok: false, id: null, message: 'not a preview request' };
+	if (!Number.isSafeInteger(data.id) || (data.id as number) < 1) return { ok: false, id: null, message: 'a preview request needs a positive whole id' };
+	const id = data.id as number;
+	const bad = (message: string) => ({ ok: false as const, id, message: `the preview request is malformed: ${message}` });
+	if (!onlyKeys(data, MESSAGE_KEYS)) return bad('unknown message field');
+	const r = data.request;
+	if (!isObj(r)) return bad('request must be an object');
+	if (!onlyKeys(r, REQUEST_KEYS)) return bad('unknown request field');
+	const inputErr = inputShapeError(r.input);
+	if (inputErr) return bad(inputErr);
+	if (!isId(r.nodeId)) return bad('nodeId must be an id');
+	const p = pattern(r.pattern);
+	if (!p) return bad('pattern must be constant, demand or 12 factors 0–1 000 000');
+	if (!inRange(r.assurance, 0.5, 1)) return bad('assurance must be 0.5–1');
+	if (!inRange(r.tolerance, 1e-5, 0.05)) return bad('tolerance must be 0.00001–0.05');
+	const request: YieldPreviewRequest = { input: r.input as unknown as ModelInput, nodeId: r.nodeId, pattern: p, assurance: r.assurance, tolerance: r.tolerance };
+	if (r.ops !== undefined) {
+		const { ops, errors } = validateScenarioOps(r.ops);
+		if (errors.length) return bad(`the scenario's ops: ${errors.join('; ')}`);
+		request.ops = ops;
+	}
+	return { ok: true, msg: { type: 'yield', id, request } };
+}
 
 /**
  * A dam's yield worked out as the `yield` job does for kind 'firm'
@@ -29,8 +89,15 @@ export function previewYield(req: YieldPreviewRequest): YieldPoint {
 	return firmYield(problem, req.nodeId, { pattern: req.pattern, assurance: req.assurance, tolerance: req.tolerance });
 }
 
-/** The worker's answer to one message: the point, or the engine's words (never a stack). */
-export function handle(msg: ToWorker): FromWorker {
+/**
+ * The worker's answer to one message: the point, or the engine's words (never
+ * a stack). A malformed request is answered with an error and never reaches
+ * the engine; null for a message that isn't a preview request (no answer).
+ */
+export function handle(data: unknown): FromWorker | null {
+	const parsed = parseMessage(data);
+	if (!parsed.ok) return parsed.id === null ? null : { type: 'error', id: parsed.id, message: parsed.message };
+	const msg = parsed.msg;
 	try {
 		return { type: 'yield-done', id: msg.id, point: previewYield(msg.request) };
 	} catch (err) {

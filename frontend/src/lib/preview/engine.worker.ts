@@ -7,12 +7,13 @@
 // replaces or cancels one by terminating the worker (the engine is
 // synchronous, so it can't be asked to stop).
 import { handle } from './compute';
-import type { FromWorker, ToWorker } from './messages';
 
-self.onmessage = (e: MessageEvent<ToWorker>) => {
+self.onmessage = (e: MessageEvent<unknown>) => {
 	// A dedicated worker only hears the page that made it (its messages carry
 	// an empty origin); refuse anything that names another origin.
 	if (e.origin && e.origin !== self.location.origin) return;
-	if (e.data?.type !== 'yield') return;
-	(self as unknown as Worker).postMessage(handle(e.data) satisfies FromWorker);
+	// The payload is untrusted data: handle() parses it strictly before the
+	// engine sees it (compute.ts parseMessage), and ignores a non-request.
+	const answer = handle(e.data);
+	if (answer) (self as unknown as Worker).postMessage(answer);
 };

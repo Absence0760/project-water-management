@@ -286,6 +286,11 @@ worker imports `lib/preview/compute.ts`, the module that calls the engine
 (`compute.test.ts` scans for other importers). One request at a time, latest
 wins: a newer one terminates the worker mid-search, since the engine loop is
 synchronous. The bundle guard checks both workers import from `chunks/`.
+The worker treats its message as untrusted data: `compute.ts` `parseMessage`
+checks it strictly before the engine sees it (known keys only; the yield
+parameters in the backend's `YieldParams` ranges; the input's outline; a
+scenario's ops through `validateScenarioOps`), and answers a malformed
+request with an error carrying its id.
 
 That only pays because a chunk holds whole modules. A module a page and the
 worker both use carries everything either of them calls, with its imports, so
