@@ -439,6 +439,7 @@ const ALLOWED_WITH_IDS = [
 	'GET /projects/:id/scenarios/:sid/share-candidates',
 	'POST /projects/:id/scenarios/:sid/members',
 	'DELETE /projects/:id/scenarios/:sid/members/:userId',
+	'GET /projects/:id/scenarios/:sid/packs',
 	'PATCH /projects/:id/notes/:noteId',
 	'DELETE /projects/:id/notes/:noteId'
 ];
