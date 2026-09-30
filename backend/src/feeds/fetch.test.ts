@@ -275,6 +275,21 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps', config: grid, extra: 1 }).success).toBe(false);
 	});
 
+	// A bounding box's limits are all that keeps a queue message from making
+	// the fetcher read many cells: the schema checks them again here.
+	it('checks a bounding box: a valid one parses; too big, with cells, or with an unknown key is refused', () => {
+		const base = { source: 'chirps', start: '2026-01-01', end: '2026-01-02', today: '2026-01-03' };
+		const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox } })).toMatchObject({ success: true, data: { config: { bbox } } });
+		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps_gefs', config: { bbox } }).success).toBe(true);
+		// 400 cells in 20 rows.
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { south: -21, west: 25, north: -20, east: 26 } } }).success).toBe(false);
+		// 26 rows of one cell.
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { south: -21.3, west: 25, north: -20, east: 25.05 } } }).success).toBe(false);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { ...grid, bbox } }).success).toBe(false);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { ...bbox, cells: 1000 } } }).success).toBe(false);
+	});
+
 	// The fetcher is the door to the internet: a request can't make it read
 	// more than one fetchWindow would ever ask for.
 	it('refuses a window longer than the source’s own cap', () => {

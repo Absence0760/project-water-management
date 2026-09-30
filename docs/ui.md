@@ -3389,14 +3389,14 @@ part of the Settings tab's chunk; WP-2.10,
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code. The area is
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
   **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
   rows, the server's limits mirrored so a box too big is explained before
   anything is sent). The card says where a feed reads: "cell -20.12, 25.17",
-  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (`describePlace`). The station code (checked as `A2H012`; only river gauges, H codes).
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (`describePlace`).
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
   days*, the default, or *rnl: from 1981, final days only*: one product end
   to end, never one spliced onto the other) and an optional **Start date**,
