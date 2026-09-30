@@ -3165,7 +3165,19 @@ which checks every catchment tab).
   range against the station history, since a detected break can be a year
   or two off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
   Fit provenance shows the fit period and the factors per range, with the
-  years each was fitted on, that the fit ran under. Below it, **Zero-rain runs in the catchment rain**
+  years each was fitted on, that the fit ran under. Between the picker and
+  the fit period, **CHIRPS quantile map** (`settings.chirpsQuantileMap`,
+  engine ≥ 1.53.0, CR-23, off by default): a checkbox, "Quantile-map the
+  CHIRPS that fills gaps onto the catchment rain (each month’s total
+  kept)", and when on the **Wet day from (mm)** threshold (0.1–10, 1 by
+  default; the one it was turned off with comes back until Save;
+  `withChirpsQuantileMap` in `settings/rain.ts`). Disabled under raw CHIRPS,
+  where the hint says the map needs bias correction and a run would ignore
+  a saved one. A run with the map lists what it did in the CHIRPS warning,
+  warns for the gap days in months it can't map, and outputs
+  `rain_chirps_mapped`; Fit provenance shows whether the fit ran with it
+  ([model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23)).
+  Below it, **Zero-rain runs in the catchment rain**
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
   **Flagged zero runs** picker ("Treat as missing (default)" or "Run as
@@ -4798,9 +4810,11 @@ read it before.
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
-  and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
-  puts in adjacent columns after rain used. The summary CSV lists the 12
-  monthly factors.
+  and the day's CHIRPS factor (`chirps_factor`), and with the CHIRPS
+  quantile map on (engine ≥ 1.53.0) CHIRPS after the map
+  (`rain_chirps_mapped`), which the catchment daily CSV puts in adjacent
+  columns after rain used. The summary CSV lists the 12 monthly factors,
+  and the map's month table when it was on.
 - **Assurance of supply** (`#res-assurance`, on Hydrological units after the
   curtailment table, under *Units & users* on the Runs tab until issue #17;
   `reliability/AssurancePanel.svelte`, helpers in

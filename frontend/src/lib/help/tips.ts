@@ -1020,6 +1020,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.chirpsFitPeriod']
 	},
 	{
+		id: 'chirps-quantile-map',
+		term: 'CHIRPS quantile map',
+		short: 'Opt-in: gives the CHIRPS that fills gaps the catchment rain’s wet-day frequency and intensity, keeping each month’s total.',
+		category: 'data',
+		fields: ['settings.chirpsQuantileMap', 'run.rain_chirps_mapped']
+	},
+	{
 		id: 'double-mass',
 		term: 'Double mass: catchment rain vs CHIRPS',
 		short: 'Cumulative catchment rain against cumulative CHIRPS: a kink means one record changed, e.g. a station opened, closed or moved.',

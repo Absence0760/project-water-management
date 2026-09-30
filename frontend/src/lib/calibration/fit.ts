@@ -308,7 +308,7 @@ export function seedError(seed: number | null): string | null {
 export function fitRecordFor(
 	r: CalibrationReport,
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> &
-		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'flowGapFill' | 'dataQuality' | 'qualityFlags'>>,
+		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'chirpsQuantileMap' | 'flowGapFill' | 'dataQuality' | 'qualityFlags'>>,
 	opts: {
 		validate: boolean;
 		validationRecord: CalibrationFlowKind | null;
