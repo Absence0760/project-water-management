@@ -2020,7 +2020,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 ## Evidence packs
 
 A licensing evidence report frozen as a hashed, versioned, signed pack
-(roadmap WP-3.14, issue #71, migrations 112 and 120; [evidence-pack.md](./evidence-pack.md)
+(roadmap WP-3.14, issue #71, migrations 112 and 122; [evidence-pack.md](./evidence-pack.md)
 covers the manifest, the hash, the short code, the lifecycle and the
 reproduction bundle).
 
@@ -2049,7 +2049,7 @@ reproduction bundle).
   account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
   `signoffs` is a count. `pdfSha256` and `pdfPages` are set once, when the
   PDF is recorded (119_pack_render); `bundleSha256` when the pack is issued
-  (120_pack_bundle; null on a draft).
+  (122_pack_bundle; null on a draft).
 - `PackPdfState = { status: 'ready' | 'rendering' | 'failed' | 'none',
   error }`: `ready` once the PDF is recorded; `rendering` while its render
   job is queued, running, retrying or waiting for the renderer's answer;

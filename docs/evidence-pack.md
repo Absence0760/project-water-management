@@ -274,7 +274,7 @@ series re-hashed, and their stored daily outputs), builds the bundle, checks
 it as `reproduce:pack --no-run` would, stores it in the packs bucket under
 `packs/<project>/<pack>/<sha256>.zip` with its SHA-256 as the upload's
 checksum (the store refuses other bytes, and the route checks the checksum
-the store answers with is that one), and records it through `app_record_pack_bundle` (120), which only
+the store answers with is that one), and records it through `app_record_pack_bundle` (122), which only
 the transaction that issues the pack may call. All of it or none: a bundle
 that can't be stored fails the issue (`packs.db.test.ts` pins it: the pack
 stays a draft, its predecessor issued, no bundle, audit row or job). The
@@ -334,7 +334,7 @@ both a baseline and an application pack; the setter's refusals).
 
 ## Guards
 
-- `app_record_pack_bundle` (120) is the only writer of the bundle columns:
+- `app_record_pack_bundle` (122) is the only writer of the bundle columns:
   an editor, in the transaction that issues the pack, once, under the key it
   derives.
 - `evidence_pack_guard` (112) keeps the manifest, its hash, the runs, the

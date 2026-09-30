@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------------
 # Evidence packs' reproduction bundles (roadmap WP-3.14 item 11, issue #71;
 # docs/evidence-pack.md § Reproduction, docs/deployment.md § Evidence packs,
-# backend/migrations/120_pack_bundle.sql)
+# backend/migrations/122_pack_bundle.sql)
 #
 # Issuing a pack builds its reproduction bundle in the API, in the issue's own
 # transaction, and stores it in the packs bucket (packs.tf) beside the PDF,

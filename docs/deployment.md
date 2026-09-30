@@ -1419,7 +1419,7 @@ first deploy):
   exactly as `/reports/*` (§ Reports); `GET …/packs/:packId/pdf` and
   `GET …/packs/:packId/bundle` redirect to one (60 s).
 - **The reproduction bundle** ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction),
-  120_pack_bundle, infra/pack_bundles.tf): the API builds it when it issues
+  122_pack_bundle, infra/pack_bundles.tf): the API builds it when it issues
   a pack, in the issue's transaction, and puts it at
   `packs/<project>/<pack>/<sha256>.zip` with that checksum and
   `If-None-Match: *` before recording its hash; if the put fails nothing is

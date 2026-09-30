@@ -1014,7 +1014,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `engine_version`, `pdf_key`/`pdf_sha256`/`pdf_pages` (NULL until the
   PDF is recorded, 119 below) and
   `bundle_key`/`bundle_sha256` (NULL until built, each set as a set; the
-  bundle is built when the pack is issued, 120),
+  bundle is built when the pack is issued, 122),
   `created_by` and `issued_by` (→ `app_user`, `SET NULL`), `created_at`,
   `issued_at`, `superseded_by_pack_id` (→ `evidence_pack`),
   `status_reason` (1–1 000, the withdrawal's). A check ties each status to
@@ -1045,7 +1045,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `superseded_by_pack_id`; catalogue `COLUMN_ONLY_UPDATE`). The PDF and
   bundle columns aren't granted: their hashes are verified publicly, so only
   `SECURITY DEFINER` setters write them (the PDF's:
-  `app_record_pack_pdf`, 119 below; the bundle's, 120 below). `SELECT`: editors, and viewers for a baseline pack
+  `app_record_pack_pdf`, 119 below; the bundle's, 122 below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
   `DELETE` editor, drafts only.
@@ -1057,10 +1057,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
   refuses a project with a pack past draft (`restrict_violation`).
 - **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`; latest body:
-  120_pack_bundle, which adds `bundleSha256`): by short code or full hash,
+  122_pack_bundle, which adds `bundleSha256`): by short code or full hash,
   the printed fields of a pack that was issued, as `jsonb`, or NULL
   ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
-- **`app_record_pack_bundle(pack, sha256)`** (120_pack_bundle, `SECURITY
+- **`app_record_pack_bundle(pack, sha256)`** (122_pack_bundle, `SECURITY
   DEFINER`, `EXECUTE` for `water_app`): records the reproduction bundle's key
   (`packs/<project>/<pack>/<sha256>.zip`, derived here) and SHA-256, for an
   editor of the project, only for a pack the caller issued in the same

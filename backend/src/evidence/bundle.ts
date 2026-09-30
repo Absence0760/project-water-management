@@ -1,4 +1,4 @@
-// An evidence pack's reproduction bundle from the API's side (120_pack_bundle;
+// An evidence pack's reproduction bundle from the API's side (122_pack_bundle;
 // docs/evidence-pack.md § Reproduction): read both runs' stored inputs and
 // results, build the bundle (engine evidence/bundle.ts), check it, store it in
 // the packs bucket and record it, all inside the issue route's transaction. If

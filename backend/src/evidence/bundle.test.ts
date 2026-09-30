@@ -1,4 +1,4 @@
-// The reproduction bundle's storage helpers (120_pack_bundle; storage.ts):
+// The reproduction bundle's storage helpers (122_pack_bundle; storage.ts):
 // its key is the one app_record_pack_bundle derives, its download name is the
 // one its README names, and a stored checksum other than the one sent is
 // refused before the hash is recorded. The end to end (issue, MinIO, download,

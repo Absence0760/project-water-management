@@ -4,7 +4,7 @@
 // manifest's SHA-256; a registered professional signs the draft (the pack
 // statement, bound to that hash); an editor issues it, which supersedes the
 // version it replaces in the same transaction, and builds, stores and records
-// its reproduction bundle there too (bundle.ts, 120_pack_bundle); an issued
+// its reproduction bundle there too (bundle.ts, 122_pack_bundle); an issued
 // pack is withdrawn, never edited or deleted. GET /verify/:code (verifyRoutes) answers anyone
 // with the public fields of a pack that was issued.
 //
@@ -370,7 +370,7 @@ export const packRoutes = new Hono<AuthEnv>()
 					`version ${current[0].version} of this ${pack.scenarioId ? 'application' : 'baseline evidence'} is issued; draft a new version of it (supersedesId) instead of a second pack`
 				);
 			mustChange(await db.query(`UPDATE evidence_pack SET status = 'issued' WHERE project_id = $1 AND id = $2`, [id, packId]));
-			// The reproduction bundle (120_pack_bundle), built, stored and recorded in this transaction: no bundle, no issue.
+			// The reproduction bundle (122_pack_bundle), built, stored and recorded in this transaction: no bundle, no issue.
 			const bundle = await issuePackBundle(db, id, pack, manifest);
 			if (pred) {
 				mustChange(
@@ -467,7 +467,7 @@ export interface PackVerification {
 	manifestSha256: string;
 	shortCode: string;
 	pdfSha256: string | null;
-	/** The reproduction bundle's SHA-256 (120_pack_bundle), or null for a pack issued before bundles. */
+	/** The reproduction bundle's SHA-256 (122_pack_bundle), or null for a pack issued before bundles. */
 	bundleSha256: string | null;
 	successorSha256: string | null;
 	withdrawnReason: string | null;

@@ -3972,7 +3972,7 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       (`aws s3api get-object-retention`) and that the download's SHA-256
       equals verify's. Trigger: the first production deploy.
 - [x] **The reproduction bundle and `pnpm reproduce:pack`** (built
-      2026-09-30, 120_pack_bundle, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+      2026-09-30, 122_pack_bundle, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
       issue builds a deterministic ZIP (`manifest.json`, each run's stored
       inputs and results digest, the input series as CSV, the scenario, a
       README), checks it, stores it under `packs/` and records its hash

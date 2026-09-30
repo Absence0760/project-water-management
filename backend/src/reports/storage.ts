@@ -224,7 +224,7 @@ export function assertDownloadSigner(): void {
 }
 
 /**
- * The object key of a pack's reproduction bundle (120_pack_bundle;
+ * The object key of a pack's reproduction bundle (122_pack_bundle;
  * docs/evidence-pack.md § Reproduction), beside its PDF in the packs bucket:
  * its ids and the zip's own SHA-256 (app_record_pack_bundle builds the same
  * key in SQL, and the issue route checks the two agree).
