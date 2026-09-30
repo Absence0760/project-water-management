@@ -36,7 +36,7 @@ def _rain(rng: random.Random, start: dt.date, days: int, winter: bool) -> list[f
     return out
 
 
-def random_input(seed: int) -> dict:
+def random_input(seed: int, dense: bool = False) -> dict:
     rng = random.Random(seed * 7919 + 17)
     years = rng.randint(3, 6) if rng.random() < 0.85 else 1
     start = dt.date(rng.randint(2001, 2016), rng.choice([1, 4, 7, 10]), 1)
@@ -247,7 +247,7 @@ def random_input(seed: int) -> dict:
             settings.pop("simulationStart")
 
     doc = {"settings": settings, "model": {"nodes": nodes, "crops": crops, "cropAreas": crop_areas, "transfers": transfers}, "series": series}
-    add_phase_two(rng, doc, start, days)
+    add_phase_two(rng, doc, start, days, dense)
     return doc
 
 
@@ -255,16 +255,22 @@ def _day(rng, start: dt.date, days: int) -> str:
     return (start + dt.timedelta(days=rng.randrange(-60, days + 60))).isoformat()
 
 
-def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> None:
+def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
     """Phase 2a features (verify/README.md), each in a share of the networks,
-    drawn after every phase-1 draw so a seed's phase-1 part is unchanged."""
+    drawn after every phase-1 draw so a seed's phase-1 part is unchanged.
+    `dense` puts each feature in most networks (the mutation self-test's
+    extra cases), so a few networks reach every phase-2a rule."""
+
+    def gate(p: float) -> float:
+        return 0.85 if dense else p
+
     m = doc["model"]
     s = doc["settings"]
     nodes = m["nodes"]
     by_id = {x["id"]: x for x in nodes}
 
     # Other water users (§2.7c), put in the middle of a reach so farms drain into them.
-    if rng.random() < 0.3:
+    if rng.random() < gate(0.3):
         for k in range(rng.randint(1, 3)):
             child = rng.choice([x for x in nodes if x["downstreamNodeId"] is not None])
             u = {
@@ -284,14 +290,14 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
     units = farms + [x for x in nodes if x["kind"] == "user"]
 
     # Demand factors (§2.3 item 4a), from a date now and then.
-    if rng.random() < 0.2:
+    if rng.random() < gate(0.2):
         for x in rng.sample(units, rng.randint(1, len(units))):
             x["demandFactor"] = _monthly(rng, 0, 1.2, 2)
         if rng.random() < 0.4:
             s["demandFactorFrom"] = _day(rng, start, days)
 
     # Supply rules and the river pump (§2.7e).
-    if rng.random() < 0.3:
+    if rng.random() < gate(0.3):
         for f in farms:
             if rng.random() < 0.5:
                 continue
@@ -305,7 +311,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
                 f["supplyStopPct"] = round(rng.uniform(0, 1), 2)
 
     # Hands-off flows and River to dam by month (§2.7h).
-    if rng.random() < 0.3:
+    if rng.random() < gate(0.3):
         for f in farms:
             if rng.random() < 0.5:
                 continue
@@ -320,7 +326,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
 
     # Dam survey curves, releases and seepage shares (§2.7a).
     dams = [f for f in farms if f["damCapacityM3"] > 0]
-    if dams and rng.random() < 0.3:
+    if dams and rng.random() < gate(0.3):
         for f in dams:
             if rng.random() < 0.5:
                 cap = f["damCapacityM3"]
@@ -341,7 +347,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
                 f["damOutletCapacityM3Day"] = rng.choice([None, round(f["damCapacityM3"] / rng.uniform(20, 400), 1)])
 
     # Boreholes (§2.7d): the combined capacity and individual ones.
-    if rng.random() < 0.35:
+    if rng.random() < gate(0.35):
         bhs = []
         for x in units:
             if rng.random() < 0.5:
@@ -364,7 +370,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
         m["boreholes"] = bhs
 
     # Demand objects with schedules and the basic-needs floor (§2.7f).
-    if rng.random() < 0.3:
+    if rng.random() < gate(0.3):
         objs = []
         for f in farms:
             if rng.random() < 0.5:
@@ -394,7 +400,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
         m["demandObjects"] = objs
 
     # River off-takes and canal seepage return (§2.6a), never in a loop.
-    if len(farms) >= 2 and rng.random() < 0.3:
+    if len(farms) >= 2 and rng.random() < gate(0.3):
         succ = {x["id"]: set() for x in nodes}
         for x in nodes:
             if x["downstreamNodeId"] is not None:
@@ -443,7 +449,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int) -> N
             m["transfers"].append(t)
 
     # Allocations: compare only, the cap with licence conditions, or a full allocation (§2.12a).
-    if rng.random() < 0.35:
+    if rng.random() < gate(0.35):
         s["allocationMode"] = rng.choice(["none", "cap", "cap", "fullAllocation"])
         allocs = []
         for x in units:
