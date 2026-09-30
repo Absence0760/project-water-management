@@ -46,3 +46,28 @@ test('a run lists the CHIRPS factors it applied, and Settings can turn the corre
 	await expect(page.getByRole('heading', { level: 2, name: 'Raw' })).toBeVisible();
 	await expect(page.getByText(/CHIRPS rain bias-corrected/)).toHaveCount(0);
 });
+
+test('Settings turns the CHIRPS quantile map on with its wet-day threshold, and it waits for bias correction', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'CHIRPS quantile map');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const map = page.getByTestId('chirps-quantile-map');
+	const on = map.getByRole('checkbox', { name: /Quantile-map the CHIRPS that fills gaps/ });
+	// Off by default (engine ≥ 1.53.0): no threshold until it is turned on.
+	await expect(on).not.toBeChecked();
+	await expect(map.getByLabel(/Wet day from/)).toHaveCount(0);
+	await on.check();
+	const wet = map.getByLabel(/Wet day from/);
+	await expect(wet).toHaveValue('1');
+	await wet.fill('2.5');
+	await wet.blur();
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await page.reload();
+	await expect(on).toBeChecked();
+	await expect(map.getByLabel(/Wet day from/)).toHaveValue('2.5');
+	// Under raw CHIRPS the map can't act: the checkbox is disabled and the hint says why.
+	await page.getByLabel('CHIRPS bias correction', { exact: true }).selectOption('none');
+	await expect(on).toBeDisabled();
+	await expect(map.getByText(/Needs bias correction: the map reshapes bias-corrected CHIRPS\. A run ignores it and says so\./)).toBeVisible();
+});

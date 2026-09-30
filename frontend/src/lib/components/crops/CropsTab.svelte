@@ -172,6 +172,19 @@
 		const c = editor.addCrop();
 		void openCrop(c.id);
 	}
+	// A crop removed from its sheet takes its row, and the Edit button that opened the sheet, with it:
+	// the focus would fall to the page's top. Put it on the Edit button now in that place in the list
+	// (the next crop, or the last one), or on Add crop once the list is empty.
+	let listEl: HTMLUListElement | undefined = $state();
+	let emptyAddEl: HTMLButtonElement | undefined = $state();
+	function removed(id: string) {
+		const index = [...namedRows, ...otherRows].findIndex((r) => r.id === id);
+		void tick().then(() => {
+			const edits = listEl?.querySelectorAll<HTMLButtonElement>('button[data-crop-edit]') ?? [];
+			const next = edits.length ? edits[Math.min(Math.max(index, 0), edits.length - 1)] : emptyAddEl;
+			next?.focus();
+		});
+	}
 
 	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
@@ -230,7 +243,7 @@
 		{:else}
 			<span></span>
 		{/if}
-		<button type="button" class="btn btn-sm" aria-label="{readonly ? 'View' : 'Edit'} {r.name}" onclick={() => openCrop(r.id)}>{readonly ? 'View' : 'Edit'}</button>
+		<button type="button" class="btn btn-sm" data-crop-edit aria-label="{readonly ? 'View' : 'Edit'} {r.name}" onclick={() => openCrop(r.id)}>{readonly ? 'View' : 'Edit'}</button>
 	</li>
 {/snippet}
 
@@ -242,7 +255,7 @@
 			<section class="panel" aria-label="No crops yet">
 				<div class="empty">
 					<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
-					{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
+					{#if !readonly}<button type="button" class="btn btn-primary" bind:this={emptyAddEl} onclick={add}>Add crop</button>{/if}
 				</div>
 			</section>
 		{/if}
@@ -263,7 +276,7 @@
 					<div class="list-cols" aria-hidden="true" data-testid="crop-spark-caption">
 						<span></span><span></span><span class="c-spark">{FACTOR_CAPTION}</span><span></span><span class="btn btn-sm ghost">{readonly ? 'View' : 'Edit'}</span>
 					</div>
-					<ul class="crop-list" aria-label="Crops, largest planted area first">
+					<ul class="crop-list" aria-label="Crops, largest planted area first" bind:this={listEl}>
 						{#each namedRows as r (r.id)}{@render cropRow(r, false)}{/each}
 						{#if otherRows.length}
 							<li class="other-row" data-testid="crop-other">
@@ -361,7 +374,7 @@
 	</div>
 
 	{#if sheetCrop && onsave}
-		<CropSheet bind:open={sheetOpen} {editor} cropId={sheetCrop} {farms} {readonly} {onsave} bind:reason />
+		<CropSheet bind:open={sheetOpen} {editor} cropId={sheetCrop} {farms} {readonly} {onsave} onremove={removed} bind:reason />
 	{/if}
 {/if}
 

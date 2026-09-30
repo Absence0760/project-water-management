@@ -7,7 +7,10 @@
 // pinned at 1440 × 960 and on a phone, with an owner's four catchments and a
 // farmer's thirty farms. A bounced address (SES, stood in for by
 // `pnpm dev:mail:bounce`) pauses a person's alert emails behind a banner on
-// the account and alert pages, which turns them back on. An editor sets a
+// the account and alert pages, which turns them back on (the focus moving to
+// a title that stays). A save that fails puts the switch back where the
+// server has it, and a muted catchment's note turns its alert emails back on,
+// focusing the card's title. An editor sets a
 // staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
 import { acceptInvites, addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
@@ -77,6 +80,28 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await p.reload();
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 	await expect(p.getByRole('region', { name: 'Alerting catchment' }).getByRole('group', { name: 'Dam running low: Lower farm' }).getByRole('radio', { name: 'Once a day (06:00)' })).toBeChecked();
+
+	// A choice that fails to save goes back to the server's: the radio picked doesn't stay picked.
+	const saveUrl = new RegExp(`/me/alerts/${project.id}$`);
+	await p.route(saveUrl, (route) =>
+		route.request().method() === 'PUT' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) }) : route.fallback()
+	);
+	await dam.getByRole('radio', { name: 'Off' }).check();
+	await expect(section.getByRole('alert')).toBeVisible();
+	await expect(dam.getByRole('radio', { name: 'Once a day (06:00)' })).toBeChecked();
+	await expect(dam.getByRole('radio', { name: 'Off' })).not.toBeChecked();
+	await p.unroute(saveUrl);
+
+	// A muted catchment (every alert email off, as its unsubscribe link does) is turned back on from its note;
+	// the note and its button go, and the focus moves to the card's title rather than the top of the page.
+	const mute = await p.request.put(`${API_URL}/me/alerts/${project.id}`, { data: { items: [{ kind: 'all', mode: 'off' }] } });
+	expect(mute.status(), await mute.text()).toBe(200);
+	await p.reload();
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await expect(section.getByText('All alert emails for this catchment are off.')).toBeVisible();
+	await section.getByRole('button', { name: 'Turn alert emails back on' }).click();
+	await expect(section.getByText('All alert emails for this catchment are off.')).toHaveCount(0);
+	await expect(section.getByRole('heading', { level: 2, name: 'Alerting catchment' })).toBeFocused();
 });
 
 // A farmer-only user has no workspace: their account pages sit in the farmer
@@ -305,9 +330,23 @@ test('a bounced address pauses the alert emails behind a banner, which turns the
 	await onAccount.getByRole('button', { name: 'Turn alert emails back on' }).click();
 	await expect(p.getByRole('status').filter({ hasText: 'Alert emails are back on.' })).toBeVisible();
 	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+	// The banner and its button went: the focus is on the section's title, just above the status.
+	await expect(p.getByRole('heading', { level: 2, name: 'Alert emails' })).toBeFocused();
 	await p.goto('/account/alerts');
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+});
+
+test('turning alert emails back on from the alert emails page puts the focus on its title', async ({ signIn }) => {
+	const farmer = await signIn('Resumed farmer');
+	expect(await simulateBounce(farmer.user.email)).toContain('alert emails paused');
+	const p = farmer.page;
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await p.locator('[data-mail-suppressed="bounce"]').getByRole('button', { name: 'Turn alert emails back on' }).click();
+	await expect(p.getByRole('status').filter({ hasText: 'Alert emails are back on.' })).toBeVisible();
+	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+	await expect(p.getByRole('heading', { level: 1, name: 'Alert emails' })).toBeFocused();
 });
 
 test('an editor sets a staleness level per data feed, starting from its source’s default', async ({ page, owner }) => {

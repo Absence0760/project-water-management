@@ -19,7 +19,7 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
-import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
+import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
@@ -1036,7 +1036,8 @@ function runNetwork(
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
-				fits: prepared.fits!
+				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
+				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
@@ -1079,7 +1080,7 @@ function runNetwork(
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
-			chirpsCorrection,
+			chirpsCorrection: summaryCorrection(chirpsCorrection),
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),
@@ -2465,8 +2466,21 @@ export function chirpsColumns(
 		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
 		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
 		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
+		// The gap map (engine ≥ 1.53.0, CR-23): what a gap day reads, on every day, as rain_chirps_corrected is.
+		const mapper = chirpsQuantileMapper(corr, chirps);
+		if (mapper) {
+			const mapped = corrected.map((v, t) => mapper(start + t) ?? v);
+			out.push({ key: 'rain_chirps_mapped', label: 'CHIRPS rain bias-corrected and quantile-mapped (wet days, month totals kept)', unit: 'mm', values: mapped });
+		}
 	}
 	return out;
+}
+
+/** The correction as a run summary keeps it: without the gap map's tables and a snapshot's lead (they stay with the pinned fit, as a rain-source period's tables do). */
+function summaryCorrection(c: ChirpsCorrection | null): ChirpsCorrection | null {
+	if (!c?.quantileMap?.tables && !c?.quantileMap?.lead) return c;
+	const { tables: _tables, lead: _lead, ...qm } = c.quantileMap;
+	return { ...c, quantileMap: qm };
 }
 
 /** Daily net irrigation demand per node (zeros for gauges and crop-less farms). */

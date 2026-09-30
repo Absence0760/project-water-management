@@ -336,7 +336,7 @@
 				{/key}
 			</div>
 			<div class="panel" id="res-water-account">
-				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" />
 			</div>
 		</div>
 	{/if}

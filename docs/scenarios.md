@@ -615,6 +615,10 @@ Migration `024_scenarios.sql`
   among the project's team scenarios, an application's among its owner's
   applications (ignoring case; 049, so naming a draft never says a hidden one
   exists), at most 500 ops. `op_names` (047) is the ops' display names above.
+  `purpose_need`, `mitigation`, `monitoring` (129) are the answers to the
+  evidence report's fixed Appendix C prompts, written with the description
+  by whoever may change the scenario and printed in Appendix C, each answered
+  or *Not given* ([design/evidence-report.md § 4.3](./design/evidence-report.md)).
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only.
 - Triggers: the base is a run of the same project and not a scenario run; a

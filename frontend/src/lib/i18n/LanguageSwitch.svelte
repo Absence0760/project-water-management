@@ -10,24 +10,31 @@
 	emails read it too. `compact` shows EN | AF for a phone header; the full
 	names stay the accessible names. `segmented` joins the buttons into one
 	control sized like the form fields around it (the account page), 44 px on
-	touch and phones.
+	touch and phones. `addressOf` makes each language a link to its own
+	address (the landing page, `/welcome` and `/welcome/af`, issue #137),
+	however many languages there are: it works before any script runs, the
+	chosen one is marked `aria-current`, and a click keeps the choice like a
+	button does; the address sets the words.
 -->
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { i18n, isLocale, LANGUAGES, setLocale, storeLocale, t, type Locale } from './locale.svelte';
 
-	let { compact = false, segmented = false }: { compact?: boolean; segmented?: boolean } = $props();
+	let {
+		compact = false,
+		segmented = false,
+		addressOf
+	}: { compact?: boolean; segmented?: boolean; addressOf?: (locale: Locale) => string } = $props();
 	let failed = $state(false);
 
 	/** Past two languages a row of buttons gets long on a phone: a <select> instead. */
 	const asList = LANGUAGES.length > 2;
 
-	async function choose(locale: Locale) {
-		if (locale === i18n.locale) return;
+	/** Keep the choice on this device and, signed in, on the account. */
+	async function keep(locale: Locale) {
 		failed = false;
 		storeLocale(locale);
-		const switching = setLocale(locale);
 		if (session.user) {
 			try {
 				session.user = await api.auth.updateMe({ locale });
@@ -35,11 +42,33 @@
 				failed = true;
 			}
 		}
+	}
+
+	async function choose(locale: Locale) {
+		if (locale === i18n.locale) return;
+		const switching = setLocale(locale);
+		await keep(locale);
 		await switching;
 	}
 </script>
 
-{#if asList}
+{#if addressOf}
+	<!-- Not preloaded on hover: the other language's catalogue loads on the click. -->
+	<div class="lang" class:compact class:segmented role="group" aria-label={t('Language')} data-sveltekit-preload-data="off">
+		{#each LANGUAGES as l (l.code)}
+			<a
+				href={addressOf(l.code)}
+				hreflang={l.code}
+				lang={l.code}
+				aria-current={i18n.locale === l.code ? 'true' : undefined}
+				aria-label={compact ? l.name : undefined}
+				onclick={() => void keep(l.code)}
+			>
+				{compact ? l.code.toUpperCase() : l.name}
+			</a>
+		{/each}
+	</div>
+{:else if asList}
 	<select
 		class="lang-select"
 		class:compact
@@ -73,7 +102,8 @@
 		flex-wrap: wrap;
 		gap: 4px;
 	}
-	.lang button {
+	.lang button,
+	.lang a {
 		min-height: var(--tap, 44px);
 		min-width: var(--tap, 44px);
 		padding: 0 12px;
@@ -85,7 +115,16 @@
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 	}
-	.lang button[aria-pressed='true'] {
+	/* A link looks like the button pair (the landing page's addresses, issue #137). */
+	.lang a {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+		text-decoration: none;
+	}
+	.lang button[aria-pressed='true'],
+	.lang a[aria-current='true'] {
 		color: var(--accent-contrast, #fff);
 		background: var(--accent);
 		border-color: var(--accent);
@@ -97,7 +136,8 @@
 	.lang.compact {
 		flex-wrap: nowrap;
 	}
-	.lang.compact button {
+	.lang.compact button,
+	.lang.compact a {
 		padding: 0 8px;
 		font-size: 14px;
 	}

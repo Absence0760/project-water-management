@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import { functionCode, loadFunction } from './cloudfront-functions.mjs';
 
 const root = new URL('../..', import.meta.url).pathname;
-const spa = loadFunction('spa_rewrite', ['STATIC_DIRS', 'STATIC_FILES']);
+const spa = loadFunction('spa_rewrite', ['PRERENDERED', 'STATIC_DIRS', 'STATIC_FILES']);
 const viewerRequest = (uri) => ({ request: { method: 'GET', uri, querystring: {}, headers: {}, cookies: {} }, viewer: { ip: '198.51.100.7' } });
 /** What the viewer gets: the URI sent to S3, or the function's own status. */
 const outcome = (uri) => {
@@ -29,7 +29,12 @@ test('SPA routes (no extension) are served index.html', () => {
 });
 
 test('the prerendered pages are served from their own HTML', () => {
-	for (const p of ['welcome', 'privacy', 'terms', 'methods']) assert.equal(outcome(`/${p}`), `/${p}.html`);
+	for (const p of ['welcome', 'welcome/af', 'privacy', 'terms', 'methods']) assert.equal(outcome(`/${p}`), `/${p}.html`);
+});
+
+test('a landing page in a language the build has not written is the SPA, and its HTML is not served directly (issue #137)', () => {
+	for (const uri of ['/welcome/en', '/welcome/xx', '/welcome/af/x']) assert.equal(outcome(uri), '/index.html', uri);
+	assert.equal(outcome('/welcome/af.html'), 404);
 });
 
 test("the build's files go to S3 unchanged", () => {
@@ -66,13 +71,28 @@ const staticEntries = readdirSync(staticDir);
 const staticDirs = staticEntries.filter((e) => statSync(join(staticDir, e)).isDirectory());
 const staticFiles = staticEntries.filter((e) => statSync(join(staticDir, e)).isFile());
 const routesDir = join(root, 'frontend/src/routes');
-const prerendered = readdirSync(routesDir).filter((d) => {
+// Every language but the default gets its own landing page, /welcome/<code>
+// (the `locale` param matcher, frontend/src/params/locale.ts; issue #137).
+const { LANGUAGES, DEFAULT_LOCALE } = await import(join(root, 'packages/engine/src/languages.ts'));
+const localeParams = LANGUAGES.map((l) => l.code).filter((c) => c !== DEFAULT_LOCALE);
+/** The paths a route directory prerenders: `[[lang=locale]]` is none and each non-default language. */
+function prerenderedPaths(dir, rel = '') {
+	const here = [];
 	try {
-		return /export const prerender = true/.test(readFileSync(join(routesDir, d, '+page.ts'), 'utf8'));
+		if (rel && /export const prerender = true/.test(readFileSync(join(dir, '+page.ts'), 'utf8'))) here.push(rel);
 	} catch {
-		return false;
+		// no +page.ts here
 	}
-});
+	const below = readdirSync(dir)
+		.filter((d) => statSync(join(dir, d)).isDirectory())
+		.flatMap((d) => prerenderedPaths(join(dir, d), `${rel}/${d}`));
+	return [...here, ...below].flatMap((p) => {
+		const m = /^(.*)\/\[\[lang=locale\]\]$/.exec(p);
+		return m ? [m[1], ...localeParams.map((c) => `${m[1]}/${c}`)] : [p];
+	});
+}
+// Without the leading slash: 'welcome', 'welcome/af', 'privacy', …
+const prerendered = prerenderedPaths(routesDir).map((p) => p.slice(1));
 
 test('every file and directory in frontend/static is served', () => {
 	for (const d of staticDirs) assert.ok(spa.STATIC_DIRS.includes(d), `frontend/static/${d}/ is missing from spa_rewrite's STATIC_DIRS (infra/s3_cloudfront.tf)`);
@@ -80,11 +100,13 @@ test('every file and directory in frontend/static is served', () => {
 });
 
 test('every prerendered page is mapped and served', () => {
-	assert.ok(prerendered.length >= 4, `found the prerendered routes (${prerendered})`);
+	assert.ok(prerendered.length >= 5 && prerendered.includes('welcome/af'), `found the prerendered routes (${prerendered})`);
 	for (const p of prerendered) {
 		assert.equal(outcome(`/${p}`), `/${p}.html`, `/${p} must be served from ${p}.html`);
-		assert.ok(spa.STATIC_FILES.includes(`${p}.html`), `${p}.html is missing from STATIC_FILES`);
+		// A top-level page's HTML is also served by its own name, like the build's other root files.
+		if (!p.includes('/')) assert.ok(spa.STATIC_FILES.includes(`${p}.html`), `${p}.html is missing from STATIC_FILES`);
 	}
+	assert.deepEqual([...spa.PRERENDERED].sort(), prerendered.map((p) => `/${p}`).sort(), 'PRERENDERED lists exactly the prerendered pages');
 });
 
 test('no stale entries: each listed location is something the build writes', () => {

@@ -4,7 +4,7 @@
 // this wraps it in zod and tightens every id to a UUID, because the rows a
 // scenario run writes (run_series.node_id) are uuid columns.
 import { createHash } from 'node:crypto';
-import { canonicalJson, validateScenarioOps, type ScenarioOp } from '@water-management/engine';
+import { APPLICANT_PROMPT_MAX, canonicalJson, validateScenarioOps, type ScenarioOp } from '@water-management/engine';
 import { z } from 'zod';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -126,6 +126,12 @@ const description = z
 	.string()
 	.max(4000)
 	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
+/** An answer to one of Appendix C's fixed prompts (129_scenario_statement): trimmed, so whitespace alone is "Not given". */
+const promptAnswer = z
+	.string()
+	.trim()
+	.max(APPLICANT_PROMPT_MAX)
+	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 const ownedNodeIds = z
 	.array(z.string().uuid())
 	.max(500)
@@ -148,14 +154,35 @@ export const STATUS_MOVES: Record<ScenarioStatus, readonly ScenarioStatus[]> = {
 };
 
 export const CreateScenarioBody = z
-	.object({ name, description: description.default(''), baseRunId: z.string().uuid(), ops: Ops.default([]), ownedNodeIds: ownedNodeIds.default([]) })
+	.object({
+		name,
+		description: description.default(''),
+		purposeAndNeed: promptAnswer.default(''),
+		mitigation: promptAnswer.default(''),
+		monitoring: promptAnswer.default(''),
+		baseRunId: z.string().uuid(),
+		ops: Ops.default([]),
+		ownedNodeIds: ownedNodeIds.default([])
+	})
 	.strict();
 
 /** PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft. */
 export const PatchScenarioBody = z
-	.object({ name: name.optional(), description: description.optional(), ops: Ops.optional(), ownedNodeIds: ownedNodeIds.optional(), status: z.enum(SCENARIO_STATUSES).optional() })
+	.object({
+		name: name.optional(),
+		description: description.optional(),
+		purposeAndNeed: promptAnswer.optional(),
+		mitigation: promptAnswer.optional(),
+		monitoring: promptAnswer.optional(),
+		ops: Ops.optional(),
+		ownedNodeIds: ownedNodeIds.optional(),
+		status: z.enum(SCENARIO_STATUSES).optional()
+	})
 	.strict()
-	.refine((b) => Object.values(b).some((v) => v !== undefined), 'send at least one of name, description, ops, ownedNodeIds, status');
+	.refine(
+		(b) => Object.values(b).some((v) => v !== undefined),
+		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, ops, ownedNodeIds, status'
+	);
 
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();
 

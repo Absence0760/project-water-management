@@ -985,40 +985,70 @@ export const af: Catalogue = {
 	'eb271459': 'Teken in om kommentaar te lewer.',
 	// Only members of this project can comment. Ask its owner to invite you.
 	'6ffb150a': 'Net lede van hierdie projek kan kommentaar lewer. Vra sy eienaar om jou uit te nooi.',
-	// An application in {project}, shared read-only
-	'47a825ae': '’n Aansoek in {project}, leesalleen gedeel',
+	// Licensing evidence pack, version {version}, shared read-only
+	'119a99c5': 'Bewyspakket vir ’n lisensieaansoek, weergawe {version}, leesalleen gedeel',
+	// This pack was withdrawn
+	'bb4deebf': 'Hierdie pakket is teruggetrek',
+	// This pack was replaced
+	'ad43ef79': 'Hierdie pakket is vervang',
+	// The reason given:
+	'e5b2a595': 'Die rede wat gegee is:',
+	// The version that replaced it has the code {code}.
+	'c007a48f': 'Die weergawe wat dit vervang het, het die kode {code}.',
+	// Check it on the verify page
+	'4ba8c6ca': 'Kontroleer dit op die verifikasiebladsy',
 	// The river’s ecological reserve
 	'd593593a': 'Die rivier se ekologiese reserwe',
-	// Months the Reserve is met at each EWR site: the published baseline beside this application.
-	'8727e404': 'Maande waarin die Reserwe by elke EWR-punt behou word: die gepubliseerde basislyn en hierdie aansoek langs mekaar.',
+	// Months the Reserve is met at each EWR site: the baseline beside this application, as the pack records them.
+	'7908fb42': 'Maande waarin die Reserwe by elke EWR-punt behou word: die basislyn en hierdie aansoek langs mekaar, soos die pakket dit aanteken.',
+	// Months the Reserve is met at each EWR site, as the pack records them.
+	'89c05bf6': 'Maande waarin die Reserwe by elke EWR-punt behou word, soos die pakket dit aanteken.',
 	// Baseline
 	'fda19a62': 'Basislyn',
 	// With this application
 	'd5c802a1': 'Met hierdie aansoek',
 	// No EWR site has a Reserve rule table in this catchment.
 	'07fce436': 'Geen EWR-punt in hierdie opvanggebied het ’n reëltabel vir die Reserwe nie.',
-	// What the application changes
-	'590d8af3': 'Wat die aansoek verander',
-	// A baseline assumption changes the shared baseline itself, not only the applicant’s own proposal.
-	'5f76a417': '’n Basislynaanname verander die gedeelde basislyn self, nie net die aansoeker se eie voorstel nie.',
-	// No changes.
-	'23de827f': 'Geen veranderinge nie.',
-	// The decision
-	'479ef2ba': 'Die besluit',
-	// The catchment’s totals
-	'd14cdcfe': 'Die opvanggebied se totale',
+	// The river in figures
+	'f04b02fc': 'Die rivier in syfers',
 	// Figure
 	'a7ba4f29': 'Syfer',
+	// Change
+	'a1de2fdd': 'Verandering',
+	// Not assessed
+	'a0119bb9': 'Nie beoordeel nie',
+	// Flow volumes aren’t shown for this catchment: with so few hydrological units, or with a change to the shared baseline, they could reveal a hydrological unit’s water use.
+	'ab7c31f2': 'Vloeivolumes word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede, of met ’n verandering aan die gedeelde basislyn, kan hulle ’n hidrologiese eenheid se watergebruik verklap.',
+	// Days below the EWR by month
+	'0fb6d799': 'Dae onder die EWR per maand',
+	// The change this application makes to the days below the EWR at the outlet, each calendar month.
+	'1f82a2e0': 'Die verandering wat hierdie aansoek aan die dae onder die EWR by die uitloop maak, vir elke kalendermaand.',
+	// Check this pack
+	'd779136e': 'Kontroleer hierdie pakket',
+	// Its code is {code}. Anyone holding a copy of the pack can check it against this app on the verify page.
+	'85f3519a': 'Sy kode is {code}. Enigiemand met ’n afskrif van die pakket kan dit op die verifikasiebladsy teen hierdie app kontroleer.',
+	// Open the verify page
+	'776e241a': 'Maak die verifikasiebladsy oop',
+	// Manifest SHA-256
+	'f3fb79f2': 'Manifes se SHA-256',
+	// PDF SHA-256
+	'194f08c7': 'PDF se SHA-256',
+	// Reproduction bundle SHA-256
+	'845a3b23': 'Reproduksiebundel se SHA-256',
+	// Signed by:
+	'ac41cdb0': 'Onderteken deur:',
 	// Public comments
 	'd7603e02': 'Openbare kommentaar',
 	// a former member
 	'51eae74d': '’n voormalige lid',
 	// No comments yet.
 	'ea48a91c': 'Nog geen kommentaar nie.',
+	// Commenting is closed: this pack no longer stands.
+	'6cbfca10': 'Kommentaar is gesluit: hierdie pakket staan nie meer nie.',
 	// Add a comment
 	'b34ab8fe': 'Lewer kommentaar',
-	// Shown with your name to everyone this application is shared with. Plain text; every edit is kept.
-	'c476d7ee': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie aansoek gedeel is. Gewone teks; elke wysiging word bewaar.',
+	// Shown with your name to everyone this pack is shared with. Plain text; every edit is kept.
+	'bcad8655': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie pakket gedeel is. Gewone teks; elke wysiging word bewaar.',
 	// Posting…
 	'44539655': 'Plaas tans…',
 	// Post comment
@@ -1029,12 +1059,32 @@ export const af: Catalogue = {
 	'e87f8a59': 'Om kommentaar te lewer, het jy ’n rekening in hierdie projek nodig, sodat elke kommentaar ’n naam het.',
 	// About this page
 	'254af6c5': 'Oor hierdie bladsy',
+	// A licensing evidence pack: the model results an applicant attaches to a water-use licence application, signed by a registered professional and fixed once issued. This page shows part of it, read-only, and names no hydrological unit.
+	'c68155f0': '’n Bewyspakket vir ’n lisensieaansoek: die modelresultate wat ’n aansoeker by ’n aansoek om ’n watergebruiklisensie aanheg, onderteken deur ’n geregistreerde professionele persoon en vasgelê sodra dit uitgereik is. Hierdie bladsy wys ’n deel daarvan, leesalleen, en noem geen hidrologiese eenheid nie.',
+	// This link works until it expires or is withdrawn. If the pack is withdrawn or replaced, the link says so instead of showing its figures.
+	'60872763': 'Hierdie skakel werk totdat dit verval of ingetrek word. As die pakket teruggetrek of vervang word, sê die skakel dit in plaas daarvan om sy syfers te wys.',
+	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
+	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
+	// An application in {project}, shared read-only
+	'47a825ae': '’n Aansoek in {project}, leesalleen gedeel',
+	// Months the Reserve is met at each EWR site: the published baseline beside this application.
+	'8727e404': 'Maande waarin die Reserwe by elke EWR-punt behou word: die gepubliseerde basislyn en hierdie aansoek langs mekaar.',
+	// What the application changes
+	'590d8af3': 'Wat die aansoek verander',
+	// A baseline assumption changes the shared baseline itself, not only the applicant’s own proposal.
+	'5f76a417': '’n Basislynaanname verander die gedeelde basislyn self, nie net die aansoeker se eie voorstel nie.',
+	// No changes.
+	'23de827f': 'Geen veranderinge nie.',
+	// The decision
+	'479ef2ba': 'Die besluit',
+	// The catchment’s totals
+	'd14cdcfe': 'Die opvanggebied se totale',
+	// Shown with your name to everyone this application is shared with. Plain text; every edit is kept.
+	'c476d7ee': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie aansoek gedeel is. Gewone teks; elke wysiging word bewaar.',
 	// An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.
 	'243c85d3': '’n Aansoek om water in hierdie opvanggebied te gebruik, gemodelleer op grond van die opvanggebied se gepubliseerde basislyn. Dit is leesalleen, en dit noem geen ander hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn, while the application is submitted or decided.
 	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
-	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
-	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// No flows to show.
 	'be1887a5': 'Geen vloei om te wys nie.',
 	// The mean flow was above the reserve in every month.
@@ -1047,10 +1097,18 @@ export const af: Catalogue = {
 	'8ca58fb8': 'Riviervloei by die opvanggebied se uitloop elke maand teenoor sy ekologiese reserwe, {from} tot {to}. {verdict} Die syfers is in die tabel hieronder.',
 	// {from} to {to}. Monthly means of the modelled daily flow.
 	'ac863279': '{from} tot {to}. Maandgemiddeldes van die daaglikse vloei, deur die model bereken.',
-	// Not assessed
-	'a0119bb9': 'Nie beoordeel nie',
-	// Met in {met} of {months} ({pct})
-	'34e32294': 'In {met} van {months} behou ({pct})',
+	// Withdrawn. It was issued on {date}.
+	'8e4796c9': 'Teruggetrek. Dit is op {date} uitgereik.',
+	// Replaced by a newer version. It was issued on {date}.
+	'1c125a8a': 'Deur ’n nuwer weergawe vervang. Dit is op {date} uitgereik.',
+	// Issued on {date}.
+	'6e3bf74b': 'Op {date} uitgereik.',
+	// This evidence pack was withdrawn, so it no longer stands and its figures aren’t shown here.
+	'9adac0bc': 'Hierdie bewyspakket is teruggetrek, so dit staan nie meer nie en sy syfers word nie hier gewys nie.',
+	// A newer version of this evidence pack replaced it, so it no longer stands and its figures aren’t shown here.
+	'f92463b1': '’n Nuwer weergawe van hierdie bewyspakket het dit vervang, so dit staan nie meer nie en sy syfers word nie hier gewys nie.',
+	// Met in {pct} of {months}
+	'37529d2d': 'In {pct} van {months} behou',
 	// At the catchment outlet
 	'82aa7d85': 'By die opvanggebied se uitloop',
 	// At {place}
@@ -1061,6 +1119,32 @@ export const af: Catalogue = {
 	'352c8acd': '{months} minder onder die Reserwe met hierdie aansoek.',
 	// No change in the months the Reserve is met.
 	'30121f7a': 'Geen verandering in die maande waarin die Reserwe behou word nie.',
+	// Reserve months met at {place}
+	'272c23b2': 'Maande waarin die Reserwe by {place} behou word',
+	// Reserve months met at the catchment outlet
+	'f8660c2e': 'Maande waarin die Reserwe by die opvanggebied se uitloop behou word',
+	// Days below the EWR at the outlet
+	'1d9fb19d': 'Dae onder die EWR by die uitloop',
+	// Days with no flow at the outlet
+	'11099d08': 'Dae sonder vloei by die uitloop',
+	// Volume short of the EWR at the outlet, whole run
+	'58081ec2': 'Tekort aan die EWR by die uitloop, as volume, oor die hele lopie',
+	// Mean yearly flow out of the catchment
+	'808341a3': 'Gemiddelde jaarlikse vloei uit die opvanggebied',
+	// {n} days
+	'64b9f5b6': '{n} dae',
+	// {n} million m³
+	'24dbc095': '{n} miljoen m³',
+	// {n} million m³ a year
+	'87cb5f13': '{n} miljoen m³ per jaar',
+	// {sign}{n} points
+	'977c3f99': '{sign}{n} persentasiepunte',
+	// Likely range {low} to {high} ({n} model sets)
+	'b1e363b8': 'Waarskynlike reeks {low} tot {high} ({n} modelstelle)',
+	// {name}, {body} {number}
+	'b2f1991f': '{name}, {body} {number}',
+	// Met in {met} of {months} ({pct})
+	'34e32294': 'In {met} van {months} behou ({pct})',
 	// Days below the EWR at the outlet: {base} on the baseline, {app} with this application.
 	'74849620': 'Dae onder die EWR by die uitloop: {base} op die basislyn, {app} met hierdie aansoek.',
 	// another hydrological unit
@@ -1341,6 +1425,8 @@ export const af: Catalogue = {
 	'eb3bc0dd': 'Terug na jou rekening',
 	// At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).
 	'6e6c53b1': 'Hoogstens {cap} waarskuwings-e-posse per dag kom dadelik. Die res wag vir die volgende oggend se opsomming (06:00).',
+	// Loading…
+	'2e7e4ae3': 'Laai tans…',
 	// None of your catchments can send you alerts yet.
 	'8349b21d': 'Nie een van jou opvanggebiede kan nog vir jou waarskuwings stuur nie.',
 	// All alert emails for this catchment are off.
@@ -1587,18 +1673,20 @@ export const af: Catalogue = {
 	'5b46b440': 'Terug na jou projekte',
 	// Back to sign in
 	'5b7ba2af': 'Terug na inteken',
-	// {name} · Shared application
-	'b850cd64': '{name} · Gedeelde aansoek',
-	// {name} · Shared catchment view
-	'd520e65e': '{name} · Gedeelde aansig van die opvanggebied',
 	// Shared application
 	'28c82702': 'Gedeelde aansoek',
+	// Shared evidence pack
+	'a21a86be': 'Gedeelde bewyspakket',
 	// Shared catchment view
 	'7c6df5c8': 'Gedeelde aansig van die opvanggebied',
+	// {name} · Shared application
+	'b850cd64': '{name} · Gedeelde aansoek',
+	// {name} · Shared evidence pack
+	'de86b838': '{name} · Gedeelde bewyspakket',
+	// {name} · Shared catchment view
+	'd520e65e': '{name} · Gedeelde aansig van die opvanggebied',
 	// Shared view
 	'6d06bb05': 'Gedeelde aansig',
-	// Loading…
-	'2e7e4ae3': 'Laai tans…',
 	// This link doesn’t open anything
 	'6595c259': 'Hierdie skakel maak niks oop nie',
 	// This link has expired or was withdrawn. Ask whoever sent it for a new one.

@@ -9,7 +9,7 @@
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
 	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
-	// Settings → Drought restrictions (engine ≥ 1.52.0, WP-3.8): its own chunk, for the same reason.
+	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
@@ -41,7 +41,11 @@
 		PAN_COEFFICIENT_TYPICAL_MAX,
 		PAN_COEFFICIENT_TYPICAL_MIN,
 		PE_SOURCE_MAX,
+		QM_MIN_WET_DAYS,
+		QM_WET_DAY_MM_MAX,
+		QM_WET_DAY_MM_MIN,
 		panCoefficientOutOfRange,
+		type ChirpsQuantileMap,
 		type CalibrationParams,
 		type CalibrationReport,
 		type FitRecord,
@@ -78,7 +82,7 @@
 	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
-	import { CHIRPS_BIAS_OPTIONS } from './rain';
+	import { CHIRPS_BIAS_OPTIONS, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
@@ -194,6 +198,12 @@
 	function setArealOn(on: boolean) {
 		if (!on && areal) lastAreal = $state.snapshot(areal) as EditableArealRain;
 		s.arealRain = storedArealRain(withArealRain(on, lastAreal));
+	}
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); the threshold it was switched off with is kept until saved.
+	let lastGapMap = $state<ChirpsQuantileMap | null>(null);
+	function setGapMapOn(on: boolean) {
+		if (!on && s.chirpsQuantileMap) lastGapMap = { ...s.chirpsQuantileMap };
+		s.chirpsQuantileMap = withChirpsQuantileMap(on, lastGapMap);
 	}
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
@@ -917,6 +927,45 @@
 				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 		</div>
+		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
+		<fieldset class="plain" data-testid="chirps-quantile-map">
+			<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
+			<label class="check">
+				<input
+					type="checkbox"
+					disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+					checked={!!s.chirpsQuantileMap}
+					onchange={(e) => setGapMapOn(e.currentTarget.checked)}
+					aria-describedby="st-chirps-qm-h"
+				/>
+				Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
+			</label>
+			{#if s.chirpsQuantileMap}
+				{@const q = s.chirpsQuantileMap}
+				<div class="field">
+					<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
+					<NumberInput
+						id="st-chirps-qm-wet"
+						min={QM_WET_DAY_MM_MIN}
+						max={QM_WET_DAY_MM_MAX}
+						step={0.1}
+						disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+						value={q.wetDayMm}
+						onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
+					/>
+				</div>
+			{/if}
+			<span class="hint" id="st-chirps-qm-h">
+				{#if s.chirpsBiasCorrection !== 'monthly'}
+					Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
+				{:else}
+					Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
+					often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
+					doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
+				{/if}
+			</span>
+			<FieldHistoryLine field="settings:chirpsQuantileMap" />
+		</fieldset>
 		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
 		<ChirpsFitPeriodSection
@@ -1178,7 +1227,7 @@
 		/>
 	</div>
 
-	<!-- Drought restrictions (engine ≥ 1.52.0, WP-3.8) ---------------------------------------->
+	<!-- Drought restrictions (engine ≥ 1.54.0, WP-3.8) ---------------------------------------->
 	<section class="panel" id="set-restrict" aria-labelledby="restrict-h">
 		<div class="panel-head">
 			<h2 id="restrict-h">Drought restrictions <HelpTip key="settings.droughtRestriction" /></h2>

@@ -37,9 +37,11 @@
 	 * The smallest a diagram's smallest text may be drawn (px). A diagram
 	 * scales to its column, so a wide one shrank its 11 px notes to 7 px at
 	 * 1440 (the model pipeline, 920 units wide in a 565 px column); it is
-	 * never drawn narrower than this allows, and scrolls sideways instead.
-	 * 9.5 lets the 660-wide ones (GR4J, a day on a farm) fit the guide's
-	 * column whole.
+	 * never drawn narrower than this allows, and scrolls sideways instead
+	 * (on a phone). Every diagram is drawn at most 660 wide, which 9.5 lets
+	 * fit the guide's column whole from 1280 px (582 px there); the pipeline,
+	 * workflow, calibration loop, validation and rain sources were redrawn to
+	 * it (diagrams/width.test.ts).
 	 */
 	const MIN_TEXT_PX = 9.5;
 	let box: HTMLDivElement | undefined = $state();
