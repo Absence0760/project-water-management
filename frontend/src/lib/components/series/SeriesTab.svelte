@@ -194,6 +194,8 @@
 	const endDate = (s: { startDate: string; length: number }) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1);
 	const inUse = $derived(seriesInUse(list, rainSourceKinds(settings?.rainSource)));
 	const gaugeInUse = $derived(gaugeRecordsInUse(list, gauges));
+	// The gauge calibration scores at (settings.calibrationSiteNodeId, engine ≥ 1.41.0); null = the outlet.
+	const calibrationSite = $derived(settings?.calibrationSiteNodeId ?? null);
 	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a node no longer in the model';
 	const latestRun = $derived(runs?.[0] ?? null);
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
@@ -619,10 +621,12 @@
 									>
 								{/if}
 								{#if role}
-									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration and the EWR test use the outlet’s records.' : role.help}>
+									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? (s.siteNodeId === calibrationSite ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results), and calibration and a run’s calibration statistics score it there (Settings → Calibration record → Scored at); the outlet’s EWR test uses the outlet’s records.' : 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration scores it only if Settings → Calibration record → Scored at picks this gauge, and the outlet’s EWR test uses the outlet’s records.') : role.help}>
 										{s.siteNodeId
 											? gaugeInUse.has(s.id)
-												? 'Gauge record (checks only)'
+												? s.siteNodeId === calibrationSite
+													? 'Gauge record (calibration site)'
+													: 'Gauge record (checks only)'
 												: gauges.some((g) => g.id === s.siteNodeId)
 													? 'Not used (another record of this kind is at this gauge)'
 													: 'Not used: its gauge is no longer in the model'

@@ -1,33 +1,44 @@
 <!--
-	Settings fields for the calibration window (settings.calibrationStart/End)
-	and the flow record it is scored against (settings.calibrationFlowKind).
-	Bind the three values; `error` is set when the window is invalid so the
-	parent form can block saving.
+	Settings fields for the calibration window (settings.calibrationStart/End),
+	the flow record it is scored against (settings.calibrationFlowKind) and
+	where (settings.calibrationSiteNodeId, engine ≥ 1.41.0: the outlet, or a
+	gauge inside the network with a record of its own). Bind the values;
+	`error` is set when the window is invalid so the parent form can block
+	saving.
 -->
 <script lang="ts">
-	import type { CalibrationFlowKind } from '@water-management/engine';
+	import type { CalibrationFlowKind, CalibrationSite } from '@water-management/engine';
 	import { FLOW_KIND_LABEL, windowError } from './metrics';
 
 	let {
 		start = $bindable(null),
 		end = $bindable(null),
 		flowKind = $bindable(null),
+		siteNodeId = $bindable(null),
 		error = $bindable(null),
 		readonly = false,
-		availableKinds = null
+		availableKinds = null,
+		sites = []
 	}: {
 		start: string | null;
 		end: string | null;
 		flowKind: CalibrationFlowKind | null;
+		/** null = the outlet. */
+		siteNodeId?: string | null;
 		error?: string | null;
 		readonly?: boolean;
-		/** Series kinds the project has; limits the flow options when given. */
+		/** Series kinds the project has at the outlet; limits the flow options when given. */
 		availableKinds?: string[] | null;
+		/** The gauges inside the network with a record (engine calibrationSites): the other places calibration can score. */
+		sites?: CalibrationSite[];
 	} = $props();
 
 	const uid = $props.id();
 	const KINDS: CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
-	const options = $derived(KINDS.filter((k) => !availableKinds || availableKinds.includes(k) || k === flowKind));
+	const site = $derived(siteNodeId ? (sites.find((x) => x.nodeId === siteNodeId) ?? null) : null);
+	// The records where calibration scores: the outlet's, or the chosen gauge's.
+	const kindsHere = $derived(siteNodeId ? (site?.records ?? []) : availableKinds);
+	const options = $derived(KINDS.filter((k) => !kindsHere || kindsHere.includes(k) || k === flowKind));
 
 	$effect(() => {
 		error = windowError(start, end);
@@ -60,6 +71,27 @@
 			/>
 		</div>
 	</div>
+	{#if sites.length || siteNodeId}
+		<div class="field">
+			<label for="{uid}-site">Scored at</label>
+			<select id="{uid}-site" disabled={readonly} bind:value={siteNodeId} aria-describedby="{uid}-site-hint">
+				<option value={null}>The outlet</option>
+				{#each sites as g (g.nodeId)}<option value={g.nodeId}>{g.name}</option>{/each}
+				{#if siteNodeId && !site}<option value={siteNodeId}>A gauge no longer in the model, or with no record</option>{/if}
+			</select>
+			{#if siteNodeId && !site}
+				<p class="warn" role="status" data-testid="calibration-site-gone">
+					The saved site's gauge is no longer in the model, or no flow record is attached to it any more. Runs score the outlet's record
+					and warn, and Fit automatically refuses the site: pick another gauge, or the outlet.
+				</p>
+			{/if}
+			<p class="hint muted" id="{uid}-site-hint">
+				At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
+				filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
+				outlet's EWR test stays the outlet's.
+			</p>
+		</div>
+	{/if}
 	<div class="field">
 		<label for="{uid}-kind">Compare with</label>
 		<select id="{uid}-kind" disabled={readonly} bind:value={flowKind}>
@@ -93,6 +125,12 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 		margin: 0.4rem 0 0.75rem;
+	}
+	.warn {
+		color: var(--warning);
+		font-size: 0.85rem;
+		margin: 0.4rem 0 0;
+		max-width: 75ch;
 	}
 	.err {
 		color: var(--danger);

@@ -3288,13 +3288,36 @@ from the WP:
       dam's seepage return (WP-3.5), with the balance and the attribution
       following. Trigger: a hydrologist wanting canal seepage credited, or a
       measured loss split.
-- [ ] **Calibrating at a gauge inside the network.** Calibration and the
-      observed-flow EWR test read the outlet's record only; a record
-      attached to an inner gauge (084) feeds the plausibility checks
-      (model.md §2.10d). Durable fix: `calibrationSiteNodeId` (null = the
-      outlet), with calibrate() scoring that gauge's simulated flow and the
-      fit record recording the site. Trigger: a project whose calibration
-      record sits at an inner gauge.
+- [x] **Calibrating at a gauge inside the network.** Done 2026-09-30,
+      engine 1.41.0: `settings.calibrationSiteNodeId` (null = the outlet,
+      the default, so nothing changes for a project that never sets it).
+      calibrate() scores the gauge's simulated flow (its outflow) against
+      the gauge's own record, `calibrationFlowKind` and the
+      independent-record test pick among the gauge's records, and the
+      report, the fit record (`siteNodeId`, flagged `siteChanged` when the
+      settings move) and automated calibration's plan carry the site; the
+      server's rules and the uncertainty ensemble follow it. A gauge's
+      record has no gauged range and no gap filling (those settings are the
+      outlet records'). The API checks a new site is a gauge above the
+      outlet with a record, and a copy or import moves it. Settings →
+      Calibration record → *Scored at* picks it. The outlet's observed-flow
+      EWR test stays the outlet's, since its requirement is the outlet's
+      pragmatic EWR and a gauge's flow can't be judged against it; each gauge
+      EWR site with a record gets its own test (below)
+      ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
+  - [x] **The run's calibration statistics at the calibration site.** Done
+        2026-09-30 (engine 1.41.0): runModel scores `summary.calibration` at
+        the site (`siteNodeId`, `siteName`; `fitStatus` against a fit at the
+        same site), stores the gauge's record as that node's
+        `observed_flow`, and the Results tab charts it as the calibration
+        site's hydrograph. A stored site the run can't use warns and scores
+        the outlet; Settings says so under *Scored at*.
+  - [x] **EWR agreement at a gauge EWR site with its own record.** Done
+        2026-09-30 (engine 1.41.0): `summary.catchment.ewrAgreementSites`,
+        each gauge EWR site's record against its simulated outflow and its
+        own pragmatic requirement (`ewr_cumulative`), beside the outlet's
+        unchanged test, in the Runs tab and the summary CSV
+        ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
 - [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
       is typed; `arealFactorFromMap` (engine) needs the forcing's values,
       which Settings doesn't load. Durable fix: a small panel that fetches

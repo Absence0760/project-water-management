@@ -330,6 +330,7 @@ describe('applyReport', () => {
 			exclusionsChanged: false,
 			qualityFlagsChanged: false,
 			flowKindChanged: false,
+			siteChanged: false,
 			forcingChanged: false,
 			chirpsSourceChanged: false,
 			apanDailyChanged: false,

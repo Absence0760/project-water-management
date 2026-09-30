@@ -11,6 +11,7 @@
 		DEFAULT_STARTS,
 		MAX_STARTS,
 		OBJECTIVES,
+		calibrationSeriesKey,
 		type CalibrationBounds,
 		type CalibrationFlowKind,
 		type CalibrationProgress,
@@ -167,7 +168,8 @@
 			handle = startFit({ input, model: 'gr4j', objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
 			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
-			const fitted = server.series[report.flowKind as CalibrationFlowKind];
+			// At the calibration site: the outlet's record, or a gauge's (engine ≥ 1.41.0).
+			const fitted = server.series[calibrationSeriesKey(report.flowKind as CalibrationFlowKind, report.siteNodeId)];
 			ran = { ...context, ...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin } : {}) };
 			status = 'done';
 		} catch (e) {
