@@ -138,6 +138,12 @@ export interface SummaryMeta {
 	 * capacity. Absent or empty = no such dam, no column.
 	 */
 	damCapacityEndM3?: Record<string, number>;
+	/**
+	 * The project's node names by id, for the drought restriction rule's dams,
+	 * units and EWR site in words (engine ≥ 1.54.0); absent = the summary's
+	 * farm names, and an id no name is known for is printed as it is.
+	 */
+	nodeNames?: Record<string, string>;
 }
 
 /**
@@ -896,7 +902,8 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 	if (summary.droughtRestriction) {
 		yield '';
-		yield* droughtRestrictionLines(summary.droughtRestriction);
+		const names = new Map<string, string>([...summary.farms.map((f) => [f.nodeId, f.name] as [string, string]), ...Object.entries(meta.nodeNames ?? {})]);
+		yield* droughtRestrictionLines(summary.droughtRestriction, (id) => names.get(id) ?? id);
 	}
 	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
 		yield '';
@@ -1581,9 +1588,9 @@ export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwate
  * the run, and per unit its mean demand before and after the cut and what it
  * was supplied. Only in runs with the rule on.
  */
-export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestriction']>): Generator<string> {
+export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestriction']>, name: (id: string) => string = (id) => id): Generator<string> {
 	yield csvRow(['Drought restrictions (the model rule; not the published restriction notice)']);
-	yield csvRow(['Rule', describeDroughtRestriction(r.rule)]);
+	yield csvRow(['Rule', describeDroughtRestriction(r.rule, name)]);
 	if (r.rule.source?.trim()) yield csvRow(['Source', r.rule.source.trim()]);
 	yield csvRow(['Reviews in the run', r.reviews]);
 	if (r.ewrReviews !== undefined) yield csvRow(['Reviews after a day the EWR trigger’s site wasn’t met', r.ewrReviews]);
@@ -1593,7 +1600,7 @@ export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestr
 	yield csvRow(['Whole run', r.daysByLevel.reduce((a, b) => a + b, 0), ...r.daysByLevel]);
 	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean supplied (m³/day)', 'Days restricted']);
 	for (const u of r.units)
-		yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day, u.daysByLevel ? u.daysByLevel.slice(1).reduce((a, b) => a + b, 0) : null]);
+		yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day), u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day, u.daysByLevel ? u.daysByLevel.slice(1).reduce((a, b) => a + b, 0) : null]);
 }
 
 /**
