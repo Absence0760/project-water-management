@@ -11,9 +11,11 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  * another account, maybe on another device) must still be able to use a reset
  * or confirmation link instead of being bounced to the project list. A
  * share link (/share, WP-2.3) is the same: its token is the credential, and so
- * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13).
+ * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13). An
+ * evidence pack's verify page (/verify/<code>, WP-3.14) answers anyone holding
+ * the code printed on the pack, signed in or not.
  */
-export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe'];
+export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe', '/verify'];
 
 /**
  * The public landing page's own address (issue #57): prerendered static HTML

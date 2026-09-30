@@ -5,13 +5,18 @@
 	// that a submit freezes the ops, that no one decides their own); this
 	// offers only the moves it would allow. Its comments (WP-3.15: the notes
 	// drawer with an audience picker) and, for the applicant and the
-	// assessors, its read-only share links (the Share dialog).
+	// assessors, its read-only share links (the Share dialog). For the
+	// project's viewers and up (not its applicants, who read no pack), it
+	// lists the application's evidence packs (WP-3.14) with their status.
+	import { base } from '$app/paths';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { scenarioAudiences } from '$lib/components/notes/notes';
+	import PackBadge from '$lib/components/packs/PackBadge.svelte';
+	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
-	import { api, OUTCOME_LABEL, scenarioProblems, SCENARIO_OUTCOMES, type Scenario, type ScenarioOutcome, type ScenarioWithCheck } from '$lib/api';
+	import { api, OUTCOME_LABEL, scenarioProblems, SCENARIO_OUTCOMES, type Pack, type Scenario, type ScenarioOutcome, type ScenarioWithCheck } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate } from '$lib/format/number';
 
@@ -23,6 +28,7 @@
 		problems,
 		unverifiedRuns = 0,
 		locked = false,
+		canReadPacks = false,
 		onchange,
 		onleft
 	}: {
@@ -47,6 +53,8 @@
 		 * the old status back on screen.
 		 */
 		locked?: boolean;
+		/** The caller reads evidence packs (viewer and up; an applicant doesn't). */
+		canReadPacks?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
 		/** You stopped reading it (left the share): it leaves your list. */
 		onleft: () => void;
@@ -154,6 +162,24 @@
 		}
 	}
 
+	// --- evidence packs ---------------------------------------------------------------
+	let packs = $state.raw<Pack[] | null>(null);
+	let packsFailed = $state(false);
+	$effect(() => {
+		if (!canReadPacks) return;
+		const sid = scenarioId;
+		packs = null;
+		packsFailed = false;
+		api.packs.list(projectId).then(
+			(all) => {
+				if (sid === scenarioId) packs = packsByScenario(all).get(sid) ?? [];
+			},
+			() => {
+				if (sid === scenarioId) packsFailed = true;
+			}
+		);
+	});
+
 	// --- comments and share links (WP-3.15) -------------------------------------------
 	const party = $derived(isOwner || s.members.some((m) => m.userId === session.user?.id));
 	const audiences = $derived(scenarioAudiences({ assessor: canDecide, party }));
@@ -228,6 +254,29 @@
 			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || unverifiedRuns > 0}>Record the decision</button>
 			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
+	{/if}
+
+	{#if canReadPacks}
+		<div class="packs" data-testid="application-panel-packs">
+			<h4>Evidence packs</h4>
+			{#if packsFailed}
+				<p class="muted">The packs couldn’t be read.</p>
+			{:else if packs === null}
+				<p class="muted">Loading…</p>
+			{:else if packs.length}
+				<ul>
+					{#each packs as p (p.id)}
+						<li>
+							<PackBadge status={p.status} version={p.version} />
+							<a href={packHref(base, projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
+							<span class="muted">{p.issuedAt ? `issued ${fmtDate(p.issuedAt)}` : `drafted ${fmtDate(p.createdAt)}`}</span>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="muted">None. An editor makes one from a run’s evidence report.</p>
+			{/if}
+		</div>
 	{/if}
 
 	<div class="shared">
@@ -336,6 +385,19 @@
 		align-items: center;
 		gap: 0.3rem;
 		min-height: var(--tap, 44px);
+	}
+	.packs ul {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 0.5rem;
+		display: grid;
+		gap: 0.3rem;
+	}
+	.packs li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.2rem 0.5rem;
 	}
 	.shared ul {
 		margin: 0 0 0.5rem;

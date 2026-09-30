@@ -8,9 +8,11 @@
 	// must be scrolled through before it can be
 	// submitted. The server gets back the hash of the
 	// statement shown here and refuses a sign-off if the statement has changed
-	// since (onstale reloads it).
+	// since (onstale reloads it). For an evidence pack (WP-3.14, issue #71) it
+	// signs the pack statement, and says first that the signer's name and
+	// registration are shown publicly on the pack's verify page.
 	import { tick, untrack } from 'svelte';
-	import { api, ApiError, type Signoff, type SignoffList } from '$lib/api';
+	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffList } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import {
 		BLOCKED_CATEGORIES_NOTE,
@@ -20,26 +22,28 @@
 		registrationFieldsOf,
 		type RegistrationBodyCode
 	} from '@water-management/engine';
-	import { DEFAULT_REGISTRATION_BODY, registrationAdvice, scrolledToEnd, signoffBlockers } from './signoffForm';
+	import { DEFAULT_REGISTRATION_BODY, PACK_SIGNER_PUBLIC, registrationAdvice, scrolledToEnd, signoffBlockers, statementEngines, type SignoffTarget } from './signoffForm';
 
 	let {
 		open = $bindable(false),
 		projectId,
-		runId,
+		target,
 		list,
 		onsigned,
 		onstale
 	}: {
 		open?: boolean;
 		projectId: string;
-		runId: string;
-		list: SignoffList;
+		target: SignoffTarget;
+		list: SignoffList | PackSignoffList;
 		onsigned: (s: Signoff) => void;
 		onstale: () => void;
 	} = $props();
 
 	const uid = `so-${Math.random().toString(36).slice(2, 9)}`;
 	const statement = $derived(list.statement);
+	const engines = $derived(statementEngines(statement));
+	const pack = $derived('packVersion' in statement ? statement : null);
 	let ticked = $state(new Set<string>());
 	let readAll = $state(false);
 	let fullName = $state('');
@@ -95,7 +99,7 @@
 		busy = true;
 		error = '';
 		try {
-			const s = await api.signoffs.create(projectId, runId, {
+			const request = {
 				fullName,
 				registrationBody,
 				registrationCategory,
@@ -104,7 +108,8 @@
 				scope,
 				confirmed: [...ticked],
 				statementSha256: list.statementSha256
-			});
+			};
+			const s = target.kind === 'pack' ? await api.packs.sign(projectId, target.id, request) : await api.signoffs.create(projectId, target.id, request);
 			onsigned(s);
 			open = false;
 		} catch (err) {
@@ -116,12 +121,21 @@
 	}
 </script>
 
-<Dialog bind:open title="Sign off this run" wide>
+<Dialog bind:open title={pack ? 'Sign off this evidence pack' : 'Sign off this run'} wide>
 	<form id="{uid}-form" onsubmit={submit}>
-		<p>
-			You sign as a registered professional, for this run as it was made (engine {statement.engineVersion}). A sign-off is permanent: it can’t be
-			changed or withdrawn, only followed by another.
-		</p>
+		{#if pack}
+			<p>
+				You sign as a registered professional, for version {pack.packVersion} of this evidence pack, identified by its manifest SHA-256
+				<code class="hash">{pack.manifestSha256}</code>, whose runs were made with engine {engines}. A sign-off is permanent: it can’t be changed or
+				withdrawn, only followed by another.
+			</p>
+			<p class="alert alert-warning" data-testid="signoff-public">{PACK_SIGNER_PUBLIC}</p>
+		{:else}
+			<p>
+				You sign as a registered professional, for this run as it was made (engine {engines}). A sign-off is permanent: it can’t be
+				changed or withdrawn, only followed by another.
+			</p>
+		{/if}
 		<!-- Before the confirmations: the first refers to "the person named above". -->
 		<div class="grid">
 			<label>Full name <input bind:value={fullName} maxlength="200" autocomplete="name" required /></label>
@@ -168,14 +182,14 @@
 			Methods: methodology statement <strong>{statement.methodology.version}</strong> (docs/methodology in the app's source, SHA-256
 			<code>{statement.methodology.sha256.slice(0, 12)}…</code>).
 		</p>
-		<h3 id="{uid}-lim">Known limitations ({statement.limitations.length}) and errata of engine {statement.engineVersion} ({statement.errata.length})</h3>
+		<h3 id="{uid}-lim">Known limitations ({statement.limitations.length}) and errata of engine {engines} ({statement.errata.length})</h3>
 		<!-- Focusable so a keyboard can scroll it; reading to the end is what enables the sign-off. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div class="limits" bind:this={box} onscroll={checkRead} tabindex="0" role="region" aria-labelledby="{uid}-lim">
 			<ul>
 				{#each statement.limitations as l (l.id)}<li><strong>{l.id}</strong> {l.title}. <span class="muted">{l.status}.</span></li>{/each}
 			</ul>
-			<p class="small"><strong>Errata</strong> (known bugs recorded for engine {statement.engineVersion} or the engine of its fit, docs/engine-errata.md):</p>
+			<p class="small"><strong>Errata</strong> (known bugs recorded for engine {engines} or the engine of its fit, docs/engine-errata.md):</p>
 			{#if statement.errata.length}
 				<ul>
 					{#each statement.errata as e (e.id)}<li><strong>{e.id}</strong> {e.summary}. <span class="muted">Applies when: {e.appliesWhen}. {e.fixedIn ? `Fixed in engine ${e.fixedIn}.` : 'Not fixed yet.'}</span></li>{/each}
@@ -266,5 +280,9 @@
 	}
 	.notes {
 		padding-left: 1.2rem;
+	}
+	.hash {
+		overflow-wrap: anywhere;
+		font-size: 0.8em;
 	}
 </style>

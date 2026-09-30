@@ -1487,11 +1487,22 @@
 //             b72ba4eb merged). #229's share links and #204's hands-off flow
 //             now in main; nothing of the evidence measures changed, engine
 //             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
-// 2026-09-30  total 1267 → 1272 KB; largestWorkerKb 38 → 21 KB (down). The
+// 2026-09-30  total 1267 → 1285 KB (issue #71, WP-3.14: the evidence pack's
+//             screens, measured 1282 with main @ 848000ac merged). Two new
+//             routes, each its own lazy chunk loaded only when opened: the
+//             pack view with its actions (~6 KB) and the public verify page
+//             with its in-browser file check (~6 KB); the pack helpers and
+//             badge (~2 KB) and the pack lists on the evidence report and
+//             the Applications tab and panel. No new dependency: the hash is
+//             WebCrypto, the canonical JSON the engine's. Headroom ~3 KB.
+// 2026-09-30  total 1285 → 1295 KB; largestWorkerKb 38 → 21 KB (down). The
 //             preview worker (issue #73, WP-1.17/WP-3.6: the Yield panel's
 //             in-browser firm yield), a second entry of the page build
 //             beside the calibration worker (vite.config.ts workerChunks).
-//             Measured 1269 KB against 1264 on its base 6045472a (+5 KB).
+//             Measured 1292 KB against 1285 on main ad899818 (+7 KB: the
+//             worker, runner and panel ~5 KB, and the worker's strict
+//             message parse, which brings validateScenarioOps into the
+//             workers' chunk, ~1 KB, PR #234's CodeQL fix).
 //             Rolldown now puts the network run code both workers use in a
 //             shared chunk (22 KB, loaded by the workers only), so the
 //             calibration worker's own file drops 37 → 17 KB (its whole
@@ -1512,7 +1523,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1272,
+	totalCodeKb: 1295,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

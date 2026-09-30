@@ -254,6 +254,47 @@ that every id is a row of the audit. After changing an audit decision, run
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 
+## Verify page
+
+`/verify/<code>` (`routes/verify/[[code]]/+page.svelte`; WP-3.14, issue #71,
+[evidence-pack.md § Verification](./evidence-pack.md#verification)): the
+public page an issued evidence pack prints on every page. Open to anyone,
+signed in or not (`OPEN_PATHS`); `noindex, nofollow` and `no-referrer`.
+English only: its readers are licensing assessors, like the methods page's.
+
+- **What it shows** is exactly what `GET /verify/:code` returns, and nothing
+  else: a verdict (*Issued and current*; *Superseded*, with a link to verify
+  the newer version by its code; *Withdrawn. Don't rely on it*, with the
+  reason the editor gave), then the catchment, version, issue date, engine,
+  report format, methodology statement with its SHA-256, the manifest
+  SHA-256 and the PDF's (or *No server PDF recorded for this pack*). **Signed
+  off by** lists each signer's name, date and registration as the report
+  prints it (*self-declared*), with the professional body's register as a
+  link and its address in full; the register URLs are the engine's, never the
+  database's. **Errata recorded in the pack** are those the manifest
+  recorded when it was drafted.
+- **Check a PDF or manifest.** Choose or drop a file: it is hashed in the
+  browser (WebCrypto SHA-256, `packs/pack.ts` `checkFile`) and compared with
+  the recorded hashes; the page says so, and that the file is never
+  uploaded. A JSON file that doesn't match byte for byte is compared once
+  more in its canonical form (RFC 8785, as the hash is taken), so a manifest
+  saved pretty-printed still matches and any change to what it says doesn't.
+  While no PDF hash is recorded, the check offers the manifest only and says
+  why.
+- **A code that answers nothing** (unknown, malformed, a draft, a pack
+  withdrawn before issue) is one answer: *No issued evidence pack has this
+  code*. The code is read in any case, with or without dashes, or as the full
+  64-character hash. Bare `/verify` asks for a code; **Verify another pack**
+  is at the foot of every state. Only the latest lookup is shown
+  (`packs/pack.ts` `latestOnly`, `lookUpCode`): a slow first lookup that
+  answers after following *Verify the newer version* or **Verify another
+  pack** is dropped, and so is a file check of the pack no longer shown.
+- Everything shown is text (Svelte escapes it). The links are underlined,
+  not colour alone.
+- Tested by `e2e/tests/evidence-pack.spec.ts` (signed out, a wrong code, a
+  manifest as downloaded, pretty-printed and with one byte changed, the
+  superseded and withdrawn verdicts, axe in light and dark).
+
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
@@ -5295,6 +5336,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   draft or withdrawn application says it must be submitted first and offers
   no form. The assessors list and withdraw every link to it; the applicant
   their own.
+- **Evidence packs** (WP-3.14), for the project's viewers and up (an
+  applicant reads no pack, [evidence-pack.md § Lifecycle](./evidence-pack.md#lifecycle)):
+  each of the application's packs with its status badge, "Version n, code
+  xxxx-xxxx-xxxx" linking to its [pack view](#evidence-pack), and when it was
+  issued or drafted; *None* says an editor makes one from a run's evidence
+  report.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`, issue #17 option A): every submitted, withdrawn or
@@ -5317,12 +5364,15 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   Approved, Approved with conditions or Refused in the band colours, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
   "waiting N days" while it awaits a decision), changes and runs, and the
+  the application's evidence packs (WP-3.14: each a status badge, newest
+  version first, linking to its [pack view](#evidence-pack); *none*, or
+  *couldn't be read*, which leaves the rest of the table) and the
   application's comments (the compact notes button, WP-3.15; its share
   links are in its Application panel).
 - **Fit:** from 1100 × 620 the card fills the window and the rows scroll
   inside it under a sticky header; below a 640 px column each application is
-  a card (name, status, applicant, submitted, "1 change · 0 runs") and the
-  page scrolls.
+  a card (name, status, applicant, submitted, "1 change · 0 runs", its
+  packs, its comments) and the page scrolls.
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -5332,7 +5382,7 @@ In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it, and an editor who isn't its owner gets the
 **Decide** form (outcome radios, reasons and conditions, **Record the
-decision**; final). Evidence packs (WP-3.14) will be linked from the list.
+decision**; final).
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and
@@ -5843,7 +5893,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     `loadImpactSeries` fetches before ready; the year-class method and the
     Reserve site are the project's `settings.outcomes`, as the impact report
     reads them; *Not enough years* per class on a short record, and the
-    note when only one run is at full allocation); *Where
+    note when only one run is at full allocation; an [evidence
+    pack](#evidence-pack) leaves it out and says so, since its manifest
+    doesn't freeze those inputs); *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -5908,6 +5960,15 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
     issued* for a draft), **Appendix C** (application only): the scenario's
     description and the run's notes, verbatim, the only free text.
+- **Evidence packs of this report** (screen only, under the checks): the
+  packs of this run's report (an application pack by its scenario run, a
+  baseline pack by the nominated run), each with its status badge, version,
+  code and date, linking to its [pack view](#evidence-pack). For an editor,
+  when the report may be issued, **Create evidence pack** drafts one and
+  opens it; once the application (or the baseline evidence) has an issued
+  pack the button is **Create version n+1 of the evidence pack**, which
+  supersedes it when issued. A report that may not be issued says a pack can
+  be made once every check that stops issue passes.
 - **Draft stamp.** Every section head and the footer (`data-report-footer`)
   read *Draft · not issued* until an evidence pack issues it (WP-3.14), and
   in print a diagonal *Draft · not issued* watermark crosses every page
@@ -5920,6 +5981,67 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   PDF yet: it comes with the issued pack (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
   `e2e/tests/evidence-allocations.spec.ts`.
+
+### Evidence pack
+
+`/projects/:id/packs/:packId` (`routes/projects/[id]/packs/[packId]/+page.svelte`;
+WP-3.14, issue #71, [evidence-pack.md](./evidence-pack.md)): one evidence
+pack, rendered with the evidence report's own layout (`EvidenceReport`)
+from the pack's frozen manifest (`GET …/packs/:packId`), never from the
+live run. Viewer role and up; the project's applicants and farmers read no
+pack.
+
+- **The stamp** on every section head and in the footer
+  (`packs/pack.ts` `packStamp`): *Draft pack · not issued*, *Issued · version
+  n · date*, *Superseded · version n · issued date*, *Withdrawn · version n*
+  (with its issue date when it had one). Once issued, every section and the
+  footer also print the manifest SHA-256, the short code and the verify link
+  `{origin}/verify/{code}` (`packVerifyLine`), and Appendix B.4 lists them.
+  The footer is `data-report-footer`, which a server render prints on every
+  page; `data-report-ready` follows the catchment report's contract, so e2e
+  and the renderer wait on it. Printing is A4 and light. The page reads only
+  the pack and its sign-offs, and the project for the caller's role; a
+  render session, which may read only the first two, skips the project, and
+  a project that can't be read leaves the pack shown without the editor's
+  moves. After a sign-off, issue or withdrawal the page reads the pack again
+  quietly; if that fails, the pack stays as it was, under an inline alert
+  with **Try again**, and `data-report-ready` stays set. Only the latest
+  load is applied, so following **Open the newer version** while a load is
+  in flight can't show the older pack.
+- **What isn't frozen is left out.** Page 1's licence impact by year class
+  reads the runs' daily series and the project's year-class settings, which
+  a `pack-1` manifest doesn't carry, so a pack prints a line saying it is not
+  part of the pack instead of the board (tracked in
+  [followups.md § Evidence report](./followups.md#evidence-report-issue-71):
+  the manifest will carry it).
+- **The bar** (screen only): Back (to the application in Scenarios, or the
+  baseline run in Runs), the status badge, **Download PDF** (the browser's
+  print), **Download manifest** (the canonical RFC 8785 bytes the hash is
+  taken of, `evidence-pack-<code>-manifest.json`, so the file checks on the
+  verify page), **Verify page** once issued, and the version, code, manifest
+  hash and PDF hash (or that none is recorded).
+- **Where it stands** (`packs/PackActions.svelte`): a draft's checklist from
+  the API (the frozen report may be issued, both runs still carry the
+  server's stamp, signed under the current pack statement), each ticked or
+  with what to do; an issued pack's issue stamp; a superseded pack's link to
+  the newer version; a withdrawn pack's reason, marked as shown publicly. A
+  red alert when the stored manifest no longer matches its hash. For an
+  editor: **Issue pack** (enabled once every line is ticked; a confirm says
+  the verify page then answers publicly with the signers' names), **Delete
+  draft** (an unsigned draft only), **New version…** of an issued pack (a
+  new draft from the same run's report, superseding it once issued),
+  **Withdraw…** (a dialog asking for a reason, 1–1 000 characters, that says
+  the reason is public). The server holds every rule and its refusal is
+  shown with the ways out it names.
+- **Sign-off** is Appendix B.2's, against the pack statement: **Sign off this
+  evidence pack…** opens the run's sign-off dialog with the pack's version,
+  manifest hash and engines, the eleventh confirmation, and first a warning
+  that the signer's name, registration and date are shown publicly on the
+  verify page, for as long as the pack exists.
+- Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
+  in the dialog, issue, the stamps, verify line and footer, the manifest
+  download, withdraw; an application's packs in the Applications tab and
+  panel, and version 2 superseding version 1) and `packs/pack.test.ts`.
 
 ## Help (`/help`)
 
@@ -6261,7 +6383,8 @@ email" banner, the account page and its alert emails page
 public shared view (`/share`), the public landing page (`/` signed out,
 `/welcome`, [§ Landing page](#landing-page)), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
-digest). The modeller workspace stays English.
+digest). The modeller workspace stays English, and so do the public
+methods and verify pages (their readers are assessors).
 
 - **The language table.** Every language the site, the emails and the
   database know is one entry in `packages/engine/src/languages.ts`
