@@ -116,6 +116,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (from the literature, engine 0.33.0; pending the hydrologist)"
 	},
 	{
+		"id": "L1",
+		"source": "finding",
+		"severity": "Medium (licence applications that insert a senior other water user on a reach)",
+		"title": "A new senior water user inserted above existing farms is classed as a changed assumption, not the applicant's proposal",
+		"status": "Decided (conservative, engine 1.35.0; Needs hydrologist)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,
