@@ -12,6 +12,7 @@ import {
 	scenarioSteps,
 	upgradeLegacyModel,
 	validateScenarioOps,
+	type AllocationEntry,
 	type AppliedOp,
 	type BoreholeMode,
 	type BoreholeTarget,
@@ -26,12 +27,27 @@ import {
 	type ScenarioOp,
 	type ScenarioOpName,
 	type SettingsPath,
+	type CropSetField,
+	type LandCoverSetField,
 	type TransferSetField
 } from '@water-management/engine';
 import { newNode } from '$lib/model/editor.svelte';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
-import { NODE_FIELD_SPECS, SETTINGS_SPECS, TRANSFER_FIELD_SPECS, formatValue, monthsText, parseValue, percentMessage, settingsValue, type PeDraft, type ValueSpec } from './fields';
+import {
+	CROP_FIELD_SPECS,
+	LAND_COVER_FIELD_SPECS,
+	NODE_FIELD_SPECS,
+	SETTINGS_SPECS,
+	TRANSFER_FIELD_SPECS,
+	formatValue,
+	monthsText,
+	parseValue,
+	percentMessage,
+	settingsValue,
+	type PeDraft,
+	type ValueSpec
+} from './fields';
 
 // ---------------------------------------------------------------------------
 // The base, and the input each op meets
@@ -71,7 +87,7 @@ export function namesOf(models: readonly (ProjectModel | undefined)[], ops: read
 		for (const c of m?.crops ?? []) names.set(c.id, c.name);
 	}
 	for (const op of ops) {
-		if (op.op === 'node.add' && op.node?.id) names.set(op.node.id, op.node.name);
+		if ((op.op === 'node.add' || op.op === 'node.insert') && op.node?.id) names.set(op.node.id, op.node.name);
 		if (op.op === 'crop.add' && op.crop?.id) names.set(op.crop.id, op.crop.name);
 	}
 	return names;
@@ -147,19 +163,27 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'node.set': "Change a node's value",
 	'node.add': 'Add a node',
 	'node.remove': 'Remove a node',
+	'node.move': 'Move a node (what it drains into)',
+	'node.insert': 'Insert a node on a reach',
 	'cropArea.set': "Set a hydrological unit's crop area",
 	'crop.add': 'Add a crop',
+	'crop.set': 'Change a crop',
+	'crop.remove': 'Remove a crop',
 	'transfer.add': 'Add a transfer',
 	'transfer.set': 'Change a transfer',
 	'transfer.remove': 'Remove a transfer',
 	'landCover.add': 'Add land cover',
 	'landCover.remove': 'Remove land cover',
+	'landCover.set': 'Change land cover',
 	'borehole.add': 'Add a borehole',
 	'borehole.remove': 'Remove a borehole',
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall or daily A-pan',
 	'demand.scale': 'Scale demand',
-	'ewrRule.set': "Set an EWR site's rule table"
+	'ewrRule.set': "Set an EWR site's rule table",
+	'ewrRule.remove': "Remove an EWR site's rule table",
+	'allocation.set': 'Set a registered volume',
+	'allocation.remove': 'Remove a registered volume'
 };
 
 /** A node or crop id that neither the base nor any name source knows. */
@@ -201,6 +225,16 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'node.remove':
 			return `Remove “${nodeName(op.nodeId)}”`;
+		case 'node.move': {
+			const was = m?.nodes.find((n) => n.id === op.nodeId)?.downstreamNodeId;
+			return `Move “${nodeName(op.nodeId)}”: drains into ${was ? `${nodeName(was)} → ` : '→ '}${nodeName(op.downstreamNodeId)}`;
+		}
+		case 'node.insert': {
+			const n = op.node;
+			const dam = n.kind === 'farm' && n.damCapacityM3 > 0 ? `, dam ${fmtNum(n.damCapacityM3)} m³` : '';
+			const ups = (op.upstreamNodeIds ?? []).map(nodeName).join(', ');
+			return `Insert the ${KIND_WORD[n.kind] ?? n.kind} “${n.name}” above ${nodeName(n.downstreamNodeId ?? '')}, taking what ${ups} drain${op.upstreamNodeIds?.length === 1 ? 's' : ''}${dam}`;
+		}
 		case 'cropArea.set': {
 			const was = m?.cropAreas.filter((a) => a.nodeId === op.nodeId && a.cropId === op.cropId).reduce((s, a) => s + a.areaM2, 0);
 			const from = m ? `${ha(was ?? 0)} → ` : '→ ';
@@ -208,6 +242,17 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'crop.add':
 			return `Add the crop “${op.crop.name}”`;
+		case 'crop.set': {
+			const f = CROP_FIELD_SPECS[op.field as CropSetField];
+			const c = m?.crops.find((x) => x.id === op.cropId);
+			// A crop's own efficiency left out is the hydrological unit's, as null is.
+			const was = c ? ((c as unknown as Record<string, unknown>)[op.field] ?? null) : undefined;
+			return `Crop ${cropName(op.cropId)}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+		}
+		case 'crop.remove': {
+			const farms = new Set(m?.cropAreas.filter((a) => a.cropId === op.cropId).map((a) => a.nodeId) ?? []).size;
+			return `Remove the crop “${cropName(op.cropId)}”${m ? (farms ? `, and its area on ${farms} hydrological unit${farms === 1 ? '' : 's'}` : ', planted nowhere') : ''}`;
+		}
 		case 'transfer.add': {
 			const t = op.transfer;
 			const cap = t.dailyCapM3 != null ? `, at most ${fmtNum(t.dailyCapM3)} m³/day` : '';
@@ -229,6 +274,13 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'landCover.remove': {
 			const p = m?.landCover?.find((x) => x.id === op.patchId);
 			return p ? `${nodeName(p.nodeId)}: remove ${coverLabel(p.coverClass)} (${fmtNum(p.areaKm2, 3, true)} km²)` : 'Remove a land-cover patch';
+		}
+		case 'landCover.set': {
+			const f = LAND_COVER_FIELD_SPECS[op.field as LandCoverSetField];
+			const p = m?.landCover?.find((x) => x.id === op.patchId);
+			const was = p ? (p as unknown as Record<string, unknown>)[op.field] : undefined;
+			const what = p ? `${nodeName(p.nodeId)}, ${coverLabel(p.coverClass)} patch of ${fmtNum(p.areaKm2, 3, true)} km²` : 'A land-cover patch';
+			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'borehole.add': {
 			const b = op.borehole;
@@ -265,9 +317,35 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const where = `Reserve rule table at ${siteName(t.siteNodeId, m, nodeName)}`;
 			return was === undefined ? `${where}: → ${now}` : `${where}: ${was ? tableText(was, false) : 'none'} → ${now}`;
 		}
+		case 'ewrRule.remove': {
+			const was = before ? siteTable(before, op.siteNodeId) : undefined;
+			const where = `Reserve rule table at ${siteName(op.siteNodeId, m, nodeName)}`;
+			return `${where}: ${was ? `${tableText(was, false)} → ` : was === null ? 'none → ' : ''}removed`;
+		}
+		case 'allocation.set': {
+			const a = op.allocation;
+			const was = m?.allocations?.find((x) => x.id === a.id);
+			return was
+				? `${nodeName(a.nodeId ?? '')}: registered volume ${volumeText(was)} → ${volumeText(a)}${was.nodeId !== a.nodeId ? ` (was on ${nodeName(was.nodeId ?? '')})` : ''}`
+				: `${nodeName(a.nodeId ?? '')}: add a registered volume, ${volumeText(a)}`;
+		}
+		case 'allocation.remove': {
+			const was = m?.allocations?.find((x) => x.id === op.allocationId);
+			return was ? `${nodeName(was.nodeId ?? '')}: remove the registered volume ${volumeText(was)}` : 'Remove a registered volume';
+		}
 		default:
 			return `Unknown change ${(op as { op?: string }).op ?? ''}`;
 	}
+}
+
+/** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
+export function volumeText(a: AllocationEntry): string {
+	const parts = [`${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
+	if (a.validFrom || a.validTo) parts.push(`valid ${a.validFrom ?? '…'} to ${a.validTo ?? '…'}`);
+	if (a.storageM3 != null) parts.push(`storage ${fmtNum(a.storageM3)} m³`);
+	if (a.months?.length) parts.push(`${monthsText(a.months)} only`);
+	if (a.maxRateM3s != null) parts.push(`at most ${fmtNum(a.maxRateM3s, 4, true)} m³/s`);
+	return parts.join(', ');
 }
 
 /** The outlet, or a gauge by name: where an ewrRule.set puts its table. */
@@ -359,7 +437,20 @@ export interface OpDraft {
 	/** ewrRule.set (engine ≥ 1.6.0): the site (OUTLET_SITE or a gauge's id), and its table as the Settings editor holds it (one table). */
 	ewrSite: string;
 	ewrTables: EwrRuleTable[];
+	/** node.insert (engine ≥ 1.34.0): the nodes draining into the new node's downstream node that drain into it instead. */
+	upstreamNodeIds: string[];
+	/** allocation.set / .remove (engine ≥ 1.34.0): the volume replaced or removed (NEW_ALLOCATION for a new one), and the entry's fields. */
+	allocationId: string;
+	alSource: 'surface' | 'groundwater';
+	alVolume: string;
+	alStorage: string;
+	alFrom: string;
+	alTo: string;
+	alRate: string;
 }
+
+/** The form's value for a new registered volume (allocation.set with a fresh id). */
+export const NEW_ALLOCATION = '(new)';
 
 /** The form's value for the outlet as an EWR site (a table's siteNodeId null). */
 export const OUTLET_SITE = '(outlet)';
@@ -408,7 +499,32 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		demandNodeIds: [],
 		demandPct: '',
 		ewrSite: '',
-		ewrTables: []
+		ewrTables: [],
+		upstreamNodeIds: [],
+		allocationId: '',
+		alSource: 'surface',
+		alVolume: '',
+		alStorage: '',
+		alFrom: '',
+		alTo: '',
+		alRate: ''
+	};
+}
+
+/** The allocation.set draft's fields from a stored volume (or a new one's defaults), so a small change is a small edit. */
+export function allocationDraft(d: OpDraft, a: AllocationEntry | undefined): OpDraft {
+	if (!a) return { ...d, nodeId: '', months: [], alSource: 'surface', alVolume: '', alStorage: '', alFrom: '', alTo: '', alRate: '' };
+	const t = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v));
+	return {
+		...d,
+		nodeId: a.nodeId ?? '',
+		months: [...(a.months ?? [])],
+		alSource: a.waterSource,
+		alVolume: t(a.volumeM3PerYear),
+		alStorage: t(a.storageM3),
+		alFrom: a.validFrom ?? '',
+		alTo: a.validTo ?? '',
+		alRate: t(a.maxRateM3s)
 	};
 }
 
@@ -435,7 +551,17 @@ export function startTable(input: ModelInput, site: string): EwrRuleTable {
 /** The value spec of the field a node.set / transfer.set / settings.set draft names, or null. */
 export function draftSpec(d: Pick<OpDraft, 'kind' | 'field'>): ValueSpec | null {
 	const table =
-		d.kind === 'node.set' ? NODE_FIELD_SPECS : d.kind === 'transfer.set' ? TRANSFER_FIELD_SPECS : d.kind === 'settings.set' ? SETTINGS_SPECS : null;
+		d.kind === 'node.set'
+			? NODE_FIELD_SPECS
+			: d.kind === 'transfer.set'
+				? TRANSFER_FIELD_SPECS
+				: d.kind === 'settings.set'
+					? SETTINGS_SPECS
+					: d.kind === 'crop.set'
+						? CROP_FIELD_SPECS
+						: d.kind === 'landCover.set'
+							? LAND_COVER_FIELD_SPECS
+							: null;
 	return (table as Record<string, { spec: ValueSpec }> | null)?.[d.field]?.spec ?? null;
 }
 
@@ -495,6 +621,21 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'node.remove':
 				op = { op: 'node.remove', nodeId: need(d.nodeId, 'a node') };
 				break;
+			case 'node.move':
+				op = { op: 'node.move', nodeId: need(d.nodeId, 'the node to move'), downstreamNodeId: need(d.downstreamNodeId, 'what it will drain into') };
+				break;
+			case 'node.insert': {
+				const name = d.newName.trim();
+				if (!name) throw new DraftError('enter a name for the new node');
+				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'the node it drains into')), id: newId(), name, kind: d.newKind };
+				if (d.newKind === 'farm') node.damCapacityM3 = number(d.damCapacityM3, 'the dam capacity')!;
+				else node.userDemandM3Day = new Array<number>(12).fill(number(d.demandM3Day, 'the demand')!);
+				// Only nodes that drain there now: a stale tick (the downstream node changed) is dropped.
+				const ups = d.upstreamNodeIds.filter((id) => model.nodes.some((n) => n.id === id && n.downstreamNodeId === node.downstreamNodeId));
+				if (!ups.length) throw new DraftError('tick the nodes that will drain into the new one (with none, add a node instead)');
+				op = { op: 'node.insert', node, upstreamNodeIds: [...new Set(ups)] };
+				break;
+			}
 			case 'cropArea.set':
 				op = { op: 'cropArea.set', nodeId: need(d.nodeId, 'a hydrological unit'), cropId: need(d.cropId, 'a crop'), areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })! };
 				break;
@@ -505,6 +646,16 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				op = { op: 'crop.add', crop: { id: newId(), name, cropFactor } };
 				break;
 			}
+			case 'crop.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick what to change');
+				const value = parsed(spec, d.value, CROP_FIELD_SPECS[d.field as CropSetField].label);
+				op = { op: 'crop.set', cropId: need(d.cropId, 'a crop'), field: d.field, value } as ScenarioOp;
+				break;
+			}
+			case 'crop.remove':
+				op = { op: 'crop.remove', cropId: need(d.cropId, 'a crop') };
+				break;
 			case 'transfer.add':
 				op = {
 					op: 'transfer.add',
@@ -547,6 +698,13 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'landCover.remove':
 				op = { op: 'landCover.remove', patchId: need(d.patchId, 'a land-cover patch') };
 				break;
+			case 'landCover.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick what to change');
+				const value = parsed(spec, d.value, LAND_COVER_FIELD_SPECS[d.field as LandCoverSetField].label);
+				op = { op: 'landCover.set', patchId: need(d.patchId, 'a land-cover patch'), field: d.field, value } as ScenarioOp;
+				break;
+			}
 			case 'borehole.add': {
 				const name = d.bhName.trim();
 				if (!name) throw new DraftError('enter a name for the borehole');
@@ -604,6 +762,40 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				op = { op: 'ewrRule.set', table: { ...table, siteNodeId: site === OUTLET_SITE ? null : site, source: typeof table.source === 'string' ? table.source.trim() : table.source } };
 				break;
 			}
+			case 'ewrRule.remove': {
+				const site = need(d.ewrSite, 'an EWR site');
+				op = { op: 'ewrRule.remove', siteNodeId: site === OUTLET_SITE ? null : site };
+				break;
+			}
+			case 'allocation.set': {
+				const which = need(d.allocationId, 'a registered volume, or a new one');
+				const a: AllocationEntry = {
+					id: which === NEW_ALLOCATION ? newId() : which,
+					nodeId: need(d.nodeId, 'the hydrological unit or other user it is for'),
+					waterSource: d.alSource,
+					volumeM3PerYear: number(d.alVolume, 'the volume')!
+				};
+				const storage = number(d.alStorage, 'the storage', { nullable: true });
+				if (storage !== null) a.storageM3 = storage;
+				const date = (text: string, what: string) => {
+					const t = text.trim();
+					if (t && !/^\d{4}-\d{2}-\d{2}$/.test(t)) throw new DraftError(`${what}: enter a date as YYYY-MM-DD`);
+					return t || null;
+				};
+				const from = date(d.alFrom, 'Valid from');
+				const to = date(d.alTo, 'Valid to');
+				if (from) a.validFrom = from;
+				if (to) a.validTo = to;
+				const months = [...new Set(d.months)].sort((x, y) => x - y);
+				if (months.length) a.months = months;
+				const rate = number(d.alRate, 'the maximum rate', { nullable: true });
+				if (rate !== null) a.maxRateM3s = rate;
+				op = { op: 'allocation.set', allocation: a };
+				break;
+			}
+			case 'allocation.remove':
+				op = { op: 'allocation.remove', allocationId: need(d.allocationId, 'a registered volume') };
+				break;
 			default:
 				throw new DraftError('pick a kind of change');
 		}
@@ -674,6 +866,14 @@ function scaleNote(kind: ScenarioOpName, text: string): string {
 	if (kind === 'series.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, 'the change must be between −100 % and +900 %');
 	// A rule table's own checks are sentences already ("Say where the table comes from …"); a shape error names its field.
 	if (kind === 'ewrRule.set') return text.replace(/(^|; )table\.\w+: (?=[A-Z])/g, '$1').replace(/(^|; )table\.(\w+): /g, '$1$2 ');
+	// A registered volume's errors name its field: say it in the form's words.
+	if (kind === 'allocation.set')
+		return text
+			.replace(/(^|; )allocation\.volumeM3PerYear: /g, '$1the volume ')
+			.replace(/(^|; )allocation\.storageM3: /g, '$1the storage ')
+			.replace(/(^|; )allocation\.maxRateM3s: /g, '$1the maximum rate ')
+			.replace(/(^|; )allocation\.validTo: is before valid from/g, '$1valid to is before valid from')
+			.replace(/(^|; )allocation\.(\w+): /g, '$1$2 ');
 	if (kind === 'demand.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, `the demand must be between 0 % and ${DEMAND_SCALE_MAX * 100} % of what they'd take`);
 	return text;
 }

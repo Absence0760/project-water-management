@@ -16,6 +16,9 @@ import {
 	LOW_FLOW_MEASURES,
 	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
+	CROP_SET_FIELDS,
+	LAND_COVER_CLASSES,
+	LAND_COVER_SET_FIELDS,
 	SUPPLY_RULES,
 	SUPPLY_RULE_LABEL,
 	TRANSFER_SET_FIELDS,
@@ -24,6 +27,8 @@ import {
 	damCurveProblem,
 	isIsoDate,
 	type DamCurvePoint,
+	type CropSetField,
+	type LandCoverSetField,
 	type NodeKind,
 	type NodeSetField,
 	type PeInput,
@@ -67,7 +72,13 @@ export type ValueSpec =
 	 * pasted as the Network form's survey box reads them (network/damCurve.ts);
 	 * empty is none, the power law.
 	 */
-	| { t: 'curve' };
+	| { t: 'curve' }
+	/**
+	 * A land-cover patch's reductions overriding its class's (engine ≥ 1.34.0,
+	 * landCover.set): "MAR %, low-flow %", typed as two numbers; empty is the
+	 * class's defaults.
+	 */
+	| { t: 'reductions' };
 
 /** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
 export interface PeDraft {
@@ -178,6 +189,27 @@ export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 };
 
 export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
+
+// ---------------------------------------------------------------------------
+// crop.set, landCover.set (engine ≥ 1.34.0)
+// ---------------------------------------------------------------------------
+
+export const CROP_FIELD_SPECS: Record<CropSetField, FieldSpec> = {
+	name: { label: 'Name', spec: { t: 'text' } },
+	cropFactor: { label: 'Crop factors', spec: { t: 'monthly', unit: '', scale: 1, nullable: false } },
+	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct(true, "the hydrological unit's") }
+};
+
+export const CROP_FIELDS = CROP_SET_FIELDS.map((field) => ({ field, label: CROP_FIELD_SPECS[field].label }));
+
+export const LAND_COVER_FIELD_SPECS: Record<LandCoverSetField, FieldSpec> = {
+	coverClass: { label: 'Land cover', spec: { t: 'enum', options: LAND_COVER_CLASSES.map((c) => ({ value: c.id, label: c.label })) } },
+	areaKm2: { label: 'Area', spec: num('km²') },
+	densityPct: { label: 'Condensed cover', spec: pct() },
+	factors: { label: 'Reductions (MAR, low flow)', spec: { t: 'reductions' } }
+};
+
+export const LAND_COVER_FIELDS = LAND_COVER_SET_FIELDS.map((field) => ({ field, label: LAND_COVER_FIELD_SPECS[field].label }));
 
 // ---------------------------------------------------------------------------
 // settings.set
@@ -311,6 +343,13 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
 		case 'node':
 			return text ? { ok: true, value: text } : { ok: false, error: 'pick a node' };
+		case 'reductions': {
+			if (text === '') return { ok: true, value: null };
+			const parts = text.replace(/%/g, ' ').split(/\s*;\s*|,\s+|\s+/).filter(Boolean);
+			const xs = parts.map((p) => parseNum(p));
+			if (xs.length !== 2 || xs.some((x) => x === null)) return { ok: false, error: 'enter two percentages, the MAR reduction and the low-flow reduction (e.g. 20; 30), or leave it empty for the class defaults' };
+			return { ok: true, value: { mar: round(xs[0]! / 100), lowFlow: round(xs[1]! / 100) } };
+		}
 		case 'curve': {
 			if (text === '') return { ok: true, value: null };
 			// Read and checked as the Network form reads a pasted survey (the engine's damCurveProblem, a model rule applyScenario also runs).
@@ -372,6 +411,10 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 			return peDraftOf(v, undefined).mm;
 		case 'curve':
 			return Array.isArray(v) ? curveText(v as DamCurvePoint[]) : '';
+		case 'reductions': {
+			const r = v as { mar?: unknown; lowFlow?: unknown };
+			return typeof r.mar === 'number' && typeof r.lowFlow === 'number' ? `${round(r.mar * 100)}; ${round(r.lowFlow * 100)}` : '';
+		}
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -414,6 +457,11 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			return peText(v === null || v === undefined ? null : (v as PeInput));
 		case 'curve':
 			return curveSummary(v);
+		case 'reductions': {
+			const r = (v ?? null) as { mar?: unknown; lowFlow?: unknown } | null;
+			if (!r || typeof r.mar !== 'number' || typeof r.lowFlow !== 'number') return "the class's";
+			return `MAR −${fmtNum(r.mar * 100, 1, true)} %, low flow −${fmtNum(r.lowFlow * 100, 1, true)} %`;
+		}
 	}
 }
 

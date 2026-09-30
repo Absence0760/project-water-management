@@ -299,13 +299,66 @@ describe('diffModel', () => {
 		expect(ops).toEqual([{ op: 'transfer.set', transferId: T, field: 'monthlyRateM3s', value: [0, 0.03, 0.01, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]);
 	});
 
-	it('turns land cover into landCover.add and .remove; a patch edited in place is removed and added again', () => {
+	it('turns land cover into landCover.add and .remove, a patch edited in place into landCover.set (engine ≥ 1.34.0), one moved to another unit removed and added', () => {
 		const b = base();
 		const e = editing(b);
 		e.model.landCover![0]!.areaKm2 = 2;
+		e.model.landCover![0]!.densityPct = 0.25;
 		const added = e.addLandCover(UP);
 		added.areaKm2 = 0.5;
-		expect(roundTrips(b, e.snapshot()).map((o) => o.op)).toEqual(['landCover.remove', 'landCover.add', 'landCover.add']);
+		expect(roundTrips(b, e.snapshot())).toEqual([
+			{ op: 'landCover.add', patch: expect.objectContaining({ id: added.id, nodeId: UP, areaKm2: 0.5 }) },
+			{ op: 'landCover.set', patchId: P, field: 'areaKm2', value: 2 },
+			{ op: 'landCover.set', patchId: P, field: 'densityPct', value: 0.25 }
+		]);
+		const e2 = editing(b);
+		e2.model.landCover![0]!.nodeId = UP;
+		expect(roundTrips(b, e2.snapshot()).map((o) => o.op)).toEqual(['landCover.remove', 'landCover.add']);
+	});
+
+	it('turns a crop edited in the Crops tab into crop.set per field, and a removed crop into crop.remove (engine ≥ 1.34.0)', () => {
+		const b = base();
+		const e = editing(b);
+		e.model.crops[0]!.cropFactor[0] = 0.9;
+		e.model.crops[0]!.name = 'Stone fruit';
+		const ops = roundTrips(b, e.snapshot());
+		expect(ops).toEqual([
+			{ op: 'crop.set', cropId: CROP, field: 'name', value: 'Stone fruit' },
+			{ op: 'crop.set', cropId: CROP, field: 'cropFactor', value: [0.9, ...new Array(11).fill(0.6)] }
+		]);
+		// Removed: one op, which drops its areas too (so no cropArea.set rides along).
+		const e2 = editing(b);
+		e2.removeCrop(CROP);
+		expect(roundTrips(b, e2.snapshot())).toEqual([{ op: 'crop.remove', cropId: CROP }]);
+		// A new crop given the removed one's name: the removal goes first, so the name is free.
+		const e3 = editing(b);
+		e3.removeCrop(CROP);
+		const c = e3.addCrop();
+		c.name = 'Orchard';
+		expect(roundTrips(b, e3.snapshot()).map((o) => o.op)).toEqual(['crop.remove', 'crop.add']);
+	});
+
+	it('turns what a node drains into into node.move, and a new node existing nodes now drain into into node.insert (engine ≥ 1.34.0)', () => {
+		const b = base();
+		// Lower farm drains into Upper farm: move it to drain into the gauge.
+		const e = editing(b);
+		node(e, LO).downstreamNodeId = G;
+		expect(roundTrips(b, e.snapshot())).toEqual([{ op: 'node.move', nodeId: LO, downstreamNodeId: G }]);
+		// A new weir between the upper farm and the gauge: node.insert, taking the upper farm (and the lower behind it).
+		const e2 = editing(b);
+		const w = e2.addNode();
+		Object.assign(w, { name: 'New weir', downstreamNodeId: G });
+		node(e2, UP).downstreamNodeId = w.id;
+		const ops = roundTrips(b, e2.snapshot());
+		expect(ops).toEqual([{ op: 'node.insert', node: expect.objectContaining({ id: w.id, downstreamNodeId: G }), upstreamNodeIds: [UP] }]);
+		// Reversing the two farms' order: each move lands where it ends up, nearest the outlet first, so neither makes a loop.
+		const e3 = editing(b);
+		node(e3, LO).downstreamNodeId = G;
+		node(e3, UP).downstreamNodeId = LO;
+		expect(roundTrips(b, e3.snapshot())).toEqual([
+			{ op: 'node.move', nodeId: LO, downstreamNodeId: G },
+			{ op: 'node.move', nodeId: UP, downstreamNodeId: LO }
+		]);
 	});
 
 	it('turns individual boreholes into borehole.add and .remove; one edited in place is removed and added again', () => {
@@ -328,19 +381,16 @@ describe('diffModel', () => {
 	it('names every edit no op can express, and records none of them', () => {
 		const b = base();
 		const e = editing(b);
-		node(e, LO).downstreamNodeId = G;
+		node(e, LO).downstreamNodeId = null;
 		node(e, UP).kind = 'user';
-		e.model.crops[0]!.cropFactor[0] = 0.9;
 		node(e, G).areaKm2 = 3;
 		const d = diffModel(b, e.snapshot());
 		expect(d.unsupported).toEqual([
-			"Editing the crop “Orchard” (its name or crop factors): a scenario can't change a crop yet. Add a new crop and move the areas to it.",
 			"Area on “Outflow gauge”: a scenario can't set that on a gauge.",
 			"Changing “Upper farm” from a farm to a user: a scenario can't change a node's kind. Remove it and add a new node.",
-			"Moving “Lower farm” (what it drains into): a scenario can't move a node yet. Remove it and add a new one where it should drain."
+			"Making “Lower farm” drain nowhere: the catchment keeps its outflow node, which a scenario can't move."
 		]);
-		e.removeCrop(CROP);
-		expect(diffModel(b, e.snapshot()).unsupported[0]).toBe("Removing the crop “Orchard”: a scenario can't remove a crop yet. Set its areas to 0 instead.");
+		expect(d.ops.some((o) => o.op === 'node.move')).toBe(false);
 	});
 
 	it('refuses a value the engine refuses, in the form’s words', () => {
