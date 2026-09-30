@@ -1609,6 +1609,12 @@
 //             Appendix C's prompt rows; +1 KB). Measured 1333 locally on the
 //             combined branch with both issue #71 pieces, main @ 5604071e;
 //             CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1338 → 1344 KB (issue #71, #270 with #268 and #269 in it:
+//             the applicant's pack view route and the Application panel's
+//             pack list (packs/applicantPack.ts), the errata found since
+//             issue on verify, the pack page and the applicant view
+//             (errataFoundSinceNote)). Measured 1338 locally, 1341 on CI;
+//             headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1619,7 +1625,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1338,
+	totalCodeKb: 1344,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

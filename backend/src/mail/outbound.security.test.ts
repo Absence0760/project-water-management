@@ -76,7 +76,19 @@ const builders: Record<string, () => Mail[]> = {
 		[null, 'af'].flatMap((locale) =>
 			[true, false].flatMap((farmer) => alertKinds.map((f) => alertTemplates.alertMail({ email: TO, locale, farmer }, project, f, unsub)))
 		),
-	digestMail: () => [null, 'af'].map((locale) => alertTemplates.digestMail({ email: TO, locale, farmer: false }, project, alertKinds, unsub, 20, 4))
+	digestMail: () => [null, 'af'].map((locale) => alertTemplates.digestMail({ email: TO, locale, farmer: false }, project, alertKinds, unsub, 20, 4)),
+	packNoticeMail: () =>
+		(['issued', 'withdrawn'] as const).flatMap((event) =>
+			(['editor', 'applicant'] as const).flatMap((as) =>
+				templates.LOCALES.map((l) =>
+					templates.packNoticeMail(
+						TO,
+						{ event, as, projectId: 'p1', packId: 'k1', projectName: EVIL, scenarioId: 's1', scenarioName: EVIL, version: 2, supersedesVersion: 1, shortCode: 'ab12-cd34-ef56', reason: EVIL },
+						l
+					)
+				)
+			)
+		)
 };
 
 const exportedBuilders = [...Object.entries(templates), ...Object.entries(alertTemplates)]
@@ -99,7 +111,8 @@ describe('every email template, against hostile names', () => {
 			farmerInviteMail: 'farmer_invite',
 			reportReadyMail: 'report_ready',
 			alertMail: 'alert',
-			digestMail: 'alert_digest'
+			digestMail: 'alert_digest',
+			packNoticeMail: 'pack_notice'
 		};
 		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
 		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);

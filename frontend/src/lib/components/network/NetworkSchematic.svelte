@@ -784,9 +784,6 @@
 		font-size: 0.8rem;
 		color: var(--text-2);
 	}
-	.supply-legend .legend {
-		margin-top: 0.3rem;
-	}
 	.dam-water {
 		fill: none;
 		stroke: var(--sch-node);

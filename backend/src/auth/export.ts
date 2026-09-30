@@ -81,6 +81,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'note.deleted_by': { excluded: 'notes the person hid; note.deleted is in auditEvents' },
 	// Their own earlier texts of a scenario note, under that note (115_scenario_share_notes).
 	'note_revision.edited_by': { section: 'notes' },
+	// The "pack issued" / "pack withdrawn" emails sent to the person (133_pack_notices), 30 days.
+	'pack_notice.user_id': { section: 'packNotices' },
 	'project.created_by': { excluded: 'the project itself; the membership is in projectMemberships' },
 	'outlook_publication.ended_by': { excluded: 'the project’s outlook publication to farmers; outlook.unpublished is in auditEvents' },
 	'outlook_publication.published_by': { excluded: 'the project’s outlook publication to farmers; outlook.published is in auditEvents' },
@@ -232,6 +234,12 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE d.user_id = $1 ORDER BY d.created_at DESC`,
 			[userId]
 		);
+		// Own rows only under RLS (133): the evidence pack emails sent to them.
+		const { rows: packNotices } = await db.query(
+			`SELECT project_id AS "projectId", pack_id AS "packId", event, status, created_at AS "createdAt", sent_at AS "sentAt"
+			 FROM pack_notice WHERE user_id = $1 ORDER BY created_at DESC, pack_id, event`,
+			[userId]
+		);
 		// Own row only under RLS (083): one row, or none when they never saved any.
 		const { rows: prefs } = await db.query(
 			`SELECT preferences, updated_at AS "updatedAt" FROM user_preferences WHERE user_id = $1`,
@@ -253,6 +261,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			invites: rest.invites,
 			alertSubscriptions: rest.alertSubscriptions,
 			alertDeliveries,
+			packNotices,
 			preferences: prefs,
 			reportSubscriptions: rest.reportSubscriptions,
 			auditEvents: rest.auditEvents,

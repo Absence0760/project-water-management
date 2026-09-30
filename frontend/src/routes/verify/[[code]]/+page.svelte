@@ -3,7 +3,8 @@
 	// § Verify, docs/evidence-pack.md § Verification): /verify/<short code or
 	// full manifest hash> (bare /verify asks for a code), printed on every page of an issued pack. Signed out
 	// or in, it shows exactly what GET /verify/:code returns (status, version,
-	// issue date, catchment, engine, methodology, errata, signers with their
+	// issue date, catchment, engine, methodology, the errata the pack recorded
+	// and, apart, those found since issue for its runs' engines, signers with their
 	// register links as the report prints them, the newer version, a
 	// withdrawal's reason) and nothing else; a code that answers nothing is
 	// "not found", whatever the reason. "Check a PDF or manifest" hashes a
@@ -20,7 +21,7 @@
 	import { api, ApiError, type PackVerification } from '$lib/api';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { checkableAccept, checkableFiles, checkFile, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
+	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
 	import { fmtDate } from '$lib/format/number';
 
 	const code = $derived(page.params.code ?? '');
@@ -77,6 +78,7 @@
 		checkOne(e.dataTransfer?.files[0]);
 	}
 
+	const since = $derived(v ? errataFoundSinceNote(v) : null);
 	const successorCode = $derived(v?.successorSha256 ? packShortCode(v.successorSha256) : null);
 </script>
 
@@ -192,6 +194,15 @@
 					<p class="muted">None: no known bug was recorded for this engine when the pack was drafted.</p>
 				{/if}
 				<p class="small muted">The errata the pack recorded when it was drafted. The methods and their known limitations are on the <a href="{base}/methods">methods page</a>.</p>
+				<div data-testid="verify-errata-since">
+					<h3>{since?.heading}</h3>
+					{#if v.errataFoundSince.length}
+						<ul class="errata">{#each v.errataFoundSince as e (e.id)}<li><strong>{e.id}</strong> {e.summary}</li>{/each}</ul>
+						<p class="small muted">{since?.note}</p>
+					{:else}
+						<p class="muted">None: no erratum has been found since issue for the engines this pack’s runs used.</p>
+					{/if}
+				</div>
 			</section>
 
 			<section class="card" aria-labelledby="check-h" data-testid="verify-check">
@@ -374,6 +385,10 @@
 	.errata {
 		padding-left: 1.2rem;
 		margin: 0 0 0.5rem;
+	}
+	h3 {
+		font-size: 1rem;
+		margin: 0.75rem 0 0.35rem;
 	}
 	.drop {
 		display: flex;

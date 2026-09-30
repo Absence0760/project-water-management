@@ -3,8 +3,9 @@
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
 // reaches a server log.
-import { packShortCode, type RestrictionLevel, type CatchmentSite, type NoticeText } from '@water-management/engine';
+import { ENGINE_ERRATA, packShortCode, type CatchmentSite, type Erratum, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { z } from 'zod';
+import { errataFoundSince } from '../evidence/errata.js';
 import type { PackVerification } from '../evidence/packs.js';
 import { UUID } from '../projects/access.js';
 
@@ -90,13 +91,15 @@ export interface ShareLinkRow {
 export const SELECT_LINKS = `
 	SELECT s.id, s.label, s.created_at, cu.display_name AS created_by_name, s.expires_at, s.revoked_at,
 		ru.display_name AS revoked_by_name, s.last_used_at, s.target_kind, s.target_id,
-		coalesce(sc.name, ep.manifest->'report'->'identity'->>'title') AS target_name,
-		coalesce(sc.status, ep.status) AS target_status,
-		ep.version AS target_version,
+		coalesce(sc.name, ep.manifest->'report'->'identity'->>'title', ap.m->>'title') AS target_name,
+		coalesce(sc.status, ep.status, ap.m->>'status') AS target_status,
+		coalesce(ep.version, (ap.m->>'version')::int) AS target_version,
 		s.created_by IS NOT DISTINCT FROM app_current_user_id() AS mine
 	FROM share_link s
 	LEFT JOIN scenario sc ON s.target_kind = 'scenario' AND sc.id = s.target_id
 	LEFT JOIN evidence_pack ep ON s.target_kind = 'pack' AND ep.id = s.target_id
+	-- An applicant reads no pack row (131): their own application's pack is named through app_applicant_pack_meta.
+	LEFT JOIN LATERAL (SELECT CASE WHEN s.target_kind = 'pack' AND ep.id IS NULL THEN app_applicant_pack_meta(s.project_id, s.target_id) END AS m) ap ON true
 	LEFT JOIN app_user cu ON cu.id = s.created_by
 	LEFT JOIN app_user ru ON ru.id = s.revoked_by`;
 
@@ -313,10 +316,10 @@ export interface ShareScenarioRow {
 
 const hex = (v: unknown): Buffer | null => (typeof v === 'string' && /^[0-9a-f]*$/.test(v) && v.length ? Buffer.from(v, 'hex') : null);
 
-const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+export const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+export const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 /** One shared run, field by field: the database's allowlist again, so nothing it adds later leaves by default. */
 export function toSharedRun(raw: Record<string, unknown>): SharedRun {
@@ -491,7 +494,7 @@ const SHARED_ROW_IDS = ['reserve', 'ewrDays', 'noFlowDays', 'shortfall', 'outflo
 const VOLUME_ROW_IDS = new Set(['shortfall', 'outflowMar']);
 const bool = (v: unknown): boolean => v === true;
 
-function toBand(v: unknown): SharedBand | null {
+export function toBand(v: unknown): SharedBand | null {
 	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
 	const b = obj(v);
 	return { n: num(b.n), p5: num(b.p5), p50: num(b.p50), p95: num(b.p95) };
@@ -499,9 +502,21 @@ function toBand(v: unknown): SharedBand | null {
 
 const sha = (v: unknown): string | null => (typeof v === 'string' && /^[0-9a-f]{64}$/.test(v) ? v : null);
 
-/** The verify object field by field (evidence/packs.ts PackVerification), so nothing the database adds later leaves by default. */
-function toVerify(raw: Record<string, unknown>): PackVerification {
+/**
+ * The verify object field by field (evidence/packs.ts PackVerification), so
+ * nothing the database adds later leaves by default. GET /verify/:code and
+ * POST /share/pack both answer through it. `runs` (132) never leaves: it
+ * gives the errata found since issue (evidence/errata.ts), over `errata`
+ * (the engine's current list unless a test passes one).
+ */
+export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[] = ENGINE_ERRATA): PackVerification {
 	const m = obj(raw.methodology);
+	const recorded = arr(raw.errata).map((e) => ({ id: str(obj(e).id) ?? '', summary: str(obj(e).summary) ?? '' }));
+	const runs = arr(raw.runs).flatMap((x) => {
+		const r = obj(x);
+		const engineVersion = str(r.engineVersion);
+		return engineVersion ? [{ engineVersion, fitEngineVersion: str(r.fitEngineVersion) }] : [];
+	});
 	const status = raw.status === 'superseded' || raw.status === 'withdrawn' ? raw.status : 'issued';
 	const manifest = sha(raw.manifestSha256) ?? '';
 	return {
@@ -518,7 +533,8 @@ function toVerify(raw: Record<string, unknown>): PackVerification {
 		successorSha256: sha(raw.successorSha256),
 		withdrawnReason: status === 'withdrawn' ? str(raw.withdrawnReason) : null,
 		methodology: { version: str(m.version), sha256: str(m.sha256) },
-		errata: arr(raw.errata).map((e) => ({ id: str(obj(e).id) ?? '', summary: str(obj(e).summary) ?? '' })),
+		errata: recorded,
+		errataFoundSince: errataFoundSince(recorded, runs, errata),
 		signers: arr(raw.signers).map((x) => {
 			const s = obj(x);
 			return {

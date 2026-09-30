@@ -1066,7 +1066,26 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `app_record_pack_pdf`, 119 below; the bundle's, 122 below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
-  `DELETE` editor, drafts only.
+  `DELETE` editor, drafts only. No policy for contributors, on purpose: the
+  manifest names every unit, and a row policy can't hide a column.
+- **An applicant's packs** (131_applicant_packs, `SECURITY DEFINER`,
+  `STABLE`, search path pinned, `EXECUTE` for `water_app`):
+  `app_applicant_pack_meta(project, pack)` is a pack's lifecycle fields
+  (`id, scenarioId, title, mode, version, status, issuedAt,
+  manifestSha256, supersedesId, supersededById, withdrawnReason, isOwner,
+  canShare`) for its application's parties (`app_scenario_party`), when it
+  is of an application (`origin = 'applicant'`) and was issued; else NULL.
+  `app_applicant_packs(project, scenario)` lists them, newest version
+  first. `app_applicant_pack(project, pack)` is one row of `pack, verify`
+  (`app_verify_pack`), `figures` (`app_share_pack_projection`, 128, with the
+  `k` rule and no changed baseline assumption for the volumes) and `units`
+  (`app_applicant_pack_units(report, own)`, IMMUTABLE, not `water_app`'s:
+  the report's users, their own by name, `own` being
+  `app_application_own_nodes`, 071, plus the nodes only in the application
+  run; every other unit in both runs as `{ kind, n, changePts }`, numbered
+  per kind by `md5` of its id, the change rounded to whole points; NULL
+  when the report changed a baseline assumption). Nothing else of the
+  manifest ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - **Cites both runs**: `model_run_cited` (latest body here) has a clause for
   each, so `trimRuns`, the unpin and the run `DELETE` keep them, and
   `citedBy` lists `{ kind: 'pack', name: 'version N' }`.
@@ -1075,9 +1094,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
   refuses a project with a pack past draft (`restrict_violation`).
 - **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`; latest body:
-  122_pack_bundle, which adds `bundleSha256`): by short code or full hash,
+  132_verify_pack_run_engines, which adds `runs`; 122_pack_bundle added
+  `bundleSha256`): by short code or full hash,
   the printed fields of a pack that was issued, as `jsonb`, or NULL
   ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+  `runs` (each run's `engine_version` and its fit's engine, baseline first)
+  is for the API's errata found since issue and never returned as is.
 - **`app_record_pack_bundle(pack, sha256)`** (122_pack_bundle, `SECURITY
   DEFINER`, `EXECUTE` for `water_app`): records the reproduction bundle's key
   (`packs/<project>/<pack>/<sha256>.zip`, derived here) and SHA-256, for an
@@ -1116,6 +1138,43 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   downloads), `jobs/trust.security.db.test.ts` (a `pack_render` job naming
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
+
+**Notices (133_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
+
+- **`pack_notice`**: one "pack issued" or "pack withdrawn" email per pack,
+  person and event, ever: primary key `(pack_id, user_id, event)` (it covers
+  `pack_id` → `evidence_pack`, cascade); `user_id` (→ `app_user`, cascade),
+  `event` (`issued`, `withdrawn`), `project_id` (→ `project`, cascade;
+  copied from the pack by the queue function), `status` (`pending` →
+  `sending` → `sent`, `skipped` with a `reason`, or `failed`), `attempts`,
+  `created_at`, `claimed_at`, `locked_until`, `sent_at`, `settled_at` (when
+  it became sent, skipped or failed), `reason` (≤ 200).
+  Indexes on `user_id`, `project_id`, the open rows and `settled_at`.
+  Purged **30 days** after it is settled (`app_purge_pack_notices`, from
+  the tick).
+- RLS: SELECT your own rows (`pack_notice_own`). No write policy: every
+  write goes through the `SECURITY DEFINER` functions below (the table
+  grant mirrors `alert_delivery`'s).
+- **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
+  only (`42501`), and only for a pack in that state (`23514`; an unknown
+  event `22023`). Inserts a row for each person of
+  `pack_notice_audience(project, scenario)` (editors and owners, direct or
+  through the team, and the application's scenario owner with a role of
+  contributor or above; revoked from `water_app`) but the caller, with a
+  confirmed, unsuppressed address; `ON CONFLICT DO NOTHING`. A draft that
+  was withdrawn queues none (returns 0). NOTIFYs `job_queued`, so the local
+  worker ticks at commit.
+- **`app_pack_notice_claim(limit, lease)`**, **`app_pack_notice_finish(pack,
+  user, event, status, reason)`**, **`app_purge_pack_notices(age ≥ 30 days)`**:
+  the worker's own context only (no user and no API key,
+  `alert_worker_context`); the claim returns each notice with the pack's
+  public facts (version, manifest hash, the replaced version, the withdrawal
+  reason) and fails a notice left `sending` past its lease rather than
+  re-sending it.
+- Guards: `evidence/notices.db.test.ts`, the catalogue
+  (`APP_USER_ON_DELETE`: cascade), `db/cross-project-refs.security.db.test.ts`
+  (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
+  (`USER_FK_COVERAGE`: the `packNotices` section).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -1619,7 +1678,10 @@ Read-only links to the current publication for people outside the project
     listed and revoked by the editors who read the scenario and by whoever
     made it. A pack link (128) is made by an editor or the owner, only while
     the pack is `issued`, and listed and revoked by the project's editors
-    (they read every pack) and the owner.
+    (they read every pack) and the owner; since 131 also by the
+    application's owner for their own application's issued pack
+    (`app_applicant_pack_meta`'s `canShare`), listed and revoked by the
+    contributor who made it.
   - `app_share_view` and `app_share_series` answer an untargeted link only.
   - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
     scenario link whose application is `submitted` or `decided`, one row of

@@ -7,8 +7,9 @@
 // or by an applicant on their own, once it is submitted or decided; the
 // assessors list and revoke every link to it, an applicant the ones they
 // made. A link to one evidence pack (128_pack_share_notes.sql) is made by an
-// editor while the pack is issued; its editors list and revoke every link to
-// it. The public reads, POST /share/view, /share/series, /share/scenario and
+// editor while the pack is issued, or by the applicant for their own
+// application's (131_applicant_packs); its editors list and revoke every link
+// to it, an applicant the ones they made. The public reads, POST /share/view, /share/series, /share/scenario and
 // /share/pack, have no session: the token is the credential, read only
 // through the SECURITY DEFINER app_share_view / app_share_series /
 // app_share_scenario / app_share_pack, and every dead link (unknown,
@@ -81,6 +82,26 @@ async function shareablePack(db: Db, projectId: string, packId: string): Promise
 		throw new ApiError(409, 'only an issued pack can be shared: a draft is still changing, and a superseded or withdrawn pack no longer stands');
 }
 
+/**
+ * An applicant's own pack (131_applicant_packs, app_applicant_pack_meta): a
+ * pack of their application that was issued, as its party reads it; null
+ * when they aren't its party (or it was never issued). They read no pack
+ * row, so RLS can't answer this.
+ */
+async function applicantPack(db: Db, projectId: string, packId: string): Promise<{ status: string; canShare: boolean } | null> {
+	const { rows } = await db.query<{ m: { status: string; canShare: boolean } | null }>('SELECT app_applicant_pack_meta($1, $2) AS m', [projectId, packId]);
+	return rows[0]?.m ?? null;
+}
+
+/** Below editor: only its application's party (else 403, as before, found or not), and only its owner while it is issued. */
+async function shareableApplicantPack(db: Db, projectId: string, packId: string): Promise<void> {
+	const p = await applicantPack(db, projectId, packId);
+	if (!p) throw new ApiError(403, 'only the editors, or the applicant for their own application, can share this pack');
+	if (p.status !== 'issued')
+		throw new ApiError(409, 'only an issued pack can be shared: a draft is still changing, and a superseded or withdrawn pack no longer stands');
+	if (!p.canShare) throw new ApiError(403, 'only the applicant who made the application can share its pack');
+}
+
 /** GET/POST /projects/:id/share-links, DELETE /projects/:id/share-links/:linkId. */
 export const shareLinkRoutes = new Hono<AuthEnv>()
 	.get('/:id/share-links', async (c) => {
@@ -88,10 +109,12 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			if (q.packId) {
-				// A pack's links: its project's editors (they read every pack) list every one.
-				await requireRole(db, id, 'editor');
-				const { rows: found } = await db.query('SELECT 1 FROM evidence_pack WHERE id = $1 AND project_id = $2', [q.packId, id]);
-				if (!found[0]) throw new ApiError(404, 'not found');
+				// A pack's links: its project's editors (they read every pack) list every one; its applicant (131) the ones they made (RLS).
+				const role = await requireRole(db, id, 'contributor');
+				if (rank[role] >= rank.editor) {
+					const { rows: found } = await db.query('SELECT 1 FROM evidence_pack WHERE id = $1 AND project_id = $2', [q.packId, id]);
+					if (!found[0]) throw new ApiError(404, 'not found');
+				} else if (!(await applicantPack(db, id, q.packId))) throw new ApiError(403, 'requires editor role, or the applicant for their own application');
 				const { rows } = await db.query<ShareLinkRow>(
 					`${SELECT_LINKS} WHERE s.project_id = $1 AND s.target_kind = 'pack' AND s.target_id = $2 ORDER BY s.created_at DESC, s.id`,
 					[id, q.packId]
@@ -124,8 +147,9 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		return withUser(userId, async (db) => {
 			if (body.targetKind === undefined) await requireRole(db, id, 'owner');
 			else if (body.targetKind === 'pack') {
-				await requireRole(db, id, 'editor');
-				await shareablePack(db, id, body.targetId!);
+				const role = await requireRole(db, id, 'contributor');
+				if (rank[role] >= rank.editor) await shareablePack(db, id, body.targetId!);
+				else await shareableApplicantPack(db, id, body.targetId!);
 			} else await shareableScenario(db, id, body.targetId!, await requireRole(db, id, 'contributor'), userId);
 			const kind = body.targetKind ?? null;
 			const { token, hash } = newToken();
