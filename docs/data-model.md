@@ -1130,9 +1130,9 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   Indexes on `user_id`, `project_id`, the open rows and `settled_at`.
   Purged **30 days** after it is settled (`app_purge_pack_notices`, from
   the tick).
-- RLS: SELECT your own rows (`pack_notice_own`). No write policy: every
-  write goes through the `SECURITY DEFINER` functions below (the table
-  grant mirrors `alert_delivery`'s).
+- RLS: SELECT your own rows (`pack_notice_own`). `water_app` holds
+  `SELECT` only and there is no write policy: every write goes through the
+  `SECURITY DEFINER` functions below (`catalogue.db.test.ts` `READ_ONLY`).
 - **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
   only (`42501`), and only for a pack in that state (`23514`; an unknown
   event `22023`). Inserts a row for each person of

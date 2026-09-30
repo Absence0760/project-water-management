@@ -138,11 +138,13 @@ const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_s
  */
 const NO_INSERT = new Set(['series_blob', 'note_revision']);
 /**
- * Reference data water_app only reads: the languages a person or an invite
- * can have, written by the migration runner from the engine's language table
- * (080_language.sql, scripts/migrate.ts syncLanguages).
+ * Tables water_app only reads: the languages a person or an invite can have,
+ * written by the migration runner from the engine's language table
+ * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
+ * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
+ * no caller can choose a recipient.
  */
-const READ_ONLY = new Set(['language']);
+const READ_ONLY = new Set(['language', 'pack_notice']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -354,7 +356,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app only SELECT, and has only a read policy, on reference tables (language)', async () => {
+	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice)', async () => {
 		for (const table of READ_ONLY) {
 			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);

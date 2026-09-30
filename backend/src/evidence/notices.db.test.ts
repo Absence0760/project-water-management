@@ -163,12 +163,13 @@ describe('queueing a pack’s notices', () => {
 		}
 	});
 
-	it('gives water_app no way to write a notice itself: RLS reads only one’s own rows', async () => {
+	it('gives water_app no way to write a notice itself (SELECT only): RLS reads only one’s own rows', async () => {
 		await expect(
 			withUser(editor.id, (db) => db.query(`INSERT INTO pack_notice (pack_id, user_id, event, project_id) VALUES ($1, $2, 'issued', $3)`, [draftPack, stranger.id, projectId]))
 		).rejects.toMatchObject({ code: '42501' });
-		const changed = await withUser(owner.id, (db) => db.query(`UPDATE pack_notice SET status = 'sent' WHERE pack_id = $1`, [applicationPack]));
-		expect(changed.rowCount).toBe(0);
+		// water_app holds SELECT only (133): an UPDATE or DELETE is refused outright, not just filtered to no rows.
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE pack_notice SET status = 'sent' WHERE pack_id = $1`, [applicationPack]))).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(owner.id, (db) => db.query(`DELETE FROM pack_notice WHERE pack_id = $1`, [applicationPack]))).rejects.toMatchObject({ code: '42501' });
 		// Positive control: the applicant reads their own row, and only it.
 		const own = await withUser(applicant.id, (db) => db.query<{ user_id: string }>('SELECT user_id FROM pack_notice'));
 		expect(own.rows.map((r) => r.user_id)).toEqual([applicant.id]);
@@ -243,6 +244,34 @@ describe('sending them', () => {
 			expect(mailsTo(owner)).toHaveLength(1);
 		} finally {
 			await asOwner(`UPDATE app_user SET mail_suppressed_at = NULL, mail_suppressed_reason = NULL WHERE id = $1`, [applicant.id]);
+		}
+	});
+
+	it('emails the application’s owner whatever their role above farmer: an owner ranked viewer still gets it (positive control for the contributor case above)', async () => {
+		// Another issued version of the application, planted as the schema owner (the issue route isn't under test here).
+		const pack = await arrange(async (q) =>
+			(
+				await q(
+					`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, supersedes_pack_id, scenario_id, scenario_run_id, status, manifest, manifest_sha256,
+						report_version, engine_version, created_by, issued_at, issued_by)
+					 SELECT gen_random_uuid(), project_id, baseline_run_id, 2, id, scenario_id, scenario_run_id, 'issued', '{}', md5(random()::text) || md5(random()::text),
+						report_version, engine_version, created_by, now(), issued_by
+					 FROM evidence_pack WHERE id = $1 RETURNING id::text`,
+					[applicationPack]
+				)
+			)[0]!.id as string
+		);
+		await asOwner(`UPDATE project_member SET role = 'viewer' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+		try {
+			await withUser(editor.id, (db) => queuePackNotices(db, pack, 'issued'));
+			expect(await recipients(pack)).toContain(applicant.id);
+			outbox.length = 0;
+			await sendPackNotices();
+			expect(mailsTo(applicant)).toHaveLength(1);
+			expect(mailsTo(applicant)[0]!.text).toContain('the application “Upper dam <b>raise</b>” is yours');
+		} finally {
+			await asOwner(`UPDATE project_member SET role = 'contributor' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+			await arrange((q) => q('DELETE FROM evidence_pack WHERE id = $1', [pack]));
 		}
 	});
 
