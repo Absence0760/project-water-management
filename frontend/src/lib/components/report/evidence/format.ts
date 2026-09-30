@@ -37,13 +37,16 @@ export function valueText(row: Pick<EvidenceRow, 'unit'>, v: number | null): str
 /**
  * The Change cell: `main` is the paired median (or, without a band, the
  * run's own difference and "no band"), `sub` the 5–95 % range and the run's
- * own difference, or why there is no band.
+ * own difference, or why there is no band. The other applications' row is a
+ * sum of other runs' differences, not this run's: its number stands without
+ * "run:".
  */
-export function changeText(row: Pick<EvidenceRow, 'unit'>, c: EvidenceChange | null): { main: string; sub: string | null; banded: boolean } {
+export function changeText(row: Pick<EvidenceRow, 'unit'> & { id?: EvidenceRow['id'] }, c: EvidenceChange | null): { main: string; sub: string | null; banded: boolean } {
 	if (!c) return { main: '–', sub: null, banded: false };
 	const d = digitsFor(row.unit);
 	const u = suffix(row.unit, true);
 	const run = c.run === null ? null : `${signed(c.run, d)}${u}`;
+	if (row.id === 'otherApplications') return { main: run ?? '–', sub: c.bandNote ?? 'no band', banded: false };
 	const b = c.band;
 	if (b && b.p50 !== null && b.p5 !== null && b.p95 !== null && !c.bandNote) {
 		return { main: `${signed(b.p50, d)}${u}`, sub: `${signed(b.p5, d)} to ${signed(b.p95, d)}${run ? ` · run: ${run}` : ''}`, banded: true };
