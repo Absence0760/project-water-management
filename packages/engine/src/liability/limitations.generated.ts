@@ -116,6 +116,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (from the literature, engine 0.33.0; pending the hydrologist)"
 	},
 	{
+		"id": "L1",
+		"source": "finding",
+		"severity": "Medium (capped runs whose licences state months of use or a maximum rate)",
+		"title": "The cap applies a licence's months of use and maximum rate to every surface draw, the farm's own dam included, and not while no licence of the source is in force",
+		"status": "Decided (engine 1.34.0, issue #72; pending the hydrologist)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

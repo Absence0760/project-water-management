@@ -1849,13 +1849,16 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				const GD = g('groundwater_to_dam');
 				if (!G) return `${n.id}: supplied series missing`;
 				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
-				// The licence conditions (engine ≥ 1.33.0): the room is at most the day's limit, which the
+				// The licence conditions (engine ≥ 1.34.0): the room is at most the day's limit, which the
 				// input gives (0 outside the months of use, else the maximum rates × 86 400).
 				const limit = dailyLimits(allocs, source, day0, out.days);
 				// What is left of the year's volume. A day whose room is the licence limit hides it, so it is
 				// known from the first day of a water year, or a day the limit doesn't bind (a resumed run
 				// starts with the year's use before the snapshot, which the output doesn't carry).
 				let left: number | null = null;
+				// This water year's use on the run's days: what is left is at most the budget less it, whatever
+				// came before the run (a resumed run's use before the snapshot is ≥ 0), so it bounds every day.
+				let usedInRun = 0;
 				for (let t = 0; t < out.days; t++) {
 					const where = `${n.id} day ${t}`;
 					const use = useOn(t);
@@ -1865,8 +1868,15 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					if (room[t]! < 0 || room[t]! > Math.min(b, lim) + eps) return `${where}: ${source} allocation room ${room[t]} outside [0, the year's registered ${b}${lim < b ? ` and the licence's ${lim} today` : ''}]`;
 					if (use > room[t]! + eps) return `${where}: took ${use} of ${source} water with only ${room[t]} allowed today by its registered volume${limit ? ' and licence conditions' : ''}`;
 					const newYear = t > 0 && monthOfEpochDay(day0 + t) === 10 && monthOfEpochDay(day0 + t - 1) !== 10;
-					if (newYear) left = b;
-					else if (left !== null) left = Math.max(0, left - useOn(t - 1));
+					if (newYear) {
+						left = b;
+						usedInRun = 0;
+					} else if (t > 0) {
+						usedInRun += useOn(t - 1);
+						if (left !== null) left = Math.max(0, left - useOn(t - 1));
+					}
+					if (room[t]! > Math.max(0, b - usedInRun) + tol(Math.max(b, usedInRun)))
+						return `${where}: ${source} allocation room ${room[t]} is more than the year's registered ${b} less the ${usedInRun} it has taken this water year`;
 					if (left !== null) {
 						const want = Math.min(left, lim);
 						if (Math.abs(room[t]! - want) > tol(Math.max(b, left)))

@@ -368,7 +368,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Registered volumes and the allocation mode (engine ≥ 1.18.0), from their own stream, after everything else.
 	const allocations = randomAllocations(new Rng(seed ^ 0x510e527f), nodes, settings, start, days);
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
-	// Their licence conditions (engine ≥ 1.33.0), from their own stream, so the volumes themselves are what they were.
+	// Their licence conditions (engine ≥ 1.34.0), from their own stream, so the volumes themselves are what they were.
 	addLicenceConditions(new Rng(seed ^ 0x6c9e0e8b), allocations);
 	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
@@ -638,7 +638,7 @@ function randomAllocations(g: Rng, nodes: NetworkNode[], settings: Partial<Proje
 }
 
 /**
- * Licence conditions (engine ≥ 1.33.0, issue #72) on about a third of the
+ * Licence conditions (engine ≥ 1.34.0, issue #72) on about a third of the
  * allocations: months of use (the summer or winter half, one month, or an
  * empty list, which states none) and a maximum rate from 0 to more than any
  * day's use.

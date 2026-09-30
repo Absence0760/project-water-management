@@ -1460,7 +1460,7 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
+	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. A cap run applies the months and the rate (engine ≥ 1.34.0); the conditions in words are only shown. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];

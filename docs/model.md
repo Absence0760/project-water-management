@@ -6374,7 +6374,7 @@ bits whatever order they came in).
   (`scaled`).
 
 **Licence conditions** (the months of use, a maximum rate, conditions in
-words; migration 103) ride on the input. From engine 1.33.0 (issue #72) the
+words; migration 103) ride on the input. From engine 1.34.0 (issue #72) the
 **cap** applies the months and the rate, per source, each day:
 
 ```
@@ -6390,7 +6390,9 @@ water used for surface; every pumping unit, the dam-target ones included, for
 groundwater), and the transfer room's dam-draw bound (§2.6) reads the same
 room. The stored `allocation_room_*` columns are that day's room. An empty
 months list states none; a month or rate that doesn't read is dropped with a
-warning, keeping the volume. Two choices, pending the hydrologist with the
+warning, keeping the volume, and a cap run warns about a rate that can't
+deliver its volume in its months (a rate of 0 by name: an export's blank
+field is often a 0). Two choices, pending the hydrologist with the
 rest of the cap: the dam draw counts against the surface rate like any other
 surface use (a licence rate usually names the river abstraction, not what a
 farm draws from its own dam), and water not taken stays where it was, so a
@@ -6413,7 +6415,8 @@ to cap or full allocation is fitted against the flows the mode produces.
 on every saved run, and the engine fuzz with allocations in a quarter of its
 networks, a third of their allocations with licence conditions): a room
 column only for a capped source, each day MIN(what is left of the year's
-volume, the licence limit recomputed from the input), the left part falling
+volume, the licence limit recomputed from the input) and never more than the
+year's budget less its use on the run's days so far, the left part falling
 by exactly the day's use within a water year and starting again at the
 recomputed budget on 1 October, never below 0, and the day's use never above
 it; a full

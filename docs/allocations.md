@@ -37,7 +37,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 
 Licence conditions are recorded and shown (the list sums them up in one
 line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions"). The months and
-the maximum rate bind a run whose allocation mode is **cap** (engine 1.33.0,
+the maximum rate bind a run whose allocation mode is **cap** (engine 1.34.0,
 [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
 the unit takes nothing of that source in a month outside the months of use,
 and at most the rate × 86 400 m³ a day. The comparison and a full-allocation

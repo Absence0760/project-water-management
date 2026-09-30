@@ -87,7 +87,7 @@ export interface PlanNode {
 	 * Surface use (supplied − groundwater to the crop: the dam, the river pump
 	 * and off-take water used) and groundwater use (pumped to the crop and
 	 * into the dam) per water year stay within it, and each day within the
-	 * licence conditions' limit (engine ≥ 1.33.0: 0 outside the months of use,
+	 * licence conditions' limit (engine ≥ 1.34.0: 0 outside the months of use,
 	 * else the maximum rates × 86 400; `surfaceLimit`, `groundwaterLimit`).
 	 * Absent = no cap.
 	 */
@@ -517,7 +517,7 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 /**
  * A source's room today under an allocation cap: the water year's registered
  * volume less the use so far, never below 0, and at most the licence
- * conditions' limit today (engine ≥ 1.33.0). Infinity without a cap.
+ * conditions' limit today (engine ≥ 1.34.0). Infinity without a cap.
  */
 function capRoom(budget: Float64Array | null, limit: Float64Array | null | undefined, used: number, t: number): number {
 	if (!budget) return Infinity;

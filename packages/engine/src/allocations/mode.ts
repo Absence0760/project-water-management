@@ -17,7 +17,7 @@
 //    it included, so that water uses up both volumes; the comparison nets it
 //    (docs/model.md §2.12). Pending the hydrologist (followups.md §
 //    Allocations, issue #90).
-//    The licence conditions bind too (engine ≥ 1.33.0, issue #72): on a day
+//    The licence conditions bind too (engine ≥ 1.34.0, issue #72): on a day
 //    outside every in-force allocation's months of use the source gives
 //    nothing, and otherwise at most the in-force allocations' maximum rates
 //    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
@@ -96,6 +96,28 @@ export function usableAllocations(list: readonly AllocationEntry[] | undefined, 
 	return out;
 }
 
+/**
+ * A cap run's warning for an allocation whose maximum rate can't deliver its
+ * volume in its months of use (a year when none are stated), or null. The
+ * rate is applied as stated either way; a 0 is often a blank field in an
+ * export, so it is named.
+ */
+export function rateShortfall(a: AllocationEntry): string | null {
+	if (a.maxRateM3s == null || !(a.volumeM3PerYear > 0)) return null;
+	const days = a.months?.length ? a.months.reduce((s, m) => s + DAYS_IN_MONTH[m - 1]!, 0) : 365;
+	const most = a.maxRateM3s * M3S_TO_M3_PER_DAY * days;
+	if (most >= a.volumeM3PerYear) return null;
+	return a.maxRateM3s === 0
+		? `allocation cap: allocation ${String(a.id)}'s maximum rate is 0, so it may take none of its ${a.volumeM3PerYear} m³ a year (a blank rate states none)`
+		: `allocation cap: at its maximum rate allocation ${String(a.id)} can take at most ${Math.round(most)} m³ in ${a.months?.length ? 'its months of use' : 'a year'}, less than its ${a.volumeM3PerYear} m³`;
+}
+
+/** Days in each calendar month of a common year (the rate warning's reach; a leap day doesn't change it). */
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** A rate in m³/s as m³ a day. */
+const M3S_TO_M3_PER_DAY = 86_400;
+
 /** First epoch day of water year `wy` (1 October). */
 const wyStart = (wy: number) => toEpochDay(`${wy}-10-01`);
 
@@ -134,7 +156,7 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
 
 /**
  * The licence conditions' limit on each run day (`cap` mode, engine ≥
- * 1.33.0, issue #72), m³/day, for one water source: of the allocations of
+ * 1.34.0, issue #72), m³/day, for one water source: of the allocations of
  * `source` in force that day (their validity dates), those whose months of
  * use include the day's month (none stated = every month) give their
  * maximum rate × 86 400 (none stated = no limit), summed. So a day in a
@@ -150,7 +172,7 @@ export function dailyLimits(allocs: readonly AllocationEntry[], source: Allocati
 		lo: a.validFrom ? toEpochDay(a.validFrom) : -Infinity,
 		hi: a.validTo ? toEpochDay(a.validTo) : Infinity,
 		months: a.months?.length ? new Set(a.months) : null,
-		perDay: a.maxRateM3s == null ? Infinity : a.maxRateM3s * 86_400
+		perDay: a.maxRateM3s == null ? Infinity : a.maxRateM3s * M3S_TO_M3_PER_DAY
 	}));
 	const out = new Float64Array(days);
 	for (let t = 0; t < days; t++) {
@@ -236,7 +258,7 @@ interface ModePlanNode {
 /**
  * A unit's cap (PlanNode.allocationCap): per source, the water year's
  * registered volume on each day (null = that source isn't capped), and the
- * licence conditions' limit on each day (m³/day, engine ≥ 1.33.0; absent or
+ * licence conditions' limit on each day (m³/day, engine ≥ 1.34.0; absent or
  * null = none stated).
  */
 export interface AllocationCap {
@@ -340,6 +362,10 @@ export function planAllocations(
 			p.allocationCap = { surface, groundwater, ...(surfaceLimit ? { surfaceLimit } : {}), ...(groundwaterLimit ? { groundwaterLimit } : {}) };
 			if (!surface) warnings.push(`allocation cap: "${nodes[i]!.name}" has no surface-water volume registered, so its surface use isn't capped`);
 			if (!groundwater && p.borehole) warnings.push(`allocation cap: "${nodes[i]!.name}" has no groundwater volume registered, so its boreholes aren't capped`);
+			for (const a of allocs) {
+				const w = rateShortfall(a);
+				if (w) warnings.push(w);
+			}
 			continue;
 		}
 		if (nodes[i]!.kind !== 'farm') continue;

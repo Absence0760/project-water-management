@@ -188,4 +188,34 @@ describe('the allocation settings (issue #72)', () => {
 		const s = (await viewer.call('GET', `/projects/${projectId}`)).body.project.settings;
 		expect([s.allocationMode, s.allocationTolerance]).toEqual(['cap', 0.2]);
 	});
+
+	it('a capped run keeps to the stored licence’s months of use and maximum rate (engine 1.34.0)', async () => {
+		await asOwner('DELETE FROM allocation WHERE project_id = $1', [projectId]);
+		// A volume far above the demand, so only the conditions bind: January only, at most 0.0001 m³/s (8.64 m³ a day).
+		const created = await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmA.id, volumeM3PerYear: 1e9, months: [1], maxRateM3s: 0.0001 });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'licence conditions' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const id = run.body.run.id;
+		const [{ summary }] = await asOwner('SELECT summary FROM model_run WHERE id = $1', [id]);
+		expect(summary.verification.passed).toBe(true);
+		const series = async (nodeId: string, key: string) =>
+			(await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = $3`, [id, nodeId, key]))[0]!.values as number[];
+		const G = await series(farmA.id, 'supplied');
+		const room = await series(farmA.id, 'allocation_room_surface');
+		const perDay = 0.0001 * 86_400;
+		const d0 = Date.UTC(2021, 9, 1);
+		const january = (t: number) => new Date(d0 + t * 86_400_000).getUTCMonth() === 0;
+		let atRate = 0;
+		for (let t = 0; t < G.length; t++) {
+			expect(room[t]!, `day ${t}`).toBeLessThanOrEqual(january(t) ? perDay * (1 + 1e-12) : 0);
+			expect(G[t]!, `day ${t}`).toBeLessThanOrEqual(january(t) ? perDay * (1 + 1e-12) : 0);
+			if (january(t) && Math.abs(G[t]! - perDay) < 1e-9) atRate++;
+		}
+		// Positive controls: the rate binds on January days the river has more than it (not all: the fixture's river runs
+		// low), and Farm B (no licence) takes more than that rate in other months.
+		expect(atRate).toBeGreaterThan(20);
+		const B = await series(farmB.id, 'supplied');
+		expect(B.some((v, t) => !january(t) && v > perDay)).toBe(true);
+	});
 });

@@ -11,7 +11,7 @@ import { applyScenario } from '../scenario';
 import { checkResume } from '../testing/warmstartInvariants';
 import type { AllocationEntry } from './compare';
 import { checkAllocations } from '../verify/checks';
-import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, registeredOver, usableAllocations, yearBudgets } from './mode';
+import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, rateShortfall, registeredOver, usableAllocations, yearBudgets } from './mode';
 
 const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((x) => x.nodeId === nodeId && x.key === key)?.values;
 
@@ -222,7 +222,7 @@ describe("allocationMode 'fullAllocation'", () => {
 	});
 });
 
-describe("allocationMode 'cap': licence conditions (engine 1.33.0, issue #72)", () => {
+describe("allocationMode 'cap': licence conditions (engine 1.34.0, issue #72)", () => {
 	// A volume far above any year's use, so only the conditions bind.
 	const volume = meanA * 10;
 	const summer = [10, 11, 12, 1, 2, 3];
@@ -282,6 +282,89 @@ describe("allocationMode 'cap': licence conditions (engine 1.33.0, issue #72)", 
 		expect(checkResume(x, toEpochDay('2006-01-15') - toEpochDay(full.startDate), runModelWithoutChecks(x))).toBeNull();
 	});
 
+	const borehole = (target: 'direct' | 'dam', mode: 'supplemental' | 'primary') => (m: ModelInput) =>
+		(m.model.boreholes = [{ id: 'bh', nodeId: 'a', name: 'Borehole', capacityM3Day: 1e6, annualCapM3: null, mode, emergencyBelowPct: 0, target, depletionFactor: 0.5 }]);
+	const winter = [4, 5, 6, 7, 8, 9];
+
+	it('keeps the boreholes to the groundwater licence’s months, and they pump in them', () => {
+		// A trickle of surface water, so a supplemental borehole carries the farm; groundwater only April to September.
+		const x = withAllocations(
+			[
+				{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 },
+				{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: volume, months: winter }
+			],
+			'cap',
+			borehole('direct', 'supplemental')
+		);
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const gw = col(out, 'a', 'groundwater_used')!;
+		let inMonths = 0;
+		for (let t = 0; t < gw.length; t++) {
+			if (winter.includes(monthOf(out, t))) inMonths += gw[t]!;
+			else expect(gw[t], `day ${t}`).toBe(0);
+		}
+		expect(inMonths).toBeGreaterThan(0);
+	});
+
+	it('holds a dam-target borehole’s pumping into the dam to the groundwater rate', () => {
+		const G0 = col(base, 'a', 'supplied')!;
+		const perDay = Math.max(...G0) / 4;
+		const x = withAllocations([{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: volume, maxRateM3s: perDay / 86_400 }], 'cap', borehole('dam', 'primary'));
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const gd = col(out, 'a', 'groundwater_to_dam')!;
+		const gw = col(out, 'a', 'groundwater_used') ?? gd.map(() => 0);
+		for (let t = 0; t < gd.length; t++) expect(gd[t]! + gw[t]!, `day ${t}`).toBeLessThanOrEqual(perDay * (1 + 1e-12));
+		// The rate binds: without it the borehole pumps more on some day.
+		const free = runModelWithoutChecks(withAllocations([{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: volume }], 'cap', borehole('dam', 'primary')));
+		expect(Math.max(...col(free, 'a', 'groundwater_to_dam')!)).toBeGreaterThan(perDay * 1.01);
+		expect(gd.some((v, t) => Math.abs(v + gw[t]! - perDay) <= perDay * 1e-9)).toBe(true);
+	});
+
+	it('keeps a water user’s river take to its months of use', () => {
+		const x = withAllocations([{ id: 'u', nodeId: 'u', waterSource: 'surface', volumeM3PerYear: 1e9, months: summer }], 'cap', (m) => {
+			const g = m.model.nodes.find((n) => n.id === 'g')!;
+			m.model.nodes.push({ ...g, id: 'u', name: 'Town', kind: 'user', sortOrder: 3, downstreamNodeId: null, userDemandM3Day: new Array(12).fill(103), userReturnPct: 0, userPriority: 'senior' });
+			g.downstreamNodeId = 'u';
+		});
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const G = col(out, 'u', 'supplied')!;
+		let inMonths = 0;
+		for (let t = 0; t < G.length; t++) {
+			if (summer.includes(monthOf(out, t))) inMonths += G[t]!;
+			else expect(G[t], `day ${t}`).toBe(0);
+		}
+		expect(inMonths).toBeGreaterThan(0);
+	});
+
+	it('the self-check catches a room left at the licence limit once the year’s volume is used (negative control)', () => {
+		// Both bind: half the mean volume, at half the busiest day's rate.
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, maxRateM3s: perDay / 86_400 }], 'cap');
+		const out = runModelWithoutChecks(x);
+		expect(checkAllocations(x, out)).toBeNull();
+		const room = out.series.find((s) => s.nodeId === 'a' && s.key === ALLOCATION_SERIES.surfaceRoom.key)!.values;
+		// A day the year's volume is spent (not a 1 October, where the room starts again).
+		const spent = room.findIndex((r, t) => r === 0 && monthOf(out, t) !== 10);
+		expect(spent).toBeGreaterThan(0);
+		const bad = structuredClone(out);
+		bad.series.find((s) => s.nodeId === 'a' && s.key === ALLOCATION_SERIES.surfaceRoom.key)!.values[spent] = perDay;
+		expect(checkAllocations(x, bad)).toMatch(/is more than the year's registered .* less the .* it has taken this water year/);
+	});
+
+	it('warns in a cap run when a licence’s rate can’t deliver its volume, and names a rate of 0', () => {
+		expect(rateShortfall({ id: 'z', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100, maxRateM3s: 0 })).toMatch(/maximum rate is 0/);
+		// 0.001 m³/s is 31 536 m³ a year, 15 811 m³ in April–September.
+		expect(rateShortfall({ id: 'r', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100_000, maxRateM3s: 0.001 })).toMatch(/at most 31536 m³ in a year, less than its 100000 m³/);
+		expect(rateShortfall({ id: 'w', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 20_000, maxRateM3s: 0.001, months: winter })).toMatch(/at most 15811 m³ in its months of use/);
+		expect(rateShortfall({ id: 'ok', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 30_000, maxRateM3s: 0.001 })).toBeNull();
+		const list: AllocationEntry[] = [{ id: 'z', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100, maxRateM3s: 0 }];
+		expect(runModelWithoutChecks(withAllocations(list, 'cap')).summary.warnings.some((w) => /maximum rate is 0/.test(w))).toBe(true);
+		expect(runModelWithoutChecks(withAllocations(list, 'none')).summary.warnings.some((w) => /maximum rate is 0/.test(w))).toBe(false);
+	});
+
 	describe('dailyLimits', () => {
 		const start = toEpochDay('2001-10-01');
 		it('is null when no allocation of the source states a condition', () => {
@@ -308,6 +391,22 @@ describe("allocationMode 'cap': licence conditions (engine 1.33.0, issue #72)", 
 			expect(l[0]).toBe(0); // October: outside its months
 			expect(l[31]).toBe(Infinity); // November, no rate stated
 			expect(l[50]).toBe(Infinity); // after it ends: nothing in force, the year's budget alone binds
+		});
+
+		it('gives the same limits at UTC+14 and UTC−11 (date arithmetic is UTC)', () => {
+			const tz = process.env.TZ;
+			const a: AllocationEntry[] = [{ id: 'm', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [10, 3], maxRateM3s: 0.1, validFrom: '2001-10-15', validTo: '2002-03-10' }];
+			const limits = () => Array.from(dailyLimits(a, 'surface', start, 366)!);
+			try {
+				process.env.TZ = 'Pacific/Kiritimati';
+				const east = limits();
+				process.env.TZ = 'Pacific/Pago_Pago';
+				expect(limits()).toEqual(east);
+				// 14 October is before it is in force, 15 October in it, 1 November outside its months, 10 March its last day.
+				expect([east[13], east[14], east[31], east[160], east[161]]).toEqual([Infinity, 0.1 * 86_400, 0, 0.1 * 86_400, Infinity]);
+			} finally {
+				process.env.TZ = tz;
+			}
 		});
 
 		it('a rate of 0 allows nothing', () => {

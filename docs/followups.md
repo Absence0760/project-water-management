@@ -2969,13 +2969,25 @@ from the WP:
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
       input.
-- [x] **Apply licence conditions in the cap** (2026-09-30, engine 1.33.0,
+- [x] **Apply licence conditions in the cap** (2026-09-30, engine 1.34.0,
       issue #72): no supply of a source on a day outside the months of use
       of every allocation of it in force, and at most their maximum rates
       × 86 400 a day (`dailyLimits`); the day's room is the smaller of that
       and what is left of the year's volume, and the `allocations`
       self-check replays both. `fullAllocation` still scales to the volume
       only ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+      Whether the months and rate should bind the dam draw or only the
+      river-side takes is engine-audit L1 (pending the hydrologist, #90).
+- [ ] **Say when a licence's months or rate bound, not only the volume.**
+      `RunSummary.allocations` `capReached` lists the water years a source
+      used up its volume; a run held to its rate all season, or dry outside
+      its months, reads "never reached". And `allocation_room_*` is now the
+      day's room (1.34.0), so what is left of the year's volume isn't
+      visible on a day the limit binds. The durable fix: per source, the
+      days the licence limit bound per water year beside `capReached`, and
+      an `allocation_left_*` column when a licence states conditions.
+      Trigger: the evidence report (#71) citing the cap, or an assessor
+      reading a capped run's conditions.
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
