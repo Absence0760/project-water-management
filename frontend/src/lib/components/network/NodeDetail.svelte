@@ -13,6 +13,7 @@
 	import BoreholeFields from './BoreholeFields.svelte';
 	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
+	import RiverToDamFields from './RiverToDamFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { hasSupplySettings } from './supply';
 	import { ewrSiteIssue } from '$lib/model/validate';
@@ -85,6 +86,8 @@
 	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
 	const showEwrSite = $derived(node.kind === 'gauge' || node.ewrSite === false);
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
+	/** River to dam set by month (engine ≥ 1.31.0): the one value is then inert. */
+	const byMonth = $derived(node.divertMonthlyM3Day != null);
 </script>
 
 <div class="detail">
@@ -181,12 +184,12 @@
 							nullable={f.nullable}
 							grouped={!isPct(f)}
 							placeholder={f.nullable ? 'not set' : undefined}
-							disabled={readonly}
+							disabled={readonly || (f.key === 'divertCapacityM3Day' && byMonth)}
 							aria-describedby="{id(f.key)}-h"
 							value={node[f.key] ?? null}
 							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
-						<span class="hint" id="{id(f.key)}-h">{f.help}</span>
+						<span class="hint" id="{id(f.key)}-h">{f.key === 'divertCapacityM3Day' && byMonth ? 'Not used: River to dam is set by month below.' : f.help}</span>
 						<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
 					</div>
 				{/each}
@@ -236,6 +239,9 @@
 						</span>
 						<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
 					</div>
+				{/if}
+				{#if g === 'routing'}
+					<RiverToDamFields {node} {readonly} />
 				{/if}
 				{#if g === 'irrigation'}
 					<DevelopmentFields {node} {readonly} part="abstraction" />

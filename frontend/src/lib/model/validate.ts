@@ -36,6 +36,27 @@ export function supplyIssues(
 }
 
 /**
+ * A node's hands-off flow and River to dam by month problems (engine ≥
+ * 1.31.0, issue #204), as the API refuses them (engine modelRules and the
+ * backend's zod: 12 finite values ≥ 0), in words for the node form; farms
+ * only.
+ */
+export function operatingIssues(n: Pick<NetworkNode, 'kind' | 'handsOffM3Day' | 'handsOffEwr' | 'divertMonthlyM3Day'>): string[] {
+	const handsOff = n.handsOffM3Day ?? null;
+	const divert = n.divertMonthlyM3Day ?? null;
+	if (n.kind !== 'farm') {
+		return handsOff !== null || n.handsOffEwr === true || divert !== null
+			? ['only a hydrological unit has a hands-off flow and River to dam by month; clear them.']
+			: [];
+	}
+	const bad = (row: number[]) => row.length !== 12 || row.some((v) => !Number.isFinite(v) || v < 0);
+	const out: string[] = [];
+	if (handsOff !== null && bad(handsOff)) out.push('the hands-off flow needs 12 monthly values, none negative.');
+	if (divert !== null && bad(divert)) out.push('River to dam by month needs 12 monthly values, none negative.');
+	return out;
+}
+
+/**
  * Why a node's EWR site flag (engine ≥ 1.5.0) can't be saved, as the API
  * refuses it (engine modelRules), or null: the outlet is always an EWR site,
  * and only a gauge can be taken off.
@@ -133,6 +154,8 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (development) issues.push({ area: 'network', message: `${label}: ${development}` });
 		// Supply rule and river pump (WP-3.8), as the API checks them.
 		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
+		// Hands-off flow and River to dam by month (engine ≥ 1.31.0), as the API checks them.
+		for (const m of operatingIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
 		// EWR site flag (engine ≥ 1.5.0), as the API checks it.
 		const ewrSite = ewrSiteIssue(n);
 		if (ewrSite) issues.push({ area: 'network', message: `${label}: ${ewrSite}` });

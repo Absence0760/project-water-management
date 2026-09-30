@@ -1316,6 +1316,16 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1207 KB (issue #204: measured 1204 with main @
+//             7b0d2a73 merged, #203 included). A farm's hands-off flow and
+//             River to dam by month: the engine's operating rules
+//             (network/supply.ts operatingOf, the operatingRules self-check,
+//             the scenario and comparison fields) in the workspace and the
+//             workers that bundle the engine, and in the one-node form the
+//             Supply section's hands-off months and EWR tick, the new
+//             RiverToDamFields, their plain-words lines and save rules
+//             (network/supply.ts, model/validate.ts operatingIssues). No
+//             new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1326,7 +1336,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1201,
+	totalCodeKb: 1207,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
