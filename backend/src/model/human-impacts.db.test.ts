@@ -383,6 +383,12 @@ describe('dam storage (WP-3.5)', () => {
 		await bad({ ...model, nodes: [outlet, { ...farm, divertMonthlyM3Day: [...winter.slice(1), -1] }] }, /divertMonthlyM3Day/);
 		await expect(asOwner(`UPDATE node SET hands_off_m3_day = '{1,2,3}' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
 		await expect(asOwner(`UPDATE node SET divert_monthly_m3_day = array_fill(-1::float8, ARRAY[12]) WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
+		await expect(asOwner(`UPDATE node SET hands_off_ewr = NULL WHERE id = $1`, [farm.id])).rejects.toThrow(/null/i);
+		for (const col of ['hands_off_m3_day', 'divert_monthly_m3_day']) {
+			await expect(asOwner(`UPDATE node SET ${col} = array_fill(1::float8, ARRAY[13]) WHERE id = $1`, [farm.id]), `${col}: 13 values`).rejects.toThrow(/check/i);
+			// A NULL element: 0 <= ALL alone lets it through (NULL, not false), so the check names it (migration 111).
+			await expect(asOwner(`UPDATE node SET ${col} = '{1,1,1,1,1,NULL,1,1,1,1,1,1}' WHERE id = $1`, [farm.id]), `${col}: a NULL month`).rejects.toThrow(/check/i);
+		}
 		// Positive control: 12 values ≥ 0 go in.
 		await asOwner(`UPDATE node SET hands_off_m3_day = array_fill(0::float8, ARRAY[12]) WHERE id = $1`, [farm.id]);
 	});

@@ -17,8 +17,9 @@
 --
 -- Farms only is a model rule (engine modelRuleIssues, operatingKind), checked
 -- by the API on save as the supply rule's kind is (060); the table checks only
--- what holds for every row: 12 values, none negative (the arrays' pattern of
--- 011 and 041).
+-- what holds for every row: 12 values, none NULL and none negative (the
+-- arrays' pattern of 011 and 041, plus the NULL element, which 0 <= ALL lets
+-- through: a comparison with NULL is unknown, and a CHECK passes unknown).
 --
 -- New columns on an existing table: the table-level grants to water_app in 001
 -- and node's RLS policies already cover them; no foreign key, so no index. No
@@ -29,10 +30,10 @@
 
 ALTER TABLE node
 	ADD COLUMN hands_off_m3_day double precision[]
-		CHECK (hands_off_m3_day IS NULL OR (cardinality(hands_off_m3_day) = 12 AND 0 <= ALL (hands_off_m3_day))),
+		CHECK (hands_off_m3_day IS NULL OR (cardinality(hands_off_m3_day) = 12 AND array_position(hands_off_m3_day, NULL) IS NULL AND 0 <= ALL (hands_off_m3_day))),
 	ADD COLUMN hands_off_ewr boolean NOT NULL DEFAULT false,
 	ADD COLUMN divert_monthly_m3_day double precision[]
-		CHECK (divert_monthly_m3_day IS NULL OR (cardinality(divert_monthly_m3_day) = 12 AND 0 <= ALL (divert_monthly_m3_day)));
+		CHECK (divert_monthly_m3_day IS NULL OR (cardinality(divert_monthly_m3_day) = 12 AND array_position(divert_monthly_m3_day, NULL) IS NULL AND 0 <= ALL (divert_monthly_m3_day)));
 
 COMMENT ON COLUMN node.hands_off_m3_day IS
 	'Hands-off flow (m3/day) by water-year month (Oct-Sep, 12 values >= 0) left in the river before the river pump and River to dam; NULL = none. Farms only. Engine >= 1.31.0 (issue #204).';
