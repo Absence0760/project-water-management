@@ -23,7 +23,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
-	import { api, type Allocation, type AllocationList, type RunMeta } from '$lib/api';
+	import { api, type Allocation, type AllocationCapYears, type AllocationList, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -37,6 +37,7 @@
 	import {
 		allocationsContext,
 		AUTHORISATION_LABEL,
+		capYearsText,
 		comparisonRows,
 		conditionsSummary,
 		foldYears,
@@ -103,6 +104,10 @@
 	let comparison = $state.raw<AllocationComparison | null>(null);
 	/** What the compared run's allocation mode did to its use (engine ≥ 1.18.0). */
 	let runMode = $state<AllocationMode>('none');
+	/** A cap run's water years per unit and source (engine ≥ 1.18.0; the days the limit bound from 1.40.0). */
+	let capYears = $state.raw<AllocationCapYears[]>([]);
+	/** The run has a forecast tail: the cap's counts (from its summary) include its forecast days, the comparison doesn't. */
+	let capForecast = $state(false);
 	let cLoading = $state(false);
 	let cError = $state<string | null>(null);
 	let wanted = '';
@@ -115,10 +120,13 @@
 			if (wanted === id) {
 				comparison = r.comparison;
 				runMode = r.run.allocationMode ?? 'none';
+				capYears = r.capYears ?? [];
+				capForecast = !!r.run.forecastFrom;
 			}
 		} catch (e) {
 			if (wanted === id) {
 				comparison = null;
+				capYears = [];
 				cError = msg(e);
 			}
 		} finally {
@@ -139,6 +147,7 @@
 	const pickedName = $derived(units.find((u) => u.nodeId === pickedId)?.name ?? '');
 	const pickedYears = $derived(rows.filter((r) => r.nodeId === pickedId));
 	const pickedStorage = $derived(comparison?.nodes.find((n) => n.nodeId === pickedId)?.storage ?? null);
+	const pickedCap = $derived(capYears.filter((c) => c.nodeId === pickedId));
 	const pickedVolumes = $derived(data?.allocations.filter((a) => a.nodeId === pickedId) ?? []);
 	const tally = $derived.by(() => {
 		const n = (s: string) => units.filter((u) => u.status === s).length;
@@ -373,6 +382,13 @@
 										“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the
 										registered volume prorated to them, and isn’t counted in the whole water years.
 									</p>
+									{#if pickedCap.length}
+										<div class="cap-years" data-testid="allocation-cap-years">
+											{#each pickedCap as c (c.waterSource)}
+												<p class="small">{#if pickedCap.length > 1 || bothSources}<strong>{SOURCE_LABEL[c.waterSource]}:</strong> {/if}{capYearsText(c, capForecast)}</p>
+											{/each}
+										</div>
+									{/if}
 									{#if pickedStorage && (pickedStorage.registeredM3 !== null || pickedStorage.modelledCapacityM3)}
 										<p class="small storage">
 											Registered storage {pickedStorage.registeredM3 === null ? 'not stated' : `${fmtNum(pickedStorage.registeredM3)} m³`} · dam capacity in the run
@@ -723,6 +739,9 @@
 	}
 	.detail-body {
 		min-height: 0;
+	}
+	.cap-years p {
+		margin: 0.5rem 0 0;
 	}
 	.storage {
 		margin: 0.5rem 0 0;

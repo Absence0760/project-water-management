@@ -286,6 +286,14 @@ export interface NodeResult {
 	 * absent on a node without one.
 	 */
 	allocationRoom?: { surface: Float64Array | null; groundwater: Float64Array | null };
+	/**
+	 * allocationMode 'cap' with licence conditions (engine ≥ 1.40.0): what is
+	 * left of each capped source's water-year volume at the start of each day
+	 * (m³), before the day's limit; the room is MIN(this, the limit). null for
+	 * a source without a limit (its room is what is left); absent on a node
+	 * with no limit on either source.
+	 */
+	allocationLeft?: { surface: Float64Array | null; groundwater: Float64Array | null };
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
 	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
@@ -528,16 +536,25 @@ function capRoom(budget: Float64Array | null, limit: Float64Array | null | undef
 /**
  * What a node may still take today under an allocation cap (engine ≥ 1.18.0):
  * [surface, groundwater], each capRoom; Infinity for a source (or a node)
- * without a cap. Records the room in the node's allocation_room columns.
+ * without a cap. Records the room in the node's allocation_room columns, and
+ * what is left of the year's volume in its allocation_left ones (a source with
+ * a limit, engine ≥ 1.40.0).
  */
 function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null, t: number): [number, number] {
 	const c = node.allocationCap;
 	if (!c || !used) return [Infinity, Infinity];
 	const room = r.allocationRoom!;
+	const left = r.allocationLeft;
 	let s = Infinity;
 	let g = Infinity;
-	if (c.surface) s = room.surface![t] = capRoom(c.surface, c.surfaceLimit, used[0]!, t);
-	if (c.groundwater) g = room.groundwater![t] = capRoom(c.groundwater, c.groundwaterLimit, used[1]!, t);
+	if (c.surface) {
+		s = room.surface![t] = capRoom(c.surface, c.surfaceLimit, used[0]!, t);
+		if (left?.surface) left.surface[t] = Math.max(0, c.surface[t]! - used[0]!);
+	}
+	if (c.groundwater) {
+		g = room.groundwater![t] = capRoom(c.groundwater, c.groundwaterLimit, used[1]!, t);
+		if (left?.groundwater) left.groundwater[t] = Math.max(0, c.groundwater[t]! - used[1]!);
+	}
 	return [s, g];
 }
 
@@ -581,6 +598,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
 		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
 		if (n.allocationCap) r.allocationRoom = { surface: n.allocationCap.surface ? new Float64Array(days) : null, groundwater: n.allocationCap.groundwater ? new Float64Array(days) : null };
+		// What is left of the year's volume, beside the room, for a source whose licence states conditions (engine ≥ 1.40.0).
+		if (n.allocationCap && ((n.allocationCap.surface && n.allocationCap.surfaceLimit) || (n.allocationCap.groundwater && n.allocationCap.groundwaterLimit))) {
+			const c = n.allocationCap;
+			r.allocationLeft = { surface: c.surface && c.surfaceLimit ? new Float64Array(days) : null, groundwater: c.groundwater && c.groundwaterLimit ? new Float64Array(days) : null };
+		}
 		return r;
 	});
 	// The storage reset (engine ≥ 0.46.0, settings.damStorageReset): the day, −1 = none.

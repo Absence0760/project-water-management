@@ -5187,6 +5187,12 @@ says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
 full allocation ("… what the river would look like if every registered user
 took their entitlement, not what they take").
+In a cap run the picked unit's card says, per capped source under its water
+years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
+days the cap held use back and by which limit (the volume used up, the
+maximum rate, outside the months of use), then the years the volume was
+used up; a run before 1.40.0 says only the years, and to run again for the
+days.
 
 **The page flows** in the window's one scroll, and nothing scrolls inside a
 card: each long list shows its first few, the ones that matter most, with a

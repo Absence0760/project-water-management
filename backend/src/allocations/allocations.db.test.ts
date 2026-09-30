@@ -200,6 +200,8 @@ describe('the run comparison', () => {
 		const res = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const { comparison } = res.body;
+		// Not a cap run: no cap years to show.
+		expect(res.body.capYears).toEqual([]);
 		expect(comparison.nodes.map((n: { name: string }) => n.name).sort()).toEqual(['Farm A', 'Farm B', 'Farm C', 'Farm D', 'Farm E']);
 		const a = comparison.nodes.find((n: { nodeId: string }) => n.nodeId === farmA.id);
 		// The engine's own arithmetic on the stored series, not a copy of it.

@@ -5,7 +5,7 @@
 // app compares modelled use with a registered volume and leaves the finding to
 // the authority (docs/allocations.md § What the comparison is not).
 import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
-import type { Allocation, AllocationAuthorisation, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
+import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
@@ -271,3 +271,40 @@ export const TEMPLATE_CSV =
 
 /** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
 export const shortHash = (sha: string) => sha.slice(0, 12);
+
+/** "2003/04", "2003/04 and 2005/06", "2003/04, 2004/05 and 2005/06". */
+const yearList = (ys: readonly number[]) => {
+	const l = ys.map(waterYearLabel);
+	return l.length < 2 ? (l[0] ?? '') : `${l.slice(0, -1).join(', ')} and ${l.at(-1)}`;
+};
+
+/**
+ * A cap run's water years for one unit and source in words (engine ≥ 1.18.0,
+ * docs/allocations.md § The cap): the days the licence limit held use back,
+ * by which limit (engine ≥ 1.40.0), then the years the registered volume was
+ * used up. A run before 1.40.0 says only the years. Modelled, not a finding.
+ * The counts come from the run's summary, which covers a forecast tail too
+ * (`forecast`), unlike the comparison, so that is said.
+ */
+export function capYearsText(c: AllocationCapYears, forecast = false): string {
+	const text = capYearsWords(c);
+	return forecast ? `${text} These counts include the run’s forecast days, which the comparison above leaves out.` : text;
+}
+
+function capYearsWords(c: AllocationCapYears): string {
+	const reached = c.capReached.map((y) => y.waterYear);
+	const usedUp = reached.length ? `The registered volume was used up in ${yearList(reached)}.` : 'The registered volume was never used up.';
+	if (!c.limitBound) return `${usedUp} (This run is from before the app counted the days the licence held use back; run the model again to see them.)`;
+	const sum = (k: 'days' | 'volumeDays' | 'rateDays' | 'monthsDays') => c.limitBound!.reduce((a, y) => a + y[k], 0);
+	const days = sum('days');
+	if (!days) return `The cap never held use back. ${usedUp}`;
+	const years = c.limitBound.filter((y) => y.days > 0).length;
+	const parts = [
+		[sum('volumeDays'), 'with the volume used up'],
+		[sum('rateDays'), 'at the maximum rate'],
+		[sum('monthsDays'), 'outside the months of use']
+	]
+		.filter(([n]) => (n as number) > 0)
+		.map(([n, w]) => `${fmtNum(n as number)} ${w}`);
+	return `The cap held use back on ${fmtNum(days)} day${days === 1 ? '' : 's'} in ${years} water year${years === 1 ? '' : 's'}: ${parts.join(', ')}. ${usedUp}`;
+}

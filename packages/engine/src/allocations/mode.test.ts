@@ -5,13 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { testCatchment } from '../outlook/testCatchment';
-import type { ModelInput, ModelOutput } from '../project';
+import type { AllocationLimitBound, ModelInput, ModelOutput } from '../project';
 import { captureModelState, runModel, runModelChecked, runModelFrom, runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario';
 import { checkResume } from '../testing/warmstartInvariants';
 import type { AllocationEntry } from './compare';
 import { checkAllocations } from '../verify/checks';
-import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, rateShortfall, registeredOver, usableAllocations, yearBudgets } from './mode';
+import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, limitBoundKind, outsideMonths, rateShortfall, registeredOver, usableAllocations, yearBudgets } from './mode';
 
 const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((x) => x.nodeId === nodeId && x.key === key)?.values;
 
@@ -497,5 +497,181 @@ describe('the allocations a run reads', () => {
 		expect(r.problems).toEqual([]);
 		expect(r.input.settings.allocationMode).toBe('cap');
 		expect(applyScenario(x, [{ op: 'settings.set', path: 'allocationMode', value: 'nope' as never }]).problems[0]).toMatch(/allocationMode/);
+	});
+});
+
+describe("allocationMode 'cap': the days the licence limit bound (engine 1.40.0)", () => {
+	const volume = meanA * 10;
+	const summer = [10, 11, 12, 1, 2, 3];
+	const monthOf = (out: ModelOutput, t: number) => monthOfEpochDay(toEpochDay(out.startDate) + t);
+	const source = (out: ModelOutput, nodeId = 'a', waterSource = 'surface') => out.summary.allocations!.nodes.find((n) => n.nodeId === nodeId)!.sources.find((x) => x.waterSource === waterSource)!;
+	const total = (ys: readonly AllocationLimitBound[], k: 'days' | 'volumeDays' | 'rateDays' | 'monthsDays') => ys.reduce((a, y) => a + y[k], 0);
+	/** Days the farm went short, per water year: `pick` days only. */
+	const shortDays = (out: ModelOutput, pick: (t: number) => boolean) => {
+		const W = col(out, 'a', 'deficit')!;
+		const D = col(out, 'a', 'demand')!;
+		return perYear(out, W.map((w, t) => (pick(t) && w > 1e-9 * Math.max(D[t]!, 1) ? 1 : 0)));
+	};
+
+	it('counts the days outside the months of use a short farm could take nothing, and only those', () => {
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume, months: summer }], 'cap');
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const lb = source(out).limitBound!;
+		// Every day it was short outside its months is a bound day; the volume and rate never bind.
+		const want = shortDays(out, (t) => !summer.includes(monthOf(out, t)));
+		expect(lb.map((y) => [y.waterYear, y.monthsDays])).toEqual([...want].filter(([, n]) => n > 0));
+		expect(total(lb, 'monthsDays')).toBeGreaterThan(0);
+		expect(total(lb, 'volumeDays') + total(lb, 'rateDays')).toBe(0);
+		for (const y of lb) expect(y.days).toBe(y.volumeDays + y.rateDays + y.monthsDays);
+		// The volume isn't reached: capReached alone read "never".
+		expect(source(out).capReached).toEqual([]);
+	});
+
+	it('counts the days the maximum rate held a short farm back as rate days', () => {
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const out = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume, maxRateM3s: perDay / 86_400 }], 'cap'));
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const lb = source(out).limitBound!;
+		const G = col(out, 'a', 'supplied')!;
+		const atRate = shortDays(out, (t) => Math.abs(G[t]! - perDay) <= perDay * 1e-9);
+		expect(total(lb, 'rateDays')).toBe([...atRate.values()].reduce((a, n) => a + n, 0));
+		expect(total(lb, 'rateDays')).toBeGreaterThan(0);
+		expect(total(lb, 'monthsDays') + total(lb, 'volumeDays')).toBe(0);
+	});
+
+	it('counts volume days once the year’s volume is used, with no allocation_left column without conditions', () => {
+		const out = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2 }], 'cap'));
+		const src = source(out);
+		expect(total(src.limitBound!, 'volumeDays')).toBeGreaterThan(0);
+		expect(total(src.limitBound!, 'rateDays') + total(src.limitBound!, 'monthsDays')).toBe(0);
+		// Every year that reached the cap and then went short has bound days.
+		for (const r of src.capReached!) expect(src.limitBound!.some((y) => y.waterYear === r.waterYear), String(r.waterYear)).toBe(true);
+		expect(col(out, 'a', ALLOCATION_SERIES.surfaceLeft.key)).toBeUndefined();
+	});
+
+	it('stores what is left of the year’s volume beside the room when the licence states conditions', () => {
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, months: summer, maxRateM3s: perDay / 86_400 }], 'cap');
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const left = col(out, 'a', ALLOCATION_SERIES.surfaceLeft.key)!;
+		const room = col(out, 'a', ALLOCATION_SERIES.surfaceRoom.key)!;
+		const G = col(out, 'a', 'supplied')!;
+		const k = toEpochDay('2003-10-01') - toEpochDay(out.startDate);
+		expect(left[k]).toBeCloseTo(meanA / 2, 6);
+		expect(left[k + 1]).toBeCloseTo(meanA / 2 - G[k]!, 6);
+		// Outside the months the room is 0 while volume is left: the column the room hides.
+		const hidden = left.findIndex((l, t) => !summer.includes(monthOf(out, t)) && l > 0);
+		expect(hidden).toBeGreaterThanOrEqual(0);
+		expect(room[hidden]).toBe(0);
+		for (let t = 0; t < left.length; t++) expect(room[t]).toBeLessThanOrEqual(left[t]!);
+		// All three limits bind somewhere in the record.
+		const lb = source(out).limitBound!;
+		expect(total(lb, 'volumeDays')).toBeGreaterThan(0);
+		expect(total(lb, 'rateDays')).toBeGreaterThan(0);
+		expect(total(lb, 'monthsDays')).toBeGreaterThan(0);
+		// Not for a farm without conditions, nor in another mode.
+		expect(col(out, 'b', ALLOCATION_SERIES.surfaceLeft.key)).toBeUndefined();
+		const none = runModelWithoutChecks({ ...x, settings: { ...x.settings, allocationMode: 'none' } });
+		expect(col(none, 'a', ALLOCATION_SERIES.surfaceLeft.key)).toBeUndefined();
+		expect(source(none).limitBound).toBeUndefined();
+	});
+
+	it('counts a water user’s days outside its months, and a groundwater licence’s', () => {
+		const u = withAllocations([{ id: 'u', nodeId: 'u', waterSource: 'surface', volumeM3PerYear: 1e9, months: summer }], 'cap', (m) => {
+			const g = m.model.nodes.find((n) => n.id === 'g')!;
+			m.model.nodes.push({ ...g, id: 'u', name: 'Town', kind: 'user', sortOrder: 3, downstreamNodeId: null, userDemandM3Day: new Array(12).fill(103), userReturnPct: 0, userPriority: 'senior' });
+			g.downstreamNodeId = 'u';
+		});
+		const ou = runModelChecked(u);
+		expect(ou.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		expect(total(source(ou, 'u').limitBound!, 'monthsDays')).toBeGreaterThan(0);
+		const winter = [4, 5, 6, 7, 8, 9];
+		const g = withAllocations(
+			[
+				{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 },
+				{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: volume, months: winter }
+			],
+			'cap',
+			(m) => (m.model.boreholes = [{ id: 'bh', nodeId: 'a', name: 'Borehole', capacityM3Day: 1e6, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0, target: 'direct', depletionFactor: 0.5 }])
+		);
+		const og = runModelChecked(g);
+		expect(og.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		expect(total(source(og, 'a', 'groundwater').limitBound!, 'monthsDays')).toBeGreaterThan(0);
+		expect(col(og, 'a', ALLOCATION_SERIES.groundwaterLeft.key)).toBeDefined();
+		// The surface trickle has no conditions: its limit is its volume.
+		expect(col(og, 'a', ALLOCATION_SERIES.surfaceLeft.key)).toBeUndefined();
+		expect(total(source(og).limitBound!, 'volumeDays')).toBeGreaterThan(0);
+	});
+
+	it('a resumed run counts the same bound days in its water years as the uninterrupted one', () => {
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, months: summer, maxRateM3s: perDay / 86_400 }], 'cap');
+		const full = runModelWithoutChecks(x);
+		const tail = runModelFrom(captureModelState(x, '2006-10-01'), x);
+		const fromFull = source(full).limitBound!.filter((y) => y.waterYear >= 2006);
+		expect(source(tail).limitBound).toEqual(fromFull);
+	});
+
+	it('a run resumed inside a water year counts that year’s bound days on its own days only, the later years as the uninterrupted run', () => {
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, months: summer, maxRateM3s: perDay / 86_400 }], 'cap');
+		const full = runModelWithoutChecks(x);
+		const at = '2007-01-15';
+		const tail = runModelFrom(captureModelState(x, at), x);
+		const k = toEpochDay(at) - toEpochDay(full.startDate);
+		const lb = (o: ModelOutput) => source(o).limitBound!;
+		expect(lb(tail).filter((y) => y.waterYear > 2006)).toEqual(lb(full).filter((y) => y.waterYear > 2006));
+		const y2006 = (o: ModelOutput) => lb(o).find((y) => y.waterYear === 2006)?.days ?? 0;
+		expect(y2006(tail)).toBeLessThanOrEqual(y2006(full));
+		// Positive control: the full run has bound days in 2006/07 before the resume day.
+		const W = col(full, 'a', 'deficit')!;
+		const first = toEpochDay('2006-10-01') - toEpochDay(full.startDate);
+		expect(W.slice(first, k).some((w) => w > 0)).toBe(true);
+		expect(checkAllocations(x, tail)).toBeNull();
+	});
+
+	it('the self-check catches bound days that don’t follow from the columns, and a wrong allocation_left (negative controls)', () => {
+		const perDay = Math.max(...col(base, 'a', 'supplied')!) / 2;
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, months: summer, maxRateM3s: perDay / 86_400 }], 'cap');
+		const out = runModelWithoutChecks(x);
+		expect(checkAllocations(x, out)).toBeNull();
+		const bad = structuredClone(out);
+		const y = source(bad).limitBound![0]!;
+		y.monthsDays++;
+		y.days++;
+		expect(checkAllocations(x, bad)).toMatch(/the days the licence limit bound .* don't follow from the run's own columns/);
+		const bad2 = structuredClone(out);
+		const left = bad2.series.find((s) => s.nodeId === 'a' && s.key === ALLOCATION_SERIES.surfaceLeft.key)!.values;
+		const april = toEpochDay('2004-04-10') - toEpochDay(out.startDate);
+		left[april] = left[april]! + 1000;
+		expect(checkAllocations(x, bad2)).toMatch(/what is left of the surface volume is/);
+		const bad3 = structuredClone(out);
+		bad3.series = bad3.series.filter((s) => !(s.nodeId === 'a' && s.key === ALLOCATION_SERIES.surfaceLeft.key));
+		expect(checkAllocations(x, bad3)).toMatch(/no allocation_left_surface column for a surface volume with licence conditions/);
+	});
+
+	it('limitBoundKind and outsideMonths', () => {
+		// Short, took all its room: which limit set it.
+		expect(limitBoundKind(100, Infinity, false, 100, 150, 50, 1000)).toBe('volumeDays');
+		expect(limitBoundKind(0, 0, true, 0, 150, 150, 1000)).toBe('volumeDays');
+		expect(limitBoundKind(100, 0, true, 0, 150, 150, 1000)).toBe('monthsDays');
+		expect(limitBoundKind(100, 0, false, 0, 150, 150, 1000)).toBe('rateDays');
+		expect(limitBoundKind(100, 40, false, 40, 150, 110, 1000)).toBe('rateDays');
+		// A volume used up to summing noise is used up, even outside the months.
+		expect(limitBoundKind(1e-10, 0, true, 0, 150, 150, 1000)).toBe('volumeDays');
+		expect(limitBoundKind(1e-3, 0, true, 0, 150, 150, 1000)).toBe('monthsDays');
+		// Not short, or took less than its room: didn't bind.
+		expect(limitBoundKind(100, 0, true, 0, 0, 0, 1000)).toBeNull();
+		expect(limitBoundKind(100, 40, false, 30, 150, 120, 1000)).toBeNull();
+		const start = toEpochDay('2003-09-30');
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [10] }];
+		expect(Array.from(outsideMonths(a, 'surface', start, 2)!)).toEqual([1, 0]);
+		// Another licence in force that states no months: every month may be used.
+		expect(Array.from(outsideMonths([...a, { id: 't', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 }], 'surface', start, 2)!)).toEqual([0, 0]);
+		// Not in force yet: no limit, not outside.
+		expect(Array.from(outsideMonths([{ ...a[0]!, validFrom: '2003-10-01' }], 'surface', start, 2)!)).toEqual([0, 0]);
+		expect(outsideMonths([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, maxRateM3s: 1 }], 'surface', start, 2)).toBeNull();
 	});
 });
