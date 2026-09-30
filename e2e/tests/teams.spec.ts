@@ -155,7 +155,7 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await expect(reviewer.page.getByRole('link', { name: 'New project', exact: true })).toBeVisible();
 });
 
-test('only a team admin edits the portfolio traffic lights; a member reads which apply', async ({ page, owner, signIn }) => {
+test('only a team admin edits the EWR traffic lights; a member reads which apply', async ({ page, owner, signIn }) => {
 	void owner;
 	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Lights Board' } });
 	const { team } = (await res.json()) as { team: { id: string } };
@@ -167,7 +167,7 @@ test('only a team admin edits the portfolio traffic lights; a member reads which
 	// They live in the team settings sheet, out of the page's reading path; the page states the rule.
 	await page.goto(`/teams/${team.id}`);
 	await expect(page.getByRole('region', { name: 'Projects' })).toContainText('No projects yet.');
-	const panel = (await openTeamSettings(page)).getByRole('region', { name: 'Portfolio traffic lights' });
+	const panel = (await openTeamSettings(page)).getByRole('region', { name: 'EWR traffic lights' });
 	await expect(panel).toContainText('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
 	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
 	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
@@ -187,13 +187,13 @@ test('only a team admin edits the portfolio traffic lights; a member reads which
 	await panel.getByLabel('Amber below (%)').fill('12.5');
 	await expect(panel.getByRole('alert')).toHaveCount(0);
 	await save.click();
-	await expect(panel.getByRole('status')).toHaveText('Saved. The portfolio now uses these thresholds.');
+	await expect(panel.getByRole('status')).toHaveText('Saved. The team’s projects are now judged by these thresholds.');
 	await expect(panel).toContainText('green when it was not met on under 2.5 % of them, amber under 12.5 %, red otherwise');
 	await expect(panel).toContainText('These are the team’s own thresholds.');
 
 	// The member reads them, and has no form.
 	await colleague.page.goto(`/teams/${team.id}`);
-	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Portfolio traffic lights' });
+	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'EWR traffic lights' });
 	await expect(theirs).toContainText('amber under 12.5 %');
 	await expect(theirs).toContainText('Only owners can change them.');
 	await expect(theirs.getByRole('button')).toHaveCount(0);
@@ -204,7 +204,7 @@ test('only a team admin edits the portfolio traffic lights; a member reads which
 	await expect(page).toHaveURL(/[?&]settings=1/);
 	await expect(panel.getByLabel('Green below (%)')).toHaveValue('2.5');
 	await panel.getByRole('button', { name: 'Use the defaults' }).click();
-	await expect(panel.getByRole('status')).toHaveText('Saved. The portfolio uses the default thresholds again.');
+	await expect(panel.getByRole('status')).toHaveText('Saved. The team’s projects are judged by the default thresholds again.');
 	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
 	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
 	await expectNoViolations(page, { tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] });
@@ -230,8 +230,10 @@ test('the teams list shows each team’s numbers and its projects’ traffic lig
 	await expect(card).toContainText(/1 (red|amber|unknown), 1 (unknown|green)/);
 	await expect(card.getByRole('list', { name: /^Projects of Card Board/ }).getByRole('link')).toHaveCount(2);
 	await expect(card.getByText('Unknown: no run yet')).toBeVisible();
-	await card.getByRole('link', { name: 'Portfolio' }).click();
-	await expect(page).toHaveURL(new RegExp(`/teams/${team.id}/portfolio$`));
+	// The team's catchments in full: the project list filtered to the team, worst EWR first (issue #176).
+	await card.getByRole('link', { name: 'Project list' }).click();
+	await expect(page).toHaveURL(new RegExp(`/\\?owner=team:${team.id}&sort=status$`));
+	await expect(page.getByRole('table').getByRole('rowheader')).toHaveCount(2);
 });
 
 for (const [sizeName, viewport] of [

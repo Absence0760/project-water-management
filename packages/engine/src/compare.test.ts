@@ -650,6 +650,35 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists a demand object’s note changed, and not one that differs only in spaces (engine 1.45.0: demandObject.set may change it)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: 'Meter records 2020'
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.note = ' Meter records 2020 ';
+		expect(texts(a, b)).toEqual([]);
+		b.model.demandObjects![0]!.note = 'Reconciliation strategy AADD';
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first, note "Meter records 2020" → "Reconciliation strategy AADD"'
+		]);
+	});
+
 	it('lists a demand object’s people served, and reads none and null alike (engine 1.44.0)', () => {
 		const a = snapshot();
 		const town = {
@@ -1048,6 +1077,13 @@ describe('diffInputs', () => {
 		expect(texts(old, { ...a, settings: { ...a.settings, runoffModel: 'gr4j' } })).toEqual(['Runoff model: legacy (b023 recession) → GR4J']);
 		// Provenance only, but a changed note is still a difference between the two runs' records (engine ≥ 0.31.1).
 		expect(texts(a, { ...a, settings: { ...a.settings, panCoefficientSource: 'FAO-56 Table 5' } })).toEqual(['Pan coefficient source: none → "FAO-56 Table 5"']);
+		// Likewise the dam evaporation factors' note (engine ≥ 1.49.0); a run saved before it compares as none.
+		expect(texts(a, { ...a, settings: { ...a.settings, lakeEvapFactorSource: 'Flat 0.75 × A-pan (the default) preset: …' } })).toEqual([
+			'Dam evaporation factor source: none → "Flat 0.75 × A-pan (the default) preset: …"'
+		]);
+		const beforeNote = structuredClone(a);
+		delete (beforeNote.settings as Record<string, unknown>).lakeEvapFactorSource;
+		expect(diffInputs(beforeNote, { ...a, settings: { ...a.settings, lakeEvapFactorSource: '' } })).toEqual([]);
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

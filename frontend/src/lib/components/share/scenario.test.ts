@@ -46,10 +46,11 @@ const scenario = (over: Partial<ShareScenario['scenario']> = {}): ShareScenario[
 });
 
 describe('readShareKind', () => {
-	it('reads a scenario link from the fragment; anything else is the catchment view', () => {
+	it('reads a scenario or pack link from the fragment; anything else is the catchment view', () => {
 		expect(readShareKind('#t=abc&k=scenario')).toBe('scenario');
+		expect(readShareKind('#t=abc&k=pack')).toBe('pack');
 		expect(readShareKind('#t=abc')).toBeNull();
-		expect(readShareKind('#t=abc&k=pack')).toBeNull();
+		expect(readShareKind('#t=abc&k=run')).toBeNull();
 	});
 });
 
@@ -105,6 +106,34 @@ describe('changeRows', () => {
 			'A registered volume set on Rooikloof',
 			'A registered volume removed'
 		]);
+	});
+
+	it('words the demand-object ops (engine ≥ 1.45.0) without an object’s name, since one may be on another unit', () => {
+		const o = { id: 'd', nodeId: 'n-other', name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' } as const;
+		const ops: ScenarioOp[] = [
+			{ op: 'demandObject.add', demandObject: { ...o, nodeId: OWN, name: 'Cottages' } },
+			{ op: 'demandObject.add', demandObject: o },
+			{ op: 'demandObject.set', demandObjectId: 'd', field: 'returnPct', value: 0.2 },
+			{ op: 'demandObject.remove', demandObjectId: 'd' }
+		];
+		const rows = changeRows(scenario({ ops, classified: null }));
+		expect(rows.map((r) => sp(r.text))).toEqual([
+			'A new water use that isn’t a crop on Rooikloof',
+			'A new water use that isn’t a crop on another hydrological unit',
+			'A water use that isn’t a crop changed: returnPct',
+			'A water use that isn’t a crop removed'
+		]);
+		expect(JSON.stringify(rows)).not.toContain('Neighbour village');
+		// Without its run's classes, the rule on the op alone: an object on their own unit is the proposal.
+		expect(rows.map((r) => r.cls)).toEqual(['proposal', 'baseline', 'baseline', 'baseline']);
+	});
+
+	it('words a demand scaling of one part by its technical name (engine ≥ 1.45.0)', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'demand.scale', factor: 0.9, part: 'domestic', nodeIds: [OWN] },
+			{ op: 'demand.scale', factor: 0.7 }
+		];
+		expect(changeRows(scenario({ ops, classified: null })).map((r) => sp(r.text))).toEqual(['Demand of domestic scaled by 0.9', 'Demand scaled by 0.7']);
 	});
 
 	it('takes the class its run applied when it has one for every op', () => {

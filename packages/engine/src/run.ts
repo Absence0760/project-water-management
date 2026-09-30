@@ -19,13 +19,13 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
-import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
-import { FLOW_FILL_COLUMNS } from './flowGapFill';
+import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
+import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, flowDayFlags, observedInfillMask, ratingOf } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -161,7 +161,7 @@ export function runModelCapturing(input: ModelInput, at: string): { output: Mode
 	const state = sink.state!;
 	// Columns a run carries only when a day of it needs them: a resumed run keeps them, as zeros when none of its days do.
 	output.series.forEach((x, i) => {
-		if (!HISTORY_COLUMNS.has(x.key)) return;
+		if (!HISTORY_COLUMNS.has(x.key) && !KEPT_COLUMNS.has(x.key)) return;
 		const prev = output.series[i - 1];
 		state.columns.push({ nodeId: x.nodeId, key: x.key, label: x.label, unit: x.unit, after: prev ? { nodeId: prev.nodeId, key: prev.key } : null });
 	});
@@ -207,6 +207,9 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 	for (const c of state.columns) {
 		const has = (nodeId: string | null, key: string) => output.series.findIndex((x) => x.nodeId === nodeId && x.key === key);
 		if (has(c.nodeId, c.key) >= 0) continue;
+		// A kept column (the quality flags) the resumed run didn't compute has no record behind it (an input
+		// without the flow record, such as an outlook member's): zeros would claim every day in the gauged range.
+		if (KEPT_COLUMNS.has(c.key)) continue;
 		const at = c.after ? has(c.after.nodeId, c.after.key) : -1;
 		output.series.splice(at + 1, 0, { nodeId: c.nodeId, key: c.key, label: c.label, unit: c.unit, values: new Array<number>(output.days).fill(0) });
 	}
@@ -215,6 +218,8 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 
 /** Columns a run adds only when one of its days needs them, which a resumed run keeps from its capture run (all 0 on its days then). */
 const HISTORY_COLUMNS = new Set([ZERO_RAIN_COLUMN.key, ACCUMULATION_COLUMN.key, 'dam_storage_set', 'senior_requirement', 'passed_for_senior']);
+/** Columns a resumed run keeps from its capture run by computing them for its own days (never zeros: a code 0 is a class). */
+const KEPT_COLUMNS = new Set<string>([FLOW_QUALITY_COLUMN.key]);
 
 /**
  * runModel, then the engine's checks on its own output (./verify): what a
@@ -266,7 +271,10 @@ function runNetwork(
 ): ModelOutput {
 	const capturing = warm.captureDay !== undefined;
 	const resume = warm.resume;
-	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
+	const prepared = prepareRun(input, {
+		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
+		...(capturing ? { captureFits: true } : {})
+	});
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
@@ -410,6 +418,39 @@ function runNetwork(
 		push(calSite.nodeId, 'observed_flow', OBSERVED_SERIES_LABEL[calKind], 'm³/day', toDay(calObserved));
 		const other = kinds.find((k) => k !== calKind);
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
+	}
+	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18, ./calibrate/dayFlags.ts): the classes the fit
+	// reads, beside the scored `observed_flow` (the outlet's or the calibration site's), only when a day is flagged.
+	// A run resumed from a snapshot whose capture run stored them stores them too, so the two have the same columns.
+	// A resumed run whose input leaves out the record's history (the capture's record had readings before the
+	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
+	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
+	let outletFlowFlags: Uint8Array | null = null;
+	let flowRecordHistory = false;
+	if (calKind) {
+		const siteId = calSite?.nodeId ?? null;
+		const record = series[calibrationSeriesKey(calKind, siteId)];
+		if (captureAt !== undefined) flowRecordHistory = hasReadingBefore(record, start + captureAt);
+		const noHistory = !!resume?.flowRecordHistory && !hasReadingBefore(record, start);
+		if (noHistory) {
+			warnings.push(
+				`Resumed from ${startDate} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
+			);
+		}
+		const flags = recordFlowFlags({
+			kind: calKind,
+			series: record,
+			start,
+			days,
+			settings,
+			siteNodeId: siteId,
+			flowFill,
+			...(noHistory ? { suspect: false } : {})
+		});
+		const kept = resume?.columns.some((c) => c.key === FLOW_QUALITY_COLUMN.key && c.nodeId === siteId) ?? false;
+		if (kept || hasFlaggedDay(flags)) push(siteId, FLOW_QUALITY_COLUMN.key, FLOW_QUALITY_COLUMN.label, FLOW_QUALITY_COLUMN.unit, flags);
+		// At the outlet these are the outlet record's flags, which the plausibility checks read too.
+		if (siteId === null) outletFlowFlags = flags;
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
@@ -877,7 +918,8 @@ function runNetwork(
 		reserve: ewrAssurance.map((a) => a.report),
 		outflow: topo.outflow,
 		upstream: topo.upstream,
-		flowFill
+		flowFill,
+		outletFlowFlags
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -939,6 +981,17 @@ function runNetwork(
 		})
 	});
 
+	// The filled records whose fill read readings (the record's or its donor's) before the snapshot's day: a resumed
+	// input without that history leaves their fill out (prepare.ts flowFillsFor), never fills them differently.
+	const fillHistory: GapFillKind[] =
+		capturing && flowFill
+			? GAP_FILL_KINDS.filter((k) => {
+					if (!flowFill[k]) return false;
+					const donor = settings.flowGapFill[k]?.donor;
+					const day = start + captureAt!;
+					return hasReadingBefore(series[k], day) || (!!donor && hasReadingBefore(series[donor], day));
+				})
+			: [];
 	if (capturing && warm.sink) {
 		const net = sim.captured!;
 		warm.sink.state = {
@@ -957,10 +1010,13 @@ function runNetwork(
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
-				fits: prepared.fits!
+				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
+				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
-			columns: []
+			columns: [],
+			...(flowRecordHistory ? { flowRecordHistory: true as const } : {}),
+			...(fillHistory.length ? { flowFillHistory: fillHistory } : {})
 		};
 	}
 
@@ -996,7 +1052,7 @@ function runNetwork(
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
-			chirpsCorrection,
+			chirpsCorrection: summaryCorrection(chirpsCorrection),
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),
@@ -1039,6 +1095,8 @@ function runPlausibility(r: {
 	upstream: readonly ArrayLike<number>[];
 	/** The gap-filled observed records (PreparedRun.flowFill, engine ≥ 1.23.0): their days are flagged infilled. */
 	flowFill?: PreparedRun['flowFill'];
+	/** The outlet record's flags when the run already computed them (the quality column at the outlet), else null. */
+	outletFlowFlags?: Uint8Array | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -1073,9 +1131,7 @@ function runPlausibility(r: {
 	// The calibration record's quality flags (CR-18): the recession segments leave flagged days out.
 	const kind = r.observedKind;
 	const flowFlagged = kind
-		? flaggedDayMask(
-				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(r.flowFill?.[kind]), dataQuality: settings.dataQuality })
-			)
+		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
@@ -1337,8 +1393,9 @@ export function buildNetworkPlan(
 	const wyOfDay = objectsBy.size ? waterYearMonths(month, days) : null;
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
-		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one),
+		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, (o) => unitPartFactor(n, o.category, []), factorFrom, warnings, start) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
 		if (po && s > 0) {
@@ -2300,8 +2357,21 @@ export function chirpsColumns(
 		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
 		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
 		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
+		// The gap map (engine ≥ 1.53.0, CR-23): what a gap day reads, on every day, as rain_chirps_corrected is.
+		const mapper = chirpsQuantileMapper(corr, chirps);
+		if (mapper) {
+			const mapped = corrected.map((v, t) => mapper(start + t) ?? v);
+			out.push({ key: 'rain_chirps_mapped', label: 'CHIRPS rain bias-corrected and quantile-mapped (wet days, month totals kept)', unit: 'mm', values: mapped });
+		}
 	}
 	return out;
+}
+
+/** The correction as a run summary keeps it: without the gap map's tables and a snapshot's lead (they stay with the pinned fit, as a rain-source period's tables do). */
+function summaryCorrection(c: ChirpsCorrection | null): ChirpsCorrection | null {
+	if (!c?.quantileMap?.tables && !c?.quantileMap?.lead) return c;
+	const { tables: _tables, lead: _lead, ...qm } = c.quantileMap;
+	return { ...c, quantileMap: qm };
 }
 
 /** Daily net irrigation demand per node (zeros for gauges and crop-less farms). */
@@ -2394,7 +2464,8 @@ function buildDemand(
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
 		// requirement F after the store, so the rain used, the store and the gross demand stay as they were;
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
-		const factor = demandFactorOf(node, warnings);
+		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
+		const factor = unitPartFactor(node, 'crops', warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);

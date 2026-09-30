@@ -21,7 +21,7 @@ import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOr
 import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
-import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
+import { chirpsQuantileMapText, fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import { declaredRuleText } from './uncertainty/options';
 import {
@@ -39,6 +39,7 @@ import {
 	type CropDef,
 	type DemandObject,
 	DEMAND_OBJECT_CATEGORY_LABEL,
+	DEMAND_PARTS,
 	type FarmSummary,
 	type LandCoverPatch,
 	type NetworkNode,
@@ -195,6 +196,13 @@ export interface RunComparison {
 		segmentsB?: string[];
 		fitWindowsA?: string[];
 		fitWindowsB?: string[];
+		/**
+		 * Engine ≥ 1.53.0 (CR-23): each run's CHIRPS gap map in words
+		 * (chirpsQuantileMapText; null = off, as every run before it); both
+		 * absent when neither run had one. A different map counts in `changed`.
+		 */
+		quantileMapA?: string | null;
+		quantileMapB?: string | null;
 		changed: boolean;
 	} | null;
 	/**
@@ -394,6 +402,8 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	const rsa = rainSourceLines(a.summary.rainSource);
 	const rsb = rainSourceLines(b.summary.rainSource);
 	const rainSource = rsa.length || rsb.length ? { periodsA: rsa, periodsB: rsb, changed: !same(rsa, rsb) } : null;
+	const qma = chirpsQuantileMapText(xa?.quantileMap);
+	const qmb = chirpsQuantileMapText(xb?.quantileMap);
 	const chirpsFit =
 		xa || xb
 			? {
@@ -406,7 +416,9 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 					segmentsB: segsOf(xb).map(fitSegmentName),
 					fitWindowsA: fitWindowLabels(xa),
 					fitWindowsB: fitWindowLabels(xb),
+					...(qma || qmb ? { quantileMapA: qma, quantileMapB: qmb } : {}),
 					changed:
+						qma !== qmb ||
 						!xa ||
 						!xb ||
 						!same(xa.excludedWaterYears, xb.excludedWaterYears) ||
@@ -701,6 +713,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
+	// Engine ≥ 1.49.0; provenance only (a lake-factor preset's note). A snapshot without it had none.
+	lakeEvapFactorSource: { label: 'Dam evaporation factor source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',
@@ -708,6 +722,14 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.29.0; a snapshot without it takes the default, 'all', which is what older runs did.
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
+	// Engine ≥ 1.53.0 (CR-23); a snapshot without it ran without (null, the default).
+	chirpsQuantileMap: {
+		label: 'CHIRPS quantile map',
+		fmt: (v) => {
+			const w = v && typeof v === 'object' ? (v as { wetDayMm?: unknown }).wetDayMm : undefined;
+			return w === undefined ? 'off (the monthly factor alone)' : `on (wet days ≥ ${fmtValue(w)} mm)`;
+		}
+	},
 	// Engine ≥ 0.30.0; a snapshot without it had none.
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
@@ -1295,6 +1317,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Demand factor (engine ≥ 0.41.0, the demand.scale scenario op).
 		const df = optionalMonthlyChange(x.demandFactor, y.demandFactor, '×', 'none');
 		if (df) parts.push(`demand factor ${df}`);
+		// Demand factors by part (engine ≥ 1.45.0, demand.scale with a part): the crops' or one object category's.
+		for (const part of DEMAND_PARTS) {
+			const at = (n: NetworkNode) => (n.partDemandFactor && typeof n.partDemandFactor === 'object' && Object.hasOwn(n.partDemandFactor, part) ? n.partDemandFactor[part] : null);
+			const pf = optionalMonthlyChange(at(x), at(y), '×', 'none');
+			if (pf) parts.push(`${part} demand factor ${pf}`);
+		}
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
@@ -1432,8 +1460,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
 			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
-			if (moved || scheduleChanged || populationChanged || fields.some((f) => !same(x[f], y[f])))
-				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}` });
+			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.45.0).
+			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();
+			if (moved || scheduleChanged || populationChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
+				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}${noteChanged ? `, note "${(x.note ?? '').trim()}" → "${(y.note ?? '').trim()}"` : ''}` });
 		}
 	}
 
@@ -1756,6 +1786,7 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		...NODE_FIELDS.map(([k, label]): [string, string] => [label, String(k)]),
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
+		...DEMAND_PARTS.map((p): [string, string] => [`${p} demand factor`, 'partDemandFactor']),
 		['dam release', 'damReleaseM3Day'],
 		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
 		['hands-off flow', 'handsOffM3Day'],

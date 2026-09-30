@@ -18,6 +18,7 @@ import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
+import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
@@ -99,6 +100,16 @@ export interface RainSourceQuantileMap {
 	fromWaterYear: number;
 	toWaterYear: number;
 	/** Wet-day threshold, mm: a day below it is dry and keeps its scaled value. */
+	wetDayMm: number;
+}
+
+/**
+ * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23): the CHIRPS gap fill's
+ * quantile map. Fitted on the §2.4b fit period's shared days, so it has no era
+ * of its own; only the wet-day threshold is set.
+ */
+export interface ChirpsQuantileMap {
+	/** Wet-day threshold, mm (QM_WET_DAY_MM_MIN … QM_WET_DAY_MM_MAX): a day below it is dry and keeps its factor-corrected value. */
 	wetDayMm: number;
 }
 
@@ -289,6 +300,16 @@ export interface ProjectSettings {
 	 */
 	lakeEvapFactorMonthly?: Monthly | null;
 	/**
+	 * Where the dam evaporation factors came from (engine ≥ 1.49.0): free text,
+	 * e.g. the lake-factor preset the Settings form filled them from
+	 * (`LAKE_FACTOR_PRESETS`, ./evaporation/lakeFactorPresets.ts) with its
+	 * citation and pan conversion. Provenance only: the model never reads it.
+	 * Recorded with each run (the settings snapshot), so run comparison and the
+	 * report show it. '' = none; optional so settings stored before it still
+	 * type.
+	 */
+	lakeEvapFactorSource?: string;
+	/**
 	 * What the project's registered volumes (ProjectModel.allocations) do to a
 	 * run (engine ≥ 1.18.0, issue #72, ./allocations/mode.ts, docs/model.md
 	 * §2.12a): 'none' (the default) compares only; 'cap' keeps each unit's
@@ -367,6 +388,15 @@ export interface ProjectSettings {
 	 * factors fill a gap (engine ≥ 0.29.0, ./rain.ts, issue #40). Default 'all'.
 	 */
 	chirpsFitPeriod: ChirpsFitPeriod;
+	/**
+	 * Opt-in quantile mapping of the CHIRPS gap fill (engine ≥ 1.53.0, CR-23,
+	 * ./rain.ts, docs/model.md §2.4b *Quantile map*): after the monthly
+	 * factor, map CHIRPS' wet days onto the catchment rain's over the fit
+	 * period, month by month, keeping every calendar month's corrected total.
+	 * Only with `chirpsBiasCorrection: 'monthly'`. Absent or null = the
+	 * monthly factor alone, as every run before 1.53.0.
+	 */
+	chirpsQuantileMap?: ChirpsQuantileMap | null;
 	/**
 	 * Periods whose catchment rain comes from another series × monthly factors
 	 * (engine ≥ 0.30.0, ./rain.ts, issue #40 (b)). Default none.
@@ -712,6 +742,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		allocationMode: 'none',
 		allocationTolerance: 0.1,
 		lakeEvapFactorMonthly: null,
+		lakeEvapFactorSource: '',
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.5, lo: 0.5 },
@@ -723,6 +754,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		arealRain: null,
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
+		chirpsQuantileMap: null,
 		rainSource: [],
 		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
@@ -875,6 +907,27 @@ export function resolveArealRain(raw: unknown, warnings: string[]): ArealRain | 
 	}
 	const r = raw as ArealRain;
 	return { factors: [...r.factors] as unknown as Monthly, method: r.method, source: r.source.trim() };
+}
+
+/** Why a stored settings.chirpsQuantileMap can't be used, or null (absent and null are fine: off). The API applies the same rules. */
+export function chirpsQuantileMapError(raw: unknown): string | null {
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw !== 'object' || Array.isArray(raw)) return 'is not { wetDayMm }';
+	const extra = Object.keys(raw).filter((k) => k !== 'wetDayMm');
+	if (extra.length) return `has unknown field${extra.length === 1 ? '' : 's'} ${extra.join(', ')}`;
+	const w = (raw as { wetDayMm?: unknown }).wetDayMm;
+	if (typeof w !== 'number' || !Number.isFinite(w) || w < QM_WET_DAY_MM_MIN || w > QM_WET_DAY_MM_MAX) return `wet-day threshold must be ${QM_WET_DAY_MM_MIN}–${QM_WET_DAY_MM_MAX} mm`;
+	return null;
+}
+
+/** settings.chirpsQuantileMap as the engine runs it: absent, null or unusable (with a warning) = off. */
+export function resolveChirpsQuantileMap(raw: unknown, warnings: string[]): ChirpsQuantileMap | null {
+	const err = chirpsQuantileMapError(raw);
+	if (err) {
+		warnings.push(`CHIRPS quantile map ignored (${err}): CHIRPS gap days take the monthly factor alone`);
+		return null;
+	}
+	return raw ? { wetDayMm: (raw as ChirpsQuantileMap).wetDayMm } : null;
 }
 
 /** The run's areal rain column (engine ≥ 1.13.0): rain_final × the month's areal factor, output only with a correction. */
@@ -1141,6 +1194,14 @@ export interface NetworkNode {
 	 * model editor and a model save don't carry it.
 	 */
 	demandFactor?: number[] | null;
+	/**
+	 * Demand factors by part of a unit's demand (engine ≥ 1.45.0, issue #123):
+	 * a multiplier per water-year month (Oct–Sep) on its crop water
+	 * requirement (`crops`) or on its demand objects of one category, on top
+	 * of `demandFactor`. Absent part = 1. Only the `demand.scale` scenario op
+	 * with a `part` sets it (docs/scenarios.md § Demand scaling); a farm's only.
+	 */
+	partDemandFactor?: Partial<Record<DemandPart, number[]>> | null;
 	/**
 	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
 	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
@@ -1613,6 +1674,14 @@ export interface ProjectModel {
  */
 export const DEMAND_OBJECT_CATEGORIES = ['domestic', 'municipal', 'industrial', 'livestock', 'irrigation', 'external', 'other'] as const;
 export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
+
+/**
+ * The parts of a unit's demand a restriction can cut on its own (engine ≥
+ * 1.45.0, issue #123, DWS's % restrictions per category): its crop water
+ * requirement, or its demand objects of one category.
+ */
+export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
+export type DemandPart = (typeof DEMAND_PARTS)[number];
 
 /** Each category in plain words (the node form, run results). */
 export const DEMAND_OBJECT_CATEGORY_LABEL: Record<DemandObjectCategory, string> = {

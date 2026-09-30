@@ -30,12 +30,20 @@
 		fitRecordCaveats,
 		fitRecordStatus,
 		hasPotentialEvaporation,
+		LAKE_FACTOR_PRESETS,
+		lakeFactorPresetFill,
+		lakeFactorPresetNamed,
+		lakeFactorPresetStale,
 		PAN_COEFFICIENT_PRESET_SOURCE,
 		PAN_COEFFICIENT_PRESETS,
 		PAN_COEFFICIENT_TYPICAL_MAX,
 		PAN_COEFFICIENT_TYPICAL_MIN,
 		PE_SOURCE_MAX,
+		QM_MIN_WET_DAYS,
+		QM_WET_DAY_MM_MAX,
+		QM_WET_DAY_MM_MIN,
 		panCoefficientOutOfRange,
+		type ChirpsQuantileMap,
 		type CalibrationParams,
 		type CalibrationReport,
 		type FitRecord,
@@ -72,7 +80,7 @@
 	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
-	import { CHIRPS_BIAS_OPTIONS } from './rain';
+	import { CHIRPS_BIAS_OPTIONS, withChirpsQuantileMap } from './rain';
 	import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
@@ -156,6 +164,9 @@
 	let x2Open = $state(untrack(() => project.settings.gr4j?.x2 !== 0));
 	// The preset picker itself is never saved — it only fills panCoefficient, then resets.
 	let panPreset = $state('');
+	// Likewise the lake-factor preset picker (engine ≥ 1.49.0): it fills lakeEvapFactorMonthly and its source note, then resets.
+	let lakePreset = $state('');
+	let lakePresetError = $state<string | null>(null);
 
 	const dirty = $derived(JSON.stringify(s) !== saved);
 	const cal = $derived(s.calibration);
@@ -185,6 +196,12 @@
 	function setArealOn(on: boolean) {
 		if (!on && areal) lastAreal = $state.snapshot(areal) as EditableArealRain;
 		s.arealRain = storedArealRain(withArealRain(on, lastAreal));
+	}
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); the threshold it was switched off with is kept until saved.
+	let lastGapMap = $state<ChirpsQuantileMap | null>(null);
+	function setGapMapOn(on: boolean) {
+		if (!on && s.chirpsQuantileMap) lastGapMap = { ...s.chirpsQuantileMap };
+		s.chirpsQuantileMap = withChirpsQuantileMap(on, lastGapMap);
 	}
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
@@ -251,6 +268,30 @@
 		}
 		panPreset = '';
 	}
+
+	/**
+	 * Fills the monthly dam evaporation factors from a lake-factor preset (still editable after) and the source note
+	 * with its citation and pan conversion. A WR90 preset needs the monthly A-pan, since it converts S-pan factors at it.
+	 */
+	function applyLakePreset(id: string) {
+		lakePreset = '';
+		if (!id) return;
+		const fill = lakeFactorPresetFill(id, $state.snapshot(s.apanMm));
+		if (!fill.ok) {
+			lakePresetError = `Can't fill from that preset: ${fill.reason}.`;
+			return;
+		}
+		lakePresetError = null;
+		s.lakeEvapFactorMonthly = [...fill.values];
+		s.lakeEvapFactorSource = fill.note;
+	}
+
+	/** The preset the source note names, when the factors or the A-pan have moved on since it was filled. */
+	const lakePresetStale = $derived(
+		lakeFactorPresetStale({ lakeEvapFactor: s.lakeEvapFactor, lakeEvapFactorMonthly: s.lakeEvapFactorMonthly, lakeEvapFactorSource: s.lakeEvapFactorSource, apanMm: s.apanMm })
+			? lakeFactorPresetNamed(s.lakeEvapFactorSource)
+			: null
+	);
 
 	/** Choose where GR4J's PE comes from; a monthly row switched away from is remembered until saved or discarded. */
 	function setPeKind(kind: EditablePe['kind']) {
@@ -498,6 +539,40 @@
 				</label>
 			</div>
 		</div>
+		<div class="field lake-preset">
+			<span class="lbl"><label for="st-lake-preset">Dam evaporation preset</label><HelpTip key="settings.lakeEvapFactorSource" /></span>
+			<select id="st-lake-preset" disabled={readonly} value={lakePreset} onchange={(e) => {
+					applyLakePreset(e.currentTarget.value);
+					// Back to "Fill from a preset…" (lakePreset stays '', so the binding alone wouldn't reset it).
+					e.currentTarget.value = '';
+				}} aria-describedby="st-lake-preset-h">
+				<option value="">Fill from a preset…</option>
+				{#each LAKE_FACTOR_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+			</select>
+			<span class="hint" id="st-lake-preset-h">
+				Fills the monthly factors (still editable) and the source note below. The WR90 lake factors are S-pan ratios, so the WR90 presets convert them to A-pan at this project's monthly A-pan: enter the A-pan first, and fill again after changing it.
+			</span>
+			{#if lakePresetError}<span class="err" role="status" data-testid="lake-preset-error">{lakePresetError}</span>{/if}
+		</div>
+		<div class="field lake-source">
+			<span class="lbl"><label for="st-lake-source">Dam evaporation factor source</label><HelpTip key="settings.lakeEvapFactorSource" /></span>
+			<input
+				id="st-lake-source"
+				readonly={readonly}
+				maxlength={PE_SOURCE_MAX}
+				value={s.lakeEvapFactorSource ?? ''}
+				placeholder="e.g. a preset, or a site study of this dam"
+				aria-describedby="st-lake-source-h"
+				oninput={(e) => (s.lakeEvapFactorSource = e.currentTarget.value)}
+			/>
+			<span class="hint" id="st-lake-source-h">Optional: where the factors come from. A preset fills it; it is recorded with each run and shown in run comparisons and the report.</span>
+			<FieldHistoryLine field="settings:lakeEvapFactorSource" />
+		</div>
+		{#if lakePresetStale}
+			<p class="alert alert-warning small" role="status" data-testid="lake-preset-stale">
+				The dam evaporation factors no longer match the “{lakePresetStale.label}” preset the source note names (a factor or the A-pan changed since it was filled): fill it again, or update the note.
+			</p>
+		{/if}
 		<details class="advanced" data-testid="feb-advanced">
 			<summary>
 				Advanced: days in February, {fmtNum(s.februaryDays, 2, true)}{#if febChanged}{' '}<span class="changed">(not the default {fmtNum(FEB_DEFAULT, 2)})</span>{/if}
@@ -767,7 +842,11 @@
 		{:else}
 			<div class="field pan-preset">
 				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
-				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => applyPanPreset(e.currentTarget.value)} aria-describedby="st-pan-preset-h">
+				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => {
+						applyPanPreset(e.currentTarget.value);
+						// Back to "Choose a preset…": panPreset was '' already, so setting it again doesn't touch the DOM.
+						e.currentTarget.value = '';
+					}} aria-describedby="st-pan-preset-h">
 					<option value="">Choose a preset…</option>
 					{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
 				</select>
@@ -840,6 +919,45 @@
 				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 		</div>
+		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
+		<fieldset class="plain" data-testid="chirps-quantile-map">
+			<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
+			<label class="check">
+				<input
+					type="checkbox"
+					disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+					checked={!!s.chirpsQuantileMap}
+					onchange={(e) => setGapMapOn(e.currentTarget.checked)}
+					aria-describedby="st-chirps-qm-h"
+				/>
+				Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
+			</label>
+			{#if s.chirpsQuantileMap}
+				{@const q = s.chirpsQuantileMap}
+				<div class="field">
+					<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
+					<NumberInput
+						id="st-chirps-qm-wet"
+						min={QM_WET_DAY_MM_MIN}
+						max={QM_WET_DAY_MM_MAX}
+						step={0.1}
+						disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+						value={q.wetDayMm}
+						onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
+					/>
+				</div>
+			{/if}
+			<span class="hint" id="st-chirps-qm-h">
+				{#if s.chirpsBiasCorrection !== 'monthly'}
+					Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
+				{:else}
+					Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
+					often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
+					doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
+				{/if}
+			</span>
+			<FieldHistoryLine field="settings:chirpsQuantileMap" />
+		</fieldset>
 		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
 		<ChirpsFitPeriodSection
@@ -1400,12 +1518,15 @@
 		margin: 0.3rem 0 0;
 	}
 	.pe-source,
-	.pan-source {
+	.pan-source,
+	.lake-preset,
+	.lake-source {
 		max-width: 40rem;
 		margin-top: 0.5rem;
 	}
 	.pe-source input,
-	.pan-source input {
+	.pan-source input,
+	.lake-source input {
 		width: 100%;
 	}
 	.check {

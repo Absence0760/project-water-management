@@ -408,6 +408,11 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.scenarioId,
 		insert: (h, ref) => [`INSERT INTO note (project_id, author_id, body, scenario_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, u(), ref]]
 	},
+	// A team note on an issued pack (128_pack_share_notes): note_same_project checks it.
+	'note.pack_id': {
+		ref: (w) => w.successorPackId,
+		insert: (h, ref) => [`INSERT INTO note (project_id, author_id, body, pack_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, u(), ref]]
+	},
 	'publication_farm.node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [`INSERT INTO publication_farm (publication_id, project_id, node_id, view) VALUES ($1, $2, $3, '{}')`, [h.publicationId, h.projectId, ref]]
@@ -768,6 +773,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/notes scenarioId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a scenario', scenarioId: r.scenarioId }),
 	'POST /projects/:id/share-links targetId': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/share-links`, { label: 'Assessor', expiresInDays: 7, targetKind: 'scenario', targetId: r.submittedApplicationId }),
+	'POST /projects/:id/share-links targetId (pack)': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/share-links`, { label: 'Forum', expiresInDays: 7, targetKind: 'pack', targetId: r.successorPackId }),
+	'POST /projects/:id/notes packId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a pack', packId: r.successorPackId }),
 	'PUT /projects/:id/alert-rules nodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: r.farm2Id, threshold: 0.3, enabled: true }] }),
 	'PUT /projects/:id/alert-rules feedId': (h, r) => dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'data_stale', feedId: r.feedId, threshold: 5, enabled: true }] }),
@@ -842,7 +850,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':
 		'a read filter within the application (GET …/scenarios/:sid/results): app_application_run_results answers only a run of that scenario in that project, so another project’s run matches nothing (scenarios/results.db.test.ts)',
-	'share/links.ts:targetId': ['POST /projects/:id/share-links targetId'],
+	'share/links.ts:targetId': ['POST /projects/:id/share-links targetId', 'POST /projects/:id/share-links targetId (pack)'],
+	'share/links.ts:packId': 'a read filter within the project (the share-link list): another project’s pack is 404',
 	'history/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'jobs/handlers/feed-fetch.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts holds every payload to its job’s project',
 	'jobs/handlers/feed-ingest.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts',
@@ -866,6 +875,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'notes/routes.ts:nodeId': ['POST /projects/:id/notes nodeId'],
 	'notes/routes.ts:runId': ['POST /projects/:id/notes runId'],
 	'notes/routes.ts:scenarioId': ['POST /projects/:id/notes scenarioId'],
+	'notes/routes.ts:packId': ['POST /projects/:id/notes packId'],
 	'outlooks/routes.ts:baseRunId': 'a read filter within the project',
 	'outlooks/schema.ts:baseRunId': 'checked by seasonal_outlook_guard (the SQL case) and outlooks.db.test.ts; the route needs a multi-year record',
 	'outlooks/schema.ts:outlookId': 'a job payload: jobs/trust.security.db.test.ts',

@@ -50,12 +50,23 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
 		['Calibration record', s.calibrationFlowKind ? (FLOW_KIND_LABEL[s.calibrationFlowKind] ?? s.calibrationFlowKind) : 'observed gauge flow, else logger'],
 		['Reporting window (curtailment)', describeWindow(s.reportStart, s.reportEnd)],
-		['CHIRPS bias correction', s.chirpsBiasCorrection === 'none' ? 'none (raw CHIRPS)' : `monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}`],
+		[
+			'CHIRPS bias correction',
+			s.chirpsBiasCorrection === 'none'
+				? 'none (raw CHIRPS)'
+				: // Engine ≥ 1.53.0 (CR-23): the gap map; a snapshot without it ran without.
+					`monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}${s.chirpsQuantileMap ? `; gap days quantile-mapped onto the catchment rain (wet days ≥ ${s.chirpsQuantileMap.wetDayMm} mm)` : ''}`
+		],
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
-		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows.
-		['Dam evaporation factor', s.lakeEvapFactorMonthly ? 'by month (see the monthly table)' : fmtNum(s.lakeEvapFactor, 2, true)]
+		// Monthly factors (engine ≥ 0.35.0, WP-3.5) are listed with the monthly rows; engine ≥ 1.49.0 adds where
+		// the factors came from (a lake-factor preset's note), when noted.
+		[
+			'Dam evaporation factor',
+			(s.lakeEvapFactorMonthly ? 'by month (see the monthly table)' : fmtNum(s.lakeEvapFactor, 2, true)) +
+				(s.lakeEvapFactorSource ? ` (source: ${s.lakeEvapFactorSource})` : '')
+		]
 	);
 	return rows;
 }
@@ -68,7 +79,7 @@ export function monthlyRows(s: RunSettings): { label: string; values: string[] }
 		row('A-pan evaporation (mm)', s.apanMm, 1),
 		// Under a monthly PE (issue #39) GR4J runs on its own row and the pan coefficient is unused.
 		...(monthlyPe ? [row('GR4J monthly PE (mm)', monthlyPe.mm, 1)] : [row('Pan coefficient', s.panCoefficient, 2)]),
-		...(s.lakeEvapFactorMonthly ? [row('Dam evaporation factor (× A-pan)', s.lakeEvapFactorMonthly, 2)] : []),
+		...(s.lakeEvapFactorMonthly ? [row('Dam evaporation factor (× A-pan)', s.lakeEvapFactorMonthly, 3)] : []),
 		row('Pragmatic EWR (m³/day)', s.ewrPragmaticM3PerDay, 0)
 	];
 }

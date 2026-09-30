@@ -16,9 +16,10 @@ import { t } from '$lib/i18n/locale.svelte';
 
 // i18n-section: share.scenario
 
-/** The link's kind from the URL's fragment (`k=scenario`); null: the catchment view. */
-export function readShareKind(hash: string): 'scenario' | null {
-	return new URLSearchParams(hash.replace(/^#/, '')).get('k') === 'scenario' ? 'scenario' : null;
+/** The link's kind from the URL's fragment (`k=scenario`, `k=pack`); null: the catchment view. */
+export function readShareKind(hash: string): 'scenario' | 'pack' | null {
+	const k = new URLSearchParams(hash.replace(/^#/, '')).get('k');
+	return k === 'scenario' || k === 'pack' ? k : null;
 }
 
 export type EwrTrend = 'same' | 'better' | 'worse';
@@ -120,12 +121,21 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('A new borehole on {unit}', { unit: unit(op.borehole.nodeId) });
 		case 'borehole.remove':
 			return t('A borehole removed');
+		case 'demandObject.add':
+			return t('A new water use that isn’t a crop on {unit}', { unit: unit(op.demandObject.nodeId) });
+		case 'demandObject.set':
+			return t('A water use that isn’t a crop changed: {field}', { field: op.field });
+		case 'demandObject.remove':
+			return t('A water use that isn’t a crop removed');
 		case 'settings.set':
 			return t('A catchment setting changed: {path}', { path: op.path });
 		case 'series.scale':
 			return t('The {kind} record scaled by {factor}', { kind: op.kind, factor: fmtNumber(op.factor, 2, true) });
 		case 'demand.scale':
-			return t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });
+			// One part of a unit's demand (engine ≥ 1.45.0): the crops or one category of demand object, by its technical name.
+			return op.part
+				? t('Demand of {part} scaled by {factor}', { part: op.part, factor: fmtNumber(op.factor, 2, true) })
+				: t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });
 		case 'ewrRule.set':
 			return t('The Reserve’s rule table replaced at {site}', { site: op.table.siteNodeId ? unit(op.table.siteNodeId) : t('the catchment outlet') });
 		case 'ewrRule.remove':
@@ -190,7 +200,7 @@ export function resultsNote(r: ShareScenario['results']): string | null {
 	return null;
 }
 
-/** sessionStorage key: a scenario link's token, kept for this tab while its reader signs in to comment. */
+/** sessionStorage key: a scenario or pack link's token and kind, kept for this tab while its reader signs in to comment. */
 export const SHARE_RETURN_KEY = 'wm:share-return';
 /** How long a kept link waits for its reader to sign in; after that a bare /share in the tab doesn't reopen it. */
 export const SHARE_RETURN_MS = 15 * 60_000;

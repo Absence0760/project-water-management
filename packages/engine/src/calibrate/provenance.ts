@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
-import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -244,6 +244,12 @@ export interface FitRecord {
 		 * which ran with none, so a correction added since is a change.
 		 */
 		arealRain?: ArealRain | null;
+		/**
+		 * The CHIRPS gap map the fit ran under (engine ≥ 1.53.0, CR-23,
+		 * settings.chirpsQuantileMap). Recorded only when it was on: absent =
+		 * off, as every fit before it ran, so a map turned on since is a change.
+		 */
+		chirpsQuantileMap?: ChirpsQuantileMap | null;
 		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
 		panCoefficientSource?: string;
 		/**
@@ -368,6 +374,8 @@ export interface FitContext {
 		pe?: PeInput | null;
 		/** The areal rainfall correction (engine ≥ 1.13.0); absent = none. */
 		arealRain?: ArealRain | null;
+		/** The CHIRPS gap map (engine ≥ 1.53.0); absent = off. */
+		chirpsQuantileMap?: ChirpsQuantileMap | null;
 		panCoefficientSource?: string;
 		/** Gap filling of the observed flow records (engine ≥ 1.23.0); absent = none. */
 		flowGapFill?: FlowGapFillSettings | null;
@@ -429,6 +437,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			rainSource: structuredClone(ctx.settings.rainSource ?? []),
 			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
 			arealRain: resolveArealRain(ctx.settings.arealRain, []),
+			...(gapMapOf(ctx.settings) ? { chirpsQuantileMap: gapMapOf(ctx.settings) } : {}),
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality)
@@ -649,6 +658,11 @@ const peChanged = (a: PeInput, b: PeInput): boolean =>
 const ONES = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 const arealRainChanged = (a: ArealRain | null, b: ArealRain | null): boolean => !closeArray(a?.factors ?? ONES, b?.factors ?? ONES);
 
+/** The CHIRPS gap map a run under these settings applies (engine ≥ 1.53.0): only in mode 'monthly'; null = off. */
+function gapMapOf(s: { chirpsQuantileMap?: unknown; chirpsBiasCorrection?: ChirpsBiasMode }): ChirpsQuantileMap | null {
+	return (s.chirpsBiasCorrection ?? 'monthly') === 'monthly' ? resolveChirpsQuantileMap(s.chirpsQuantileMap, []) : null;
+}
+
 /**
  * Which of a fit's recorded forcing fields differ from the settings, or null
  * when there is nothing recorded to compare. `panCoefficient` and `apanMm`
@@ -668,6 +682,7 @@ function forcingDiff(
 	chirpsBiasCorrection: boolean;
 	zeroRainRuns: boolean;
 	chirpsFitPeriod: boolean;
+	chirpsQuantileMap: boolean;
 	rainSource: boolean;
 	rainChecks: boolean;
 } | null {
@@ -690,6 +705,8 @@ function forcingDiff(
 					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns)))),
 		// Engine ≥ 0.29.0; absent on an older forcing, so never flagged there.
 		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod),
+		// Engine ≥ 1.53.0. A forcing without it ran without the gap map, so one turned on since is a change.
+		chirpsQuantileMap: !sameJson(gapMapOf(settings), gapMapOf({ chirpsQuantileMap: record.forcing.chirpsQuantileMap, chirpsBiasCorrection: record.forcing.chirpsBiasCorrection })),
 		// Engine ≥ 0.30.0. A forcing without it predates rain-source periods, so it ran with none.
 		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? []),
 		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
@@ -779,7 +796,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 			chirpsSourceChanged ||
 			apanDailyChanged ||
 			chirpsFactorsChanged ||
-			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource || forcing.rainChecks)),
+			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.chirpsQuantileMap || forcing.rainSource || forcing.rainChecks)),
 		chirpsSourceChanged,
 		apanDailyChanged,
 		chirpsFactorsChanged,
@@ -857,7 +874,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {
 		out.push(
-			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
+			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);
 	}
 	return out;

@@ -158,7 +158,13 @@ bottom:
    each side's period, ranges and windows named; `chirpsFit.ts`). A change of
    the `chirpsFitPeriod` setting itself is also a settings line ("CHIRPS fit
    period: whole record → listed water years: …"); a run saved before 0.29.0
-   compares as the whole record, with no windows to compare. The
+   compares as the whole record, with no windows to compare. From engine
+   1.53.0 the CHIRPS gap map (CR-23) is part of it too: `chirpsFit`
+   carries each side's map in words (`quantileMapA/B`, null = off, only
+   when either run had one) and a different map counts as a change; the
+   note says "quantile map: off → …", and the `chirpsQuantileMap` setting
+   is a settings line ("CHIRPS quantile map: off (the monthly factor
+   alone) → on (wet days ≥ 1 mm)"); a run saved before it compares as off. The
    factors can move with no settings line at all: new rain data, a keep-dry
    or missing period (which since engine 0.18.0 also decides which days the
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
@@ -228,7 +234,10 @@ bottom:
    is part of the run's record. A run saved before 0.31.0 has no `pe` and
    compares as pan coefficient × A-pan. A changed pan-coefficient source
    note (`panCoefficientSource`, engine ≥ 0.31.1) is its own line, **Pan
-   coefficient source**, reading "none" where a run has none.
+   coefficient source**, reading "none" where a run has none; likewise the
+   dam evaporation factors' note (`lakeEvapFactorSource`, engine ≥ 1.49.0,
+   a lake-factor preset's name and citation), **Dam evaporation factor
+   source**.
    A change of the areal rainfall correction (`settings.arealRain`, engine
    ≥ 1.13.0, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130))
    is a settings line labelled **Areal rainfall correction (GR4J)**: "none →
@@ -458,7 +467,11 @@ name**:
   matched by id, then by their "from → to" route. **Individual boreholes**
   (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
   name): added, removed, or changed with the old and new capacity, mode,
-  target, annual cap and depletion.
+  target, annual cap and depletion. **Demand objects** (engine ≥ 1.7.0) are
+  matched by id, then by (unit name, object name): added, removed, or
+  changed with the old and new category, size, return, priority and
+  schedule, and (from engine 1.45.0, since a scenario's `demandObject.set`
+  may change it) the note saying where its number comes from, spaces aside.
 
 ### Series and metrics only one run has
 

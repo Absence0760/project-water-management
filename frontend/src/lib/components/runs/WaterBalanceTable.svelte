@@ -2,14 +2,23 @@
 	The water balance of a run per water year (engine ≥ 0.12.0): the table a
 	hydrologist hands a client first. Its own section in Model quality on Runs &
 	results (issue #137), and inside the self-checks in the printable report
-	(docs/ui.md § Self-checks).
+	(docs/ui.md § Self-checks). River & reserve's Water account is the
+	catchment's balance for the same years; each links to the other rather than
+	copying it (accountHref).
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
 
-	let { summary }: { summary: Pick<RunSummary, 'waterBalance'> } = $props();
+	let {
+		summary,
+		accountHref
+	}: {
+		summary: Pick<RunSummary, 'waterBalance'>;
+		/** River & reserve's Water account for the same run (the workspace); none in the printable report. */
+		accountHref?: string;
+	} = $props();
 
 	const uid = $props.id();
 	const balance = $derived(balanceTableRows(summary.waterBalance));
@@ -29,6 +38,12 @@
 			{balanceEquation(cols)}. Volumes in Mm³; the residual, in m³, should be 0.
 			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
 		</p>
+		{#if accountHref}
+			<p class="muted small" data-testid="balance-account-link">
+				The catchment’s own account, from natural flow before land cover and flow shares, in m³ with a chart of in and out:
+				<a href={accountHref}>Water account</a> on River &amp; reserve.
+			</p>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact">
 				<thead>

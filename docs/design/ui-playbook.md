@@ -80,7 +80,7 @@ section it belongs to, with the example that taught it.
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
-  Crops, the portfolio) is
+  Crops, the Projects list) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -301,6 +301,24 @@ section it belongs to, with the example that taught it.
   Limits and Source titles went (dividers mark the groups and each field
   names itself): 147 px at 1440. `transfers-page.spec.ts` caps the height
   of a rule with thirty on the page.
+- **Two pages showing the same rows are one page with a filter.** The team
+  portfolio listed a team's catchments with the same figures, from the same
+  helpers, as the project list's rows; it added two columns and three tiles.
+  It became the list's team chip (issue #176): the two columns joined the
+  list, the tiles' counts its header line (the stacked bar only repeated
+  them), the page's one note (the thresholds) a line under the chips while a
+  team is picked, and the old address a redirect that keeps its sort. Before
+  adding a column, work out the name column's width at 1440 with the sidebar:
+  seven fixed columns left it 227 px only after every other column gave
+  10 px, and the restriction went under the dam rather than into a column of
+  its own (it is a published-run fact beside the dam, and "Not published" in
+  both said the same thing twice).
+- **Table headings wrap in a fixed-width column.** `app.css` keeps
+  `table.data thead th` on one line, so in a `table-layout: fixed` table a
+  long heading runs into the next ("Hydrological units short" over Lowest
+  dam on the project list). Let such a table's headings wrap
+  (`white-space: normal`, bottom-aligned), and check in e2e that each
+  heading's content ends inside its cell (`portfolio.spec.ts`).
 - **Put a panel's columns side by side by the panel's width, not the
   window's.** Runs & results' runoff panel set its table beside the stores
   chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
@@ -483,9 +501,12 @@ section it belongs to, with the example that taught it.
   - **Reserve the text as drawn, not as estimated.** Room for a label comes
     from its width in the font it is drawn in (the schematic measures on a
     canvas, `measuredWidths`), with the per-character estimate only as the
-    floor: the system sans varies, and DejaVu Sans (Linux, CI) draws ~15 %
+    floor: DejaVu Sans (the old body font on Linux and CI) drew ~15 %
     wider than the estimate, which ran names into the next node and put a
-    transfer through "Melkhout Gauge".
+    transfer through "Melkhout Gauge". A canvas measures in whatever face has
+    loaded, so the schematic measures again when the page's fonts finish
+    loading (`document.fonts`), or a drawing made before Inter arrived keeps
+    the fallback's widths.
   - **Three steps of hierarchy:** the name (12.5 px, 600, `--text`), its
     figure (11 px, 400, `--text-muted`), and the line's own key (the legend,
     not a label on every line). Both text colours are ≥ 4.5:1 on the ground
@@ -502,7 +523,14 @@ section it belongs to, with the example that taught it.
     drawing scaled to its column is never drawn with its smallest text under
     9.5 px (help `Diagram` sets its `min-width` from the viewBox); past that
     it scrolls sideways, as on a phone. The model pipeline, 920 units wide,
-    drew its notes at 7 px at 1440.
+    drew its notes at 7 px at 1440. **Then draw it to fit, rather than
+    letting the floor make it scroll:** with the floor, five help diagrams
+    720–920 wide scrolled 40–213 px sideways in the 582 px guide column at
+    1280. Work out the widest drawing the column holds (column px × smallest
+    text px ÷ 9.5: 673 for 11 px text at 1280) and redraw to it: a long
+    chain runs top to bottom (the pipeline), a row of seven steps becomes
+    two rows (the workflow). `help/diagrams/width.test.ts` holds help
+    diagrams to 660.
 - **Label every chart.** Every chart, sparkline, bar, band or mini-plot says
   what it shows without the reader guessing. The Crops list's factor
   sparklines had no title, axis, units or months, and the operator's
@@ -587,8 +615,7 @@ fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
 picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Tables menu, node sheet),
-`routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
-with a sticky header), `series/SeriesTab.svelte` (a table over a chart in
+`series/SeriesTab.svelte` (a table over a chart in
 the window's one scroll, the long table folded under "Show all N series"
 with the picked row kept, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
@@ -704,6 +731,15 @@ Interaction details that bit:
   with Summary alone on the first. Flow the links like words (inline blocks)
   so a group breaks where it must, and move what doesn't fit into More
   rather than growing a third row (`common/SectionNav.svelte`).
+- **A fit measures every state it can draw, and every margin the line
+  holds.** SectionNav's fit measured each link only in its "widest" state,
+  bold, and gave More no trailing gap; with Inter under Linux Chromium,
+  which rounds each glyph's advance to whole pixels, regular weight set up
+  to 4 px wider than semibold, and a line's last margin still takes room, so
+  CI's bar kept a link too many and More wrapped to a third row while a Mac
+  fit (#264). Measure each variant the element can take and use the widest;
+  count trailing margins; and when a layout check fails only in CI, run it
+  in CI's browser before guessing (`e2e/README.md` § Fonts).
 - **A reading page's header says what the page decides.** A long form has
   no count to show; Settings & calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the
@@ -911,15 +947,20 @@ Interaction details that bit:
   (`e2e/art/landing-screens.spec.ts`). A generated picture that runs off its
   frame fails its generator rather than a reviewer: `scripts/landing-art/modules.mjs`
   refuses a hero with anything on its edge.
-- **Size text for the widest common sans, not this laptop's.** `system-ui`
-  is Noto Sans on the Fedora workstation but DejaVu Sans on CI's Ubuntu
-  runner (and most Debian/Ubuntu desktops), about 12 % wider. The crop
-  list's phone sparkline column was 6rem, which held "Oct max 1.10 Sep" in
-  Noto with 0.1 px to spare and cut it to "max …" in DejaVu, so the spec
-  passed here and failed on CI. Give a fixed column that holds text the
-  DejaVu width, and check a layout spec under it locally by running
-  Playwright with `FONTCONFIG_FILE` pointing at a fontconfig file whose
-  `system-ui` and `sans-serif` aliases prefer DejaVu Sans.
+- **Body text is one font everywhere: the self-hosted Inter.** It used to be
+  `system-ui`, which is SF Pro on a Mac, Noto Sans on the Fedora workstation
+  and DejaVu Sans on CI's Ubuntu runner (about 12 % wider than Noto), so a
+  layout that fit one machine wrapped on another: the crop list's phone
+  sparkline column cut "Oct max 1.10 Sep" to "max …" only in CI, and #258's
+  Settings bar put two links in More only in CI. `--font-sans` is now
+  `'Inter'` (`frontend/static/fonts/inter-variable.woff2`, built by
+  `brand/build.py body-font`), with an Arial fallback scaled to Inter's
+  metrics for the moment before it loads, so a layout spec that passes on a
+  laptop passes in CI and on every reader's device. Still size a fixed
+  column for the text it holds with room to spare, not to the pixel: a
+  reader's browser can refuse web fonts. Monospace is still the platform's
+  (pinned to DejaVu Sans Mono in e2e on Linux; macOS Chromium ignores that
+  pin).
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

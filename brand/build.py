@@ -13,14 +13,19 @@ Outputs (all committed, all regenerated deterministically):
     frontend/static/apple-touch-icon.png, icon-192.png, icon-512.png, icon-maskable-512.png
     frontend/static/site.webmanifest
     frontend/static/fonts/outfit-600.woff2     Latin subset, static 600 weight (OFL)
+    frontend/static/fonts/inter-variable.woff2 body text: subset, weights 400-700, text optical size (OFL)
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import re
 import shutil
 import subprocess
 import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -34,6 +39,13 @@ SRC = ROOT / "brand" / "src"
 DIST = ROOT / "brand" / "dist"
 STATIC = ROOT / "frontend" / "static"
 FONT_SRC = ROOT / "brand" / "fonts" / "Outfit-Variable.ttf"
+# The body face's source: Inter 4.1's variable font from the upstream release,
+# fetched and checked on each build rather than committed (880 KB, over the
+# repo's 500 KB file limit). Its licence is committed as brand/fonts/OFL-Inter.txt.
+BODY_ZIP_URL = "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
+BODY_ZIP_SHA256 = "9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"
+BODY_TTF_SHA256 = "4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf"
+BODY_LICENCE = ROOT / "brand" / "fonts" / "OFL-Inter.txt"
 
 NAVY = "#102A43"
 CYAN = "#1E9BB8"
@@ -65,6 +77,55 @@ def build_webfont(font: TTFont) -> None:
     f.flavor = "woff2"
     f.save(out)
     shutil.copy(FONT_SRC.parent / "OFL.txt", STATIC / "fonts" / "OFL.txt")
+
+
+# What the body face keeps: Latin (ASCII, Latin-1, Extended-A, for names and
+# Afrikaans), combining marks, Greek (Δ, Σ, α, β in formulas), and the
+# punctuation, super/subscripts, currency, letterlike, arrows, maths and shapes
+# blocks the UI writes (–, ’, …, m³, ≤, −, →, ●). Glyphs Inter lacks there
+# (✓, ✕) fall back to the system face, as before.
+BODY_UNICODES = [
+    *range(0x20, 0x7F), *range(0xA0, 0x180), *range(0x2B0, 0x300), *range(0x300, 0x370), *range(0x370, 0x400),
+    *range(0x2000, 0x2070), *range(0x2070, 0x20A0), *range(0x20A0, 0x20D0), *range(0x2100, 0x2150),
+    *range(0x2190, 0x2200), *range(0x2200, 0x2300), *range(0x25A0, 0x2600),
+]
+
+
+def build_body_webfont() -> None:
+    """The body text face: every platform lays text out in the same metrics.
+
+    system-ui is SF Pro on a Mac, Segoe UI on Windows, Roboto on Android and
+    DejaVu Sans on the CI runner, so a layout that fits one can wrap on another
+    (#258's Settings bar: one row on a Mac, a link in More in CI). Weights 400 to
+    700 (the UI's range), the text optical size, no italic (the UI's few
+    italics are synthesized)."""
+    font = TTFont(io.BytesIO(body_source()))
+    opts = Options()
+    opts.layout_features = ["kern", "liga", "calt", "ccmp", "locl", "mark", "mkmk", "lnum", "tnum", "case"]
+    sub = Subsetter(options=opts)
+    sub.populate(unicodes=BODY_UNICODES)
+    sub.subset(font)
+    # Subset first, then pin the axes: instancing the whole font leaves feature
+    # references to glyphs the subsetter then can't find.
+    font = instantiateVariableFont(font, {"opsz": 14, "wght": (400, 700)}, inplace=False)
+    font.flavor = "woff2"
+    font.recalcTimestamp = False  # the same bytes on every rebuild
+    font.save(STATIC / "fonts" / "inter-variable.woff2")
+    shutil.copy(BODY_LICENCE, STATIC / "fonts" / "OFL-Inter.txt")
+
+
+def body_source() -> bytes:
+    """InterVariable.ttf from the pinned upstream release, refused unless both hashes match."""
+    with urllib.request.urlopen(BODY_ZIP_URL, timeout=120) as r:
+        archive = r.read()
+    got = hashlib.sha256(archive).hexdigest()
+    if got != BODY_ZIP_SHA256:
+        raise SystemExit(f"{BODY_ZIP_URL}: sha256 {got}, expected {BODY_ZIP_SHA256}")
+    ttf = zipfile.ZipFile(io.BytesIO(archive)).read("InterVariable.ttf")
+    got = hashlib.sha256(ttf).hexdigest()
+    if got != BODY_TTF_SHA256:
+        raise SystemExit(f"InterVariable.ttf: sha256 {got}, expected {BODY_TTF_SHA256}")
+    return ttf
 
 
 def kerning(font: TTFont) -> dict[tuple[str, str], int]:
@@ -217,8 +278,15 @@ def main() -> None:
     )
 
     build_webfont(font)
+    build_body_webfont()
     print("brand assets built")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    # `build.py body-font`: the body web font only (fonttools, no Inkscape or ImageMagick).
+    if sys.argv[1:] == ["body-font"]:
+        build_body_webfont()
+    else:
+        main()

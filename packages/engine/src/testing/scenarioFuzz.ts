@@ -5,9 +5,9 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
-import { CROP_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
+import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
 const monthly = (g: Rng, f: () => number) => Array.from({ length: 12 }, f);
 
@@ -320,6 +320,87 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			bores.push(id);
 		}
 	}
+	// Demand-object ops (engine ≥ 1.45.0), from a stream of their own for the same reason: an object
+	// added on a unit (now and then on a user or gauge, or a missing node: a problem), fields set
+	// one or a few at a time on one object (an edit group), and removals. A sizing switched without
+	// its numbers, or a return from an object piped out, breaks a model rule (a problem).
+	const o = new Rng(seed ^ 0x7feb352d);
+	if (count === undefined && o.bool(0.3)) {
+		const objects = (input.model.demandObjects ?? []).map((x) => x.id);
+		for (let k = o.int(1, 3); k > 0; k--) {
+			const roll = o.float(0, 1);
+			if (objects.length && roll < 0.2) {
+				ops.push({ op: 'demandObject.remove', demandObjectId: o.bool(0.9) ? o.pick(objects) : missing() });
+				continue;
+			}
+			if (objects.length && roll < 0.6) {
+				const demandObjectId = o.bool(0.95) ? o.pick(objects) : missing();
+				for (let f = o.int(1, 3); f > 0; f--) {
+					const field = o.pick(DEMAND_OBJECT_SET_FIELDS);
+					const value =
+						field === 'name'
+							? `Scenario object ${k}.${f}`
+							: field === 'category'
+								? o.pick(DEMAND_OBJECT_CATEGORIES)
+								: field === 'sizing'
+									? o.pick(['monthly', 'perUnit'] as const)
+									: field === 'monthlyM3Day' || field === 'monthlyFactor'
+										? o.bool(0.2)
+											? null
+											: monthly(o, () => o.float(0, field === 'monthlyFactor' ? 2 : 500))
+										: field === 'count'
+											? o.pick([null, o.int(0, 5000)])
+											: field === 'litresPerUnitDay'
+												? o.pick([null, o.float(0, 400)])
+												: field === 'lossPct'
+													? o.float(0, 0.5)
+													: field === 'returnPct'
+														? o.frac()
+														: field === 'priority'
+															? o.pick(DEMAND_OBJECT_PRIORITIES)
+															: field === 'destination'
+																? o.pick(['internal', 'external'] as const)
+																: field === 'enabled'
+																	? o.bool(0.8)
+																	: field === 'population'
+																		? o.pick([null, o.int(0, 20_000)])
+																		: field === 'schedule'
+																		? o.bool(0.4)
+																			? null
+																			: [{ label: 'Scenario window', span: 'always' as const, from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: o.float(0, 2) }]
+																		: o.pick(['Scenario note', ' Scenario note ', '']);
+					ops.push({ op: 'demandObject.set', demandObjectId, field, value } as ScenarioOp);
+				}
+				continue;
+			}
+			const units = nodes.filter((x) => x.kind === 'farm');
+			const x = o.bool(0.9) && units.length ? o.pick(units) : o.bool(0.5) && nodes.length ? o.pick(nodes) : null;
+			const id = `so${k}`;
+			const perUnit = o.bool(0.4);
+			const external = o.bool(0.15);
+			ops.push({
+				op: 'demandObject.add',
+				demandObject: {
+					id,
+					nodeId: x?.id ?? missing(),
+					name: `Scenario object ${k}`,
+					category: o.pick(DEMAND_OBJECT_CATEGORIES),
+					sizing: perUnit ? 'perUnit' : 'monthly',
+					monthlyM3Day: perUnit ? null : monthly(o, () => o.float(0, 500)),
+					count: perUnit ? o.int(0, 5000) : null,
+					litresPerUnitDay: perUnit ? o.float(0, 400) : null,
+					lossPct: perUnit ? o.float(0, 0.3) : 0,
+					monthlyFactor: perUnit && o.bool(0.3) ? monthly(o, () => o.float(0.5, 1.5)) : null,
+					returnPct: external ? (o.bool(0.1) ? 0.2 : 0) : o.frac(),
+					priority: o.pick(DEMAND_OBJECT_PRIORITIES),
+					destination: external ? 'external' : 'internal',
+					enabled: o.bool(0.9),
+					note: ''
+				}
+			});
+			objects.push(id);
+		}
+	}
 	// demand.scale (issue #53 R1), from a stream of its own for the same reason.
 	const q = new Rng(seed ^ 0x5bd1e995);
 	if (count === undefined && q.bool(0.3)) {
@@ -334,6 +415,10 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 				op.nodeIds = picked;
 			}
 			if (q.bool(0.4)) op.months = [...new Set(Array.from({ length: q.int(1, 6) }, () => q.int(1, 12)))];
+			// One part of a unit's demand (engine ≥ 1.45.0), from its own stream so the draws above are what they were;
+			// now and then on a user op (a problem).
+			const qp = new Rng(seed ^ 0x2f3a91c7 ^ k);
+			if (qp.bool(0.5) && (op.category !== 'user' || qp.bool(0.1))) op.part = qp.pick(DEMAND_PARTS);
 			ops.push(op);
 		}
 	}

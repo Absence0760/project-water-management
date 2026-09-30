@@ -34,6 +34,11 @@ const PUBLIC = new Set([
 	// model, read only through app_share_scenario's redacted projection; a
 	// link opens only its own target (share/scenario-share.db.test.ts).
 	'POST /share/scenario',
+	// A link to one evidence pack (128_pack_share_notes): the same token model,
+	// read only through app_share_pack, which answers what GET /verify/:code
+	// already does plus, while the pack is issued, a redacted projection of its
+	// own frozen report (share/pack-share.db.test.ts).
+	'POST /share/pack',
 	// One-click unsubscribe from alert emails (WP-2.13): the token is the
 	// credential, and it can only turn off the one subscription it names,
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
@@ -326,6 +331,8 @@ describe('route auth inventory', () => {
 		expect(routes).toContain('POST /share/series');
 		expect(routes).toContain('POST /share/scenario');
 		expect(PUBLIC.has('POST /share/scenario')).toBe(true);
+		expect(routes).toContain('POST /share/pack');
+		expect(PUBLIC.has('POST /share/pack')).toBe(true);
 	});
 
 	// API keys (WP-2.9): the owner's routes need a session; the ingest routes
@@ -378,6 +385,7 @@ describe('route auth inventory', () => {
 		'POST /auth/render-session',
 		'POST /share/view',
 		'POST /share/series',
+		'POST /share/pack',
 		'POST /alerts/unsubscribe'
 	])('%s answers anonymous requests (400 on an empty body, not 401)', async (route) => {
 		const path = route.split(' ')[1]!;

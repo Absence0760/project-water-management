@@ -100,8 +100,16 @@
 	// sets `open` to the true it already is: nothing reopens. `cancel` comes
 	// synchronously with the Escape, so follow it too. Only the dialog's own:
 	// a file input's `cancel` (its picker dismissed) bubbles up to here.
+	// With a `beforeclose`, a `cancel` that still comes (the window's keydown
+	// below prevents Escape's) asks it too, rather than closing unasked.
 	function oncancel(e: Event) {
-		if (e.target === el && !e.defaultPrevented) open = false;
+		if (e.target !== el || e.defaultPrevented) return;
+		if (beforeclose) {
+			e.preventDefault();
+			requestClose();
+			return;
+		}
+		open = false;
 	}
 
 	// The browser fires `close` from a queued task. If the dialog was closed and shown again before
@@ -132,12 +140,20 @@
 	// With a `beforeclose`, Escape is handled here rather than through `cancel`:
 	// once a page has refused one `cancel` with no click since, Chrome closes on
 	// the next Escape without firing it, so the question would be skipped.
+	// Listened for on the window, not the dialog: when the focus has fallen out
+	// of the dialog to <body> (a control that had it was disabled) the key never
+	// reaches the dialog. A key from inside another dialog (the question
+	// `beforeclose` asks, stacked on this one) is that dialog's.
 	function onkeydown(e: KeyboardEvent) {
-		if (!beforeclose || e.key !== 'Escape' || e.defaultPrevented) return;
+		if (!beforeclose || !open || !el?.open || e.key !== 'Escape' || e.defaultPrevented) return;
+		const t = e.target;
+		if (t instanceof Node && t !== document.body && t !== document.documentElement && !el.contains(t)) return;
 		e.preventDefault();
 		requestClose();
 	}
 </script>
+
+<svelte:window {onkeydown} />
 
 <dialog
 	bind:this={el}
@@ -151,7 +167,6 @@
 	role={alert ? 'alertdialog' : undefined}
 	aria-describedby={alert ? bodyId : undefined}
 	{oncancel}
-	{onkeydown}
 	{onclose}
 >
 	<h2 id={titleId}>{title}</h2>

@@ -27,6 +27,7 @@
 	import OpList from './OpList.svelte';
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import ApplicantResults from './ApplicantResults.svelte';
+	import ScenarioStatement from './ScenarioStatement.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -461,6 +462,11 @@
 			</div>
 		</fieldset>
 	{/if}
+
+	<!-- Appendix C's fixed prompts (129_scenario_statement): changed on the description's terms, so not frozen by a submission. -->
+	{#key s.id}
+		<ScenarioStatement scenarioName={s.name} answers={s} {canChange} {saving} onsave={(p) => patch(p)} />
+	{/key}
 
 	{#if isApplication}
 		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />

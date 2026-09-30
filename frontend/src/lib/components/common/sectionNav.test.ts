@@ -18,8 +18,14 @@ describe('navFitCount', () => {
 	});
 
 	it('moves the last links into More, keeping the More button on the second row', () => {
-		// Row 1 holds three links, row 2 four; the More box (60 + 10) needs one link's room on row 2.
+		// Row 1 holds three links, row 2 four; the More box (60 + 5 + 10) needs one link's room on row 2.
 		expect(navFitCount(nine, fit)).toBe(6);
+	});
+
+	it('counts the gap after the More button, as after every link', () => {
+		// Row 2: 95 + 95 + 138 = 328, then More: 60 + 10 (its group gap) = 398 fits the 400,
+		// but More has its own 5 px margin after it too, which the line holds: 403 doesn't.
+		expect(navFitCount(links(90, 90, 90, 90, 90, 133, 90), fit)).toBe(5);
 	});
 
 	it('counts the wider gap before a group', () => {

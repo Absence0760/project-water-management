@@ -326,6 +326,50 @@ An ensemble stored before engine 1.33.0 has none of these measures: each such
 cell prints "no band: the ensemble was stored before engine 1.33.0", and a run
 made before it prints the row *Not assessed* with the reason.
 
+Report version `evidence-7` added § 1's **paired change in the FDC check
+curve** (ER5 follow-up). The two curve bands on the chart come from the same
+parameter sets, so they overlap even when every set moves the curve the same
+way. A small table under each FDC plot therefore gives, at each table point,
+the paired median change in the application's flow with its 5–95 % range,
+the runs' own difference, and the sets in which the application's flow is
+lower (`river[].fdcChange`, from `PairedSummary.reserveFdcChange`). Nothing
+is tabled when the two runs read the site at different points, units or
+components. A pack issued before `evidence-7` keeps its frozen document: no
+table, and the caption keeps its warning that overlapping ranges don't mean
+no change.
+
+**Report version `evidence-8`** (issue #71 follow-up, before the pilot):
+Appendix C's fixed prompts. Until then Appendix C printed the scenario's
+description and the run's notes as written, so what an applicant left out
+(mitigation, say) was simply absent and an assessor had to notice. Now it
+asks three questions of every application (engine `evidence/prompts.ts`,
+`APPLICANT_PROMPTS`) and prints each with its answer or *Not given*:
+
+- **Purpose and need**: what the change is for, and why this water is needed
+  (what the works serve, why less water or another source would not do).
+  Among the factors [NWA] s27 weighs is efficient and beneficial use in the
+  public interest, and a WULA's motivation opens with it ([GEOSS]).
+- **Mitigation**: what will avoid, reduce or offset the effect on the river
+  and other users (releases, a lower take in dry months, a smaller dam, a
+  condition accepted). The applicant persona's "shows mitigation, not only
+  impact" (§ 10); the report's numbers stay the model's, the words the
+  applicant's.
+- **Monitoring**: how the effect will be measured once built (what, where,
+  how often, by whom, who sees the records), which a licence condition
+  would rest on.
+
+Judgement: fixed prompts, not a form per authority, since ER-D1 is still
+open; three because they are the parts of a WULA motivation the report's
+numbers can't supply, and a short list keeps *Not given* meaningful. The
+answers are stored on the scenario (`129_scenario_statement`) and written
+where it is edited ([ui.md § Scenarios](../ui.md)), by whoever may change it,
+on the description's terms (not frozen by a submission; an issued pack
+freezes what it printed, [evidence-pack.md](../evidence-pack.md#what-a-pack-holds)).
+The description and run notes stay after them: the description is often the
+one line that names the works, and the run notes carry the modeller's reason
+next to a WR2012 query. A pack drafted before `evidence-8` says the prompts
+aren't part of it.
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 
@@ -335,7 +379,7 @@ two downstream farms; a catchment with more gets its own page.
 | --- | --- | --- |
 | A | Inputs and assumptions | A.1 settings that drive results; A.2 the application's ops and the full input diff; A.3 input series (kind, dates, days, SHA-256); A.4 baseline history; A.5 every run warning, verbatim |
 | B | Limitations, sign-off and verification | B.1 generated known limitations and errata; B.2 sign-off; B.3 disclaimer (D10); B.4 manifest hash, short code, verify link, in-browser check, reproduction command, page count |
-| C | Applicant's statement (optional) | The only free text the applicant writes, labelled as theirs: the scenario description and the run notes, verbatim with author and time (§6 G13) |
+| C | Applicant's statement | The only free text the applicant writes, labelled as theirs (§6 G13): first three fixed prompts, **purpose and need**, **mitigation** and **monitoring**, each with its question and the answer verbatim or *Not given* (report version `evidence-7`); then the scenario description and the run notes, verbatim with author and time |
 
 ### 4.4 Table, chart or prose
 
@@ -506,7 +550,7 @@ Nothing here changes `runModel`'s results.
 | ER2 | **Evidence mode** on the report route: its own section list (`report/sections.ts`), the refusal checks, page 1, flags, "Not assessed" rows, footers with page x of y, Appendix C | §§2, 4, 6 | WP-2.15 Phase C |
 | ER3 | A **declared uncertainty rule set** per project (thresholds, members, bounds), fixed before results are seen and versioned like settings; a cited ensemble must match it | G4; followups "Automated calibration with pre-declared rules" is the same idea for fits | WP-2.15 Phase C (the setting); the fit-side rule set stays its own follow-up |
 | ER4 | `summarisePaired` adds the worse-share for the Reserve rate per site, and paired bands on each farm's share of demand supplied and on the FDC-check rate | D-U3; C14, C15 rows have no band today | Built: the Reserve share (Phase C); each unit's supply and the applicant's own (engine 1.33.0). The FDC check is banded as its curve (ER5), not as a rate |
-| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Built (engine 1.33.0): the impacted curve at the table's points per site and month in each member (`reserveFdc`); § 1's chart shades the baseline's band (R1) and hatches the application's own (R2) |
+| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Built (engine 1.33.0): the impacted curve at the table's points per site and month in each member (`reserveFdc`); § 1's chart shades the baseline's band (R1) and hatches the application's own (R2); from `evidence-7` the paired change in the curve at each table point, with "worse in k of n" (the sets in which the application's flow is lower), is a table under the chart (`PairedSummary.reserveFdcChange`, `EvidenceSite.fdcChange`), since the two bands overlap even when every pair shifts the curve the same way |
 | ER6 | The WR2012 five-statistic table (CR-28) | C8 | Built as CR-28 (engine 1.19.0); the report shows it in § 3's calibration record |
 | ER7 | Report the fit record's validation scores, and "Not assessed" with the reason when the parameters aren't from a stored fit | C6 | Phase C (frontend only) |
 | ER8 | Assurance of supply metrics per farm (time-based, volumetric, annual) | C15 | WP-3.4, unchanged |
@@ -562,7 +606,8 @@ no-flow row, a flag for flows below the table's lowest point, the days a user
 is served in full while the site fails, Appendix C's fixed prompts, and paired
 bands on each unit's supply (ER4 rest). Built since, in the follow-ups: the
 driest month's FDC, the other applications on the baseline with their sum,
-the diagonal draft stamp and the licence impact by year class on page 1; and
+the diagonal draft stamp, the licence impact by year class on page 1 and
+Appendix C's fixed prompts (`evidence-7`, § 4.3); and
 for cancelled ensembles, the finding that nothing interim is stored (a
 started row holds no summary or result, `run_uncertainty`'s check), which the
 ledger now says.

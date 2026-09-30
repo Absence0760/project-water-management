@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	allocationCapLines,
@@ -64,6 +64,11 @@ describe('series column order', () => {
 		const cat = ['rain_chirps_corrected', 'is_summer', 'rain_used', 'ewr', 'rain_chirps', 'rain_final', 'natural_flow'];
 		// Final rainfall, then CHIRPS as uploaded and corrected, right after rain used.
 		expect(cat.sort(seriesKeyOrder('catchment'))).toEqual(['natural_flow', 'ewr', 'rain_used', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'is_summer']);
+		// The quality flags (engine ≥ 1.48.0) after the observed records and their gap fill, before the EWR.
+		const obs = ['ewr', 'observed_flow_quality', 'observed_flow_fill', 'observed_flow', 'simulated_outflow'];
+		expect(obs.sort(seriesKeyOrder('catchment'))).toEqual(['simulated_outflow', 'observed_flow', 'observed_flow_fill', 'observed_flow_quality', 'ewr']);
+		// At a calibration site (a gauge node), beside the gauge's records.
+		expect(['observed_flow_quality', 'outflow', 'observed_flow'].sort(seriesKeyOrder('node'))).toEqual(['outflow', 'observed_flow', 'observed_flow_quality']);
 	});
 });
 
@@ -725,6 +730,28 @@ describe('CHIRPS bias factors block', () => {
 		]);
 	});
 
+	it('lists the CHIRPS gap map, month by month, when it was on (engine ≥ 1.53.0)', () => {
+		const months = Array.from({ length: 12 }, (_, i) => ({
+			month: i + 1,
+			basis: [6, 7, 8].includes(i + 1) ? null : i + 1 === 9 ? ('season' as const) : ('month' as const),
+			catchmentWetDays: 40,
+			chirpsWetDays: 41,
+			chirpsWetMm: 2.5
+		}));
+		const quantileMap = { wetDayMm: 1, minWetDays: 30, months, mappedDays: 25, unmappedDays: 6, partialMonthDays: 2, factorOnlyMm: 17, mappedMm: 16.5 };
+		const lines = [...chirpsFactorLines({ ...corr, quantileMap })];
+		const at = lines.findIndex((l) => l.startsWith('CHIRPS quantile map,'));
+		expect(lines[at]).toMatch(/^CHIRPS quantile map,"wet days \(≥ 1 mm\) quantile-mapped onto the catchment rain's wet days over the fit period, CHIRPS' wet-day threshold raised/);
+		expect(lines[at + 1]).toBe('Month,Mapped on,Catchment wet days,CHIRPS wet days,CHIRPS wet-day threshold (mm)');
+		expect(lines[at + 2]).toBe('Oct,own month,40,41,2.5');
+		expect(lines[at + 10]).toBe('Jun,not mapped (monthly factor alone),40,41,2.5');
+		expect(lines[at + 13]).toBe('Sep,3-month season,40,41,2.5');
+		expect(lines[at + 14]).toBe('Gap days the map changed,25,gap days left to the monthly factor alone,6,in a month CHIRPS does not yet cover whole,2');
+		expect(lines[at + 15]).toBe('Gap rain by the monthly factor alone (mm),17,after the map (mm),16.5');
+		// Positive control: off, no block.
+		expect([...chirpsFactorLines(corr)].some((l) => l.startsWith('CHIRPS quantile map'))).toBe(false);
+	});
+
 	it('adds the fit period, its reference window and each listed range’s factors (engine ≥ 0.29.0)', () => {
 		const seg = (from: number, fillFrom: number | null, fillTo: number | null, reason: string) => ({
 			fromWaterYear: from, toWaterYear: from + 9, reason, fillFrom, fillTo, fitWindow: { fromWaterYear: from, toWaterYear: from + 8 },
@@ -861,7 +888,10 @@ describe('farm column guide', () => {
 	it('gives every farm daily column its letter and formula', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
-		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
+		expect(lines).toHaveLength(2 + FARM_COLUMNS.length + 2 + OBSERVED_FLOW_COLUMNS.length);
+		// The observed flow record's columns follow, the quality flags' codes spelled out (engine ≥ 1.48.0).
+		expect(lines[2 + FARM_COLUMNS.length]).toBe('Observed flow columns (the catchment daily CSV or a calibration site’s)');
+		expect(lines.find((l) => l.startsWith(',observed_flow_quality,'))).toContain('3 above the highest gauging');
 		expect(lines).toContain('V,balance_residual,"(H + I + J + rain on dam + GW + GWd) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW, GWd and Dep only with boreholes)"');
 	});
 });

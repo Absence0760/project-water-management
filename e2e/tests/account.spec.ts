@@ -55,6 +55,30 @@ test('“Download my data” saves the account’s data export as a JSON file', 
 	await expect(panel.getByRole('alert')).toHaveText('You downloaded your data a moment ago. Try again in 1 minute.');
 });
 
+// A unit that fails to save goes back to the saved one: the radio picked
+// stays picked in the DOM otherwise, and the farm view would disagree with it.
+test('a volume unit that fails to save goes back to the saved one', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/account');
+	const prefs = page.getByRole('region', { name: 'Language and units' }).getByRole('group', { name: 'Volumes on your hydrological unit pages' });
+	await expect(prefs.getByLabel('Cubic metres (m³)')).toBeChecked();
+	await page.route(/\/auth\/me$/, (route) =>
+		route.request().method() === 'PATCH' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) }) : route.fallback()
+	);
+	await prefs.getByLabel('Megalitres (ML)').check();
+	await expect(prefs.getByRole('alert')).toBeVisible();
+	await expect(prefs.getByLabel('Cubic metres (m³)')).toBeChecked();
+	await expect(prefs.getByLabel('Megalitres (ML)')).not.toBeChecked();
+	await expect(prefs.getByText('Saved.')).toHaveCount(0);
+
+	// Once the server answers again, the choice saves.
+	await page.unroute(/\/auth\/me$/);
+	await prefs.getByLabel('Megalitres (ML)').check();
+	await expect(prefs.getByRole('status')).toHaveText('Saved.');
+	await expect(prefs.getByRole('alert')).toHaveCount(0);
+	await expect(prefs.getByLabel('Megalitres (ML)')).toBeChecked();
+});
+
 test('an unconfirmed address says so', async ({ page }) => {
 	const user = await register(page.context().request, 'Unconfirmed', { verified: false });
 	await signInUnconfirmed(page.context(), user);

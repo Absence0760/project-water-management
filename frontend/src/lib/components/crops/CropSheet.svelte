@@ -21,6 +21,7 @@
 		farms,
 		readonly,
 		onsave,
+		onremove,
 		reason = $bindable('')
 	}: {
 		open?: boolean;
@@ -30,6 +31,8 @@
 		farms: readonly { id: string; name: string }[];
 		readonly: boolean;
 		onsave: () => void;
+		/** Told before the crop is removed, so the page can put the focus somewhere that stays (the Edit button that opened the sheet goes with its row). */
+		onremove?: (cropId: string) => void;
 		reason?: string;
 	} = $props();
 
@@ -57,6 +60,7 @@
 			}))
 		)
 			return;
+		onremove?.(id);
 		editor.removeCrop(id);
 		open = false;
 	}

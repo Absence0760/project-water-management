@@ -435,15 +435,26 @@ paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 The app is a static SPA (`ssr = false`, `prerender = false` in
 `routes/+layout.ts`): every route renders in the browser from the fallback
 `index.html`. The public landing page (issue #57) is the exception.
-`routes/welcome/+page.ts` sets `ssr = true` and `prerender = true` (as do the
+`routes/welcome/[[lang=locale]]/+page.ts` sets `ssr = true` and `prerender = true` (as do the
 legal pages, `routes/privacy` and `routes/terms`, and the methods page,
 `routes/methods`: `STATIC_PATHS` in
 `lib/auth/session.svelte.ts`), so the
 build writes `welcome.html` with the page's HTML and its meta and Open Graph
 tags in it: crawlers and link previews read it without running the app, and a
-visitor sees it before any script. CloudFront's `spa_rewrite` function serves
-`/welcome` from `welcome.html`, and `/privacy`, `/terms` and `/methods` from theirs (`infra/s3_cloudfront.tf`, guarded in
-`guardrails.tftest.hcl`; the e2e static server mirrors it). The absolute URLs in
+visitor sees it before any script. The landing page is written once per
+language (issue #137): the optional `[[lang=locale]]` parameter (matched by
+`src/params/locale.ts`: a language of the table other than English) and the
+route's `entries` add `welcome/af.html`. The route's load returns the
+language and its catalogue, and the page applies them as it renders, so the
+prerender and the hydration are in the address's language; `hooks.server.ts`
+(it runs only at build time here) rewrites `<html lang="en">` for that route
+alone, since the i18n state is module-wide and the fallback `index.html`
+must not inherit the last page's language. CloudFront's `spa_rewrite` function serves
+`/welcome` from `welcome.html`, `/welcome/af` from `welcome/af.html` (its
+`PRERENDERED` list), and `/privacy`, `/terms` and `/methods` from theirs (`infra/s3_cloudfront.tf`, guarded in
+`guardrails.tftest.hcl`, and `infra/scripts/cloudfront-functions.test.mjs`
+checks `PRERENDERED` against the routes and the language table, so a new
+language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in
 its tags come from `kit.prerender.origin`: the build's `SITE_ORIGIN` (the
 deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.
 

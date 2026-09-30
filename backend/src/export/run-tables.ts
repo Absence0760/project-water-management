@@ -14,12 +14,14 @@ import {
 	rainSourceIntensityReferenceText,
 	rainSourceKindName,
 	rainSourceQuantileMapText,
+	chirpsQuantileMapText,
 	FLOW_DM_MIN_DAYS,
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
 	LOW_FLOW_WARN_FACTOR,
 	RECESSION_MIN_SEGMENTS,
 	GAUGE_COLUMNS,
+	OBSERVED_FLOW_COLUMNS,
 	USER_COLUMNS,
 	waterYearLabel,
 	type CalibrationStats,
@@ -55,6 +57,8 @@ const CATCHMENT_ORDER = [
 	'observed_flow_filled',
 	'observed_flow_other_fill',
 	'observed_flow_other_filled',
+	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18): after the records and their fill.
+	'observed_flow_quality',
 	'ewr',
 	'ewr_shortfall',
 	'ewr_charged',
@@ -64,6 +68,7 @@ const CATCHMENT_ORDER = [
 	'rain_areal',
 	'rain_chirps',
 	'rain_chirps_corrected',
+	'rain_chirps_mapped',
 	'chirps_factor',
 	'rain_catchment_missing',
 	'rain_catchment_spread',
@@ -278,6 +283,18 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	if (c.flaggedDaysLeftOut) yield csvRow(['Days of flagged zero runs left out (treated as missing)', c.flaggedDaysLeftOut]);
 	if (c.missingDaysLeftOut) yield csvRow(['Days listed as missing left out', c.missingDaysLeftOut]);
 	if (c.keptDryDaysInFit) yield csvRow(['Kept-dry days kept in the fit', c.keptDryDaysInFit]);
+	// Engine ≥ 1.53.0 (CR-23): the gap map, when it was on.
+	if (c.quantileMap) {
+		const q = c.quantileMap;
+		yield csvRow(['CHIRPS quantile map', chirpsQuantileMapText(q)]);
+		yield csvRow(['Month', 'Mapped on', 'Catchment wet days', 'CHIRPS wet days', 'CHIRPS wet-day threshold (mm)']);
+		for (const m of WY_MONTHS) {
+			const x = q.months[m - 1]!;
+			yield csvRow([MONTH_NAMES[m - 1]!, x.basis === 'month' ? 'own month' : x.basis === 'season' ? '3-month season' : 'not mapped (monthly factor alone)', x.catchmentWetDays, x.chirpsWetDays, x.chirpsWetMm]);
+		}
+		yield csvRow(['Gap days the map changed', q.mappedDays, 'gap days left to the monthly factor alone', q.unmappedDays, 'in a month CHIRPS does not yet cover whole', q.partialMonthDays]);
+		yield csvRow(['Gap rain by the monthly factor alone (mm)', q.factorOnlyMm, 'after the map (mm)', q.mappedMm]);
+	}
 
 	// Engine ≥ 0.29.0: the fit period and the reference window, then one block per listed range. Absent before: those runs fitted the whole record.
 	if (!c.fitPeriod) return;
@@ -1430,11 +1447,14 @@ export function* wr2012Lines(w: RunSummary['wr2012'], notes: string): Generator<
 	}
 }
 
-/** What each farm daily column means: its FarmTemplate letter and formula (verify/columns.ts). */
+/** What each farm daily column means: its FarmTemplate letter and formula; then the observed flow record's columns (verify/columns.ts). */
 export function* columnGuideLines(): Generator<string> {
 	yield csvRow(['Farm daily columns (the daily CSV of a farm)']);
 	yield csvRow(['Column', 'Series', 'Formula']);
 	for (const c of FARM_DAILY_COLUMNS) yield csvRow([c.letter ?? '', c.key, c.formula]);
+	yield csvRow(['Observed flow columns (the catchment daily CSV or a calibration site’s)']);
+	yield csvRow(['Column', 'Series', 'Meaning']);
+	for (const c of OBSERVED_FLOW_COLUMNS) yield csvRow(['', c.key, c.formula]);
 }
 
 /**
