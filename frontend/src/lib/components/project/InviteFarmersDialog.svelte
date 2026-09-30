@@ -7,6 +7,7 @@
 	// the button from everyone else). One person may also join as a licence
 	// applicant with their farms (WP-3.3, 097_contributor_invite_farms): an
 	// irrigator applying to raise their own dam.
+	import { untrack } from 'svelte';
 	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { LANGUAGES } from '$lib/i18n/state.svelte';
@@ -39,6 +40,7 @@
 	// CSV mode.
 	let csv = $state('');
 	let fileName = $state<string | null>(null);
+	let fileInput: HTMLInputElement | undefined = $state();
 	let problems = $state<string[]>([]);
 	let rows = $state<CsvFarmerRow[]>([]);
 	let results = $state<BulkFarmerResult[] | null>(null);
@@ -47,13 +49,23 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-	// Opening the dialog starts fresh.
+	// Opening the dialog starts fresh. A CSV that was sent goes too: left in
+	// the box, it read as still to send, and Preview then Send offered the
+	// same invitations again.
 	$effect(() => {
-		if (open) {
-			error = null;
-			results = null;
-			problems = [];
-		}
+		if (open)
+			untrack(() => {
+				if (results && !preview) {
+					csv = '';
+					fileName = null;
+					rows = [];
+					if (fileInput) fileInput.value = '';
+				}
+				error = null;
+				results = null;
+				problems = [];
+				preview = true;
+			});
 	});
 
 	function csvChanged() {
@@ -200,7 +212,7 @@
 			</div>
 			<div class="field">
 				<label for="invite-csv-file">…or upload a .csv file</label>
-				<input id="invite-csv-file" type="file" accept=".csv,text/csv,text/plain" onchange={(e) => pickFile(e.currentTarget.files?.[0])} />
+				<input bind:this={fileInput} id="invite-csv-file" type="file" accept=".csv,text/csv,text/plain" onchange={(e) => pickFile(e.currentTarget.files?.[0])} />
 				{#if fileName}<span class="muted small">Read {fileName}.</span>{/if}
 			</div>
 			{#if problems.length}

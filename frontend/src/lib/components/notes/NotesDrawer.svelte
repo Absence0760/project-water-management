@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { noteCounts } from './counts.svelte';
 	import NotesList from './NotesList.svelte';
 	import { countFor, notesButtonLabel, targetTitle, type NoteTarget } from './notes';
@@ -38,6 +39,22 @@
 	$effect(() => {
 		counts.ensure();
 	});
+
+	// A half-typed note (or an unsaved edit) is lost when the sheet closes:
+	// Escape, the close button and Close ask first.
+	let unsaved = $state(false);
+	const mayClose = async () =>
+		!unsaved ||
+		(await confirmDialog({
+			title: 'Discard your note?',
+			message: 'What you typed hasn’t been saved.',
+			confirmLabel: 'Discard note',
+			cancelLabel: 'Keep editing',
+			danger: true
+		}));
+	async function close() {
+		if (await mayClose()) open = false;
+	}
 </script>
 
 <button
@@ -57,12 +74,12 @@
 	{#if count > 0}<span class="count" aria-hidden="true">{count}</span>{/if}
 </button>
 
-<Dialog bind:open title={targetTitle(target)} side>
+<Dialog bind:open title={targetTitle(target)} side beforeclose={mayClose}>
 	{#if open}
-		<NotesList {projectId} {target} {canWrite} formFirst onChanged={() => counts.refresh()} />
+		<NotesList {projectId} {target} {canWrite} formFirst bind:unsaved onChanged={() => counts.refresh()} />
 	{/if}
 	{#snippet actions()}
-		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+		<button type="button" class="btn" onclick={close}>Close</button>
 	{/snippet}
 </Dialog>
 

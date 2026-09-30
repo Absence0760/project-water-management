@@ -749,6 +749,11 @@ Interaction details that bit:
   it with `form="<form id>"`, so Enter still submits. When a state swaps a
   row button (Cancel → Back while an overwrite is asked), keep one element and
   change its label, so the focus stays on it.
+- **A dialog removed while open hands the focus back itself.** The sign-off
+  dialog sits in `{#if open}` (its own chunk), so closing it took it out of
+  the page still open, and a removed `<dialog>` restores nothing: the focus
+  fell to `<body>`. `Dialog.svelte` now refocuses what opened it when it is
+  unmounted open (`signoff.spec.ts` checks `toBeFocused()`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
