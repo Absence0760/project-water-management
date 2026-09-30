@@ -37,7 +37,7 @@ interface PdfPage {
 
 /** Each page's height and words, with their boxes in points. */
 function pdfPages(path: string): PdfPage[] {
-	const html = execFileSync('pdftotext', ['-bbox', path, '-'], { encoding: 'utf8' });
+	const html = execFileSync('pdftotext', ['-bbox', path, '-'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); // every word with its box: a long report passes Node's 1 MB default
 	return html
 		.split('<page ')
 		.slice(1)

@@ -240,7 +240,10 @@
 	const pageRule = $derived(reportPageRule(footer));
 	let pageStyle: HTMLStyleElement | null = null;
 	$effect(() => {
-		if (pageStyle) pageStyle.textContent = pageRule;
+		// Read the rule first: behind `pageStyle &&` a first run (before the style exists) would
+		// never subscribe to it, and the footer, known only once the run loads, would never print.
+		const rule = pageRule;
+		if (pageStyle) pageStyle.textContent = rule;
 	});
 	$effect(() => {
 		pageStyle = document.createElement('style');
