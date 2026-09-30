@@ -8,6 +8,16 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
+
+// The Summary with a run fills in from several loads (the run record, the alerts, the published
+// baseline, Supply by farm's chunk); wait for each to finish before measuring the page.
+async function summarySettled(page: Page) {
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toHaveAttribute('aria-busy', 'false');
+	await expect(page.getByTestId('reserve-strip')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Active alerts' })).toHaveAttribute('data-ready', 'true');
+	await expect(page.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
+	await expect(page.getByRole('status').filter({ hasText: 'Loading…' })).toHaveCount(0);
+}
 /** A run's daily dam_storage series (the Dam levels' fallback for a run older than engine 1.2.0). */
 const DAM_SERIES = /\/runs\/[^/]+\/series\?key=dam_storage/;
 
@@ -35,7 +45,7 @@ test('setup complete: the checklist leaves the page for a header pill whose popo
 	]) {
 		await page.setViewportSize(viewport);
 		await page.goto(`/projects/${project.id}`);
-		await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
+		await summarySettled(page);
 		// No checklist panel on the page; the pill sits in the section header's status, before the rain pill.
 		await expect(setup(page)).toHaveCount(0);
 		const status = page.getByTestId('header-status');
