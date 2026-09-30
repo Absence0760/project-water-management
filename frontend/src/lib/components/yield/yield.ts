@@ -1,7 +1,7 @@
 // The Yield panel's pure parts (WP-3.6, docs/ui.md § Yield): the job's
 // status line, the stored results split into the latest firm yield and the
 // latest curve, and the storage–yield chart's data.
-import type { YieldPoint } from '@water-management/engine';
+import type { ScenarioOp, YieldPoint } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
@@ -85,4 +85,36 @@ export function curveChart(curve: CurveResult): { series: ChartSeries[]; xy: { x
 		series: [{ ...noDates, label: 'Yield (m³/day)', color: '--series-1' }],
 		xy: { x: curve.points.points.map((p) => p.capacityM3 / 1000), ys: [curve.points.points.map((p) => p.yieldM3Day)] }
 	};
+}
+
+/**
+ * The tolerance the preview searches to: the job's default (backend
+ * YieldParams, 0.001), which is the engine's YIELD_DEFAULT_TOLERANCE. Written
+ * out so the panel doesn't import the engine's yield module (yield.test.ts
+ * checks they agree).
+ */
+export const PREVIEW_TOLERANCE = 0.001;
+
+/** A scenario the preview can apply in the browser: its base run and its saved ops. */
+export interface PreviewScenario {
+	baseRunId: string;
+	ops: ScenarioOp[];
+	/** The ops' hash (Scenario.opsSha256): a new one means new ops to preview. */
+	opsSha256: string;
+}
+
+/**
+ * What the in-browser preview runs on, matching what the job would: a saved
+ * run's own input, or a scenario's ops on its base run's. Null when there is
+ * nothing to preview, or for a scenario given no PreviewScenario (an
+ * application: the job applies it under the applicant mask, which only the
+ * server builds, so the browser can't reproduce it).
+ */
+export function previewSource(
+	scenarioId: string | null,
+	runId: string,
+	scenario: PreviewScenario | null
+): { runId: string; ops: ScenarioOp[] | undefined; key: string } | null {
+	if (scenarioId) return scenario ? { runId: scenario.baseRunId, ops: scenario.ops, key: `s:${scenarioId}:${scenario.baseRunId}:${scenario.opsSha256}` } : null;
+	return runId ? { runId, ops: undefined, key: `r:${runId}` } : null;
 }

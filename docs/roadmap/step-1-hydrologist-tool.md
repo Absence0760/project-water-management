@@ -932,6 +932,15 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.17 Instant in-browser preview
 
+> **Worker built (issue #73):** `lib/preview/engine.worker.ts` with its
+> runner (`lib/preview/runner.ts`: one request at a time, latest wins, a
+> fake-worker-tested protocol) as a second entry of the page build beside the
+> calibration worker (`frontend/vite.config.ts` `workerChunks`, so it shares
+> the engine chunks). Its first request kind is WP-3.6's single firm yield,
+> the Yield panel's preview ([ui.md § Yield](../ui.md#yield-wp-36)). Not
+> built yet: `buildModelInput`, `preview.svelte.ts` and the "Preview
+> (unsaved)" panel below; they add a `run` request kind to the same worker.
+
 - **Goal:** change a parameter and see its effect before saving. The engine
   already runs in the browser, fast enough on the client catchment for live preview.
 - **Changes:**
