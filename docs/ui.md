@@ -1877,7 +1877,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   switch-back level must be at least the switch-to-river level. A farm with no
   dam on dam only that has anything routed to its dam gets the run's hint: it
   irrigates straight from the river with no limit; pick run of river with a
-  pump capacity. A farm turned into a gauge or other user keeps the section
+  pump capacity. A farm on river first or dam, river when low that also has
+  **River to dam** (the diversion into the dam, under Routing) gets a note that
+  the run counts the two as separate pumps, so one pump doing both jobs needs
+  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
   while it still has supply settings, so they can be reset. Read-only for
   viewers (no calculator).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),

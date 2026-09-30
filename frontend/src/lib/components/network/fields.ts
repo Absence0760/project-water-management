@@ -165,7 +165,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
-		help: 'Share of the water arriving from upstream nodes that enters the dam. The rest passes below it, where the divert capacity can take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion. (The b023 workbook\'s formula applied it the other way round; see docs/model.md §3 Q1.)'
+		help: 'Share of the water arriving from upstream nodes that enters the dam. The rest passes below it, where River to dam can take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion. (The b023 workbook\'s formula applied it the other way round; see docs/model.md §3 Q1.)'
 	},
 	{
 		key: 'pctRunoffToDam',
@@ -178,12 +178,12 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'divertCapacityM3Day',
-		label: 'Divert capacity',
+		label: 'River to dam',
 		unit: 'm³/day',
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `Divert capacity of ${n}, m³/day`,
-		help: 'Most water per day that can be diverted from the river below the dam back into the dam (a weir, furrow or pump). 0 means none.'
+		aria: (n) => `River to dam capacity of ${n}, m³/day`,
+		help: 'Most water per day taken from the river below the dam into the dam, by a weir, furrow or pump. It runs on every day the river has water, in any season. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{
 		key: 'irrigationEfficiency',
