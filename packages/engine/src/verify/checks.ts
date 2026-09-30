@@ -6,7 +6,7 @@
 // balance (mass conservation, bounds, limits honoured, totals that add up),
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
-import { monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
 import { ALLOCATION_SERIES, matchAllocations, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
@@ -1800,7 +1800,8 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkGroundwater(input, out) ??
 		checkLandCover(input, out) ??
 		checkAllocations(input, out) ??
-		checkOperatingRules(input, out)
+		checkOperatingRules(input, out) ??
+		checkSupplyAssurance(input, out)
 	);
 }
 
@@ -1938,4 +1939,297 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 		}
 	}
 	return null;
+}
+
+/**
+ * The assurance of supply (RunSummary.supplyAssurance, engine ≥ 0.32.0,
+ * ../network/reliability.ts) against each demand node's own daily columns,
+ * read here from the output's series, not from the path that built it
+ * (engine ≥ 1.34.0, issue #192, docs/engine-audit.md V1):
+ * - its reliability lists every farm and water user once, with its kind;
+ * - each node's Σ demand, Σ supplied and demand days over the reporting
+ *   window, overall and per water-year month, and the met days and ratios
+ *   they give, are its own `demand` and `supplied` over that window;
+ * - each node's stress grid and the system's (every node together) are
+ *   Σ supplied ÷ Σ demand of those columns per water year × month cell.
+ * - the water account's EWR rows follow from each site's own requirement
+ *   and shortfall series (checkAccountEwr).
+ * A V8 miscompile once gave a node another node's sums while its id stayed
+ * right; this check is what catches that class of fault in a saved run.
+ * Sums add in the same order as the code under test, so they agree to the
+ * bit on a sound run; the tolerance is float noise, 1e-9 of Σ|x|.
+ */
+export function checkSupplyAssurance(input: ModelInput, out: ModelOutput): string | null {
+	const sa = out.summary.supplyAssurance;
+	if (!sa) return null;
+	const get = seriesMap(out);
+	const d0 = toEpochDay(out.startDate);
+	const from = toEpochDay(sa.reportStart) - d0;
+	const to = toEpochDay(sa.reportEnd) - d0;
+	if (from < 0 || to >= out.days || sa.days !== to - from + 1) return `assurance window ${sa.reportStart} … ${sa.reportEnd} (${sa.days} days) is not inside the run`;
+	const close = (a: number, b: number, scale: number) => Math.abs(a - b) <= 1e-9 * scale + 1e-12;
+	const closeRatio = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b)) + 1e-15);
+	const col = new Uint8Array(out.days);
+	const row = new Int32Array(out.days);
+	const wy0 = waterYearOf(d0);
+	for (let t = 0; t < out.days; t++) {
+		col[t] = waterYearIndex(monthOfEpochDay(d0 + t));
+		row[t] = waterYearOf(d0 + t) - wy0;
+	}
+	const rows = out.days > 0 ? waterYearOf(d0 + out.days - 1) - wy0 + 1 : 0;
+	const demandIds = input.model.nodes.filter((n) => n.kind === 'farm' || n.kind === 'user');
+	if (sa.reliability.length !== demandIds.length) return `assurance lists ${sa.reliability.length} farms and water users, the model has ${demandIds.length}`;
+	const series = new Map<string, { D: number[]; G: number[] }>();
+	for (const n of demandIds) {
+		const D = get.get(`${n.id}|demand`);
+		const G = get.get(`${n.id}|supplied`);
+		if (!D || !G) return `${n.id} has no demand or supplied series for the assurance to be checked against`;
+		series.set(n.id, { D, G });
+	}
+	const seen = new Set<string>();
+	for (const r of sa.reliability) {
+		const w = `assurance ${r.nodeId}`;
+		const node = demandIds.find((n) => n.id === r.nodeId);
+		if (!node || seen.has(r.nodeId)) return `${w}: not a farm or water user of the model, or listed twice`;
+		seen.add(r.nodeId);
+		if (r.kind !== node.kind) return `${w}: kind ${r.kind}, the node is a ${node.kind}`;
+		const { D, G } = series.get(r.nodeId)!;
+		const k = assuranceTally(D, G, col, row, from, to, Math.max(rows, 0));
+		const { dm, gm, abs, days, met, mD, mG, mAbs, mDays, mMet } = k;
+		if (!close(r.demandM3, dm, abs) || !close(r.suppliedM3, gm, abs))
+			return `${w}: Σ demand / supplied ${r.demandM3} / ${r.suppliedM3} over ${sa.reportStart} … ${sa.reportEnd}, but its own daily series add up to ${dm} / ${gm}`;
+		if (r.demandDays !== days || r.metDays !== met) return `${w}: ${r.metDays} of ${r.demandDays} demand days met, its own daily series give ${met} of ${days}`;
+		if (!closeRatio(r.volumetricReliability, dm > 0 ? gm / dm : null) || !closeRatio(r.timeReliability, days > 0 ? met / days : null)) return `${w}: reliability ratios don't follow from its sums`;
+		// Failure runs: consecutive demand days not fully met, ended by a met day or a day without demand.
+		const defScale = k.totalRunDef + 1;
+		if (
+			r.failureRuns !== k.runs ||
+			r.longestFailureDays !== k.longest ||
+			!closeRatio(r.meanFailureDays, k.runs > 0 ? k.totalRunDays / k.runs : null) ||
+			!closeRatio(r.meanFailureDeficitM3, k.runs > 0 ? k.totalRunDef / k.runs : null) ||
+			!close(r.maxFailureDeficitM3, k.maxDef, defScale)
+		)
+			return `${w}: failure runs ${r.failureRuns} (longest ${r.longestFailureDays} days, largest deficit ${r.maxFailureDeficitM3}), its own daily series give ${k.runs} (longest ${k.longest}, largest ${k.maxDef})`;
+		// The annual measure: complete water years with demand, and those whose Σ supplied ÷ Σ demand reached the threshold.
+		let wyCount = 0;
+		let wyMet = 0;
+		let wyPart = 0;
+		for (let y = 0; y < rows; y++) {
+			if (!(k.yDays[y]! > 0) || !(k.yD[y]! > 0)) continue;
+			const wy = wy0 + y;
+			if (k.yDays[y]! < (Date.UTC(wy + 1, 9, 1) - Date.UTC(wy, 9, 1)) / 86_400_000) {
+				wyPart++;
+				continue;
+			}
+			wyCount++;
+			if (k.yG[y]! / k.yD[y]! >= sa.annualThreshold) wyMet++;
+		}
+		if (r.waterYears !== wyCount || (r.partWaterYears ?? 0) !== wyPart || r.waterYearsMet !== wyMet || !closeRatio(r.annualReliability, wyCount > 0 ? wyMet / wyCount : null))
+			return `${w}: ${r.waterYearsMet} of ${r.waterYears} water years met (${r.partWaterYears ?? 0} part years), its own daily series give ${wyMet} of ${wyCount} (${wyPart})`;
+		if (r.months.length !== 12) return `${w}: ${r.months.length} months`;
+		for (let c = 0; c < 12; c++) {
+			const m = r.months[c]!;
+			if (!close(m.demandM3, mD[c]!, mAbs[c]!) || !close(m.suppliedM3, mG[c]!, mAbs[c]!) || m.demandDays !== mDays[c] || m.metDays !== mMet[c])
+				return `${w}: water-year month ${c} doesn't add up to its own daily series (Σ demand ${m.demandM3} vs ${mD[c]}, ${m.demandDays} vs ${mDays[c]} demand days)`;
+			if (!closeRatio(m.timeReliability, mDays[c]! > 0 ? mMet[c]! / mDays[c]! : null) || !closeRatio(m.volumetricReliability, mD[c]! > 0 ? mG[c]! / mD[c]! : null))
+				return `${w}: water-year month ${c}'s reliability ratios don't follow from its own daily series`;
+		}
+	}
+
+	// Stress grids over the whole run: per node, and the system as every node together.
+	const st = sa.stress;
+	if (st.waterYears.length !== rows || (rows > 0 && st.waterYears[0] !== wy0)) return `assurance stress grid: water years ${st.waterYears[0]} … ${st.waterYears.at(-1)} do not span the run`;
+	const cells = () => Array.from({ length: rows }, () => new Array<number>(12).fill(0));
+	const sysD = cells();
+	const sysG = cells();
+	const sysAbs = cells();
+	const gridBad = (label: string, ratio: (number | null)[][], D: number[][], G: number[][], A: number[][]): string | null => {
+		if (ratio.length !== rows) return `assurance stress grid ${label}: ${ratio.length} rows, the run has ${rows} water years`;
+		for (let i = 0; i < rows; i++) {
+			for (let c = 0; c < 12; c++) {
+				const got = ratio[i]![c] ?? null;
+				const want = D[i]![c]! > 0 ? G[i]![c]! / D[i]![c]! : null;
+				// Σ supplied ÷ Σ demand: judged on the sums' own float noise.
+				const ok = got === null || want === null ? got === want : Math.abs(got * D[i]![c]! - G[i]![c]!) <= 1e-9 * A[i]![c]! + 1e-12;
+				if (!ok) return `assurance stress grid ${label} ${st.waterYears[i]}/${c}: ratio ${got}, its own daily series give ${want}`;
+			}
+		}
+		return null;
+	};
+	// Every node's cell sums, then the system's as the sum of those per-node totals in node-id order.
+	// reliability.ts (addToCells) instead keeps one running sum per cell across the nodes, day by day,
+	// so the system's sums can differ from these in the last bits; the ratio is judged against Σ|x| of
+	// the cell at 1e-9, far above that rounding and far below a node's worth of water.
+	const perNode = new Map<string, { D: number[][]; G: number[][]; A: number[][] }>();
+	for (const n of demandIds) {
+		const { D, G } = series.get(n.id)!;
+		const cd = cells();
+		const cg = cells();
+		const ca = cells();
+		assuranceCells(cd, cg, ca, D, G, row, col, out.days);
+		perNode.set(n.id, { D: cd, G: cg, A: ca });
+	}
+	for (const id of [...perNode.keys()].sort(cmpStr)) {
+		const p = perNode.get(id)!;
+		for (let i = 0; i < rows; i++) {
+			for (let c = 0; c < 12; c++) {
+				sysD[i]![c] = sysD[i]![c]! + p.D[i]![c]!;
+				sysG[i]![c] = sysG[i]![c]! + p.G[i]![c]!;
+				sysAbs[i]![c] = sysAbs[i]![c]! + p.A[i]![c]!;
+			}
+		}
+	}
+	if (st.nodes.length !== demandIds.length) return `assurance stress grid: ${st.nodes.length} node grids, the model has ${demandIds.length} farms and water users`;
+	for (const g of st.nodes) {
+		const p = g.nodeId === null ? undefined : perNode.get(g.nodeId);
+		if (!p) return `assurance stress grid for ${g.nodeId}, which is not a farm or water user of the model`;
+		const bad = gridBad(g.nodeId!, g.ratio, p.D, p.G, p.A);
+		if (bad) return bad;
+	}
+	const grid = gridBad('system', st.system.ratio, sysD, sysG, sysAbs);
+	if (grid) return grid;
+	return checkAccountEwr(sa.waterAccount, get, out.days);
+}
+
+/**
+ * The water account's EWR rows (per water year and the run, per site) against
+ * the site's own series: the requirement is the pragmatic EWR (`ewr` at the
+ * outlet, `ewr_cumulative` at a gauge) or, for a rule-table site
+ * (ewrSource 'ruleTable'), its `ewr_rule` on the days it has one and the
+ * pragmatic EWR on the others; the shortfall is `ewr_shortfall`, or
+ * `ewr_charge_shortfall` for a rule-table site. Required = Σ requirement,
+ * met = Σ (requirement + MIN(shortfall, 0)), days not met = days with a
+ * shortfall below 0 (engine ≥ 1.34.0, issue #192).
+ */
+function checkAccountEwr(wa: NonNullable<ModelOutput['summary']['supplyAssurance']>['waterAccount'], get: SeriesMap, days: number): string | null {
+	const sites = wa.total.ewr;
+	const rows = [...wa.years, wa.total];
+	let start = 0;
+	const spans = wa.years.map((y) => {
+		const span = { from: start, to: start + y.days - 1 };
+		start += y.days;
+		return span;
+	});
+	if (start !== days || wa.total.days !== days) return `assurance water account: its years cover ${start} days and its total ${wa.total.days}, the run has ${days}`;
+	spans.push({ from: 0, to: days - 1 });
+	for (let k = 0; k < sites.length; k++) {
+		const site = sites[k]!;
+		const key = site.nodeId ?? 'null';
+		const w = `assurance water account EWR at ${site.nodeId ?? 'the outlet'}`;
+		const pragmatic = site.nodeId === null ? get.get('null|ewr') : get.get(`${key}|ewr_cumulative`);
+		const rule = site.ewrSource === 'ruleTable' ? get.get(`${key}|ewr_rule`) : undefined;
+		const short = get.get(site.ewrSource === 'ruleTable' ? `${key}|ewr_charge_shortfall` : `${key}|ewr_shortfall`);
+		if (!pragmatic || !short || (site.ewrSource === 'ruleTable' && !rule)) return `${w}: the run has no series to check it against`;
+		for (let i = 0; i < rows.length; i++) {
+			const e = rows[i]!.ewr[k];
+			if (!e || e.nodeId !== site.nodeId) return `${w}: ${rows[i]!.waterYear ?? 'the run'} lists its sites in another order`;
+			const { from, to } = spans[i]!;
+			const { req, met, abs, notMet } = accountEwrTally(rule, pragmatic, short, from, to);
+			const close = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * abs + 1e-9;
+			if (!close(e.requiredM3, req) || !close(e.metM3, met) || e.daysNotMet !== notMet)
+				return `${w} in ${rows[i]!.waterYear ?? 'the run'}: required / met / days not met ${e.requiredM3} / ${e.metM3} / ${e.daysNotMet}, its own daily series give ${req} / ${met} / ${notMet}`;
+		}
+	}
+	return null;
+}
+
+/**
+ * The check's day loops, each its own function taking the series as
+ * parameters: the form network/reliability.ts uses to keep clear of the V8
+ * miscompile it guards against (issue #192, docs/engine-audit.md V1), so the
+ * check can't fall to the same fault as the code it checks.
+ */
+function assuranceTally(D: number[], G: number[], col: Uint8Array, row: Int32Array, from: number, to: number, rows: number) {
+	let dm = 0;
+	let gm = 0;
+	let abs = 0;
+	let days = 0;
+	let met = 0;
+	const mD = new Array<number>(12).fill(0);
+	const mG = new Array<number>(12).fill(0);
+	const mAbs = new Array<number>(12).fill(0);
+	const mDays = new Array<number>(12).fill(0);
+	const mMet = new Array<number>(12).fill(0);
+	const yD = new Array<number>(rows).fill(0);
+	const yG = new Array<number>(rows).fill(0);
+	const yDays = new Array<number>(rows).fill(0);
+	let runs = 0;
+	let runLen = 0;
+	let runDef = 0;
+	let totalRunDays = 0;
+	let totalRunDef = 0;
+	let longest = 0;
+	let maxDef = 0;
+	for (let t = from; t <= to; t++) {
+		const d = D[t]!;
+		const g = G[t]!;
+		const c = col[t]!;
+		const y = row[t]!;
+		dm += d;
+		gm += g;
+		abs += Math.abs(d) + Math.abs(g);
+		mD[c] = mD[c]! + d;
+		mG[c] = mG[c]! + g;
+		mAbs[c] = mAbs[c]! + Math.abs(d) + Math.abs(g);
+		yD[y] = yD[y]! + d;
+		yG[y] = yG[y]! + g;
+		yDays[y] = yDays[y]! + 1;
+		// Fully met: the deficit within 1e-9 of the demand, as reliability.ts counts it (MET_NOISE).
+		const failed = d > 0 && !(d - g <= 1e-9 * d);
+		if (d > 0) {
+			days++;
+			mDays[c] = mDays[c]! + 1;
+			if (!failed) {
+				met++;
+				mMet[c] = mMet[c]! + 1;
+			}
+		}
+		if (failed) {
+			runLen++;
+			runDef += d - g;
+		} else if (runLen > 0) {
+			runs++;
+			totalRunDays += runLen;
+			totalRunDef += runDef;
+			longest = Math.max(longest, runLen);
+			maxDef = Math.max(maxDef, runDef);
+			runLen = 0;
+			runDef = 0;
+		}
+	}
+	if (runLen > 0) {
+		runs++;
+		totalRunDays += runLen;
+		totalRunDef += runDef;
+		longest = Math.max(longest, runLen);
+		maxDef = Math.max(maxDef, runDef);
+	}
+	return { dm, gm, abs, days, met, mD, mG, mAbs, mDays, mMet, yD, yG, yDays, runs, totalRunDays, totalRunDef, longest, maxDef };
+}
+
+function assuranceCells(cd: number[][], cg: number[][], ca: number[][], D: number[], G: number[], row: Int32Array, col: Uint8Array, days: number): void {
+	for (let t = 0; t < days; t++) {
+		const i = row[t]!;
+		const c = col[t]!;
+		cd[i]![c] = cd[i]![c]! + D[t]!;
+		cg[i]![c] = cg[i]![c]! + G[t]!;
+		ca[i]![c] = ca[i]![c]! + Math.abs(D[t]!) + Math.abs(G[t]!);
+	}
+}
+
+function accountEwrTally(rule: number[] | undefined, pragmatic: number[], short: number[], from: number, to: number) {
+	let req = 0;
+	let met = 0;
+	let abs = 0;
+	let notMet = 0;
+	for (let t = from; t <= to; t++) {
+		const rr = rule?.[t];
+		const r = rr !== undefined && Number.isFinite(rr) ? rr : pragmatic[t]!;
+		const sh = short[t]!;
+		req += r;
+		met += r + Math.min(sh, 0);
+		abs += Math.abs(r) + Math.abs(sh);
+		if (sh < 0) notMet++;
+	}
+	return { req, met, abs, notMet };
 }
