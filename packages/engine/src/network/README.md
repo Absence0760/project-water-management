@@ -142,7 +142,13 @@ active month,
 with `maxDaily` = `maxRateM3s` × 86 400, lowered by `dailyCapM3` when set.
 Rules run by `priority`, lowest first; within a priority, rules into one
 destination share its room and rules from one source share its free water,
-each pro rata to its own limit, so the list order never matters. The volume is
+each pro rata to its own limit, so the list order never matters. From engine
+1.36.0 (audit N6) each rule draws only above its own reserve: the source's
+water is split into bands at its rules' reserves, and each band is shared, pro
+rata to what each still wants, by the rules whose reserve is at or below it,
+so a lower-reserve rule never lets a sibling take the dam below that sibling's
+reserve. A rule with no rate this month is not active. Where a source's rules
+all keep one reserve this is the formula above to the bit (model.md §2.6). The volume is
 added to the destination's J and subtracted from the source's. Transfers
 involving a gauge are skipped with a warning.
 

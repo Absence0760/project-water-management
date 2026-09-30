@@ -2432,8 +2432,10 @@ role and not before it.
         rate, and a land-cover patch's area and cover on their own
         ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)).
         Left open:
-        - [ ] **A transfer rule that moves nothing relaxes its siblings'
-              reserve** (found reviewing #73; `network/simulate.ts` ~726,
+        - [x] **A transfer rule that moves nothing relaxes its siblings'
+              reserve** (done in #240, engine 1.36.0: [engine-audit.md
+              N6](./engine-audit.md#findings), erratum ER-11; found
+              reviewing #73; `network/simulate.ts` ~726,
               `freeBy[tr.from]`): a rule active in a month at max rate 0 (a
               listed month at rate 0), or any rule with a lower reserve at
               the same priority, counts in the free water above each rule's

@@ -109,7 +109,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"firstAffected": "0.16.0",
 		"fixedIn": "1.36.0",
 		"severity": "Medium",
-		"appliesWhen": "Three or more transfer rules of one priority from one dam, at different reserves, or one of them active in a month at rate 0 with a lower reserve than the others",
+		"appliesWhen": "Two or more transfer rules of one priority from one dam at different reserves (counting a rule active that month at rate 0)",
 		"summary": "The rules shared the free water above the lowest reserve among them, so the higher-reserve rules together could take the dam below their own reserves (a rule moving nothing lowered the floor for the rest)",
 		"source": "engine-audit.md N6; model.md §2.6"
 	}
