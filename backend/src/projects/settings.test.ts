@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, dataQualityPatchError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -413,6 +413,40 @@ describe('SettingsPatch.arealRain (engine ≥ 1.13.0)', () => {
 		expect(forcing.safeParse({ ...base, arealRain: null }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, arealRain: areal }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, arealRain: { ...areal, source: '' } }).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.chirpsQuantileMap (engine ≥ 1.47.0, CR-23)', () => {
+	const ok = (chirpsQuantileMap: unknown) => SettingsPatch.safeParse({ chirpsQuantileMap }).success;
+
+	it('accepts exactly what the engine runs (a table test holds the two together)', () => {
+		for (const [name, v] of [
+			['off', null],
+			['the default threshold', { wetDayMm: 1 }],
+			['the bottom of the range', { wetDayMm: 0.1 }],
+			['the top of the range', { wetDayMm: 10 }],
+			['below the range', { wetDayMm: 0.09 }],
+			['above the range', { wetDayMm: 10.5 }],
+			['NaN', { wetDayMm: NaN }],
+			['a string', { wetDayMm: '1' }],
+			['no threshold', {}],
+			['an extra key', { wetDayMm: 1, fromWaterYear: 2000 }],
+			['a bare number', 1]
+		] as [string, unknown][]) {
+			expect(ok(v), name).toBe(chirpsQuantileMapError(v) === null);
+		}
+	});
+
+	it('is off by default, replaced whole by a patch, and recorded in a fit record’s forcing, optionally', () => {
+		expect(mergeSettings({}).chirpsQuantileMap).toBeNull();
+		const stored = patchSettings({}, { chirpsQuantileMap: { wetDayMm: 2 } });
+		expect(stored.chirpsQuantileMap).toEqual({ wetDayMm: 2 });
+		expect(patchSettings(stored, { chirpsQuantileMap: null }).chirpsQuantileMap).toBeNull();
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).chirpsQuantileMap).toEqual({ wetDayMm: 2 });
+		const forcing = FitRecord.shape.forcing.unwrap();
+		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
+		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 1 } }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 20 } }).success).toBe(false);
 	});
 });
 

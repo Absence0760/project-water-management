@@ -148,6 +148,8 @@ function runColumns(s: ExportSeries, run: ReadingRun): DailyColumn[] {
 	} else if (run.inputKey === 'rain_chirps_mm') {
 		if (c.chirps_factor) out.push(numeric(c.chirps_factor));
 		if (c.rain_chirps_corrected) out.push(numeric(c.rain_chirps_corrected));
+		// Engine ≥ 1.47.0 (CR-23): CHIRPS after the gap map, when it was on.
+		if (c.rain_chirps_mapped) out.push(numeric(c.rain_chirps_mapped));
 	} else if ((CALIBRATION_FLOW_KINDS as readonly string[]).includes(run.inputKey)) {
 		if (c.simulated_outflow) out.push(numeric(c.simulated_outflow));
 	} else if (run.gaugeFlow) {
@@ -157,4 +159,4 @@ function runColumns(s: ExportSeries, run: ReadingRun): DailyColumn[] {
 }
 
 /** The run_series keys runColumns can read from the catchment. */
-export const RUN_CATCHMENT_KEYS = ['rain_final', RAIN_SOURCE_COLUMN.key, ZERO_RAIN_COLUMN.key, ACCUMULATION_COLUMN.key, 'chirps_factor', 'rain_chirps_corrected', 'simulated_outflow'];
+export const RUN_CATCHMENT_KEYS = ['rain_final', RAIN_SOURCE_COLUMN.key, ZERO_RAIN_COLUMN.key, ACCUMULATION_COLUMN.key, 'chirps_factor', 'rain_chirps_corrected', 'rain_chirps_mapped', 'simulated_outflow'];
