@@ -863,6 +863,14 @@ put the results first; its first screen follows board A1 of the redesign
    was a one-line `<details>` at the foot of the page that grew it by 125 px
    when opened.
 
+- **Ready.** The Summary's body (`data-testid="summary-body"`, in `overview/OverviewTab.svelte`)
+  sets `data-ready="true"` once every section that loads its own data has settled, loaded or
+  failed: the latest run's record and the previous run's, the dams' levels, the Supply by farm
+  chunk, the alerts (`AlertsPanel`'s `ready`) and the published baseline (`PublishedBaseline`'s
+  `ready`). The Latest run card is on the page while its record loads and the rest fill in after
+  it, so the page grows until then: an e2e spec that measures layout (page height, box positions)
+  waits on it first (`summaryReady` in `e2e/tests/overview.spec.ts`), never on a sleep.
+
 - **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
   `overview/reserveStrip.ts`), once the latest run's record is in: the days
   below the pragmatic EWR at the outlet in each of the run's last twelve

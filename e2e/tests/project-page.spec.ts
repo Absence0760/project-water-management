@@ -52,6 +52,8 @@ test('the page: one title, its context and Download in the header, the facts, de
 	// No Recent changes (issue #177): History is in the sidebar, and its header names the latest change.
 	await expect(region(page, 'Recent changes')).toHaveCount(0);
 
+	// The notes list fills in after its card is on the page and moves the facts under it: measure once it has.
+	await expect(region(page, 'Recent notes')).toHaveAttribute('data-notes-ready', 'true');
 	// Details on the left, who has access on the right: Team above Members, level with the details.
 	const details = (await region(page, 'Project details').boundingBox())!;
 	const team = (await region(page, 'Team').boundingBox())!;

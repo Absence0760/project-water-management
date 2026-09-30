@@ -192,6 +192,11 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   `data-fit` through `waitForMapFit` in `support/diagrams.ts`). Never use
   `networkidle`, never `waitForTimeout`, and never inflate a timeout to get past
   a slow step. Fix whatever is slow.
+- **Measure layout (page height, box positions) only after the page's
+  readiness attribute** (the Summary's `data-ready`, a section's
+  `data-notes-ready`, a chart's `data-ready`): a region that is visible while
+  it loads isn't at its final size, and the page grows as its neighbours
+  fill in. See `docs/design/ui-playbook.md` § Testing.
 - **Select by role and accessible name** (`getByRole`, `getByLabel`). If an
   element can't be reached that way, fix its accessibility in the component
   (a label, an `aria-label`) rather than reaching for CSS or a test id.

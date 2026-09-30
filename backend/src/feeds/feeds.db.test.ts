@@ -22,7 +22,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
-import { FEED_META_MAX_BYTES, utcToday } from './fetch.js';
+import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
@@ -721,6 +721,118 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: o.window.end });
 	});
 
+	// Issue #69: a final CHIRPS value is never revised, so the next window starts after the final days.
+	it('keeps the answer’s final marker, and the next fetch starts after it (positive control: without one it re-reads 50 days)', async () => {
+		const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+		const o = await fetchJob();
+		await acceptIngestResult(msg(o, { ...result(o, values), meta: { days: 10, finalThrough: plus(o.window.start, 4) } }));
+		await tick();
+		expect((await feedRow(o.feedId)).last_meta).toMatchObject({ through: o.window.end, finalThrough: plus(o.window.start, 4) });
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const next = await runFetchJob();
+		// It says which of those days the feed holds (the newest), so their preliminary values aren't read again.
+		expect(next.request).toEqual(expect.objectContaining({ start: plus(o.window.start, 5), end: o.window.end, heldThrough: plus(o.window.start, 9) }));
+		// That fetch finds nothing final: the marker it started after stands.
+		await acceptIngestResult(msg({ ...o, jobId: next.fetchJobId }, { ok: true, startDate: next.request.start, values: [6, 7], meta: { days: 2 } }));
+		await tick();
+		expect((await feedRow(o.feedId)).last_meta).toMatchObject({ finalThrough: plus(o.window.start, 4) });
+
+		const p = await fetchJob();
+		await acceptIngestResult(msg(p, result(p, values)));
+		await tick();
+		expect((await feedRow(p.feedId)).last_meta).not.toHaveProperty('finalThrough');
+		await p.owner.call('POST', `/projects/${p.pid}/feeds/${p.feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: plus(p.window.start, 9 - CHIRPS_REVISION_DAYS), end: p.window.end });
+	});
+
+	it('ignores a forged final marker: a day past the answer’s values, before the window, or over a gap is never stored', async () => {
+		for (const forged of [(o: { window: { start: string; end: string } }) => o.window.end, (o: { window: { start: string } }) => plus(o.window.start, -1), (o: { window: { start: string } }) => plus(o.window.start, 3)]) {
+			const o = await fetchJob();
+			// Four values and a gap on the fourth day: no claim past the third day holds.
+			await acceptIngestResult(msg(o, { ...result(o, [1, 2, 3, null, 5]), meta: { days: 5, finalThrough: forged(o) } }));
+			await tick();
+			const row = await feedRow(o.feedId);
+			expect(row).toMatchObject({ consecutive_failures: 0, last_data_date: plus(o.window.start, 4) });
+			expect(row.last_meta).not.toHaveProperty('finalThrough');
+			await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+			// The re-read as without a marker, from the newest day.
+			expect((await runFetchJob()).request.start).toBe(plus(o.window.start, 4 - CHIRPS_REVISION_DAYS));
+		}
+	});
+
+	it('on the fixtures: the first fetch marks the final days, the next reads only after them, and a new place starts again', async () => {
+		const owner = await signUp('Finals');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60) } }))).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1); // inline, from the fixtures: final up to 40 days back, preliminary to 3
+		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { finalThrough: addDays(-40), prelimDays: 37 } });
+		const before = (await series(owner, pid, 'rain_chirps_mm'))!;
+		// The next inline fetch reads nothing it holds: the preliminary days stay as they are, still counted, and the newest day stands.
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toEqual(before);
+		expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: addDays(-3), last_meta: { days: 0, prelimDays: 37, finalThrough: addDays(-40) } });
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), end: addDays(-1), heldThrough: addDays(-3) });
+		// Another place: the marker says nothing about it (data_feed_stamp clears last_meta).
+		await owner.call('PATCH', `/projects/${pid}/feeds/${feedId}`, { config: { cells: [cell(), cell()], startDate: addDays(-60) } });
+		expect((await feedRow(feedId)).last_meta).toBeNull();
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-60), end: addDays(-1) });
+	});
+
+	it('a hole in the series inside what the feed read is read again and filled: held days end at the first empty one', async () => {
+		const owner = await signUp('Holes');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60) } }))).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const full = (await series(owner, pid, 'rain_chirps_mm'))!;
+		// Day -20 (preliminary on the fixtures) loses its value: the newest day is still -3, but -20 isn't held.
+		const i = 40;
+		expect(full.startDate).toBe(addDays(-60));
+		expect(full.values[i]).not.toBeNull();
+		await asOwner(`UPDATE time_series SET "values"[$2] = NULL WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid, i + 1]);
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-21) });
+		// The inline fetch reads it again from the preliminary product and fills it.
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual(full.values);
+		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { prelimDays: 37, finalThrough: addDays(-40) } });
+	});
+
+	it('an rnl feed never sends heldThrough: it has no preliminary days (positive control: a sat feed holding the same days does)', async () => {
+		for (const product of ['rnl', 'sat'] as const) {
+			const o = await fetchJob({ config: { cells: [cell()], product } });
+			// The first day final: the next window starts on the second, which the series holds.
+			await acceptIngestResult(msg(o, { ...result(o, [1, 2, 3]), meta: { days: 3, finalThrough: o.window.start } }));
+			await tick();
+			await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+			const next = await runFetchJob();
+			expect(next.request.start).toBe(plus(o.window.start, 1));
+			if (product === 'rnl') expect(next.request).not.toHaveProperty('heldThrough');
+			else expect(next.request).toMatchObject({ heldThrough: plus(o.window.start, 2) });
+		}
+	});
+
+	it('while a confirmed replacement stages, the held days are the stage’s; once the live series stops conflicting, the live series’', async () => {
+		const owner = await signUp('StageHeld');
+		const pid = await project(owner);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-150), values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' });
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1); // window 1 (120 days) staged, inline from the fixtures
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		// The live series holds v2.0 there, but the answer goes to the stage, which holds every day through -31.
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-31) });
+		// The live series emptied: it no longer conflicts, so the ingest merges into it, and it holds none of those days.
+		await asOwner(`UPDATE time_series SET "values" = array_fill(NULL::double precision, ARRAY[3]) WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid]);
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).not.toHaveProperty('heldThrough');
+	});
+
 	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
 	it('an empty answer records how far it read, so the next fetch moves past the empty stretch', async () => {
 		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: '1960-01-01' }, targetKind: 'flow_observed_m3s' });
@@ -1218,7 +1330,8 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 			replaceFrom: 'CHIRPS/2.0',
 			rebuilding: { startDate: first, through: addDays(-31) },
 			health: { state: 'pending', reason: { code: 'rebuilding', from: first, through: addDays(-31) } },
-			lastMeta: { staged: 120 }
+			// The staged days are final up to 40 days back (the fixtures), so window 2 starts after them (#69).
+			lastMeta: { staged: 120, finalThrough: addDays(-40) }
 		});
 		const listed = (await owner.call('GET', `/projects/${pid}/series`)).body.series[0];
 		expect(listed).toMatchObject({ kind: 'rain_chirps_mm', rebuilding: true, product: 'CHIRPS' });
@@ -1243,7 +1356,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		// Every day of the swapped-in record is the feed's own (031_feed_days), so its later re-reads still revise them.
 		const [days] = await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND name = ''`, [pid]);
 		expect(days).toEqual({ feed_id: id, feed_days: `{[${first},${addDays(-150 + s.values.length)})}` });
-		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0' } });
+		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0', finalThrough: addDays(-40) } });
 		expect(await pending()).toEqual([]);
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null, rebuilding: null });
 		expect((await owner.call('GET', `/projects/${pid}/series`)).body.series[0]).toMatchObject({ rebuilding: false });
