@@ -75,8 +75,12 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
 	back: {
-		why: 'EvidencePage, the pack page: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
-		in: ['lib/components/report/evidence/EvidencePage.svelte', 'routes/projects/[id]/packs/[packId]/+page.svelte']
+		why: 'EvidencePage, the pack pages: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
+		in: ['lib/components/report/evidence/EvidencePage.svelte', 'routes/projects/[id]/packs/[packId]/+page.svelte', 'routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte']
+	},
+	applicantPackHref: {
+		why: 'BUILDER: "{base}/projects/" + encoded project id + "/scenarios/" + encoded scenario id + "/packs/" + encoded pack id (packs/applicantPack.ts; a pack id the API maps as a UUID or drops)',
+		in: ['lib/components/scenarios/ApplicationPanel.svelte', 'routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte']
 	},
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	filterHref: { why: 'ApplicationsTab: withoutParam(page.url, "status") or withParam(page.url, "status", f)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },

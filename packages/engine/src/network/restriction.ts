@@ -206,7 +206,7 @@ export function levelCut(rule: Pick<DroughtRestrictionRule, 'levels'>, level: nu
  * `nodeIds` that isn't a farm, an EWR site that isn't a gauge. The run warns
  * and leaves each out; the Settings form blocks Save.
  */
-export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string }[]): RestrictionIssue[] {
+export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string; ewrSite?: boolean }[]): RestrictionIssue[] {
 	const out: RestrictionIssue[] = [];
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const name = (id: string) => byId.get(id)?.name ?? id;
@@ -222,7 +222,8 @@ export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes
 	const site = rule.ewrTrigger?.siteNodeId;
 	if (typeof site === 'string') {
 		const n = byId.get(site);
-		if (!n || n.kind !== 'gauge') out.push({ field: 'ewrTrigger.siteNodeId', message: n ? `“${name(site)}” isn't a gauge` : `the EWR site ${site} isn't in the model` });
+		// A gauge whose EWR site flag is off isn't an EWR site (topology.ts isEwrSite): its EWR is never reported.
+		if (!n || n.kind !== 'gauge' || n.ewrSite === false) out.push({ field: 'ewrTrigger.siteNodeId', message: !n ? `the EWR site ${site} isn't in the model` : n.kind !== 'gauge' ? `“${name(site)}” isn't a gauge` : `“${name(site)}” isn't an EWR site` });
 	}
 	return out;
 }
@@ -235,13 +236,15 @@ export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes
  * (below 100 %), cutting every part by the notice's %, reviewed on the day it
  * was published and lifted on the day the WUA expects to publish next. null
  * (with the reason) for a notice that cuts nothing: no restriction, or an
- * advisory or restriction without a %.
+ * advisory or restriction without a %. `publishedOn` is the calendar day it
+ * was published in the project's time zone (YYYY-MM-DD), not the UTC
+ * timestamp: a notice published just after midnight there is that day's.
  */
-export function restrictionRuleFromNotice(notice: { level: string; pct: number | null; publishedAt: string; nextExpectedOn: string | null }): { rule: DroughtRestrictionRule | null; reason: string | null } {
+export function restrictionRuleFromNotice(notice: { level: string; pct: number | null; publishedOn: string; nextExpectedOn: string | null }): { rule: DroughtRestrictionRule | null; reason: string | null } {
 	if (notice.level === 'none') return { rule: null, reason: 'The published notice has no restriction.' };
 	if (!(typeof notice.pct === 'number' && notice.pct > 0)) return { rule: null, reason: 'The published notice gives no % cut to copy.' };
 	const md = (iso: string) => (iso.slice(5, 10) === '02-29' ? '03-01' : iso.slice(5, 10));
-	const review = md(notice.publishedAt);
+	const review = md(notice.publishedOn);
 	const lift = notice.nextExpectedOn ? md(notice.nextExpectedOn) : null;
 	const cut = Math.min(1, notice.pct / 100);
 	return {
@@ -249,7 +252,7 @@ export function restrictionRuleFromNotice(notice: { level: string; pct: number |
 			reviewDates: [review],
 			...(lift && lift !== review ? { liftDates: [lift] } : {}),
 			levels: [{ label: notice.level === 'advisory' ? 'Advisory notice' : 'Published notice', belowPct: 1, cuts: Object.fromEntries(DEMAND_PARTS.map((p) => [p, cut])) }],
-			source: `The WUA's published restriction notice of ${notice.publishedAt.slice(0, 10)} (${notice.pct} %)`
+			source: `The WUA's published restriction notice of ${notice.publishedOn.slice(0, 10)} (${notice.pct} %)`
 		},
 		reason: null
 	};
@@ -284,8 +287,15 @@ export interface PlanRestriction {
 	ownDam: Int32Array;
 	/** 1 for each unit the rule cuts (farms only). */
 	inScope: Uint8Array;
-	/** The EWR trigger's site (a node index) and its level; -1 = none. */
+	/**
+	 * The EWR trigger's site (a node index) and its level; -1 = none. At the
+	 * outlet (`ewrAtOutlet`) the trigger reads the catchment's EWR, the
+	 * outflow against the whole pragmatic EWR (the `ewr_shortfall` catchment
+	 * column the compliance report counts), not the outflow node's own
+	 * share-weighted one, which differs when the flow shares sum below 1.
+	 */
 	ewrSite: number;
+	ewrAtOutlet: boolean;
 	ewrLevel: number;
 	/** The level each unit held on the day before the first day (a resumed run, engine ≥ 1.54.0); absent = a fresh start. */
 	initialLevels?: Uint8Array;
@@ -325,7 +335,7 @@ export function restrictionEvents(rule: Pick<DroughtRestrictionRule, 'reviewDate
  */
 export function planRestriction(
 	rule: DroughtRestrictionRule,
-	nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string }[],
+	nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string; ewrSite?: boolean }[],
 	start: number,
 	days: number,
 	warnings: string[] = [],
@@ -354,7 +364,7 @@ export function planRestriction(
 	let ewrSite = -1;
 	if (rule.ewrTrigger) {
 		const id = rule.ewrTrigger.siteNodeId;
-		const i = id === null ? outlet : nodes.findIndex((n) => n.id === id && n.kind === 'gauge');
+		const i = id === null ? outlet : nodes.findIndex((n) => n.id === id && n.kind === 'gauge' && n.ewrSite !== false);
 		if (i < 0) warnings.push('the drought restriction rule’s EWR trigger has no site in the model: left out');
 		else ewrSite = i;
 	}
@@ -368,6 +378,7 @@ export function planRestriction(
 		ownDam,
 		inScope,
 		ewrSite,
+		ewrAtOutlet: ewrSite >= 0 && ewrSite === outlet,
 		ewrLevel: ewrSite >= 0 ? rule.ewrTrigger!.level : 0
 	};
 }

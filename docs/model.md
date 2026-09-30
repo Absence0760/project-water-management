@@ -3318,7 +3318,7 @@ regression suite is unchanged.
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
 | `name`, `note` | a label, and the detail of where the number comes from (which meter and years, which strategy, which norm) |
-| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 130; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
+| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 134; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -3721,7 +3721,7 @@ notice says what the WUA asked for; the rule is what the model assumes.
 | `basis` | engine ≥ 1.54.0: which storage the level reads. `total` (the default, absent): every farm dam's, one level for every unit; `dams`: the farm dams in `damNodeIds` only, one level for every unit; `own`: each unit its own dam, a level per unit |
 | `damNodeIds` | the farm dams `dams` reads (with that basis only) |
 | `nodeIds` | the units the rule cuts (farm ids); absent = every unit |
-| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge) wasn't met the day before, the level is at least `level` |
+| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge that is an EWR site) wasn't met the day before, the level is at least `level` |
 
 The parts are the ones `demand.scale` cuts on their own (#252): `crops` (a
 unit's crop water requirement F) and each demand-object category
@@ -3818,9 +3818,12 @@ each **pending the hydrologist**, listed in
   one.
 - *The EWR trigger* (engine ≥ 1.54.0; the roadmap's "when the downstream EWR
   site failed yesterday"). It raises the level only on a review day, as
-  the storage does, from the site's pragmatic EWR shortfall (`ewr_shortfall`
-  of the outlet or the gauge, §2.7) on the day before, known at the start of
-  the review day, so it stays causal and holds with the rest until the next
+  the storage does, from the site's pragmatic EWR shortfall on the day
+  before (§2.7): at the outlet the catchment's `ewr_shortfall`, the outflow
+  against the whole EWR, which the compliance report counts (not the outflow
+  node's own share-weighted column, lower when the flow shares sum below
+  1); at a gauge its own, and only a gauge that is an EWR site. Known at the
+  start of the review day, so it stays causal and holds with the rest until the next
   review or lift. A fresh run's first day has no day before and isn't
   raised. Only the day before is read, not a count of recent days, and not
   the Reserve rule tables' monthly compliance.
@@ -3842,7 +3845,7 @@ of the summary CSV. A model-state snapshot carries each unit's level held
 turns the WUA's published restriction notice (WP-2.3) into a starting rule,
 never the reverse: one level in force whenever the dams aren't full (below
 100 %), cutting every part by the notice's %, reviewed on the day it was
-published and lifted on the day the WUA expects to publish next (29
+published (in the project's time zone) and lifted on the day the WUA expects to publish next (29
 February read as 1 March). A notice with no restriction, or none with a %,
 gives no rule, with the reason. Settings and the scenario form offer it.
 
@@ -3873,8 +3876,10 @@ removed, the source ([run-comparison.md](./run-comparison.md)).
 recomputes each unit's level every day from the stored storage, capacity,
 reset and EWR-shortfall columns and the rule (the review and lift days, the
 dams read, the units cut and the trigger's site worked out in the check
-itself, not by the engine's planner; a resumed run from the state its
-summary records), each part's cut column, and each unit's restricted
+itself, not by the engine's planner, and the level, cut and floor formulas
+written out in it, not imported; a resumed run from the state its summary
+records, taken as given: the check can't see the snapshot, and `checkResume`
+is what holds a resumed run to the uninterrupted one), each part's cut column, and each unit's restricted
 demand from its crop requirement, efficiency and object demands with the
 floor; it holds supplied ≤ restricted demand ≤ demand (a restriction never
 raises supply) and the summary's days and means to the columns; without
@@ -3883,14 +3888,18 @@ against the restricted demand, and the objects' shares against their cut
 demands. Tests (`run.droughtRestriction.test.ts`, `outlook/restriction.test.ts`):
 hand examples (a dam emptying at 100 m³/day reviewed on 5 October, a lift
 date, a run starting after a lift, the start of the day read rather than the
-end, two levels with the floor held), bit identity off, the self-check
+end, two levels with the floor held; the listed dams, each unit's own dam, some
+units only, ids that don't fit the network, the EWR trigger read from the
+day before, and a rule from the notice), bit identity off, the self-check
 catching a tampered level, cut, restricted demand and supply, the rule's
-checks, the scenario op and the comparison, resume from a snapshot, the
-triggers mapping; and on random networks every invariant (balance,
-self-checks, order invariance, determinism), forecast prefix stability and
-a run cut short. The fuzz generator gives a quarter of networks a random
-rule (1–12 review dates, lift dates, 1–4 levels up to cuts of 100 %), the
-warm-start and scenario fuzz carry it, and the doubled-crop-areas property
+checks, the scenario op and the comparison, resume from a snapshot (to the
+bit, and passing the self-check), the triggers mapping; and on random
+networks every invariant (balance, self-checks, order invariance,
+determinism), forecast prefix stability and a run cut short. The fuzz
+generator gives a quarter of networks a random rule (1–12 review dates,
+lift dates, 1–4 levels up to cuts of 100 %; each basis, some units, an EWR
+trigger on the outlet or a gauge, now and then an id the network hasn't
+got), the warm-start and scenario fuzz carry it, and the doubled-crop-areas property
 runs without it (more demand restricts every unit sooner, and a unit
 upstream that takes less leaves more below, as the trigger rule does). The
 Excel audit workbook refuses a farm under a rule, by name.
@@ -7099,7 +7108,9 @@ bits whatever order they came in).
 
   over the run's days *D(y)* of the year (a part year asks for the prorated
   volume; the year a forecast tail starts in, over its historical days, the
-  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f), so it asks for exactly its registered volume and keeps its own
+  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f; a later water
+  year the tail runs into is a part year of its own, over its tail days,
+  verify/ probe `full-allocation-tail-new-year`), so it asks for exactly its registered volume and keeps its own
   seasonal shape; the crop requirement F and every demand object scale by the
   same *k*, and the soil-water store and effective rain are untouched (they
   set the shape). A senior water user is scaled before its demand is passed
@@ -7109,7 +7120,10 @@ bits whatever order they came in).
   names them). What the unit is then supplied is the model's, as always. The
   run stores *k* as `allocation_demand_factor`, and `RunSummary.allocations`
   lists per unit and year the demand before and the volume it was scaled to
-  (`scaled`).
+  (`scaled`). A year with no demand lists the volume registered over its
+  run days, except the year a forecast tail starts in, which lists k × its
+  demand, 0 (verify/ probe `scaled-no-demand-tail-year`; the two readings
+  disagree, followups.md § Verification).
 
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
@@ -8270,7 +8284,7 @@ text:
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
-| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the farm dams' storage at the start of that day (0 from a lift date, else held); each part's cut column is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's days per level and unit means add up to the columns. Without the rule, no restriction column or summary. |
+| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the storage at the start of that day (every farm dam's, the listed dams', or under `own` each unit's own dam, in its own `restriction_level` column, the catchment column the deepest), raised to the EWR trigger's level after a day its site's EWR wasn't met (the outlet's catchment column, or the gauge's), 0 from a lift date, else held; only the units the rule cuts carry `restricted_demand`; each part's cut column (a shared basis only) is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's reviews, EWR-triggered reviews, days per level and unit means add up to the columns. The level, cut and floor formulas are written out in the check, not the engine's. A resumed run starts from the state its summary records (`start`), which the check takes as given: it can't see the snapshot. Without the rule, no restriction column or summary. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
@@ -8288,11 +8302,18 @@ series to float noise (`pnpm test:verify`, the CI job `verify`). A mutation
 self-test breaks the Python one documented rule at a time and requires each
 break to show. Where this document was too thin to write a step, the engine's
 output settled it and the text above now says so (the probes named in
-§2.4a, §2.4b, §2.4d, §2.6 and §2.10a). On engine 1.36.0 it found no
-departure from this document; what it doesn't cover yet (boreholes,
-allocations, demand objects, off-takes, rule tables, forecast mode,
-calibration, land cover, time-varying development and the other optional
-inputs) is its phase 2 ([followups.md](./followups.md) § Verification).
+§2.4a, §2.4b, §2.4d, §2.6, §2.10a and §2.12a). Phase 2a (engine 1.53.0)
+added boreholes and stream depletion, allocations and the licence cap, demand
+objects and the basic-needs floor, river off-takes and canal seepage, other
+water users, supply rules and the river pump, dam survey curves and releases,
+and hands-off flows. On engine 1.36.0 it found no departure from this
+document; on 1.53.0 one, on a few random networks: a float-noise demand
+switches on a primary or emergency dam-target borehole (§2.7d), and drops a
+day from `limitBound` (§2.12a) (followups.md § Verification). What it doesn't
+cover yet (rule tables, forecast mode, calibration, land cover, time-varying
+development, drought restrictions, `demand.scale` by part and the other
+optional inputs) is its phase 2b ([followups.md](./followups.md) §
+Verification).
 
 **Recomputed outside the engine (issue #68).** The checks show the model
 agrees with itself; the **Excel audit workbook** shows it agrees with its

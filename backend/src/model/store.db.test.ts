@@ -168,7 +168,7 @@ describe('model store', () => {
 					],
 					// The people it serves, for the basic-needs floor (engine 1.44.0, migration 127): more than its 1 200 stands.
 					population: 4100.5,
-					// Where its number comes from (engine 1.56.0, migration 130).
+					// Where its number comes from (engine 1.56.0, migration 134).
 					source: 'perCapita',
 					note: 'Red Book norm' },
 				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, note: '' }
@@ -219,7 +219,7 @@ describe('model store', () => {
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
 		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).
 		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
-		// Migration 130's CHECK keeps the source in the list below the API's own check (engine 1.56.0).
+		// Migration 134's CHECK keeps the source in the list below the API's own check (engine 1.56.0).
 		await expect(asOwner('UPDATE demand_object SET source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'survey'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_source_known' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));

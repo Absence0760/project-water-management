@@ -33,7 +33,7 @@
 	import { api } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { monthName } from '$lib/format/months';
-	import { joinMonthDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 	let {
 		value = $bindable(),
@@ -46,7 +46,7 @@
 		error?: string | null;
 		readonly?: boolean;
 		/** The model's nodes: the dams, units and EWR sites to pick from (none: those choices are hidden). */
-		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'damCapacityM3' | 'downstreamNodeId'>[];
+		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'damCapacityM3' | 'downstreamNodeId' | 'ewrSite'>[];
 		/** The project, to start from its published restriction notice (none: no such button). */
 		projectId?: string | null;
 	} = $props();
@@ -56,7 +56,7 @@
 	const floored = (p: DemandPart) => (BASIC_NEEDS_CATEGORIES as readonly string[]).includes(p);
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
 	const dams = $derived(farms.filter((n) => n.damCapacityM3 > 0));
-	const gauges = $derived(nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null));
+	const gauges = $derived(nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null && n.ewrSite !== false));
 	$effect(() => {
 		const e = restrictionFormError(value);
 		const n = !e && value && nodes.length ? droughtRestrictionNodeIssues(value, nodes)[0] : undefined;
@@ -93,12 +93,12 @@
 		noticeBusy = true;
 		noticeMessage = null;
 		try {
-			const { current } = await api.publication.get(projectId);
+			const [{ current }, project] = await Promise.all([api.publication.get(projectId), api.projects.get(projectId)]);
 			if (!current) {
 				noticeMessage = 'Nothing is published yet.';
 				return;
 			}
-			const r = restrictionRuleFromNotice({ level: current.restriction.level, pct: current.restriction.pct, publishedAt: current.publishedAt, nextExpectedOn: current.nextExpectedOn });
+			const r = restrictionRuleFromNotice({ level: current.restriction.level, pct: current.restriction.pct, publishedOn: noticeDay(current.publishedAt, project.timeZone), nextExpectedOn: current.nextExpectedOn });
 			if (!r.rule) {
 				noticeMessage = r.reason;
 				return;

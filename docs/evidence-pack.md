@@ -9,8 +9,10 @@ An applicant attaches it to a water-use licence application, and anyone
 holding it can check it against the app with its short code.
 
 This page covers what a pack holds, what its hash covers, the short code, the
-lifecycle, the PDF, verification, the reproduction bundle, and sharing a
-pack by link with comments on it. The routes are in
+lifecycle, the PDF, verification, the reproduction bundle, sharing a
+pack by link with comments on it, what an applicant reads of their own
+application's packs, and the emails sent when a pack is issued or
+withdrawn. The routes are in
 [api.md § Evidence packs](./api.md#evidence-packs), the table in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
@@ -25,7 +27,11 @@ panel, and the public verify page with its in-browser file check
 ([§ The PDF](#the-pdf)); and the reproduction bundle with
 `pnpm reproduce:pack` ([§ Reproduction](#reproduction)); and share links
 to an issued pack with public comments on it
-([§ Sharing and comments](#sharing-and-comments), 2026-09-30). What is left is
+([§ Sharing and comments](#sharing-and-comments), 2026-09-30); and the
+applicant's own copy of their application's issued packs, with share links
+([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
+"pack issued" and "pack withdrawn" emails to the editors and the applicant
+([§ Notices](#notices), 133_pack_notices, 2026-09-30). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -178,10 +184,11 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
 
 **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
 delete drafts. Viewers read packs (an application's only when they can read
-its scenario). Applicants (contributors) and farmers can neither read nor act
-on a pack; issuing, superseding and withdrawing stay with the project's
-editors (operator decision, 2026-09-29). Editors share an issued pack by link
-([§ Sharing and comments](#sharing-and-comments)).
+its scenario). Farmers read none. Applicants (contributors) act on none:
+issuing, superseding and withdrawing stay with the project's editors
+(operator decision, 2026-09-29); they read their own application's issued
+packs, anonymised, and link them ([§ Applicants](#applicants)). Editors
+share an issued pack by link ([§ Sharing and comments](#sharing-and-comments)).
 
 Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
@@ -251,6 +258,14 @@ the pack prints:
 - `withdrawnReason` (for a withdrawn pack, else null);
 - `methodology` `{ version, sha256 }`;
 - `errata` `[{ id, summary }]`, as the manifest recorded them;
+- `errataFoundSince` `[{ id, summary }]`: errata that apply now to the
+  engine of either run (or, for a `fit` erratum, of the automatic fit its
+  parameters came from) and that the manifest didn't record, found since
+  the pack was drafted (132). The current list
+  ([engine-errata.md](./engine-errata.md), `errataFor`) over the runs'
+  engines, less the recorded ids, in the list's order. The manifest, its
+  hash and `errata` never change: an erratum added to engine-errata.md
+  after issue shows here, apart and marked "found since issue";
 - `signers` `[{ fullName, registrationBody, registrationCategory,
   registrationField, registrationNo, signedAt }]`.
 
@@ -260,7 +275,19 @@ same answer. The response isn't cached (`Cache-Control: no-store`), so a
 withdrawal shows at once.
 
 The lookup is `app_verify_pack(code)`, a `SECURITY DEFINER` function that
-builds exactly that object; the route adds only `shortCode`.
+builds that object, plus `runs` (132: each run's `engine_version` and its
+fit's engine, `inputs.settings.fitRecord.engineVersion`, read from
+`model_run`), which never leaves the API: the route maps the object field by
+field (`toVerify`, backend/src/share/links.ts, the same mapping as a pack's
+share link) and turns `runs` into `errataFoundSince`
+(backend/src/evidence/errata.ts), and adds `shortCode`. The errata list is
+the engine's (`ENGINE_ERRATA`, generated from engine-errata.md), so a new
+erratum shows on verify once the API that carries it is deployed.
+
+The pack's own page (`GET …/packs/:packId`, `errataFoundSince`) lists them
+too, in its bar above the report, which is never printed: the pack and its
+PDF print only what the manifest recorded. On a draft they are the errata
+found since the draft was made; drafting the pack again records them.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
@@ -412,9 +439,8 @@ stays. The matrix is in [data-model.md § Notes](./data-model.md#notes-037_notes
 They carry the whole report (every unit's figures, the applicant's
 statement), which the redaction above keeps from the public; an authority
 gets them from the applicant and checks them on the verify page.
-**Applicants** make no pack link yet: they read no pack
-([followups.md § Applicants](./followups.md#applicants-wp-33), "Applicants'
-access to their own application's packs").
+**Applicants** link their own application's issued pack too
+([§ Applicants](#applicants)); the link shows exactly this, whoever made it.
 
 Tests: `backend/src/share/pack-share.db.test.ts` (who makes, lists and
 revokes a pack link, each with its control; one kind only, both ways;
@@ -425,6 +451,131 @@ withdrawn and superseded; the note matrix and revisions),
 extras), `frontend/src/lib/components/share/pack.test.ts` and
 `e2e/tests/pack-share.spec.ts` (make a link from the pack page, open it
 signed out, comment, withdraw: the link says so and why).
+
+## Applicants
+
+An application's applicant, and whoever they shared it with
+(`scenario_member`), read the packs of it that were issued, and its owner
+shares them by link (WP-3.15; `131_applicant_packs`). Issuing stays with the
+editors. The screens are the Application panel's pack list and the
+applicant's pack view ([ui.md § Evidence pack](./ui.md#evidence-pack)); the
+routes are `GET …/scenarios/:sid/packs` and `…/packs/:packId`
+([api.md § Evidence packs](./api.md#evidence-packs)).
+
+**Which packs.** Issued, superseded and withdrawn after issue, each with its
+standing (a superseded one links the version that replaced it; a withdrawn
+one gives the reason verify gives). Never a draft, nor a pack withdrawn
+before it was issued: as verify, those never existed publicly.
+
+**What they read: their copy, not the assessors'.** The manifest names every
+hydrological unit with its figures, so an applicant never reads the pack's
+row; they read a projection the database builds (D2's recommended default,
+[roadmap step 3 § WP-3.3](./roadmap/step-3-licensing.md), pending the client):
+
+| Shown | From |
+| --- | --- |
+| the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
+| the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
+| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
+| every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: ranked per kind in the order of a hash of the node's id, so the number says nothing of its name or place; a rank within this pack, not a label, so "Farm 3" in one version need not be "Farm 3" in the next |
+
+No units at all when the report changed a baseline assumption (the figures
+that move with it could read another unit's values out, as for the
+applicant's results, 118). Never another unit's name, id, demand, volumes or
+reliability, the registered volumes or holders, the other applications, the
+flags and questions, the settings, model, input diff, series hashes,
+warnings or the applicant statement, and no person but the signers. **Not
+the PDF, the manifest or the bundle:** each carries the whole report, which
+is the assessors' copy (an applicant checks any copy they are handed on the
+verify page). An anonymised printable copy for the applicant is a follow-up
+([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+
+**Share links.** The application's owner (not the consultant they shared it
+with) makes a link to their own pack while it is issued, and lists and
+revokes the links they made, whatever its standing; the editors still list
+and revoke every link. The link shows the public projection above
+([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
+applicant's own included.
+
+**Why functions, not a policy.** A row policy for contributors on
+`evidence_pack` would hand them the whole manifest (RLS picks rows, not
+columns, and `water_app` holds table-wide `SELECT`). So the read is
+`SECURITY DEFINER` functions returning an allowlist built in SQL
+(`app_applicant_packs`, `app_applicant_pack_meta`, `app_applicant_pack`;
+the anonymiser `app_applicant_pack_units` isn't `water_app`'s to call), and
+the route maps the answer field by field again. A route that forgot to
+project couldn't leak what the database never returned
+([security.md § Evidence packs](./security.md#evidence-packs)).
+
+Tests: `backend/src/evidence/applicant-packs.db.test.ts`,
+`evidence/applicantPacks.test.ts`,
+`frontend/src/lib/components/packs/applicantPack.test.ts` and
+`e2e/tests/applicant-pack.spec.ts` (the applicant opens their issued pack
+from the Application panel, sees their farm by name and the neighbour as
+"Farm 1", makes a link, and it opens signed out).
+
+## Notices
+
+When a pack is **issued**, or one that was issued is **withdrawn**, the
+project's editors and the application's owner get an email (133_pack_notices;
+Mailpit locally, SES in production; `backend/src/evidence/notices.ts`). It
+follows the alert mails' pattern ([architecture.md § Alert emails](./architecture.md#alert-emails)):
+
+1. **Queued with the change.** The issue and withdraw routes call
+   `app_pack_notice_queue(pack, event)` in their own transaction, as the
+   editor who acted: one `pack_notice` row per recipient, so the notice
+   commits with the issue or withdrawal, or neither does. The function
+   refuses anyone but an editor of the pack's project, and a pack not in
+   that state.
+2. **Sent by the worker's tick**, after the jobs and the alert mails. Each
+   email is built in a transaction *as its recipient*, under RLS: their role
+   is checked again (someone removed or demoted since gets nothing), so is
+   their address (confirmed, and not suppressed by SES since:
+   `app_user.mail_suppressed_at`), and the catchment's and the application's
+   names are read as they may read them. The mail goes out after that
+   transaction; a transport failure is retried on the next ticks (3 attempts)
+   and logged as `mail_send_failed` (kind `pack_notice`), which the
+   `mail-send-failed` alarm counts. A worker that dies mid-send leaves the
+   notice failed, never sent twice.
+
+**Who gets it.** Everyone whose role on the project, direct or through its
+team, is editor or owner (they issue and withdraw packs), and, for an
+application's pack, the scenario's owner while they still hold a role above
+farmer (an applicant is a contributor). Never a viewer, a farmer, another
+applicant or a non-member, and never the person who issued or withdrew it:
+they just did it. Once per pack, person and event (the primary key).
+
+**Which events** (decided 2026-09-30):
+
+| Event | Emailed? | Why |
+| --- | --- | --- |
+| issued | yes | the pack now stands; the email of a new version says which version it replaces |
+| superseded | no email of its own | it happens in the same step as the new version's issue, whose email says so |
+| withdrawn, after it was issued | yes, with the reason | the verify link the applicant may have given an authority now says withdrawn |
+| withdrawn as a draft | no | a draft was never public (verify answers `404` for it) |
+
+**What it says.** The pack's version, what it is for (the application's
+name, or the baseline evidence), the catchment, the short code and the
+public verify link (**Check the pack**); for a withdrawal, the reason, which
+verify shows anyone already. Never a figure. It also links the recipient's
+own view of the pack (**Open the pack in the catchment**): an editor's is
+the pack's page, the applicant's their own copy
+(`/projects/:id/scenarios/:sid/packs/:packId`, [§ Applicants](#applicants)),
+never the editors' page, which they can't open. The words are in the
+mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
+recipient's language, English where a key has no translation.
+
+There is no opt-out: like a report-ready email, it goes to the few people
+who act on packs, once per issue or withdrawal. The rows are the person's
+(in their data export as `packNotices`, deleted with the account) and are
+purged 30 days after they are settled.
+
+Tests: `backend/src/evidence/notices.db.test.ts` (who is queued, each
+refusal with its control, the worker-only claim, each recipient's email, the
+re-checks at send, a lapsed lease and the retries, the export and the purge), `evidence/packs.db.test.ts`
+(the issue and withdraw routes queue them; a withdrawn draft queues none),
+`mail/templates.test.ts` and `mail/outbound.security.test.ts` (the email,
+against hostile names).
 
 ## Guards
 

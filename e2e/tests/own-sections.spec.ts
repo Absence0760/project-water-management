@@ -107,13 +107,19 @@ test.describe('1440×960', () => {
 		await expect.poll(() => sectionNames(page)).toEqual(without('Allocations', 'Applications'));
 
 		// "Hidden (n)" brings them back one at a time; more can go.
+		// Each click's save is awaited before the next nextSave() listens: the saves go one after another
+		// (SectionsMenu.svelte save()), so an unawaited one could land after Reset's listener and be taken for it.
 		await menuButton(page).click();
+		const shown = nextSave(page);
 		await panel(page).getByRole('checkbox', { name: 'Allocations' }).check();
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		await expect(nav(page).getByRole('link', { name: 'Allocations' })).toBeVisible();
+		expect(await sent(shown)).toEqual(['applications', 'crops']);
+		const hid = nextSave(page);
 		await panel(page).getByRole('checkbox', { name: 'Transfers' }).uncheck();
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
 		await expect(nav(page).getByRole('link', { name: 'Transfers' })).toHaveCount(0);
+		expect(await sent(hid)).toEqual(['applications', 'crops', 'transfers']);
 
 		// Reset to default forgets the choice: the default three are hidden again, not every section shown.
 		const reset = nextSave(page);

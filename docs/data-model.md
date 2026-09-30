@@ -70,7 +70,7 @@ erDiagram
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
-| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 130, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
+| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 134, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
@@ -558,8 +558,8 @@ turning it off undoes it; the run's own columns carry the filled days.
 (`settings.droughtRestriction`, engine ≥ 1.54.0, WP-3.8; no table, column or
 migration): review and lift dates and up to six levels, each a storage
 threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
-One rule per project, not per node, so no node id to keep in step and no
-same-project trigger or RLS policy of its own: it is read and written with
+One rule per project (the dams and units it reads are listed in it, not a
+column on the node), so no same-project trigger or RLS policy of its own: it is read and written with
 the project's settings, under the project's policies. A patch replaces it
 whole; `null` or absent is off. A model input: runs snapshot it with their
 settings, and the run comparison and the settings history show changes.
@@ -1081,7 +1081,26 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `app_record_pack_pdf`, 119 below; the bundle's, 122 below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
-  `DELETE` editor, drafts only.
+  `DELETE` editor, drafts only. No policy for contributors, on purpose: the
+  manifest names every unit, and a row policy can't hide a column.
+- **An applicant's packs** (131_applicant_packs, `SECURITY DEFINER`,
+  `STABLE`, search path pinned, `EXECUTE` for `water_app`):
+  `app_applicant_pack_meta(project, pack)` is a pack's lifecycle fields
+  (`id, scenarioId, title, mode, version, status, issuedAt,
+  manifestSha256, supersedesId, supersededById, withdrawnReason, isOwner,
+  canShare`) for its application's parties (`app_scenario_party`), when it
+  is of an application (`origin = 'applicant'`) and was issued; else NULL.
+  `app_applicant_packs(project, scenario)` lists them, newest version
+  first. `app_applicant_pack(project, pack)` is one row of `pack, verify`
+  (`app_verify_pack`), `figures` (`app_share_pack_projection`, 128, with the
+  `k` rule and no changed baseline assumption for the volumes) and `units`
+  (`app_applicant_pack_units(report, own)`, IMMUTABLE, not `water_app`'s:
+  the report's users, their own by name, `own` being
+  `app_application_own_nodes`, 071, plus the nodes only in the application
+  run; every other unit in both runs as `{ kind, n, changePts }`, numbered
+  per kind by `md5` of its id, the change rounded to whole points; NULL
+  when the report changed a baseline assumption). Nothing else of the
+  manifest ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - **Cites both runs**: `model_run_cited` (latest body here) has a clause for
   each, so `trimRuns`, the unpin and the run `DELETE` keep them, and
   `citedBy` lists `{ kind: 'pack', name: 'version N' }`.
@@ -1090,9 +1109,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
   refuses a project with a pack past draft (`restrict_violation`).
 - **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`; latest body:
-  122_pack_bundle, which adds `bundleSha256`): by short code or full hash,
+  132_verify_pack_run_engines, which adds `runs`; 122_pack_bundle added
+  `bundleSha256`): by short code or full hash,
   the printed fields of a pack that was issued, as `jsonb`, or NULL
   ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+  `runs` (each run's `engine_version` and its fit's engine, baseline first)
+  is for the API's errata found since issue and never returned as is.
 - **`app_record_pack_bundle(pack, sha256)`** (122_pack_bundle, `SECURITY
   DEFINER`, `EXECUTE` for `water_app`): records the reproduction bundle's key
   (`packs/<project>/<pack>/<sha256>.zip`, derived here) and SHA-256, for an
@@ -1131,6 +1153,43 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   downloads), `jobs/trust.security.db.test.ts` (a `pack_render` job naming
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
+
+**Notices (133_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
+
+- **`pack_notice`**: one "pack issued" or "pack withdrawn" email per pack,
+  person and event, ever: primary key `(pack_id, user_id, event)` (it covers
+  `pack_id` → `evidence_pack`, cascade); `user_id` (→ `app_user`, cascade),
+  `event` (`issued`, `withdrawn`), `project_id` (→ `project`, cascade;
+  copied from the pack by the queue function), `status` (`pending` →
+  `sending` → `sent`, `skipped` with a `reason`, or `failed`), `attempts`,
+  `created_at`, `claimed_at`, `locked_until`, `sent_at`, `settled_at` (when
+  it became sent, skipped or failed), `reason` (≤ 200).
+  Indexes on `user_id`, `project_id`, the open rows and `settled_at`.
+  Purged **30 days** after it is settled (`app_purge_pack_notices`, from
+  the tick).
+- RLS: SELECT your own rows (`pack_notice_own`). No write policy: every
+  write goes through the `SECURITY DEFINER` functions below (the table
+  grant mirrors `alert_delivery`'s).
+- **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
+  only (`42501`), and only for a pack in that state (`23514`; an unknown
+  event `22023`). Inserts a row for each person of
+  `pack_notice_audience(project, scenario)` (editors and owners, direct or
+  through the team, and the application's scenario owner with a role of
+  contributor or above; revoked from `water_app`) but the caller, with a
+  confirmed, unsuppressed address; `ON CONFLICT DO NOTHING`. A draft that
+  was withdrawn queues none (returns 0). NOTIFYs `job_queued`, so the local
+  worker ticks at commit.
+- **`app_pack_notice_claim(limit, lease)`**, **`app_pack_notice_finish(pack,
+  user, event, status, reason)`**, **`app_purge_pack_notices(age ≥ 30 days)`**:
+  the worker's own context only (no user and no API key,
+  `alert_worker_context`); the claim returns each notice with the pack's
+  public facts (version, manifest hash, the replaced version, the withdrawal
+  reason) and fails a notice left `sending` past its lease rather than
+  re-sending it.
+- Guards: `evidence/notices.db.test.ts`, the catalogue
+  (`APP_USER_ON_DELETE`: cascade), `db/cross-project-refs.security.db.test.ts`
+  (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
+  (`USER_FK_COVERAGE`: the `packNotices` section).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -1634,7 +1693,10 @@ Read-only links to the current publication for people outside the project
     listed and revoked by the editors who read the scenario and by whoever
     made it. A pack link (128) is made by an editor or the owner, only while
     the pack is `issued`, and listed and revoked by the project's editors
-    (they read every pack) and the owner.
+    (they read every pack) and the owner; since 131 also by the
+    application's owner for their own application's issued pack
+    (`app_applicant_pack_meta`'s `canShare`), listed and revoked by the
+    contributor who made it.
   - `app_share_view` and `app_share_series` answer an untargeted link only.
   - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
     scenario link whose application is `submitted` or `decided`, one row of

@@ -34,6 +34,9 @@ const summary = (r: TickResult) =>
 	(r.feeds ? `feeds: ${r.feeds.queued} queued${r.feeds.refused ? `, ${r.feeds.refused} refused` : ''}; ` : '') +
 	(r.reports?.queued || r.reports?.skipped ? `scheduled reports: ${r.reports.queued} queued${r.reports.skipped ? `, ${r.reports.skipped} skipped` : ''}; ` : '') +
 	(r.alerts?.sent || r.alerts?.skipped || r.alerts?.failed ? `alerts: ${r.alerts.sent} sent, ${r.alerts.skipped} skipped, ${r.alerts.failed} failed; ` : '') +
+	(r.packNotices?.sent || r.packNotices?.skipped || r.packNotices?.failed
+		? `pack notices: ${r.packNotices.sent} sent, ${r.packNotices.skipped} skipped, ${r.packNotices.failed} failed; `
+		: '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;
 

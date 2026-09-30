@@ -36,7 +36,7 @@ def _rain(rng: random.Random, start: dt.date, days: int, winter: bool) -> list[f
     return out
 
 
-def random_input(seed: int) -> dict:
+def random_input(seed: int, dense: bool = False) -> dict:
     rng = random.Random(seed * 7919 + 17)
     years = rng.randint(3, 6) if rng.random() < 0.85 else 1
     start = dt.date(rng.randint(2001, 2016), rng.choice([1, 4, 7, 10]), 1)
@@ -246,4 +246,252 @@ def random_input(seed: int) -> dict:
         if settings.get("simulationStart") and settings["simulationStart"] > settings["simulationEnd"]:
             settings.pop("simulationStart")
 
-    return {"settings": settings, "model": {"nodes": nodes, "crops": crops, "cropAreas": crop_areas, "transfers": transfers}, "series": series}
+    doc = {"settings": settings, "model": {"nodes": nodes, "crops": crops, "cropAreas": crop_areas, "transfers": transfers}, "series": series}
+    add_phase_two(rng, doc, start, days, dense)
+    return doc
+
+
+def _day(rng, start: dt.date, days: int) -> str:
+    return (start + dt.timedelta(days=rng.randrange(-60, days + 60))).isoformat()
+
+
+def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Phase 2a features (verify/README.md), each in a share of the networks,
+    drawn after every phase-1 draw so a seed's phase-1 part is unchanged.
+    `dense` puts each feature in most networks (the mutation self-test's
+    extra cases), so a few networks reach every phase-2a rule."""
+
+    def gate(p: float) -> float:
+        return 0.85 if dense else p
+
+    m = doc["model"]
+    s = doc["settings"]
+    nodes = m["nodes"]
+    by_id = {x["id"]: x for x in nodes}
+
+    # Other water users (§2.7c), put in the middle of a reach so farms drain into them.
+    if rng.random() < gate(0.3):
+        for k in range(rng.randint(1, 3)):
+            child = rng.choice([x for x in nodes if x["downstreamNodeId"] is not None])
+            u = {
+                "id": _uuid(rng), "name": f"user {k}", "kind": "user", "downstreamNodeId": child["downstreamNodeId"],
+                "sortOrder": len(nodes), "areaKm2": 0, "areaHiKm2": 0, "areaLoKm2": 0, "flowShareManual": None,
+                "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0,
+                "divertCapacityM3Day": 0, "irrigationEfficiency": 1, "lossReturnFraction": 0, "damAreaFullM2": None,
+                "damAreaExponent": 0.7, "damSeepagePerDay": 0,
+                "userDemandM3Day": None if rng.random() < 0.1 else _monthly(rng, 0, rng.choice([200, 3000, 30000]), 0),
+                "userReturnPct": rng.choice([0, 0, 0.5, round(rng.random(), 2)]),
+                "userPriority": rng.choice(["senior", "senior", "junior"]),
+            }
+            child["downstreamNodeId"] = u["id"]
+            nodes.append(u)
+            by_id[u["id"]] = u
+    farms = [x for x in nodes if x["kind"] == "farm"]
+    units = farms + [x for x in nodes if x["kind"] == "user"]
+
+    # Demand factors (§2.3 item 4a), from a date now and then.
+    if rng.random() < gate(0.2):
+        for x in rng.sample(units, rng.randint(1, len(units))):
+            x["demandFactor"] = _monthly(rng, 0, 1.2, 2)
+        if rng.random() < 0.4:
+            s["demandFactorFrom"] = _day(rng, start, days)
+
+    # Supply rules and the river pump (§2.7e).
+    if rng.random() < gate(0.3):
+        for f in farms:
+            if rng.random() < 0.5:
+                continue
+            rule = rng.choice(["riverFirst", "trigger", "runOfRiver", "damFirst"])
+            f["supplyRule"] = rule
+            if rule == "runOfRiver" and rng.random() < 0.8:
+                f["damCapacityM3"] = 0
+            f["pumpCapacityM3Day"] = rng.choice([None, 0, round(rng.uniform(50, 3000)), round(rng.uniform(1000, 50000))])
+            if rule == "trigger":
+                f["supplyTriggerPct"] = round(rng.uniform(0, 0.7), 2)
+                f["supplyStopPct"] = round(rng.uniform(0, 1), 2)
+
+    # Hands-off flows and River to dam by month (§2.7h).
+    if rng.random() < gate(0.3):
+        for f in farms:
+            if rng.random() < 0.5:
+                continue
+            r = rng.random()
+            if r < 0.4:
+                f["handsOffM3Day"] = _monthly(rng, 0, rng.choice([500, 5000, 50000]), 0)
+            elif r < 0.5:
+                f["handsOffM3Day"] = [0] * 12
+            f["handsOffEwr"] = rng.random() < 0.4
+            if rng.random() < 0.5:
+                f["divertMonthlyM3Day"] = [0 if rng.random() < 0.4 else round(rng.uniform(0, 5000)) for _ in range(12)]
+
+    # Dam survey curves, releases and seepage shares (§2.7a).
+    dams = [f for f in farms if f["damCapacityM3"] > 0]
+    if dams and rng.random() < gate(0.3):
+        for f in dams:
+            if rng.random() < 0.5:
+                cap = f["damCapacityM3"]
+                rows = []
+                v = 0.0
+                a = 0.0
+                lvl = rng.uniform(0, 100)
+                for _ in range(rng.randint(2, 7)):
+                    v += cap * rng.uniform(0.1, 0.5)
+                    a += cap / rng.uniform(2, 12) * rng.uniform(0.1, 0.6)
+                    lvl += rng.uniform(0.2, 2)
+                    rows.append({"levelM": round(lvl, 2), "areaM2": round(a, 1), "volumeM3": round(v, 1)})
+                rng.shuffle(rows)
+                f["damCurve"] = rows
+            if rng.random() < 0.5:
+                f["damReleaseRule"] = rng.choice(["passInflow", "fixed", "none"])
+                f["damReleaseM3Day"] = None if rng.random() < 0.3 else _monthly(rng, 0, f["damCapacityM3"] / rng.choice([50, 500]), 1)
+                f["damOutletCapacityM3Day"] = rng.choice([None, round(f["damCapacityM3"] / rng.uniform(20, 400), 1)])
+
+    # Boreholes (§2.7d): the combined capacity and individual ones.
+    if rng.random() < gate(0.35):
+        bhs = []
+        for x in units:
+            if rng.random() < 0.5:
+                continue
+            if rng.random() < 0.5:
+                x["boreholeCapacityM3Day"] = round(rng.uniform(20, 3000))
+                x["boreholeRule"] = rng.choice(["supplemental", "primary", "drought"])
+                x["boreholeTriggerPct"] = round(rng.uniform(0, 0.8), 2)
+            x["streamDepletionFrac"] = rng.choice([0, 0.5, 1, round(rng.random(), 2)])
+            x["streamDepletionLagDays"] = rng.choice([0, 0, 3, round(rng.uniform(0, 60), 1)])
+            for _ in range(rng.choice([0, 1, 2, 3])):
+                bhs.append({
+                    "id": _uuid(rng), "nodeId": x["id"], "name": "bh", "capacityM3Day": round(rng.uniform(10, 2000)),
+                    "annualCapM3": rng.choice([None, round(rng.uniform(500, 20000)), round(rng.uniform(20000, 300000))]),
+                    "mode": rng.choice(["none", "supplemental", "supplemental", "primary", "emergency"]),
+                    "emergencyBelowPct": round(rng.uniform(0, 0.8), 2),
+                    "target": rng.choice(["direct", "direct", "dam"]),
+                    "depletionFactor": rng.choice([0, 1, round(rng.random(), 2)]),
+                })
+        m["boreholes"] = bhs
+
+    # Demand objects with schedules and the basic-needs floor (§2.7f).
+    if rng.random() < gate(0.3):
+        objs = []
+        for f in farms:
+            if rng.random() < 0.5:
+                continue
+            for _ in range(rng.randint(1, 3)):
+                cat = rng.choice(["domestic", "municipal", "industrial", "livestock", "irrigation", "external", "other"])
+                per = rng.random() < 0.5
+                ob = {
+                    "id": _uuid(rng), "nodeId": f["id"], "name": "obj", "category": cat,
+                    "sizing": "perUnit" if per else "monthly",
+                    "monthlyM3Day": None if per else _monthly(rng, 0, rng.choice([50, 1000, 10000]), 1),
+                    "count": rng.randint(1, 3000) if per else None,
+                    "litresPerUnitDay": rng.choice([25, 45, 230, round(rng.uniform(10, 400), 1)]) if per else None,
+                    "lossPct": round(rng.uniform(0, 0.4), 2) if per else 0,
+                    "monthlyFactor": (_monthly(rng, 0.5, 1.5, 2) if rng.random() < 0.5 else None) if per else None,
+                    "returnPct": round(rng.random(), 2), "priority": rng.choice(["first", "shared", "last"]),
+                    "destination": "internal", "enabled": rng.random() > 0.1, "note": "",
+                }
+                if rng.random() < 0.2:
+                    ob["destination"] = "external"
+                    ob["returnPct"] = 0
+                if not per and rng.random() < 0.5:
+                    ob["population"] = rng.randint(1, 20000)
+                if rng.random() < 0.5:
+                    ob["schedule"] = [_window(rng, start, days) for _ in range(rng.randint(1, 4))]
+                objs.append(ob)
+        m["demandObjects"] = objs
+
+    # River off-takes and canal seepage return (§2.6a), never in a loop.
+    if len(farms) >= 2 and rng.random() < gate(0.3):
+        succ = {x["id"]: set() for x in nodes}
+        for x in nodes:
+            if x["downstreamNodeId"] is not None:
+                succ[x["id"]].add(x["downstreamNodeId"])
+
+        def reach(a, b):
+            seen, st = set(), [a]
+            while st:
+                k = st.pop()
+                if k == b:
+                    return True
+                if k in seen:
+                    continue
+                seen.add(k)
+                st.extend(succ[k])
+            return False
+
+        for _ in range(rng.randint(1, 3)):
+            a, b = rng.sample(farms, 2)
+            if reach(b["id"], a["id"]):
+                continue
+            succ[a["id"]].add(b["id"])
+            t = {
+                "id": _uuid(rng), "fromNodeId": a["id"], "toNodeId": b["id"],
+                "months": sorted(rng.sample(range(1, 13), rng.randint(1, 12))),
+                "maxRateM3s": round(rng.uniform(0.001, 0.2), 4), "dailyCapM3": rng.choice([None, None, round(rng.uniform(100, 8000))]),
+                "minStoragePct": 0, "enabled": rng.random() > 0.1, "priority": rng.randint(0, 2), "source": "river",
+                "handsOffM3Day": rng.choice([None, None, round(rng.uniform(0, 5000))]), "handsOffEwr": rng.random() < 0.3,
+                "lossPct": rng.choice([0, 0.1, round(rng.uniform(0, 0.6), 2)]), "sizing": rng.choice(["demand", "demand", "capacity"]),
+                "topUpDam": rng.random() < 0.4,
+            }
+            if rng.random() < 0.25:
+                rates = [0 if rng.random() < 0.4 else round(rng.uniform(0.001, 0.2), 4) for _ in range(12)]
+                t["monthlyRateM3s"] = rates
+                t["months"] = [(k + 9) % 12 + 1 for k in range(12) if rates[k] > 0]
+                t["maxRateM3s"] = max(rates)
+            if t["lossPct"] > 0 and rng.random() < 0.5:
+                t["lossReturnPct"] = rng.choice([1, round(rng.random(), 2)])
+                below = []
+                k = a["downstreamNodeId"]
+                while k is not None:
+                    if by_id[k]["kind"] == "farm":
+                        below.append(k)
+                    k = by_id[k]["downstreamNodeId"]
+                t["lossReturnNodeId"] = rng.choice([None] + below)
+            m["transfers"].append(t)
+
+    # Allocations: compare only, the cap with licence conditions, or a full allocation (§2.12a).
+    if rng.random() < gate(0.35):
+        s["allocationMode"] = rng.choice(["none", "cap", "cap", "fullAllocation"])
+        allocs = []
+        for x in units:
+            if rng.random() < 0.3:
+                continue
+            for src in ("surface", "groundwater"):
+                if rng.random() < 0.4:
+                    continue
+                for _ in range(rng.choice([1, 1, 2])):
+                    a = {
+                        "id": _uuid(rng), "nodeId": x["id"], "waterSource": src,
+                        "volumeM3PerYear": rng.choice([0, round(rng.uniform(1000, 50000)), round(rng.uniform(50000, 2000000))]),
+                        "storageM3": None, "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None,
+                    }
+                    if rng.random() < 0.3:
+                        a["validFrom"] = _day(rng, start, days)
+                    if rng.random() < 0.3:
+                        a["validTo"] = _day(rng, start, days)
+                        if a["validFrom"] and a["validFrom"] > a["validTo"]:
+                            a["validFrom"], a["validTo"] = a["validTo"], a["validFrom"]
+                    if rng.random() < 0.4:
+                        a["months"] = sorted(rng.sample(range(1, 13), rng.randint(1, 12)))
+                    if rng.random() < 0.4:
+                        a["maxRateM3s"] = rng.choice([0, round(rng.uniform(0.0005, 0.05), 4)])
+                    allocs.append(a)
+        m["allocations"] = allocs
+
+
+def _window(rng, start: dt.date, days: int) -> dict:
+    span = rng.choice(["always", "yearly", "range", "easter"])
+    w = {"label": "", "span": span, "from": None, "to": None, "easterFrom": None, "easterTo": None,
+         "weekdays": None, "factor": rng.choice([0, 0, 0.5, 1.5, round(rng.uniform(0, 3), 2)])}
+    if span == "yearly":
+        a = dt.date(2001, 1, 1) + dt.timedelta(days=rng.randrange(365))
+        b = dt.date(2001, 1, 1) + dt.timedelta(days=rng.randrange(365))
+        w["from"], w["to"] = a.strftime("%m-%d"), b.strftime("%m-%d")
+    elif span == "range":
+        a, b = sorted([_day(rng, start, days), _day(rng, start, days)])
+        w["from"], w["to"] = a, b
+    elif span == "easter":
+        a, b = sorted([rng.randint(-60, 60), rng.randint(-60, 60)])
+        w["easterFrom"], w["easterTo"] = a, b
+    if span == "always" or rng.random() < 0.3:
+        w["weekdays"] = sorted(rng.sample(range(1, 8), rng.randint(1, 6)))
+    return w

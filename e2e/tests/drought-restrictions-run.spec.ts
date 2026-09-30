@@ -4,7 +4,7 @@
 // unit's own dam and adds an EWR trigger; an editor replaces it with an
 // outlook's review triggers (asked first; the panel then says it is the
 // rule); a run under it shows the Units & supply tables (axe, and no sideways
-// scroll at phone width).
+// scroll at phone width), and the printable report shows them too.
 //
 // Synthetic catchment (support/api.ts sampleModel): twelve water years of
 // made-up rain, each scaled differently. The outlook's levels are all below
@@ -85,6 +85,11 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	await expect(panel).toHaveAttribute('data-state', 'complete');
 	const asRule = panel.getByTestId('triggers-as-rule');
 	await expect(asRule.getByTestId('triggers-rule-words')).toContainText(/^reviewed 1 Jan, lifted 1 May; /);
+	// Cancelled: the rule stays the notice's.
+	await asRule.getByRole('button', { name: 'Replace the drought restriction rule with this' }).click();
+	await answerConfirm(page, false, 'Replace the drought restriction rule?');
+	await expect(asRule.getByRole('button', { name: 'Replace the drought restriction rule with this' })).toBeVisible();
+	expect((await settingsOf(page.request, project.id)).droughtRestriction).toEqual(fromNotice);
 	await asRule.getByRole('button', { name: 'Replace the drought restriction rule with this' }).click();
 	await answerConfirm(page, true, 'Replace the drought restriction rule?');
 	await expect(asRule.getByTestId('triggers-rule-saved')).toHaveText('Saved to Settings → Drought restrictions. Runs from now on follow it.');
@@ -107,4 +112,14 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	await expectNoViolations(page, { include: '#res-restrictions' });
 	await page.setViewportSize({ width: 390, height: 844 });
 	await expectNoSidewaysScroll(page);
+
+	// The printable report carries the same tables for the restricted run, and none for the base run made without the rule.
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto(`/projects/${project.id}/report?run=${restrictedRun}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.locator('#report-restrictions-h')).toHaveText('Drought restrictions');
+	await expect(page.getByTestId('restriction-days-table').locator('tbody tr').last()).toContainText('Whole run');
+	await page.goto(`/projects/${project.id}/report?run=${runId}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('restriction-days-table')).toHaveCount(0);
 });

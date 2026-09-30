@@ -1609,16 +1609,26 @@
 //             Appendix C's prompt rows; +1 KB). Measured 1333 locally on the
 //             combined branch with both issue #71 pieces, main @ 5604071e;
 //             CI ~2 KB above. Headroom ~3 KB.
-// 2026-09-30  total 1338 → 1352 KB (engine 1.54.0, WP-3.8's drought
-//             restriction rule: +16.8 KB measured on main @ 3571e104; 1347
-//             locally with main @ b88b7f4f merged, CI ~2 KB above). The
+// 2026-09-30  total 1338 → 1344 KB (issue #71, #270 with #268 and #269 in it:
+//             the applicant's pack view route and the Application panel's
+//             pack list (packs/applicantPack.ts), the errata found since
+//             issue on verify, the pack page and the applicant view
+//             (errataFoundSinceNote)). Measured 1338 locally, 1341 on CI;
+//             headroom ~3 KB.
+// 2026-09-30  total 1344 → 1362 KB (engine 1.54.0, WP-3.8's drought
+//             restriction rule: measured on main @ 3571e104, 1,352,782 →
+//             1,369,985 gzip bytes, +16.8 KB, raised by that rounded up). The
 //             rule in the engine (network/restriction.ts with its bases,
 //             units, EWR trigger and the notice's rule, its daily step in
 //             simulate, the droughtRestriction self-check, the
 //             triggers-to-rule mapping and the run comparison's lines), the
 //             Settings editor (its own chunk, also the scenario form's), the
 //             Units & supply tables (their own chunk and panel) and the
-//             outlook's "Use as the drought restriction rule". Headroom ~3 KB.
+//             outlook's "Use as the drought restriction rule". Re-measured
+//             with main @ b88b7f4f's 1338 merged (#260, the pack share,
+//             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
+//             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
+//             locally, CI ~2 KB above. Headroom ~3 KB.
 // 2026-09-30  total 1352 → 1355 KB (report format evidence-9, issue #259: the
 //             evidence report's § 6, the applicant's demand objects with
 //             their sizing, source, note and demand, the by-source line
@@ -1626,6 +1636,10 @@
 //             demand-objects table) and demandObjects.ts; ~1 KB). Measured
 //             1353 locally on feat/evidence-demand-source (stacked on
 //             feat/demand-source, #266); CI ~2 KB above. Headroom ~2 KB.
+// 2026-09-30  total 1362 → 1364 KB (the evidence-9 entry above, re-measured
+//             with feat/demand-source @ 9def0a3c merged, which carries the
+//             drought rule's 1362 and main @ a2e28a02): 1360 locally, CI ~2 KB
+//             above. Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1636,7 +1650,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1355,
+	totalCodeKb: 1364,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
