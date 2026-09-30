@@ -350,6 +350,36 @@ describe('dam storage (WP-3.5)', () => {
 		await expect(asOwner(`UPDATE node SET pump_capacity_m3_day = -1 WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
 	});
 
+	it('stores an other water user’s pump capacity, runs it, and refuses a supply rule on the user (engine 1.58.0)', async () => {
+		const u = await signUp('UserPump');
+		const projectId = await project(u, 'Town pump');
+		const outlet = node('Outlet', null);
+		const town = node('Town', outlet.id, { kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(5e5), pumpCapacityM3Day: 1500 });
+		const farm = node('Upper', town.id);
+		const model = { nodes: [outlet, town, farm], crops: [], cropAreas: [], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === town.id)).toMatchObject({ kind: 'user', supplyRule: 'damFirst', pumpCapacityM3Day: 1500 });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'town pump' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		const user = (summary.users as { nodeId: string; avgSuppliedM3Day: number; avgRiverAbstractionM3Day?: number; avgPumpLimitedM3Day?: number; daysPumpLimited?: number }[]).find((x) => x.nodeId === town.id)!;
+		// It never takes more than its pump: the mean is at most 1 500 m³/day, and on the wet days the pump bound.
+		expect(user.avgRiverAbstractionM3Day).toBe(user.avgSuppliedM3Day);
+		expect(user.avgSuppliedM3Day).toBeLessThanOrEqual(1500);
+		expect(user.avgPumpLimitedM3Day).toBeGreaterThan(0);
+		expect(user.daysPumpLimited).toBeGreaterThan(0);
+		// Its river take is supplied − groundwater_used: no river_abstraction series (a farm's river pump).
+		expect(await seriesKeys(u, projectId, run.body.run.id, town.id, ['river_abstraction', 'pump_limited'])).toEqual(['pump_limited']);
+
+		const res = await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, supplyRule: 'riverFirst' }, farm] });
+		expect(res.status).toBe(400);
+		expect(JSON.stringify(res.body)).toMatch(/only a farm has a supply rule; an other water user always takes from the river/);
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, pumpCapacityM3Day: -1 }, farm] })).status).toBe(400);
+	});
+
 	it('stores a farm’s hands-off flow and River to dam by month, runs them, and refuses invalid ones (issue #204)', async () => {
 		const u = await signUp('HandsOff');
 		const projectId = await project(u, 'Hands-off flow');
