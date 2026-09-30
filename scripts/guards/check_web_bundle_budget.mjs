@@ -1564,6 +1564,12 @@
 //             specs and descriptions, override mode recording object edits,
 //             and four share-page lines in both catalogues; measured 1314
 //             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+// 2026-09-30  total 1319 → 1322 KB (engine 1.48.0, the observed flow's per-day
+//             quality flags as strips with a key on the Runs hydrograph and
+//             the Data tab's flow chart, calibration/flowFlags.ts and
+//             LineChart's lanes: +2 KB (1306 → 1308 with main @ 8266a682);
+//             measured 1317 locally with #252 merged, main @ 17c4a590;
+//             CI runs ~2 KB above that). Headroom ~3 KB.
 //             above that). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -1575,7 +1581,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1319,
+	totalCodeKb: 1322,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

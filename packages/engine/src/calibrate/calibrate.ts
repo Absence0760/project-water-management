@@ -46,7 +46,7 @@ import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { forecastTail } from '../forecastTail';
 import { prepareRun } from '../prepare';
 import { recordRepresentativeness, type RecordRepresentativeness } from './representativeness';
-import { censoredObserved, dayQuality, flowDayFlags, observedInfillMask, rainDayFlags, ratingOf, scoringDays, type DayQuality } from './dayFlags';
+import { censoredObserved, dayQuality, rainDayFlags, ratingOf, recordFlowFlags, scoringDays, siteQualityFlags, type DayQuality } from './dayFlags';
 
 /** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.13.0), as runModel's WR2012 check reads it. */
 const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
@@ -421,17 +421,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Per-day quality flags (CR-18/19, ./dayFlags.ts): which observed days the objective scores, and which it censors.
 	// The gauged ranges (settings.qualityFlags.ratings) are the outlet records' ratings, so a gauge's record has none:
 	// no day of it can be flagged as extrapolated. The data checks' suspect days still apply.
-	const qf = siteNodeId === null ? settings.qualityFlags : { ...settings.qualityFlags, ratings: {} };
-	const flagsOf = (k: CalibrationFlowKind) =>
-		flowDayFlags({
-			kind: k,
-			series: siteSeries[k],
-			start: d0,
-			days,
-			rating: ratingOf(qf, k),
-			infilled: siteNodeId === null ? observedInfillMask(run.flowFill?.[k]) : null,
-			dataQuality: settings.dataQuality
-		});
+	// The same classes the run stores as `observed_flow_quality` (recordFlowFlags).
+	const qf = siteQualityFlags(settings.qualityFlags, siteNodeId);
+	const flagsOf = (k: CalibrationFlowKind) => recordFlowFlags({ kind: k, series: siteSeries[k], start: d0, days, settings, siteNodeId, flowFill: run.flowFill });
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;

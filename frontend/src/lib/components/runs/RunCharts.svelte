@@ -11,7 +11,7 @@
 	// pages; the run header links there (RunsTab.svelte).
 	import { untrack, type Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import type { DailySeries } from '@water-management/engine';
+	import { FLOW_QUALITY_COLUMN, type DailySeries, type QualityFlagSettings } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import { beforeForecast, FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -22,6 +22,7 @@
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, seriesSpan, type ExcludedPeriod } from './exclusionShading';
+	import { flowFlagLanes } from '$lib/calibration/flowFlags';
 
 	let {
 		projectId,
@@ -33,7 +34,8 @@
 		record,
 		deeperLead,
 		forecastFrom = null,
-		exclusions = []
+		exclusions = [],
+		flagUse = null
 	}: {
 		projectId: string;
 		runId: string;
@@ -50,6 +52,8 @@
 		forecastFrom?: string | null;
 		/** The periods this run's calibration left out (its own settings snapshot, runExclusions): tinted on the hydrograph. */
 		exclusions?: ExcludedPeriod[];
+		/** How Fit automatically treats each flagged class, from the run's own settings snapshot (resolveQualityFlags): the flag key says so. Null: not said. */
+		flagUse?: Omit<QualityFlagSettings, 'ratings'> | null;
 	} = $props();
 	const band = $derived(forecastBand(forecastFrom));
 
@@ -104,6 +108,30 @@
 				if (id === runId) siteError = e instanceof Error ? e.message : String(e);
 			});
 	});
+
+	// The scored record's per-day quality flags (engine ≥ 1.48.0, `observed_flow_quality`): stored beside the scored
+	// `observed_flow`, the catchment's or the calibration site's, only when a day is flagged. Strips along the foot of
+	// that record's hydrograph. A failed load says so under the chart, which still draws.
+	let quality = $state.raw<{ nodeId: string | null; series: DailySeries } | null>(null);
+	let qualityError = $state<string | null>(null);
+	$effect(() => {
+		const id = runId;
+		const at = refs.find((r) => r.key === FLOW_QUALITY_COLUMN.key)?.nodeId;
+		quality = null;
+		qualityError = null;
+		if (at === undefined) return;
+		get(FLOW_QUALITY_COLUMN.key, at)
+			.then((series) => {
+				if (id === runId) quality = { nodeId: at, series };
+			})
+			.catch((e) => {
+				if (id === runId) qualityError = `The observed flow's quality flags could not be loaded: ${e instanceof Error ? e.message : String(e)}`;
+			});
+	});
+	const lanesAt = (nodeId: string | null) => (quality && quality.nodeId === nodeId ? flowFlagLanes(quality.series.values as number[], quality.series.startDate, flagUse) : []);
+	const outletLanes = $derived(lanesAt(null));
+	const siteLanes = $derived(siteId ? lanesAt(siteId) : []);
+	const LANES_LABEL = 'Observed flow quality flags';
 
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
 	// Gauge or logger, and which one the run is scored against (issue #45).
@@ -214,10 +242,13 @@
 				{band}
 				shade={excluded}
 				shadeKey={excludedKey}
+				lanes={outletLanes}
+				lanesLabel={LANES_LABEL}
 				bind:ready={hydroReady}
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
+		{#if qualityError}<div class="alert alert-error" role="alert">{qualityError}</div>{/if}
 		{#if siteId}
 			<!-- The calibration site (engine ≥ 1.41.0): the pair the run's calibration statistics score. -->
 			{#if siteError}
@@ -234,6 +265,8 @@
 					{band}
 					shade={excluded}
 					shadeKey={excludedKey}
+					lanes={siteLanes}
+					lanesLabel={LANES_LABEL}
 					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Settings → Calibration record → Scored at)."
 				/>
 			{:else}
