@@ -527,6 +527,58 @@ describe('applyScenario: each op', () => {
 	});
 });
 
+describe('hostile op names and fields (a worker message or request body is untrusted)', () => {
+	// Names every plain object inherits: a lookup in a checks table by one of
+	// them must refuse it, never find Object.prototype's own member and call or
+	// write through it (CodeQL js/unvalidated-dynamic-method-call and
+	// js/remote-property-injection, PR #234).
+	const HOSTILE = ['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'];
+	const hostile = (op: Record<string, unknown>) => op as unknown as ScenarioOp;
+
+	it.each(HOSTILE)('node.set, transfer.set and settings.set refuse %s as a problem, never a throw, and touch no prototype', (name) => {
+		const b = base();
+		const r = applyScenario(b, [
+			hostile({ op: 'node.set', nodeId: 'A', field: name, value: { polluted: true } }),
+			hostile({ op: 'transfer.set', transferId: 't1', field: name, value: { polluted: true } }),
+			hostile({ op: 'settings.set', path: name, value: { polluted: true } }),
+			hostile({ op: 'settings.set', path: `gr4j.${name}`, value: { polluted: true } }),
+			hostile({ op: 'series.scale', kind: name, factor: 1 })
+		]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(5);
+		for (const p of r.problems) expect(typeof p).toBe('string');
+		expect(r.problems[0]).toMatch(/can't be set on a farm/);
+		expect(r.problems[1]).toMatch(/is not a transfer field a scenario can set/);
+		expect(r.problems[2]).toMatch(/is not a setting a scenario can change/);
+		expect(r.problems[3]).toMatch(/is not a setting a scenario can change/);
+		expect(r.problems[4]).toMatch(/can't be scaled/);
+		expect(r.input).toEqual(b);
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+	});
+
+	it.each(HOSTILE)('validateScenarioOps refuses %s as a field, path or node field with an error, never a throw', (name) => {
+		const r = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: name, value: 1 },
+			{ op: 'transfer.set', transferId: 't1', field: name, value: 1 },
+			{ op: 'settings.set', path: name, value: 1 },
+			{ op: 'node.add', node: { id: 'N', name: 'New', kind: 'farm', downstreamNodeId: 'G', [name]: 1 } }
+		]);
+		expect(r.errors.slice(0, 3)).toEqual([
+			'ops[0].field: is not a node field a scenario can set',
+			'ops[1].field: is not a transfer field a scenario can set',
+			'ops[2].path: is not a setting a scenario can change'
+		]);
+		for (const e of r.errors) expect(typeof e).toBe('string');
+	});
+
+	it.each(HOSTILE)('an unknown op name %s is refused by the validator and is a problem in applyScenario', (name) => {
+		expect(validateScenarioOps([{ op: name }]).errors[0]).toMatch(/^ops\[0\]\.op: must be one of node\.set/);
+		const r = applyScenario(base(), [hostile({ op: name })]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(1);
+	});
+});
+
 describe('applyScenario: edit groups (consecutive node.set on one node, checked once)', () => {
 	const set = (nodeId: string, field: string, value: unknown) => ({ op: 'node.set', nodeId, field, value }) as ScenarioOp;
 	/** A on the trigger rule (it has a dam). */

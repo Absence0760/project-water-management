@@ -11,7 +11,10 @@ import {
 	NODE_SET_FIELDS,
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
+	SETTINGS_PATHS,
+	TRANSFER_SET_FIELDS,
 	allocationOpIssues,
+	allowed,
 	cropFieldError,
 	demandScaleError,
 	ewrRuleTableOpIssues,
@@ -396,12 +399,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 	switch (op.op) {
 		case 'node.set': {
 			const n = findNode(d, op.nodeId);
-			if (!(NODE_SET_FIELDS[n.kind] as readonly string[]).includes(op.field)) fail(`"${op.field}" can't be set on a ${n.kind}`);
-			const e = nodeFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
+			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
+			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
+			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);
+			const e = nodeFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
 			const oldCap = n.damCapacityM3;
-			(n as unknown as Record<string, unknown>)[op.field] = op.field === 'name' ? (op.value as string).trim() : cloneData(op.value);
-			if (op.field === 'damCapacityM3' && n.kind === 'farm') {
+			(n as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			if (field === 'damCapacityM3' && n.kind === 'farm') {
 				const note = resizeDamGeometry(n, oldCap);
 				if (note && see.node(n.id)) notes.push(note);
 			}
@@ -521,13 +526,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'transfer.set': {
 			const t = findTransfer(d, op.transferId);
-			const e = transferFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
-			if ((op.field === 'fromNodeId' || op.field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
+			const field = allowed(TRANSFER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a transfer field a scenario can set`);
+			const e = transferFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			if ((field === 'fromNodeId' || field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
-			if (op.field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
-			else (t as unknown as Record<string, unknown>)[op.field] = op.field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
+			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
+			else (t as unknown as Record<string, unknown>)[field] = field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
 			break;
 		}
 		case 'transfer.remove': {
@@ -573,8 +579,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		case 'settings.set': {
 			const e = settingsValueError(op.path, op.value);
 			if (e) fail(`${op.path} ${e}`);
+			// Written by the allowlist's own path, never the op's text.
+			const path = allowed(SETTINGS_PATHS, op.path) ?? fail(`"${String(op.path)}" is not a setting a scenario can change`);
 			const value = cloneData(op.value);
-			const [head, leaf] = op.path.split('.') as [string, string | undefined];
+			const [head, leaf] = path.split('.') as [string, string | undefined];
 			const s = d.settings as Record<string, unknown>;
 			if (leaf === undefined) s[head] = value;
 			else {
@@ -584,14 +592,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			break;
 		}
 		case 'series.scale': {
-			if (!(SCALABLE_SERIES_KINDS as readonly string[]).includes(op.kind)) fail(`${op.kind} can't be scaled`);
+			const kind = allowed(SCALABLE_SERIES_KINDS, op.kind) ?? fail(`${String(op.kind)} can't be scaled`);
 			if (!(Number.isFinite(op.factor) && op.factor >= 0 && op.factor <= SERIES_SCALE_MAX)) fail(`factor must be 0–${SERIES_SCALE_MAX}`);
 			for (const k of ['from', 'to'] as const) if (op[k] !== undefined && !isIsoDate(op[k])) fail(`${k} must be an ISO date`);
-			const s = d.series[op.kind] ?? fail(`the base has no ${op.kind} series`);
+			const s = d.series[kind] ?? fail(`the base has no ${kind} series`);
 			const start = toEpochDay(s.startDate);
 			const a = op.from === undefined ? 0 : Math.max(0, toEpochDay(op.from) - start);
 			const b = op.to === undefined ? s.values.length - 1 : Math.min(s.values.length - 1, toEpochDay(op.to) - start);
-			if (a > b) fail(`no day of ${op.kind} falls in ${op.from ?? 'its start'} – ${op.to ?? 'its end'}`);
+			if (a > b) fail(`no day of ${kind} falls in ${op.from ?? 'its start'} – ${op.to ?? 'its end'}`);
 			const values = s.values.slice();
 			let n = 0;
 			for (let t = a; t <= b; t++) {
@@ -600,7 +608,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				values[t] = v * op.factor;
 				n++;
 			}
-			d.series = { ...d.series, [op.kind]: { startDate: s.startDate, values } satisfies DailySeries };
+			d.series = { ...d.series, [kind]: { startDate: s.startDate, values } satisfies DailySeries };
 			notes.push(`${n} day(s) scaled`);
 			break;
 		}

@@ -407,6 +407,16 @@ body when `errors` is non-empty. Whether a target id exists depends on the
 base run, so that is `applyScenario`'s job, not the validator's. Ids are any
 non-empty string here; the backend tightens them to UUIDs (`backend/src/scenarios/schema.ts` `checkOps`).
 
+Field names, settings paths and series kinds are untrusted text (a request
+body, a stored scenario, the preview worker's message), so both the
+validator and `applyScenario` first resolve them to the allowlist's own
+name (`allowed()`), then look that name up in a `Map` of checks and write
+through it, never through the op's text. A name every object inherits (`__proto__`, `constructor`,
+`toString`, `hasOwnProperty`…) is refused like any unknown one, as an error
+or a problem, never a throw and never a prototype write (`overrides.test.ts` ›
+hostile op names and fields; CodeQL js/remote-property-injection and
+js/unvalidated-dynamic-method-call, PR #234).
+
 ## Tests
 
 `packages/engine/src/scenario/`, all in `pnpm test`:

@@ -846,7 +846,9 @@ must build WP-2.15 Phase B.
   fractions (pending the hydrologist). Not built yet, in
   [followups.md § Firm yield](../followups.md#firm-yield-wp-36): the
   contributor policies (waiting for WP-3.3's role), the in-browser preview
-  through WP-1.17's worker, and finding a job started elsewhere.
+  through WP-1.17's worker, and finding a job started elsewhere. All three
+  since built (issue #73; the preview on a run and a team scenario, not yet
+  on an application).
 
 - **Goal.** The yield of a proposed or raised dam, the headline number of
   a storage application.
