@@ -449,6 +449,16 @@ export interface ProjectSettings {
 	 */
 	calibrationFlowKind: CalibrationFlowKind | null;
 	/**
+	 * Where calibration scores the model (engine ≥ 1.41.0, docs/model.md
+	 * §2.10k): null = the outlet (every engine before), else a gauge node inside
+	 * the network with an observed record of its own (a GaugeSeriesKey series,
+	 * 084_gauge_records.sql). calibrate() then scores that gauge's simulated
+	 * flow against that gauge's record (calibrationFlowKind picks among its
+	 * records). The run's own calibration statistics and the observed-flow EWR
+	 * test stay at the outlet.
+	 */
+	calibrationSiteNodeId: string | null;
+	/**
 	 * Periods left out of every calibration score (automatic calibration and
 	 * the run's calibration statistics): whole water years or date ranges,
 	 * each with a reason (./calibrate/provenance.ts). Default none.
@@ -630,9 +640,11 @@ export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
  * The key of an observed record attached to a gauge node inside the network
  * (engine ≥ 1.4.0, docs/model.md §2.10d): `<kind>@<node id>` in
  * ModelInput.series, beside the outlet's records (plain kinds). The backend
- * builds it from time_series.site_node_id (084_gauge_records.sql). Only the
- * plausibility checks read it: calibration, the EWR agreement and every other
- * check stay on the outlet's records.
+ * builds it from time_series.site_node_id (084_gauge_records.sql). The
+ * plausibility checks read it, and (engine ≥ 1.41.0) calibration when
+ * settings.calibrationSiteNodeId names that gauge; the run's calibration
+ * statistics, the EWR agreement and every other check stay on the outlet's
+ * records.
  */
 export type GaugeSeriesKey = `${CalibrationFlowKind}@${string}`;
 export const gaugeSeriesKey = (kind: CalibrationFlowKind, nodeId: string): GaugeSeriesKey => `${kind}@${nodeId}`;
@@ -643,6 +655,22 @@ export function parseGaugeSeriesKey(key: string): { kind: CalibrationFlowKind; n
 	const kind = key.slice(0, at);
 	const nodeId = key.slice(at + 1);
 	return (CALIBRATION_FLOW_KINDS as readonly string[]).includes(kind) && nodeId ? { kind: kind as CalibrationFlowKind, nodeId } : null;
+}
+
+/**
+ * The ModelInput.series key of a calibration record at a site (engine ≥
+ * 1.41.0): the plain kind at the outlet (null), else the gauge's key.
+ */
+export const calibrationSeriesKey = (kind: CalibrationFlowKind, siteNodeId: string | null | undefined): CalibrationFlowKind | GaugeSeriesKey =>
+	siteNodeId ? gaugeSeriesKey(kind, siteNodeId) : kind;
+
+/**
+ * The calibration records a site has, in CALIBRATION_FLOW_KINDS order (null =
+ * the outlet's). `series` is keyed as ModelInput.series; only whether a key
+ * holds something is read, so a client can pass a map of the keys it knows.
+ */
+export function calibrationRecordsAt(series: Readonly<Record<string, unknown>> | undefined, siteNodeId: string | null | undefined): CalibrationFlowKind[] {
+	return CALIBRATION_FLOW_KINDS.filter((k) => !!series?.[calibrationSeriesKey(k, siteNodeId)]);
 }
 
 /**
@@ -699,6 +727,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationStart: null,
 		calibrationEnd: null,
 		calibrationFlowKind: null,
+		calibrationSiteNodeId: null,
 		calibrationExclusions: [],
 		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
 		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null },

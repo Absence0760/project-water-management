@@ -23,8 +23,10 @@
 //   the fit against a second instrument, not just a second period.
 import { fromEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from '../calendar';
 import { simulateNetwork } from '../network/simulate';
-import { arealRainFactors, type CalibrationFlowKind, type ModelInput } from '../project';
+import { alignFlow } from '../prepare';
+import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, pickObservedKind } from '../run';
+import { calibrationSiteIndex } from './site';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
@@ -222,6 +224,13 @@ export interface CalibrationReport {
 	startParams: ParamSet;
 	/** The flow record fitted to, and what it was compared with. */
 	flowKind: string;
+	/**
+	 * Where it was scored (engine ≥ 1.41.0, settings.calibrationSiteNodeId):
+	 * null = the outlet, else the gauge node whose record `flowKind` is and
+	 * whose simulated flow (`simulatedKey`, that node's outflow) it was
+	 * compared with. Absent on a report from before: the outlet.
+	 */
+	siteNodeId?: string | null;
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -291,6 +300,10 @@ export interface CalibrationProblem {
 	area: number;
 	startParams: ParamSet;
 	flowKind: string;
+	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
+	siteNodeId: string | null;
+	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
+	records: CalibrationFlowKind[];
 	/** Observed flow (m³/day), NaN where missing. */
 	observed: Float64Array;
 	/**
@@ -375,9 +388,23 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const { historyDays } = forecastTail(run);
 	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
 
-	const kind = pickObservedKind(settings.calibrationFlowKind, input.series ?? {}, warnings);
-	if (!kind) throw new Error('no observed flow series to calibrate against: upload a gauge or logger record');
-	const observedOf = (k: CalibrationFlowKind) => Float64Array.from(aligned(k), (v) => (v === null ? NaN : v * SEC_PER_DAY));
+	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
+	const siteNodeId = settings.calibrationSiteNodeId ?? null;
+	const siteIndex = calibrationSiteIndex(input.model.nodes, topo.outflow, siteNodeId);
+	const series = input.series ?? {};
+	const at = (k: CalibrationFlowKind) => series[calibrationSeriesKey(k, siteNodeId)];
+	const siteSeries: ModelInput['series'] = siteNodeId === null ? series : Object.fromEntries(CALIBRATION_FLOW_KINDS.flatMap((k) => (at(k) ? [[k, at(k)!]] : [])));
+	const kind = pickObservedKind(settings.calibrationFlowKind, siteSeries, warnings);
+	if (!kind) {
+		throw new Error(
+			siteNodeId === null
+				? 'no observed flow series to calibrate against: upload a gauge or logger record'
+				: `no observed flow record at the calibration site "${input.model.nodes[siteIndex]!.name}": attach one to it on the Data page, or calibrate at the outlet`
+		);
+	}
+	// A gauge's record is scored as stored: the gap filling is the outlet records' (prepareRun's flowFill), so it isn't read there.
+	const observedOf = (k: CalibrationFlowKind) =>
+		Float64Array.from(siteNodeId === null ? aligned(k) : alignFlow(at(k), start, days), (v) => (v === null ? NaN : v * SEC_PER_DAY));
 	const observed = observedOf(kind);
 
 	const d0 = run.start;
@@ -392,9 +419,19 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		throw new Error(`only ${allIdx.length} observed days inside the calibration window (outside exclusions); at least 30 are needed`);
 	}
 	// Per-day quality flags (CR-18/19, ./dayFlags.ts): which observed days the objective scores, and which it censors.
-	const qf = settings.qualityFlags;
+	// The gauged ranges (settings.qualityFlags.ratings) are the outlet records' ratings, so a gauge's record has none:
+	// no day of it can be flagged as extrapolated. The data checks' suspect days still apply.
+	const qf = siteNodeId === null ? settings.qualityFlags : { ...settings.qualityFlags, ratings: {} };
 	const flagsOf = (k: CalibrationFlowKind) =>
-		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(run.flowFill?.[k]), dataQuality: settings.dataQuality });
+		flowDayFlags({
+			kind: k,
+			series: siteSeries[k],
+			start: d0,
+			days,
+			rating: ratingOf(qf, k),
+			infilled: siteNodeId === null ? observedInfillMask(run.flowFill?.[k]) : null,
+			dataQuality: settings.dataQuality
+		});
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;
@@ -431,8 +468,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		const shortPlan = { ...plan, days: n };
 		return (p: ParamSet): Float64Array => {
 			runoff(p, n);
-			if (topo.outflow < 0) return new Float64Array(days);
-			return simulateNetwork(shortPlan).nodes[topo.outflow]!.outflow;
+			if (siteIndex < 0) return new Float64Array(days);
+			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};
 	};
 	const lastAll = allIdx[allIdx.length - 1]!;
@@ -443,6 +480,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		area,
 		startParams,
 		flowKind: kind,
+		siteNodeId,
+		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
 		scoredDays: idx,
 		censor: scoring.censor,
@@ -479,7 +518,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
 		simulate: simulator(Math.max(idx[idx.length - 1]!, lastAll) + 1),
 		record(k) {
-			if (!input.series?.[k]) return null;
+			if (!siteSeries[k]) return null;
 			const obs = k === kind ? observed : observedOf(k);
 			const on: number[] = [];
 			for (let t = 0; t < days; t++) if (!excluded[t]) on.push(t);
@@ -491,6 +530,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		}
 	};
 }
+
+/**
+ * What a fit at an inner gauge (engine ≥ 1.41.0) leaves out: the gauged
+ * ranges and gap filling are the outlet records' settings, and the run's own
+ * statistics stay at the outlet.
+ */
+export const siteNote = (name: string): string =>
+	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Settings → Calibration record are the outlet records', so none applies to this record, and the run's calibration statistics and the observed-flow EWR test stay at the outlet.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {
@@ -874,7 +921,11 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		const want = opts.validationRecord;
 		const rec = pb.record(want);
 		if (!rec) {
-			notes.push(`The project has no ${RECORD_NAME[want]}, so the fit was not validated against one.`);
+			notes.push(
+				pb.siteNodeId === null
+					? `The project has no ${RECORD_NAME[want]}, so the fit was not validated against one.`
+					: `The calibration site has no ${RECORD_NAME[want]}, so the fit was not validated against one.`
+			);
 		} else if (rec.scoredDays.length < MIN_RECORD_DAYS) {
 			const flagged = (rec.observedDays ?? rec.scoredDays.length) - rec.scoredDays.length;
 			notes.push(
@@ -930,6 +981,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			})
 		)
 	);
+	if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	const fitClean = scored(pb, params, all);
@@ -949,6 +1001,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		params,
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
+		siteNodeId: pb.siteNodeId,
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,
 		before: scored(pb, pb.startParams, all),
