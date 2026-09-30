@@ -10,6 +10,9 @@
 	// the browser's (the root layout), with the EN | AF switch in its header.
 	// One column on a phone; two on a laptop, so the result fits the window
 	// (issue #17, docs/ui.md § Share page).
+	// A scenario link (WP-3.15) says so in its fragment (`k=scenario`) and
+	// opens ScenarioView in the same shell; its reader signing in to comment
+	// comes back here with the token from this tab's sessionStorage.
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -17,22 +20,45 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
-	import { loadShare, type ShareLoad } from '$lib/components/share/load';
+	import { loadScenarioShare, loadShare, type ScenarioShareLoad, type ShareLoad } from '$lib/components/share/load';
+	import { readShareKind, SHARE_RETURN_KEY } from '$lib/components/share/scenario';
+	import ScenarioView from '$lib/components/share/ScenarioView.svelte';
 	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '$lib/components/share/share';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
-	let token: string | null = null;
-	let result = $state<ShareLoad | null>(null);
+	let token = $state<string | null>(null);
+	let kind: 'scenario' | null = null;
+	let result = $state<ShareLoad | ScenarioShareLoad | null>(null);
+	let scenario = $state(false);
 
 	async function load() {
 		result = null;
-		result = await loadShare(api.share, token);
+		scenario = kind === 'scenario';
+		result = kind === 'scenario' ? await loadScenarioShare(api.share, token) : await loadShare(api.share, token);
+	}
+
+	const sview = $derived(scenario && result?.state === 'ready' ? (result as Extract<ScenarioShareLoad, { state: 'ready' }>).view : null);
+	const ready = $derived(!scenario && result?.state === 'ready' ? (result as Extract<ShareLoad, { state: 'ready' }>) : null);
+	const title = $derived(sview ? t('{name} · Shared application', { name: sview.scenario.name }) : ready ? t('{name} · Shared catchment view', { name: ready.view.project.name }) : scenario ? t('Shared application') : t('Shared catchment view'));
+
+	/** A scenario link kept while its reader signed in (ScenarioView), once. */
+	function returning(): string {
+		try {
+			const kept = sessionStorage.getItem(SHARE_RETURN_KEY);
+			sessionStorage.removeItem(SHARE_RETURN_KEY);
+			const v = kept ? (JSON.parse(kept) as { t?: unknown; k?: unknown; exp?: unknown }) : null;
+			return v && typeof v.t === 'string' && typeof v.exp === 'number' && v.exp > Date.now() ? `#t=${v.t}${v.k === 'scenario' ? '&k=scenario' : ''}` : '';
+		} catch {
+			return '';
+		}
 	}
 
 	/** Read the token from the fragment, drop it from the address bar, and load. */
 	function open() {
-		token = readShareToken(location.hash);
+		const hash = location.hash || returning();
+		token = readShareToken(hash);
+		kind = readShareKind(hash);
 		if (location.hash) replaceState(`${base}/share`, {});
 		load();
 	}
@@ -49,7 +75,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('{page} · Water Management', { page: result?.state === 'ready' ? t('{name} · Shared catchment view', { name: result.view.project.name }) : t('Shared catchment view') })}</title>
+	<title>{t('{page} · Water Management', { page: title })}</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
@@ -74,12 +100,14 @@
 			</section>
 		{:else if result.state === 'error'}
 			<section class="card" aria-labelledby="err-h">
-				<h1 id="err-h">{t('Shared catchment view')}</h1>
+				<h1 id="err-h">{scenario ? t('Shared application') : t('Shared catchment view')}</h1>
 				<p role="alert">{t('Couldn’t load this just now. Check your connection and try again.')}</p>
 				<button type="button" class="btn" onclick={load}>{t('Try again')}</button>
 			</section>
-		{:else}
-			{@const view = result.view}
+		{:else if sview}
+			<ScenarioView view={sview} token={token ?? ''} />
+		{:else if ready}
+			{@const view = ready.view}
 			{@const cv = view.publication.catchmentView}
 			{@const notice = shareNotice(view)}
 			<div class="head">
@@ -121,10 +149,10 @@
 				</div>
 
 				<div class="col">
-					{#if result.months}
-						<FlowChart months={result.months} />
+					{#if ready.months}
+						<FlowChart months={ready.months} />
 					{:else}
-						<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
+						<p class="fine" role={ready.chartFailed ? 'status' : undefined}>{ready.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
 					{/if}
 
 					<section class="card" aria-labelledby="about-h">

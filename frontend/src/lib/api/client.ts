@@ -96,6 +96,8 @@ import type {
 	ShareSeries,
 	ShareSeriesKey,
 	ShareView,
+	ShareScenario,
+	NoteRevision,
 	Team,
 	TeamMember,
 	TeamRole,
@@ -575,12 +577,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
 		},
 		shareLinks: {
-			/** The project's share links, newest first, revoked and expired ones included (owner). */
+			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
 			list: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links`).then((r) => r.links),
 			/** Make a link (owner). `url` carries the token: this is the only time it is shown. */
 			create: (id: string, label: string, expiresInDays: number) =>
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
-			/** Withdraw a link (owner): it stops working at once. */
+			/** The links to one scenario (WP-3.15): every one to an assessor, the ones they made to an applicant. */
+			listForScenario: (id: string, scenarioId: string) =>
+				request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links?scenarioId=${enc(scenarioId)}`).then((r) => r.links),
+			/** Link a submitted or decided scenario (an assessor, or its applicant). */
+			createForScenario: (id: string, scenarioId: string, label: string, expiresInDays: number) =>
+				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays, targetKind: 'scenario', targetId: scenarioId }).then(
+					(r) => r.link
+				),
+			/** Withdraw a link (the owner; an assessor or the applicant for a scenario link): it stops working at once. */
 			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
 		},
 		/** Notes and comments (WP-2.7): farmers and above; RLS scopes what each caller sees. */
@@ -597,7 +607,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			edit: (id: string, noteId: string, body: string) =>
 				request<{ note: Note }>('PATCH', `${p(id)}/notes/${enc(noteId)}`, { body }).then((r) => r.note),
 			/** Soft delete (the author or an editor): hidden, kept for the audit trail. */
-			remove: (id: string, noteId: string) => request<void>('DELETE', `${p(id)}/notes/${enc(noteId)}`)
+			remove: (id: string, noteId: string) => request<void>('DELETE', `${p(id)}/notes/${enc(noteId)}`),
+			/** A scenario note's earlier texts (WP-3.15), read as the note is. */
+			revisions: (id: string, noteId: string) => request<{ note: Note; revisions: NoteRevision[] }>('GET', `${p(id)}/notes/${enc(noteId)}/revisions`)
 		},
 		apiKeys: {
 			/** The project's API keys, newest first, revoked and expired ones included (owner). */
@@ -639,7 +651,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** What a share link shows, signed out; 404 for any dead link. */
 			view: (token: string) => request<ShareView>('POST', '/share/view', { token }),
 			/** One catchment series of the published run; 404 when there is none to show (including a small catchment). */
-			series: (token: string, key: ShareSeriesKey) => request<ShareSeries>('POST', '/share/series', { token, key })
+			series: (token: string, key: ShareSeriesKey) => request<ShareSeries>('POST', '/share/series', { token, key }),
+			/** A scenario link (WP-3.15), signed out; 404 for any dead link. */
+			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token })
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */

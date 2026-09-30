@@ -10,6 +10,9 @@ const link = (over: Partial<ShareLink> = {}): ShareLink => ({
 	createdBy: 'Jo Owner',
 	expiresAt: '2026-10-24T22:30:00Z',
 	revokedAt: null,
+	targetKind: null,
+	targetId: null,
+	mine: true,
 	revokedBy: null,
 	lastUsedAt: null,
 	...over

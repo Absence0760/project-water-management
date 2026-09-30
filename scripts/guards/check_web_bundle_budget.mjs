@@ -1443,6 +1443,25 @@
 // 2026-09-30  total 1250 → 1254 KB (issue #204: measured 1251 with main @
 //             5be749ca merged). #215's report publication and assurance now
 //             in main. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1249 KB (PR #229: measured 1246 with main @
+//             848000ac merged). Against main's 1237: share links and comments
+//             for a submitted application (WP-3.15): the shared application's
+//             view on /share (share/ScenarioView, share/scenario.ts), scenario
+//             comments in the notes list and the application panel, and the
+//             share-link panel's application links. No new dependency.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1254 KB (PR #229: measured 1251 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main; nothing
+//             of the share links changed. Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1257 KB (PR #229: measured 1254 with main @
+//             5502d0a6 merged). #225's evidence-report follow-ups now in
+//             main. Headroom ~3 KB.
+// 2026-09-30  total 1250 → 1261 KB (PR #229: measured 1258 with main @
+//             5be749ca merged). #215's report publication and assurance now
+//             in main; nothing of the share links changed. Headroom ~3 KB.
+// 2026-09-30  total 1254 → 1265 KB (PR #229: measured 1262 with main @
+//             da8c6959 merged). #220's hands-off flow now in main; nothing of
+//             the share links changed. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1453,7 +1472,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1254,
+	totalCodeKb: 1265,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

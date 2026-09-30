@@ -61,6 +61,8 @@ export const SECTIONS: Record<string, string> = {
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',
+	'share.scenario':
+		'Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.',
 	landing: 'The public landing page (/welcome, and / for someone not signed in): what the app is and who it is for, for a first-time visitor who may be a hydrologist, a water user association, a licence applicant or a farmer. Plain, specific, no sales talk. Every figure on it comes from an invented example catchment.',
 	'landing.hero': 'Landing page: the top of the page, its headline and the two buttons, and the tag beside the drawing’s river gauge.',
 	'landing.scene': 'Landing page: the text description of the drawing of a catchment (read by screen readers).',

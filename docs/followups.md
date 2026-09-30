@@ -3391,9 +3391,54 @@ Applicant view and the Applications tab. Left:
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
-- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
-      access** (WP-3.15) link from the list and the Application panel.
-      Trigger: those WPs.
+- [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in
+      `115_scenario_share_notes`. A submitted or decided application gets
+      read-only share links (the Application panel's Share dialog: an
+      assessor or its applicant; `POST /share/scenario`, a redacted
+      projection with the EWR per site first, results only when the stamps
+      verify), and comments (the notes drawer on the Application panel and
+      each Applications row) with the `assessors`, `parties` and
+      `public_participation` audiences, the read/write matrix in
+      [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
+      edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
+      link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
+- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
+      Add `'pack'` to `share_link.target_kind` (its CHECK and
+      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
+      and PDF key, redacted as `app_share_scenario` is, answering only an
+      issued pack), `app_share_link_creatable` / `_visible` for packs (an
+      editor for any issued pack, the applicant for their own), a nullable
+      `note.pack_id` (same-project trigger through `assert_same_project`,
+      covering index, `note_one_target` and `note_participation_on_scenario`
+      widened to it, `note_write_revision` for pack notes), the notes helpers
+      taking a pack, `POST /share/pack` on the public allowlist,
+      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
+      `evidence_pack` lands** (WP-3.14, migration 112, being built beside
+      this).
+- [ ] **Packs from the Applications list** (WP-3.14) link from the list and
+      the Application panel. Trigger: that WP.
+- [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
+      as a `viewer` to comment, and the e2e does so; but a viewer reads every
+      farm's figures, every team note and every decided application, far
+      more than commenting needs and everything the share link redacts. A
+      member contributor with no farm links can already post
+      `public_participation` and reads almost nothing (045). Durable fix: a
+      comment-only role or scope (or invite NGOs as linkless contributors,
+      if the client accepts that they could then file applications).
+      Trigger: the first real NGO invited to comment (client decision,
+      step-3 D5).
+- [ ] **The owner's inventory of every public link.** The Project page's
+      Share links list shows the baseline links only; scenario links are
+      listed per application (its Share dialog), made by assessors and
+      applicants. Durable fix: list every live link for the owner with its
+      target, and revoke from there. Trigger: before the first scenario
+      link is used with a real catchment.
+- [ ] **Afrikaans for the shared application page** (WP-3.15): the
+      `share.scenario` strings are on the translation sheet
+      (docs/i18n/af-translation-sheet.md). If they are not translated in the
+      same change, the Afrikaans catalogue is incomplete and `/share` falls
+      back to English words. Trigger: this PR's translation round (see its
+      description).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
