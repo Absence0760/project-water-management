@@ -23,6 +23,12 @@ export function supplyIssues(
 	const pump = n.pumpCapacityM3Day ?? null;
 	const trigger = n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct;
 	const stop = n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct;
+	// An other water user has a pump capacity of its own (engine ≥ 1.58.0), but no supply rule; a gauge has neither.
+	if (n.kind === 'user') {
+		if (rule !== 'damFirst') out.push('only a hydrological unit has a supply rule; an other water user always takes from the river, up to its pump capacity. Set the supply rule to dam only.');
+		if (pump !== null && !inRange(pump, 0, Infinity)) out.push("the pump capacity can't be negative.");
+		return out;
+	}
 	if (n.kind !== 'farm') {
 		if (rule !== 'damFirst' || pump !== null) out.push('only a hydrological unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.');
 		return out;
