@@ -3719,19 +3719,23 @@ Applicant view and the Applications tab. Left:
       [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
       edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
       link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
-- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
-      Add `'pack'` to `share_link.target_kind` (its CHECK and
-      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
-      and PDF key, redacted as `app_share_scenario` is, answering only an
-      issued pack), `app_share_link_creatable` / `_visible` for packs (an
-      editor for any issued pack, the applicant for their own), a nullable
-      `note.pack_id` (same-project trigger through `assert_same_project`,
-      covering index, `note_one_target` and `note_participation_on_scenario`
-      widened to it, `note_write_revision` for pack notes), the notes helpers
-      taking a pack, `POST /share/pack` on the public allowlist,
-      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
-      met** (`evidence_pack` landed in migration 112, 2026-09-29); the next
-      piece of WP-3.15, tracked in issue #71.
+- [x] **Pack targets for share links and notes** (WP-3.15, the pack half):
+      done in `128_pack_share_notes` (2026-09-30, issue #71). An editor
+      links an **issued** pack from its page (`targetKind: 'pack'`,
+      `app_share_link_creatable` / `_visible`); `POST /share/pack`
+      (`app_share_pack`, public) answers exactly what verify does plus,
+      while the pack stands, a redacted projection of its own frozen report
+      (the river's rows and sites, the `k` rule on volumes); a superseded or
+      withdrawn pack's link says so, and why, with no figure. `note.pack_id`
+      (`team` or `public_participation`, open while a pack link is live, every
+      edit kept), `GET|POST …/notes?packId=`, the pack page's Notes, and a
+      pack view on `/share` ([evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)).
+      Two decisions against the first sketch here: no PDF key through the
+      link (the PDF carries every unit's figures and the applicant's
+      statement, which the projection withholds), and no applicant-made
+      link, since applicants read no pack yet ("Applicants' access to their
+      own application's packs", § Evidence report, holds both for when they
+      do).
 - [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
@@ -4232,9 +4236,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       Contributors read no pack today (operator decision, 2026-09-29:
       issuing stays with editors). Durable fix: a read policy for the
       scenario's owner and members on packs of their application once
-      issued, with the D2 anonymising applied to the manifest they see.
-      Trigger: WP-3.15, or the first applicant who needs the pack itself
-      rather than its verify link.
+      issued, with the D2 anonymising applied to the manifest they see; then
+      `app_share_link_creatable` / `_visible` (128) let the applicant link
+      their own issued pack and list and revoke the links they made, as for
+      a scenario link. Trigger: the first applicant who needs the pack itself
+      rather than its verify link (WP-3.15's share links to packs landed in
+      128 without it).
 - [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner. Trigger: with the pack
       view.

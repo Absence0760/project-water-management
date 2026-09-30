@@ -643,8 +643,12 @@ result without signing in, until it expires or its owner revokes it.
   `?token=`), and POSTs it in a JSON body. The page sets `noindex` and
   `no-referrer`. A link pasted into a chat app is still readable by whoever
   sees the message: that is what a link is.
-- **Owner-only.** `share_link` RLS: SELECT, INSERT (as yourself) and UPDATE
-  for `app_has_role(project_id, 'owner')`; nobody else sees a row. `water_app`
+- **Owner-only for a baseline link.** `share_link` RLS: SELECT, INSERT (as
+  yourself) and UPDATE for `app_has_role(project_id, 'owner')`; nobody else
+  sees a baseline link's row. Targeted links widen this for their own
+  target only: an application's to its assessors and applicant
+  ([Scenario links](#scenario-links-wp-315-115_scenario_share_notessql)),
+  a pack's to the project's editors ([Pack links](#pack-links-wp-315-128_pack_share_notessql)). `water_app`
   may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
   catalogue test pins both): a revoked link stays as the record of who made
   and withdrew it. An insert trigger stamps `created_by` and `created_at`.
@@ -693,6 +697,63 @@ result without signing in, until it expires or its owner revokes it.
   pinned to one list; revocation final even in SQL, with the account-deletion
   control) and `routes.test.ts` (the two reads on the public allowlist,
   answering `400` rather than `401`).
+
+### Pack links (WP-3.15, 128_pack_share_notes.sql)
+
+A link to **one** issued evidence pack, for a comment period or an
+assessor without an account. The same token model (32 bytes, SHA-256 at
+rest, in the fragment with `&k=pack`), with these differences:
+
+- **Who makes one.** An editor or the owner, and only while the pack is
+  `issued` (`app_share_link_creatable`; the route answers `403` below
+  editor, `404` for a pack not in the project, `409` otherwise). A draft is
+  still changing; a superseded or withdrawn pack no longer stands, so nobody
+  is sent a fresh link to it. Not a contributor: applicants read no pack
+  (112), and making a public link to what you can't read would be a way
+  round that ([followups.md](./followups.md#evidence-report-issue-71)).
+  Editors and the owner list and revoke every pack link
+  (`app_share_link_visible`), and the owner's inventory names the pack by
+  its report's title, its status and version, through the owner's own RLS.
+- **Never wider than verify, plus the pack's own figures.** Only through
+  `SECURITY DEFINER app_share_pack`: its `verify` is `app_verify_pack`'s
+  object for the pack, unchanged, so a link reveals nothing about the
+  pack's standing, hashes or signers that its printed code doesn't already.
+  The figures come from the **frozen manifest** (never the live model, runs
+  or settings), rebuilt from an allowlist in SQL
+  (`app_share_pack_projection`, not callable by `water_app`) and again
+  field by field in TypeScript (`share/links.ts toSharePack`): the report's
+  title and mode, both runs' dates and engines, page 1's river rows (a
+  reserve row names a gauge, never the outlet: its node may be a farm) with
+  their bands, each EWR site's compliance, and the paired change by month.
+  The volume rows (shortfall, outflow MAR) only at 5 or more farm holders
+  (the `k` rule above) and only when the report changed no baseline
+  assumption (as a scenario link's volumes). Never a user's, farm's or
+  allocation's row, name or figures, the other applications, the works a
+  site sits below, the settings, model, input diff or series hashes, the
+  applicant's statement or notes, or anyone but the signers. The PDF,
+  manifest and reproduction bundle are **not** offered through a link: each
+  carries the whole report.
+- **A pack that no longer stands.** Once superseded or withdrawn, the link
+  answers `verify` (its status, the reason or successor's hash) and the
+  comments, and `figures` `null`, in the database and again in TypeScript:
+  a forum given the link never keeps reading figures the applicant
+  withdrew. A draft, or a pack withdrawn before it was issued, answers
+  nothing (it was never public), the same `404` as a dead link.
+- **One target.** A pack link opens nothing on `/share/view`,
+  `/share/series` or `/share/scenario`, and no baseline or scenario link
+  opens a pack; `share_link_target_check` refuses another project's pack.
+- **Comments** as on a scenario link (§ Notes above): an account in the
+  project, while the pack is issued with a live link.
+- **Tests:** `share/pack-share.db.test.ts` (who makes, lists and revokes,
+  each with its control; one kind only, both ways; revoked and expired
+  against a live token; verify's object unchanged; the string scan for
+  every unit, the holder, the applicant's name and statement, another
+  application, ids and e-mails in a manifest seeded with them; the `k` and
+  baseline-assumption rules; withdrawn and superseded; the note matrix),
+  `share/links.test.ts` (the TypeScript allowlist, and no figures once not
+  issued, against rows with planted extras), `routes.test.ts`
+  (`POST /share/pack` public) and the cross-project, mass-assignment and
+  write-route sweeps.
 
 ### Scenario links (WP-3.15, 115_scenario_share_notes.sql)
 
@@ -1343,6 +1404,14 @@ In short:
   written only by a trigger, read as the note is). Tests:
   `share/scenario-share.db.test.ts` (the matrix, reads and writes, each with
   a positive control; the revisions).
+  **Pack notes (WP-3.15, 128):** `team` (read and written where the pack is
+  read: `note_select` / `note_insert` test it through evidence_pack's own
+  policy, so a contributor, who reads no pack, never sees one) or
+  `public_participation` (`note_select_pack`, `app_pack_note_visible`,
+  `app_pack_note_writable`: posted by a member contributor or above only
+  while the pack is issued with a live pack link; editors always read them,
+  other members while open or once the closed pack was shared). A farmer
+  reads none; every edit is kept. Tests: `share/pack-share.db.test.ts`.
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
@@ -2134,8 +2203,8 @@ PDF someone else asked for kept the person as a recipient
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
-| A scenario note's earlier texts, and who edited (115, WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
-| A public comment's author's display name, shown on the scenario's share link (115) | `note` (`public_participation`), read by `app_share_scenario` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
+| A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
 | Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
@@ -2697,6 +2766,7 @@ nothing else.
   they read its scenario (`app_scenario_readable`, 045); editors read every
   pack. Contributors (applicants) and farmers read none and act on none
   (operator decision, 2026-09-29: issuing stays with the project's editors).
+  An editor shares an issued pack by link ([§ Pack links](#pack-links-wp-315-128_pack_share_notessql)).
   The pack routes' bodies are strict where they create or issue.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the

@@ -12,16 +12,30 @@
 	// submitted or decided scenario's links instead, in its Share dialog: an
 	// assessor lists and withdraws every link to it, its applicant the ones
 	// they made (the API's RLS decides which are listed).
+	// With `pack` (WP-3.15, 128_pack_share_notes; docs/ui.md § Evidence pack)
+	// it is one issued evidence pack's links, on the pack's page: its editors
+	// list, make and withdraw them.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
-	import { api, SHARE_LABEL_MAX, type ScenarioStatus, type ShareLink } from '$lib/api';
+	import { api, SHARE_LABEL_MAX, type PackStatus, type ScenarioStatus, type ShareLink } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { DEFAULT_EXPIRY_DAYS, EXPIRY_CHOICES, linkRow, revokeQuestion, sortLinks, STATE_WORD } from './shareLinks';
 
-	let { projectId, scenario }: { projectId: string; scenario?: { id: string; name: string; status: ScenarioStatus } } = $props();
-	/** A link opens a scenario only while it is submitted or decided (app_share_scenario). */
-	const shareable = $derived(!scenario || scenario.status === 'submitted' || scenario.status === 'decided');
-	const listLinks = () => (scenario ? api.shareLinks.listForScenario(projectId, scenario.id) : api.shareLinks.listAll(projectId));
+	let {
+		projectId,
+		scenario,
+		pack
+	}: { projectId: string; scenario?: { id: string; name: string; status: ScenarioStatus }; pack?: { id: string; name: string; status: PackStatus; version: number } } = $props();
+	/** One target's links (a scenario's or a pack's), rather than the owner's inventory. */
+	const targeted = $derived(!!scenario || !!pack);
+	/**
+	 * A link opens a scenario only while it is submitted or decided
+	 * (app_share_scenario); one is made to a pack only while it is issued (a
+	 * made link keeps working after, showing that it no longer stands).
+	 */
+	const shareable = $derived(pack ? pack.status === 'issued' : !scenario || scenario.status === 'submitted' || scenario.status === 'decided');
+	const listLinks = () =>
+		pack ? api.shareLinks.listForPack(projectId, pack.id) : scenario ? api.shareLinks.listForScenario(projectId, scenario.id) : api.shareLinks.listAll(projectId);
 
 	let links = $state<ShareLink[]>([]);
 	let loading = $state(true);
@@ -46,7 +60,7 @@
 		loading = true;
 		loadError = null;
 		try {
-			if (scenario) {
+			if (targeted) {
 				links = await listLinks();
 				published = true;
 			} else {
@@ -68,9 +82,11 @@
 		error = null;
 		copied = '';
 		try {
-			const { url, ...link } = scenario
-				? await api.shareLinks.createForScenario(projectId, scenario.id, label.trim(), days)
-				: await api.shareLinks.create(projectId, label.trim(), days);
+			const { url, ...link } = pack
+				? await api.shareLinks.createForPack(projectId, pack.id, label.trim(), days)
+				: scenario
+					? await api.shareLinks.createForScenario(projectId, scenario.id, label.trim(), days)
+					: await api.shareLinks.create(projectId, label.trim(), days);
 			links = [link, ...links];
 			fresh = { id: link.id, label: link.label, url };
 			label = '';
@@ -109,8 +125,19 @@
 	}
 </script>
 
-<section class:panel={!scenario} aria-labelledby={scenario ? undefined : 'share-h'} data-testid={scenario ? 'scenario-share' : undefined}>
-	{#if scenario}
+<section class:panel={!targeted} aria-labelledby={targeted ? undefined : 'share-h'} data-testid={pack ? 'pack-share' : scenario ? 'scenario-share' : undefined}>
+	{#if pack}
+		<p class="muted small intro" id="share-what">
+			A read-only link to {pack.name} for someone outside the project (an NGO, a catchment forum), signed out. They see what the verify
+			page shows (its status, hashes and signers) and, while it stays issued, the river’s ecological reserve at each EWR site, the
+			days below the EWR and, when the catchment has at least five hydrological units, its volumes. Never a hydrological unit’s name
+			or figures, registered volumes, other applications or the applicant’s statement. If the pack is later withdrawn or replaced, the
+			link says so instead of showing its figures. While a link is live, members can comment for public participation.
+		</p>
+		{#if !shareable}
+			<p class="alert alert-info" data-testid="pack-share-closed">Only an issued pack can be shared: a draft is still changing, and a superseded or withdrawn pack no longer stands.</p>
+		{/if}
+	{:else if scenario}
 		<p class="muted small intro" id="share-what">
 			A read-only link to “{scenario.name}” for someone outside the project (an NGO, a catchment forum), signed out. They see its
 			changes, the river’s ecological reserve at each EWR site against the baseline, the catchment’s totals when it has at least five
@@ -186,16 +213,16 @@
 						<tr class:dead={r.state !== 'live'}>
 							<th scope="row">
 								{r.label}
-								{#if !scenario}<span class="opens">{r.opens}</span>{/if}
+								{#if !targeted}<span class="opens">{r.opens}</span>{/if}
 								<span class="state {r.state}">{STATE_WORD[r.state]}</span>
-								{#if !scenario && r.state === 'live' && r.opensNothing}<span class="nothing">{r.opensNothing}</span>{/if}
+								{#if (!targeted || pack) && r.state === 'live' && r.opensNothing}<span class="nothing">{r.opensNothing}</span>{/if}
 							</th>
 							<td>{r.created}</td>
 							<td>{r.ends}</td>
 							<td>{r.lastUsed}</td>
 							<td class="act">
 								{#if r.canRevoke}
-									<button type="button" class="btn btn-sm btn-danger" disabled={busy === r.id} onclick={() => revoke(r.id, r.label, scenario ? undefined : r.opens)} aria-label="Withdraw {r.label}">Withdraw</button>
+									<button type="button" class="btn btn-sm btn-danger" disabled={busy === r.id} onclick={() => revoke(r.id, r.label, targeted ? undefined : r.opens)} aria-label="Withdraw {r.label}">Withdraw</button>
 								{/if}
 							</td>
 						</tr>

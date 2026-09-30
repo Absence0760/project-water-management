@@ -9,7 +9,8 @@ An applicant attaches it to a water-use licence application, and anyone
 holding it can check it against the app with its short code.
 
 This page covers what a pack holds, what its hash covers, the short code, the
-lifecycle, the PDF, verification and the reproduction bundle. The routes are in
+lifecycle, the PDF, verification, the reproduction bundle, and sharing a
+pack by link with comments on it. The routes are in
 [api.md § Evidence packs](./api.md#evidence-packs), the table in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
@@ -22,7 +23,9 @@ panel, and the public verify page with its in-browser file check
 ([ui.md § Evidence pack](./ui.md#evidence-pack),
 [§ Verify page](./ui.md#verify-page)); the server-rendered PDF
 ([§ The PDF](#the-pdf)); and the reproduction bundle with
-`pnpm reproduce:pack` ([§ Reproduction](#reproduction)). What is left is
+`pnpm reproduce:pack` ([§ Reproduction](#reproduction)); and share links
+to an issued pack with public comments on it
+([§ Sharing and comments](#sharing-and-comments), 2026-09-30). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -152,7 +155,8 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
 delete drafts. Viewers read packs (an application's only when they can read
 its scenario). Applicants (contributors) and farmers can neither read nor act
 on a pack; issuing, superseding and withdrawing stay with the project's
-editors (operator decision, 2026-09-29).
+editors (operator decision, 2026-09-29). Editors share an issued pack by link
+([§ Sharing and comments](#sharing-and-comments)).
 
 Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
@@ -335,6 +339,67 @@ engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 `scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
 MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
 both a baseline and an application pack; the setter's refusals).
+
+## Sharing and comments
+
+An editor shares an **issued** pack by a read-only link, so an NGO, a
+catchment forum or an assessor without an account can read it during a
+comment period (WP-3.15, the pack half; `128_pack_share_notes`; the token
+model is a share link's, [security.md § Share links](./security.md#share-links)).
+The pack's page has **Share link…** (editors, once it was issued) and
+**Notes** (whoever reads it); the link opens `/share#t=…&k=pack`
+([ui.md § Share page](./ui.md#share-page)).
+
+**What the link shows** (`POST /share/pack`, `app_share_pack`): never more
+than the pack itself, and never more than an application's link would.
+
+| Always (a pack that was issued) | Only while it is `issued` |
+| --- | --- |
+| exactly what `GET /verify/:code` answers: status, version, issue date, catchment, engine and report versions, the manifest, PDF and bundle hashes, the successor's hash, the withdrawal reason, methodology, errata, signers | from the **frozen manifest**, never the live model: the report's title and mode, both runs' dates, engines and runoff model, the application's count of proposals and assumptions |
+| its public comments, with their authors' display names | page 1's river rows (Reserve months met per site, days below the EWR, no-flow days) with their bands; each EWR site's Reserve compliance (the outlet unnamed); the paired change by calendar month |
+| | the volume rows (shortfall, outflow MAR) only at 5 or more farm holders and when the report changed no baseline assumption (the share links' `k` rule) |
+
+Never a user's, farm's or allocation's row, name or figures, the other
+applications, the works below which a site sits, the settings, model, input
+diff or series hashes, the applicant's statement, or any person but the
+signers. The page words each row itself, by its id, in the reader's
+language (the report's own labels are English).
+
+**After the pack stops standing.** A link keeps working when its pack is
+later superseded or withdrawn, and then shows the standing, the withdrawal
+reason or the replacing version's code, and the comments, with **no
+figure**: the same link a forum was given must never keep showing figures
+the applicant has withdrawn. A new link is made only to an issued pack
+(`409` otherwise). A draft never had a public page: its link can't be made,
+and the read answers nothing for a pack that was never issued, as verify
+does.
+
+**Comments.** A pack note is `team` (whoever reads the pack) or
+`public_participation`: any member contributor and up posts one while the
+pack is issued and has a live link (`app_pack_commentable`); editors and the
+comment's author always read it, other members while it is open, and once
+it was shared and is superseded or withdrawn (the record of a closed
+comment period). Farmers read and write none. Every edit is kept
+(`note_revision`), and a pack past draft is never deleted, so the record
+stays. The matrix is in [data-model.md § Notes](./data-model.md#notes-037_notessql).
+
+**Not through a link:** the PDF, the manifest and the reproduction bundle.
+They carry the whole report (every unit's figures, the applicant's
+statement), which the redaction above keeps from the public; an authority
+gets them from the applicant and checks them on the verify page.
+**Applicants** make no pack link yet: they read no pack
+([followups.md § Applicants](./followups.md#applicants-wp-33), "Applicants'
+access to their own application's packs").
+
+Tests: `backend/src/share/pack-share.db.test.ts` (who makes, lists and
+revokes a pack link, each with its control; one kind only, both ways;
+revoked and expired against a live token; the redaction scan against a
+manifest seeded with every secret; the `k` and baseline-assumption rules;
+withdrawn and superseded; the note matrix and revisions),
+`share/links.test.ts` (the TypeScript allowlist against a row with planted
+extras), `frontend/src/lib/components/share/pack.test.ts` and
+`e2e/tests/pack-share.spec.ts` (make a link from the pack page, open it
+signed out, comment, withdraw: the link says so and why).
 
 ## Guards
 

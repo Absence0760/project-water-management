@@ -207,3 +207,9 @@ Tracked in issue #103.
   and is kept as that licence record (035, 112; operator decision on packs).
   It states what was already the case for nominations: a clarification, not
   a material change, so no `LEGAL_VERSION` bump.
+- 2026-09-30: Privacy §5 (who can see it) says what a share link opens now
+  (a catchment's published results, a submitted application (115) or an
+  issued evidence pack (128)) and the two things those pages name: a public
+  comment's author (115, 128) and a pack's signers (as verify already
+  shows, 112). It states what the app already did: a clarification, not a
+  material change, so no `LEGAL_VERSION` bump.

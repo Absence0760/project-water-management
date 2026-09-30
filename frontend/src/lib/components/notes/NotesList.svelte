@@ -10,7 +10,7 @@
 	farm card passes the catalogue's, so this list never imports it.
 	`formFirst` puts the add form above the notes (the notes drawer, where a
 	long list would push it a screen down).
-	A scenario's comments (WP-3.15) have an audience picker (the target's
+	A scenario's or an evidence pack's comments (WP-3.15) have an audience picker (the target's
 	`audiences`, which the server enforces), a badge with each note's
 	audience, and "edited" opens the note's earlier texts (note_revision).
 -->
@@ -18,7 +18,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
-	import { AUDIENCE_BADGE, AUDIENCE_LABEL, bodyProblem, createBody, normaliseBody, targetQuery, type NoteTarget } from './notes';
+	import { AUDIENCE_BADGE, AUDIENCE_LABEL, bodyProblem, createBody, hasAudiences, normaliseBody, targetQuery, type NoteTarget } from './notes';
 	import { NOTES_EN, type NotesWords } from './words';
 
 	let {
@@ -60,9 +60,9 @@
 		const edited = editing !== null && editDraft !== (notes?.find((n) => n.id === editing)?.body ?? '');
 		unsaved = draft.trim() !== '' || edited;
 	});
-	/** A scenario comment's audience (its target's first by default). */
+	/** A scenario or pack comment's audience (its target's first by default). */
 	let audience = $state<NoteVisibility | null>(null);
-	const audiences = $derived(target.kind === 'scenario' ? target.audiences : []);
+	const audiences = $derived(hasAudiences(target) ? target.audiences : []);
 	const chosen = $derived<NoteVisibility>(audience && audiences.includes(audience) ? audience : (audiences[0] ?? 'team'));
 	/** The note whose earlier texts are open, and them. */
 	let historyOf = $state<string | null>(null);
@@ -116,7 +116,7 @@
 		busy = true;
 		error = null;
 		try {
-			const note = await api.notes.create(projectId, createBody(target, draft, target.kind === 'scenario' ? chosen : farmer || shareWithFarm ? 'farm' : 'team'));
+			const note = await api.notes.create(projectId, createBody(target, draft, hasAudiences(target) ? chosen : farmer || shareWithFarm ? 'farm' : 'team'));
 			notes = [note, ...(notes ?? [])];
 			draft = '';
 			onChanged?.();
@@ -175,7 +175,7 @@
 		<form class="add" onsubmit={add}>
 			<label for="{uid}-new">{words.add}</label>
 			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
-			{#if target.kind === 'scenario' && audiences.length > 1}
+			{#if hasAudiences(target) && audiences.length > 1}
 				<div class="audience">
 					<label for="{uid}-aud">Who reads it</label>
 					<select id="{uid}-aud" value={chosen} onchange={(e) => (audience = e.currentTarget.value as NoteVisibility)} data-testid="note-audience">
@@ -185,7 +185,7 @@
 			{/if}
 			<p id="{uid}-help" class="muted small">
 				{words.plainText}
-				{#if target.kind === 'scenario'}{audiences.length > 1 ? '' : `${AUDIENCE_LABEL[chosen]}.`} Every edit is kept in its history.{:else if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this hydrological unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				{#if hasAudiences(target)}{audiences.length > 1 ? '' : `${AUDIENCE_LABEL[chosen]}.`} Every edit is kept in its history.{:else if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this hydrological unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
 				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
 			</p>
 			{#if showShare}
@@ -227,13 +227,13 @@
 					<p class="meta muted">
 						<span>{n.mine ? words.you : (n.author ?? words.formerMember)}</span>
 						· <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time>
-						{#if n.editedAt && n.scenarioId}
+						{#if n.editedAt && (n.scenarioId || n.packId)}
 							· <button type="button" class="btn btn-ghost btn-sm" aria-expanded={historyOf === n.id} onclick={() => toggleHistory(n)} title={words.editedAt(fmtDate(n.editedAt, true))}
 								>{words.edited}: history<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button
 							>
 						{:else if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
 						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to its farmers</span>{/if}
-						{#if n.scenarioId}<span class="badge" data-testid="note-audience-badge">{AUDIENCE_BADGE[n.visibility]}</span>{/if}
+						{#if n.scenarioId || n.packId}<span class="badge" data-testid="note-audience-badge">{AUDIENCE_BADGE[n.visibility]}</span>{/if}
 						{#if canWrite && editing !== n.id}
 							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
 							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}

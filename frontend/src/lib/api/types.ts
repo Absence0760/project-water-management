@@ -1289,21 +1289,22 @@ export interface ShareLink {
 	revokedBy: string | null;
 	/** Bumped at most once an hour when the link is opened. */
 	lastUsedAt: string | null;
-	/** null: the published baseline; 'scenario': one scenario (WP-3.15). */
+	/** null: the published baseline; 'scenario': one scenario (WP-3.15); 'pack': one evidence pack (128). */
 	targetKind: ShareTargetKind | null;
 	targetId: string | null;
 	/**
 	 * The target's name and status as the caller reads them (RLS): null for the
 	 * baseline, and for a target they can't read now (an application reopened
-	 * as a draft, or deleted), which the link opens nothing of.
+	 * as a draft, or deleted), which the link opens nothing of. A pack's
+	 * name is its report's title, with its version.
 	 */
-	target: { name: string; status: ScenarioStatus } | null;
+	target: { name: string; status: ScenarioStatus | PackStatus; version?: number } | null;
 	/** The caller made it. */
 	mine: boolean;
 }
 
 /** What a link may name besides the published baseline (backend SHARE_TARGET_KINDS). */
-export type ShareTargetKind = 'scenario';
+export type ShareTargetKind = 'scenario' | 'pack';
 
 /** One EWR site's Reserve compliance on a shared run (backend share/links.ts SharedEwrSite). */
 export interface SharedEwrSite {
@@ -1365,6 +1366,66 @@ export interface ShareScenario {
 	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
 }
 
+/** A band as a pack link shows it (backend share/links.ts SharedBand). */
+export interface SharedBand {
+	n: number | null;
+	p5: number | null;
+	p50: number | null;
+	p95: number | null;
+}
+
+/** One row of a shared pack's change table: the river's rows, and the volume rows past the k rule. */
+export interface SharedPackRow {
+	id: 'reserve' | 'ewrDays' | 'noFlowDays' | 'shortfall' | 'outflowMar';
+	/** A gauge's name on a reserve row; null for the outlet and every other row. */
+	subject: string | null;
+	unit: string;
+	higherIsWorse: boolean;
+	baseline: number | null;
+	application: number | null;
+	change: { run: number | null; band: SharedBand | null; bandNote: string | null; worse: { k: number; n: number } | null } | null;
+	notAssessed: string | null;
+	note: string | null;
+}
+
+/** One EWR site's Reserve compliance in a shared pack: the baseline (A) against the application (B). */
+export interface SharedPackSite {
+	name: string | null;
+	isOutlet: boolean;
+	category: string | null;
+	monthsA: number | null;
+	rateA: number | null;
+	rateB: number | null;
+	longestA: number | null;
+	longestB: number | null;
+	lost: number | null;
+	gained: number | null;
+}
+
+/** POST /share/pack (public, 128): an issued pack's redacted figures, or a superseded or withdrawn pack's standing. */
+export interface SharePack {
+	/** The id lets a signed-in member comment from the page; it grants nothing on its own. */
+	project: { id: string };
+	pack: { id: string; title: string; mode: 'baseline' | 'application'; version: number; shortCode: string };
+	/** GET /verify/:code's answer for the pack, exactly. */
+	verify: PackVerification;
+	/** null once the pack is superseded or withdrawn. */
+	figures: {
+		identity: {
+			title: string;
+			mode: 'baseline' | 'application';
+			baseline: { startDate: string; endDate: string; engineVersion: string; runoffModel: string };
+			application: { engineVersion: string; proposals: number; assumptions: number } | null;
+		};
+		volumes: boolean;
+		rows: SharedPackRow[];
+		river: SharedPackSite[];
+		byMonth: { month: number; run: number | null; band: SharedBand | null }[] | null;
+		disclaimerVersion: string | null;
+	} | null;
+	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+}
+
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
 export interface SharedCatchmentView {
 	runStart: string;
@@ -1409,7 +1470,7 @@ export const NOTE_MAX = 4000;
  * parties, or everyone taking part in public participation (docs/data-model.md § Notes).
  */
 export type NoteVisibility = 'team' | 'farm' | 'assessors' | 'parties' | 'public_participation';
-export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting' | 'scenario';
+export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting' | 'scenario' | 'pack';
 
 /** A plain-text note on a node, run, setting or the project (WP-2.7; docs/api.md § Notes). */
 export interface Note {
@@ -1427,6 +1488,8 @@ export interface Note {
 	runId: string | null;
 	settingKey: string | null;
 	scenarioId: string | null;
+	/** The evidence pack it is about (128_pack_share_notes). */
+	packId: string | null;
 	visibility: NoteVisibility;
 	/** The caller wrote it, and may edit it. */
 	mine: boolean;
@@ -1440,6 +1503,7 @@ export interface NotesQuery {
 	runId?: string;
 	settingKey?: string;
 	scenarioId?: string;
+	packId?: string;
 	target?: NoteTargetKind;
 	limit?: number;
 }
@@ -1451,6 +1515,8 @@ export interface NoteCreate {
 	runId?: string;
 	settingKey?: string;
 	scenarioId?: string;
+	/** An evidence pack: `team` or `public_participation` only (128). */
+	packId?: string;
 	visibility?: NoteVisibility;
 }
 
@@ -1470,6 +1536,7 @@ export interface NoteCounts {
 	runs: Record<string, number>;
 	settings: Record<string, number>;
 	scenarios: Record<string, number>;
+	packs?: Record<string, number>;
 }
 
 /** A professional sign-off on a run or an evidence pack (036_signoff, 112_evidence_pack; docs/api.md § Sign-offs). Immutable. */

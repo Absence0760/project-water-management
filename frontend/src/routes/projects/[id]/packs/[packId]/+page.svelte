@@ -24,6 +24,13 @@
 	// printed) says where the server PDF is (detail.pdf): its download when
 	// ready, "printing" while it renders, and why it failed, with an
 	// editor's "Try again" (POST …/pdf).
+	//
+	// Sharing and comments (WP-3.15, 128_pack_share_notes): an editor makes a
+	// read-only share link to an issued pack here (Share link…, the same
+	// ShareLinksPanel as an application's) and withdraws any of them, a
+	// withdrawn or superseded pack's too; whoever reads the pack keeps team
+	// notes on it and sees its public comments (Notes). Neither shows to a
+	// render session, which reads no project.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -31,8 +38,12 @@
 	import { api, ApiError, hasRole, type PackDetail, type PackSignoffList, type Project } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { packAudiences } from '$lib/components/notes/notes';
+	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import PackActions from '$lib/components/packs/PackActions.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { latestOnly, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
@@ -124,6 +135,9 @@
 	}
 	const report = $derived(detail?.manifest.report ?? null);
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
+	/** Share links to it (an editor, once it was issued) and its notes (whoever reads it); never in a render session, which reads no project. */
+	const canShare = $derived(canEdit && !!pack && pack.status !== 'draft');
+	let shareOpen = $state(false);
 	const ready = $derived(status === 'loaded');
 	const stamp = $derived(pack ? packStamp(pack) : '');
 	const verify = $derived(pack ? packVerifyRef(pack, page.url.origin, base) : null);
@@ -200,6 +214,8 @@
 			{#if manifestUrl}<a class="btn" href={manifestUrl} download={manifestFileName(pack.shortCode)} data-testid="pack-manifest-download">Download manifest</a>{/if}
 			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
+			{#if canShare}<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button>{/if}
+			{#if project}<NotesDrawer {projectId} target={{ kind: 'pack', packId: pack.id, name: `evidence pack v${pack.version}`, audiences: packAudiences(pack.status === 'issued') }} />{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
 				<span class="mono hash">{pack.manifestSha256}</span>. {#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>{pack.pdfPages ? ` (${pack.pdfPages} pages)` : ''}.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
@@ -219,6 +235,14 @@
 				</div>
 			{/if}
 		</div>
+		{#if canShare}
+			<Dialog bind:open={shareOpen} title="Share evidence pack v{pack.version} read-only" side>
+				{#if shareOpen}<ShareLinksPanel {projectId} pack={{ id: pack.id, name: `evidence pack version ${pack.version}`, status: pack.status, version: pack.version }} />{/if}
+				{#snippet actions()}
+					<button type="button" class="btn" onclick={() => (shareOpen = false)}>Close</button>
+				{/snippet}
+			</Dialog>
+		{/if}
 		<PackActions {projectId} {pack} issue={detail.issue} manifestMatches={detail.manifestMatches} {canEdit} onchange={reload} />
 		<Lazy load={loadReport}>
 			{#snippet children(EvidenceReportView)}

@@ -6,7 +6,10 @@
 // sees a `team` note. A scenario note (WP-3.15, 115_scenario_share_notes.sql)
 // has one of three more audiences, `assessors`, `parties` and
 // `public_participation` (docs/data-model.md § Notes has the matrix), and
-// every edit of one keeps the text it replaced (note_revision). The checks
+// every edit of one keeps the text it replaced (note_revision). A note on an
+// evidence pack (128_pack_share_notes.sql) is `team` (whoever reads the pack)
+// or `public_participation` (posted while the pack is issued and has a live
+// share link), its edits kept the same way. The checks
 // here repeat the rules for clear 403s; the policies are what hold if a check
 // is missed.
 import { Hono } from 'hono';
@@ -35,7 +38,9 @@ export const NOTE_VISIBILITIES = ['team', 'farm', 'assessors', 'parties', 'publi
 export type NoteVisibility = (typeof NOTE_VISIBILITIES)[number];
 /** The audiences only a scenario note has (note_participation_on_scenario). */
 export const SCENARIO_VISIBILITIES = ['assessors', 'parties', 'public_participation'] as const;
-const onScenarioOnly = (v: string | undefined) => (SCENARIO_VISIBILITIES as readonly string[]).includes(v ?? '');
+/** The audiences a pack note may have (note_pack_audience). */
+export const PACK_VISIBILITIES = ['team', 'public_participation'] as const;
+const onScenarioOnly = (v: string | undefined) => v === 'assessors' || v === 'parties';
 const Body = z
 	.string()
 	.trim()
@@ -50,15 +55,20 @@ export const CreateNote = z
 		runId: uuid.optional(),
 		settingKey: settingKey.optional(),
 		scenarioId: uuid.optional(),
+		packId: uuid.optional(),
 		visibility: z.enum(NOTE_VISIBILITIES).optional()
 	})
 	.strict()
 	.refine(
-		(b) => [b.nodeId, b.runId, b.settingKey, b.scenarioId].filter((t) => t !== undefined).length <= 1,
-		'a note is about one thing: a node, a run, a setting or a scenario'
+		(b) => [b.nodeId, b.runId, b.settingKey, b.scenarioId, b.packId].filter((t) => t !== undefined).length <= 1,
+		'a note is about one thing: a node, a run, a setting, a scenario or an evidence pack'
 	)
 	.refine((b) => b.visibility !== 'farm' || b.nodeId !== undefined, 'only a note on a farm can be shown to its farmers')
-	.refine((b) => !onScenarioOnly(b.visibility) || b.scenarioId !== undefined, 'only a note on a scenario can be for the assessors, the parties or public participation');
+	.refine((b) => !onScenarioOnly(b.visibility) || b.scenarioId !== undefined, 'only a note on a scenario can be for the assessors or the parties')
+	.refine(
+		(b) => b.visibility !== 'public_participation' || b.scenarioId !== undefined || b.packId !== undefined,
+		'only a note on a scenario or an evidence pack can be for public participation'
+	);
 
 export const EditNote = z.object({ body: Body }).strict();
 
@@ -69,13 +79,14 @@ export const NotesQuery = z
 		/** Exact key or group: `calibration` matches `calibration` and `calibration.*`. */
 		settingKey: settingKey.optional(),
 		scenarioId: uuid.optional(),
+		packId: uuid.optional(),
 		/** Only notes on this kind of target (`project`: the project-level ones). */
-		target: z.enum(['project', 'node', 'run', 'setting', 'scenario']).optional(),
+		target: z.enum(['project', 'node', 'run', 'setting', 'scenario', 'pack']).optional(),
 		limit: z.coerce.number().int().min(1).max(NOTES_LIMIT_MAX).optional()
 	})
 	.strict();
 
-export type NoteTarget = 'project' | 'node' | 'run' | 'setting' | 'scenario';
+export type NoteTarget = 'project' | 'node' | 'run' | 'setting' | 'scenario' | 'pack';
 
 interface NoteRow {
 	id: string;
@@ -89,6 +100,7 @@ interface NoteRow {
 	run_id: string | null;
 	setting_key: string | null;
 	scenario_id: string | null;
+	pack_id: string | null;
 	visibility: NoteVisibility;
 }
 
@@ -106,6 +118,7 @@ export interface Note {
 	runId: string | null;
 	settingKey: string | null;
 	scenarioId: string | null;
+	packId: string | null;
 	visibility: NoteVisibility;
 	/** The caller wrote it (and may edit it). */
 	mine: boolean;
@@ -113,8 +126,8 @@ export interface Note {
 	canDelete: boolean;
 }
 
-export const targetOf = (r: Pick<NoteRow, 'node_id' | 'run_id' | 'setting_key' | 'scenario_id'>): NoteTarget =>
-	r.node_id ? 'node' : r.run_id ? 'run' : r.setting_key ? 'setting' : r.scenario_id ? 'scenario' : 'project';
+export const targetOf = (r: Pick<NoteRow, 'node_id' | 'run_id' | 'setting_key' | 'scenario_id'> & { pack_id?: string | null }): NoteTarget =>
+	r.node_id ? 'node' : r.run_id ? 'run' : r.setting_key ? 'setting' : r.scenario_id ? 'scenario' : r.pack_id ? 'pack' : 'project';
 
 export function toNote(r: NoteRow, userId: string, role: Role): Note {
 	const mine = r.author_id === userId;
@@ -130,6 +143,7 @@ export function toNote(r: NoteRow, userId: string, role: Role): Note {
 		runId: r.run_id,
 		settingKey: r.setting_key,
 		scenarioId: r.scenario_id,
+		packId: r.pack_id,
 		visibility: r.visibility,
 		mine,
 		canDelete: mine || rank[role] >= rank.editor
@@ -139,7 +153,7 @@ export function toNote(r: NoteRow, userId: string, role: Role): Note {
 // The API lists no deleted note, not even to the editors RLS lets see them.
 const SELECT_NOTES = `
 	SELECT n.id, n.body, n.author_id, u.display_name AS author_name, n.created_at, n.edited_at,
-		n.node_id, nd.name AS node_name, n.run_id, n.setting_key, n.scenario_id, n.visibility
+		n.node_id, nd.name AS node_name, n.run_id, n.setting_key, n.scenario_id, n.pack_id, n.visibility
 	FROM note n
 	LEFT JOIN app_user u ON u.id = n.author_id
 	LEFT JOIN node nd ON nd.id = n.node_id
@@ -183,6 +197,37 @@ async function scenarioVisibility(db: Db, projectId: string, scenarioId: string,
 	return visibility;
 }
 
+/**
+ * Whether the caller may post a note with this visibility on evidence pack
+ * `packId` (the insert policy's rule, for a clear answer): 404 when it isn't a
+ * pack they read or can comment on, 403 when it is but not with that
+ * audience. Returns the visibility to use: the one asked for, or `team` for
+ * a reader of the pack and public participation for anyone else.
+ */
+async function packVisibility(db: Db, projectId: string, packId: string, asked: NoteVisibility | undefined): Promise<NoteVisibility> {
+	const { rows } = await db.query<{ readable: boolean; commentable: boolean; record: boolean }>(
+		`SELECT EXISTS (SELECT 1 FROM evidence_pack WHERE id = $1 AND project_id = $2) AS readable,
+			app_pack_commentable($2, $1) AS commentable,
+			app_pack_note_visible($2, $1, NULL) AS record`,
+		[packId, projectId]
+	);
+	const r = rows[0]!;
+	// The pack is read under RLS: another project's isn't there, nor one a contributor can't read unless it is
+	// open for comment, or its comment record is theirs to read (shared, then withdrawn or superseded: a clear 403 below).
+	if (!r.readable && !r.commentable && !r.record) throw notFound();
+	const visibility: NoteVisibility = asked ?? (r.readable ? 'team' : 'public_participation');
+	if (!(PACK_VISIBILITIES as readonly string[]).includes(visibility))
+		throw ApiError.coded(403, 'note_audience_denied', `a note on an evidence pack is for the team or for public participation, not ${visibility}`);
+	const { rows: ok } = await db.query<{ ok: boolean }>(
+		`SELECT CASE WHEN $3 = 'team' THEN app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM evidence_pack WHERE id = $2 AND project_id = $1)
+			ELSE app_pack_note_writable($1, $2) END AS ok`,
+		[projectId, packId, visibility]
+	);
+	if (!ok[0]?.ok && visibility === 'public_participation') throw ApiError.coded(403, 'note_comment_closed', 'this evidence pack is not open for public comment');
+	if (!ok[0]?.ok) throw ApiError.coded(403, 'note_audience_denied', `you can't post a note with visibility ${visibility} on this evidence pack`);
+	return visibility;
+}
+
 /** GET/POST /projects/:id/notes, GET /projects/:id/notes/counts, PATCH|DELETE /projects/:id/notes/:noteId, GET …/notes/:noteId/revisions. */
 export const noteRoutes = new Hono<AuthEnv>()
 	.get('/:id/notes', async (c) => {
@@ -201,8 +246,10 @@ export const noteRoutes = new Hono<AuthEnv>()
 			if (q.runId) add('n.run_id = ?', q.runId);
 			if (q.settingKey) add(`(n.setting_key = ? OR starts_with(n.setting_key, ? || '.'))`, q.settingKey);
 			if (q.scenarioId) add('n.scenario_id = ?', q.scenarioId);
-			if (q.target === 'project') where.push('n.node_id IS NULL AND n.run_id IS NULL AND n.setting_key IS NULL AND n.scenario_id IS NULL');
+			if (q.packId) add('n.pack_id = ?', q.packId);
+			if (q.target === 'project') where.push('n.node_id IS NULL AND n.run_id IS NULL AND n.setting_key IS NULL AND n.scenario_id IS NULL AND n.pack_id IS NULL');
 			if (q.target === 'scenario') where.push('n.scenario_id IS NOT NULL');
+			if (q.target === 'pack') where.push('n.pack_id IS NOT NULL');
 			if (q.target === 'node') where.push('n.node_id IS NOT NULL');
 			if (q.target === 'run') where.push('n.run_id IS NOT NULL');
 			if (q.target === 'setting') where.push('n.setting_key IS NOT NULL');
@@ -218,10 +265,10 @@ export const noteRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireRole(db, id, 'farmer');
-			const { rows } = await db.query<{ node_id: string | null; run_id: string | null; setting_key: string | null; scenario_id: string | null; n: number }>(
-				`SELECT node_id, run_id, setting_key, scenario_id, count(*)::integer AS n FROM note
+			const { rows } = await db.query<{ node_id: string | null; run_id: string | null; setting_key: string | null; scenario_id: string | null; pack_id: string | null; n: number }>(
+				`SELECT node_id, run_id, setting_key, scenario_id, pack_id, count(*)::integer AS n FROM note
 				 WHERE project_id = $1 AND deleted_at IS NULL
-				 GROUP BY node_id, run_id, setting_key, scenario_id`,
+				 GROUP BY node_id, run_id, setting_key, scenario_id, pack_id`,
 				[id]
 			);
 			const counts = {
@@ -229,13 +276,15 @@ export const noteRoutes = new Hono<AuthEnv>()
 				nodes: {} as Record<string, number>,
 				runs: {} as Record<string, number>,
 				settings: {} as Record<string, number>,
-				scenarios: {} as Record<string, number>
+				scenarios: {} as Record<string, number>,
+				packs: {} as Record<string, number>
 			};
 			for (const r of rows) {
 				if (r.node_id) counts.nodes[r.node_id] = r.n;
 				else if (r.run_id) counts.runs[r.run_id] = r.n;
 				else if (r.setting_key) counts.settings[r.setting_key] = r.n;
 				else if (r.scenario_id) counts.scenarios[r.scenario_id] = r.n;
+				else if (r.pack_id) counts.packs[r.pack_id] = r.n;
 				else counts.project = r.n;
 			}
 			return c.json(counts);
@@ -255,6 +304,17 @@ export const noteRoutes = new Hono<AuthEnv>()
 					`INSERT INTO note (project_id, author_id, body, scenario_id, visibility)
 					 VALUES ($1, app_current_user_id(), $2, $3, $4) RETURNING id`,
 					[id, body.body, body.scenarioId, visibility]
+				);
+				return c.json({ note: toNote(await loadNote(db, id, rows[0]!.id), userId, role) }, 201);
+			}
+			if (body.packId) {
+				// A pack note: the team (whoever reads the pack), or a public comment from any member contributor+ while it is open.
+				if (rank[role] < rank.contributor) throw ApiError.coded(403, 'note_audience_denied', 'a farmer can’t comment on an evidence pack');
+				const visibility = await packVisibility(db, id, body.packId, body.visibility);
+				const { rows } = await db.query<{ id: string }>(
+					`INSERT INTO note (project_id, author_id, body, pack_id, visibility)
+					 VALUES ($1, app_current_user_id(), $2, $3, $4) RETURNING id`,
+					[id, body.body, body.packId, visibility]
 				);
 				return c.json({ note: toNote(await loadNote(db, id, rows[0]!.id), userId, role) }, 201);
 			}
@@ -319,6 +379,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 				runId: note.run_id,
 				settingKey: note.setting_key,
 				scenarioId: note.scenario_id,
+				packId: note.pack_id,
 				visibility: note.visibility,
 				author: note.author_name,
 				// So deleting the author's account can pseudonymise this event (048_account_deletion.sql).
