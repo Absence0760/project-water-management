@@ -311,7 +311,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		.sort((x, y) => x.band.p50! - y.band.p50! || x.month - y.month)
 		.map((m) => ({ month: m.month, median: m.band.p50!, band: m.band }));
 
-	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired));
+	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired, change));
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
 	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
@@ -710,7 +710,11 @@ function siteCategory(run: EvidenceRunInput, site: EwrAssuranceSite): string | n
 /** Months whose natural flow is drier than the rule table's driest point (G16): the requirement is scaled with the flow there (model.md §2.9c). */
 const belowTable = (site: EwrAssuranceSite | null) => (site ? site.months.filter((m) => m.beyond === 'drier').length : null);
 
-function sites(b: EvidenceRunInput, a: EvidenceRunInput | null, bands: (key: string) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote'>): EvidenceSite[] {
+function sites(
+	b: EvidenceRunInput,
+	a: EvidenceRunInput | null,
+	bands: (key: string, siteA: EwrAssuranceSite, siteB: EwrAssuranceSite | null) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote' | 'fdcChange'>
+): EvidenceSite[] {
 	return (b.summary.ewrAssurance ?? []).map((site) => {
 		const other = a ? matchSite(a.summary.ewrAssurance ?? [], site) : null;
 		const otherMonths = new Map((other?.months ?? []).map((m) => [`${m.year}-${m.month}`, m]));
@@ -773,7 +777,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null, bands: (key: str
 			belowTableExpectedPct: site.naturalSource === 'run' && site.points.length ? 100 - site.points[site.points.length - 1]! : null,
 			byMonth,
 			fdcMonth,
-			...bands(site.nodeId ?? 'outlet'),
+			...bands(site.nodeId ?? 'outlet', site, other),
 			fdcDriestMonth
 		};
 	});
@@ -783,18 +787,21 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null, bands: (key: str
  * The banded FDC check per site (ER5): the cited ensemble's band on the
  * baseline's curve, and the paired ensemble's band on the application's own
  * curve (the same parameter sets on its inputs), per calendar month and table
- * point. No band, with the reason, when there is none to show.
+ * point; and (evidence-7) the paired change in the curve at each point, with
+ * the sets in which the application's flow is lower. No band, with the
+ * reason, when there is none to show.
  */
 function fdcBandsOf(
 	input: EvidenceInput,
 	cited: EvidenceEnsembleInput | null,
 	baseSum: EvidenceReport['uncertainty']['baseline'],
-	paired: PairedSummary | null
-): (key: string) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote'> {
+	paired: PairedSummary | null,
+	change: ChangeCell
+): (key: string, siteA: EwrAssuranceSite, siteB: EwrAssuranceSite | null) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote' | 'fdcChange'> {
 	const rule = declaredRuleOf(input.baseline);
 	const app = !!input.application;
-	return (key) => {
-		const none = (note: string) => ({ fdcBands: null, fdcBandNote: note });
+	return (key, siteA, siteB) => {
+		const none = (note: string) => ({ fdcBands: null, fdcBandNote: note, fdcChange: null });
 		if (!rule) return none(NO_BAND.notDeclared);
 		if (!cited || !baseSum) return none(NO_BAND.noEnsemble);
 		if (baseSum.gated) return none(NO_BAND.gated(baseSum.accepted, baseSum.total));
@@ -808,6 +815,27 @@ function fdcBandsOf(
 			b: other ? (other.months[i] ?? []).map(usable) : null
 		}));
 		const bOld = app && paired && !paired.gated && paired.carriesMeasures === false;
+		// The change is read point by point, so both runs must read the site at the same table points, in the same unit and component.
+		const samePoints =
+			!!siteB &&
+			siteA.unit === siteB.unit &&
+			siteA.component === siteB.component &&
+			siteA.points.length === siteB.points.length &&
+			siteA.points.every((p, j) => p === siteB.points[j]);
+		const moved = other && !bOld ? (paired!.reserveFdcChange?.find((x) => x.key === key) ?? null) : null;
+		const fdcChange =
+			moved && siteB && samePoints
+				? moved.months.map((points, i) => {
+						const month = calendarMonthOf(i);
+						const fa = siteA.byMonth.find((m) => m.month === month)?.fdc ?? [];
+						const fb = siteB.byMonth.find((m) => m.month === month)?.fdc ?? [];
+						return {
+							month,
+							// `moved` implies an application, for which the change cell is never null.
+							points: points.map((p, j) => change(diff(fa[j]?.impacted ?? null, fb[j]?.impacted ?? null), p.band, worseOf(p.worse, p.band.n))!)
+						};
+					})
+				: null;
 		return {
 			fdcBands,
 			fdcBandNote: !app
@@ -818,7 +846,10 @@ function fdcBandsOf(
 						? `The application’s curve: ${NO_BAND.gated(paired.members, cited.members + 1)}.`
 						: bOld
 							? `The application’s curve: ${NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE)}.`
-							: null
+							: moved && !samePoints
+								? 'The paired change isn’t tabled: the two runs read this site against different table points or units.'
+								: null,
+			fdcChange
 		};
 	};
 }

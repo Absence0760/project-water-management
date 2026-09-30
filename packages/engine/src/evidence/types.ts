@@ -38,8 +38,12 @@ import type { PairedSummary } from '../uncertainty/paired';
  * evidence-6: § 5 cites a capped run's cap (`EvidenceAllocationSource.capA` / `capB`): the
  * water years the registered volume was used up and the days the licence limit held use
  * back, by limit (RunSummary.allocations, engine ≥ 1.40.0 for the days).
+ * evidence-7: § 1's paired change in the FDC check curve (`EvidenceSite.fdcChange`, the
+ * engine review of ER5): per month and table point, the band on application − baseline of
+ * the impacted flow with "worse in k of n", from `PairedSummary.reserveFdcChange`, printed
+ * as a table under the chart instead of reading the change off two overlapping bands.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-6';
+export const EVIDENCE_REPORT_VERSION = 'evidence-7';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -377,6 +381,18 @@ export interface EvidenceSite {
 	 */
 	fdcBands: { month: number; a: (Band | null)[]; b: (Band | null)[] | null }[] | null;
 	fdcBandNote: string | null;
+	/**
+	 * The paired change in the FDC check curve (evidence-7), per calendar
+	 * month (water-year order) and table point, table unit: `run` the two
+	 * runs' own difference (application − baseline), `band` the paired band
+	 * on it (each kept parameter set on both runs' inputs), `worse` the sets
+	 * in which the application's flow at the point is lower. Null for
+	 * baseline evidence, and when the application's curve has no band
+	 * (`fdcBandNote` says why) or the two runs read the site against
+	 * different table points, units or components. Absent from a pack's
+	 * document before evidence-7.
+	 */
+	fdcChange?: { month: number; points: EvidenceChange[] }[] | null;
 	/**
 	 * The site's driest calendar month: the lowest mean natural flow over its
 	 * complete months in the baseline (evidence-3). A property of the river,

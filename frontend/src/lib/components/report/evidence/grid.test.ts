@@ -1,8 +1,8 @@
 // The Reserve heat maps' cells (issue #71, design §4.2; persona E: depth of
 // failure, the failed month the heavier mark, changes outlined).
-import type { EvidenceSiteMonth } from '@water-management/engine';
+import type { EvidenceChange, EvidenceSite, EvidenceSiteMonth } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { depthOf, fdcMonths, reserveGrid, waterYearLabel } from './grid';
+import { depthOf, fdcCaption, fdcChangeRows, fdcMonths, reserveGrid, waterYearLabel } from './grid';
 
 const m = (year: number, month: number, over: Partial<EvidenceSiteMonth> = {}): EvidenceSiteMonth => ({
 	year,
@@ -78,5 +78,50 @@ describe('fdcMonths: the FDC checks § 1 plots', () => {
 	it('plots whichever it has, and nothing without either', () => {
 		expect(fdcMonths({ fdcMonth: null, fdcDriestMonth: 7 }, true).map((f) => f.kind)).toEqual(['driest']);
 		expect(fdcMonths({ fdcMonth: null, fdcDriestMonth: null }, true)).toEqual([]);
+	});
+});
+
+describe('the FDC check’s paired change (evidence-7)', () => {
+	const band = (p5: number | null, p50: number | null, p95: number | null, n = 40) => ({ n, p5, p50, p95, min: p5, max: p95 });
+	const cell = (over: Partial<EvidenceChange>): EvidenceChange => ({ run: -0.012, band: band(-0.02, -0.01, -0.004), bandNote: null, worse: { k: 38, n: 40 }, ...over });
+	const bands: EvidenceSite['fdcBands'] = [{ month: 5, a: [band(1, 2, 3)], b: null }];
+	const hatched: EvidenceSite['fdcBands'] = [{ month: 5, a: [band(1, 2, 3)], b: [band(0.9, 1.9, 2.9)] }];
+	const f = { month: 5, why: 'the month met least often.' };
+
+	it('prints one row per table point: the paired median, its range and the run’s own difference, and the sets lower', () => {
+		const rows = fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({}), cell({ run: 0, band: band(0, 0, 0), worse: { k: 0, n: 40 } })] }] }, 5, [10, 90]);
+		expect(rows).toEqual([
+			{ point: 10, main: '−0.0100', sub: '−0.0200 to −0.0040 · run: −0.0120', worse: '38 of 40 sets (95 %)' },
+			{ point: 90, main: '0.0000', sub: '0.0000 to 0.0000 · run: 0.0000', worse: '0 of 40 sets (0 %)' }
+		]);
+		// Digits follow the month's largest change.
+		expect(fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({ run: -1.234, band: band(-2.5, -1.2, -0.3) })] }] }, 5, [50])[0]!.main).toBe('−1.20');
+	});
+
+	it('says "no band" with the reason and prints only the run’s own difference; nothing for a month without cells', () => {
+		const [row] = fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({ band: band(null, null, null, 12), bandNote: 'no band: not enough accepted parameter sets (12 of 41)', worse: null })] }] }, 5, [10]);
+		expect(row).toEqual({ point: 10, main: 'run: −0.0120', sub: 'no band: not enough accepted parameter sets (12 of 41)', worse: '—' });
+		expect(fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({})] }] }, 6, [10])).toEqual([]);
+		expect(fdcChangeRows({ fdcChange: null }, 5, [10])).toEqual([]);
+		expect(fdcChangeRows({}, 5, [10])).toEqual([]);
+		// A cell past the plotted points is left out, never "NaN %".
+		expect(fdcChangeRows({ fdcChange: [{ month: 5, points: [cell({}), cell({})] }] }, 5, [10]).map((r) => r.point)).toEqual([10]);
+	});
+
+	it('captions the chart: the table carries the change, and the overlap warning stays only where both bands are drawn with no table', () => {
+		const tabled = fdcCaption({ fdcBands: hatched, fdcBandNote: null, fdcChange: [{ month: 5, points: [cell({})] }] }, f, true);
+		expect(tabled).toMatch(/^May: the month met least often\. The simulated curve should lie on or above the EWR curve\. Shaded: how far the kept parameter sets spread each run’s own curve/);
+		expect(tabled).toContain('The table below pairs them');
+		expect(tabled).not.toMatch(/overlap/i);
+		// The paired band is gated: no hatched band and no table, so the shading is the baseline's alone; the note says why.
+		const gated = fdcCaption({ fdcBands: bands, fdcBandNote: 'The application’s curve: no band: not enough accepted parameter sets (12 of 41).', fdcChange: null }, f, true);
+		expect(gated).toContain('Shaded: the range of the kept parameter sets on the baseline’s curve (R1).');
+		expect(gated).not.toMatch(/hatched|The table below|overlap/i);
+		expect(gated).toMatch(/12 of 41\)\.$/);
+		// Both bands drawn but no change tabled (a pack issued before evidence-7, or different table points): the warning stays.
+		expect(fdcCaption({ fdcBands: hatched, fdcBandNote: null }, f, true)).toContain('Overlapping ranges don’t mean no change');
+		expect(fdcCaption({ fdcBands: hatched, fdcBandNote: 'The paired change isn’t tabled: the two runs read this site against different table points.', fdcChange: null }, f, true)).toContain('Overlapping ranges don’t mean no change');
+		expect(fdcCaption({ fdcBands: bands, fdcBandNote: null, fdcChange: null }, f, false)).toMatch(/Shaded: the range of the kept parameter sets on the baseline’s curve \(R1\)\.$/);
+		expect(fdcCaption({ fdcBands: null, fdcBandNote: 'no band: no ensemble on the declared rule', fdcChange: null }, f, true)).toMatch(/Curve band: no band: no ensemble on the declared rule\.$/);
 	});
 });
