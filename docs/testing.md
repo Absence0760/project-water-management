@@ -108,6 +108,20 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   policies were re-planning them for every row) and passwords were hashed at
   bcrypt's minimum cost under vitest (`auth/password.ts`; the e2e API server
   too, with `PASSWORD_HASH_COST=4`, e2e/README.md; 12 elsewhere).
+- **DB test files share the job queue, so each cleans up the jobs it
+  queues.** Claim, tick and purge are global on purpose, and the files run
+  one after another on one database, so a job one file leaves pending is
+  claimed by the next file's `runTick` and shows up in its counts (a
+  leftover yield, outlook, sweep and alert job made feeds.db.test.ts's
+  "Run now" tick finish 5 jobs, not 1, whenever the file that left them
+  happened to run first). A file that queues a job (a re-run, yield,
+  outlook, sweep, calibration, report …) runs it (`runTick`) or retires it
+  (`retirePendingJobs(projectId)` in `__tests__/helpers.ts`;
+  `clearLadderJobs(ctx)` after `buildLadder`) before it ends. The guard is
+  `backend/src/__tests__/db-setup.ts`, a per-file setup of the `db` and
+  `perf-db` projects: after every file it fails that file if any job is
+  still queued, retrying or running, naming each kind and project, then
+  retires them so only the leaking file fails.
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.

@@ -3,9 +3,9 @@
 // with a 400 and the code `body_refused` by readJson (http/body.ts), never a
 // 500 from Postgres (NUL is 22021 / 22P05) or a stack overflow. The route
 // list is the app's live inventory, so a new route is swept too.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, signUp } from '../__tests__/helpers.js';
-import { buildLadder, SAMPLE, type LadderCtx, type Sample } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type Sample } from '../__tests__/routeSamples.js';
 import { MAX_JSON_DEPTH } from './body.js';
 
 const ORIGIN = 'http://localhost:7777';
@@ -119,6 +119,7 @@ describe("hostile values in every field of each route's own body", () => {
 	beforeAll(async () => {
 		ctx = await buildLadder('BodyField');
 	}, 60_000);
+	afterAll(() => clearLadderJobs(ctx));
 	const samples = { ...SAMPLE, ...OPTIONAL };
 
 	const request = (route: string, s: Sample, text: string) => {

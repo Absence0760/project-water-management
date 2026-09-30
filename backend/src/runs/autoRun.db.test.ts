@@ -88,6 +88,7 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		expect(wait).toBeLessThanOrEqual(15 * MIN);
 		// The project says when, for the header.
 		expect((await u.call('GET', `/projects/${pid}`)).body.project.rerunQueuedFor).toBe(on.body.rerunQueuedFor);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 
 	it('an idempotent re-send queues nothing (no day changed)', async () => {
@@ -167,6 +168,7 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		const wait = pushed!.run_after.getTime() - Date.now();
 		expect(wait).toBeGreaterThan(29 * MIN);
 		expect(wait).toBeLessThanOrEqual(30 * MIN);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 
 	it('leaves a pending manual re-run as it is (it reads the new data too), and queues a new one behind a running re-run', async () => {
