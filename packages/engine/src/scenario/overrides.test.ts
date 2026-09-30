@@ -1103,6 +1103,12 @@ describe('later ops (engine ≥ 1.34.0): crops, land cover, rule tables, registe
 		const none = base();
 		none.model.landCover![0]!.areaKm2 = 0;
 		expect(texts(none, one({ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.9 }, none).input)).toEqual(['Farm B: land cover "pine" 0 km² → 0 km² condensed, its patches’ cover changed']);
+		// The same patches in another order are no change.
+		const two = base();
+		two.model.landCover!.push({ id: 'lc2', nodeId: 'B', coverClass: 'pine', areaKm2: 0.5, densityPct: 0.9, factors: null });
+		const swapped = structuredClone(two);
+		swapped.model.landCover!.reverse();
+		expect(texts(two, swapped)).toEqual([]);
 		// Another class is another patch group: removed from one, added to the other.
 		expect(texts(base(), one({ op: 'landCover.set', patchId: 'lc1', field: 'coverClass', value: 'eucalyptus' }).input)).toHaveLength(2);
 	});

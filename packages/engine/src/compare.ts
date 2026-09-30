@@ -1336,13 +1336,13 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
 		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
 		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
-			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string; patches: string }>();
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string; patches: string[] }>();
 			for (const p of m.landCover ?? []) {
 				const farm = farmOf(p.nodeId);
 				const k = key(farm, p.coverClass);
-				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '', patches: '' };
+				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '', patches: [] };
 				cur.km2 += p.areaKm2;
-				cur.patches += `${p.areaKm2}@${p.densityPct};`;
+				cur.patches.push(`${p.areaKm2}@${p.densityPct}`);
 				cur.condensed += p.areaKm2 * p.densityPct;
 				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
 				g.set(k, cur);
@@ -1358,9 +1358,13 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
 			// The area on its own too (engine ≥ 1.34.0, landCover.set): a patch at no cover can grow without its condensed area moving.
 			// Also a patch's cover on its own (a patch of no area, or two patches that cancel out): the patches changed.
-			else if (!same(x.condensed, y.condensed) || !same(x.km2, y.km2) || x.factors !== y.factors || x.patches !== y.patches) {
+			// Patches as a set (sorted), so the same patches in another order are no change.
+			const px = [...x?.patches ?? []].sort().join(';');
+			const py = [...y.patches].sort().join(';');
+			if (!x) continue;
+			if (!same(x.condensed, y.condensed) || !same(x.km2, y.km2) || x.factors !== y.factors || px !== py) {
 				const area = !same(x.km2, y.km2) ? ` (area ${km2(x.km2)} → ${km2(y.km2)})` : '';
-				const cover = !area && same(x.condensed, y.condensed) && x.patches !== y.patches ? ', its patches’ cover changed' : '';
+				const cover = !area && same(x.condensed, y.condensed) && px !== py ? ', its patches’ cover changed' : '';
 				out.push({
 					area: 'network',
 					kind: 'changed',
