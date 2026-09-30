@@ -7,7 +7,7 @@ import { OPERATING_DEFAULTS, type ModelInput, type ModelOutput, type NetworkNode
 import { runModel, runModelWith, withVerification } from '../run';
 import { randomInput } from '../testing/fuzz';
 import { sameOutput } from '../testing/invariants';
-import { checkInvariants, checkOperatingRules } from '../verify/checks';
+import { checkInvariants, checkOperatingRules, checkWorkings } from '../verify/checks';
 import { divertCapacityToday, handsOffToday, operatingOf } from './supply';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -165,6 +165,65 @@ describe('the hands-off flow and River to dam (issue #204)', () => {
 	});
 });
 
+describe('the hands-off flow on a farm without a dam (issue #204)', () => {
+	// With no dam, what the split and River to dam send "into the dam" (K, M, O) is irrigated straight from
+	// the river (b023's stand-in for a river pump), so the hands-off flow cuts all three: O first, then K and M.
+
+	it('upstream inflow routed to an absent dam leaves the hands-off flow (H = 1000, D = 2000, 700 kept)', () => {
+		// B, upstream, has no crops and passes its runoff to A; A has no area of its own, so H = 1000, I = 0.
+		const mk = (a: Partial<NetworkNode>) => {
+			const i = input({ areaKm2: 0, pctUpstreamToDam: 1, ...a }, 2000, 1);
+			i.model.nodes.push(node('B', 'farm', 'A'));
+			return i;
+		};
+		const open = run(mk({}), [1000]);
+		const kept = run(mk({ handsOffM3Day: flat(700) }), [1000]);
+		passed(open);
+		passed(kept);
+		expect(col(kept, 'A', 'inflow_upstream')).toEqual([1000]);
+		// Before: all 1000 went into the absent dam and was irrigated, and nothing flowed on.
+		expect(col(open, 'A', 'supplied')).toEqual([1000]);
+		expect(col(open, 'A', 'outflow')).toEqual([0]);
+		// Now K is cut to 300 and 700 passes.
+		expect(col(kept, 'A', 'upstream_to_dam')).toEqual([300]);
+		expect(col(kept, 'A', 'supplied')).toEqual([300]);
+		expect(col(kept, 'A', 'outflow')).toEqual([700]);
+	});
+
+	it('cuts O first, then M, and takes nothing (exactly) when less than the hands-off flow flows', () => {
+		// Half the runoff to the absent dam, River to dam up to 3000 of the rest, 700 kept.
+		const o = run(input({ pctRunoffToDam: 0.5, divertCapacityM3Day: 3000, handsOffM3Day: flat(700) }, 2000, 3), [1000, 4000, 300]);
+		passed(o);
+		// Day 0: M = 500, O = 500 took everything; O goes to 0 and M to 300. Day 1: O alone is cut, 2000 → 1300.
+		// Day 2: 300 < 700 flows, so all of it passes: M and O exactly 0.
+		expect(col(o, 'A', 'diverted_to_dam')).toEqual([0, 1300, 0]);
+		expect(col(o, 'A', 'runoff_to_dam')).toEqual([300, 2000, 0]);
+		expect(col(o, 'A', 'below_dam_not_diverted')).toEqual([700, 700, 300]);
+		expect(col(o, 'A', 'supplied')).toEqual([300, 2000, 0]);
+	});
+
+	it('a dam out of service (capacity 0 today) is none', () => {
+		// The same farm with a 10 000 m³ dam that isn't in service until after the run: as without a dam.
+		const o = run(input({ pctRunoffToDam: 1, damCapacityM3: 10_000, damInServiceFrom: '2030-01-01', handsOffM3Day: flat(700) }, 2000, 1), [1000]);
+		passed(o);
+		expect(col(o, 'A', 'runoff_to_dam')).toEqual([300]);
+		expect(col(o, 'A', 'outflow')).toEqual([700]);
+	});
+
+	it('checkOperatingRules holds a farm without a dam to H + I − (K + M + O) ≥ MIN(H + I, keep)', () => {
+		const i = input({ pctRunoffToDam: 1, handsOffM3Day: flat(700) }, 2000, 1);
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: [1000] }));
+		expect(checkOperatingRules(i, out)).toBeNull();
+		// M of 1000 and S of 0 (the run before the fix): nothing left for the river.
+		const bad = structuredClone(out);
+		const set = (key: string, v: number) => (bad.series.find((s) => s.nodeId === 'A' && s.key === key)!.values[0] = v);
+		set('runoff_to_dam', 1000);
+		set('runoff_below_dam', 0);
+		set('below_dam_not_diverted', 0);
+		expect(checkOperatingRules(i, bad)).toMatch(/with no dam, what it took into the dam and River to dam left 0 in the river, less than MIN\(the 1000 reaching it, the hands-off flow 700\)/);
+	});
+});
+
 describe('operatingOf (issue #204)', () => {
 	const farm = (over: Partial<NetworkNode>) => node('F', 'farm', 'G', over);
 	it('none by default, and a hands-off flow of 0 in every month without the EWR is none', () => {
@@ -277,5 +336,25 @@ describe('checkOperatingRules (issue #204)', () => {
 		// The whole run's self-checks report it.
 		const o = withVerification(i, edit(out, 'diverted_to_dam', (v) => (v[0] = 10)));
 		expect(o.summary.verification!.checks.find((c) => c.id === 'operatingRules')!.passed).toBe(false);
+	});
+
+	it('checkWorkings replays River to dam, so a diversion cut to 0 is caught (the one-sided checks let it through)', () => {
+		const i = input({ damCapacityM3: 1e6, divertCapacityM3Day: 3000, handsOffM3Day: flat(800) }, 0, 3);
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: [1000, 4000, 0] }));
+		expect(checkWorkings(i, out)).toBeNull();
+		// Day 1: 4000 below the dam, 800 kept, so River to dam takes its full 3000. O = 0 (S untouched) keeps
+		// every bound checkOperatingRules holds, but not the replay.
+		const tampered = edit(out, 'diverted_to_dam', (v) => (v[1] = 0));
+		expect(checkOperatingRules(i, tampered)).toBeNull();
+		expect(checkWorkings(i, tampered)).toMatch(/A day 1: diverted 0 ≠ 3000 \(MIN\(capacity 3000, L \+ N\) less what passes for the hands-off flow 800\)/);
+	});
+
+	it('the pump taking into the hands-off flow is reported under workings too', () => {
+		const i = input({ ...dam, supplyRule: 'riverFirst', pumpCapacityM3Day: 1500, handsOffM3Day: flat(700) }, 2000, 3);
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: [1000, 4000, 0] }));
+		const o = withVerification(i, edit(out, 'river_abstraction', (v) => (v[0] = 100)));
+		const w = o.summary.verification!.checks.find((c) => c.id === 'workings')!;
+		expect(w.passed).toBe(false);
+		expect(w.detail).toMatch(/pumped 100 from the river, more than the 500 below the dam less the 700 that must pass/);
 	});
 });

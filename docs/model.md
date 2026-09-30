@@ -2052,7 +2052,7 @@ storage to whole m³; the engine doesn't (R1).
 | L | Upstream inflow "below dam" | `H − K` |
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
-| O | Diverted back to dam ("River to dam") | `MIN(divertCapacity, L + N)`, the capacity being the month's when River to dam is set by month (engine ≥ 1.31.0, §2.7h); then cut so S passes the senior users' requirement (§2.7c) and, with a hands-off flow, so `S ≥ MIN(L + N, hands-off keep)` (§2.7h) |
+| O | Diverted back to dam ("River to dam") | `MIN(divertCapacity, L + N)`, the capacity being the month's when River to dam is set by month (engine ≥ 1.31.0, §2.7h); then cut so S passes the senior users' requirement (§2.7c) and, with a hands-off flow, so `S ≥ MIN(L + N, hands-off keep)`, or on a farm without a dam today `S ≥ MIN(H + I, hands-off keep)`, cutting K and M too once O is 0 (§2.7h) |
 | A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
 | G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1). A farm with a supply rule other than `damFirst` also pumps from the river below the dam (§2.7e) |
 | P | Interim storage | `store[t−1] + Pd − E − Sp + M + O + K + J − G` |
@@ -3234,7 +3234,9 @@ value every month), and the client catchment regression suite is unchanged.
 keep_h = MAX(handsOff[m], handsOffEwr ? Z : 0)                 0 without a hands-off flow
 O      = MIN(divert[m] (or divertCapacity), L + N)
          then the senior users' pass (§2.7c) cuts O, K and M so S ≥ MIN(Zs, H + I)
-         then O = MIN(O, MAX(0, L + N − keep_h))              River to dam leaves MIN(L + N, keep_h)
+         then, with a dam today, O = MIN(O, MAX(0, L + N − keep_h))   River to dam leaves MIN(L + N, keep_h)
+         or, with none (capacity 0 today), O then K and M cut          the farm leaves MIN(H + I, keep_h)
+         so S = H + I − (K + M + O) ≥ MIN(H + I, keep_h)
 S      = L + N − O
 pump keep = MAX(Zs, the pass-inflow release's target, keep_h)   (§2.7e)
 Gr     = on the river ? MIN(pump capacity, MAX(0, S − pump keep), demand) : 0
@@ -3252,12 +3254,27 @@ one keeps `passed_for_senior` meaning what it did.
   only; River to dam is a pump or a furrow taking the same river below the
   dam, so a hands-off flow on the farm binds it too (issue #204). The design
   didn't cover River to dam; this is the decision taken.
-- *It cuts only O, never K or M.* What the dam split sends into the dam
-  (the upstream-to-dam % K and the runoff-to-dam % M) is the on-channel dam
-  catching its own inflow, not an abstraction a hands-off condition applies
-  to. Passing inflow through an on-channel dam is a release rule (§2.7a,
-  pass inflow), which the pump already leaves in the river. Out of scope
-  here.
+- *With a dam it cuts only O, never K or M.* What the dam split sends into
+  the dam (the upstream-to-dam % K and the runoff-to-dam % M) is the
+  on-channel dam catching its own inflow, not an abstraction a hands-off
+  condition applies to. Passing inflow through an on-channel dam is a
+  release rule (§2.7a, pass inflow), which the pump already leaves in the
+  river. Out of scope here.
+- *Without a dam it cuts K, M and O.* On a farm with no dam today (capacity
+  0: none entered, or one not in service yet or filled with sediment,
+  §2.7g), what the split and River to dam send "into the dam" is irrigated
+  straight from the river, b023's stand-in for a river pump (§2.7e), so all
+  three are abstraction. The farm leaves `MIN(H + I, keep_h)`: O is cut
+  first, then K and M pro rata, as the senior users' pass does (§2.7c),
+  exactly 0 when everything passes. Cutting only O there would leave the
+  keep unenforced: `pctUpstreamToDam` 1, a hands-off flow of 700, H = 1000
+  and a demand of 2000 irrigated all 1000 and left the river dry. What the
+  absent dam doesn't irrigate spills back to the river the same day, so the
+  cut only ever lowers the farm's supply.
+- *A river off-take sourced at a farm* (§2.6a) keeps only its own hands-off
+  flow (and the EWR, when its rule asks), never the farm's: the farm's
+  hands-off flow binds the farm's own pump and River to dam, not other
+  rules drawing on the flow leaving it.
 - *The EWR is the node's Z*, the requirement passing the farm (its own and
   upstream shares), as for a pass-inflow release and a river off-take; not
   only its own share Y.
@@ -3278,9 +3295,14 @@ comparison lists them (the monthly rows as the dam release's).
 
 **Checks.** `checkOperatingRules` (engine ≥ 1.31.0, a self-check of its
 own) holds every farm, every day, to: 0 ≤ Gr ≤ pump capacity; S − Gr ≥
-MIN(S, keep_h); S ≥ MIN(L + N, keep_h); 0 ≤ O ≤ the month's River to dam
-capacity. `checkWorkings` replays the pump's room with the hands-off keep and
-bounds O by the month's capacity. The fuzz generator gives 25 % of networks
+MIN(S, keep_h); on a farm with a dam today S ≥ MIN(L + N, keep_h), on one
+without S = H + I − (K + M + O) ≥ MIN(H + I, keep_h); 0 ≤ O ≤ the month's
+River to dam capacity. These are bounds, so `checkWorkings` also replays
+them: the pump's room with the hands-off keep, and O itself, O₀ = MIN(the
+month's capacity, L + N) cut so S = MAX(L + N − O₀, MIN(Zs, H + I), MIN(L + N,
+keep_h)) when K and M are uncut, and O = 0 when either was cut (the senior
+users' pass and a dam-less hands-off flow cut them only once O is 0); a
+diversion wrongly cut to 0 fails it. The fuzz generator gives 25 % of networks
 hands-off flows on half their farms (months from 0 to more than any flow, 0
 in every month, the EWR kept or not) and River to dam by month (months off,
 winter only); the Excel audit workbook refuses a farm with either, by name.
@@ -7273,7 +7295,7 @@ text:
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
-| `checkOperatingRules` | Engine ≥ 1.31.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep); 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
+| `checkOperatingRules` | Engine ≥ 1.31.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |

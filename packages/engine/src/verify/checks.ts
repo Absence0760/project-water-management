@@ -985,6 +985,22 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			const divCap = divertCapacityToday(divertOf, monthOfEpochDay(day0 + t));
 			if (o < 0 || o > Math.min(divCap, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity ${divCap}, L + N)]`;
+			{
+				// River to dam's replay (docs/model.md §2.7c, §2.7h): O₀ = MIN(capacity, L + N), then the senior
+				// users' pass and the hands-off flow cut it, so S = MAX(L + N − O₀, MIN(Zs, H + I), MIN(L + N, keep)).
+				// They cut K and M only once O is 0 (the pass, and the hands-off flow on a farm with no dam today).
+				const ror = sup !== undefined && sup.rule === 3;
+				const K0 = ror ? 0 : Math.min(h * n.pctUpstreamToDam, h);
+				const M0 = ror ? 0 : Math.min(i * n.pctRunoffToDam, i);
+				const hk = ops.handsOff ? handsOffToday(ops.handsOff, monthOfEpochDay(day0 + t), Zc[t]!) : 0;
+				const zs = ZS?.[t] ?? 0;
+				if (k === K0 && m === M0) {
+					const o0 = ror ? 0 : Math.min(divCap, l + nn);
+					const wantO = Math.max(0, Math.min(o0, l + nn - Math.max(Math.min(zs, h + i), Math.min(l + nn, hk))));
+					if (!near(o, wantO, Math.max(l, nn, zs, hk)))
+						return `${where}: diverted ${o} ≠ ${wantO} (MIN(capacity ${divCap}, L + N) less what passes for ${zs > 0 ? `the senior requirement ${zs}${hk > 0 ? ' and ' : ''}` : ''}${hk > 0 ? `the hands-off flow ${hk}` : ''})`;
+				} else if (o !== 0) return `${where}: took less of K or M into the dam (${k} of ${K0}, ${m} of ${M0}) while still diverting ${o}`;
+			}
 			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
 			const c = curve && cap > 0 && qPrev > 0 ? curveAreaAt(curve, kd === 1 ? qPrev : qPrev / kd) : null;
 			const onCurve = c && kd !== 1 ? { area: c.area, slope: c.slope / kd } : c;
@@ -1665,8 +1681,11 @@ function checkRuleVolumes(
  * - the river pump never takes more than its capacity: 0 ≤ Gr ≤ pump capacity;
  * - the flow left after the pump is at least MIN(the flow before it, the
  *   hands-off keep): S − Gr ≥ MIN(S, keep);
- * - the flow left after River to dam is at least MIN(the flow before it, the
- *   hands-off keep): S = L + N − O ≥ MIN(L + N, keep);
+ * - on a farm with a dam today, the flow left after River to dam is at least
+ *   MIN(the flow before it, the hands-off keep): S = L + N − O ≥ MIN(L + N, keep);
+ * - on a farm without one (capacity 0 today), where K, M and O are irrigated
+ *   straight from the river, the flow left after all three is at least
+ *   MIN(the farm's inflow, the keep): S = H + I − (K + M + O) ≥ MIN(H + I, keep);
  * - no diversion above the month's capacity: 0 ≤ O ≤ River to dam's
  *   capacity that month (by month when set, else the one value);
  * with keep = MAX(the month's hands-off amount, the EWR required here Z when
@@ -1688,7 +1707,12 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 		const GR = g('river_abstraction');
 		if (!L || !N || !O || !S || !Z) return `${n.id}: the columns L, N, O, S and Z are needed to check its operating rules`;
 		if (sup && !GR) return `${n.id}: river_abstraction column missing for a supply rule that pumps from the river`;
+		const H = g('inflow_upstream');
+		const I = g('runoff');
+		if (!H || !I) return `${n.id}: the columns H and I are needed to check its operating rules`;
 		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
+		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.
+		const ks = capacityScaleOf(n, day0, out.days, []);
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
 			const month = monthOfEpochDay(day0 + t);
@@ -1696,7 +1720,13 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 			const keep = ops.handsOff ? handsOffToday(ops.handsOff, month, Z[t]!) : 0;
 			const cap = divertCapacityToday(divertOf, month);
 			if (o < -tol(0) || o > cap + tol(cap)) return `${where}: River to dam diverted ${o}, outside [0, its capacity that month ${cap}]`;
-			if (ss < Math.min(l + nn, keep) - tol(Math.max(l + nn, keep))) return `${where}: River to dam left ${ss} below it, less than MIN(the ${l + nn} before it, the hands-off flow ${keep})`;
+			if (n.damCapacityM3 * (ks ? ks[t]! : 1) > 0) {
+				if (ss < Math.min(l + nn, keep) - tol(Math.max(l + nn, keep))) return `${where}: River to dam left ${ss} below it, less than MIN(the ${l + nn} before it, the hands-off flow ${keep})`;
+			} else {
+				const hi = H[t]! + I[t]!;
+				if (ss < Math.min(hi, keep) - tol(Math.max(hi, keep)))
+					return `${where}: with no dam, what it took into the dam and River to dam left ${ss} in the river, less than MIN(the ${hi} reaching it, the hands-off flow ${keep})`;
+			}
 			if (sup) {
 				const gr = GR![t]!;
 				if (gr < -tol(0) || gr > sup.pumpM3Day + tol(gr)) return `${where}: the river pump took ${gr}, outside [0, its capacity ${sup.pumpM3Day}]`;

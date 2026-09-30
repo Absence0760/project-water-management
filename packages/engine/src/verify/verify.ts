@@ -31,7 +31,7 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['allocations', 'Registered volumes: a cap is never exceeded in a water year, a full allocation’s demand adds up to the registered volume, and the run’s allocation summary matches its own series', checkAllocations],
 	[
 		'operatingRules',
-		'Each farm’s river pump stays within its capacity, and the pump and River to dam leave the hands-off flow in the river (or all of it, when less flows) and divert no more than the month’s capacity',
+		'Each farm’s river pump stays within its capacity and leaves the hands-off flow (or all of the flow, when less flows) in what passes the dam; River to dam diverts no more than the month’s capacity and leaves the hands-off flow in what passes the dam split (L + N) on a farm with a dam, or in what reaches the farm (H + I) on one without',
 		checkOperatingRules
 	]
 ];

@@ -870,14 +870,46 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					}
 				}
 			}
+			// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date), and the
+			// storage the dam-level triggers read, at the entered capacity's scale.
+			const k = capacityK(node, t);
+			const cap = node.damCapacityM3 * k;
 			// The hands-off flow (engine ≥ 1.31.0, docs/model.md §2.7h): River to dam leaves MIN(L + N, keep)
-			// below the dam, keep = MAX(the month's hands-off amount, the EWR Z here when kept). It cuts only
-			// the diversion O, not what the dam's split sends into it (K, M): the on-channel dam is not a pump.
+			// below the dam, keep = MAX(the month's hands-off amount, the EWR Z here when kept). With a dam it
+			// cuts only the diversion O, not what the dam's split sends into it (K, M): the on-channel dam is
+			// not a pump. Without one today (capacity 0), K, M and O are irrigated straight from the river
+			// (b023's stand-in for a river pump, ./supply.ts), so all three are abstraction: the farm leaves
+			// MIN(H + I, keep), cutting O first, then K and M pro rata, as the senior users' pass does.
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			const ho = node.handsOff;
 			const hk = ho ? handsOffToday(ho, month[t]!, Z) : 0;
-			if (hk > 0 && O > 0) O = Math.min(O, Math.max(0, L + N - hk));
+			if (hk > 0) {
+				if (cap > 0) {
+					if (O > 0) O = Math.min(O, Math.max(0, L + N - hk));
+				} else {
+					let short = Math.min(hk, H + I) - (L + N - O);
+					if (short > 0) {
+						const dO = Math.min(short, O);
+						O -= dO;
+						short -= dO;
+						const into = K + M;
+						if (short > 0 && into > 0) {
+							if (short >= into) {
+								// Everything passes: exactly nothing is taken (see the senior users' pass above).
+								K = 0;
+								M = 0;
+							} else {
+								const dK = (short * K) / into;
+								K = Math.max(0, K - dK);
+								M = Math.max(0, M - (short - dK));
+							}
+							L = H - K;
+							N = I - M;
+						}
+					}
+				}
+			}
 			const qPrev = startStorage(i, t);
 			// Dam losses and gains before irrigation (audit N2). The surface area
 			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
@@ -885,10 +917,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Evaporation takes at most what is there (yesterday's storage, the
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
-			// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date), and the
-			// storage the dam-level triggers read, at the entered capacity's scale.
-			const k = capacityK(node, t);
-			const cap = node.damCapacityM3 * k;
 			const dead = k === 1 ? node.deadStorageM3 : node.deadStorageM3 * k;
 			const qLevel = k === 1 ? qPrev : k > 0 ? qPrev / k : 0;
 			const day = damDay(node, qPrev, t, lakeEvapMmDay, damRainMm);
