@@ -61,6 +61,11 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	await page.goBack();
 	await expect(page).toHaveURL(/#set-report-schedules$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
+
+	// Data feeds is a lazy chunk: its anchor is on a wrapper that is always there, and the link lands on the panel.
+	await menu.getByRole('link', { name: 'Data feeds', exact: true }).click();
+	await expect(page).toHaveURL(/#set-feeds$/);
+	await expect(page.locator('#set-feeds').getByRole('heading', { level: 2, name: 'Data feeds' })).toBeInViewport();
 });
 
 test('a link into a group (?tab=calibration, a note’s #set- link) opens the page on that group, below the menu', async ({ page, owner }) => {
