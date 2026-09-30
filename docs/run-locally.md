@@ -70,6 +70,13 @@ pnpm dev
 
 - **Frontend:** http://localhost:7777
 - **Backend:** http://localhost:3001 (`GET /health` → `{ "ok": true }`)
+- `pnpm dev` starts Postgres first (`pnpm dev:db:up`, which returns at once when
+  it is already up), so a reboot or a `pnpm dev:db:down` doesn't leave the
+  backend failing with `ECONNREFUSED 127.0.0.1:5434`. `dev:full`,
+  `dev:run:backend` and `dev:run:worker` do the same. Mailpit and MinIO stay
+  opt-in (`pnpm dev:mail:up`, `pnpm dev:s3:up`). Every checkout, git worktrees
+  included, drives the same containers: `docker-compose.yml` fixes the compose
+  project name, so `pnpm dev:db:down` in any of them stops the shared database.
 - The backend applies any pending migrations every time it starts or restarts
   (`backend/scripts/dev-server.ts` under `tsx watch`, which also watches `backend/migrations/`).
   So a database set up before a new migration landed, or a `git pull` that adds one while
