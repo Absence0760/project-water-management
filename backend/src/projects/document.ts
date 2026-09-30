@@ -127,7 +127,8 @@ export interface ProjectDocumentNote {
  * The project's notes for the export, as the caller sees them (RLS), without
  * deleted ones. Only viewers and above can export, and they see every
  * undeleted note, `farm` ones included, so the file is what they can read in
- * the app.
+ * the app. Notes on a scenario (115_scenario_share_notes) stay out, as the
+ * scenarios themselves do: they are about an application, not the model.
  */
 export async function loadDocumentNotes(db: Db, projectId: string): Promise<ProjectDocumentNote[]> {
 	const { rows } = await db.query<{
@@ -148,7 +149,7 @@ export async function loadDocumentNotes(db: Db, projectId: string): Promise<Proj
 		 LEFT JOIN app_user u ON u.id = n.author_id
 		 LEFT JOIN node nd ON nd.id = n.node_id
 		 LEFT JOIN model_run r ON r.id = n.run_id
-		 WHERE n.project_id = $1 AND n.deleted_at IS NULL
+		 WHERE n.project_id = $1 AND n.deleted_at IS NULL AND n.scenario_id IS NULL
 		 ORDER BY n.created_at, n.id`,
 		[projectId]
 	);
@@ -157,7 +158,7 @@ export async function loadDocumentNotes(db: Db, projectId: string): Promise<Proj
 		author: r.author,
 		createdAt: r.created_at.toISOString(),
 		editedAt: r.edited_at?.toISOString() ?? null,
-		target: targetOf(r),
+		target: targetOf({ ...r, scenario_id: null }) as ProjectDocumentNote['target'],
 		nodeId: r.node_id,
 		nodeName: r.node_name,
 		runId: r.run_id,

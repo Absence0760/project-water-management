@@ -1,5 +1,5 @@
 // Two river measures of the licensing evidence report (issue #71, engine ≥
-// 1.32.0, docs/model.md §2.9e): days the river stops at the outlet, and days
+// 1.33.0, docs/model.md §2.9e): days the river stops at the outlet, and days
 // a farm or water user is served in full while an EWR site below it fails.
 // New outputs only: both are read off the run's own daily series, so no
 // result the engine had before changes.

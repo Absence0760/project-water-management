@@ -69,7 +69,7 @@ export const NO_BAND = {
 /** A no-flow day, in words (NO_FLOW_M3_DAY). */
 export const BASIS_NO_FLOW = `Simulated outflow at the outlet below 1 L/s (${NO_FLOW_M3_DAY} m³/day, a gauge’s 0.000 m³/s), every day of the run`;
 
-/** Why a run has no figure for a measure added in engine 1.32.0. */
+/** Why a run has no figure for a measure added in engine 1.33.0. */
 const beforeMeasures = (what: string) => `Not assessed: ${what} made before engine ${ENSEMBLE_MEASURES_SINCE}, which added this measure; run the model again.`;
 
 /** Which of a project's declared rule the stored settings hold, or null when none is (or it is malformed). */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { modelRuleIssues, SUPPLY_RULES, type NetworkNode, type ProjectModel } from '@water-management/engine';
-import { ewrSiteIssue, supplyIssues, validateModel } from './validate';
+import { ewrSiteIssue, operatingIssues, supplyIssues, validateModel } from './validate';
 
 function node(id: string, name: string, down: string | null): NetworkNode {
 	return {
@@ -240,6 +240,23 @@ describe('validateModel', () => {
 		expect(messages(model([{ ...g, supplyRule: 'riverFirst' }, farm({})]))).toEqual([
 			'"Gauge": only a hydrological unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
 		]);
+	});
+
+	it('refuses a hands-off flow or River to dam by month off a farm, and a bad month, as the API does (engine 1.32.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const farm = (over: Partial<NetworkNode>) => ({ ...node('a', 'A', 'g'), ...over });
+		const twelve = new Array(12).fill(100);
+		expect(messages(model([g, farm({ handsOffM3Day: twelve, handsOffEwr: true, divertMonthlyM3Day: twelve })]))).toEqual([]);
+		expect(messages(model([g, farm({ handsOffM3Day: [...twelve.slice(1), -1] })]))).toEqual(['"A": the hands-off flow needs 12 monthly values, none negative.']);
+		expect(messages(model([g, farm({ divertMonthlyM3Day: [1, 2] })]))).toEqual(['"A": River to dam by month needs 12 monthly values, none negative.']);
+		expect(messages(model([{ ...g, handsOffEwr: true }, farm({})]))).toEqual(['"Gauge": only a hydrological unit has a hands-off flow and River to dam by month; clear them.']);
+		// Exactly the backend's model rule on the kind (engine operatingKind).
+		for (const kind of ['farm', 'user', 'gauge'] as const)
+			for (const over of [{}, { handsOffM3Day: twelve }, { handsOffEwr: true }, { handsOffEwr: false }, { divertMonthlyM3Day: twelve }] as Partial<NetworkNode>[]) {
+				const n: NetworkNode = { ...node('a', 'A', 'g'), kind, ...over };
+				const backend = [...modelRuleIssues(model([g, n])).keys()].some((k) => k.startsWith('operatingKind'));
+				expect(operatingIssues(n).length > 0, JSON.stringify({ kind, over })).toBe(backend);
+			}
 	});
 
 	it('refuses the EWR site flag off the outlet or a hydrological unit, exactly as the backend does (engine 1.5.0)', () => {

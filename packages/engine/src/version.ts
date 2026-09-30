@@ -1,7 +1,7 @@
 // The engine's version, stamped on every run. A change in engine behaviour
 // bumps it (docs/STACK.md). A module of its own so pages that only show or
 // compare the version don't load the model code (issue #9).
-export const ENGINE_VERSION = '1.32.0';
+export const ENGINE_VERSION = '1.33.0';
 
 /**
  * The engine that added the evidence report's measures to the uncertainty
@@ -10,4 +10,4 @@ export const ENGINE_VERSION = '1.32.0';
  * in uncertainty/ensemble.ts, so the report page can name it without loading
  * the ensemble code.
  */
-export const ENSEMBLE_MEASURES_SINCE = '1.32.0';
+export const ENSEMBLE_MEASURES_SINCE = '1.33.0';

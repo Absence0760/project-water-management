@@ -106,7 +106,7 @@ export interface MemberMetrics {
 	reserveRate: Record<string, number | null>;
 	/** Simulated outflow's flow-duration curve per water-year month, at FDC_POINTS, m³/day; [] for a month the run has no day in. */
 	fdcM3Day: number[][];
-	// Engine ≥ 1.32.0 (ENSEMBLE_MEASURES_SINCE, issue #71): absent on members stored before, whose bands then say so.
+	// Engine ≥ 1.33.0 (ENSEMBLE_MEASURES_SINCE, issue #71): absent on members stored before, whose bands then say so.
 	/** Days the outlet's simulated outflow is below NO_FLOW_M3_DAY (summary.catchment.noFlow). */
 	noFlowDays?: number;
 	/** Days each EWR site's daily EWR was not met ('outlet' or the gauge's id; summary.servedWhileEwrFails). */
@@ -138,9 +138,9 @@ export interface EnsembleHeader {
 	waterYears: { waterYear: number; days: number }[];
 	farms: { nodeId: string; name: string }[];
 	reserveSites: { key: string; name: string }[];
-	/** Every farm and water user (engine ≥ 1.32.0; absent on older headers). */
+	/** Every farm and water user (engine ≥ 1.33.0; absent on older headers). */
 	units?: { nodeId: string; name: string }[];
-	/** Every EWR site, outlet first (engine ≥ 1.32.0; absent on older headers). */
+	/** Every EWR site, outlet first (engine ≥ 1.33.0; absent on older headers). */
 	ewrSites?: { key: string; name: string }[];
 	fdcPoints: number[];
 	/** Run days in each water-year month (0 = Oct): a month without any has no flow-duration curve. */
@@ -733,7 +733,7 @@ export interface EnsembleBands {
 	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order, at `fdcPoints` exceedance %; only months the run has days in. */
 	fdc: { month: number; ewrM3Day: number; points: Band[] }[];
 	fdcPoints: number[];
-	// Engine ≥ 1.32.0 (ENSEMBLE_MEASURES_SINCE): absent on summaries stored before.
+	// Engine ≥ 1.33.0 (ENSEMBLE_MEASURES_SINCE): absent on summaries stored before.
 	/** Days the outlet's flow is below NO_FLOW_M3_DAY. */
 	noFlowDays?: Band;
 	/** Days each EWR site's daily EWR is not met, outlet first. */

@@ -145,7 +145,7 @@ describe('storing the result', () => {
 		expect(res.body.details.join(' ')).toMatch(/ewrDaysNotMet/);
 	});
 
-	it('refuses a kept member without the evidence measures (engine ≥ 1.32.0): a missing one would thin its band unseen', async () => {
+	it('refuses a kept member without the evidence measures (engine ≥ 1.33.0): a missing one would thin its band unseen', async () => {
 		const k = members.findIndex((m) => m.accepted && m.index > 0);
 		const { noFlowDays: _drop, ...thin } = members[k]!.metrics!;
 		const res = await owner.call('POST', `${base(runA)}/uncertainty/${uid}/result`, { members: members.map((m, i) => (i === k ? { ...m, metrics: thin } : m)), coverage });
@@ -169,7 +169,7 @@ describe('storing the result', () => {
 		expect(e.accepted).toBe(kept);
 		expect(e.summary.accepted).toBe(kept);
 		expect(e.summary.bands.ewrDaysNotMet.p50).not.toBeNull();
-		// The evidence measures (engine ≥ 1.32.0), banded over every kept member.
+		// The evidence measures (engine ≥ 1.33.0), banded over every kept member.
 		expect(e.summary.bands.noFlowDays.n).toBe(kept);
 		expect(e.summary.bands.ewrSites.map((x: { key: string }) => x.key)).toEqual(['outlet']);
 		expect(e.summary.bands.supply.every((x: { band: { n: number } }) => x.band.n === kept)).toBe(true);

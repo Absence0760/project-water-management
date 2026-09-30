@@ -135,7 +135,7 @@ const ENSEMBLE_COLUMNS = `u.id, u.run_id AS "runId", u.baseline_id AS "baselineI
  * stored before a summary field existed (the Reserve's "worse in", ER4)
  * carries it too; the members themselves were verified when stored. A
  * measure the members don't carry (no-flow days, EWR days per site, supply
- * per unit and the Reserve FDC on members stored before engine 1.32.0)
+ * per unit and the Reserve FDC on members stored before engine 1.33.0)
  * comes out as a band of no pairs, which the report prints as "no band".
  */
 async function loadEnsembles(

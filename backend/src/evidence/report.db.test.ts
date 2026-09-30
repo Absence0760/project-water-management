@@ -134,7 +134,7 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		const days = r.rows.find((x) => x.id === 'ewrDays')!;
 		expect(days.change?.band?.p50).not.toBeNull();
 		expect(days.change?.worse?.n).toBe(r.uncertainty.paired?.members);
-		// The engine-1.32.0 measures, recomputed with the scenario's own units (the backend passes them: Upper has no
+		// The engine-1.33.0 measures, recomputed with the scenario's own units (the backend passes them: Upper has no
 		// crop, so no demand and no pairs for its own-supply band, which exists all the same).
 		expect(r.uncertainty.paired?.carriesMeasures).toBe(true);
 		expect(r.uncertainty.paired?.ownSupply?.band.n).toBe(0);

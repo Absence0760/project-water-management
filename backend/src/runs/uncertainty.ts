@@ -128,7 +128,7 @@ const MetricsSchema = z
 		curtailmentM3Day: z.record(z.string().max(80), num),
 		reserveRate: z.record(z.string().max(80), num.nullable()),
 		fdcM3Day: z.array(z.array(num).max(20)).length(12),
-		// Engine ≥ 1.32.0 (issue #71). Required on a post: a result is stored only on the engine it was started on
+		// Engine ≥ 1.33.0 (issue #71). Required on a post: a result is stored only on the engine it was started on
 		// (storable), which always computes them, and a member missing one would thin its band unseen. Ensembles
 		// stored before lack them; those are read from the database, never through this schema.
 		noFlowDays: z.number().int().min(0),

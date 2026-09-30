@@ -1414,8 +1414,56 @@
 //             848000ac merged). The report's publication, assurance and build
 //             record on top of main's evidence report. Headroom ~3 KB.
 // 2026-09-30  total 1241 → 1246 KB (issue #70: measured 1243 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1250 KB (issue #70: measured 1247 with main @
+// 2026-09-29  total 1210 → 1214 KB (issue #204: measured 1211 with main @
+//             3f9b4c17 merged, the entries above included). A farm's
+//             hands-off flow and River to dam by month: the engine's operating rules
+//             (network/supply.ts operatingOf, the operatingRules self-check,
+//             the scenario and comparison fields) in the workspace and the
+//             workers that bundle the engine, and in the one-node form the
+//             Supply section's hands-off months and EWR tick, the new
+//             RiverToDamFields, their plain-words lines and save rules
+//             (network/supply.ts, model/validate.ts operatingIssues). The
+//             review's fixes kept the growth to ~4 KB: every twelve-month row of the
+//             one-node form is now one MonthFields component (network/
+//             MonthFields.svelte + monthFields.ts; five callers' tables and
+//             setMonth/fillAll folded into it), and the engine's dam-less
+//             hands-off cut. No new dependency. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1244 KB (issue #204: measured 1241 with main @
+//             848000ac merged). The hands-off flow and River to dam by month
+//             fields on top of main's evidence report. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1247 KB (issue #204: measured 1244 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1250 KB (issue #204: measured 1247 with main @
+//             5502d0a6 merged). #225's evidence-report follow-ups now in
+//             main. Headroom ~3 KB.
+// 2026-09-30  total 1250 → 1254 KB (issue #204: measured 1251 with main @
+//             5be749ca merged). #215's report publication and assurance now
+//             in main. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1249 KB (PR #229: measured 1246 with main @
+//             848000ac merged). Against main's 1237: share links and comments
+//             for a submitted application (WP-3.15): the shared application's
+//             view on /share (share/ScenarioView, share/scenario.ts), scenario
+//             comments in the notes list and the application panel, and the
+//             share-link panel's application links. No new dependency.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1254 KB (PR #229: measured 1251 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main; nothing
+//             of the share links changed. Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1257 KB (PR #229: measured 1254 with main @
+//             5502d0a6 merged). #225's evidence-report follow-ups now in
+//             main. Headroom ~3 KB.
+// 2026-09-30  total 1250 → 1261 KB (PR #229: measured 1258 with main @
+//             5be749ca merged). #215's report publication and assurance now
+//             in main; nothing of the share links changed. Headroom ~3 KB.
+// 2026-09-30  total 1254 → 1265 KB (PR #229: measured 1262 with main @
+//             da8c6959 merged). #220's hands-off flow now in main; nothing of
+//             the share links changed. Headroom ~3 KB.
 // 2026-09-29  total 1231 → 1233 KB (issue #71, the evidence measures,
-//             engine 1.32.0: measured 1233 against 1231 on its base
+//             engine 1.33.0: measured 1233 against 1231 on its base
 //             e1d60130, +1.97 KB gzipped). The evidence report's lazy chunk
 //             +1.31 KB (§ 4's "served in full while a site fails" tables and
 //             banded Change column, § 2's two new rows, the FDC chart's
@@ -1432,9 +1480,10 @@
 // 2026-09-30  total 1241 → 1245 KB (issue #71: measured 1242 with main @
 //             e8ebaf18 merged). #222's allocations chart now in main.
 //             Headroom ~3 KB.
-// 2026-09-30  total 1246 → 1250 KB (issue #70: measured 1247 with main @
-//             5502d0a6 merged). #225's evidence-report follow-ups now in
-//             main. Headroom ~3 KB.
+// 2026-09-30  total 1265 → 1267 KB (issue #71: measured 1264 with main @
+//             b72ba4eb merged). #229's share links and #204's hands-off flow
+//             now in main; nothing of the evidence measures changed, engine
+//             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1445,7 +1494,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1250,
+	totalCodeKb: 1267,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

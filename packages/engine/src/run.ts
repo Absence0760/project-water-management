@@ -37,7 +37,7 @@ import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './n
 import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
-import { supplyOf } from './network/supply';
+import { operatingOf, supplyOf } from './network/supply';
 import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
@@ -424,7 +424,7 @@ function runNetwork(
 	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR, or
 	// with settings.ewrChargeSource 'ruleTable' the site's rule-table requirement where it has one.
 	const chargeSites = ewrChargeSites(settings, siteNodes, topo.outflow, ewrAssurance, sim, simOutflow, ewr, ewrShort, days, nodes, warnings);
-	// Units served in full while an EWR site below them fails (engine ≥ 1.32.0, issue #71, ./reserve/riverMeasures.ts):
+	// Units served in full while an EWR site below them fails (engine ≥ 1.33.0, issue #71, ./reserve/riverMeasures.ts):
 	// per site, against the daily requirement its charge follows.
 	const servedWhileFails = servedWhileEwrFails({
 		days,
@@ -1305,6 +1305,7 @@ export function buildNetworkPlan(
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings),
+				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),

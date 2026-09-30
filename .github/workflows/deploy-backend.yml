@@ -19,7 +19,9 @@ name: Deploy backend
 #              backend@*/web@*, and every AWS variable/secret is set. Until the AWS
 #              account is bootstrapped, this is where a release stops, with a
 #              pointer to infra/README.md § Operator steps.
-#   build      no environment, no AWS. Installs deps and packages the four
+#   build      no environment, no AWS. Runs the engine suite + soak
+#              (scripts/release/engine-build.mjs; its record goes into every
+#              bundle), installs deps and packages the four
 #              Lambda zips (API, migrate, worker, fetcher), and builds the
 #              report renderer's container image (backend/renderer.Dockerfile),
 #              saved as an artifact. Third-party npm code never runs in a job
@@ -115,7 +117,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30  # the engine soak: ~5 min on a 4-core runner
     steps:
       - name: Checkout the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -140,6 +142,15 @@ jobs:
 
       - name: Typecheck backend
         run: pnpm -C backend check
+
+      # The engine build's test record (WP-3.13, model.md §2.10f): the engine's
+      # unit suite (the invariant tests) with its random-network soak widened to
+      # 2 000 catchments, on this commit. A failed suite stops the release here.
+      # The script puts the record in $GITHUB_ENV as ENGINE_BUILD, which
+      # package-lambdas.sh bakes into every Lambda bundle for the evidence packs
+      # (an esbuild define; backend/src/release/engineBuild.ts reads it).
+      - name: Engine invariant suite and soak
+        run: node scripts/release/engine-build.mjs --soak-cases 2000
 
       # backend/dist/lambda.zip (API) + backend/dist/migrate.zip (migrations +
       # owner-role runner) + backend/dist/worker.zip (background jobs) +

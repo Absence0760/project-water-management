@@ -4,21 +4,28 @@
 	// switch levels. Only the m³/day is stored; the pump count and rate are a
 	// calculator that fills it (the model stores one number that can't disagree
 	// with itself), so a saved capacity reloads into the m³/day field with the
-	// calculator empty. The node is the editor's own object, so edits land in
-	// the model directly.
+	// calculator empty. Below them, the hands-off flow (engine ≥ 1.32.0, issue
+	// #204, §2.7h): a flow by month and/or the EWR left in the river before the
+	// pump or River to dam takes anything. The node is the editor's own
+	// object, so edits land in the model directly.
 	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { supplyIssues } from '$lib/model/validate';
-	import { noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
+	import { operatingIssues, supplyIssues } from '$lib/model/validate';
+	import MonthFields from './MonthFields.svelte';
+	import { handsOffPreview, handsOffTicked, noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `sp-${k}-${node.id}`;
+	// History's unit filter: a farm's own fields (a gauge or user keeps them only to clear).
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	const rule = $derived<SupplyRule>(node.supplyRule ?? SUPPLY_DEFAULTS.supplyRule);
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
 	const problems = $derived(supplyIssues(node));
+	const operating = $derived(operatingIssues(node));
 	const noDam = $derived(noDamSupplyHint(node));
 	const shared = $derived(sharedPumpHint(node));
 
@@ -32,6 +39,10 @@
 		if (v !== null) node.pumpCapacityM3Day = v;
 	}
 	const cap = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
+
+	// The hands-off flow by month (water-year order); null = no set flow.
+	const label = $derived(node.name || 'this hydrological unit');
+	const handsOff = $derived(node.handsOffM3Day ?? null);
 </script>
 
 <div class="supply" data-testid="supply-{node.id}">
@@ -42,6 +53,7 @@
 				{#each SUPPLY_RULES as r (r)}<option value={r}>{cap(SUPPLY_RULE_LABEL[r])}</option>{/each}
 			</select>
 			<span class="hint" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
+			<FieldHistoryLine field="node:{node.id}:supplyRule" {unit} />
 		</div>
 		{#if rule !== 'damFirst'}
 			{#if !readonly}
@@ -82,21 +94,59 @@
 						{readonly ? 'Pumps × m³/h per pump × 24 h.' : 'Or enter the pumps and their rate to work it out (pumps × m³/h × 24 h).'}
 					{/if}
 				</span>
+				<FieldHistoryLine field="node:{node.id}:pumpCapacityM3Day" {unit} />
 			</div>
 		{/if}
 		{#if rule === 'trigger'}
 			<div class="field">
 				<span class="lbl"><label for={id('trigger')}>Switch to river below <span class="u">(% of dam)</span></label><HelpTip key="node.supplyTriggerPct" /></span>
 				<NumberInput id={id('trigger')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct} onchange={(v) => (node.supplyTriggerPct = v ?? 0)} />
+				<FieldHistoryLine field="node:{node.id}:supplyTriggerPct" {unit} />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for={id('stop')}>Back to the dam at <span class="u">(% of dam)</span></label><HelpTip key="node.supplyStopPct" /></span>
 				<NumberInput id={id('stop')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct} onchange={(v) => (node.supplyStopPct = v ?? 0)} />
+				<FieldHistoryLine field="node:{node.id}:supplyStopPct" {unit} />
 			</div>
 		{/if}
 	</div>
+	<div class="hands-off" data-testid="hands-off-{node.id}">
+		<h3 class="sub">Hands-off flow <HelpTip key="node.handsOffM3Day" /></h3>
+		<label class="check">
+			<input type="checkbox" disabled={readonly} checked={handsOff !== null} onchange={(e) => (node.handsOffM3Day = handsOffTicked(e.currentTarget.checked))} />
+			Leave a set flow in the river, by month
+		</label>
+		{#if handsOff !== null}
+			<MonthFields
+				values={handsOff}
+				label={(m) => `Hands-off flow of ${label} in ${m}, m³/day`}
+				caption="Hands-off flow, m³/day, per month"
+				fillLabel="Use October’s flow for every month"
+				{readonly}
+				onchange={(next) => (node.handsOffM3Day = next)}
+			/>
+		{/if}
+		<FieldHistoryLine field="node:{node.id}:handsOffM3Day" {unit} />
+		<div class="check-row">
+			<label class="check">
+				<input type="checkbox" disabled={readonly} checked={node.handsOffEwr === true} onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)} />
+				Also leave the EWR in the river
+			</label>
+			<HelpTip key="node.handsOffEwr" />
+		</div>
+		<FieldHistoryLine field="node:{node.id}:handsOffEwr" {unit} />
+		<p class="hint note" data-testid="hands-off-note">{handsOffPreview(node)}</p>
+	</div>
 	{#each problems as p (p)}
 		<p class="problem" role="alert">{cap(p)}</p>
+	{/each}
+	{#each operating as p (p)}
+		<div class="problem-row">
+			<p class="problem" role="alert">{cap(p)}</p>
+			{#if node.kind !== 'farm' && node.divertMonthlyM3Day != null && !readonly}
+				<button type="button" class="btn btn-sm" onclick={() => (node.divertMonthlyM3Day = null)}>Clear River to dam by month</button>
+			{/if}
+		</div>
 	{/each}
 	{#if noDam}<p class="hint note" role="note">{noDam}</p>{/if}
 	{#if shared}<p class="hint note" role="note" data-testid="shared-pump-note">{shared}</p>{/if}
@@ -130,6 +180,36 @@
 		font-weight: 400;
 		color: var(--text-muted);
 	}
+	.sub {
+		font-size: 0.85rem;
+		font-weight: 600;
+		margin: 0.75rem 0 0.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		margin-bottom: 0.5rem;
+	}
+	.check-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
+	}
+	.check-row .check {
+		margin-bottom: 0;
+	}
+	.problem-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+	}
 	.problem {
 		margin: 0.25rem 0;
 		font-size: 0.85rem;
@@ -141,7 +221,8 @@
 	}
 	@media (max-width: 640px) {
 		.field :global(input),
-		.field select {
+		.field select,
+		.problem-row .btn {
 			min-height: 44px;
 		}
 	}

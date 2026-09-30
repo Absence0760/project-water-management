@@ -895,7 +895,9 @@ nothing. Step by step:
      `export-tf-vars.sh`). Until the account
      is bootstrapped and `export-tf-vars.sh` has run, **every release stops
      here** with a pointer to the runbook, before anything is built.
-6. **build** installs dependencies and builds the artifact. It has no
+6. **build** installs dependencies, runs the engine suite and soak for the
+   [engine build record](#engine-build-record) (a failure stops the release
+   here), and builds the artifact with that record in it. It has no
    environment and no AWS credentials, so third-party npm code never runs
    next to them.
 7. **deploy** waits in `environment: production` until the operator opens
@@ -906,6 +908,28 @@ nothing. Step by step:
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
    ECR, tagged with the version.
+
+### Engine build record
+
+Every report's validation statement names the engine build's own test results
+(model.md §2.10f, roadmap WP-3.13), and the evidence pack manifests will too
+(WP-3.14). The build job of both release workflows makes that record before it
+builds, with `scripts/release/engine-build.mjs --soak-cases N` (1 600 cases for
+the web, 2 000 for the backend): the engine's unit suite with its random-network
+soak widened to N, on this commit. A failing suite fails the release. The
+script puts the record (`{version, gitSha, invariantsPassed, soakCases}`) in
+`$GITHUB_ENV` as `ENGINE_BUILD`:
+
+- **web**: `frontend/vite.config.ts` injects it as `__ENGINE_BUILD__` for the
+  validation statement (below).
+- **backend**: `infra/scripts/package-lambdas.sh` passes it to every Lambda
+  bundle as the esbuild define `__ENGINE_BUILD_JSON__`;
+  `backend/src/release/engineBuild.ts` `engineBuild()` reads it, and is null
+  without one or for a record made for another `ENGINE_VERSION`. It is not an
+  environment variable of the Lambdas.
+
+Unset, both inject an empty string: dev, the e2e build and any local build say
+*Not recorded for this build*.
 
 ### The production environment's branch and tag policy
 

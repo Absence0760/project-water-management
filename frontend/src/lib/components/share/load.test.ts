@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import type { ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
-import { loadShare, type ShareApi } from './load';
+import type { ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import { loadScenarioShare, loadShare, type ShareApi } from './load';
 
 const TOKEN = 'x'.repeat(43);
 const VIEW = { project: { name: 'Sandspruit' } } as ShareView;
@@ -18,6 +18,10 @@ function fakeApi(over: Partial<ShareApi> = {}): ShareApi & { calls: string[] } {
 		series: async (t, key) => {
 			calls.push(`series ${key}`);
 			return series(key, key === 'ewr' ? [2, 2] : [1, 3]);
+		},
+		scenario: async (t) => {
+			calls.push(`scenario ${t}`);
+			return { project: { id: 'p', name: 'Sandspruit' } } as ShareScenario;
 		},
 		...over
 	};
@@ -47,5 +51,22 @@ describe('loadShare', () => {
 		expect(none).toMatchObject({ state: 'ready', months: null, chartFailed: false });
 		const failed = await loadShare(fakeApi({ series: async () => Promise.reject(new ApiError(500, 'The server had a problem')) }), TOKEN);
 		expect(failed).toMatchObject({ state: 'ready', months: null, chartFailed: true });
+	});
+});
+
+describe('loadScenarioShare (WP-3.15)', () => {
+	it('asks nothing without a token, and reads the scenario with one', async () => {
+		const api = fakeApi();
+		expect(await loadScenarioShare(api, null)).toEqual({ state: 'nolink' });
+		expect(api.calls).toEqual([]);
+		expect(await loadScenarioShare(api, TOKEN)).toMatchObject({ state: 'ready', view: { project: { name: 'Sandspruit' } } });
+		expect(api.calls).toEqual([`scenario ${TOKEN}`]);
+	});
+
+	it('turns a 404 into the dead-link state and anything else into an error', async () => {
+		const dead = fakeApi({ scenario: async () => Promise.reject(new ApiError(404, 'not found')) });
+		expect(await loadScenarioShare(dead, TOKEN)).toEqual({ state: 'dead' });
+		const down = fakeApi({ scenario: async () => Promise.reject(new Error('offline')) });
+		expect(await loadScenarioShare(down, TOKEN)).toEqual({ state: 'error', message: 'offline' });
 	});
 });

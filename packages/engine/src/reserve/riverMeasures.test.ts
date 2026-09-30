@@ -1,5 +1,5 @@
 // No-flow days and "served in full while the site fails" (issue #71, engine ≥
-// 1.32.0, docs/model.md §2.9e): the definitions on hand-made series, each with
+// 1.33.0, docs/model.md §2.9e): the definitions on hand-made series, each with
 // its positive control, and a real run's summary against its own daily series.
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';

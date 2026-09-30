@@ -115,7 +115,7 @@ test('an application on the nominated run gives the full evidence report, draft 
 	// The outlet's row comes before the works' row, which starts the same way.
 	const days = table.getByRole('row', { name: /^Days below the EWR/ }).first();
 	await expect(days.getByRole('cell').nth(3)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
-	// The engine-1.32.0 measures carry the paired band and "worse in" (ER4): no-flow days and the applicant's own supply.
+	// The engine-1.33.0 measures carry the paired band and "worse in" (ER4): no-flow days and the applicant's own supply.
 	for (const label of [/^No-flow days at the outlet/, /^The applicant’s own supply/])
 		await expect(table.getByRole('row', { name: label }).getByRole('cell').nth(3)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
 	// The upper farm's dam has no EWR site between it and the outlet: said, with the assessor's question.

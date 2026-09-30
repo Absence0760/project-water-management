@@ -5,16 +5,18 @@
 	// amounts sit below it. The outlet capacity and seepage share are ordinary
 	// number fields in the Farm dam group (./fields.ts).
 	import { DAM_RELEASE_RULES, type DamReleaseRule, type NetworkNode } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
 	import { curveNotes, curveText, parseDamCurve } from './damCurve';
+	import MonthFields from './MonthFields.svelte';
+	import { monthsOf } from './monthFields';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `dam-${k}-${node.id}`;
 	const label = $derived(node.name || 'this hydrological unit');
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	const RULE_LABEL: Record<DamReleaseRule, string> = {
 		none: 'None: the dam releases nothing',
 		passInflow: 'Pass inflow: up to what the river below still needs',
@@ -60,21 +62,13 @@
 	);
 
 	const rule = $derived(node.damReleaseRule ?? 'none');
-	const release = $derived(node.damReleaseM3Day ?? new Array<number>(12).fill(0));
+	const release = $derived(node.damReleaseM3Day ?? monthsOf(0));
 	const useEwr = $derived(rule === 'passInflow' && (node.damReleaseM3Day === null || node.damReleaseM3Day === undefined));
 
 	function setRule(r: DamReleaseRule) {
 		node.damReleaseRule = r;
 		// A fixed release needs its amounts; pass inflow starts from the EWR.
-		if (r === 'fixed' && !node.damReleaseM3Day) node.damReleaseM3Day = new Array(12).fill(0);
-	}
-	function setMonth(i: number, v: number | null) {
-		const next = [...release];
-		next[i] = v ?? 0;
-		node.damReleaseM3Day = next;
-	}
-	function fillAll() {
-		node.damReleaseM3Day = new Array(12).fill(release[0] ?? 0);
+		if (r === 'fixed' && !node.damReleaseM3Day) node.damReleaseM3Day = monthsOf(0);
 	}
 </script>
 
@@ -135,6 +129,7 @@
 			</div>
 		{/if}
 	{/if}
+	<FieldHistoryLine field="node:{node.id}:damCurve" {unit} />
 
 	<h3 class="sub">Releases <HelpTip key="node.damReleaseRule" /></h3>
 	<div class="field">
@@ -151,6 +146,7 @@
 				A compensation or low-flow release is a common licence condition; pick a rule to model one.
 			{/if}
 		</span>
+		<FieldHistoryLine field="node:{node.id}:damReleaseRule" {unit} />
 	</div>
 	{#if rule === 'passInflow'}
 		<label class="check">
@@ -158,33 +154,23 @@
 				type="checkbox"
 				disabled={readonly}
 				checked={useEwr}
-				onchange={(e) => (node.damReleaseM3Day = e.currentTarget.checked ? null : new Array(12).fill(0))}
+				onchange={(e) => (node.damReleaseM3Day = e.currentTarget.checked ? null : monthsOf(0))}
 			/>
 			Pass up to the EWR required here (this hydrological unit's share and upstream shares)
 		</label>
 	{/if}
 	{#if rule === 'fixed' || (rule === 'passInflow' && !useEwr)}
-		<table class="data compact months">
-			<caption>
-				{rule === 'fixed' ? 'Release' : 'Flow to keep below the dam'}, m³/day, per month <HelpTip key="node.damReleaseM3Day" />
-			</caption>
-			<thead>
-				<tr>{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}</tr>
-			</thead>
-			<tbody>
-				<tr>
-					{#each WATER_YEAR_MONTHS as m, i (m)}
-						<td>
-							<NumberInput label="Dam release of {label} in {m}, m³/day" min={0} grouped={readonly} disabled={readonly} value={release[i] ?? 0} onchange={(v) => setMonth(i, v)} />
-						</td>
-					{/each}
-				</tr>
-			</tbody>
-		</table>
-		{#if !readonly}
-			<button type="button" class="btn btn-sm" onclick={fillAll}>Use October’s amount for every month</button>
-		{/if}
+		<MonthFields
+			values={release}
+			label={(m) => `Dam release of ${label} in ${m}, m³/day`}
+			caption="{rule === 'fixed' ? 'Release' : 'Flow to keep below the dam'}, m³/day, per month"
+			help="node.damReleaseM3Day"
+			fillLabel="Use October’s amount for every month"
+			{readonly}
+			onchange={(next) => (node.damReleaseM3Day = next)}
+		/>
 	{/if}
+	<FieldHistoryLine field="node:{node.id}:damReleaseM3Day" {unit} />
 </div>
 
 <style>
@@ -203,8 +189,7 @@
 		align-items: flex-start;
 		margin: 0.25rem 0 0.5rem;
 	}
-	.rows td,
-	.months td :global(input) {
+	.rows td {
 		font-variant-numeric: tabular-nums;
 	}
 	svg {
@@ -266,25 +251,6 @@
 		gap: 0.4rem;
 		font-size: 0.85rem;
 		margin-bottom: 0.5rem;
-	}
-	.months {
-		display: block;
-		overflow-x: auto;
-		margin: 0.5rem 0;
-	}
-	.months caption {
-		text-align: left;
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: var(--text-2);
-		padding-bottom: 0.25rem;
-	}
-	.months td {
-		min-width: 76px;
-	}
-	.months td :global(input) {
-		width: 100%;
-		text-align: right;
 	}
 	@media (max-width: 640px) {
 		.field select,

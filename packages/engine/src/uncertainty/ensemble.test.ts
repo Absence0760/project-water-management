@@ -425,7 +425,7 @@ describe('runEnsemble on a synthetic catchment', () => {
 		expect(memberMismatches(ctx, flipped, [kept]).join(' ')).toMatch(/kept false, recomputed true/);
 	});
 
-	it('carries the evidence measures (engine ≥ 1.32.0) as the run’s summary has them, and the server catches a member without them', () => {
+	it('carries the evidence measures (engine ≥ 1.33.0) as the run’s summary has them, and the server catches a member without them', () => {
 		const out = runModel(input);
 		const m = result.members[0]!.metrics!;
 		expect(m.noFlowDays).toBe(out.summary.catchment.noFlow!.days);
@@ -519,7 +519,7 @@ describe('paired bands on the difference between a run and its baseline', () => 
 		expect(verifyPaired(application, options, baseline.header, kept, forged, 1, () => 0).mismatches.join(' ')).toMatch(/ewrDaysNotMet/);
 	});
 
-	it('band the evidence measures member by member, and give no pairs where the baseline’s members predate them (engine < 1.32.0)', () => {
+	it('band the evidence measures member by member, and give no pairs where the baseline’s members predate them (engine < 1.33.0)', () => {
 		const paired = runPairedEnsemble(application, baseline);
 		const s = summarisePaired(baseline, paired, { own: ['F2'] });
 		const kept = baseline.members.filter((m) => m.accepted);
@@ -532,7 +532,7 @@ describe('paired bands on the difference between a run and its baseline', () => 
 		expect(s.supply![0]!.band.p50).toBe(0);
 		expect(s.ownSupply!.band.n).toBe(0);
 		expect(summarisePaired(baseline, paired).ownSupply).toBeUndefined();
-		// Members stored before engine 1.32.0: no measure, so no pairs and no worse-share, never a zero.
+		// Members stored before engine 1.33.0: no measure, so no pairs and no worse-share, never a zero.
 		const strip = (m: MemberMetrics): MemberMetrics => {
 			const { noFlowDays: _a, ewrSiteDaysNotMet: _b, unitDemandM3Day: _c, unitSuppliedM3Day: _d, reserveFdc: _e, ...old } = m;
 			return old;

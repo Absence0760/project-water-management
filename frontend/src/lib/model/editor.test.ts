@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OPERATING_DEFAULTS } from '@water-management/engine';
 import { validateModel } from './validate';
 import { ModelEditor } from './editor.svelte';
 
@@ -37,6 +38,17 @@ describe('ModelEditor', () => {
 		const farm = ed.addNode();
 		const user = ed.addUser();
 		for (const n of [farm, user]) expect(n).toMatchObject({ damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null });
+		expect(validateModel(ed.model)).toEqual([]);
+	});
+
+	it('starts a new node with no hands-off flow and River to dam at the one value all year (engine 1.32.0)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const farm = ed.addNode();
+		const user = ed.addUser();
+		for (const n of [farm, user]) expect(n).toMatchObject(OPERATING_DEFAULTS);
+		expect(OPERATING_DEFAULTS).toEqual({ handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
 		expect(validateModel(ed.model)).toEqual([]);
 	});
 

@@ -292,7 +292,7 @@ note), *None* in the value's place when there are none the reader can see;
 § 4 lists each. Days below the pragmatic EWR is the row's measure because
 every run has it; the Reserve's change is in § 4 beside it.
 
-Report version `evidence-4` (engine 1.32.0) added three fixed page-1 rows and
+Report version `evidence-4` (engine 1.33.0) added three fixed page-1 rows and
 a § 4 table, each printed whether or not it has anything to show (G6):
 
 - **No-flow days at the outlet**: days the simulated outflow is below 1 L/s
@@ -322,8 +322,8 @@ a § 4 table, each printed whether or not it has anything to show (G6):
   each unit upstream got its whole demand on the site's failing days, both
   runs, and a "read these first" count naming them.
 
-An ensemble stored before engine 1.32.0 has none of these measures: each such
-cell prints "no band: the ensemble was stored before engine 1.32.0", and a run
+An ensemble stored before engine 1.33.0 has none of these measures: each such
+cell prints "no band: the ensemble was stored before engine 1.33.0", and a run
 made before it prints the row *Not assessed* with the reason.
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
@@ -442,7 +442,7 @@ measure has a test in the build (§11).
 | G2 | Every nomination printed, with reasons | Quietly switching the baseline | `run_nomination` append-only | built |
 | G3 | Baseline-assumption ops refuse issue and turn every page's banner red | Moving the baseline inside a "proposal" (a pan coefficient, an EWR table) | `classifyOp`; WP-3.15 item 2 | built: red banner and flag, preview only, `issuable` false |
 | G4 | One cited ensemble, on the project's declared thresholds; every start listed | Trying seeds or thresholds until the band is kind | DB-drawn seed, kept starts (014); declared rule set (ER3); the *first* complete ensemble on the rule is cited | built |
-| G5 | Every change paired, with "worse in k of n" | Quoting the kind end of two overlapping bands | `summarisePaired` | built, Reserve included (`reserve[].worse`), and from engine 1.32.0 each unit's supply, the applicant's own, no-flow days and the EWR site below the works |
+| G5 | Every change paired, with "worse in k of n" | Quoting the kind end of two overlapping bands | `summarisePaired` | built, Reserve included (`reserve[].worse`), and from engine 1.33.0 each unit's supply, the applicant's own, no-flow days and the EWR site below the works |
 | G6 | Fixed rows and sections; absence printed | Leaving out the measure that looks bad | Evidence-mode section list with "Not assessed" | built |
 | G7 | Fixed windows: EWR measures over every complete month of the run; a shorter reporting window is shown *beside* the whole run, never instead | Choosing a wet window | Reserve assessment already uses complete months; report rule (judgement) | partial: Reserve rows over every complete month; days-fully-met columns use the reporting window, not shown beside the whole run |
 | G8 | Months and sites, not averages; worst months on page 1 | Averaging a dry-season impact away | §2.9c by month; paired by month | built |
@@ -505,8 +505,8 @@ Nothing here changes `runModel`'s results.
 | ER1 | The render session may read a **second run** (the baseline, for an application report) and its uncertainty rows: `RenderScope` becomes `{ projectId, runIds[] }`, the runs named by the job | Today `reports/scope.ts` allows exactly one run, so the headless render of an evidence report would be refused | WP-2.15 Phase C (§12) |
 | ER2 | **Evidence mode** on the report route: its own section list (`report/sections.ts`), the refusal checks, page 1, flags, "Not assessed" rows, footers with page x of y, Appendix C | §§2, 4, 6 | WP-2.15 Phase C |
 | ER3 | A **declared uncertainty rule set** per project (thresholds, members, bounds), fixed before results are seen and versioned like settings; a cited ensemble must match it | G4; followups "Automated calibration with pre-declared rules" is the same idea for fits | WP-2.15 Phase C (the setting); the fit-side rule set stays its own follow-up |
-| ER4 | `summarisePaired` adds the worse-share for the Reserve rate per site, and paired bands on each farm's share of demand supplied and on the FDC-check rate | D-U3; C14, C15 rows have no band today | Built: the Reserve share (Phase C); each unit's supply and the applicant's own (engine 1.32.0). The FDC check is banded as its curve (ER5), not as a rate |
-| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Built (engine 1.32.0): the impacted curve at the table's points per site and month in each member (`reserveFdc`); § 1's chart shades the baseline's band (R1) and hatches the application's own (R2) |
+| ER4 | `summarisePaired` adds the worse-share for the Reserve rate per site, and paired bands on each farm's share of demand supplied and on the FDC-check rate | D-U3; C14, C15 rows have no band today | Built: the Reserve share (Phase C); each unit's supply and the applicant's own (engine 1.33.0). The FDC check is banded as its curve (ER5), not as a rate |
+| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Built (engine 1.33.0): the impacted curve at the table's points per site and month in each member (`reserveFdc`); § 1's chart shades the baseline's band (R1) and hatches the application's own (R2) |
 | ER6 | The WR2012 five-statistic table (CR-28) | C8 | Built as CR-28 (engine 1.19.0); the report shows it in § 3's calibration record |
 | ER7 | Report the fit record's validation scores, and "Not assessed" with the reason when the parameters aren't from a stored fit | C6 | Phase C (frontend only) |
 | ER8 | Assurance of supply metrics per farm (time-based, volumetric, annual) | C15 | WP-3.4, unchanged |
@@ -635,7 +635,7 @@ layout from the frozen manifest.
   (`backend/src/allocations/runUse.ts`), the over/under-use chart
   (`UsePlot`), the page-1 row *Registered vs modelled use* and its flag
   ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
-- The evidence measures (report version `evidence-4`, engine 1.32.0, §4.2):
+- The evidence measures (report version `evidence-4`, engine 1.33.0, §4.2):
   no-flow days, the EWR site below the works, users served in full while a
   site fails, ER4's supply bands and ER5's banded FDC.
 

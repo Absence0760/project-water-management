@@ -1913,9 +1913,62 @@ note's link on the Summary, `notes.ts` `noteHref`).
   pump capacity. A farm on river first or dam, river when low that also has
   **River to dam** (the diversion into the dam, under Routing) gets a note that
   the run counts the two as separate pumps, so one pump doing both jobs needs
-  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
-  while it still has supply settings, so they can be reset. Read-only for
-  viewers (no calculator).
+  its capacity split between them (`sharedPumpHint`; with River to dam by
+  month, any month above 0 counts, `diverts`). Under them, **Hands-off flow**
+  (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
+  flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
+  **Use October’s flow for every month**; unticked = none), and **Also leave
+  the EWR in the river** keeps the EWR required at the farm too. A line under
+  them says in plain words what the farm leaves and before which of its takes
+  (`handsOffPreview`, `handsOffTakers`): no hands-off flow (senior users only,
+  not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
+  m³/day by month", every figure as entered) with the months without one, the
+  EWR, or the larger of the two, before only the takes that apply: the river
+  pump (any rule but dam only, unless its capacity is 0), River to dam (on a
+  farm with a dam), or, on a farm with no dam, what it irrigates straight from
+  the river (what is routed to its dam). Where none applies (dam only with no
+  River to dam) it says the flow changes nothing. The save rules (farms only,
+  12 values none negative, `operatingIssues` in `lib/model/validate.ts`, a
+  test holds its kind rule to the engine's) show as alerts under the section.
+  A farm turned into a gauge or other user keeps the section while it still
+  has supply or hands-off settings (or River to dam by month, with a **Clear
+  River to dam by month** button beside the alert, since Routing is gone), so
+  they can be reset. The two boxes' help tips sit beside their labels, not in
+  them, so each box's name is its words alone. Read-only for viewers (no
+  calculator).
+- **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
+  every twelve-month row of the one-node form (the dam release, a demand
+  object's demand or profile, an other water user's demand, the hands-off flow
+  and River to dam by month) is the one component: a caption naming the group
+  (its help tip beside it, outside the name), an optional **Use October’s …
+  for every month** button on the caption line, and twelve fields, each with
+  its month shown above it and an accessible name of its own ("Demand of Town
+  in Oct, m³/day"). The fields wrap by the room the group has (a container
+  query, not the viewport): six to a row in the node sheet, four on a phone,
+  three on the narrowest, all twelve in one row only from 70rem, where each
+  still holds 12 345.5 whole. It never scrolls sideways, and the fields have
+  no spin buttons (the arrow keys still step them), so 12 345.5 and 0.0129
+  show whole for owners and viewers alike (`supply.spec.ts` checks
+  `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
+  button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
+  a profile) is in the `.ts` neighbour, unit-tested.
+- **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
+  one-node form, farms, under **River to dam** in Routing: **Set River to dam
+  by month** opens twelve m³/day fields (started from the one value, with
+  **Use October’s capacity for every month**); while it is on, the one River
+  to dam field is read-only with the hint "Not used: River to dam is set by
+  month below", and a line gives the capacity ("up to 800 m³/day", or
+  "between 800 and 12 345.5 m³/day by month") and names the months it takes
+  nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
+  dam's own hint says what it leaves in the river: senior users' demand, and
+  the hands-off flow under Supply when there is one. The months are edited
+  only here: on a farm set by month the node table's River to dam cell
+  (`NetworkTab.svelte`, desktop and phone card) has no input for the one
+  value the run ignores, but the months' range, read-only ("by month:
+  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
+  tables it is plain text. A farm with the one value edits it in the table as
+  before.
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
@@ -5190,6 +5243,19 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
   applicant never does.
+- **Comments and share links** (WP-3.15), at the top of the panel: the
+  application's **Notes** button (the notes drawer on the scenario, titled
+  "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
+  assessors, **Share link…**, which opens the **Share dialog** (a side sheet,
+  `ShareLinksPanel.svelte` with a `scenario`): what the viewer will see (its
+  changes, the EWR at each site against the baseline, the catchment's totals
+  at five or more units, the public comments; never another unit, a member
+  or a registered volume), "Who it's for" and "Works for" (1 week to 1
+  year), **Make link** and the link shown once to copy, then the links to it
+  (live first, who made it, when it ends, last opened) with **Withdraw**. A
+  draft or withdrawn application says it must be submitted first and offers
+  no form. The assessors list and withdraw every link to it; the applicant
+  their own.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`, issue #17 option A): every submitted, withdrawn or
@@ -5211,7 +5277,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   with N" under it), status as a pill in words (Awaiting a decision;
   Approved, Approved with conditions or Refused in the band colours, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
-  "waiting N days" while it awaits a decision), changes and runs.
+  "waiting N days" while it awaits a decision), changes and runs, and the
+  application's comments (the compact notes button, WP-3.15; its share
+  links are in its Application panel).
 - **Fit:** from 1100 × 620 the card fills the window and the rows scroll
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs") and the
@@ -5313,13 +5381,18 @@ last by Ann, 12 Aug 2026: 40% → 60%", that links to History filtered to that
 field (`?tab=history&kind=revision&unit=<unit>&q=<words>`, the unit only for a
 unit's own fields). A field never changed since it was set shows nothing.
 
-- **Where:** the node sheet's numeric fields and **Drains into**, the farm
+- **Where:** the node sheet's numeric fields and **Drains into**, its
+  Supply section (the supply rule, the river pump capacity, the trigger's two
+  levels, the hands-off flow and its EWR tick) and **Set River to dam by
+  month**, the dam's survey curve, release rule and release months, the farm
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
   warm-up, the rain threshold, the flow-share method, the annual assurance
-  threshold, the data-quality thresholds). Monthly tables and rule editors
-  have none.
+  threshold, the data-quality thresholds). A twelve-month row set or cleared
+  reads as its range on the line ("none → by month: 0–800 m³/day", "300
+  m³/day every month", `compactMonths`); History keeps the full row. Other
+  monthly tables and rule editors have none.
 - **Data:** one `GET …/history/fields` for the whole project
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at
@@ -5373,6 +5446,19 @@ March") is kept against what it is about.
   hidden from everyone, kept for the audit trail). On a farm, *Also show to
   this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
+- **On a scenario** (WP-3.15, the Application panel and each Applications
+  row): the drawer is "Comments on “name”", with a **Who reads it** picker
+  of the audiences the caller may post to, their natural one first (an
+  assessor: *The assessors only*, *The assessors and the applicant's party*,
+  *Public participation: shown with your name on the shared link*, *The
+  project team*; one of the application's parties: the parties, the
+  assessors, public participation; anyone else, only public participation,
+  shown as a line instead of a picker). Each comment carries its audience as
+  a badge (Assessors, Parties, Public, Team), and an edited one says
+  *edited: history*, a button that opens its earlier texts inline, oldest
+  first, with when each was written and replaced (`GET …/revisions`). The
+  server holds the matrix (data-model.md § Notes); the picker only offers
+  what it allows.
 - **Farmer view.** *Notes about your hydrological unit* (`farm/FarmNotes.svelte`) lists
   the farmer's own notes and the WUA's farm-visible ones on that farm, and
   adds a note, always shown to the farm. The WUA previewing the page sees the
@@ -5731,7 +5817,7 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
-    the FDC check against the EWR curve (`FdcPlot`: from engine 1.32.0 the
+    the FDC check against the EWR curve (`FdcPlot`: from engine 1.33.0 the
     baseline's 5–95 % band shaded behind its line and the application's
     hatched, or the caption says why there is none) of the month the report
     ranks first (the largest drop in months met, else the one met least
@@ -6575,6 +6661,34 @@ signed in or out, for someone outside the project, on a phone first.
   Try again. Every string is in `lib/components/share/share.ts`, the chart
   in `share/chart.ts`, the loading rules in `share/load.ts`, all
   unit-tested.
+- **A scenario link** (WP-3.15, `/share#t=…&k=scenario`,
+  `share/ScenarioView.svelte`, words in `share/scenario.ts`, the
+  `share.scenario` section): the same shell, header and states, reading
+  `POST /share/scenario`. Top to bottom: the application's name, "An
+  application in *catchment*, shared read-only", where it stands
+  ("Submitted on *date*, awaiting a decision" or the decision and its date),
+  the caveat; then in the left column **The river's ecological reserve
+  first**: for each EWR site (the outlet unnamed) the months the Reserve is
+  met on the baseline beside the application, and the change in words
+  ("2 months more below the Reserve with this application", in red when
+  worse), and the days below the EWR at the outlet; or why there are no
+  results (not run on its current changes; or not stored by the model run
+  itself, so not shown). Then **What the application changes**: each change
+  in words, the applicant's own unit by name and any other as "another
+  hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
+  (with a line saying what that means), and the description. In the right
+  column: the decision's reasons (once decided), **The catchment's totals**
+  (flow out, water supplied, units short of 95 % of demand, baseline and
+  application; only at five or more units), **Public comments** (oldest
+  first, author and date, *edited*), and **About this page**. A signed-in
+  member gets **Add a comment** (posted for public participation, "Shown
+  with your name to everyone this application is shared with"); anyone else
+  gets **Sign in to comment**, which keeps the link in this tab's
+  `sessionStorage` (never the address bar) so the page opens it again after
+  the sign-in. A server `404` says only members can comment, a `403` that
+  it isn't open for comment. Same two-column layout from 860 px, one
+  column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
+  sign in, comment, the assessor's view) with axe.
 
 ## Viewers
 

@@ -30,7 +30,7 @@ import type { PairedSummary } from '../uncertainty/paired';
  * evidence-4: the page-1 rows "No-flow days at the outlet" (`noFlowDays`) and "EWR below the
  * works" (`ewrBelowWorks`); paired bands on the supply rows and in § 4 (`EvidenceUser.change`);
  * "served in full while the site fails" (`servedWhileFailing`, § 4, with its flag); and the
- * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.32.0).
+ * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.33.0).
  */
 export const EVIDENCE_REPORT_VERSION = 'evidence-4';
 
@@ -407,7 +407,7 @@ export interface EvidenceServedUnit {
 	daysB: number | null;
 }
 
-/** Per EWR site, the days units upstream got their whole demand while the site's EWR failed (§ 4, engine ≥ 1.32.0). */
+/** Per EWR site, the days units upstream got their whole demand while the site's EWR failed (§ 4, engine ≥ 1.33.0). */
 export interface EvidenceServedWhileFailing {
 	/** Set when the runs don't carry it: printed in the section's place. */
 	notAssessed: string | null;

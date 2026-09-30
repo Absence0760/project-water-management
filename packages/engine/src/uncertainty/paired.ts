@@ -131,8 +131,8 @@ export interface PairedSummary {
 	/** Farms in only one of the runs (no difference to take). */
 	unpaired: string[];
 	decisionRule: string;
-	// Engine ≥ 1.32.0 (ENSEMBLE_MEASURES_SINCE, issue #71). Absent on summaries stored before.
-	/** Every pair carries the measures below; false when the baseline's members were stored before engine 1.32.0 (their bands then have no pairs). */
+	// Engine ≥ 1.33.0 (ENSEMBLE_MEASURES_SINCE, issue #71). Absent on summaries stored before.
+	/** Every pair carries the measures below; false when the baseline's members were stored before engine 1.33.0 (their bands then have no pairs). */
 	carriesMeasures?: boolean;
 	/** The change in no-flow days at the outlet, and the share of the pairs with more. */
 	noFlowDays?: Band;
@@ -212,7 +212,7 @@ export function summarisePaired(
 		carriesMeasures: pairs.length > 0 && pairs.every(({ a, b }) => a.noFlowDays !== undefined && b.noFlowDays !== undefined),
 		noFlowDays: d((x) => x.noFlowDays),
 		noFlowDaysWorse: share((x) => x.noFlowDays),
-		// A baseline header stored before engine 1.32.0 has no site or unit list: the other run's, which the pairs then can't fill (n = 0).
+		// A baseline header stored before engine 1.33.0 has no site or unit list: the other run's, which the pairs then can't fill (n = 0).
 		ewrSites: (paired.header.ewrSites ?? [])
 			.filter((s) => !baseline.header.ewrSites || baseEwrSites.has(s.key))
 			.map((s) => ({ ...s, band: d((x) => x.ewrSiteDaysNotMet?.[s.key]), worse: share((x) => x.ewrSiteDaysNotMet?.[s.key]) })),
