@@ -10,7 +10,7 @@
 	// drawer; Edit areas opens the planted-areas grid). From 1100 px of page
 	// width the list is a column that scrolls in itself and the chart and bars
 	// fill the window beside it, so they stay on the first screen whatever the
-	// number of crops or units. The full grids open from the Grids menu in the
+	// number of crops or units. The full grids open from the Tables menu in the
 	// grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
 	// through `sections` (CropGrids); scenario override mode shows all three
 	// inline the same way.
@@ -173,7 +173,7 @@
 		void openCrop(c.id);
 	}
 
-	// --- the Grids menu (as the Network's): each full grid in the grid modal ---
+	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
 		['planted-areas', 'Planted areas']
@@ -198,7 +198,7 @@
 		document.addEventListener('pointerdown', onDoc);
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
-	// The page's section header shows the summary line, Grids and Add crop (not in a modal or override mode).
+	// The page's section header shows the summary line, Tables and Add crop (not in a modal or override mode).
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, !sections));
 </script>
 
@@ -206,8 +206,8 @@
 {#snippet headerActions()}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
-		<summary class="btn">Grids <span aria-hidden="true">▾</span></summary>
-		<div class="grids-pop" role="group" aria-label="Open as a grid">
+		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
+		<div class="grids-pop" role="group" aria-label="Open as a table">
 			{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>

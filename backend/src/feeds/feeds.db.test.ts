@@ -18,7 +18,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	...(await orig<typeof import('../jobs/transport.js')>()),
 	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => void sent.push(message)
 }));
-import { asOwner, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { FEED_META_MAX_BYTES, utcToday } from './fetch.js';
@@ -980,6 +980,43 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		await ingest(ok('2026-01-01', [3]));
 		const [row] = await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND name = 'CHIRPS'`, [pid]);
 		expect(row).toEqual({ feed_id: id, feed_days: '{[2026-01-01,2026-01-02)}' });
+	});
+
+	it('the series list marks a fed series with its feed and how many days are still the feed’s (the Data tab’s mark); none is null', async () => {
+		const { owner, pid, ingest } = await setup('Marked');
+		const viewer = await signUp('MarkViewer');
+		await member(owner, pid, viewer, 'viewer');
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'My gauge', unit: 'mm', startDate: '2026-01-01', values: [5, 5] });
+		const listed = async (u: User, name = '') =>
+			((await u.call('GET', `/projects/${pid}/series`)).body.series as { name: string; feed: unknown }[]).find((s) => s.name === name)!.feed;
+		// A gap is no day of the feed's: three of the four.
+		await ingest(ok('2026-01-01', [1, null, 3, 4]));
+		expect(await listed(owner)).toEqual({ source: 'chirps', days: 3 });
+		// Any viewer reads it (data_feed_select), and a single series' GET carries it too.
+		expect(await listed(viewer)).toEqual({ source: 'chirps', days: 3 });
+		const fedId = ((await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; name: string }[]).find((s) => s.name === '')!.id;
+		expect((await viewer.call('GET', `/projects/${pid}/series/${fedId}`)).body.feed).toEqual({ source: 'chirps', days: 3 });
+		// No feed wrote the user's own series.
+		expect(await listed(owner, 'My gauge')).toBeNull();
+		// A user's merge takes the days it sends; the count follows.
+		expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-03', values: [30] })).status).toBe(200);
+		expect(await listed(owner)).toEqual({ source: 'chirps', days: 2 });
+		// An API key can't read data_feed (below viewer): its merge answer says null rather than failing,
+		// and the key's day is not the feed's (positive control: the owner still sees the feed's two).
+		const secret = (await owner.call('POST', `/projects/${pid}/api-keys`, { name: 'Logger' })).body.secret as string;
+		const r = await app.request('/ingest/v1/series/merge', {
+			method: 'POST',
+			headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+			body: JSON.stringify({ kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-06', values: [6] })
+		});
+		const answer = (await r.json()) as { series: { feed: unknown; rebuilding: boolean } };
+		expect(r.status, JSON.stringify(answer)).toBe(200);
+		expect(answer.series).toMatchObject({ feed: null, rebuilding: false });
+		expect(await listed(owner)).toEqual({ source: 'chirps', days: 2 });
+		// Once the user has written over every day the feed wrote, no day is its own: no mark.
+		expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, null, null, 40] })).status).toBe(200);
+		expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: null, feed_days: null });
+		expect(await listed(owner)).toBeNull();
 	});
 
 	it('a feed’s days are only ever a feed of the same project (composite foreign key)', async () => {

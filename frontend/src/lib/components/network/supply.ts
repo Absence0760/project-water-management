@@ -36,6 +36,22 @@ export function noDamSupplyHint(
 	return 'This hydrological unit has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit. To cap it, pick run of river and enter the pump capacity.';
 }
 
+/**
+ * A note for a farm that fills its dam from the river (River to dam,
+ * `divertCapacityM3Day`) and also irrigates with a river pump: the run
+ * treats the two as separate pumps, each with its own capacity, so one pump
+ * doing both jobs is counted twice unless its capacity is split. Run of river
+ * ignores the diversion (no dam), and a pump of 0 is no pump. Null otherwise.
+ */
+export function sharedPumpHint(
+	n: Pick<NetworkNode, 'kind' | 'divertCapacityM3Day' | 'supplyRule' | 'pumpCapacityM3Day'>
+): string | null {
+	const rule = n.supplyRule ?? SUPPLY_DEFAULTS.supplyRule;
+	if (n.kind !== 'farm' || rule === 'damFirst' || rule === 'runOfRiver') return null;
+	if (!(n.divertCapacityM3Day > 0) || n.pumpCapacityM3Day === 0) return null;
+	return 'This hydrological unit also takes water from the river into its dam (River to dam, under Routing). The run treats that and the river pump as two pumps: if one pump does both, split its capacity between the two fields.';
+}
+
 /** Whether a node carries supply settings other than the defaults (a farm turned into a gauge or user keeps them). */
 export const hasSupplySettings = (n: Pick<NetworkNode, 'supplyRule' | 'pumpCapacityM3Day'>) =>
 	(n.supplyRule ?? 'damFirst') !== 'damFirst' || (n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined);

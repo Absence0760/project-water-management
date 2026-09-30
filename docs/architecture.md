@@ -1090,8 +1090,14 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   from our side, never from the answer: a day outside it (the forecast aside,
   keyed by its issue) refuses the answer whole as a failed fetch.
 
-Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
-audit event per merge (WP-2.4) and the debounced re-run after new data (WP-2.11).
+The Data tab marks a series a feed wrote ("Written by the CHIRPS daily
+rainfall feed", with a count when the feed wrote only some of its days):
+`SeriesMeta.feed`, read from `time_series.feed_id` / `feed_days` under RLS
+([ui.md § Data](./ui.md#data)).
+
+The audit event per merge (`series.merged`) and the debounced re-run after new
+data (WP-2.11) are built (see Merging above), and so is CHIRPS over a bounding box
+(`config.bbox`, above), #69's last open item.
 
 ## Server-side reports
 

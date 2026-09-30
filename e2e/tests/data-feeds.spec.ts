@@ -1,7 +1,7 @@
 // Data feeds (WP-2.10, docs/ui.md § Data feeds): an owner attaches a
 // CHIRPS-GEFS forecast feed on the synthetic fixtures (FEED_SOURCE=fixtures,
 // no network), runs it, and the status panel shows it healthy with its newest
-// day; the forecast series appears on the Data tab. A feed pointed at the
+// day; the forecast series appears on the Data tab, marked as the feed's. A feed pointed at the
 // fixture grid's sea cell shows as failing, with the warning above the list,
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 // Automatic runs (WP-2.11, docs/ui.md § Automatic runs) live here too: new
@@ -91,7 +91,10 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	// The forecast landed in the project's series.
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const inputs = page.getByRole('region', { name: 'Input time series' });
-	await expect(inputs.getByRole('rowheader', { name: /^Rainfall — forecast/ })).toBeVisible();
+	const forecast = inputs.getByRole('rowheader', { name: /^Rainfall — forecast/ });
+	await expect(forecast).toBeVisible();
+	// Marked as the feed's (SeriesMeta.feed): every day of it came from the feed, so no count.
+	await expect(forecast.getByTestId('series-feed')).toHaveText('Written by the CHIRPS-GEFS rainfall forecast feed');
 	// The count is the section header's since the list's own summary line went (issue #174).
 	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
 });

@@ -57,7 +57,7 @@
 	import { projectToday } from '$lib/components/projects/freshness';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
+	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
@@ -549,6 +549,7 @@
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
 						{@const role = KIND_ROLES[s.kind]}
 						{@const behind = behindAge.get(s.id)}
+						{@const fed = feedMark(s.feed, st?.present)}
 						<!-- Pointer shortcut only; the View button is the accessible control. -->
 						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 						<tr role="row" class="pick" class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
@@ -575,6 +576,10 @@
 									{/if}
 								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
 									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
+								{/if}
+								<!-- The data feed that wrote days of it (031_feed_days), with how many when it wrote only some. -->
+								{#if fed}
+									<span class="prov" data-testid="series-feed">{fed}</span>
 								{/if}
 								<!-- Where the values came from, and a unit conversion at upload (107): only when there is something to say. -->
 								{#if s.source || (s.sourceUnit && s.sourceUnitFactor !== 1)}

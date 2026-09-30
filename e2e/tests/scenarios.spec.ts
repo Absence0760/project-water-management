@@ -372,7 +372,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
-	// Override mode shows the node table inline, on the scenario's model: not the map, whose Grids menu and
+	// Override mode shows the node table inline, on the scenario's model: not the map, whose Tables menu and
 	// farm links open the page's overlays on the catchment's model (issue #17).
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
 	await expect(page.locator('details.grids-menu')).toHaveCount(0);
