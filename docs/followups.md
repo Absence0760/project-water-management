@@ -3288,12 +3288,36 @@ from the WP:
       fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
       allowlist). Left for the applicant's view of results below: a Yield
       panel on the Applicant view (the API is ready).
-- [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
-      browser for an instant preview, through WP-1.17's preview worker
-      (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
-      in this tree yet, and one yield takes about a second in the job.
-      Trigger: WP-1.17's worker lands; the engine's `firmYield` is pure and
-      ready for it.
+- [x] **In-browser preview.** Done (issue #73): the preview worker
+      (`lib/preview/engine.worker.ts`, WP-1.17's, a second entry of the page
+      build beside the calibration worker) works out the dam's firm yield
+      for the picked pattern and assurance as soon as the Yield panel opens,
+      labelled "Preview · Not stored"; the job stays the stored result. Same
+      input as the job (the run's own stored input, or a team scenario's
+      saved ops on its base run's) and the same search, so the numbers agree
+      on the same engine (unit `preview/compute.test.ts`, e2e
+      `yield.spec.ts` on a run and a scenario). Viewers preview too. Not
+      offered on an application (the job applies the applicant mask, built
+      only on the server) and not for the curve (see below). Bundle: total
+      +5 KB; the calibration worker's own file 37 → 17 KB, since the run
+      code both workers use moved to a shared chunk.
+- [ ] **The preview on an application, and across engine releases.** The
+      Yield preview isn't offered on an applicant's scenario: the job
+      applies its ops under `applicationMask` (backend
+      `scenarios/applicant.ts`), which can re-id and rename masked items, so
+      the browser can't reproduce the job's input, and a contributor can't
+      read the base run's input anyway. And the browser runs the web
+      build's engine while the job runs the backend's: they're released
+      separately, so between a `web@` and a `backend@` release the preview
+      can differ from the job by the engine change (the stored result names
+      its engine version; the preview doesn't yet). Durable fix: a
+      `GET …/scenarios/:sid/model-input` that returns the masked,
+      checked input the job would use (for an applicant only what the
+      projection lets them see, if the client wants them to preview), and
+      the preview showing "engine X" beside the stored result's, with a note
+      when they differ. Trigger: the applicant Yield panel (parallel PR)
+      asks for a preview, or the first production release where web and
+      backend engine versions diverge.
 - [x] **A job started elsewhere.** The Yield panel followed only the jobs it
       queued itself, so after a reload or in another tab mid-job it showed
       the last stored result. Fixed: `GET /projects/:id/yield/jobs?nodeId=`

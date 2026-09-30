@@ -3,50 +3,59 @@ import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
-const AUTOCAL_WORKER = fileURLToPath(new URL('./src/lib/calibration/autocal.worker.ts', import.meta.url));
-const AUTOCAL_WORKER_URL = 'virtual:autocal-worker-url';
+/** The Web Workers built as entries of the page build: source, the virtual module serving its URL, its output name under workers/. */
+const WORKERS = [
+	// Calibration: the fit, the uncertainty ensemble, the sensitivity runs (lib/calibration/runner.ts).
+	{ file: fileURLToPath(new URL('./src/lib/calibration/autocal.worker.ts', import.meta.url)), id: 'virtual:autocal-worker-url', name: 'autocal.worker' },
+	// Preview: the engine on inputs the page holds, never stored (WP-1.17; the Yield panel's preview, lib/preview/runner.ts).
+	{ file: fileURLToPath(new URL('./src/lib/preview/engine.worker.ts', import.meta.url)), id: 'virtual:preview-worker-url', name: 'preview.worker' }
+] as const;
 
 /**
- * The calibration worker as a chunk of the page build (issue #9).
+ * The engine's Web Workers as chunks of the page build (issue #9).
  *
  * Vite bundles `new Worker(new URL(…))` as a separate build, so the worker
  * carried its own copy of the engine, most of which the pages ship too. Here
- * `lib/calibration/runner.ts` takes the worker's URL from a virtual module
- * instead, and in the client build that module emits the worker as one more
- * entry of the page build: Rolldown then puts the engine code it shares with
- * pages in shared chunks, which the worker imports as ES modules (it is a
- * module worker). The worker entry lands under `_app/immutable/workers/`, where
- * the bundle guard looks for it. In dev (and vitest) the URL is Vite's own
- * worker URL for the source file; the server build never starts a worker.
+ * each worker's runner (`lib/calibration/runner.ts`, `lib/preview/runner.ts`)
+ * takes the worker's URL from a virtual module instead, and in the client
+ * build that module emits the worker as one more entry of the page build:
+ * Rolldown then puts the engine code it shares with pages (and with the other
+ * worker) in shared chunks, which the worker imports as ES modules (it is a
+ * module worker). The worker entries land under `_app/immutable/workers/`,
+ * where the bundle guard looks for them. In dev (and vitest) the URL is Vite's
+ * own worker URL for the source file; the server build never starts a worker.
+ * One plugin for every worker: each would otherwise wrap chunkFileNames and
+ * find the other's function there instead of the pattern.
  */
-function autocalWorkerChunk(): Plugin {
-	const resolved = '\0' + AUTOCAL_WORKER_URL;
+export function workerChunks(): Plugin {
+	const byResolved = new Map<string, (typeof WORKERS)[number]>(WORKERS.map((w) => ['\0' + w.id, w]));
 	let serve = false;
 	let root = '';
 	return {
-		name: 'water:autocal-worker-chunk',
+		name: 'water:worker-chunks',
 		configResolved(config) {
 			serve = config.command === 'serve';
 			root = config.root;
 		},
 		resolveId(id) {
-			return id === AUTOCAL_WORKER_URL ? resolved : undefined;
+			return WORKERS.some((w) => w.id === id) ? '\0' + id : undefined;
 		},
 		load(id, options) {
-			if (id !== resolved) return undefined;
+			const w = byResolved.get(id);
+			if (!w) return undefined;
 			if (options?.ssr) return 'export default "";';
-			// What Vite itself serves for `new Worker(new URL('./autocal.worker.ts', import.meta.url), { type: 'module' })`.
-			if (serve) return `export default ${JSON.stringify('/' + relative(root, AUTOCAL_WORKER).split(sep).join('/') + '?worker_file&type=module')};`;
-			const ref = this.emitFile({ type: 'chunk', id: AUTOCAL_WORKER });
+			// What Vite itself serves for `new Worker(new URL('./<name>.ts', import.meta.url), { type: 'module' })`.
+			if (serve) return `export default ${JSON.stringify('/' + relative(root, w.file).split(sep).join('/') + '?worker_file&type=module')};`;
+			const ref = this.emitFile({ type: 'chunk', id: w.file });
 			return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
 		},
 		// Rolldown names an emitted chunk by chunkFileNames, which SvelteKit sets
-		// to a bare hash; name the worker's entry so it lands under workers/.
+		// to a bare hash; name each worker's entry so it lands under workers/.
 		outputOptions(output) {
 			const chunkFileNames = output.chunkFileNames;
 			if (typeof chunkFileNames !== 'string' || !chunkFileNames.includes('/chunks/')) return undefined;
-			const worker = chunkFileNames.replace(/\/chunks\/.*$/, '/workers/autocal.worker-[hash].js');
-			return { ...output, chunkFileNames: (chunk) => (chunk.facadeModuleId === AUTOCAL_WORKER ? worker : chunkFileNames) };
+			const names = new Map(WORKERS.map((w) => [w.file as string, chunkFileNames.replace(/\/chunks\/.*$/, `/workers/${w.name}-[hash].js`)]));
+			return { ...output, chunkFileNames: (chunk) => (chunk.facadeModuleId && names.get(chunk.facadeModuleId)) || chunkFileNames };
 		}
 	};
 }
@@ -219,7 +228,7 @@ export function helpArticlesChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, chunkModuleMap(), sveltekit()],
+	plugins: [shortFileNames(), workerChunks(), preload.plugin, chunkModuleMap(), sveltekit()],
 	// The engine build record (WP-3.13): the web release workflow runs the
 	// engine suite and a soak and puts the record in ENGINE_BUILD
 	// (scripts/release/engine-build.mjs); the report's validation statement
@@ -240,8 +249,8 @@ export default defineConfig({
 		// compiled components are full of them, into defineProperty and WeakMap
 		// helpers: ~6 KB gzip across the bundle. The app already needs newer
 		// browsers than ES2022 does (HelpTip's popover: Chrome 114, Safari 17,
-		// Firefox 125). Applies to the calibration worker too, which is part of
-		// the page build.
+		// Firefox 125). Applies to the calibration and preview workers too,
+		// which are part of the page build.
 		target: 'es2022',
 		// Oxc, Vite 8's own minifier (its default, spelled out). Under Vite 5
 		// Terser beat esbuild by ~5% JS gzip, because its mangler reuses the

@@ -30,9 +30,9 @@ describe('short output file names', () => {
 		expect(out.assetFileNames).toBe('assets/[name][extname]');
 	});
 
-	it('runs before the calibration worker plugin, which needs the chunk pattern as a string', () => {
+	it('runs before the worker chunk plugin, which needs the chunk pattern as a string', () => {
 		const names = (config as { plugins: { name?: string }[] }).plugins.flat().map((p) => p?.name);
 		expect(names.indexOf('water:short-file-names')).toBeGreaterThanOrEqual(0);
-		expect(names.indexOf('water:short-file-names')).toBeLessThan(names.indexOf('water:autocal-worker-chunk'));
+		expect(names.indexOf('water:short-file-names')).toBeLessThan(names.indexOf('water:worker-chunks'));
 	});
 });
