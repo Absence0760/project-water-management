@@ -2453,9 +2453,13 @@ role and not before it.
         refuses an answer with a day outside it, and drops any answer but
         the newest fetch's (late or redelivered). A DWS backfill through an
         empty stretch now moves on too (#29, `last_meta.through`).
-  - [ ] Related: "Run now" is deduped per feed but not rate-limited, and an
-        hourly schedule re-reads CHIRPS (published daily) 24 times a day; cap
-        both when the request volume item above is done.
+  - [x] ~~Related: "Run now" is deduped per feed but not rate-limited, and an
+        hourly schedule re-reads CHIRPS (published daily) 24 times a day.~~
+        **Done (#69, `111_feed_daily_only`):** every feed runs daily (the
+        hourly schedule is gone for every source: none publishes more
+        often), and "Run now" is a token bucket per feed, 6 presses that
+        queue or pull a fetch, then one every 10 minutes (`429` with
+        `Retry-After`).
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):

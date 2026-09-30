@@ -7,8 +7,8 @@
 // own farm's rows and nothing else. And 045 keeps a viewer out of what these
 // tables say about an application hidden from them (a note on its run, a
 // sign-off of it, a yield of it). Every "cannot see" has a positive control.
-import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -65,6 +65,9 @@ const insertYield = async (target: { runId?: string; scenarioId?: string }) =>
 			[projectId, target.runId ?? null, target.scenarioId ?? null, rooikloof.id]
 		)
 	)[0].id as string;
+
+// The re-run the job probe queues: no later file's tick should claim it (db-setup.ts).
+afterAll(() => retirePendingJobs(projectId));
 
 beforeAll(async () => {
 	[owner, editor, viewer, applicant, farmer] = (await Promise.all(['Ctowner', 'Cteditor', 'Ctviewer', 'Ctapplicant', 'Ctfarmer'].map((n) => signUp(n)))) as [
