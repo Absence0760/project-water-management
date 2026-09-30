@@ -5957,7 +5957,11 @@ pack.
   `{origin}/verify/{code}` (`packVerifyLine`), and Appendix B.4 lists them.
   The footer is `data-report-footer`, which a server render prints on every
   page; `data-report-ready` follows the catchment report's contract, so e2e
-  and the renderer wait on it. Printing is A4 and light.
+  and the renderer wait on it. Printing is A4 and light. The page reads only
+  the pack and its sign-offs, and the project for the caller's role; a
+  render session, which may read only the first two, skips the project, and
+  a project that can't be read leaves the pack shown without the editor's
+  moves.
 - **What isn't frozen is left out.** Page 1's licence impact by year class
   reads the runs' daily series and the project's year-class settings, which
   a `pack-1` manifest doesn't carry, so a pack prints a line saying it is not

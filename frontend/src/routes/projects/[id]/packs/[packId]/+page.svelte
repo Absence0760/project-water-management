@@ -12,11 +12,19 @@
 	// is in Appendix B.2, against the pack statement. data-report-ready
 	// follows the catchment report's contract, so e2e and a server render wait
 	// on it. Printing is A4 and light, as the report route's.
+	//
+	// The server PDF prints this page in a pack render session
+	// (backend/src/reports/scope.ts), which may read only GET …/packs/:packId
+	// and its /signoffs: so a render session never asks for the project (it
+	// only decides whether the editor's moves show), and a project that
+	// can't be read leaves the pack readable, without the moves. A "can't
+	// show this" is a main > [role="alert"].
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { REPORT_FOOTER } from '@water-management/engine';
 	import { api, ApiError, hasRole, type PackDetail, type PackSignoffList, type Project } from '$lib/api';
+	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
@@ -39,7 +47,9 @@
 	async function load(id: string, pid: string, quiet = false) {
 		if (!quiet) status = 'loading';
 		try {
-			const [p, d, so] = await Promise.all([api.projects.get(id), api.packs.get(id, pid), api.packs.signoffs(id, pid)]);
+			// The project only gives the caller's role (the editor's moves); a render session doesn't read it.
+			const role = session.user?.renderSession ? Promise.resolve(null) : api.projects.get(id).catch(() => null);
+			const [p, d, so] = await Promise.all([role, api.packs.get(id, pid), api.packs.signoffs(id, pid)]);
 			try {
 				await loadOnce(loadReport);
 			} catch {
