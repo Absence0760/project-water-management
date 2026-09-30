@@ -234,6 +234,7 @@ const FK_SQL = `
  */
 const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },
+	'data_feed_run_now.feed_id': { reason: 'no project_id of its own: the row is its feed’s “Run now” bucket, written only by app_feed_take_run_now', premise: 'no project_id' },
 	'report_schedule_recipient.schedule_id': {
 		reason: 'no project_id of its own: the row is its schedule’s (report_schedule_recipient_check holds the recipient to that project’s members)',
 		premise: 'no project_id'

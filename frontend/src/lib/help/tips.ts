@@ -399,8 +399,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'diversion',
-		term: 'Diversion back to dam',
-		short: 'Daily capacity to pump or channel water from the river below the dam back into it, in m³/day.',
+		term: 'River to dam (diversion)',
+		short: 'Daily capacity to pump or channel water from the river below the dam into it, in m³/day. Separate from the river pump that irrigates.',
 		units: 'm³/day',
 		category: 'farm',
 		fields: ['node.divertCapacityM3Day']

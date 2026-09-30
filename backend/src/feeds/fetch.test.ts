@@ -10,6 +10,7 @@ import {
 	FetchRequestSchema,
 	FetchResult,
 	fetchWindow,
+	heldThrough,
 	runFetch,
 	utcToday
 } from './fetch.js';
@@ -115,6 +116,84 @@ describe('fetchWindow', () => {
 	});
 });
 
+// Issue #69: a final CHIRPS value is never revised, so the revision re-read
+// starts after the feed's final marker (last_meta.finalThrough).
+describe('fetchWindow with the final marker (CHIRPS)', () => {
+	const today = '2026-09-25';
+	it('starts the re-read after the last final day, and ignores a marker the window already starts after', () => {
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-15')).toEqual({ start: '2026-08-16', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-07-01')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', today, '2026-09-24', '2026-08-01')).toEqual({ start: '2026-08-02', end: '2026-09-24' });
+	});
+
+	it('never starts past the window’s end: final through yesterday (or later) leaves one day', () => {
+		expect(fetchWindow('chirps', grid, '2026-09-24', today, '2026-09-24', '2026-09-23')).toEqual({ start: '2026-09-24', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-24', today, '2026-09-24', '2026-09-24')).toEqual({ start: '2026-09-24', end: '2026-09-24' });
+		expect(fetchWindow('chirps', grid, '2026-09-24', today, '2026-09-24', '2026-10-30')).toEqual({ start: '2026-09-24', end: '2026-09-24' });
+	});
+
+	it('the 120-day cap counts from the moved start: a backfill of final days has no overlap', () => {
+		const config = { ...grid, startDate: '2020-01-01' };
+		// Without the marker a backfill window re-reads 50 days of the last one.
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-04-29')).toEqual({ start: '2020-03-10', end: '2020-07-07' });
+		expect(fetchWindow('chirps', config, '2020-04-29', today, '2020-04-29', '2020-04-29')).toEqual({ start: '2020-04-30', end: '2020-08-27' });
+		// The #29 case (the last window read was empty): the marker moves it on the same way.
+		expect(fetchWindow('chirps', config, null, today, '2020-04-29')).toEqual({ start: '2020-03-11', end: '2020-07-08' });
+		expect(fetchWindow('chirps', config, null, today, '2020-04-29', '2020-04-29')).toEqual({ start: '2020-04-30', end: '2020-08-27' });
+		const w = fetchWindow('chirps', config, '2020-04-29', today, '2020-04-29', '2020-04-29');
+		expect(Date.parse(w.end) - Date.parse(w.start)).toBe((CHIRPS_MAX_DAYS - 1) * 86_400_000);
+	});
+
+	it('keeps the startDate floor, and a startDate in the future still asks for no days', () => {
+		const config = { ...grid, startDate: '2026-09-01' };
+		expect(fetchWindow('chirps', config, '2026-09-22', today, '2026-09-24', '2026-08-20')).toEqual({ start: '2026-09-01', end: '2026-09-24' });
+		expect(fetchWindow('chirps', config, '2026-09-22', today, '2026-09-24', '2026-09-10')).toEqual({ start: '2026-09-11', end: '2026-09-24' });
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-10-05' }, null, today, null, '2026-10-10')).toEqual({ start: '2026-10-05', end: '2026-09-24' });
+	});
+
+	it('only CHIRPS: the forecast and DWS ignore it', () => {
+		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', today, null, '2026-09-30')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2026-06-01', today, '2026-09-25', '2026-06-01')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
+	});
+
+	// What the marker and the held days save, on the fixtures (sat final up to
+	// 40 days back, preliminary to 3; rnl final to 6): the range requests of a
+	// caught-up feed's daily fetch without either, and with both (#69). Before
+	// #69 the same fetch took 194 (sat) and 158 (rnl): every day probed its
+	// final file and re-read its preliminary one.
+	it.each([
+		['sat', 160, 3],
+		['rnl', 158, 5]
+	] as const)('a caught-up %s feed’s daily fetch: %i range requests without them, %i with them', async (product, before, after) => {
+		const day = '2026-03-10';
+		const fixtures = fixtureHttp(() => day);
+		let n = 0;
+		const http: FeedHttp = { range: (u, s, e) => (n++, fixtures.range(u, s, e)), text: fixtures.text };
+		const config = { ...grid, product };
+		const first = fetchWindow('chirps', config, null, day);
+		const r = await runFetch({ source: 'chirps', config, ...first, today: day }, http);
+		if (!r.ok || r.startDate === null) throw new Error('the first fetch read nothing');
+		const newest = new Date(Date.parse(`${r.startDate}T00:00:00Z`) + (r.values.length - 1) * 86_400_000).toISOString().slice(0, 10);
+		expect(r.meta.finalThrough).toBe(product === 'sat' ? '2026-01-29' : '2026-03-04');
+		const count = async (finalThrough: string | null, held: boolean) => {
+			n = 0;
+			const w = fetchWindow('chirps', config, newest, day, first.end, finalThrough);
+			// Every day after the marker is still in the window, through yesterday: nothing the re-read could revise is skipped.
+			expect(w.end).toBe(first.end);
+			if (finalThrough) expect(w.start).toBe(new Date(Date.parse(`${finalThrough}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10));
+			// What the series holds after the first fetch: its days.
+			const h = held ? heldThrough('chirps', w, { startDate: r.startDate!, values: r.values }) : undefined;
+			const again = await runFetch({ source: 'chirps', config, ...w, today: day, ...(h ? { heldThrough: h } : {}) }, http);
+			// The feed card's preliminary count is the same either way.
+			expect(again.ok ? (again.meta.prelimDays ?? 0) : null).toBe(product === 'sat' ? 37 : 0);
+			return n;
+		};
+		expect(await count(null, false)).toBe(before);
+		expect(await count(r.meta.finalThrough as string, true)).toBe(after);
+	});
+});
+
 describe('runFetch on the fixtures', () => {
 	const http = fixtureHttp(() => '2026-03-10');
 	it('CHIRPS: days up to the preliminary lag, with how many are preliminary', async () => {
@@ -145,6 +224,15 @@ describe('runFetch on the fixtures', () => {
 		expect(r).toEqual({ ok: true, startDate: '2021-01-01', values: [1, 2], meta: { days: 2, gaps: 0, outside: 3, 'quality 1': 2 } });
 		const none = await runFetch({ source: 'dws', config: { station: 'X0H000' }, start: '2022-01-01', end: '2022-01-10', today: '2022-01-10' }, http);
 		expect(none).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0, outside: 5 } });
+	});
+
+	it('CHIRPS: how far the leading days are final (finalThrough), and none when the first day is preliminary', async () => {
+		const r = await runFetch({ source: 'chirps', config: grid, start: '2026-01-20', end: '2026-03-09', today: '2026-03-10' }, http);
+		expect(r).toMatchObject({ ok: true, meta: { finalThrough: '2026-01-29', prelimDays: 37 } });
+		const prelim = await runFetch({ source: 'chirps', config: grid, start: '2026-02-20', end: '2026-03-09', today: '2026-03-10' }, http);
+		expect(prelim.ok && prelim.meta).not.toHaveProperty('finalThrough');
+		const rnl = await runFetch({ source: 'chirps', config: { ...grid, product: 'rnl' }, start: '2026-02-20', end: '2026-03-09', today: '2026-03-10' }, http);
+		expect(rnl).toMatchObject({ ok: true, meta: { finalThrough: '2026-03-04', prelimDays: 0 } });
 	});
 
 	it('CHIRPS with nothing published yet: ok, no days', async () => {
@@ -252,13 +340,49 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(req('chirps', grid, '2026-07-01', '2026-05-31')).toBe(true);
 	});
 
+	// A queue message: heldThrough only ever names a CHIRPS day inside the window (heldThrough()).
+	it('takes heldThrough only as a CHIRPS sat day inside the window', () => {
+		const req = (source: string, config: unknown, held: unknown) =>
+			FetchRequestSchema.safeParse({ source, config, start: '2026-01-01', end: '2026-01-31', today: '2026-02-01', heldThrough: held }).success;
+		expect(req('chirps', grid, '2026-01-01')).toBe(true);
+		expect(req('chirps', grid, '2026-01-31')).toBe(true);
+		expect(req('chirps', grid, undefined)).toBe(true);
+		for (const bad of ['2025-12-31', '2026-02-01', '2026-02-30', 'soon', 7, null]) expect(req('chirps', grid, bad), String(bad)).toBe(false);
+		expect(req('dws', { station: 'X0H000' }, '2026-01-10')).toBe(false);
+		expect(req('chirps_gefs', grid, '2026-01-10')).toBe(false);
+		// rnl has no preliminary days to hold.
+		expect(req('chirps', { ...grid, product: 'rnl' }, '2026-01-10')).toBe(false);
+		expect(req('chirps', { ...grid, product: 'rnl' }, undefined)).toBe(true);
+	});
+
+	it('heldThrough() is the last day of the window’s leading run the series holds a value on, CHIRPS only', () => {
+		const w = { start: '2026-01-10', end: '2026-01-20' };
+		const ser = (startDate: string, values: (number | null)[]) => ({ startDate, values });
+		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, 3, 4, 5, 6]))).toBe('2026-01-15');
+		// A hole inside what the feed holds ends it: the hole is read again.
+		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, null, 4, 5, 6]))).toBe('2026-01-11');
+		// Bounded to the window's end; a series from before the window counts from the window's first day.
+		expect(heldThrough('chirps', w, ser('2026-01-10', new Array(30).fill(1)))).toBe('2026-01-20');
+		expect(heldThrough('chirps', w, ser('2026-01-05', [null, null, null, null, null, 1, 2]))).toBe('2026-01-11');
+		// Nothing on the window's first day, a series that starts later, or none: nothing held.
+		expect(heldThrough('chirps', w, ser('2026-01-10', [null, 2, 3]))).toBeUndefined();
+		expect(heldThrough('chirps', w, ser('2026-01-12', [1, 2, 3]))).toBeUndefined();
+		expect(heldThrough('chirps', w, ser('2026-01-10', []))).toBeUndefined();
+		expect(heldThrough('chirps', w, null)).toBeUndefined();
+		expect(heldThrough('chirps', { start: '2026-02-01', end: '2026-01-20' }, ser('2026-01-01', new Array(60).fill(1)))).toBeUndefined();
+		expect(heldThrough('dws', w, ser('2026-01-10', [1, 2, 3]))).toBeUndefined();
+	});
+
 	it('every window fetchWindow asks for passes (positive control)', () => {
 		const today = '2026-06-01';
 		for (const last of [null, '2026-05-28', '2020-01-01', '1990-01-01']) {
 			for (const [source, config] of [['chirps', { ...grid, startDate: '1990-01-01' }], ['chirps', grid], ['chirps_gefs', grid], ['dws', { station: 'X0H000', startDate: '1950-01-01' }], ['dws', { station: 'X0H000' }]] as const) {
 				for (const through of [null, '2026-05-31', '2020-03-01', '1995-01-01', '1970-12-31']) {
-					const w = fetchWindow(source, config as never, last, today, through);
-					expect(FetchRequestSchema.safeParse({ source, config, ...w, today }).success, `${source} ${last} ${through}`).toBe(true);
+					for (const final of [null, '2026-05-31', '2026-05-01', '2020-03-01', '1995-01-01']) {
+						const w = fetchWindow(source, config as never, last, today, through, final);
+						const held = heldThrough(source, w, last ? { startDate: '1950-01-01', values: new Array(30_000).fill(1) } : null);
+						expect(FetchRequestSchema.safeParse({ source, config, ...w, today, ...(held ? { heldThrough: held } : {}) }).success, `${source} ${last} ${through} ${final}`).toBe(true);
+					}
 				}
 			}
 		}

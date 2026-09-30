@@ -1275,7 +1275,7 @@ naming `startDate`, not a server error).
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }`, and/or `{ source }` (a string, or `null` to clear; 107) | `SeriesMeta`: says what an existing series holds, where its values came from (`source`), or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding, feed }` —
 `source` is where the values came from (a station id, agency, file or data feed; `null` = not recorded) and `sourceUnit` /
 `sourceUnitFactor` the unit the upload gave and the factor that converted it to `unit` (both `null` = not recorded; 107,
 [data-model.md § Series source and unit](./data-model.md#series-source-and-unit-107_series_sourcesql)). A PUT records exactly what it
@@ -1286,6 +1286,9 @@ counts the blank days a merge stores (the Data page's freshness, "Data now runs 
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
+`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs` or `dws`;
+`days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
+or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 
@@ -2676,7 +2679,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
-| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. `409` for a switched-off feed | editor |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
@@ -2693,8 +2696,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
-    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
-    `hourly`; `enabled` (default true);
+    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
+    the only value: no source publishes more often, 111_feed_daily_only;
+    `hourly` is a `400`); `enabled` (default true);
   - `replaceSeries` (default false): the owner confirms the feed may replace
     its target series, which holds values of another product or version, or
     an unrecorded one. Without it, attaching (or re-targeting, or switching
@@ -2728,8 +2732,11 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
   left alone because the series held a value the feed didn't write: an
   upload or import, #30), `staged` / `replaced` (a confirmed replacement's
-  days staged so far, or the label of what it replaced once swapped in) and
-  `through` (the last day the fetch asked for).
+  days staged so far, or the label of what it replaced once swapped in),
+  `through` (the last day the fetch asked for) and, for CHIRPS,
+  `finalThrough` (the last day through which the series is final, not read
+  again, #69). A CHIRPS `prelimDays` counts the preliminary days in the
+  window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all

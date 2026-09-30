@@ -2378,7 +2378,11 @@ key there would let any read-only principal forge any user's session.
   with internet access and the only one outside the VPC. It has no database
   URL or secret; its role can receive from `fetch-requests` and send to
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
-  policy lets the worker, and only the worker, reach those two queues.
+  policy lets the worker, and only the worker, reach those two queues. What
+  it is asked to fetch is bounded upstream: feeds run daily only, and "Run
+  now" is a token bucket per feed (6, then one every 10 minutes;
+  111_feed_daily_only, `app_feed_take_run_now`), so an editor can't turn a
+  feed into a request loop.
 - **Blast radius:** Lambda reserved concurrency is capped. There are monthly
   and daily budgets and Cost Anomaly Detection (off until the operator turns
   it on after the first apply; deployment.md § Budget alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s

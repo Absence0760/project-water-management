@@ -19,6 +19,7 @@ import {
 	type SeriesMeta,
 	type SeriesProvenance
 } from '@water-management/engine';
+import { fmtNum } from '$lib/format/number';
 
 /** The kinds a person is asked the product and version of: the CHIRPS series. */
 export const asksProvenance = (kind: string) => kind === 'rain_chirps_mm';
@@ -152,3 +153,23 @@ export const describeProvenance = (s: Pick<SeriesMeta, 'product' | 'productVersi
 	const p = seriesProvenance(s);
 	return p ? provenanceLabel(p) : 'version not recorded';
 };
+
+/** A data feed's source as the Data tab names it (backend feeds/config.ts SOURCES labels). */
+const FEED_LABELS: Record<string, string> = { chirps: 'CHIRPS daily rainfall', chirps_gefs: 'CHIRPS-GEFS rainfall forecast', dws: 'DWS gauge flow' };
+
+/**
+ * The Data tab's mark on a series a data feed wrote (SeriesMeta.feed,
+ * time_series.feed_id): "Written by the CHIRPS daily rainfall feed", or how
+ * many days when the feed wrote only some of the days with a value ("312
+ * days written by the CHIRPS daily rainfall feed"; the rest were uploaded or
+ * imported). Live, unlike the series' source (107), which records where a new
+ * series first came from and stays after the feed goes. `present` is the
+ * series' days with a value, when its values are loaded. null when no day is
+ * the feed's.
+ */
+export function feedMark(feed: SeriesMeta['feed'], present?: number | null): string | null {
+	if (!feed || feed.days <= 0) return null;
+	const label = FEED_LABELS[feed.source] ?? feed.source;
+	if (present != null && feed.days < present) return `${fmtNum(feed.days)} ${feed.days === 1 ? 'day' : 'days'} written by the ${label} feed`;
+	return `Written by the ${label} feed`;
+}

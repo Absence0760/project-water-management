@@ -1,6 +1,6 @@
 // The workspace's section header (issue #17, option A): one header per
 // section, drawn by the page (routes/projects/[id]) above the open tab. A tab
-// that has its own context line or actions (the Network's summary, Grids and
+// that has its own context line or actions (the Network's summary, Tables and
 // Add node; the Crops summary and Add crop; the Summary's run line) puts
 // them here while it shows its page (the Summary also puts its "Setup complete" pill beside the
 // rain pill, as `status`), instead of drawing a header of its own,

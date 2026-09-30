@@ -1,5 +1,5 @@
 // Crops & demand is a crop list and bars (issue #17, option A · A3): the full grids
-// open from the header's Grids menu in the grid modal (`grid=<id>`), a crop's
+// open from the header's Tables menu in the grid modal (`grid=<id>`), a crop's
 // name and factors in a side sheet from its row's Edit (`crop=<id>`). These
 // open them the way a person does. Save and close with saveModelChanges /
 // closeModal from ./network.ts.
@@ -12,7 +12,7 @@ const TITLE: Record<CropGrid, string> = {
 };
 const MENU: Record<CropGrid, string> = { 'crop-factors': 'Crop factors', 'planted-areas': 'Planted areas' };
 
-/** Opens one of the crop grids from the Crops page's Grids menu and returns the grid's dialog. */
+/** Opens one of the crop grids from the Crops page's Tables menu and returns the grid's dialog. */
 export async function openCropGrid(page: Page, grid: CropGrid) {
 	const dialog = page.getByRole('dialog', { name: TITLE[grid] });
 	// The URL already names it (a reload keeps `grid=`): it opens with the page; wait for it.
@@ -22,7 +22,7 @@ export async function openCropGrid(page: Page, grid: CropGrid) {
 	}
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
-	await page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name: MENU[grid], exact: true }).click();
+	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: MENU[grid], exact: true }).click();
 	await dialog.waitFor();
 	return dialog;
 }

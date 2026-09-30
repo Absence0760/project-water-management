@@ -46,15 +46,19 @@ The checklist for these is issue #62; the history scrub is #63.
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
       appear under the repo's Settings → Variables.
-- [ ] **`production` environment branch/tag policy and the release-tag
+- [x] **`production` environment branch/tag policy and the release-tag
       ruleset (#126, 2026-09-29).** The release preflight now refuses every
       release until the `production` environment deploys only from `main`
       and the `backend@*`/`web@*` tags, and an active tag ruleset stops those
       tags being created (except by an admin), moved or deleted. Run the
       one-line `gh api` commands in deployment.md § The production
       environment's branch and tag policy (steps 1–3), then its step 4 check.
-      Also propose the same steps for the templates repo's
-      `backfill-prod-environment.sh`, which sets only the reviewer today.
+      — *Done 2026-09-29: steps 1–3 applied, step 4 shows the three policies
+      (`main`, `backend@*`, `web@*`) and the "Release tags" ruleset active.*
+- [ ] **Propose the branch/tag policy for the templates repo (#126).** The
+      templates repo's `backfill-prod-environment.sh` sets only the
+      reviewer; propose deployment.md's steps 1–3 for its `base` branch so
+      every estate repo gets them.
 - [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
@@ -158,9 +162,10 @@ The checklist for these is issue #62; the history scrub is #63.
       issues; delete it once nothing is needed from it). The calibration and
       rainfall issues are re-filed without the names as #1 and #2 (originals
       archived in `infra-secrets/water-management/`).
-- [ ] **`production` environment:** run
+- [x] **`production` environment:** run
       `templates/scripts/backfill-prod-environment.sh --apply`, with the
-      operator as required reviewer.
+      operator as required reviewer. — *Done: `Absence0760` is the required
+      reviewer (checked 2026-09-29).*
 - [ ] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
@@ -2429,27 +2434,37 @@ role and not before it.
   - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
         published into `rain_chirps_mm`; the existing CHIRPS bias correction
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
-  - [ ] Marking a fed series on the Data tab ("from CHIRPS feed", from
-        `time_series.feed_id`). Merges are already audited (`series.merged`,
-        `feeds/ingest.ts`).
+  - [x] Marking a fed series on the Data tab ("from CHIRPS feed", from
+        `time_series.feed_id`): built, `SeriesMeta.feed` and the Data tab's
+        *Written by the … feed* (#69). Merges are already audited
+        (`series.merged`, `feeds/ingest.ts`).
   - [x] A debounced re-run after new data (WP-2.11, built).
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
-  - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
-        last 50 days daily (~200 range requests). Trigger: more than ~20
-        CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
-        once per tick and share it between feeds, or keep a per-day
-        preliminary/final marker so final days aren't re-read.
+  - [x] ~~**Request volume grows with feeds.** Each CHIRPS feed re-reads its
+        last 50 days daily (~200 range requests).~~ **Only what can change
+        is read (#69):** the ingest keeps a checked final marker
+        (`last_meta.finalThrough`) and the next window starts after it; a
+        `sat` fetch stops probing finals after the first batch without one,
+        and doesn't re-read the preliminary days the series already holds
+        (`heldThrough`). architecture.md § Data feeds, the window. On the
+        fixtures a caught-up feed's daily fetch goes from 194 range requests
+        to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days
+        moves on 120 days a window instead of 70.
   - [x] ~~**Ingest doesn't check a result's dates against the window asked
         for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
         records its window on the feed before sending, and the ingest
         refuses an answer with a day outside it, and drops any answer but
         the newest fetch's (late or redelivered). A DWS backfill through an
         empty stretch now moves on too (#29, `last_meta.through`).
-  - [ ] Related: "Run now" is deduped per feed but not rate-limited, and an
-        hourly schedule re-reads CHIRPS (published daily) 24 times a day; cap
-        both when the request volume item above is done.
+  - [x] ~~Related: "Run now" is deduped per feed but not rate-limited, and an
+        hourly schedule re-reads CHIRPS (published daily) 24 times a day.~~
+        **Done (#69, `111_feed_daily_only`):** every feed runs daily (the
+        hourly schedule is gone for every source: none publishes more
+        often), and "Run now" is a token bucket per feed, 6 presses that
+        queue or pull a fetch, then one every 10 minutes (`429` with
+        `Retry-After`).
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):

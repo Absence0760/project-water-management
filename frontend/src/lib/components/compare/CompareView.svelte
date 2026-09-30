@@ -369,7 +369,7 @@
 		})
 	);
 
-	// Export impact report with two what-ifs is a menu (Escape and a click outside close it, as the Network's Grids).
+	// Export impact report with two what-ifs is a menu (Escape and a click outside close it, as the Network's Tables).
 	let exportEl: HTMLDetailsElement | undefined = $state();
 	let exportOpen = $state(false);
 	function closeExport() {
