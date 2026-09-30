@@ -20,6 +20,7 @@ import {
 	LOW_FLOW_WARN_FACTOR,
 	RECESSION_MIN_SEGMENTS,
 	GAUGE_COLUMNS,
+	OBSERVED_FLOW_COLUMNS,
 	USER_COLUMNS,
 	waterYearLabel,
 	type CalibrationStats,
@@ -55,6 +56,8 @@ const CATCHMENT_ORDER = [
 	'observed_flow_filled',
 	'observed_flow_other_fill',
 	'observed_flow_other_filled',
+	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18): after the records and their fill.
+	'observed_flow_quality',
 	'ewr',
 	'ewr_shortfall',
 	'ewr_charged',
@@ -1430,11 +1433,14 @@ export function* wr2012Lines(w: RunSummary['wr2012'], notes: string): Generator<
 	}
 }
 
-/** What each farm daily column means: its FarmTemplate letter and formula (verify/columns.ts). */
+/** What each farm daily column means: its FarmTemplate letter and formula; then the observed flow record's columns (verify/columns.ts). */
 export function* columnGuideLines(): Generator<string> {
 	yield csvRow(['Farm daily columns (the daily CSV of a farm)']);
 	yield csvRow(['Column', 'Series', 'Formula']);
 	for (const c of FARM_DAILY_COLUMNS) yield csvRow([c.letter ?? '', c.key, c.formula]);
+	yield csvRow(['Observed flow columns (the catchment daily CSV or a calibration site’s)']);
+	yield csvRow(['Column', 'Series', 'Meaning']);
+	for (const c of OBSERVED_FLOW_COLUMNS) yield csvRow(['', c.key, c.formula]);
 }
 
 /**

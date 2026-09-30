@@ -278,3 +278,25 @@ export const LEGACY_RUNOFF_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'resultant_flow', letter: 'Y', formula: 'MAX(X, S)' },
 	{ key: 'natural_flow', letter: 'AB', formula: 'MAX(Y, 0)' }
 ];
+
+/**
+ * The observed flow record's columns (the catchment's, or a calibration
+ * site's node's, engine ≥ 1.41.0), for the summary CSV's column guide. No
+ * letters: the workbook's [Flow data] column is the record itself. The
+ * quality flags (engine ≥ 1.48.0, docs/model.md §2.10h) are
+ * ../calibrate/dayFlags.ts FLOW_QUALITY_COLUMN, checked by ./checks.ts
+ * checkFlowQuality.
+ */
+export const OBSERVED_FLOW_COLUMNS: readonly FarmColumn[] = [
+	{ key: 'observed_flow', letter: null, formula: 'the calibration record as stored, m³/s × 86 400; blank on a day without a reading (blank, not a number, or negative), except a gap-filled day when the quality flags score infilled days, which holds the filled value' },
+	{ key: 'observed_flow_other', letter: null, formula: 'the other record (gauge or logger), shown and never scored', optional: true },
+	{ key: 'observed_flow_fill', letter: null, formula: 'gap fill per day (engine ≥ 1.23.0): 0 = measured or still missing, 1 = interpolated, 2 = from a donor record × its ratio; the outlet’s records only', optional: true },
+	{ key: 'observed_flow_filled', letter: null, formula: 'the filled value on a filled day (m³/day), blank on every other day; the stored record is never changed', optional: true },
+	{
+		key: 'observed_flow_quality',
+		letter: null,
+		formula:
+			'the scored record’s class per day (engine ≥ 1.48.0), the strongest that applies: 6 missing (no reading, not filled), 5 infilled (filled), 4 suspect (an outlier or a flat stretch by the Data checks), 3 above the highest gauging, 2 above 0 and below the lowest gauging, 1 human use (never set), else 0 in the gauged range; the gauged range and the fill apply only at the outlet. Only when some day is 1 to 5',
+		optional: true
+	}
+];

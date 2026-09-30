@@ -67,7 +67,10 @@ const base: ModelInput = {
 			{ nodeId: BELOW, cropId: LUCERNE, areaM2: 30_000 }
 		],
 		transfers: [],
-		boreholes: [{ id: 'b2', nodeId: BELOW, name: 'Neighbour hole', capacityM3Day: 90, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }]
+		boreholes: [{ id: 'b2', nodeId: BELOW, name: 'Neighbour hole', capacityM3Day: 90, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }],
+		demandObjects: [
+			{ id: 'd2', nodeId: BELOW, name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: monthly(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		]
 	},
 	series: {}
 } as unknown as ModelInput;
@@ -207,11 +210,15 @@ describe('projectResultsForApplicant', () => {
 			{
 				op: 'borehole.add',
 				borehole: { id: 'b2', nodeId: MINE, name: 'My new hole', capacityM3Day: 10, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
+			},
+			{
+				op: 'demandObject.add',
+				demandObject: { id: 'd2', nodeId: MINE, name: 'My cottages', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 230, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' }
 			}
 		];
 		const input = scenario(ops, raised);
 		// The run holds them under fresh ids (for the assessors: the hidden ones keep theirs).
-		expect(input.reIds.map((r) => [r.kind, r.id])).toEqual(expect.arrayContaining([['crop', LUCERNE], ['borehole', 'b2']]));
+		expect(input.reIds.map((r) => [r.kind, r.id])).toEqual(expect.arrayContaining([['crop', LUCERNE], ['borehole', 'b2'], ['demandObject', 'd2']]));
 		expect(input.runModel.boreholes!.find((b) => b.name === 'My new hole')!.id).toBe('b2-2');
 		const out = projectResultsForApplicant(input);
 		expect(out.model.crops.map((c) => [c.id, c.name])).toEqual([
@@ -220,9 +227,10 @@ describe('projectResultsForApplicant', () => {
 		]);
 		expect(out.model.cropAreas.map((a) => [a.cropId, a.areaM2])).toEqual(expect.arrayContaining([[LUCERNE, 20_000], [CITRUS, 50_000]]));
 		expect(out.model.boreholes).toEqual([expect.objectContaining({ id: 'b2', name: 'My new hole', nodeId: MINE })]);
-		// The hidden ones stay out: no Lucerne, no Neighbour hole, no fresh id.
+		expect(out.model.demandObjects).toEqual([expect.objectContaining({ id: 'd2', name: 'My cottages', nodeId: MINE })]);
+		// The hidden ones stay out: no Lucerne, no Neighbour hole or village, no fresh id.
 		const text = JSON.stringify(out);
-		for (const hidden of ['Lucerne', 'Neighbour hole', 'b2-2', `${LUCERNE}-2`]) expect(text, hidden).not.toContain(hidden);
+		for (const hidden of ['Lucerne', 'Neighbour hole', 'Neighbour village', 'b2-2', 'd2-2', `${LUCERNE}-2`]) expect(text, hidden).not.toContain(hidden);
 	});
 });
 

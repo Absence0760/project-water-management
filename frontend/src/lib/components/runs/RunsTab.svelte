@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { inputFlowShares, overAllocationError, resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
@@ -667,6 +667,7 @@
 				{nodeOrder}
 				forecastFrom={summary.forecast?.from ?? null}
 				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
+				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
 			>
 				{#snippet modelTail()}
 					<div class="panel" id="res-calibration">
