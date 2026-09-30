@@ -286,3 +286,57 @@ export function reportReadyMail(to: string, url: string, f: ReportMailFacts): Ma
 		footer: ['The PDF is kept for 7 days.', "If you weren't expecting this, a member of the project sent it to you; you can ignore it."]
 	});
 }
+
+export type PackNoticeFacts = {
+	event: 'issued' | 'withdrawn';
+	projectId: string;
+	packId: string;
+	projectName: string;
+	/** The application's scenario name; null for baseline evidence. */
+	scenarioName: string | null;
+	version: number;
+	/** The version this one replaced (an issue that superseded another), or null. */
+	supersedesVersion: number | null;
+	/** `xxxx-xxxx-xxxx` (engine packShortCode). */
+	shortCode: string;
+	/** Why it was withdrawn (public on verify); null for an issue. */
+	reason: string | null;
+	/**
+	 * Why this person gets it: `editor` (they issue and withdraw the project's
+	 * packs; the mail links the pack's own page too) or `applicant` (the
+	 * application is theirs; they read no pack, so only the public verify link).
+	 */
+	as: 'editor' | 'applicant';
+};
+
+/**
+ * An evidence pack was issued, or one that was issued was withdrawn (issue
+ * #71; docs/evidence-pack.md § Notices). Built by the worker as its recipient
+ * (evidence/notices.ts). It names the pack (version, subject, short code) and
+ * links the public verify page; never a figure. In the recipient's language
+ * (an applicant may read Afrikaans), English where a key has none.
+ */
+export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const name = f.scenarioName ?? tr.t('mail.pack.name.baseline');
+	const what = f.scenarioName === null ? tr.t('mail.pack.what.baseline') : tr.t('mail.pack.what.application', { name: f.scenarioName });
+	const v = { name, what, project: f.projectName, version: f.version, code: f.shortCode, product: PRODUCT };
+	const issued = f.event === 'issued';
+	const paragraphs: Para[] = issued
+		? [tr.t('mail.pack.issued.body', v), ...(f.supersedesVersion !== null ? [tr.t('mail.pack.issued.supersedes', { previous: f.supersedesVersion })] : [])]
+		: [tr.t('mail.pack.withdrawn.body', v), ...(f.reason ? [tr.t('mail.pack.withdrawn.reason', { reason: f.reason })] : [])];
+	paragraphs.push(tr.t('mail.pack.code', v));
+	return render(
+		'pack_notice',
+		to,
+		tr.t(issued ? 'mail.pack.issued.subject' : 'mail.pack.withdrawn.subject', v),
+		{
+			heading: tr.t(issued ? 'mail.pack.issued.heading' : 'mail.pack.withdrawn.heading'),
+			paragraphs,
+			action: { label: tr.t('mail.pack.action'), url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) },
+			footer: [f.as === 'editor' ? tr.t('mail.pack.why.editor', v) : tr.t('mail.pack.why.applicant', { name })],
+			links: f.as === 'editor' ? [{ label: tr.t('mail.pack.open'), url: sitePage(`/projects/${f.projectId}/packs/${f.packId}`) }] : []
+		},
+		tr
+	);
+}

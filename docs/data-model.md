@@ -1117,6 +1117,43 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
 
+**Notices (130_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
+
+- **`pack_notice`**: one "pack issued" or "pack withdrawn" email per pack,
+  person and event, ever: primary key `(pack_id, user_id, event)` (it covers
+  `pack_id` → `evidence_pack`, cascade); `user_id` (→ `app_user`, cascade),
+  `event` (`issued`, `withdrawn`), `project_id` (→ `project`, cascade;
+  copied from the pack by the queue function), `status` (`pending` →
+  `sending` → `sent`, `skipped` with a `reason`, or `failed`), `attempts`,
+  `created_at`, `claimed_at`, `locked_until`, `sent_at`, `settled_at` (when
+  it became sent, skipped or failed), `reason` (≤ 200).
+  Indexes on `user_id`, `project_id`, the open rows and `settled_at`.
+  Purged **30 days** after it is settled (`app_purge_pack_notices`, from
+  the tick).
+- RLS: SELECT your own rows (`pack_notice_own`). No write policy: every
+  write goes through the `SECURITY DEFINER` functions below (the table
+  grant mirrors `alert_delivery`'s).
+- **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
+  only (`42501`), and only for a pack in that state (`23514`; an unknown
+  event `22023`). Inserts a row for each person of
+  `pack_notice_audience(project, scenario)` (editors and owners, direct or
+  through the team, and the application's scenario owner with a role of
+  contributor or above; revoked from `water_app`) but the caller, with a
+  confirmed, unsuppressed address; `ON CONFLICT DO NOTHING`. A draft that
+  was withdrawn queues none (returns 0). NOTIFYs `job_queued`, so the local
+  worker ticks at commit.
+- **`app_pack_notice_claim(limit, lease)`**, **`app_pack_notice_finish(pack,
+  user, event, status, reason)`**, **`app_purge_pack_notices(age ≥ 30 days)`**:
+  the worker's own context only (no user and no API key,
+  `alert_worker_context`); the claim returns each notice with the pack's
+  public facts (version, manifest hash, the replaced version, the withdrawal
+  reason) and fails a notice left `sending` past its lease rather than
+  re-sending it.
+- Guards: `evidence/notices.db.test.ts`, the catalogue
+  (`APP_USER_ON_DELETE`: cascade), `db/cross-project-refs.security.db.test.ts`
+  (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
+  (`USER_FK_COVERAGE`: the `packNotices` section).
+
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed

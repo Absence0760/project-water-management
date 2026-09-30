@@ -2,11 +2,13 @@
 // (feeds/schedule.ts), report schedules (reports/schedule.ts) and scheduled
 // alert checks (app_alert_schedule) that are due, then claim and run due
 // jobs one at a time until none are due or the time budget is spent, then
-// send the alert mails those jobs queued (alerts/send.ts). Every transport ends
+// send the alert mails those jobs queued (alerts/send.ts) and the evidence
+// pack notices (evidence/notices.ts). Every transport ends
 // here: the local worker loop (worker.ts), `pnpm dev:jobs:tick`, the memory
 // transport (tests), and the production worker Lambda (lambda-worker.ts).
 import { sendAlerts, type SendResult } from '../alerts/send.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
+import { type NoticeResult, purgePackNotices, sendPackNotices } from '../evidence/notices.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { purgeInvites } from '../invites/invites.js';
@@ -142,6 +144,8 @@ export interface TickResult {
 	reports?: ReportScheduleResult & { purged: number };
 	/** Alert checks queued, alert rows purged (0 when alerts scheduling was off), and alert mails sent by this tick. */
 	alerts: SendResult & { scheduled: number; purged: number };
+	/** Evidence pack notices sent by this tick, and settled ones purged (130_pack_notices). */
+	packNotices: NoticeResult & { purged: number };
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -164,10 +168,12 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		dead: 0,
 		lost: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
-		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 }
+		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
+		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 }
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
+	const noticesPurged = await purgePackNotices();
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
 	let alertsScheduled = 0;
@@ -187,6 +193,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	}
 	// After the jobs, so every delivery an alert_eval queued is sent once it committed.
 	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };
+	// Queued by the issue or withdraw route itself (no job), so sent every tick; global like the alert sends.
+	result.packNotices = { purged: noticesPurged, ...(await sendPackNotices()) };
 	result.stats = await withoutUser(queueStats);
 	return result;
 }
