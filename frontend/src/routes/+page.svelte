@@ -476,7 +476,7 @@
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (createOpen = false)}>Cancel</button>
 		<button type="submit" form="create-form" class="btn btn-primary" disabled={creating || !newName.trim()}>
-			{creating ? 'Creating…' : 'Create'}
+			{creating ? 'Creating…' : 'Create project'}
 		</button>
 	{/snippet}
 </Dialog>
@@ -542,7 +542,7 @@
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (copyOpen = false)}>Cancel</button>
 		<button type="submit" form="copy-form" class="btn btn-primary" disabled={copying || !copyName.trim()}>
-			{copying ? 'Copying…' : 'Copy'}
+			{copying ? 'Copying…' : 'Copy project'}
 		</button>
 	{/snippet}
 </Dialog>

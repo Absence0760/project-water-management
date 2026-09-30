@@ -44,7 +44,7 @@ import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
-import { ALLOCATION_SERIES, matchAllocations, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
+import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
@@ -87,6 +87,7 @@ import {
 	type RunAllocationSource,
 	type UserSummary
 } from './project';
+import type { AllocationLimitBound } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
@@ -515,7 +516,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -584,6 +585,9 @@ function runNetwork(
 		// and the full-allocation demand factor, so the self-checks redo each day from the stored columns.
 		if (r.allocationRoom?.surface) push(node.id, ALLOCATION_SERIES.surfaceRoom.key, ALLOCATION_SERIES.surfaceRoom.label, 'm³', r.allocationRoom.surface);
 		if (r.allocationRoom?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterRoom.key, ALLOCATION_SERIES.groundwaterRoom.label, 'm³', r.allocationRoom.groundwater);
+		// What is left of the year's volume, for a source whose licence states conditions (engine ≥ 1.40.0).
+		if (r.allocationLeft?.surface) push(node.id, ALLOCATION_SERIES.surfaceLeft.key, ALLOCATION_SERIES.surfaceLeft.label, 'm³', r.allocationLeft.surface);
+		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
@@ -1729,7 +1733,12 @@ function runAllocations(
 				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear
 			};
 			const budget = plan.nodes[i]!.allocationCap?.[side.waterSource];
-			if (ap.mode === 'cap' && budget) src.capReached = capReached(budget, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3);
+			if (ap.mode === 'cap' && budget) {
+				const cap = plan.nodes[i]!.allocationCap!;
+				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
+				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3));
+			}
 			sources.push(src);
 		}
 		const sc = ap.scaled.get(i);
@@ -1740,25 +1749,33 @@ function runAllocations(
 }
 
 /**
- * The water years a capped source's use reached its budget (within float
- * noise). A run resumed inside a water year (`before`, the snapshot's use so
- * far that year) counts the year's use before the snapshot too, as the cap did.
+ * A capped source's water years (RunAllocationSource): `capReached`, the
+ * years its use reached its budget (within float noise), and `limitBound`
+ * (engine ≥ 1.40.0), the days per year the licence limit bound, split by
+ * which limit set the room (limitBoundKind). A run resumed inside a water
+ * year (`before`, the snapshot's use so far that year) counts the year's use
+ * before the snapshot too, as the cap did.
  */
-function capReached(
+function capYears(
 	budget: Float64Array,
+	limit: Float64Array | null,
+	outside: Uint8Array | null,
 	source: 'surface' | 'groundwater',
 	r: NodeResult,
 	startDate: string,
 	before?: readonly [number, number]
-): { waterYear: number; budgetM3: number; usedM3: number }[] {
-	const out: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
+): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
+	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
+	const limitBound: AllocationLimitBound[] = [];
 	const start = toEpochDay(startDate);
 	let wy = NaN;
 	let used = 0;
 	let lastT = 0;
+	let bound: AllocationLimitBound | null = null;
 	const close = () => {
 		const b = budget[lastT]!;
-		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) out.push({ waterYear: wy, budgetM3: b, usedM3: used });
+		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) capReached.push({ waterYear: wy, budgetM3: b, usedM3: used });
+		if (bound?.days) limitBound.push(bound);
 	};
 	for (let t = 0; t < budget.length; t++) {
 		const y = waterYearOf(start + t);
@@ -1767,12 +1784,19 @@ function capReached(
 			// A run that starts on 1 October starts the year afresh (simulateNetwork clears the use then too).
 			used = t === 0 && before && startDate.slice(5) !== '10-01' ? before[source === 'surface' ? 0 : 1] : 0;
 			wy = y;
+			bound = { waterYear: y, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		}
-		used += source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		const kind = limitBoundKind(Math.max(0, budget[t]! - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, budget[t]!);
+		if (kind) {
+			bound!.days++;
+			bound![kind]++;
+		}
+		used += use;
 		lastT = t;
 	}
 	close();
-	return out;
+	return { capReached, limitBound };
 }
 
 /**

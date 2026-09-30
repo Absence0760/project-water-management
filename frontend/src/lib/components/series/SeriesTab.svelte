@@ -116,6 +116,9 @@
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
 	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
 	let values = $state.raw<Record<string, Daily>>({});
+	// Series whose values failed to load, with the error: the preview says so and offers Try again
+	// (without it, a preview whose every series failed showed "Loading…" for ever).
+	let valuesFailed = $state.raw<Record<string, string>>({});
 	// The project's calendar date, as in the header and on the project list (projects/freshness.ts).
 	const today = $derived(projectToday(timeZone));
 
@@ -219,6 +222,11 @@
 	async function loadValues() {
 		await Promise.all(
 			list.map(async (s) => {
+				if (s.id in valuesFailed) {
+					const rest = { ...valuesFailed };
+					delete rest[s.id];
+					valuesFailed = rest;
+				}
 				const hit = cachedValues(projectId, s);
 				if (hit) {
 					values = { ...values, [s.id]: hit };
@@ -227,8 +235,9 @@
 				try {
 					const v = cacheValues(projectId, await api.series.get(projectId, s.id));
 					values = { ...values, [s.id]: v };
-				} catch {
-					/* coverage cells stay "–" */
+				} catch (e) {
+					// The coverage cells stay "–"; the preview shows the error with Try again.
+					valuesFailed = { ...valuesFailed, [s.id]: msg(e) };
 				}
 			})
 		);
@@ -784,7 +793,7 @@
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
 		{#snippet children(SeriesPreviewDialog)}
-			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
+			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} failed={valuesFailed} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
 		{/snippet}
 	</Lazy>
 {/if}

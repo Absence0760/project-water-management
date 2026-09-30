@@ -67,7 +67,9 @@
 		confirmOpen = true;
 		if (changes === null) await load();
 	}
+	const canRestore = $derived(!restoring && changes !== null && changes.some((c) => c.area !== 'series'));
 	async function restore() {
+		if (restoring) return;
 		restoring = true;
 		restoreError = null;
 		try {
@@ -139,7 +141,10 @@
 		The settings and model go back to what the run “{run.label || 'Untitled run'}” of {fmtDate(run.createdAt, true)} used. This is saved as a new change in the
 		History tab. Series values aren’t part of it.
 	</p>
-	{#if changes === null}
+	{#if changes === null && error}
+		<!-- The load failed: say so here, where the question is, not only in the closed "Changes since this run" above. -->
+		<div class="alert alert-error" role="alert">{error} <button type="button" class="btn btn-sm" onclick={load} disabled={loading}>Try again</button></div>
+	{:else if changes === null}
 		<p class="muted" role="status">Working out what changes…</p>
 	{:else if changes.filter((c) => c.area !== 'series').length === 0}
 		<p class="muted">The saved settings and model already match this run.</p>
@@ -147,19 +152,22 @@
 		<p class="small">Restoring undoes these differences:</p>
 		<ChangesList changes={changes.filter((c) => c.area !== 'series')} />
 	{/if}
-	<div class="field">
+	<!-- A form, so Enter in the reason restores (the action row's button submits it). -->
+	<form
+		id="{uid}-restore"
+		class="field"
+		onsubmit={(e) => {
+			e.preventDefault();
+			if (canRestore) restore();
+		}}
+	>
 		<label for="{uid}-reason">Reason for restoring <span class="muted">(optional)</span></label>
 		<input id="{uid}-reason" maxlength="500" bind:value={reason} />
-	</div>
+	</form>
 	{#if restoreError}<div class="alert alert-error" role="alert">{restoreError}</div>{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (confirmOpen = false)}>Cancel</button>
-		<button
-			type="button"
-			class="btn btn-primary"
-			onclick={restore}
-			disabled={restoring || changes === null || changes.filter((c) => c.area !== 'series').length === 0}
-		>
+		<button type="submit" form="{uid}-restore" class="btn btn-primary" disabled={!canRestore}>
 			{restoring ? 'Restoring…' : 'Restore'}
 		</button>
 	{/snippet}

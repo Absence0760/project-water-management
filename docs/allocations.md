@@ -43,6 +43,23 @@ the unit takes nothing of that source in a month outside the months of use,
 and at most the rate × 86 400 m³ a day. The comparison and a full-allocation
 run don't read them, and the conditions in words are never applied.
 
+A cap run says which limit held use back (engine 1.40.0): per unit, source
+and water year, the days the source took all the room it had and the unit
+still went short, split into days the year's volume was used up, days at
+the maximum rate and days outside the months of use, beside the years the
+volume was used up (`RunSummary.allocations` `limitBound` and `capReached`,
+[model.md § Which limit bound](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+The Allocations page shows it under the picked unit's water years ("The cap
+held use back on 80 days in 1 water year: 80 with the volume used up. The
+registered volume was used up in 2021/22."), and the run's summary CSV has
+an *Allocation cap by water year* table. When a licence states conditions,
+the run also stores what is left of the year's volume each day
+(`allocation_left_surface` / `allocation_left_groundwater`) beside the day's
+room. A run before 1.40.0 has the years the volume was used up only; run the
+model again for the days. Both come from the whole run, a forecast tail
+included, while the comparison reads the record only (issue #51); the page
+says so for a forecast run.
+
 A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
 the farm and source on each day.

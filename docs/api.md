@@ -2165,7 +2165,7 @@ whether a use is lawful.
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
 | GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison, capYears }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
@@ -2196,6 +2196,21 @@ whether a use is lawful.
   `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
   ([Projects](#projects)); `RunSummary.allocations` is the run's own
   comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+  In a cap run each of its sources carries `capReached: [{ waterYear,
+  budgetM3, usedM3 }]` (the years the volume was used up) and, engine ≥
+  1.40.0, `limitBound: [{ waterYear, days, volumeDays, rateDays, monthsDays
+  }]` (the days per year the licence limit held use back, by limit; only
+  years with one). A capped source whose licence states months or a rate has
+  the run series `allocation_left_surface` / `allocation_left_groundwater`
+  (what is left of the year's volume, m³, start of the day) beside
+  `allocation_room_*`. The summary CSV adds an "Allocation cap by water year"
+  block in a cap run.
+- `capYears` (the run comparison, `GET …/runs/:runId/allocations`): in a cap
+  run, one `{ nodeId, waterSource, capReached, limitBound }` per unit and
+  capped source of `RunSummary.allocations` (`limitBound` `null` on a run
+  before engine 1.40.0); `[]` for a run of another mode. Read from the run's
+  summary, not recomputed, so for a forecast run it covers the forecast days
+  too, unlike `comparison` (the page says so).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with

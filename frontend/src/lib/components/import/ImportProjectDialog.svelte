@@ -261,6 +261,16 @@
 		}
 	}
 
+	// A step that replaces the focused control (the file input, the Import button) moves focus
+	// to what comes next, rather than letting it fall to the dialog: the file picker after
+	// Choose another file, the name on the preview, Open project when done, Back to the
+	// preview after a failure. (On a closed dialog, focus() does nothing.)
+	const focusOnMount = (el: HTMLElement) => el.focus();
+	const focusName = (el: HTMLElement) => {
+		// ImportPreview mounts after this line; its name field is there by the next microtask.
+		queueMicrotask(() => el.closest('form')?.querySelector<HTMLInputElement>('#imp-name')?.focus());
+	};
+
 	const title = $derived(step === 'done' ? 'Project imported' : isWorkbook || report ? 'Import b023 workbook' : 'Import project file');
 	const inputLabel = $derived(isWorkbook ? 'b023 workbook (.xlsm or .xlsx)' : 'Project file (.json)');
 	const accept = $derived(isWorkbook ? WORKBOOK_ACCEPT : IMPORT_ACCEPT);
@@ -299,7 +309,7 @@
 			{/if}
 			<div class="field">
 				<label for="imp-file">{inputLabel}</label>
-				<input id="imp-file" type="file" {accept} disabled={step === 'reading'} onchange={(e) => pick(e.currentTarget.files?.[0])} />
+				<input id="imp-file" type="file" {accept} disabled={step === 'reading'} {@attach focusOnMount} onchange={(e) => pick(e.currentTarget.files?.[0])} />
 			</div>
 			{#if step === 'reading' && readingWorkbook}
 				<div class="reading">
@@ -310,7 +320,7 @@
 				<p class="muted small" role="status">{step === 'reading' ? `Reading ${fileName}…` : ''}</p>
 			{/if}
 		{:else if (step === 'preview' || step === 'importing') && parsed}
-			<p class="muted small file">From <span class="mono">{fileName}</span></p>
+			<p class="muted small file" {@attach focusName}>From <span class="mono">{fileName}</span></p>
 			<ImportPreview
 				{parsed}
 				{teams}
@@ -364,15 +374,21 @@
 	{#snippet actions()}
 		{#if step === 'done' && result}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
-			<a class="btn btn-primary" href="{base}/projects/{result.project.id}">Open project</a>
+			<a class="btn btn-primary" href="{base}/projects/{result.project.id}" {@attach focusOnMount}>Open project</a>
 		{:else if step === 'failed'}
-			<button type="button" class="btn" onclick={() => (open = false)}>Cancel</button>
-			{#if parsed}<button type="button" class="btn btn-primary" onclick={() => (step = 'preview')}>Back to the preview</button>{/if}
+			<!-- Close, not Cancel: there is nothing left to cancel. -->
+			{#if parsed}
+				<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+				<button type="button" class="btn btn-primary" onclick={() => (step = 'preview')} {@attach focusOnMount}>Back to the preview</button>
+			{:else}
+				<button type="button" class="btn" onclick={() => (open = false)} {@attach focusOnMount}>Close</button>
+			{/if}
 		{:else if step === 'reading' && readingWorkbook}
 			<button type="button" class="btn" onclick={cancelReading}>Cancel</button>
 		{:else}
 			{#if step === 'preview'}<button type="button" class="btn" onclick={reset}>Choose another file</button>{/if}
-			<button type="button" class="btn" onclick={() => (open = false)}>Cancel</button>
+			<!-- While importing, closing doesn't stop the request (the list still takes the project), so it is Close. -->
+			<button type="button" class="btn" onclick={() => (open = false)}>{step === 'importing' ? 'Close' : 'Cancel'}</button>
 			{#if step === 'preview' || step === 'importing'}
 				<button
 					type="submit"

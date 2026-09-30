@@ -52,6 +52,12 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await page.getByTestId('section-header').getByRole('link', { name: '+ New scenario', exact: true }).click();
 	const create = page.getByRole('dialog', { name: 'New scenario' });
 	await expect(create.getByLabel('Base run')).toHaveValue(/.+/);
+	// A name typed and cancelled is thrown away: the dialog opens empty again.
+	await create.getByLabel('Name', { exact: true }).fill('Cancelled what-if');
+	await create.getByRole('button', { name: 'Cancel' }).click();
+	await expect(create).toBeHidden();
+	await page.getByTestId('section-header').getByRole('link', { name: '+ New scenario', exact: true }).click();
+	await expect(create.getByLabel('Name', { exact: true })).toHaveValue('');
 	await create.getByLabel('Name', { exact: true }).fill(NAME);
 	await create.getByRole('button', { name: 'Create scenario' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: NAME })).toBeVisible();

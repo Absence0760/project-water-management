@@ -1,6 +1,7 @@
 import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
+	allocationCapLines,
 	chirpsFactorLines,
 	curtailmentLines,
 	ewrAssuranceLines,
@@ -326,6 +327,49 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines[0]).toBe('Land-cover streamflow reductions (invasive plants and forestry)');
 		expect(lines).toContain('Share of natural flow (%),2.9');
 		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
+	});
+
+	it('lists an allocation cap’s water years: the volume reached and the days the licence limit bound, by limit (engine 1.40.0)', () => {
+		const base = { wholeYears: 2, yearsOver: 0, meanModelledM3PerYear: 100, meanRegisteredM3PerYear: 120 };
+		const a: NonNullable<RunSummary['allocations']> = {
+			mode: 'cap',
+			tolerance: 0.1,
+			used: 2,
+			notMatched: 0,
+			nodes: [
+				{
+					nodeId: 'a',
+					name: 'Farm A',
+					sources: [
+						{
+							...base,
+							waterSource: 'surface',
+							capReached: [{ waterYear: 2003, budgetM3: 120, usedM3: 120 }],
+							limitBound: [
+								{ waterYear: 2003, days: 40, volumeDays: 30, rateDays: 4, monthsDays: 6 },
+								{ waterYear: 2004, days: 12, volumeDays: 0, rateDays: 0, monthsDays: 12 }
+							]
+						},
+						// A run before 1.40.0: no day counts.
+						{ ...base, waterSource: 'groundwater', capReached: [{ waterYear: 2004, budgetM3: 50, usedM3: 50 }] }
+					]
+				}
+			]
+		};
+		const lines = [...allocationCapLines(a)];
+		expect(lines[1]).toBe('Farm or user,Water source,Water year,Registered volume (m³),Used (m³),Volume reached,Days the limit bound,Of which: volume used up,Of which: maximum rate,Of which: outside the months of use');
+		expect(lines.slice(2)).toEqual([
+			'Farm A,Surface water,2003/04,120,120,yes,40,30,4,6',
+			// Held back only outside its months: capReached alone read "never reached".
+			'Farm A,Surface water,2004/05,,,no,12,0,0,12',
+			'Farm A,Groundwater,2004/05,50,50,yes,,,,'
+		]);
+		const never = structuredClone(a);
+		never.nodes[0]!.sources = [{ ...base, waterSource: 'surface', capReached: [], limitBound: [] }];
+		expect([...allocationCapLines(never)].at(-1)).toBe('"The cap never bound: no water year reached its registered volume, and the licence held no day back."');
+		// In the summary sheet of a cap run only.
+		expect([...summaryCsvLines(meta, { ...summary, allocations: a })]).toContain('Farm A,Surface water,2003/04,120,120,yes,40,30,4,6');
+		expect([...summaryCsvLines(meta, { ...summary, allocations: { ...a, mode: 'none' } })].some((l) => l.startsWith('Allocation cap by water year'))).toBe(false);
 	});
 
 	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 volume, then per borehole', () => {

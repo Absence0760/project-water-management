@@ -178,6 +178,13 @@ describe('the allocation settings (issue #72)', () => {
 		expect(res.status).toBe(200);
 		expect(res.body.comparison.tolerance).toBe(0.2);
 		expect(res.body.run.allocationMode).toBe('cap');
+		// The cap's water years from the run's summary (engine 1.40.0): the trickle is used up, so volume days only.
+		expect(res.body.capYears).toHaveLength(1);
+		const cy = res.body.capYears[0];
+		expect(cy).toMatchObject({ nodeId: farmA.id, waterSource: 'surface' });
+		expect(cy.capReached.length).toBeGreaterThan(0);
+		expect(cy.limitBound.length).toBeGreaterThan(0);
+		for (const y of cy.limitBound) expect([y.rateDays, y.monthsDays, y.volumeDays > 0]).toEqual([0, 0, true]);
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.05`)).body.comparison.tolerance).toBe(0.05);
 	});
 
@@ -217,5 +224,17 @@ describe('the allocation settings (issue #72)', () => {
 		expect(atRate).toBeGreaterThan(20);
 		const B = await series(farmB.id, 'supplied');
 		expect(B.some((v, t) => !january(t) && v > perDay)).toBe(true);
+		// What is left of the year's volume is stored beside the room (engine 1.40.0): the volume, less the use so far.
+		const left = await series(farmA.id, 'allocation_left_surface');
+		expect(left[0]).toBeCloseTo(1e9, 3);
+		expect(left[1]).toBeCloseTo(1e9 - G[0]!, 3);
+		// And the comparison says which limit held the farm back: the months and the rate, never the volume.
+		const res = await viewer.call('GET', `/projects/${projectId}/runs/${id}/allocations`);
+		const cy = res.body.capYears[0];
+		expect(cy.capReached).toEqual([]);
+		const sum = (k: string) => cy.limitBound.reduce((a: number, y: Record<string, number>) => a + y[k]!, 0);
+		expect(sum('monthsDays')).toBeGreaterThan(0);
+		expect(sum('rateDays')).toBeGreaterThan(0);
+		expect(sum('volumeDays')).toBe(0);
 	});
 });

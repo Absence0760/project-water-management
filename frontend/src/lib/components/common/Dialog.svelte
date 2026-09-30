@@ -54,12 +54,32 @@
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
 	const bodyId = `${titleId}-body`;
 
+	// What had the focus when it opened: the native dialog hands it back on close().
+	let opener: HTMLElement | null = null;
+
 	$effect(() => {
 		if (!el) return;
 		if (open && !el.open) {
+			opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 			el.showModal();
 			place(el);
 		} else if (!open && el.open) el.close();
+	});
+
+	// A caller that removes the dialog as it closes (`{#if open}` round a lazy
+	// dialog: the sign-off, SignoffSection.svelte) takes it out of the page
+	// while it is still open, and a removed dialog hands the focus to nobody:
+	// it fell to <body>, and the next Tab started from the top of the page.
+	// Put it back on the opener, as close() would have.
+	$effect(() => {
+		const d = el;
+		if (!d) return;
+		return () => {
+			// Svelte removes the DOM before teardowns run, so an open `d` here is already detached.
+			if (!d.open) return;
+			const active = document.activeElement;
+			if (opener?.isConnected && (!active || active === document.body || d.contains(active))) opener.focus();
+		};
 	});
 
 	/** Beside `anchor` (to its right, top-aligned), kept 8 px inside the viewport. */
@@ -162,6 +182,8 @@
 		max-width: none;
 		width: min(440px, calc(100% - 2 * var(--gutter)));
 		max-height: calc(100vh - 2rem);
+		/* The visible height on a phone, whose 100vh runs under the browser's toolbar and hid the action row. */
+		max-height: calc(100dvh - 2rem);
 		overflow-y: auto;
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
 	}
@@ -177,6 +199,7 @@
 	dialog.full {
 		width: min(1600px, calc(100% - 2 * var(--gutter)));
 		height: calc(100vh - 2rem);
+		height: calc(100dvh - 2rem);
 		overflow: hidden;
 	}
 	dialog.full[open] {
@@ -276,8 +299,10 @@
 	dialog:not(.keep-inputs) .body :global(textarea) {
 		width: 100%;
 	}
+	/* Wraps rather than running off a phone's width with three long labels. */
 	.actions {
 		display: flex;
+		flex-wrap: wrap;
 		justify-content: flex-end;
 		gap: 0.5rem;
 		margin-top: 1rem;
