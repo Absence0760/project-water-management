@@ -3188,8 +3188,13 @@ before to the bit, and a day the schedule switches off stays off (s = 0, no
 floor). The floor is on the demand, not the supply: on a short day the
 object is still served by its priority class, and what it lacks of b_k(t) is
 reported. A full allocation (`allocationMode` `fullAllocation`, §2.12a)
-rescales the unit's whole demand afterwards, floor included: it states the
-registered use, not a restriction. The curtailment report holds the floor
+rescales the unit's whole demand afterwards by its factor KF, but on a
+restricted day an object with a floor keeps MAX(KF × o_k, MIN(B_k, o_k)), so
+a restriction what-if on a full-allocation run never takes it below its
+floor either (the unit's demand over the year is then its registered volume
+plus what the floor holds). A full allocation alone is not a restriction and
+rescales the object, floor included; whether it should hold the floor too is
+[audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
 too (§2.11). *Not modelled:* a drought restriction rule that cuts demand by
 dam level (WP-3.8) doesn't exist yet; when it is built it has to hold the
 same floor (`planObjects` applies it to the demand factor today). A municipality's own restriction
@@ -6111,7 +6116,7 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | S | `totalChangeM3Day` | Total reductions (m³/day) | Engine ≥ 0.17.0 (Q13): `N − ΔG`, the change in **supply** (the storage part of the charge is not a supply cut). The sheet and older engines: `N + R`. Engine ≥ 1.38.0, on a unit with a basic-needs floor B (§2.7f): `MAX(N − ΔG, B − I)` |
 | T | `totalChangeLs` | Total reductions (l/s) | `S / 86.4` [sheet: `ROUNDDOWN(…, 1)`] |
 | U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | Engine ≥ 0.17.0 (Q13): `MAX(M − ΔG, 0)`, never below 0. The sheet and older engines: `M + R`, which went negative for a farm with little or no demand. Engine ≥ 1.38.0, on a unit with a basic-needs floor: `MAX(MAX(M − ΔG, 0), B)` |
-| – | `basicNeedsM3Day`, `basicNeedsHeldM3Day` | – | Engine ≥ 1.38.0 (issue #123, §2.7f), only on a unit with a domestic or municipal object with people: B = `AVERAGE(basic_needs over W)`, the unit's floor, and what it held back of the cut, `U − MAX(M − ΔG, 0)` ≥ 0 (in `totals` too). The EWR charge, its supply cut and the cut beyond the share are unchanged: the floor keeps water back, it doesn't hide the charge |
+| – | `basicNeedsM3Day`, `basicNeedsHeldM3Day` | – | Engine ≥ 1.38.0 (issue #123, §2.7f), only on a unit with a domestic or municipal object with people: B = `AVERAGE(basic_needs over W)`, the unit's floor, and what it held back of the cut, `U − MAX(M − ΔG, 0)` ≥ 0 (in `totals` too). The EWR charge, its supply cut and the cut beyond the share are unchanged: the floor keeps water back, it doesn't hide the charge. So where held > 0 the table's cuts remove less of the unit's consumptive use than its irrigation charge asks, by held × k; nothing moves that onto other units, and the row's badge (and the board's note) says how much |
 | V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", U / H)` [sheet: `ROUND(…, 3)`] (see quirk Q12); in 0–1 from engine 0.17.0 |
 | – | `ewrCutBeyondShareM3Day` | – | `MAX(ΔG − M, 0)` (engine ≥ 0.17.0, Q13): how far the EWR supply cut exceeds the farm's equitable share; flagged "EWR cut exceeds this farm's equitable share" when > 0 |
 

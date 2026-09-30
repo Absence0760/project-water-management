@@ -4,7 +4,7 @@
 // trips queued for seconds on a busy API). Needs Postgres (pnpm dev:db:up).
 import type { ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser, type Db } from '../db/tx.js';
 import { loadModel, loadSettingsAndModel, saveModel } from './store.js';
 
@@ -212,6 +212,8 @@ describe('model store', () => {
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
+		// Migration 124's CHECK refuses a negative population below the API's own check (engine 1.38.0).
+		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});

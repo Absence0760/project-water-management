@@ -193,6 +193,13 @@ export interface PlanObjects {
 	 * null for one without. The day's floor is MIN(floor, its demand that day).
 	 */
 	floor: (number | null)[];
+	/**
+	 * The days a restriction (the demand factor below 1) applies on the unit
+	 * (engine ≥ 1.38.0): a full allocation's rescaling holds the floor on
+	 * these days too (allocations/mode.ts). Null when no day is restricted or
+	 * no object has a floor.
+	 */
+	restricted: Uint8Array | null;
 }
 
 /**
@@ -213,6 +220,7 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 	const tier = new Uint8Array(objects.length);
 	const total = new Float64Array(days);
 	const floors: (number | null)[] = [];
+	let restricted: Uint8Array | null = null;
 	objects.forEach((o, k) => {
 		const monthly = objectMonthlyM3Day(o, warnings);
 		const who = `demand object "${o.name}"`;
@@ -228,7 +236,10 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 			const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
 			d[t] = s ? v * s[t]! : v;
 			// A restriction never below the floor (engine ≥ 1.38.0); the schedule applies first, so a day off stays off.
-			if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
+			if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) {
+				d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
+				(restricted ??= new Uint8Array(days))[t] = 1;
+			}
 		}
 		demand.push(d);
 		schedule.push(s);
@@ -242,7 +253,7 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 		tier[k] = p ?? 1;
 	});
 	for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total, floor: floors };
+	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total, floor: floors, restricted };
 }
 
 /**

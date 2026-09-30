@@ -240,7 +240,10 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   crop area, the gross demand, the rain used, the irrigation efficiency and
   the loss return stay as they are: 85 % means "85 % of what they'd take".
   A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
-  month by month; there is no op for one object yet (followups.md).
+  month by month; there is no op for one object yet (followups.md). A cut
+  (a factor below 1) never takes a domestic or municipal object with people
+  below its basic-needs floor, MIN(people × 25 l a day, its demand)
+  (engine ≥ 1.38.0, issue #123), also under a full allocation.
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of

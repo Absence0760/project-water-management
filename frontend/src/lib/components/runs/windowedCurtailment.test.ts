@@ -89,6 +89,31 @@ describe('the reporting window, worked out by the engine', () => {
 		expect(checked).toBeGreaterThan(0);
 	});
 
+	it('holds a unit’s basic-needs floor over a picked window as runModel does (engine 1.38.0)', () => {
+		let floored = 0;
+		for (let seed = 1; seed <= 120 && floored < 3; seed++) {
+			const input = randomInput(seed, { maxDays: 300 });
+			if (!input.model.demandObjects?.length) continue;
+			// Every object a town of 2 000 people, every farm cut to 10 %: the floor holds on each.
+			for (const o of input.model.demandObjects) Object.assign(o, { category: 'municipal', population: 2000 });
+			for (const n of input.model.nodes) if (n.kind === 'farm') n.demandFactor = new Array(12).fill(0.1);
+			const run = runModel(input);
+			const stored = run.summary.curtailment;
+			if (!stored?.farms.some((f) => f.basicNeedsM3Day !== undefined) || run.days < 40) continue;
+			floored++;
+			const keys = curtailmentSeriesKeys(stored, network(input))!;
+			expect(keys.some((k) => k.key === 'basic_needs')).toBe(true);
+			expect(missingSeries(keys, run.series)).toEqual([]);
+			const res = resolveWindow({ preset: 'last30' }, run, stored);
+			if (!res.ok) throw new Error(res.error);
+			const got = prepareWindowed(run, network(input), storedLookup(run)).over(res.window);
+			const expected = runModel(withWindow(input, res.window.reportStart, res.window.reportEnd)).summary.curtailment!;
+			const strip = (c: typeof expected) => c.farms.map((f) => ({ ...f, ewrBindingSiteId: null }));
+			expect(strip(got.curtailment)).toEqual(strip(expected));
+		}
+		expect(floored).toBeGreaterThan(0);
+	});
+
 	it('fetches every series the engine reads, and the run stores each of them', () => {
 		for (const { input, run } of cases) {
 			const keys = curtailmentSeriesKeys(run.summary.curtailment!, network(input))!;
