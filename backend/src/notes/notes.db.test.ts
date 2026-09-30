@@ -142,7 +142,7 @@ describe('farmers', () => {
 		expect((await farmer2.call('GET', notesUrl())).body.notes.map((n: { body: string }) => n.body)).toEqual(['Farm B farm note']);
 		// And the counts only count what the farmer can see.
 		const counts = (await farmer.call('GET', notesUrl('/counts'))).body;
-		expect(counts).toEqual({ project: 0, nodes: { [farmA.id]: 2 }, runs: {}, settings: {}, scenarios: {} });
+		expect(counts).toEqual({ project: 0, nodes: { [farmA.id]: 2 }, runs: {}, settings: {}, scenarios: {}, packs: {} });
 	});
 
 	it("refuses a farmer's team note, project note and note on another farm", async () => {
@@ -325,7 +325,7 @@ describe('notes in the project export and copy', () => {
 		expect(res.status).toBe(201);
 		const copy = res.body.project.id as string;
 		expect((await editor.call('GET', `/projects/${copy}/notes`)).body.notes).toEqual([]);
-		expect((await editor.call('GET', `/projects/${copy}/notes/counts`)).body).toEqual({ project: 0, nodes: {}, runs: {}, settings: {}, scenarios: {} });
+		expect((await editor.call('GET', `/projects/${copy}/notes/counts`)).body).toEqual({ project: 0, nodes: {}, runs: {}, settings: {}, scenarios: {}, packs: {} });
 		expect(await asOwner('SELECT 1 FROM note WHERE project_id = $1', [copy])).toEqual([]);
 		expect((await viewer.call('GET', notesUrl('?limit=500'))).body.notes).toHaveLength(before);
 	});
