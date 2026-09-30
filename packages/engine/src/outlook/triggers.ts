@@ -24,7 +24,8 @@
 // Pure: no I/O. Deterministic.
 import { damCapacityOn } from '../network/development';
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type { ModelInput } from '../project';
+import { DEMAND_PARTS, type DemandPart, type DroughtRestrictionLevel, type DroughtRestrictionRule, type ModelInput } from '../project';
+import { RESTRICTION_LEVELS_MAX } from '../network/restriction';
 import { runModelFrom, runModelWithoutChecks } from '../run';
 import { withDamStorage, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -39,6 +40,7 @@ import {
 	outlookMemberInput,
 	outlookSeasonInput,
 	summariseOutlook,
+	withoutDroughtRestriction,
 	type OutlookBaseRun,
 	type OutlookLevel,
 	type OutlookMember,
@@ -478,7 +480,9 @@ export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, o
  * date, bands × analogue years × levels member runs of the season, from the
  * one snapshot of the history (warmStart). Needs a farm dam.
  */
-export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptions): ReviewTriggers {
+export function runReviewTriggers(raw: ModelInput, options: ReviewTriggerOptions): ReviewTriggers {
+	// Without the drought restriction rule, as the outlook (withoutDroughtRestriction).
+	const input = withoutDroughtRestriction(raw);
 	const season: OutlookSeason = { decisionDate: options.reviewDate, seasonEnd: options.seasonEnd };
 	// The dates and the dams first, before the history runs.
 	checkReview(input, options);
@@ -564,24 +568,83 @@ export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'm
 }
 
 /**
- * The parameters WP-3.8's drought restriction rule is expected to take from
- * a trigger table (roadmap step 3, "cut demand by x % when storage < y %").
- * **A typed shape only**: that rule isn't in the engine yet
- * (`NetworkNode.restriction` doesn't exist), so nothing produces or reads
- * this; model.md §2.15a gives the mapping from a ReviewTriggers table.
+ * A trigger table as WP-3.8's drought restriction rule (engine ≥ 1.46.0,
+ * docs/model.md §2.15a and §2.7i): so a run, or a scenario, simulates
+ * following the table. The review date's month and day is the rule's review
+ * date and the day after the season end its lift date; each row, fullest
+ * first, is a level from the band above's lower edge (as a share of the
+ * total capacity) down, cutting each part of demand by 1 − its level's
+ * demand.scale factor. What the rule can't carry is said in `notes`, never
+ * dropped silently: a level op limited to some nodes or months, or on the
+ * other water users (the rule cuts every unit's demand all year); a factor
+ * above 1 (no cut); a row where no level met the planning rule (the WUA
+ * decides: it takes the band above's cuts); a table that isn't monotone (a
+ * deeper level cuts at least as much, so each part takes the largest cut of
+ * the rows above it); and a fullest band whose level cuts (the rule applies
+ * it below 100 %). Rows with the same cuts as the one above merge; rows at
+ * the top that cut nothing are no level. `rule` is null when no row cuts
+ * anything.
  */
-export interface DroughtRestrictionTriggerParameters {
-	/** Month and day the storage is read at the start of each season ("MM-DD", the review date's). */
-	reviewMonthDay: string;
-	/** What is read: the total storage of the farm dams, as the table's bands. */
-	basis: 'totalFarmDamStorage';
-	/** Fullest first: the first step whose threshold the storage reaches applies. */
-	steps: {
-		/** The band's lower edge, m³, and as a share of the total capacity. */
-		atOrAboveM3: number;
-		atOrAboveShare: number;
-		/** The row's level (its demand.scale ops) from the review date to the season end; null = no level met the rule (the WUA decides). */
-		levelId: string | null;
-		ops: readonly ScenarioOp[] | null;
-	}[];
+export function restrictionRuleFromTriggers(
+	table: Pick<ReviewTriggers, 'reviewDate' | 'seasonEnd' | 'capacityM3'> & { rows: readonly Pick<ReviewTriggerRow, 'band' | 'level'>[] },
+	levels: readonly { id: string; label: string; ops: readonly ScenarioOp[] }[]
+): { rule: DroughtRestrictionRule | null; notes: string[] } {
+	const notes: string[] = [];
+	const byId = new Map(levels.map((l) => [l.id, l]));
+	const pct = (x: number) => `${Math.round(x * 1000) / 10} %`;
+	/** A level's cut per part: 1 − the product of its demand.scale factors on every farm, all year. */
+	const cutsOf = (id: string): Partial<Record<DemandPart, number>> => {
+		const lv = byId.get(id);
+		const factor = new Map<DemandPart, number>(DEMAND_PARTS.map((p) => [p, 1]));
+		for (const op of lv?.ops ?? []) {
+			if (op.op !== 'demand.scale') {
+				notes.push(`${lv!.label}: a ${op.op} change isn't a demand level, so the rule doesn't carry it`);
+				continue;
+			}
+			if (op.category === 'user' || (op.nodeIds && op.nodeIds.length) || (op.months && op.months.length)) {
+				notes.push(`${lv!.label}: a demand change ${op.category === 'user' ? 'on the other water users' : 'limited to some hydrological units or months'} isn't carried; the rule cuts every unit's demand whatever the month`);
+				continue;
+			}
+			for (const p of op.part ? [op.part] : DEMAND_PARTS) factor.set(p, factor.get(p)! * op.factor);
+		}
+		const cuts: Partial<Record<DemandPart, number>> = {};
+		for (const [p, f] of factor) {
+			if (f > 1) notes.push(`${lv?.label ?? id}: raises ${p === 'crops' ? 'the crops’' : `the ${p} demand objects’`} demand (× ${f}), which a restriction can't; not cut`);
+			if (f < 1) cuts[p] = Math.min(1, Math.max(0, 1 - f));
+		}
+		return cuts;
+	};
+	const cap = table.capacityM3;
+	const steps: DroughtRestrictionLevel[] = [];
+	let prev: Partial<Record<DemandPart, number>> = {};
+	table.rows.forEach((row, i) => {
+		const below = i === 0 ? 1 : cap > 0 ? table.rows[i - 1]!.band.fromM3 / cap : 0;
+		let cuts: Partial<Record<DemandPart, number>>;
+		if (!row.level) {
+			cuts = { ...prev };
+			notes.push(`${i === 0 ? 'The fullest band' : `The band below ${pct(below)}`}: no demand level met the planning rule, so it takes the cuts of the band above, for the WUA to decide`);
+		} else cuts = cutsOf(row.level.id);
+		// A deeper level cuts each part at least as much as the one above (reported, then made so).
+		for (const [p, c] of Object.entries(prev) as [DemandPart, number][]) {
+			if ((cuts[p] ?? 0) < c) {
+				if (row.level) notes.push(`The table isn't monotone: ${row.level.label} below ${pct(below)} cuts ${p === 'crops' ? 'the crops' : `the ${p} demand objects`} less than the band above; the rule keeps the band above's ${pct(c)}`);
+				cuts[p] = c;
+			}
+		}
+		const same = DEMAND_PARTS.every((p) => (cuts[p] ?? 0) === (prev[p] ?? 0));
+		prev = cuts;
+		if (same || !(below > 0)) return;
+		if (i === 0) notes.push(`The fullest band's level (${row.level?.label ?? 'none'}) cuts demand too: the rule applies it whenever the dams are below 100 %`);
+		steps.push({ ...(row.level ? { label: row.level.label.trim().slice(0, 60) } : {}), belowPct: Math.min(1, below), cuts });
+	});
+	if (!steps.length) return { rule: null, notes: [...notes, 'No band’s level cuts demand, so there is no restriction to apply'] };
+	const md = (iso: string) => iso.slice(5);
+	// The lift date: the day after the season end; 29 February is no setting, so a season ending 28 February lifts 1 March.
+	let lift = md(fromEpochDay(toEpochDay(table.seasonEnd) + 1));
+	if (lift === '02-29') lift = '03-01';
+	const review = md(table.reviewDate) === '02-29' ? '03-01' : md(table.reviewDate);
+	return {
+		rule: { reviewDates: [review], ...(lift !== review ? { liftDates: [lift] } : {}), levels: steps.slice(0, RESTRICTION_LEVELS_MAX), source: `Review triggers from the seasonal outlook, reviewed on ${review}, season to ${md(table.seasonEnd)}` },
+		notes: steps.length > RESTRICTION_LEVELS_MAX ? [...notes, `Only the first ${RESTRICTION_LEVELS_MAX} levels are kept`] : notes
+	};
 }

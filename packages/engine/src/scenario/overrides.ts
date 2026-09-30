@@ -631,6 +631,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const value = cloneData(op.value);
 			const [head, leaf] = path.split('.') as [string, string | undefined];
 			const s = d.settings as Record<string, unknown>;
+			// No drought restriction rule and null run the same (engine ≥ 1.46.0): turning off a rule that isn't there leaves it as it is.
+			if (path === 'droughtRestriction' && value === null && (s.droughtRestriction === null || s.droughtRestriction === undefined)) break;
 			if (leaf === undefined) s[head] = value;
 			else {
 				const cur = s[head];

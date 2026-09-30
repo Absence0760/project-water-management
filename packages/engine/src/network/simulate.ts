@@ -9,6 +9,7 @@ import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
+import { PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { AllocationCap } from '../allocations/mode';
 
@@ -229,6 +230,13 @@ export interface NetworkPlan {
 	/** The run day the dams with a storageResetM3 start from it (engine ≥ 0.46.0); absent = none. */
 	storageResetDay?: number;
 	/**
+	 * The drought restriction rule (engine ≥ 1.46.0, WP-3.8, ./restriction.ts,
+	 * docs/model.md §2.7i); absent = off. Decided at the start of a review day
+	 * from the farm dams' storage then (after any storage reset, before the
+	 * transfers), so a day's level never reads a later day.
+	 */
+	restriction?: PlanRestriction;
+	/**
 	 * The land-cover low-flow threshold to use (m³/day), pinned from the run a
 	 * snapshot was captured from (engine ≥ 1.1.0, ../warmstart); absent = the
 	 * natural flow's own Q75 over this run's historical days.
@@ -296,6 +304,13 @@ export interface NodeResult {
 	allocationLeft?: { surface: Float64Array | null; groundwater: Float64Array | null };
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
+	/**
+	 * The unit's abstraction demand after the drought restriction (engine ≥
+	 * 1.46.0, docs/model.md §2.7i): what its sources are asked for, ≤ demand.
+	 * `demand` and `deficit` stay the unrestricted demand's, so a cut shows as
+	 * a shortfall. Absent without the rule, and on gauges and other users.
+	 */
+	restrictedDemand?: Float64Array;
 	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
 	objectSupplied?: Float64Array[];
 	/** Delivered by river off-takes into this unit (engine ≥ 1.14.0), after conveyance losses; absent on a unit no off-take reaches. */
@@ -401,6 +416,8 @@ export interface NetworkState {
 	boreholeUsedM3: (number[] | null)[];
 	/** Surface and groundwater use so far this water year under an allocation cap (before a 1 October clears it); null without a cap. */
 	allocationUsedM3: ([number, number] | null)[];
+	/** The drought restriction level held the day before (engine ≥ 1.46.0); 0 without the rule. */
+	restrictionLevel: number;
 }
 
 export interface NetworkResult {
@@ -413,6 +430,8 @@ export interface NetworkResult {
 	transfers: Float64Array[];
 	/** Volume each river off-take took per day (m³, before conveyance losses), in plan.offtakes order; absent without off-takes. */
 	offtakes?: Float64Array[];
+	/** The drought restriction level in force each day (engine ≥ 1.46.0; 0 = none); absent without the rule. */
+	restrictionLevel?: Uint8Array;
 }
 
 function allocNode(days: number): NodeResult {
@@ -593,6 +612,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
 		if (n.supply) r.riverAbstraction = new Float64Array(days);
+		if (plan.restriction && n.kind === 'farm') r.restrictedDemand = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
@@ -628,6 +648,48 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.18.0).
 	const allocUsed = nodes.map((n) => (n.allocationCap ? Float64Array.from(n.initialAllocationUsedM3 ?? [0, 0]) : null));
+	// The drought restriction (engine ≥ 1.46.0, ./restriction.ts, docs/model.md §2.7i): the level held, each
+	// day's level, and each unit's demand after today's cut: its abstraction demand, the crop requirement and
+	// a view of its demand objects' demand (what splitSupply reads), filled at the start of each day.
+	const rp = plan.restriction;
+	let level = rp?.initialLevel ?? 0;
+	const levelOut = rp ? new Uint8Array(days) : null;
+	const rD = rp ? new Float64Array(nodes.length) : null;
+	const rF = rp ? new Float64Array(nodes.length) : null;
+	const rObjs = rp ? nodes.map((n) => (n.kind === 'farm' && n.objects ? { ...n.objects, demand: n.objects.demand.map(() => new Float64Array(days)), total: new Float64Array(days) } : null)) : null;
+	const rPart = rp ? nodes.map((n) => (n.objects ? Uint8Array.from(n.objects.category, (c) => PART_INDEX[c]) : null)) : null;
+	/** The level decided on day t: the farm dams' storage at the start of the day as a share of their capacity that day. */
+	const decideLevel = (t: number): number => {
+		let q = 0;
+		let c = 0;
+		for (const i of rp!.dams) {
+			const cap = nodes[i]!.damCapacityM3 * capacityK(nodes[i]!, t);
+			if (!(cap > 0)) continue;
+			q += startStorage(i, t);
+			c += cap;
+		}
+		return c > 0 ? restrictionLevelFor(q / c, rp!.thresholds) : 0;
+	};
+	/** Unit i's demand today after the level's cuts: writes rF, rObjs and returns D = F′ / e + Σ objects′. */
+	const restrictDay = (i: number, t: number): number => {
+		const n = nodes[i]!;
+		const cuts = rp!.cut[level]!;
+		const cc = cuts[PART_INDEX.crops]!;
+		const F = cc > 0 ? n.demand[t]! * (1 - cc) : n.demand[t]!;
+		rF![i] = F;
+		const o = n.objects;
+		const v = rObjs![i];
+		if (!o || !v) return F / n.irrigationEfficiency;
+		const part = rPart![i]!;
+		let tot = 0;
+		for (let k = 0; k < o.ids.length; k++) {
+			const d = restrictedObjectDemand(o.demand[k]![t]!, cuts[part[k]!]!, o.floor[k]!);
+			v.demand[k]![t] = d;
+			tot += d;
+		}
+		v.total[t] = tot;
+		return F / n.irrigationEfficiency + tot;
+	};
 	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 1.1.0).
 	const startsYear = (t: number) => (t === 0 && plan.continued ? month[0] === 10 && plan.continued.monthBefore !== 10 : startsWaterYear(month, t));
 	let captured: NetworkState | undefined;
@@ -637,7 +699,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		depletionDeficitM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionDeficitM3 ?? 0) : res[i]!.depletionDeficit[t - 1]!)),
 		onRiver: onRiver.slice(),
 		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null)),
-		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null))
+		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null)),
+		// Captured before the day's decision: the level the day before held.
+		restrictionLevel: level
 	});
 	const work = opts.workings
 		? nodes.map((n, i) => {
@@ -697,6 +761,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (r.storageSet) r.storageSet[t] = startStorage(i, t) - (t === 0 ? nodes[i]!.initialStorageM3 : r.storage[t - 1]!);
 			}
 		}
+		// The drought restriction (engine ≥ 1.46.0): a review decides the level from the storage at the start of the
+		// day (a fresh run's first day too, when the latest date before it is a review), a lift ends it; then each
+		// unit's demand after its cuts, before the transfers, whose room reads it.
+		if (rp) {
+			const e = rp.event[t]!;
+			if (e === 1 || (t === 0 && e === 0 && rp.initialLevel === undefined && rp.startDecides)) level = decideLevel(t);
+			else if (e === 2) level = 0;
+			levelOut![t] = level;
+			for (let i = 0; i < nodes.length; i++) if (nodes[i]!.kind === 'farm') rD![i] = restrictDay(i, t);
+		}
 		// Annual borehole caps (WP-3.9) and allocation caps run per water year, October to September.
 		// Cleared before the transfers, whose room reads them (issue #200).
 		if (startsYear(t)) {
@@ -752,7 +826,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const q = prevQ(tr.to);
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
-				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
+				// After the drought restriction's cut (engine ≥ 1.46.0), when the rule is on.
+				const dstD = rD ? rD[tr.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
 				const draw = damDrawBound(dst, dstD, bhUsed[tr.to]!, allocUsed[tr.to]!, t);
 				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the
@@ -843,7 +918,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					continue;
 				}
 				const dst = nodes[o.to]!;
-				let need = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
+				let need = rD ? rD[o.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
 				if (o.topUpDam && dstCap > 0) {
 					const q = prevQ(o.to);
@@ -933,6 +1008,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const Dc = F / node.irrigationEfficiency;
 			const objs = node.objects;
 			const D = objs ? Dc + objs.total[t]! : Dc;
+			// What the unit's sources are asked for (engine ≥ 1.46.0): D after the drought restriction's cut, when
+			// the rule is on. D itself, and the deficit D − G, stay the unrestricted demand's.
+			const Dr = rD ? rD[i]! : D;
 			const H = sumU;
 			// Land cover removes part of the farm's natural runoff before it reaches the river or dam (WP-1.35).
 			const I0 = nat * node.share;
@@ -1054,7 +1132,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let Xpass = 0;
 			if (Xin > 0) {
 				// Off-take water used here is surface use, within the cap.
-				Xused = Math.min(Xin, D, sRoom);
+				Xused = Math.min(Xin, Dr, sRoom);
 				const rest = Xin - Xused;
 				XtoDam = rest > 0 && otInDam[i]! > 0 ? Math.min(rest, (rest * otInDam[i]!) / Xin) : 0;
 				Xpass = rest - XtoDam;
@@ -1099,14 +1177,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let Gd = 0;
 			let dGw = 0;
 			// What the unit's own sources still have to supply once the off-take water is used.
-			const Dl = Xused > 0 ? D - Xused : D;
+			const Dl = Xused > 0 ? Dr - Xused : Dr;
 			const sLeft = Xused > 0 ? sRoom - Xused : sRoom;
 			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom);
 			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - dead, 0), room);
 			else Gs = Math.min(Math.max(avail0 - dead, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;
 			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
-			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), D) : Math.min(Gs + Ggw + Gr, D);
+			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), Dr) : Math.min(Gs + Ggw + Gr, Dr);
 			const au = allocUsed[i];
 			if (au) {
 				au[0]! += G - Ggw;
@@ -1121,7 +1199,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let T: number;
 			if (objs) {
 				const got = r.objectSupplied!;
-				const Gc = splitSupply(G, Dc, objs, t, got);
+				// Split against the restricted demands when the rule is on (engine ≥ 1.46.0).
+				const Gc = rp ? splitSupply(G, rF![i]! / node.irrigationEfficiency, rObjs![i]!, t, got) : splitSupply(G, Dc, objs, t, got);
 				T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * Gc;
 				for (let k = 0; k < got.length; k++) T += objs.returnShare[k]! * got[k]![t]!;
 			} else T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
@@ -1182,6 +1261,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.groundwater[t] = Ggw;
 			r.groundwaterToDam[t] = Gd;
 			if (r.riverAbstraction) r.riverAbstraction[t] = Gr;
+			if (r.restrictedDemand) r.restrictedDemand[t] = Dr;
 			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
 			// noise of the volumes involved reported as 0 (review F8).
 			const scale = Math.max(U, Z, absAA);
@@ -1230,5 +1310,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 	}
 	if (opts.captureAt === days) captured = capture(days);
-	return { nodes: res, transfers: trOut, ...(offtakes.length ? { offtakes: otVol } : {}), ...(work ? { workings: work } : {}), ...(captured ? { captured } : {}) };
+	return {
+		nodes: res,
+		transfers: trOut,
+		...(offtakes.length ? { offtakes: otVol } : {}),
+		...(work ? { workings: work } : {}),
+		...(captured ? { captured } : {}),
+		...(levelOut ? { restrictionLevel: levelOut } : {})
+	};
 }

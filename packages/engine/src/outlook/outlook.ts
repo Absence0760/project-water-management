@@ -727,7 +727,22 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
  * whose ops aren't all demand.scale, or don't apply, are reported with
  * their problems and not run.
  */
-export function runSeasonalOutlook(input: ModelInput, options: SeasonalOutlookOptions): SeasonalOutlook {
+/**
+ * The input without its drought restriction rule (engine ≥ 1.46.0, WP-3.8,
+ * docs/model.md §2.15 and §2.7i): the seasonal outlook and its review
+ * triggers run without it. The rule is what the triggers are turned into,
+ * and a member's demand level on top of it would cut twice. The history the
+ * season starts from is then the unrestricted one too. Unchanged when the
+ * rule is off.
+ */
+export function withoutDroughtRestriction(input: ModelInput): ModelInput {
+	if (input.settings.droughtRestriction == null) return input;
+	const { droughtRestriction: _off, ...settings } = input.settings;
+	return { ...input, settings: settings as ModelInput['settings'] };
+}
+
+export function runSeasonalOutlook(raw: ModelInput, options: SeasonalOutlookOptions): SeasonalOutlook {
+	const input = withoutDroughtRestriction(raw);
 	const season: OutlookSeason = { decisionDate: options.decisionDate, seasonEnd: options.seasonEnd };
 	const s = resolveSeason(season);
 	const warm = options.warmStart !== false;

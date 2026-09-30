@@ -7,6 +7,7 @@
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
+import { randomDroughtRestriction } from './fuzz';
 import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
 const monthly = (g: Rng, f: () => number) => Array.from({ length: 12 }, f);
@@ -562,6 +563,14 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					break;
 			}
 		}
+	}
+	// The drought restriction rule (engine ≥ 1.46.0) as a settings.set, from its own stream so every seed's other ops are
+	// what they were: in a fifth of the lists it takes the place of one op (the count stays), a rule, off (null), or now
+	// and then one the op must refuse.
+	const dr = new Rng(seed ^ 0x3243f6a8);
+	if (ops.length && dr.bool(0.2)) {
+		const value = dr.bool(0.15) ? null : dr.bool(0.1) ? { reviewDates: ['02-29'], levels: [] } : randomDroughtRestriction(dr);
+		ops[dr.int(0, ops.length - 1)] = { op: 'settings.set', path: 'droughtRestriction', value } as ScenarioOp;
 	}
 	return ops;
 }

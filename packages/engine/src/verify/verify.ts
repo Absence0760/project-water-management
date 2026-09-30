@@ -16,7 +16,7 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkAllocations, checkBalance, checkEwrAttribution, checkGroundwater, checkLandCover, checkOperatingRules, checkReportTotals, checkRunoffBalance, checkSoilWater, checkSupplyAssurance, checkTransferLimits, checkWorkings } from './checks';
+import { checkAllocations, checkBalance, checkDroughtRestriction, checkEwrAttribution, checkGroundwater, checkLandCover, checkOperatingRules, checkReportTotals, checkRunoffBalance, checkSoilWater, checkSupplyAssurance, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
@@ -33,6 +33,11 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 		'operatingRules',
 		'Each farm’s river pump stays within its capacity and leaves the hands-off flow (or all of the flow, when less flows) in what passes the dam; River to dam diverts no more than the month’s capacity and leaves the hands-off flow in what passes the dam split (L + N) on a farm with a dam, or in what reaches the farm (H + I) on one without',
 		checkOperatingRules
+	],
+	[
+		'droughtRestriction',
+		'The drought restriction level each day is the one its review decided from the farm dams’ storage at the start of that day, each unit’s demand is cut by its level’s share per part and never below the basic-needs floor, and no unit is supplied more than its restricted demand',
+		checkDroughtRestriction
 	],
 	['assurance', 'The assurance of supply and the stress grids add up to each farm’s and water user’s own daily demand and supply', checkSupplyAssurance]
 ];

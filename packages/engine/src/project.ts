@@ -430,6 +430,17 @@ export interface ProjectSettings {
 	 */
 	damStorageReset?: { date: string; storageM3: Record<string, number> } | null;
 	/**
+	 * The drought restriction rule (engine ≥ 1.46.0, WP-3.8, docs/model.md
+	 * §2.7i): on each review date the level is chosen from the total farm dam
+	 * storage at the start of the day (as a share of the total capacity, the
+	 * review triggers' basis) and cuts each part of every unit's demand by its
+	 * level's share until the next review or lift date. A domestic or
+	 * municipal object is never cut below its basic-needs floor (§2.7f). A
+	 * model rule, distinct from the published restriction notice (WP-2.3).
+	 * null / absent = off, every run as before it.
+	 */
+	droughtRestriction?: DroughtRestrictionRule | null;
+	/**
 	 * Reporting window (ISO dates, inclusive) for the curtailment report, the
 	 * b023 [Shortfalls] "Set reporting period" cells. null = the run's start /
 	 * end. Clipped to the simulation period.
@@ -1575,6 +1586,39 @@ export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
 export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
 export type DemandPart = (typeof DEMAND_PARTS)[number];
 
+/**
+ * One level of the drought restriction rule (engine ≥ 1.46.0, WP-3.8,
+ * docs/model.md §2.7i): chosen on a review date when the total farm dam
+ * storage is below `belowPct` of the total capacity (and above the next,
+ * deeper level's), it cuts each part of a unit's demand by `cuts[part]`
+ * (0–1; 0.3 = 30 % less). An absent part is not cut.
+ */
+export interface DroughtRestrictionLevel {
+	/** Its name in the results ("Level 1", "Severe"); optional. */
+	label?: string;
+	/** Storage share (0 < x ≤ 1) below which the level applies. Deeper levels have lower shares. */
+	belowPct: number;
+	/** Cut per part of demand, a fraction 0–1; a deeper level cuts each part at least as much. */
+	cuts: Partial<Record<DemandPart, number>>;
+}
+
+/**
+ * The drought restriction rule (engine ≥ 1.46.0, WP-3.8, docs/model.md
+ * §2.7i; settings.droughtRestriction): its review and lift dates as a
+ * month and day ("MM-DD", never 29 February) and its levels, mildest
+ * first. On a review date the level is decided from the storage at the
+ * start of the day and holds until the next review or lift date; on a
+ * lift date any restriction ends.
+ */
+export interface DroughtRestrictionRule {
+	reviewDates: string[];
+	/** Dates a restriction ends (e.g. the day after the season end); absent = only the reviews change the level. */
+	liftDates?: string[];
+	levels: DroughtRestrictionLevel[];
+	/** Where the levels come from (a WUA decision, the review triggers of an outlook); optional. */
+	source?: string;
+}
+
 /** Each category in plain words (the node form, run results). */
 export const DEMAND_OBJECT_CATEGORY_LABEL: Record<DemandObjectCategory, string> = {
 	domestic: 'Domestic',
@@ -2576,6 +2620,28 @@ export interface GroundwaterAnnualUse {
 	boreholes: { id: string | null; name: string; abstractionM3: number; annualCapM3: number | null; capReached: boolean }[];
 }
 
+/** RunSummary.droughtRestriction (engine ≥ 1.46.0, WP-3.8, docs/model.md §2.7i). */
+export interface DroughtRestrictionSummary {
+	/** The rule as the run applied it. */
+	rule: DroughtRestrictionRule;
+	/**
+	 * Per water year the run touches (ascending): its days in the run and the
+	 * days at each level, index 0 = no restriction, then level 1 … n (the
+	 * rule's levels in order). The days add up to `days`.
+	 */
+	years: { waterYear: number; days: number; daysByLevel: number[] }[];
+	/** The days at each level over the whole run (index 0 = none). */
+	daysByLevel: number[];
+	/** Days the level was decided (review dates in the run, and its first day when it starts inside a review period). */
+	reviews: number;
+	/**
+	 * Per unit (farm, in id order): its mean abstraction demand, the mean after
+	 * the restriction (what the unit asked its sources for) and the mean
+	 * supplied, m³/day over the run. The cut is the first less the second.
+	 */
+	units: { nodeId: string; name: string; avgDemandM3Day: number; avgRestrictedDemandM3Day: number; avgSuppliedM3Day: number }[];
+}
+
 export interface RunSummary {
 	/**
 	 * The run's historical days, those before its forecast tail, when it has
@@ -2600,6 +2666,13 @@ export interface RunSummary {
 	 * without boreholes, and on older runs.
 	 */
 	groundwaterAnnualUse?: GroundwaterAnnualUse[];
+	/**
+	 * The drought restriction rule's effect (engine ≥ 1.46.0, WP-3.8,
+	 * docs/model.md §2.7i): its levels, the days each level was in force per
+	 * water year and over the run, and per unit its mean demand before and
+	 * after the restriction. Absent when the rule is off.
+	 */
+	droughtRestriction?: DroughtRestrictionSummary;
 	/**
 	 * Registered volumes against the run's use (engine ≥ 1.18.0, issue #72,
 	 * ./allocations, docs/model.md §2.12a): the allocation mode the run ran
@@ -2759,7 +2832,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'assurance';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'droughtRestriction' | 'assurance';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

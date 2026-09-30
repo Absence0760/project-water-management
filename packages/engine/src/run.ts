@@ -38,6 +38,7 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './ne
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
+import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
@@ -60,6 +61,7 @@ import {
 	arealRainFactors,
 	CALIBRATION_FLOW_KINDS,
 	DAM_AREA_EXPONENT,
+	DEMAND_PARTS,
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
@@ -68,6 +70,8 @@ import {
 	type CalibrationFlowKind,
 	type DailySeries,
 	type DemandObjectSummary,
+	type DroughtRestrictionRule,
+	type DroughtRestrictionSummary,
 	type FarmSummary,
 	type ForecastRainDays,
 	type LandCoverClass,
@@ -323,6 +327,9 @@ function runNetwork(
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
+		// The drought restriction level held the day before (engine ≥ 1.46.0): only part-way through the capture run;
+		// a snapshot of its first day holds none, so the resumed run decides that day as the capture run did.
+		if (plan.restriction && warm.continued) plan.restriction.initialLevel = resume.restrictionLevel ?? 0;
 	}
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
@@ -389,6 +396,16 @@ function runNetwork(
 		}
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
+	// The drought restriction (engine ≥ 1.46.0, docs/model.md §2.7i): the level in force each day and, per part a
+	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
+	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
+	if (plan.restriction && sim.restrictionLevel) {
+		push(null, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.level.label, RESTRICTION_SERIES.level.unit, sim.restrictionLevel);
+		DEMAND_PARTS.forEach((part, p) => {
+			if (!plan.restriction!.cut.some((c) => c[p]! > 0)) return;
+			push(null, restrictionCutKey(part), RESTRICTION_SERIES.cutLabel(part), RESTRICTION_SERIES.cutUnit, Float64Array.from(sim.restrictionLevel!, (l) => plan.restriction!.cut[l]![p]!));
+		});
+	}
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
 
 	// Who is charged for a shortfall (engine ≥ 0.17.0, audit Q17): the EWR is
@@ -493,7 +510,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -569,6 +586,8 @@ function runNetwork(
 		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
+		// The unit's demand after the drought restriction (engine ≥ 1.46.0): on every unit while the rule is on.
+		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
@@ -912,7 +931,8 @@ function runNetwork(
 				fits: prepared.fits!
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
-			columns: []
+			columns: [],
+			...(plan.restriction ? { restrictionLevel: net.restrictionLevel } : {})
 		};
 	}
 
@@ -928,6 +948,7 @@ function runNetwork(
 			...(users.length ? { users } : {}),
 			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, historyDays) } : {}),
 			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
+			...(restrictionRule && sim.restrictionLevel ? { droughtRestriction: restrictionSummary(restrictionRule, plan, sim, nodes, start, days) } : {}),
 			...(allocations ? { allocations } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
@@ -1255,6 +1276,11 @@ export function buildNetworkPlan(
 		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
+	// The drought restriction rule (engine ≥ 1.46.0, ./network/restriction.ts): its review and lift days need the run start.
+	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
+	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
+	const restriction = restrictionRule ? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0 })), start!, days) : null;
+	if (restriction && !restriction.dams.length) warnings.push('the drought restriction rule reads the farm dams’ storage, and no farm has a dam: no level is ever in force');
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
@@ -1292,6 +1318,7 @@ export function buildNetworkPlan(
 		naturalFlow: natural,
 		ewr,
 		...(reset ? { storageResetDay: reset.day } : {}),
+		...(restriction ? { restriction } : {}),
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
@@ -1328,6 +1355,41 @@ export function buildNetworkPlan(
 	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings);
 	if (warm.captureAt === undefined) return { plan, topo, allocation };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
+}
+
+/**
+ * RunSummary.droughtRestriction (engine ≥ 1.46.0, docs/model.md §2.7i): the
+ * days at each level per water year and over the run, the days the level was
+ * decided, and per unit (node-id order) its mean demand before and after the
+ * cut and its mean supply.
+ */
+function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number): DroughtRestrictionSummary {
+	const lv = sim.restrictionLevel!;
+	const n = rule.levels.length + 1;
+	const byYear = new Map<number, { waterYear: number; days: number; daysByLevel: number[] }>();
+	const total = new Array<number>(n).fill(0);
+	for (let t = 0; t < days; t++) {
+		const wy = waterYearOf(start + t);
+		let y = byYear.get(wy);
+		if (!y) byYear.set(wy, (y = { waterYear: wy, days: 0, daysByLevel: new Array<number>(n).fill(0) }));
+		y.days++;
+		y.daysByLevel[lv[t]!]!++;
+		total[lv[t]!]!++;
+	}
+	const rp = plan.restriction!;
+	let reviews = 0;
+	for (let t = 0; t < days; t++) if (rp.event[t] === 1 || (t === 0 && rp.event[0] === 0 && rp.initialLevel === undefined && rp.startDecides)) reviews++;
+	const mean = (a: ArrayLike<number>) => {
+		let s = 0;
+		for (let t = 0; t < a.length; t++) s += a[t]!;
+		return a.length ? s / a.length : 0;
+	};
+	const units = nodes
+		.map((node, i) => ({ node, r: sim.nodes[i]! }))
+		.filter((x) => x.r.restrictedDemand)
+		.sort((a, b) => cmpStr(a.node.id, b.node.id))
+		.map(({ node, r }) => ({ nodeId: node.id, name: node.name, avgDemandM3Day: mean(r.demand), avgRestrictedDemandM3Day: mean(r.restrictedDemand!), avgSuppliedM3Day: mean(r.supplied) }));
+	return { rule, years: [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear), daysByLevel: total, reviews, units };
 }
 
 /**

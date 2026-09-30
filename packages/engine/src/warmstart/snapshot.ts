@@ -103,6 +103,12 @@ export interface ModelState {
 	 * column before each, so a resumed run has the same columns.
 	 */
 	columns: { nodeId: string | null; key: string; label: string; unit: string; after: { nodeId: string | null; key: string } | null }[];
+	/**
+	 * The drought restriction level held the day before (engine ≥ 1.46.0,
+	 * settings.droughtRestriction; 0 = none), so a resumed run keeps the level
+	 * decided at the last review. Absent without the rule.
+	 */
+	restrictionLevel?: number;
 }
 
 /**

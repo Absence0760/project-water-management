@@ -57,6 +57,26 @@ export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRa
 export { isRiverOfftake, OFFTAKE_SERIES } from './network/offtake';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppliedKey, parseDemandObjectKey } from './network/demandObjects';
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';
+export {
+	DEMAND_PART_WORDS,
+	describeDroughtRestriction,
+	describeRestrictionLevel,
+	droughtRestrictionChanges,
+	droughtRestrictionIssues,
+	levelCut,
+	monthDayText,
+	parseMonthDay,
+	resolveDroughtRestriction,
+	restrictedObjectDemand,
+	restrictionCutKey,
+	restrictionLevelFor,
+	RESTRICTION_DATES_MAX,
+	RESTRICTION_LABEL_MAX,
+	RESTRICTION_LEVELS_MAX,
+	RESTRICTION_SERIES,
+	RESTRICTION_SOURCE_MAX,
+	type RestrictionIssue
+} from './network/restriction';
 export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
 export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
 export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';
