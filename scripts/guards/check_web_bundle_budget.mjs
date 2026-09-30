@@ -1530,10 +1530,10 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
-// 2026-09-30  total 1301 → 1313 KB (engine 1.43.0, the demand-object scenario
-//             ops and demand.scale by part: measured 1310 with main @ 82248f4e
+// 2026-09-30  total 1301 → 1313 KB (engine 1.45.0, the demand-object scenario
+//             ops and demand.scale by part: measured 1311 with main @ 82248f4e
 //             and #250's basic-needs floor (feat/123-basic-needs-floor @
-//             1f94fc78) merged; 1303 before the part scaling, the schedule
+//             1f94fc78, engine 1.44.0) merged; 1303 before the part scaling, the schedule
 //             editor and #250). demandObject.add / .set / .remove in the
 //             engine's scenario code (validator with the schedule's window
 //             checks, apply, classification, the mask kind) and demand.scale's

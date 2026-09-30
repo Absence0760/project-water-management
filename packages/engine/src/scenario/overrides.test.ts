@@ -850,7 +850,7 @@ describe('a dam raise', () => {
 	});
 });
 
-describe('demand.scale by part (engine ≥ 1.43.0, issue #123: DWS % restrictions per category)', () => {
+describe('demand.scale by part (engine ≥ 1.45.0, issue #123: DWS % restrictions per category)', () => {
 	/** Farm A (crops) with a village of 1 000 people at 230 l a day: 230 m³/day, a basic-needs floor of 25 m³/day. */
 	const withVillage = () => {
 		const b = base();
@@ -886,7 +886,7 @@ describe('demand.scale by part (engine ≥ 1.43.0, issue #123: DWS % restriction
 		for (const x of [cut, both]) expect(checkAll(x.input)).toBeNull();
 	});
 
-	it('never cuts a domestic object below its basic-needs floor (the same floor as the unit\'s own factor, engine 1.38.0)', () => {
+	it('never cuts a domestic object below its basic-needs floor (the same floor as the unit\'s own factor, engine 1.44.0)', () => {
 		// 1 000 people × 25 l = 25 m³/day.
 		expect(run([scale(0, 'domestic')]).village).toBeCloseTo(25, 9);
 		expect(run([scale(0.05, 'domestic')]).village).toBeCloseTo(25, 9);
@@ -1439,7 +1439,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 });
 
-describe('demand-object ops (engine ≥ 1.43.0)', () => {
+describe('demand-object ops (engine ≥ 1.45.0)', () => {
 	const withObject = () => {
 		const b = base();
 		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Town' })];

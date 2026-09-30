@@ -238,7 +238,7 @@ export function planObjects(
 		if (pop !== null && pop !== undefined && !(finite(pop) && pop >= 0)) warnings.push(`${who}: population ${String(pop)} is not a number ≥ 0; it has no basic-needs floor`);
 		if (Array.isArray(o.schedule) && o.schedule.length && day0 === undefined) throw new Error(`planObjects: ${who} has a schedule, which needs the run start`);
 		const s = day0 === undefined ? null : scheduleFactors(o.schedule, day0, days, warnings, who);
-		// The object's own demand factor (engine ≥ 1.43.0): the unit's × its category's (demand.scale with a part), one path for the floor below.
+		// The object's own demand factor (engine ≥ 1.45.0): the unit's × its category's (demand.scale with a part), one path for the floor below.
 		const factor = typeof unitFactor === 'function' ? unitFactor(o) : unitFactor;
 		const d = new Float64Array(days);
 		for (let t = 0; t < days; t++) {

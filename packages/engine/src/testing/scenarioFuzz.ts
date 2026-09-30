@@ -314,7 +314,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			bores.push(id);
 		}
 	}
-	// Demand-object ops (engine ≥ 1.43.0), from a stream of their own for the same reason: an object
+	// Demand-object ops (engine ≥ 1.45.0), from a stream of their own for the same reason: an object
 	// added on a unit (now and then on a user or gauge, or a missing node: a problem), fields set
 	// one or a few at a time on one object (an edit group), and removals. A sizing switched without
 	// its numbers, or a return from an object piped out, breaks a model rule (a problem).
@@ -409,7 +409,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 				op.nodeIds = picked;
 			}
 			if (q.bool(0.4)) op.months = [...new Set(Array.from({ length: q.int(1, 6) }, () => q.int(1, 12)))];
-			// One part of a unit's demand (engine ≥ 1.43.0), from its own stream so the draws above are what they were;
+			// One part of a unit's demand (engine ≥ 1.45.0), from its own stream so the draws above are what they were;
 			// now and then on a user op (a problem).
 			const qp = new Rng(seed ^ 0x2f3a91c7 ^ k);
 			if (qp.bool(0.5) && (op.category !== 'user' || qp.bool(0.1))) op.part = qp.pick(DEMAND_PARTS);

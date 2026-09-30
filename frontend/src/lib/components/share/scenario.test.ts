@@ -107,7 +107,7 @@ describe('changeRows', () => {
 		]);
 	});
 
-	it('words the demand-object ops (engine ≥ 1.43.0) without an object’s name, since one may be on another unit', () => {
+	it('words the demand-object ops (engine ≥ 1.45.0) without an object’s name, since one may be on another unit', () => {
 		const o = { id: 'd', nodeId: 'n-other', name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' } as const;
 		const ops: ScenarioOp[] = [
 			{ op: 'demandObject.add', demandObject: { ...o, nodeId: OWN, name: 'Cottages' } },
@@ -127,7 +127,7 @@ describe('changeRows', () => {
 		expect(rows.map((r) => r.cls)).toEqual(['proposal', 'baseline', 'baseline', 'baseline']);
 	});
 
-	it('words a demand scaling of one part by its technical name (engine ≥ 1.43.0)', () => {
+	it('words a demand scaling of one part by its technical name (engine ≥ 1.45.0)', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'demand.scale', factor: 0.9, part: 'domestic', nodeIds: [OWN] },
 			{ op: 'demand.scale', factor: 0.7 }

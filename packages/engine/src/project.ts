@@ -1103,7 +1103,7 @@ export interface NetworkNode {
 	 */
 	demandFactor?: number[] | null;
 	/**
-	 * Demand factors by part of a unit's demand (engine ≥ 1.43.0, issue #123):
+	 * Demand factors by part of a unit's demand (engine ≥ 1.45.0, issue #123):
 	 * a multiplier per water-year month (Oct–Sep) on its crop water
 	 * requirement (`crops`) or on its demand objects of one category, on top
 	 * of `demandFactor`. Absent part = 1. Only the `demand.scale` scenario op
@@ -1569,7 +1569,7 @@ export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
 
 /**
  * The parts of a unit's demand a restriction can cut on its own (engine ≥
- * 1.43.0, issue #123, DWS's % restrictions per category): its crop water
+ * 1.45.0, issue #123, DWS's % restrictions per category): its crop water
  * requirement, or its demand objects of one category.
  */
 export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;

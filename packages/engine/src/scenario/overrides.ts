@@ -108,7 +108,7 @@ export interface ScenarioMask {
 	boreholes?: readonly string[];
 	/** Registered volumes (engine ≥ 1.35.0, allocation.set): those on units the applicant can't see. */
 	allocations?: readonly string[];
-	/** Demand objects (engine ≥ 1.43.0, demandObject.*): those on units the applicant can't see. */
+	/** Demand objects (engine ≥ 1.45.0, demandObject.*): those on units the applicant can't see. */
 	demandObjects?: readonly string[];
 }
 
@@ -613,7 +613,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			// No schedule, null and an empty one run the same (engine ≥ 1.17.0): clearing a schedule the object hasn't got leaves it as it is.
 			const noSchedule = (v: unknown) => v === undefined || v === null || (Array.isArray(v) && v.length === 0);
 			if (field === 'schedule' && noSchedule(op.value) && noSchedule(o.schedule)) break;
-			// Likewise no population and null (its count, engine ≥ 1.38.0).
+			// Likewise no population and null (its count, engine ≥ 1.44.0).
 			if (field === 'population' && op.value === null && (o.population === null || o.population === undefined)) break;
 			(o as unknown as Record<string, unknown>)[field] = demandObjectValue(field, op.value);
 			break;
@@ -678,7 +678,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const wy = new Set((op.months ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map((c) => (c + 2) % 12));
 			for (const n of targets) {
 				if (op.part !== undefined) {
-					// One part of the unit's demand (engine ≥ 1.43.0): its own factor, on top of the unit's.
+					// One part of the unit's demand (engine ≥ 1.45.0): its own factor, on top of the unit's.
 					const part = allowed(DEMAND_PARTS, op.part) ?? fail(`"${String(op.part)}" is not a part of a unit's demand`);
 					const all = { ...(n.partDemandFactor && typeof n.partDemandFactor === 'object' ? n.partDemandFactor : {}) };
 					const was = Object.hasOwn(all, part) ? all[part] : undefined;
@@ -752,7 +752,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 
 /**
  * Do ops `a` and `b` (in that order) belong to one edit? Consecutive
- * `node.set` ops on the same node do, and (engine ≥ 1.43.0) consecutive
+ * `node.set` ops on the same node do, and (engine ≥ 1.45.0) consecutive
  * `demandObject.set` ops on the same demand object: the network rules are
  * checked once, after the last of them (docs/scenarios.md § Edit groups).
  */

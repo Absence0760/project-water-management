@@ -1,9 +1,9 @@
-// Demand objects through the "Add a change" form (engine ≥ 1.43.0;
+// Demand objects through the "Add a change" form (engine ≥ 1.45.0;
 // docs/scenarios.md § Op catalogue, docs/ui.md § Scenarios): an editor adds
 // a village on Upper farm, sized as people × litres a day, changes its
 // share returned and gives it a schedule (the Network form's schedule
 // editor), then cuts domestic demand 10 % and the crops 30 % (DWS's %
-// restrictions per category, engine 1.43.0); the list reads each change and
+// restrictions per category, engine 1.45.0); the list reads each change and
 // classes it (a baseline assumption until the farm is the proposer's). The
 // scenario runs with the village in its model, and the catchment's own model
 // is never touched. Synthetic catchment (support/api.ts).

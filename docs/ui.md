@@ -5090,7 +5090,7 @@ them scenarios).
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
   months; none ticked is all; `demand.scale`, issue #53 R1; for units, from
-  engine 1.43.0, **Part of their demand**: all of it, the crops, or the
+  engine 1.45.0, **Part of their demand**: all of it, the crops, or the
   demand objects of one category, DWS's % per category, never below a
   domestic or municipal object's basic-needs floor), set an EWR
   site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
@@ -5101,7 +5101,7 @@ them scenarios).
   reach (ticking the nodes draining there that will drain into it), change
   or remove a crop, change a land-cover patch (its reductions typed as
   "MAR %; low-flow %"), remove an EWR site's rule table, and set (new, or an
-  existing one filled in) or remove a registered volume; from engine 1.43.0
+  existing one filled in) or remove a registered volume; from engine 1.45.0
   add a demand object (unit, name, category, and m³/day by month or a count
   × litres a day, the rest at the category's defaults), change one field of
   one (every field, labelled as on the Network tab's form; its on/off
@@ -5155,7 +5155,7 @@ them scenarios).
   listed there and disables Record until it is undone (a crop's factors, a
   crop removed and what a node drains into record from engine 1.35.0, and a
   demand object added, changed or removed, its schedule and people served
-  included, from engine 1.43.0); the
+  included, from engine 1.45.0); the
   tables' own problems ("Fix before saving") block it too. While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an

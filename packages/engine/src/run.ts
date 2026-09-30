@@ -1263,7 +1263,7 @@ export function buildNetworkPlan(
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one),
-		// × their category's own (engine ≥ 1.43.0, demand.scale with a part), through planObjects' basic-needs floor.
+		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
 		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, (o) => unitPartFactor(n, o.category, []), factorFrom, warnings, start) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
@@ -2320,7 +2320,7 @@ function buildDemand(
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
 		// requirement F after the store, so the rain used, the store and the gross demand stay as they were;
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
-		// × the crops' own factor (engine ≥ 1.43.0, demand.scale with part 'crops').
+		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 		const factor = unitPartFactor(node, 'crops', warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.

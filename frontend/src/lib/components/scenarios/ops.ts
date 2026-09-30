@@ -340,7 +340,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const user = op.category === 'user';
 			const who = op.nodeIds?.length ? op.nodeIds.map(nodeName).join(', ') : user ? 'every other water user' : 'every hydrological unit';
 			const months = op.months?.length ? `, in ${monthsText(op.months)}` : '';
-			// One part of a unit's demand (engine ≥ 1.43.0): its crops, or its demand objects of one category.
+			// One part of a unit's demand (engine ≥ 1.45.0): its crops, or its demand objects of one category.
 			const part = op.part ? (DEMAND_PART_OPTIONS.find((p) => p.value === op.part)?.label ?? op.part) : null;
 			const whose = part ? `${part} demand` : user ? 'Demand' : 'Irrigation demand';
 			return `${whose} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
@@ -468,7 +468,7 @@ export interface OpDraft {
 	coverClass: string;
 	coverAreaKm2: string;
 	densityPct: string;
-	/** demandObject.set / .remove: the object (engine ≥ 1.43.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
+	/** demandObject.set / .remove: the object (engine ≥ 1.45.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
 	demandObjectId: string;
 	doName: string;
 	doCategory: DemandObjectCategory;
@@ -495,7 +495,7 @@ export interface OpDraft {
 	demandCategory: DemandCategory;
 	demandNodeIds: string[];
 	demandPct: string;
-	/** demand.scale's part (engine ≥ 1.43.0): '' for the whole demand, else crops or a demand object category. */
+	/** demand.scale's part (engine ≥ 1.45.0): '' for the whole demand, else crops or a demand object category. */
 	demandPart: DemandPart | '';
 	/** ewrRule.set (engine ≥ 1.6.0): the site (OUTLET_SITE or a gauge's id), and its table as the Settings editor holds it (one table). */
 	ewrSite: string;

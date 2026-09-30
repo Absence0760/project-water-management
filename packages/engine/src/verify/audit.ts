@@ -251,7 +251,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	// The demand factor on each day, as runModel applies it to F: the demand.scale factor from
 	// settings.demandFactorFrom on, × a full allocation's factor (engine ≥ 1.18.0); 0 before the
 	// unit's abstraction date (engine ≥ 1.30.0).
-	// × the crops' own factor (engine ≥ 1.43.0, demand.scale with part 'crops').
+	// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 	const df = Array.from(dailyDemandFactor(run.settings, n, day0, days, run.farm.get(ALLOCATION_SERIES.demandFactor.key), 'crops').perDay);
 	const evap = lakeEvaporationMmDay({ settings: run.settings }, run.startDate, days);
 	const cell = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

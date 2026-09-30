@@ -269,7 +269,7 @@ describe('buildOp', () => {
 		expect(classifyOp(built[11]!, [UP, LO, G])).toBe('baseline');
 	});
 
-	it('builds and describes a demand scaling of one part (engine 1.43.0, issue #123): the crops or one category of demand object', () => {
+	it('builds and describes a demand scaling of one part (engine 1.45.0, issue #123): the crops or one category of demand object', () => {
 		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
 		expect(b({ demandPct: '90', demandPart: 'domestic', demandNodeIds: [UP] })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.9, nodeIds: [UP], part: 'domestic' } });
 		expect(b({ demandPct: '70', demandPart: 'crops' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.7, part: 'crops' } });
@@ -315,7 +315,7 @@ describe('buildOp', () => {
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
 	});
 
-	it('builds and describes a demand object to add, change and remove (engine 1.43.0)', () => {
+	it('builds and describes a demand object to add, change and remove (engine 1.45.0)', () => {
 		const add = buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: ' Village ', doCategory: 'municipal', doSizing: 'monthly', doMonthlyM3Day: '300' }), m, id);
 		expect(add.ok, JSON.stringify(add)).toBe(true);
 		const op = (add as { op: ScenarioOp }).op;
@@ -343,7 +343,7 @@ describe('buildOp', () => {
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'note', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: '' } });
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'name', value: ' ' }), after.input.model, id)).toMatchObject({ ok: false });
 		expect(describeOp({ op: 'demandObject.set', demandObjectId, field: 'schedule', value: null }, after.input)).toBe('Upper farm, demand object “Village”: On/off schedule none → none');
-		// The schedule, through the Network form's editor on a copy of the object (engine 1.43.0 in the form).
+		// The schedule, through the Network form's editor on a copy of the object (engine 1.45.0 in the form).
 		const weekends = { label: 'Weekends', span: 'always' as const, from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 };
 		const village = after.input.model.demandObjects![0]!;
 		const sched = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule', doScheduleObject: { ...village, schedule: [weekends] } }), after.input.model, id);
@@ -357,7 +357,7 @@ describe('buildOp', () => {
 			error: expect.stringMatching(/^Window 1 \(“Weekends”\): /)
 		});
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule' }), after.input.model, id)).toEqual({ ok: false, error: 'Pick a demand object' });
-		// People served (the basic-needs floor, engine 1.38.0): empty is its count.
+		// People served (the basic-needs floor, engine 1.44.0): empty is its count.
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '1500' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: 1500 } });
 		const remove = buildOp(draft({ kind: 'demandObject.remove', demandObjectId }), after.input.model, id);

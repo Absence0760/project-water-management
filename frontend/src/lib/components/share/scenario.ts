@@ -131,7 +131,7 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 		case 'series.scale':
 			return t('The {kind} record scaled by {factor}', { kind: op.kind, factor: fmtNumber(op.factor, 2, true) });
 		case 'demand.scale':
-			// One part of a unit's demand (engine ≥ 1.43.0): the crops or one category of demand object, by its technical name.
+			// One part of a unit's demand (engine ≥ 1.45.0): the crops or one category of demand object, by its technical name.
 			return op.part
 				? t('Demand of {part} scaled by {factor}', { part: op.part, factor: fmtNumber(op.factor, 2, true) })
 				: t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });

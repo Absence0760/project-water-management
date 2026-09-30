@@ -536,7 +536,7 @@ export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; mont
 		const e = v === undefined ? 'missing' : c(v);
 		if (e) return `${k} ${e}`;
 	}
-	// A part is one part of a unit's demand (engine ≥ 1.43.0): an other water user's demand has none.
+	// A part is one part of a unit's demand (engine ≥ 1.45.0): an other water user's demand has none.
 	if (op.part !== undefined && op.category === 'user') return "part is a part of a hydrological unit's demand; an other water user's demand is scaled whole";
 	return null;
 }
@@ -686,7 +686,7 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 }
 
 // ---------------------------------------------------------------------------
-// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.43.0)
+// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.45.0)
 // ---------------------------------------------------------------------------
 
 /**
@@ -768,7 +768,7 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	destination: oneOf(DEMAND_OBJECT_DESTINATIONS),
 	enabled: boolean,
 	schedule: demandSchedule,
-	// The people it serves, for the basic-needs floor (engine ≥ 1.38.0); null = a per-person object's count.
+	// The people it serves, for the basic-needs floor (engine ≥ 1.44.0); null = a per-person object's count.
 	population: nullable(nonNeg),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
@@ -867,9 +867,9 @@ export type ScenarioOp =
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
 	| { op: 'borehole.remove'; boreholeId: string }
-	/** A new demand object on a unit (engine ≥ 1.43.0): a town, household, livestock or any other demand that isn't a crop. */
+	/** A new demand object on a unit (engine ≥ 1.45.0): a town, household, livestock or any other demand that isn't a crop. */
 	| { op: 'demandObject.add'; demandObject: DemandObject }
-	/** Change one field of a demand object (engine ≥ 1.43.0). */
+	/** Change one field of a demand object (engine ≥ 1.45.0). */
 	| DemandObjectSetOp
 	| { op: 'demandObject.remove'; demandObjectId: string }
 	| SettingsSetOp
@@ -913,7 +913,7 @@ export interface EwrRuleSetOp {
  * unchanged), or with `category: 'user'` the other water users'. `nodeIds`
  * limits it to those nodes (default: every node of the category); `months`
  * to those calendar months (1–12, Oct = 10; default: every month). Ops
- * stack: two at 0.9 leave 0.81. `part` (engine ≥ 1.43.0, issue #123, farms
+ * stack: two at 0.9 leave 0.81. `part` (engine ≥ 1.45.0, issue #123, farms
  * only) scales one part of a unit's demand: its crop water requirement
  * (`crops`) or its demand objects of one category (`domestic`, …), on top
  * of the unit's own factor; a domestic or municipal object's cut stops at

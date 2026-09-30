@@ -52,7 +52,7 @@ function roundTrips(b: ModelInput, after: ProjectModel) {
 }
 
 describe('diffModel', () => {
-	it('turns demand objects into demandObject.add / .set / .remove, and lets a removed unit take its objects (engine 1.43.0)', () => {
+	it('turns demand objects into demandObject.add / .set / .remove, and lets a removed unit take its objects (engine 1.45.0)', () => {
 		const b = base();
 		const e = editing(b);
 		const town = e.addDemandObject(UP, 'municipal');

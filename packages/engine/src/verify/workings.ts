@@ -45,7 +45,7 @@ export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; 
  * `allocation` (engine ≥ 1.18.0, the run's allocation_demand_factor series);
  * 0 before the unit's abstraction date (engine ≥ 1.30.0, abstractionFrom).
  * `scaled` is false when none applies (every day 1). With `part` (engine ≥
- * 1.43.0) the part's own factor multiplies the unit's: `crops` for F, a demand
+ * 1.45.0) the part's own factor multiplies the unit's: `crops` for F, a demand
  * object's category for that object.
  */
 export function dailyDemandFactor(

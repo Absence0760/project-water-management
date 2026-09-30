@@ -3153,7 +3153,7 @@ Add data and its storage; it's a follow-up
 series"), to be built when a client has such a record. Flow-triggered
 switching stays with WP-3.8's operating rules (the hands-off flow on the
 river pump and River to dam, §2.7h, doesn't switch demand objects).
-- *Restrictions by category* (engine ≥ 1.43.0, issue #123). A scenario's
+- *Restrictions by category* (engine ≥ 1.45.0, issue #123). A scenario's
   `demand.scale` on a unit scales its crops and its objects alike, one % for
   every category as the client's share-the-pain rule has it (#53 O4, issue
   #90); with `part` it scales one category only, the crop water requirement
@@ -3162,7 +3162,7 @@ river pump and River to dam, §2.7h, doesn't switch demand objects).
   multiplies the unit's own demand factor, month by month:
   f_k[m] = f[m] × f_part(k)[m], and the floor below takes f_k. One object
   is added, changed (its demand, count, schedule…) or removed by the
-  scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.43.0,
+  scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.45.0,
   [scenarios.md](./scenarios.md)), classed by the object's unit.
 
 **The basic-needs floor** (engine ≥ 1.44.0, issue #123, from issue #90 Q13,
@@ -3181,7 +3181,7 @@ where P_k is its `population`, or its `count` when that is null and it is
 sized per unit (a `monthly` object without a population has no floor; any
 other category has none). Grossed up for losses as the demand is, so the
 25 l reach the tap. A restriction is the object's demand factor f < 1 (the
-`demand.scale` op, the unit's factor × its category's from engine 1.43.0, from `settings.demandFactorFrom`); it never takes the
+`demand.scale` op, the unit's factor × its category's from engine 1.45.0, from `settings.demandFactorFrom`); it never takes the
 object below its floor:
 
 ```

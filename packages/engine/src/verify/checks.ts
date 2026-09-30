@@ -69,7 +69,7 @@ interface ObjectColumns {
 	schedule: (Float64Array | null)[];
 	/** Each object's basic-needs floor (engine ≥ 1.44.0), recomputed from the model; null without one. */
 	floor: (number | null)[];
-	/** Each object's category, for its part's demand factor (engine ≥ 1.43.0). */
+	/** Each object's category, for its part's demand factor (engine ≥ 1.45.0). */
 	category: DemandObject['category'][];
 }
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
@@ -1035,7 +1035,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
-		// On F, the crops' own factor too (engine ≥ 1.43.0, demand.scale with part 'crops').
+		// On F, the crops' own factor too (engine ≥ 1.45.0, demand.scale with part 'crops').
 		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF, 'crops');
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
@@ -1043,7 +1043,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// The basic-needs floor (engine ≥ 1.44.0): the scenario's restriction alone (a floor holds against it), and
 		// the unit's basic_needs column, Σ MIN(floor, demand) over its floored objects, exactly when it has one.
 		const SC = objs && objs.floor.some((f) => f !== null) ? dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay : null;
-		// Each object's own factor (engine ≥ 1.43.0): the unit's × its category's, with and without a full allocation's.
+		// Each object's own factor (engine ≥ 1.45.0): the unit's × its category's, with and without a full allocation's.
 		const objFactors = objs
 			? objs.category.map((c) => ({ df: dailyDemandFactor(input.settings, n, day0, out.days, KF, c).perDay, sc: dailyDemandFactor(input.settings, n, day0, out.days, undefined, c).perDay }))
 			: null;
@@ -1304,7 +1304,7 @@ function checkObjectsDay(
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
 		const fl = objs.floor[k];
-		// Its own factor (engine ≥ 1.43.0): the unit's × its category's.
+		// Its own factor (engine ≥ 1.45.0): the unit's × its category's.
 		const df = factors ? factors[k]!.df[t]! : unitDf;
 		const sc = factors ? factors[k]!.sc[t]! : unitSc;
 		const floored = fl !== null && abstracts && sc < 1;

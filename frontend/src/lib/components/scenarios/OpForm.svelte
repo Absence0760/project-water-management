@@ -52,7 +52,7 @@
 	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
 	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
 	const allocations = $derived(input.model.allocations ?? []);
-	// Demand objects (engine ≥ 1.43.0): on units only.
+	// Demand objects (engine ≥ 1.45.0): on units only.
 	const objects = $derived(input.model.demandObjects ?? []);
 	const demandObject = $derived(objects.find((o) => o.id === d.demandObjectId));
 	// node.insert: the nodes that drain into the picked node, which the new one can sit above.
@@ -89,7 +89,7 @@
 
 	/** Start the value at what the field holds now, so a small change is a small edit. */
 	function prefill() {
-		// A demand object's schedule (engine ≥ 1.43.0 in the form): a copy of the object, edited by the Network form's own schedule editor.
+		// A demand object's schedule (engine ≥ 1.45.0 in the form): a copy of the object, edited by the Network form's own schedule editor.
 		d.doScheduleObject = d.kind === 'demandObject.set' && d.field === 'schedule' && demandObject ? (JSON.parse(JSON.stringify(demandObject)) as typeof demandObject) : null;
 		const s = draftSpec(d);
 		d.value = s ? valueText(s, current) : '';

@@ -217,7 +217,7 @@ export const LAND_COVER_FIELD_SPECS: Record<LandCoverSetField, FieldSpec> = {
 export const LAND_COVER_FIELDS = LAND_COVER_SET_FIELDS.map((field) => ({ field, label: LAND_COVER_FIELD_SPECS[field].label }));
 
 // ---------------------------------------------------------------------------
-// demandObject.set (engine ≥ 1.43.0)
+// demandObject.set (engine ≥ 1.45.0)
 // ---------------------------------------------------------------------------
 
 /**
@@ -242,7 +242,7 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	},
 	destination: { label: 'Destination', spec: { t: 'enum', options: [{ value: 'internal', label: 'Used in the catchment' }, { value: 'external', label: 'Piped out of the catchment (nothing returns)' }] } },
 	enabled: { label: 'Modelled', spec: { t: 'bool' } },
-	// The basic-needs floor's people (engine ≥ 1.38.0): a domestic or municipal object is never cut below 25 l each a day.
+	// The basic-needs floor's people (engine ≥ 1.44.0): a domestic or municipal object is never cut below 25 l each a day.
 	population: { label: 'People served', spec: num('', { nullable: true, nullLabel: 'its count (per person), else none' }) },
 	note: { label: 'Where the number comes from', spec: { t: 'text', optional: true } }
 };
@@ -252,7 +252,7 @@ export const DEMAND_OBJECT_FIELDS = DEMAND_OBJECT_SET_FIELDS.map((field) => ({ f
 
 
 /**
- * demand.scale's parts (engine ≥ 1.43.0, issue #123): a unit's whole demand
+ * demand.scale's parts (engine ≥ 1.45.0, issue #123): a unit's whole demand
  * (no part), its crops, or its demand objects of one category.
  */
 export const DEMAND_PART_OPTIONS: readonly EnumOption[] = [

@@ -258,7 +258,7 @@ export function demandFactorOf(n: NetworkNode, warnings: string[]): Float64Array
 
 /**
  * A unit's demand factor for one part of its demand per water-year month
- * (engine ≥ 1.43.0, issue #123, set by demand.scale with `part`), or null
+ * (engine ≥ 1.45.0, issue #123, set by demand.scale with `part`), or null
  * when it has none for that part (1 in every month). A bad value runs as 1
  * with a warning, as demandFactorOf's. A farm's only.
  */
@@ -282,7 +282,7 @@ export function partDemandFactorOf(n: NetworkNode, part: DemandPart, warnings: s
 }
 
 /**
- * The demand factor on one part of a unit's demand (engine ≥ 1.43.0): the
+ * The demand factor on one part of a unit's demand (engine ≥ 1.45.0): the
  * unit's own × the part's, month by month; null when neither is set.
  */
 export function unitPartFactor(n: NetworkNode, part: DemandPart, warnings: string[]): Float64Array | null {

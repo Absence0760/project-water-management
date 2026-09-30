@@ -1294,7 +1294,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Demand factor (engine ≥ 0.41.0, the demand.scale scenario op).
 		const df = optionalMonthlyChange(x.demandFactor, y.demandFactor, '×', 'none');
 		if (df) parts.push(`demand factor ${df}`);
-		// Demand factors by part (engine ≥ 1.43.0, demand.scale with a part): the crops' or one object category's.
+		// Demand factors by part (engine ≥ 1.45.0, demand.scale with a part): the crops' or one object category's.
 		for (const part of DEMAND_PARTS) {
 			const at = (n: NetworkNode) => (n.partDemandFactor && typeof n.partDemandFactor === 'object' && Object.hasOwn(n.partDemandFactor, part) ? n.partDemandFactor[part] : null);
 			const pf = optionalMonthlyChange(at(x), at(y), '×', 'none');
@@ -1437,7 +1437,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
 			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
-			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.43.0).
+			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.45.0).
 			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();
 			if (moved || scheduleChanged || populationChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}${noteChanged ? `, note "${(x.note ?? '').trim()}" → "${(y.note ?? '').trim()}"` : ''}` });
