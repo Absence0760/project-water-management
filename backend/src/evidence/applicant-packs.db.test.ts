@@ -261,11 +261,11 @@ describe("listing an application's packs", () => {
 			]);
 		}
 		const [latest] = (await list(applicantA, appA)).body.packs;
-		expect(latest).toMatchObject({ scenarioId: appA, title: 'Raise the weir dam', mode: 'application', supersedesId: v1, supersededById: null, canShare: true });
+		expect(latest).toMatchObject({ scenarioId: appA, title: 'Raise the weir dam', mode: 'application', supersedesId: v1, supersededById: null, isOwner: true, canShare: true });
 		expect(latest.shortCode).toMatch(/^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/);
 		expect(latest.verifyPath).toBe(`/verify/${latest.shortCode}`);
 		// Only the owner may link it.
-		expect((await list(consultantA, appA)).body.packs[0].canShare).toBe(false);
+		expect((await list(consultantA, appA)).body.packs[0]).toMatchObject({ isOwner: false, canShare: false });
 	});
 
 	it('leaves out a pack withdrawn before it was issued', async () => {
@@ -334,7 +334,7 @@ describe('reading a pack as its applicant', () => {
 	it('reads a superseded pack with its standing and figures', async () => {
 		const r = await read(applicantA, appA, v1);
 		expect(r.status).toBe(200);
-		expect(r.body.pack).toMatchObject({ status: 'superseded', supersededById: v2, canShare: false });
+		expect(r.body.pack).toMatchObject({ status: 'superseded', supersededById: v2, isOwner: true, canShare: false });
 		expect(r.body.verify.status).toBe('superseded');
 		expect(r.body.figures.rows.length).toBeGreaterThan(0);
 	});

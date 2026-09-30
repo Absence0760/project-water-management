@@ -30,8 +30,9 @@
 -- wider than the pack:
 --   - `pack`: its id, scenario, title, mode, version, standing, issue date,
 --     manifest hash, its predecessor and successor (packs of the same
---     application), the withdrawal reason (verify's already), and whether
---     the caller may link it (the application's owner, while it is issued);
+--     application), the withdrawal reason (verify's already), whether the
+--     caller is the application's owner, and whether they may link it (the
+--     owner, while it is issued);
 --   - `verify`: exactly what GET /verify/:code answers (app_verify_pack);
 --   - `figures`: exactly what a pack link shows while the pack is issued
 --     (app_share_pack_projection, 128: the river's rows and sites, the paired
@@ -93,7 +94,9 @@ CREATE FUNCTION app_applicant_pack_meta(p_project uuid, p_pack uuid) RETURNS jso
 			'supersedesId', p.supersedes_pack_id,
 			'supersededById', p.superseded_by_pack_id,
 			'withdrawnReason', CASE WHEN p.status = 'withdrawn' THEN p.status_reason END,
-			-- As for a scenario link: the application's owner, while the pack stands.
+			-- The application's owner: they list and revoke the links they made, whatever its standing.
+			'isOwner', v_owner = app_current_user_id(),
+			-- As for a scenario link: the owner makes one while the pack stands.
 			'canShare', p.status = 'issued' AND v_owner = app_current_user_id()
 		);
 	END

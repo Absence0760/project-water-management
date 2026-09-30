@@ -38,6 +38,10 @@ const UNCODED: Record<string, string> = {
 	'share/routes.ts: only an application can be shared': 'the Share dialog, in the workspace (English); the /share page never makes a link',
 	'share/routes.ts: only an issued pack can be shared': 'the pack page’s Share dialog, in the workspace (English); the /share page never makes a link',
 	'share/routes.ts: requires owner role': 'revoking a link: the workspace (English); the /share page never revokes one',
+	'share/routes.ts: only the editors, or the applicant for their own application, can share this pack':
+		'the applicant’s pack view’s Share dialog, in the workspace (English); the /share page never makes a link',
+	'share/routes.ts: only the applicant who made the application can share its pack': 'the applicant’s pack view’s Share dialog, in the workspace (English); the /share page never makes a link',
+	'share/routes.ts: requires editor role, or the applicant for their own application': 'listing a pack’s links: the Share dialog, in the workspace (English); the /share page never lists them',
 	'share/routes.ts: not found': 'the /share page words a 404 itself (its dead-link state, share/load.ts); the owner-side 404s are the workspace’s',
 	'alerts/routes.ts: no token': 'the unsubscribe page shows its own dead-link state for any 400/404'
 };

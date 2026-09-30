@@ -39,6 +39,8 @@ export interface ApplicantPackMeta {
 	supersedesId: string | null;
 	supersededById: string | null;
 	withdrawnReason: string | null;
+	/** The caller is the application's owner (they list and revoke the links they made). */
+	isOwner: boolean;
 	/** The application's owner may make a share link to it, while it is issued. */
 	canShare: boolean;
 }
@@ -109,7 +111,8 @@ export function toApplicantPackMeta(raw: Record<string, unknown>): ApplicantPack
 		supersedesId: uuidOrNull(raw.supersedesId),
 		supersededById: uuidOrNull(raw.supersededById),
 		withdrawnReason: status === 'withdrawn' ? str(raw.withdrawnReason) : null,
-		canShare: status === 'issued' && raw.canShare === true
+		isOwner: raw.isOwner === true,
+		canShare: status === 'issued' && raw.isOwner === true && raw.canShare === true
 	};
 }
 

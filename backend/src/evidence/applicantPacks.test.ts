@@ -24,6 +24,7 @@ const row = (over: Partial<ApplicantPackRow> = {}): ApplicantPackRow => ({
 		supersedesId: null,
 		supersededById: null,
 		withdrawnReason: 'not for an issued pack',
+		isOwner: true,
 		canShare: true,
 		manifest: 'manifest-secret',
 		createdBy: 'Jane Holder'
@@ -75,6 +76,7 @@ describe('toApplicantPack', () => {
 			supersedesId: null,
 			supersededById: null,
 			withdrawnReason: null,
+			isOwner: true,
 			canShare: true
 		});
 		expect(v.figures?.rows).toEqual([]);
