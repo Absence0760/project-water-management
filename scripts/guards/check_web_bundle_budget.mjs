@@ -1417,8 +1417,32 @@
 //             e8ebaf18 merged). #222's allocations chart now in main.
 //             Headroom ~3 KB.
 // 2026-09-30  total 1246 → 1250 KB (issue #70: measured 1247 with main @
+// 2026-09-29  total 1210 → 1214 KB (issue #204: measured 1211 with main @
+//             3f9b4c17 merged, the entries above included). A farm's
+//             hands-off flow and River to dam by month: the engine's operating rules
+//             (network/supply.ts operatingOf, the operatingRules self-check,
+//             the scenario and comparison fields) in the workspace and the
+//             workers that bundle the engine, and in the one-node form the
+//             Supply section's hands-off months and EWR tick, the new
+//             RiverToDamFields, their plain-words lines and save rules
+//             (network/supply.ts, model/validate.ts operatingIssues). The
+//             review's fixes kept the growth to ~4 KB: every twelve-month row of the
+//             one-node form is now one MonthFields component (network/
+//             MonthFields.svelte + monthFields.ts; five callers' tables and
+//             setMonth/fillAll folded into it), and the engine's dam-less
+//             hands-off cut. No new dependency. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1244 KB (issue #204: measured 1241 with main @
+//             848000ac merged). The hands-off flow and River to dam by month
+//             fields on top of main's evidence report. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1247 KB (issue #204: measured 1244 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1250 KB (issue #204: measured 1247 with main @
 //             5502d0a6 merged). #225's evidence-report follow-ups now in
 //             main. Headroom ~3 KB.
+// 2026-09-30  total 1250 → 1254 KB (issue #204: measured 1251 with main @
+//             5be749ca merged). #215's report publication and assurance now
+//             in main. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1429,7 +1453,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1250,
+	totalCodeKb: 1254,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

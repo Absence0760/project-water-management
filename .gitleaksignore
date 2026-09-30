@@ -24,3 +24,11 @@ b0d3e6323a95ef6ecc8c395f64d4eaeca7f5714d:frontend/src/lib/components/reliability
 frontend/src/lib/components/reliability/reliability.ts:generic-api-key:67
 frontend/src/lib/components/reliability/reliability.ts:generic-api-key:69
 frontend/src/lib/components/network/fields.ts:generic-api-key:149
+# generic-api-key on `f.key === '<field name>'` (the River to dam capacity field), reviewed 2026-09-30:
+f08c99dc08324e539f3cbdf6093d8282aea04752:frontend/src/lib/components/network/NetworkTab.svelte:generic-api-key:585
+023787a582b0e32540e0b39595f8e3338e25ec88:frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:187
+023787a582b0e32540e0b39595f8e3338e25ec88:frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:192
+# The same three without a commit, so a staged scan (a merge of #220) matches them too:
+frontend/src/lib/components/network/NetworkTab.svelte:generic-api-key:585
+frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:187
+frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:192

@@ -110,7 +110,7 @@ describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
-		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations', 'assurance']);
+		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations', 'operatingRules', 'assurance']);
 		expect(v.checks.filter((c) => !c.passed)).toEqual([]);
 		expect(v.passed).toBe(true);
 		expect(v.maxResidual!.valueM3Day).toBeLessThan(1e-9);
@@ -191,7 +191,7 @@ describe('verification (engine 0.12.0)', () => {
 	});
 });
 
-describe('the assurance self-check (engine 1.32.0, issue #192)', () => {
+describe('the assurance self-check (engine 1.33.0, issue #192)', () => {
 	// A random network with two demand nodes whose sums differ, so a swap between them shows.
 	const pick = () => {
 		for (let seed = 1; seed < 60; seed++) {
