@@ -1928,6 +1928,7 @@ below work on it too, for an editor.
 | GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
+| GET | `/projects/:id/scenarios/:sid/results?runId=` | – | `{ run, results }`: one run of the application (the newest by default; `{ run: null, results: null }` before any) as its applicant sees it against its base (below). `run`: `id, label, engineVersion, startDate, endDate, createdAt, baseRunId, current` (`current`: made from the ops and base the application has now). `404` for a run that isn't one of its runs or an application the caller doesn't read; `409` for a team scenario (the compare page compares those), or when the run's base is no longer a published run | any reader of the application (contributor and up) |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
@@ -1940,6 +1941,29 @@ below work on it too, for an editor.
   They never
   receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
   answer them `403`.
+- **What a contributor sees of a run** (`…/results`, 118; D2's default,
+  pending the client; [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+  `results = { allProposals, ewrSites, catchment, units, downstream,
+  unitsWithheld, model }`. `ewrSites[]`: each EWR site (`name` null for the
+  outlet, a gauge's name, else the anonymous one) with `base` and
+  `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
+  `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
+  application }` always; `figures` (mean natural flow and outlet flow, base
+  and application) and `series` (the outlet's daily `outflow` and `ewr`,
+  base and application) only at five or more farm holders and when every op
+  was a proposal, else null with `withheld: 'few_farm_holders' |
+  'baseline_assumptions'` (and `deficitM3` null). `units[]`: their own units
+  (their farm links as they read them now) and the ones the ops add
+  (`added`), `{ nodeId, name, kind, base, application }` with demand,
+  supply, share met, EWR charge and dam figures. `downstream[]`: every other
+  farm or water user below those units, `{ nodeId, name, kind,
+  supplyChangePct }`: the anonymous name `…/base` gives it and the change in
+  its mean supply as a whole percentage (null when it had none in the
+  base). `units` and `downstream` are `[]` with `unitsWithheld:
+  'baseline_assumptions'` when an op was a baseline assumption. `model`:
+  what ran on their units (nodes, crops, crop areas, transfers, land cover,
+  boreholes, demand objects), an item an op added under a hidden item's id
+  shown by that id (the run holds it under a fresh one, `check.reIds`).
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
 
@@ -2493,7 +2517,7 @@ A job runs later, in the worker, as the editor who queued it.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
+| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50. A contributor lists only their own yield jobs (RLS, 096), which is how the Yield panel follows one on the Applicant view | viewer (a contributor: their own yield jobs) |
 | POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry; an automatic re-run included, which may be due later) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field (a client can't queue an automatic re-run) | editor |
 
 - `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.

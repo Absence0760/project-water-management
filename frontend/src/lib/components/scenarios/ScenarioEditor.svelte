@@ -12,8 +12,10 @@
 	// only its owner changes it, and moves it with Submit / Withdraw / Reopen;
 	// an editor who isn't its owner decides a submitted one (DecideForm). An
 	// applicant (`applicant`) reads the base through the applicant projection
-	// (api.scenarios.base: other farms anonymised) and never the comparison
-	// (the assessors compare; an applicant view of results is a follow-up).
+	// (api.scenarios.base: other farms anonymised) and, instead of the
+	// comparison, their own view of the results (ApplicantResults: the
+	// server's projection of the run against its base), and a Yield panel for
+	// their own units and the ones their changes add.
 	import { untrack } from 'svelte';
 	import type { ScenarioOp } from '@water-management/engine';
 	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '$lib/api';
@@ -24,6 +26,7 @@
 	import OpForm from './OpForm.svelte';
 	import OpList from './OpList.svelte';
 	import ScenarioCompare from './ScenarioCompare.svelte';
+	import ApplicantResults from './ApplicantResults.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -119,7 +122,14 @@
 	const effective = $derived(baseInput ? stepInputs(baseInput, s.ops).after : null);
 
 	// --- yield (WP-3.6): a farm or dam of the scenario's own network ---------------
-	const yieldFarms = $derived((effective?.model.nodes ?? []).filter((n) => n.kind === 'farm'));
+	// An applicant only their own units and the ones their node.add ops add
+	// (096_contributor_yield): the anonymous others have blank values and no yield of theirs.
+	const addedNodeIds = $derived(new Set(s.ops.flatMap((o) => (o.op === 'node.add' ? [o.node.id] : []))));
+	const yieldFarms = $derived(
+		(effective?.model.nodes ?? []).filter((n) => n.kind === 'farm' && (!applicant || s.ownedNodeIds.includes(n.id) || addedNodeIds.has(n.id)))
+	);
+	/** Who queues a yield: an editor; on an application its applicant (not the people it's shared with, 096). */
+	const canYield = $derived(applicant ? isOwner : canEdit);
 	let yieldNodeId = $state('');
 	const yieldNode = $derived(yieldFarms.find((n) => n.id === yieldNodeId) ?? null);
 	/** Changes that don't apply: an edit group's one problem line counts each of its ops. */
@@ -522,9 +532,7 @@
 {/if}
 
 {#if applicant}
-	<p class="panel muted" data-testid="applicant-results-note">
-		The assessors compare each run of your application with the published baseline. A view of the results for applicants is still to come.
-	</p>
+	<ApplicantResults {projectId} scenarioId={s.id} lastRunId={s.lastRun?.id ?? null} opsSha256={s.opsSha256} />
 {:else}
 	<ScenarioCompare {projectId} scenario={s} />
 {/if}
@@ -554,7 +562,7 @@
 						nodeName={yieldNode.name}
 						scenarioId={s.id}
 						scenario={isApplication || applicant ? null : { baseRunId: s.baseRunId, ops: s.ops, opsSha256: s.opsSha256 }}
-						{canEdit}
+						canEdit={canYield}
 						hasDam={yieldNode.damCapacityM3 > 0}
 					/>
 				{/snippet}
