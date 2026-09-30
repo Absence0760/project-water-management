@@ -39,6 +39,7 @@
 		stamp,
 		impactSeries = null,
 		outcomes = null,
+		frozen = false,
 		verify = null,
 		signoffs = null,
 		signoffTarget = null,
@@ -52,6 +53,8 @@
 		impactSeries?: ImpactSeries | null;
 		/** The project's settings.outcomes (year-class method, Reserve site), as the impact report reads them: a run doesn't record them. */
 		outcomes?: Partial<OutcomeSettings> | null;
+		/** An evidence pack's frozen report: what isn't in its manifest (the licence impact board) is left out, and page 1 says so. */
+		frozen?: boolean;
 		/** An issued pack's manifest hash, short code and verify link, printed in every section (G11); null for a draft. */
 		verify?: VerifyRef | null;
 		/** The sign-offs of what the report is (B.2): the run's in the preview, the pack's on a pack; null when not loaded. */
@@ -103,7 +106,7 @@
 	 */
 	const board = $derived.by(() => {
 		const appSummary = report.summaries.application;
-		if (!app || !appSummary || !id.application) return null;
+		if (frozen || !app || !appSummary || !id.application) return null;
 		const rules = (base.settings as { ewrRules?: { siteNodeId: string | null }[] }).ewrRules ?? [];
 		const site = chooseSite(outcomes?.siteNodeId, matrixSites(base.model.nodes, rules)).site;
 		return buildLicenceImpactBoard({
@@ -154,7 +157,7 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} boardNotFrozen={frozen && app} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				{#if !report.river.length}
 					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>

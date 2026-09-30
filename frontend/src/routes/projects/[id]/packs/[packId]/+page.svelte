@@ -141,7 +141,7 @@
 		<PackActions {projectId} {pack} issue={detail.issue} manifestMatches={detail.manifestMatches} {canEdit} onchange={reload} />
 		<Lazy load={loadReport}>
 			{#snippet children(EvidenceReportView)}
-				<EvidenceReportView {report} {projectId} {stamp} {verify} {signoffs} signoffTarget={{ kind: 'pack', id: pack!.id }} onsignoffchange={reload} />
+				<EvidenceReportView {report} {projectId} {stamp} {verify} frozen {signoffs} signoffTarget={{ kind: 'pack', id: pack!.id }} onsignoffchange={reload} />
 			{/snippet}
 		</Lazy>
 	{/if}
