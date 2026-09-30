@@ -1,5 +1,6 @@
 // Liability and credibility on the report (WP-3.13, docs/ui.md § Report): the
-// validation statement with its generated limitations, the agreed disclaimer,
+// validation statement with its generated limitations, errata and methodology
+// citation, the agreed disclaimer,
 // and the professional sign-off flow — every statement ticked, the whole
 // limitations list scrolled, then a permanent sign-off printed on the report
 // and shown to a viewer, who can't sign.
@@ -24,6 +25,11 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
 	await expect(validation.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
+	// The methodology statement by version and hash, and the errata of this run's engine (none known for the current one).
+	await expect(validation.getByText('Methodology statement', { exact: true })).toBeVisible();
+	await expect(validation.getByText(/^methodology-\d+/)).toBeVisible();
+	await expect(validation.getByRole('heading', { name: /^Errata of engine \d+\.\d+\.\d+$/ })).toBeVisible();
+	await expect(validation.getByText('No known bugs in this engine version (docs/engine-errata.md).')).toBeVisible();
 	const disclaimer = page.locator('#rep-disclaimer');
 	await expect(disclaimer).toContainText('It is not an authorisation to use water.');
 	await expect(disclaimer).toContainText('Disclaimer version 2026-09-28.2.');
@@ -72,7 +78,9 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	// Still disabled: the limitations list hasn't been read to the end.
 	await expect(submit).toBeDisabled();
 	await expect(dialog.getByText('Scroll to the end of the known limitations.')).toBeVisible();
-	const list = dialog.getByRole('region', { name: /^Known limitations/ });
+	await expect(dialog.getByText(/^Methods: methodology statement methodology-\d+/)).toBeVisible();
+	const list = dialog.getByRole('region', { name: /^Known limitations \(\d+\) and errata of engine/ });
+	await expect(list.getByText('None known for this engine version.')).toBeVisible();
 	await list.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
 	await expect(dialog.getByText('You have reached the end of the list.')).toBeVisible();
 	// Unticking one statement blocks it again.

@@ -5271,10 +5271,18 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
 - **Known limitations**, generated from [engine-audit.md](./engine-audit.md):
   every finding or workbook quirk whose decision is still open (it says
   *pending* the hydrologist or assessor, *Needs hydrologist*, or it is only
-  *Warned* or *Built* off by default). `pnpm gen:limitations` rewrites
+  *Warned* or *Built* off by default). `pnpm gen:liability` rewrites
   `liability/limitations.generated.ts` from the doc, and
   `limitations.test.ts` parses the doc again and fails when the two differ,
   so an audit item's status can't change without the list following it.
+- **Errata** (issue #71): the known bugs of the run's engine version, from
+  [engine-errata.md](./engine-errata.md) (`errataFor(engineVersion)`: first
+  affected ≤ the version < fixed in). Generated the same way
+  (`errata.generated.ts`, `errata.test.ts`). A fixed bug keeps its row, since
+  runs made by the affected versions stay stored.
+- **Methodology**: the current methodology statement's version and SHA-256
+  ([methodology/](./methodology/README.md)); `methodology.test.ts` pins every
+  published version's hash.
 
 The same module holds the disclaimer (`DISCLAIMER`, versioned; version
 `2026-09-28`, status `agreed`: accepted by the operator after a pre-counsel

@@ -250,7 +250,7 @@ generated `KNOWN_LIMITATIONS` (the list every report prints), and a
 departure's *Pending a hydrologist's confirmation* mark is read from it too.
 The departures' own words are `lib/methods/departures.ts`; its test checks
 that every id is a row of the audit. After changing an audit decision, run
-`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+`pnpm gen:liability` as usual and the page follows; when the audit adds or
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 

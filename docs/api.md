@@ -1917,10 +1917,14 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
-  Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
+  Limitation[], errata: Erratum[], methodology: { version, sha256 }, notes:
+  string[], disclaimerVersion }` (`errata`: the known bugs of the run's
+  engine version, `docs/engine-errata.md`; `methodology`: the current
+  methodology statement, `docs/methodology/`). `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
   sends it back and the server recomputes it. The current version is
-  `signoff-3` (issue #47), with ten confirmation ids, in order: `identity`,
+  `signoff-4` (issue #71: `signoff-3`, issue #47, plus the errata and the
+  methodology citation), with ten confirmation ids, in order: `identity`,
   `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
   `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
   one. The signer's details are `fullName`, the registration as codes of

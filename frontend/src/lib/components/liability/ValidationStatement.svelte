@@ -3,7 +3,9 @@
 	// engine's validationStatement() over the stored summary, so it needs no
 	// request. Printed in the report, and on screen in ValidationPanel (the
 	// run's Record group, the scenario view); the known limitations are
-	// generated from docs/engine-audit.md.
+	// generated from docs/engine-audit.md, the errata from
+	// docs/engine-errata.md, and the methodology statement is cited by version
+	// and hash (docs/methodology).
 	import { validationStatement, type RunSummary } from '@water-management/engine';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 
@@ -38,6 +40,10 @@
 					Not recorded for this build
 				{/if}
 			</dd>
+		</div>
+		<div>
+			<dt>Methodology statement</dt>
+			<dd>{v.methodology.version} <span class="muted small">(SHA-256 {v.methodology.sha256.slice(0, 12)}…)</span></dd>
 		</div>
 		<div>
 			<dt>Self-checks on this run</dt>
@@ -92,6 +98,21 @@
 		</ul>
 	{:else}
 		<p>No data-quality check fired on this run’s inputs.</p>
+	{/if}
+
+	<svelte:element this={h} id="{uid}-err">Errata of engine {v.engineVersion}</svelte:element>
+	{#if v.errata.length}
+		<p class="muted small">Known bugs of this engine version (docs/engine-errata.md): each changes results only under the conditions given.</p>
+		<div class="table-wrap">
+			<table class="data compact" aria-labelledby="{uid}-err">
+				<thead><tr><th scope="col">Erratum</th><th scope="col">What goes wrong</th><th scope="col">Applies when</th><th scope="col">Fixed in</th></tr></thead>
+				<tbody>
+					{#each v.errata as e (e.id)}<tr><th scope="row">{e.id}</th><td>{e.summary}</td><td>{e.appliesWhen}</td><td>{e.fixedIn ? `engine ${e.fixedIn}` : 'not yet'}</td></tr>{/each}
+				</tbody>
+			</table>
+		</div>
+	{:else}
+		<p>No known bugs in this engine version (docs/engine-errata.md).</p>
 	{/if}
 
 	<svelte:element this={h} id="{uid}-lim">Known limitations</svelte:element>

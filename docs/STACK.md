@@ -145,7 +145,7 @@ pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
-pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
+pnpm gen:liability          # regenerate the known limitations, the engine errata and the methodology hashes from engine-audit.md, engine-errata.md and docs/methodology/ (after changing any)
 pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
                              # packages/engine/src/languages.ts); check:i18n checks every language
 pnpm gen:i18n:stamp <lang> <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it

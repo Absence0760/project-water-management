@@ -13,7 +13,7 @@ const GENERATED = fileURLToPath(new URL('./limitations.generated.ts', import.met
 const doc = readFileSync(AUDIT, 'utf8');
 
 describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
-	it('is current: regenerate with `pnpm gen:limitations` after changing an audit item', () => {
+	it('is current: regenerate with `pnpm gen:liability` after changing an audit item', () => {
 		const parsed = parseAuditLimitations(doc);
 		expect(KNOWN_LIMITATIONS).toEqual(parsed);
 		// The file itself, byte for byte, so a hand edit fails too.
