@@ -3957,24 +3957,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       1 prints the impact report's `LicenceImpactBoard` after the change
       table, the application named as such, from the three daily series the
       page fetches before ready (`loadImpactSeries`), with the full-allocation
-      note as the impact report has it. Left: the board's view model is
-      computed in the browser, not in the engine's document, so an issued
-      pack can't freeze it yet; it moves into `evidenceReport` with the pack's
-      manifest. Tracked under *The server-rendered evidence PDF* below
-      (WP-3.14). Until then the pack's page leaves the board out and says
-      it isn't part of the pack (ui.md § Evidence pack).
+      note as the impact report has it. Since 2026-09-30 (report format
+      `evidence-5`) the engine builds the board into the document
+      (`evidence/impact.ts`) from the series the backend loads, so the draft
+      and an issued pack print the same board; the page no longer fetches
+      series for it.
 - [ ] **The server-rendered evidence PDF.** An *issued pack* is printed on
       the server now (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
       from its frozen manifest; the *draft* evidence report on the report
-      route still prints from the browser only. Left: page 1's licence
-      impact board isn't in the manifest (the browser builds it from three
-      daily series, and a pack's render session reads no run), so a pack's
-      page and PDF print without it. Durable fix: build the board in the
-      engine's `evidenceReport` from the two runs' series, so the manifest
-      carries it; a server render of the draft report (`POST …/reports
-      { runId, evidence: true }`, a render scope over the baseline, ER1) is
-      only worth it if someone asks for a draft PDF by email. Trigger: before
-      a pack goes to a real authority (the board is part of page 1).
+      route still prints from the browser only. Page 1's licence impact
+      board is in the manifest since `evidence-5` (2026-09-30), so a pack's
+      page and PDF print it. Left: a server render of the draft report
+      (`POST …/reports { runId, evidence: true }`, a render scope over the
+      baseline, ER1), only worth it if someone asks for a draft PDF by
+      email. Trigger: that request.
 - [x] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       done (issue #70), [§ Liability and sign-off](#liability-and-sign-off-wp-313).
 
