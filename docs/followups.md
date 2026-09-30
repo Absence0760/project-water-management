@@ -2187,8 +2187,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       closure check (each water year's residual, pass or fail) with a link,
       and the summary CSV and `.xlsx` export keep both tables. Pin the
       surviving table's rendered lines with an e2e spec first, and update
-      ui.md § Water account, § Self-checks and the help articles.
-      **Who:** operator (which table is the client's).
+      ui.md § Water account, § Self-checks and the help articles. The
+      surviving table also gets the playbook's "Show all N" fold: on a
+      30-water-year run the Water balance table scrolls inside its 70vh box
+      and sideways at 1440.
+      **Who:** operator (which table is the client's; asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93)).
       **Trigger:** the next change to the Water account, the Water balance
       section or the Self-checks panel, or a client asking for the table.
       **Done (2026-09-30), the part that doesn't wait on that choice:** on
