@@ -19,10 +19,18 @@ export interface GridCell {
 	weight?: number;
 }
 
+/** A bounding box in degrees: the feed reads every 0.05° cell it overlaps, area weighted (backend feeds/config.ts bboxCells). */
+export interface Bbox {
+	south: number;
+	west: number;
+	north: number;
+	east: number;
+}
+
 export interface FeedMeta {
 	id: string;
 	source: FeedSource;
-	config: { cells?: GridCell[]; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
+	config: { cells?: GridCell[]; bbox?: Bbox; skipNoData?: boolean; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
@@ -90,7 +98,7 @@ export interface FeedList {
 
 export interface FeedBody {
 	source: FeedSource;
-	config: { cells: GridCell[]; product?: ChirpsProduct; startDate?: string } | { station: string };
+	config: ({ cells: GridCell[] } | { bbox: Bbox; skipNoData?: true }) & { product?: ChirpsProduct; startDate?: string } | { station: string };
 	targetKind: string;
 	targetName: string;
 	schedule: 'daily';
@@ -113,8 +121,14 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 /** The form's state: text fields as typed. */
 export interface FeedDraft {
 	source: FeedSource;
+	/** CHIRPS / CHIRPS-GEFS: read listed cells, or every cell a bounding box overlaps. */
+	area: 'cells' | 'bbox';
 	/** One cell per line: "lat, lon" or "lat, lon, weight". */
 	cells: string;
+	/** "south, west, north, east" in degrees. */
+	bbox: string;
+	/** A bounding box only: leave out its sea (no-data) cells and average the rest. */
+	skipNoData: boolean;
 	station: string;
 	targetKind: string;
 	targetName: string;
@@ -127,7 +141,10 @@ export interface FeedDraft {
 
 export const emptyDraft = (source: FeedSource = 'chirps', kinds: string[] = []): FeedDraft => ({
 	source,
+	area: 'cells',
 	cells: '',
+	bbox: '',
+	skipNoData: false,
 	station: '',
 	targetKind: kinds[0] ?? '',
 	targetName: '',
@@ -176,6 +193,53 @@ export function parseCells(text: string): { cells: GridCell[] } | { error: strin
 	return { cells };
 }
 
+/** The CHIRPS grid's cell size; cell edges fall on its multiples (backend CHIRPS_CELL_DEG). */
+const CELL_DEG = 0.05;
+/** The server's bounding-box limits (backend BBOX_MAX_CELLS, BBOX_MAX_ROWS). */
+export const BBOX_MAX_CELLS = 100;
+export const BBOX_MAX_ROWS = 25;
+/** The cell indices [first, last) a pair of box edges spans, as the server counts them (a box edge on a grid line adds no sliver). */
+const span = (lo: number, hi: number) => Math.max(0, Math.ceil(hi / CELL_DEG - 1e-6) - Math.floor(lo / CELL_DEG + 1e-6));
+
+/** How many 0.05° cells a box covers, as the server counts them. */
+export const bboxCellCount = (b: Bbox) => span(b.south, b.north) * span(b.west, b.east);
+
+/**
+ * For a box that leaves out its sea cells: how many of its cells the last
+ * fetch averaged ("38 of 40 cells"), or null. The count is the ingest's
+ * (last_meta.cellsUsed), which refuses a fetch whose count changed.
+ */
+export function cellsUsedNote(f: Pick<FeedMeta, 'config' | 'lastMeta'>): string | null {
+	const n = f.lastMeta?.cellsUsed;
+	if (!f.config.bbox || !f.config.skipNoData || typeof n !== 'number') return null;
+	return `${n} of ${bboxCellCount(f.config.bbox)} cells`;
+}
+
+/**
+ * Parse the bounding-box field, "south, west, north, east" in degrees. Returns
+ * the box, or the first problem in words; the limits are the server's
+ * (backend/src/feeds/config.ts GridConfig). U+2212 counts as "-", as in parseCells.
+ */
+export function parseBbox(text: string): { bbox: Bbox } | { error: string } {
+	const parts = text.replace(/\u2212/g, '-').split(/[,\s]+/).filter(Boolean);
+	if (!parts.length) return { error: 'Enter the bounding box as “south, west, north, east” in degrees.' };
+	if (parts.length !== 4 || !parts.every((p) => NUM.test(p))) return { error: 'The bounding box should be four numbers: “south, west, north, east”.' };
+	const [south, west, north, east] = parts.map(Number) as [number, number, number, number];
+	if ([south, north].some((v) => v < -60 || v > 60)) return { error: 'The box’s latitudes must be between -60 and 60 (the CHIRPS grid).' };
+	if ([west, east].some((v) => v < -180 || v > 180)) return { error: 'The box’s longitudes must be between -180 and 180.' };
+	if (!(south < north)) return { error: 'The south edge must be below the north edge (south is the more negative latitude south of the equator).' };
+	if (!(west < east)) return { error: 'The west edge must be west of the east edge; a box can’t cross 180°.' };
+	const rows = span(south, north);
+	const cells = rows * span(west, east);
+	if (cells === 0) return { error: 'The box is too thin to cover a grid cell.' };
+	if (cells > BBOX_MAX_CELLS || rows > BBOX_MAX_ROWS) {
+		return {
+			error: `The box covers ${cells} grid cells in ${rows} rows; at most ${BBOX_MAX_CELLS} cells in ${BBOX_MAX_ROWS} rows (about 0.5° × 0.5°, and at most 1.25° from south to north). Shrink it, or list cells instead.`
+		};
+	}
+	return { bbox: { south, west, north, east } };
+}
+
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
 /** Only river gauges (H codes) can be fed: the backend's DWS_RIVER_GAUGE (feeds/config.ts) says why. */
 export const DWS_RIVER_GAUGE = /^[A-Z]\d[H]\d{3}$/;
@@ -183,7 +247,7 @@ export const DWS_RIVER_GAUGE = /^[A-Z]\d[H]\d{3}$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The request body for a draft, or the first problem in words and the field it is in. */
-export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'station' | 'start' } {
+export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'bbox' | 'station' | 'start' } {
 	const common = { source: d.source, targetKind: d.targetKind, targetName: d.targetName.trim(), schedule: d.schedule };
 	if (d.source === 'dws') {
 		const station = d.station.trim().toUpperCase();
@@ -191,9 +255,17 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 		if (!DWS_RIVER_GAUGE.test(station)) return { error: 'Only a DWS river gauge can be fed (an H code, e.g. A2H012): a reservoir’s (R) daily table is its spillway discharge, not the river’s flow.', field: 'station' };
 		return { body: { ...common, config: { station } } };
 	}
-	const cells = parseCells(d.cells);
-	if ('error' in cells) return { error: cells.error, field: 'cells' };
-	if (d.source !== 'chirps') return { body: { ...common, config: { cells: cells.cells } } };
+	let place: { cells: GridCell[] } | { bbox: Bbox; skipNoData?: true };
+	if (d.area === 'bbox') {
+		const box = parseBbox(d.bbox);
+		if ('error' in box) return { error: box.error, field: 'bbox' };
+		place = d.skipNoData ? { ...box, skipNoData: true } : box;
+	} else {
+		const cells = parseCells(d.cells);
+		if ('error' in cells) return { error: cells.error, field: 'cells' };
+		place = { cells: cells.cells };
+	}
+	if (d.source !== 'chirps') return { body: { ...common, config: place } };
 	// CHIRPS: one daily product end to end, from no earlier than its first day (issue #40 part c).
 	const start = d.startDate.trim();
 	const first = CHIRPS_PRODUCT_FIRST_DAY[d.product];
@@ -210,7 +282,7 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 	return {
 		body: {
 			...common,
-			config: { cells: cells.cells, ...(d.product === 'rnl' ? { product: 'rnl' as const } : {}), ...(start ? { startDate: start } : {}) }
+			config: { ...place, ...(d.product === 'rnl' ? { product: 'rnl' as const } : {}), ...(start ? { startDate: start } : {}) }
 		}
 	};
 }
@@ -248,6 +320,10 @@ export const describeWrites = (f: Pick<FeedMeta, 'writes'>) => (f.writes ? ` · 
 /** Where a feed reads, in words. */
 export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	if (f.source === 'dws') return `station ${f.config.station ?? '?'}`;
+	const b = f.config.bbox;
+	// At least two decimals (a box is usually drawn on the 0.05° grid); a plain "-", as the cell line writes it.
+	const deg = (v: number) => (Math.abs(Math.round(v * 100) - v * 100) < 1e-6 ? v.toFixed(2) : String(v));
+	if (b) return `box ${deg(b.south)}, ${deg(b.west)} to ${deg(b.north)}, ${deg(b.east)}${f.config.skipNoData ? ', sea cells left out' : ''}`;
 	const cells = f.config.cells ?? [];
 	if (cells.length === 1) return `cell ${cells[0]!.lat}, ${cells[0]!.lon}`;
 	return `${cells.length} cells`;

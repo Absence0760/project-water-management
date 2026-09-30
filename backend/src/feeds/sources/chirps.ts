@@ -21,7 +21,7 @@
 // after: that splice would be a break of its own (issue #40 part c).
 // Units are mm/day; the sea is -9999.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { FeedFormatError, FeedUnavailableError } from '../errors.js';
+import { FeedFormatError, FeedNoDataError, FeedUnavailableError } from '../errors.js';
 import type { FeedHttp } from '../http.js';
 import { openGrid, readPoints } from './tiff.js';
 
@@ -45,20 +45,52 @@ export interface Cell {
 }
 
 /**
+ * A bounding box's opt-in to leave out its no-data (sea) cells
+ * (config.skipNoData). One per fetch: `mask` records which cells had data on
+ * the first day read ('1' / '0' per cell), and every other day must match it.
+ * The sea mask is static, so a land cell going no-data between days is a
+ * corrupt or changed grid, and fails the fetch rather than quietly moving the
+ * area the mean covers.
+ */
+export interface NoDataPolicy {
+	mask: string | null;
+}
+
+/** How many cells a fetch's days were averaged over, once a day was read. */
+export const cellsUsed = (p: NoDataPolicy): number | null => (p.mask === null ? null : [...p.mask].filter((b) => b === '1').length);
+
+/**
  * The weighted mean over `cells` of one grid file, or null when the file
  * isn't published (404). A cell over the sea, or outside the grid, is a
- * configuration error and fails the fetch rather than skewing the mean.
+ * configuration error and fails the fetch rather than skewing the mean,
+ * unless `noData` is given: then no-data cells are left out and the other
+ * weights renormalised (the day still fails when no cell has data).
  */
-export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell[]): Promise<number | null> {
+export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell[], noData?: NoDataPolicy): Promise<number | null> {
 	const read = (start: number, end: number) => http.range(url, start, end);
 	const grid = await openGrid(read);
 	if (!grid) return null;
 	const values = await readPoints(read, grid, cells);
 	let sum = 0;
 	let weights = 0;
+	if (noData) {
+		const mask = values.map((v) => (v === null ? '0' : '1')).join('');
+		if (!mask.includes('1')) {
+			// Another day of this fetch had data: this file lost it all, which the sea never does.
+			if (noData.mask !== null) throw new FeedFormatError('a day’s grid has no data in any cell of the box, though another day of the fetch had some: the file looks corrupt, or the grid has changed');
+			throw new FeedNoDataError('the grid has no data in any cell of the bounding box (all sea, or outside the product’s coverage)');
+		}
+		noData.mask ??= mask;
+		if (noData.mask !== mask) {
+			throw new FeedFormatError(
+				'the cells with data changed from one day to another within one fetch (a land cell read as no data): the grid is corrupt or has changed'
+			);
+		}
+	}
 	values.forEach((v, i) => {
 		const c = cells[i]!;
-		if (v === null) throw new FeedFormatError(`the grid has no data at ${c.lat}, ${c.lon} (the sea, or outside the product’s coverage)`);
+		if (v === null && noData) return;
+		if (v === null) throw new FeedNoDataError(`the grid has no data at ${c.lat}, ${c.lon} (the sea, or outside the product’s coverage)`);
 		if (v < 0 || v > 2000) throw new FeedFormatError(`the grid has an implausible rainfall of ${v} mm at ${c.lat}, ${c.lon}`);
 		sum += v * c.weight;
 		weights += c.weight;
@@ -142,10 +174,11 @@ export async function fetchChirps(
 	start: string,
 	end: string,
 	product: 'sat' | 'rnl' = 'sat',
-	opts: { concurrency?: number; heldThrough?: string | null; today?: string } = {}
+	opts: { concurrency?: number; heldThrough?: string | null; today?: string; noData?: NoDataPolicy } = {}
 ): Promise<GridDays> {
 	const concurrency = opts.concurrency ?? 6;
 	const heldThrough = opts.heldThrough ?? null;
+	const noData = opts.noData;
 	// Without a today, the day after the window: its last month is the one still being published.
 	const today = toEpochDay(opts.today ?? fromEpochDay(toEpochDay(end) + 1));
 	const s = toEpochDay(start);
@@ -153,11 +186,11 @@ export async function fetchChirps(
 	let got: { v: number | null; prelim: boolean }[];
 	let held = 0;
 	if (product === 'rnl') {
-		got = await mapLimit(days, concurrency, async (day) => ({ v: await gridMean(http, chirpsRnlUrl(day), cells), prelim: false }));
+		got = await mapLimit(days, concurrency, async (day) => ({ v: await gridMean(http, chirpsRnlUrl(day), cells, noData), prelim: false }));
 	} else {
 		const finals = new Array<number | null>(days.length).fill(null);
 		for (let probed = 0, size = 1; probed < days.length; size = concurrency) {
-			const batch = await mapLimit(days.slice(probed, probed + size), concurrency, (day) => gridMean(http, chirpsFinalUrl(day), cells));
+			const batch = await mapLimit(days.slice(probed, probed + size), concurrency, (day) => gridMean(http, chirpsFinalUrl(day), cells, noData));
 			batch.forEach((v, i) => (finals[probed + i] = v));
 			probed += batch.length;
 			if (batch.at(-1) === null && !finalExpected(days[probed - 1]!, today)) break;
@@ -169,7 +202,7 @@ export async function fetchChirps(
 				held++;
 				return { v: null, prelim: false };
 			}
-			const prelim = await gridMean(http, chirpsPrelimUrl(day), cells);
+			const prelim = await gridMean(http, chirpsPrelimUrl(day), cells, noData);
 			return { v: prelim, prelim: prelim !== null };
 		});
 	}
@@ -201,16 +234,16 @@ export interface Forecast {
  * way to yesterday's complete one, and when neither is complete the fetch
  * fails as unavailable, which retries in 15 minutes.
  */
-export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = 6): Promise<Forecast | null> {
+export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = 6, noData?: NoDataPolicy): Promise<Forecast | null> {
 	let partial: { issued: string; days: number } | null = null;
 	for (const back of [0, 1]) {
 		const issued = fromEpochDay(toEpochDay(today) - back);
-		const first = await gridMean(http, gefsUrl(issued, issued), cells);
+		const first = await gridMean(http, gefsUrl(issued, issued), cells, noData);
 		if (first === null) continue;
 		const rest = await mapLimit(
 			Array.from({ length: GEFS_DAYS - 1 }, (_, i) => fromEpochDay(toEpochDay(issued) + i + 1)),
 			concurrency,
-			(day) => gridMean(http, gefsUrl(issued, day), cells)
+			(day) => gridMean(http, gefsUrl(issued, day), cells, noData)
 		);
 		const values = [first, ...rest];
 		if (values.every((v) => v !== null)) return { issued, startDate: issued, values };

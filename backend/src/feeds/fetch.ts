@@ -8,10 +8,10 @@
 // untrusted input and validates it (FetchResult below) before anything merges.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
-import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
-import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError } from './errors.js';
+import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells } from './config.js';
+import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedNoDataError } from './errors.js';
 import type { FeedHttp } from './http.js';
-import { fetchChirps, fetchGefs } from './sources/chirps.js';
+import { cellsUsed, fetchChirps, fetchGefs, type NoDataPolicy } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
@@ -203,23 +203,38 @@ export const FetchRequestSchema = z
 		return { ...v, config: config.data };
 	});
 
+/**
+ * The cells a grid feed reads, and for a box with skipNoData its no-data
+ * policy and `cellsUsed` for the meta: how many of the box's cells had data.
+ * The sea mask is static, so that count changing from one fetch to the next
+ * means the grid itself changed (docs/architecture.md § Data feeds).
+ */
+function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCells>; noData?: NoDataPolicy; used: () => { cellsUsed?: number } } {
+	const cells = gridCells(config);
+	if (!(config.bbox && config.skipNoData)) return { cells, used: () => ({}) };
+	const noData: NoDataPolicy = { mask: null };
+	return { cells, noData, used: () => (cellsUsed(noData) === null ? {} : { cellsUsed: cellsUsed(noData)! }) };
+}
+
 /** Run one fetch. Never throws: a failure is a result, with a message written by us. */
 export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<FetchResult> {
 	try {
 		switch (req.source) {
 			case 'chirps': {
 				const product = chirpsProduct(req.config);
-				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end, product, { heldThrough: req.heldThrough ?? null, today: req.today });
+				const { cells, noData, used } = gridRead(req.config as GridConfig);
+				const r = await fetchChirps(http, cells, req.start, req.end, product, { heldThrough: req.heldThrough ?? null, today: req.today, noData });
 				// Held preliminary days not read again still count (the feed card's "N preliminary days").
 				if (!r.values.length) return { ok: true, startDate: null, values: [], meta: r.prelimDays ? { days: 0, prelimDays: r.prelimDays, product } : { days: 0, product } };
-				const meta: Record<string, string | number> = { days: r.values.length, prelimDays: r.prelimDays, product };
+				const meta: Record<string, string | number> = { days: r.values.length, prelimDays: r.prelimDays, product, ...used() };
 				if (r.finalThrough) meta.finalThrough = r.finalThrough;
 				return { ok: true, startDate: r.startDate, values: r.values, meta };
 			}
 			case 'chirps_gefs': {
-				const r = await fetchGefs(http, (req.config as GridConfig).cells, req.today);
+				const { cells, noData, used } = gridRead(req.config as GridConfig);
+				const r = await fetchGefs(http, cells, req.today, undefined, noData);
 				if (!r) throw new FeedFormatError('no forecast was issued today or yesterday');
-				return { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, issued: r.issued } };
+				return { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, issued: r.issued, ...used() } };
 			}
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
@@ -235,6 +250,10 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 		}
 	} catch (err) {
 		if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) console.error('feed fetch failed:', err);
+		// A box skips a sea cell only when asked to (skipNoData): otherwise it would quietly shrink the area the mean is over.
+		if (err instanceof FeedNoDataError && 'bbox' in req.config && req.config.bbox && !req.config.skipNoData) {
+			return { ok: false, error: feedErrorMessage(new FeedFormatError(`${err.message}, inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)`)) };
+		}
 		return { ok: false, error: feedErrorMessage(err) };
 	}
 }
