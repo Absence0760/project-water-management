@@ -6,7 +6,7 @@ docs/model.md from the engine's observed outputs, not from its code.
 
 Stdlib only. `run(input_doc)` takes a ModelInput document (the JSON the
 engine's `runModel` takes) and returns
-    { startDate, endDate, days, series: [{ nodeId, key, values }] }
+    { startDate, endDate, days, series: [{ nodeId, key, values }], diag, summary }
 with NaN where a day has no value.
 
 Phase 1 covers: rain used (source order, threshold, CHIRPS fill with the
@@ -16,7 +16,13 @@ return share (N1), the farm dam balance (evaporation, rain on the dam,
 seepage and its return share, minimum operating level, spill), routing down
 the tree, dam-to-dam transfers (priority, bands at each rule's reserve, pro
 rata, the receiver's room) and the EWR at sites with its attribution (Q17).
-`unsupported(input_doc)` lists what an input uses beyond that.
+Phase 2a adds boreholes and stream depletion (§2.7d), allocations, the
+licence cap and full-allocation runs (§2.12a, with the summary's capReached,
+limitBound and scaled rows), demand factors (§2.3 item 4a), demand objects
+and the basic-needs floor (§2.7f), river off-takes and canal seepage (§2.6a),
+other water users (§2.7c), supply rules and the river pump (§2.7e), dam
+survey curves and releases (§2.7a) and hands-off flows with River to dam by
+month (§2.7h). `unsupported(input_doc)` lists what an input uses beyond that.
 """
 
 from __future__ import annotations
@@ -585,38 +591,19 @@ def farm_efficiency(node: dict, rows: list[tuple[dict, float]], apan: list[float
 
 
 def unsupported(doc: dict) -> list[str]:
-    """What an input uses beyond phase 1 (verify/README.md § Phase 2)."""
+    """What an input uses beyond phases 1 and 2a (verify/README.md § Phase 2b)."""
     s = doc.get("settings", {}) or {}
     m = doc.get("model", {}) or {}
     out = []
-    if m.get("boreholes"):
-        out.append("individual boreholes")
     if m.get("landCover"):
         out.append("land cover")
-    if m.get("demandObjects"):
-        out.append("demand objects")
-    if m.get("allocations") and s.get("allocationMode") not in (None, "none"):
-        out.append("allocations")
     for n in m.get("nodes", []):
-        if n.get("kind") == "user":
-            out.append("other water users")
-        if n.get("boreholeCapacityM3Day"):
-            out.append("boreholes")
-        if n.get("supplyRule") not in (None, "damFirst"):
-            out.append("supply rules")
-        if n.get("damCurve"):
-            out.append("dam survey curves")
-        if n.get("damReleaseRule") not in (None, "none"):
-            out.append("dam releases")
-        if n.get("handsOffM3Day") or n.get("handsOffEwr") or n.get("divertMonthlyM3Day"):
-            out.append("hands-off flow / River to dam by month")
         if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
             out.append("time-varying development")
-        if n.get("demandFactor"):
-            out.append("demand factors")
-    for t in m.get("transfers", []):
-        if t.get("source") == "river":
-            out.append("river off-takes")
+        if n.get("partDemandFactor"):
+            out.append("demand factors by part (demand.scale by part)")
+    if s.get("chirpsQuantileMap"):
+        out.append("CHIRPS quantile map")
     if s.get("rainSource"):
         out.append("rain-source periods")
     if s.get("arealRain"):
@@ -634,8 +621,8 @@ def unsupported(doc: dict) -> list[str]:
             out.append("non-default data-quality limits")
     if (doc.get("series") or {}).get("evap_apan_mm"):
         out.append("daily A-pan series")
-    if s.get("damStorageReset") or s.get("demandFactorFrom"):
-        out.append("outlook-only settings")
+    if s.get("damStorageReset"):
+        out.append("dam storage reset (outlook only)")
     return sorted(set(out))
 
 
@@ -655,7 +642,13 @@ def run(doc: dict) -> dict:
     out: list[dict] = []
     diag = dict(rain["diag"])
     diag.update(chirps_days=0, forecast_days=0, forecast_tail=0, room_bound=0, band_split=0, transfer_days=0,
-                charge_days=0, multi_site_charge_days=0, dead_storage_days=0, spill_days=0)
+                charge_days=0, multi_site_charge_days=0, dead_storage_days=0, spill_days=0,
+                # Phase 2a: days (unit-days) each feature did something.
+                borehole_days=0, borehole_to_dam_days=0, borehole_annual_cap_days=0, depletion_owed_days=0,
+                cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
+                offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
+                river_pump_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
+                divert_by_month_days=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -745,11 +738,25 @@ def run(doc: dict) -> dict:
             [NAN if (v := corrected_chirps(rain["chirps"], rain["fit_factors"], o, True)) is None else v for o in days],
         )
 
-    # ---- demand (§2.3) --------------------------------------------------
+
+    # ---- demand (§2.3, §2.3 item 4a, §2.7c, §2.7f) ------------------------
     crops = {c["id"]: c for c in model.get("crops", [])}
     shares = flow_shares(settings, farms)
     eff_monthly = settings.get("effectiveRainFractionMonthly")
     store_mm = settings["effectiveRainStoreMm"]
+    nodes = model["nodes"]
+    by_id = {x["id"]: x for x in nodes}
+    users = [x for x in nodes if x["kind"] == "user"]
+    # §2.3 item 4a: the nodes' demand factors, from settings.demandFactorFrom on.
+    dff = settings.get("demandFactorFrom")
+    dff_o = iso_to_ord(dff) if isinstance(dff, str) and _is_iso(dff) else None
+
+    def dfac(x, i):
+        f = x.get("demandFactor")
+        if not f or (dff_o is not None and days[i] < dff_o):
+            return 1.0
+        return float(f[wm[i]])
+
     fd: dict[str, dict] = {}
     for f in farms:
         rows = [
@@ -774,19 +781,158 @@ def run(doc: dict) -> dict:
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
             available = w + pe_m3
             used = min(available, max(0.0, gross))
-            F = max(0.0, gross) - used
+            F = (max(0.0, gross) - used) * dfac(f, i)
             w = min(smax, available - used)
             gross_s.append(gross)
             eff_s.append(used)
             soil_s.append(w / cropped * 1000 if cropped > 0 else 0.0)
             F_s.append(F)
             D_s.append(F / e)
-        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "D": D_s, "e": e}
+        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "Dc": D_s, "e": e}
 
-    # ---- network (§2.5–§2.7b) -------------------------------------------
-    nodes = model["nodes"]
-    by_id = {x["id"]: x for x in nodes}
-    order = topo_order(nodes)
+    # Demand objects (§2.7f): enabled, on a farm, in id order.
+    objs: dict[str, list[dict]] = {f["id"]: [] for f in farms}
+    for ob in sorted(model.get("demandObjects") or [], key=lambda o: o["id"]):
+        if not ob.get("enabled", True) or ob.get("nodeId") not in by_id or by_id[ob["nodeId"]]["kind"] != "farm":
+            continue
+        objs[ob["nodeId"]].append(ob)
+    obj_dem: dict[str, list[float]] = {}
+    obj_floor: dict[str, list[float]] = {}
+    obj_B: dict[str, float] = {}
+    for fid, lst in objs.items():
+        x = by_id[fid]
+        for ob in lst:
+            per_unit = ob.get("sizing") == "perUnit"
+            loss = (ob.get("lossPct") or 0.0) if per_unit else 0.0
+            if per_unit:
+                mf = ob.get("monthlyFactor")
+                base = [ob["count"] * ob["litresPerUnitDay"] / 1000 * (mf[m] if mf else 1.0) / (1 - loss) for m in range(12)]
+            else:
+                base = [float(v) for v in ob["monthlyM3Day"]]
+            pop = ob.get("population")
+            if pop is None and per_unit:
+                pop = ob.get("count")
+            B = None
+            if ob.get("category") in ("domestic", "municipal") and pop is not None:
+                B = pop * BASIC_LITRES / 1000 / (1 - loss)
+            sched = ob.get("schedule") or []
+            dem, flo = [], []
+            for i, o in enumerate(days):
+                s = schedule_factor(sched, o)
+                f_ = dfac(x, i)
+                v = base[wm[i]] * f_ * s
+                if B is not None and f_ < 1:
+                    if min(B, base[wm[i]] * s) > v:
+                        diag["floor_days"] += 1
+                    v = max(v, min(B, base[wm[i]] * s))
+                dem.append(v)
+                flo.append(min(B, v) if B is not None else NAN)
+            obj_dem[ob["id"]] = dem
+            obj_floor[ob["id"]] = flo
+            if B is not None:
+                obj_B[ob["id"]] = B
+
+    # The unit's abstraction demand before a full allocation's factor.
+    D_base: dict[str, list[float]] = {}
+    for f in farms:
+        dd = []
+        for i in range(n):
+            v = fd[f["id"]]["Dc"][i]
+            for ob in objs[f["id"]]:
+                v += obj_dem[ob["id"]][i]
+            dd.append(v)
+        D_base[f["id"]] = dd
+    for u in users:
+        ud = u.get("userDemandM3Day")
+        D_base[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
+
+    # ---- allocations (§2.12a) -------------------------------------------
+    alloc_mode = settings.get("allocationMode") or "none"
+    allocs = read_allocations(model, by_id)
+    ald: dict[str, dict[str, list[dict]]] = {}
+    for a in allocs:
+        ald.setdefault(a["nodeId"], {}).setdefault(a["waterSource"], []).append(a)
+    kf: dict[str, list[float]] = {}
+    fa_scaled: dict[str, list] = {}
+    if alloc_mode == "fullAllocation":
+        for nid, bysrc in ald.items():
+            both = sorted(bysrc.get("surface", []) + bysrc.get("groundwater", []), key=lambda a: a["id"])
+            # Each water year over its run days; the year a forecast tail
+            # starts in over its historical days only (§2.4f). A later year,
+            # all tail, is an ordinary part year.
+            tail_y = water_year(days[hist]) if hist < n else None
+            yrs: dict[int, list[int]] = {}
+            for i in range(n):
+                if i >= hist and water_year(days[i]) == tail_y:
+                    continue
+                yrs.setdefault(water_year(days[i]), []).append(i)
+            fac_y: dict[int, float] = {}
+            vol_y: dict[int, float] = {}
+            scaled_rows: list = []
+            fa_scaled[nid] = scaled_rows
+            for y, idx in yrs.items():
+                vol = 0.0
+                for a in both:
+                    inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"])
+                    vol += a["volume"] * inside / wy_length(y)
+                tot = 0.0
+                for i in idx:
+                    tot += D_base[nid][i]
+                fac_y[y] = vol / tot if tot > 0 else 0.0
+                vol_y[y] = vol
+            # The summary's rows: the demand before over every run day of the
+            # year (a forecast tail's too) and the volume it was scaled to.
+            ally: dict[int, list[int]] = {}
+            for i in range(n):
+                ally.setdefault(water_year(days[i]), []).append(i)
+            for y, idx in sorted(ally.items()):
+                tot = 0.0
+                for i in idx:
+                    tot += D_base[nid][i]
+                # A year with no demand can't be scaled: the row keeps its
+                # volume, except the year a forecast tail starts in, whose row
+                # is k × its demand, 0 (probe scaled-no-demand-tail-year).
+                if tot > 0 or y == tail_y:
+                    reg = fac_y.get(y, 0.0) * tot
+                else:
+                    reg = vol_y.get(y, 0.0)
+                scaled_rows.append({"waterYear": y, "demandM3": tot, "registeredM3": reg})
+            ks = []
+            for i in range(n):
+                y = water_year(days[i])
+                ks.append(fac_y.get(y, 0.0))
+            kf[nid] = ks
+            diag["full_allocation_units"] += 1
+    Dn: dict[str, list[float]] = {}
+    for nid, dd in D_base.items():
+        if nid in kf:
+            k = kf[nid]
+            if nid in fd:
+                fd[nid]["F"] = [fd[nid]["F"][i] * k[i] for i in range(n)]
+                fd[nid]["Dc"] = [fd[nid]["Dc"][i] * k[i] for i in range(n)]
+                for ob in objs[nid]:
+                    od = obj_dem[ob["id"]]
+                    x = by_id[nid]
+                    for i in range(n):
+                        v = od[i] * k[i]
+                        if not math.isnan(obj_floor[ob["id"]][i]) and dfac(x, i) < 1:
+                            v = max(v, obj_floor[ob["id"]][i])
+                        od[i] = v
+                dn = []
+                for i in range(n):
+                    v = fd[nid]["Dc"][i]
+                    for ob in objs[nid]:
+                        v += obj_dem[ob["id"]][i]
+                    dn.append(v)
+                Dn[nid] = dn
+            else:
+                Dn[nid] = [dd[i] * k[i] for i in range(n)]
+        else:
+            Dn[nid] = list(dd)
+    capped = alloc_mode == "cap"
+
+    # ---- network (§2.5–§2.7h) -------------------------------------------
+    order = network_order(nodes, model.get("transfers", []))
     ups: dict[str, list[str]] = {x["id"]: [] for x in nodes}
     for x in nodes:
         d = x.get("downstreamNodeId")
@@ -794,10 +940,9 @@ def run(doc: dict) -> dict:
             ups[d].append(x["id"])
     for k in ups:
         ups[k].sort()
-    outlet = next(x for x in order if x.get("downstreamNodeId") is None)
-    # Every node upstream of (or at) each node, for the EWR sites.
+    outlet = next(x for x in nodes if x.get("downstreamNodeId") is None)
     upstream_set: dict[str, set[str]] = {}
-    for x in order:
+    for x in topo_order(nodes):
         s = {x["id"]}
         for u in ups[x["id"]]:
             s |= upstream_set[u]
@@ -806,22 +951,59 @@ def run(doc: dict) -> dict:
     ewr = [float(settings["ewrPragmaticM3PerDay"][m]) for m in wm]
     k_lake = settings.get("lakeEvapFactorMonthly") or [settings["lakeEvapFactor"]] * 12
 
+    # Senior users' requirement fragmented to the farms upstream (§2.7c).
+    seniors = sorted((u for u in users if u.get("userPriority", "senior") != "junior"), key=lambda u: u["id"])
+    sen_y: dict[str, list[float]] = {f["id"]: [0.0] * n for f in farms}
+    any_senior = False
+    for u in seniors:
+        up_farms = sorted(f["id"] for f in farms if f["id"] in upstream_set[u["id"]])
+        tot = 0.0
+        for fid in up_farms:
+            tot += shares.get(fid, 0.0)
+        if tot <= 0:
+            continue
+        if any(v > 0 for v in Dn[u["id"]]):
+            any_senior = True
+        for fid in up_farms:
+            for i in range(n):
+                sen_y[fid][i] += Dn[u["id"]][i] * shares.get(fid, 0.0) / tot
+
+    # Transfer rules: dam rules (§2.6) and river off-takes (§2.6a).
     rules = []
+    offtakes = []
     for t in model.get("transfers", []):
-        if not t.get("enabled", True) or t.get("source", "dam") != "dam":
+        if not t.get("enabled", True):
             continue
         if t["fromNodeId"] not in by_id or t["toNodeId"] not in by_id:
             continue
         if by_id[t["fromNodeId"]]["kind"] != "farm" or by_id[t["toNodeId"]]["kind"] != "farm":
             continue
-        rules.append(t)
+        if t.get("source", "dam") == "river":
+            offtakes.append(t)
+        else:
+            rules.append(t)
     rules.sort(key=lambda t: t["id"])
+    offtakes.sort(key=lambda t: t["id"])
+    ot_from: dict[str, list[dict]] = {}
+    ot_into: dict[str, list[dict]] = {}
+    for t in offtakes:
+        ot_from.setdefault(t["fromNodeId"], []).append(t)
+        ot_into.setdefault(t["toNodeId"], []).append(t)
 
     def rule_rate(t, o, m):
         mr = t.get("monthlyRateM3s")
         if mr:
             return mr[m]
         return t["maxRateM3s"] if cal_month(o) in (t.get("months") or []) else 0.0
+
+    def rule_limit(t, o, m):
+        rate = rule_rate(t, o, m)
+        if not rate > 0:
+            return 0.0
+        lim = rate * 86400
+        if t.get("dailyCapM3") is not None:
+            lim = min(lim, t["dailyCapM3"])
+        return lim
 
     def can_move(t):
         mr = t.get("monthlyRateM3s")
@@ -832,18 +1014,79 @@ def run(doc: dict) -> dict:
             return any(r > 0 for r in mr)
         return bool(t.get("months")) and t["maxRateM3s"] > 0
 
+    # Pumping units per node (§2.7d): the combined capacity first, then the
+    # individual boreholes in id order.
+    units: dict[str, list[dict]] = {}
+    for x in nodes:
+        if x["kind"] not in ("farm", "user"):
+            continue
+        lst = []
+        c = x.get("boreholeCapacityM3Day")
+        if c:
+            rule = x.get("boreholeRule") or "supplemental"
+            lst.append({
+                "id": None, "cap": float(c), "annual": None,
+                "mode": "emergency" if rule == "drought" else rule,
+                "level": x.get("boreholeTriggerPct", 0.3) if x.get("boreholeTriggerPct") is not None else 0.3,
+                "target": "direct", "d": x.get("streamDepletionFrac") or 0.0,
+            })
+        for b in sorted((b for b in model.get("boreholes") or [] if b.get("nodeId") == x["id"]), key=lambda b: b["id"]):
+            if b.get("mode", "none") == "none":
+                continue
+            lst.append({
+                "id": b["id"], "cap": float(b["capacityM3Day"]), "annual": b.get("annualCapM3"), "mode": b["mode"],
+                "level": b.get("emergencyBelowPct", 0.3), "target": b.get("target", "direct"),
+                "d": b.get("depletionFactor") or 0.0,
+            })
+        has_dam = x["kind"] == "farm" and x["damCapacityM3"] > 0
+        for u_ in lst:
+            if not has_dam:
+                if u_["mode"] == "emergency":
+                    u_["mode"] = "supplemental"
+                u_["target"] = "direct"
+        if lst:
+            units[x["id"]] = lst
+    has_bh = {x["id"] for x in nodes if x["kind"] in ("farm", "user") and (x.get("boreholeCapacityM3Day") or any(b.get("nodeId") == x["id"] for b in model.get("boreholes") or []))}
+
+    def supply_rule(x):
+        r = x.get("supplyRule") or "damFirst"
+        if r == "trigger" and x["damCapacityM3"] <= 0:
+            return "riverFirst"
+        if r == "runOfRiver" and x["damCapacityM3"] > 0:
+            return "riverFirst"
+        return r
+
     names = [
         "inflow_upstream", "runoff", "transfer", "upstream_to_dam", "upstream_below_dam", "runoff_to_dam",
         "runoff_below_dam", "diverted_to_dam", "dam_area", "rain_on_dam", "dam_evaporation", "dam_seepage",
         "supplied", "interim_storage", "dam_storage", "spill", "below_dam_not_diverted", "return_flow", "outflow",
         "balance_residual", "deficit", "ewr", "ewr_cumulative", "ewr_shortfall", "ewr_shortfall_incremental",
-        "dam_seepage_lost",
+        "dam_seepage_lost", "dam_release", "river_abstraction", "groundwater_used", "groundwater_to_dam",
+        "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
+        "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
+        "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
+        "basic_needs",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
-    rule_vol = {t["id"]: [0.0] * n for t in rules}
+    rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
+    obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
     storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
+    on_river = {f["id"]: False for f in farms}
+    sd_store = {x["id"]: 0.0 for x in nodes}
+    dd_owed = {x["id"]: 0.0 for x in nodes}
+    bh_used = {x["id"]: [0.0] * len(units.get(x["id"], [])) for x in nodes}
+    al_used = {(nid, s): 0.0 for nid, bysrc in ald.items() for s in bysrc}
+    al_budget: dict[tuple, float] = {}
+    lb_days: dict[tuple, dict] = {}
     sim_out = [0.0] * n
     cat_short = [0.0] * n
+    ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}
+    use_y: dict[tuple, float] = {}
+
+    def spend(nid, src, v):
+        al_used[(nid, src)] += v
+        k_ = (nid, src, water_year(days[i]))
+        use_y[k_] = use_y.get(k_, 0.0) + v
 
     def noise_short(z, u):
         d = z - u
@@ -851,41 +1094,86 @@ def run(doc: dict) -> dict:
             return 0.0
         return -d
 
+    def area_of(f, s0):
+        cap = f["damCapacityM3"]
+        curve = usable_curve(f.get("damCurve"))
+        if curve:
+            return curve_area(curve, s0)
+        a_full = f.get("damAreaFullM2")
+        if a_full is None:
+            a_full = cap / 3
+        b = f.get("damAreaExponent", 0.7)
+        return (a_full * (s0 / cap) ** b if s0 > 0 else 0.0), None
+
     for i, o in enumerate(days):
         m = wm[i]
         rf = p_used[i]
+        wy = water_year(o)
+        if i == 0 or (_dt.date.fromordinal(o).month == 10 and _dt.date.fromordinal(o).day == 1):
+            for k in bh_used:
+                bh_used[k] = [0.0] * len(bh_used[k])
+            for k in al_used:
+                al_used[k] = 0.0
+        # Allocation rooms at the start of the day (§2.12a).
+        room = {}
+        for (nid, s) in al_used:
+            if not capped:
+                continue
+            lst = ald[nid][s]
+            if (nid, s, wy) not in al_budget:
+                b = 0.0
+                for a in lst:
+                    b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)
+                al_budget[(nid, s, wy)] = b
+            budget = al_budget[(nid, s, wy)]
+            left = max(0.0, budget - al_used[(nid, s)])
+            limit = licence_limit(lst, o)
+            room[(nid, s)] = (min(left, limit), left, limit, budget)
         # Start-of-day dam terms, before the transfers' clamps (§2.7a, §2.6).
         pre = {}
         for f in farms:
             cap = f["damCapacityM3"]
             s0 = storage[f["id"]]
             if cap > 0:
-                a_full = f.get("damAreaFullM2")
-                if a_full is None:
-                    a_full = cap / 3
-                b = f.get("damAreaExponent", 0.7)
-                area = a_full * (s0 / cap) ** b if s0 > 0 else 0.0
+                area, slope = area_of(f, s0)
                 pd = rf * area / 1000
                 seep = f.get("damSeepagePerDay") or 0.0
                 e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area
-                if b > 1:
-                    e_raw = min(e_raw, (1 - seep) * s0 / b)
+                if slope is None:
+                    b = f.get("damAreaExponent", 0.7)
+                    if b > 1:
+                        e_raw = min(e_raw, (1 - seep) * s0 / b)
+                elif slope > 0 and area > 0 and s0 * slope / area > 1:
+                    e_raw = min(e_raw, (1 - seep) * area / slope)
                 sp_raw = seep * s0
             else:
                 area = pd = e_raw = sp_raw = 0.0
             pre[f["id"]] = (area, pd, e_raw, sp_raw)
 
-        # Transfers (§2.6): by priority; each rule above its own reserve.
+        def draw_bound(fid):
+            """§2.6: the most the dam can be drawn for the demand today."""
+            dem = Dn[fid][i]
+            prim = 0.0
+            for k_, u_ in enumerate(units.get(fid, [])):
+                if u_["mode"] == "primary" and u_["target"] == "direct":
+                    prim += unit_room(u_, bh_used[fid][k_])
+            g = room.get((fid, "groundwater"))
+            if g is not None:
+                prim = min(prim, g[0])
+            v = max(0.0, dem - prim)
+            s_ = room.get((fid, "surface"))
+            if s_ is not None:
+                v = min(v, s_[0])
+            return v
+
+        # Dam transfers (§2.6): by priority; each rule above its own reserve.
         J = {f["id"]: 0.0 for f in farms}
         drawn = {f["id"]: 0.0 for f in farms}
         sched = {f["id"]: 0.0 for f in farms}
         active = []
         for t in rules:
-            rate = rule_rate(t, o, m)
-            if rate > 0:
-                lim = rate * 86400
-                if t.get("dailyCapM3") is not None:
-                    lim = min(lim, t["dailyCapM3"])
+            lim = rule_limit(t, o, m)
+            if lim > 0 or rule_rate(t, o, m) > 0:
                 active.append((t, lim))
         for prio in sorted({t["priority"] for t, _ in active}):
             group = [(t, lim) for t, lim in active if t["priority"] == prio]
@@ -897,24 +1185,28 @@ def run(doc: dict) -> dict:
                 reserve[t["id"]] = res
                 free = max(0.0, storage[src["id"]] - drawn[src["id"]] - res)
                 want[t["id"]] = min(lim, free)
-            # The receiver's room, shared pro rata to the rules' limits.
             for dst in sorted({t["toNodeId"] for t, _ in group}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
-                room = f["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw) + fd[dst]["D"][i] - sched[dst]
-                room = max(0.0, room)
+                after = storage[dst] + pd - e_raw - sp_raw
+                floor_rel = 0.0
+                if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                    outlet_c = f.get("damOutletCapacityM3Day")
+                    floor_rel = min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c,
+                                    after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0))
+                    floor_rel = max(0.0, floor_rel)
+                rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
+                rm = max(0.0, rm)
                 into = [t for t, _ in group if t["toNodeId"] == dst]
                 tot = sum(want[t["id"]] for t in into)
-                if tot > room and tot > 0:
+                if tot > rm and tot > 0:
                     diag["room_bound"] += 1
                     for t in into:
-                        want[t["id"]] = want[t["id"]] * room / tot
-            # The source's water in bands at its rules' reserves.
+                        want[t["id"]] = want[t["id"]] * rm / tot
             vol = {t["id"]: 0.0 for t, _ in group}
             for src in sorted({t["fromNodeId"] for t, _ in group}):
                 from_src = [t for t, _ in group if t["fromNodeId"] == src]
-                top = storage[src] - drawn[src]
-                cur = top
+                cur = storage[src] - drawn[src]
                 left = {t["id"]: want[t["id"]] for t in from_src}
                 levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
                 if len(levels) > 1 and any(want[t["id"]] > 0 for t in from_src):
@@ -940,10 +1232,29 @@ def run(doc: dict) -> dict:
                 drawn[t["fromNodeId"]] += v
                 sched[t["toNodeId"]] += v
 
-        # Nodes, upstream first (§2.7).
+        # River off-takes (§2.6a): each rule's share of its destination's
+        # need, fixed before the day runs.
+        ot_need: dict[str, float] = {}
+        for dst, lst in ot_into.items():
+            # Σ cap over the demand-sized rules into dst (a capacity-sized one takes no share of the need).
+            caps = [(t, rule_limit(t, o, m)) for t in lst if t.get("sizing", "demand") != "capacity"]
+            tot_cap = 0.0
+            for t, c in caps:
+                tot_cap += c
+            f = by_id[dst]
+            area, pd, e_raw, sp_raw = pre[dst]
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw))
+            for t, c in caps:
+                need = Dn[dst][i] + (rm_dst if t.get("topUpDam") else 0.0)
+                ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
+        arrived: dict[str, list[float]] = {}
+        back_to: dict[str, float] = {}
+
+        # Nodes in network order (§2.7, §2.7c, §2.6a).
         U: dict[str, float] = {}
         Z: dict[str, float] = {}
         AA: dict[str, float] = {}
+        ZS: dict[str, float] = {}
         for x in order:
             xid = x["id"]
             cc = col[xid]
@@ -956,26 +1267,150 @@ def run(doc: dict) -> dict:
             aau = 0.0
             for u in ups[xid]:
                 aau += AA[u]
+            zs_in = 0.0
+            for u in ups[xid]:
+                zs_in += ZS[u]
             cc["inflow_upstream"][i] = H
-            if x["kind"] != "farm":
+            if x["kind"] == "gauge":
                 U[xid] = H
                 Z[xid] = zu
+                ZS[xid] = zs_in
                 AA[xid] = noise_short(zu, H)
                 cc["outflow"][i] = H
                 cc["ewr_cumulative"][i] = zu
                 cc["ewr_shortfall"][i] = AA[xid]
+                cc["senior_requirement"][i] = zs_in
                 continue
+            dem = Dn[xid][i]
+            sroom = room.get((xid, "surface"))
+            groom = room.get((xid, "groundwater"))
+            s_left = sroom[0] if sroom else math.inf
+            g_left = groom[0] if groom else math.inf
+            ulist = units.get(xid, [])
+            used_u = bh_used[xid]
+            pumped = [0.0] * len(ulist)
+
+            def pump(k_, want_):
+                nonlocal g_left
+                v = max(0.0, min(unit_room(ulist[k_], used_u[k_] + pumped[k_]), want_, g_left))
+                if ulist[k_]["annual"] is not None and want_ > v and v < ulist[k_]["cap"] and v < g_left:
+                    diag["borehole_annual_cap_days"] += 1
+                pumped[k_] += v
+                g_left -= v
+                return v
+
+            if x["kind"] == "user":
+                z = zu
+                river = H if x.get("userPriority", "senior") != "junior" else max(0.0, H - zs_in)
+                GW = 0.0
+                for k_, u_ in enumerate(ulist):
+                    if u_["mode"] == "primary":
+                        GW += pump(k_, dem - GW)
+                take = max(0.0, min(dem - GW, river, s_left))
+                for k_, u_ in enumerate(ulist):
+                    if u_["mode"] == "supplemental":
+                        GW += pump(k_, dem - take - GW)
+                G = take + GW
+                diag["user_days"] += 1 if G > 0 else 0
+                diag["borehole_days"] += 1 if GW > 0 else 0
+                if x.get("userPriority", "senior") == "junior" and take < min(dem - GW, H) * (1 - 1e-9):
+                    diag["junior_short_days"] += 1
+                T = (x.get("userReturnPct") or 0.0) * G
+                flow = H - take + T
+                dep = deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i)
+                Uo = flow - dep
+                for k_ in range(len(ulist)):
+                    used_u[k_] += pumped[k_]
+                if sroom:
+                    spend(xid, "surface", take)
+                if groom:
+                    spend(xid, "groundwater", GW)
+                note_limit(lb_days, xid, wy, room, "surface", take, sroom, dem, dem - G, o, ald)
+                note_limit(lb_days, xid, wy, room, "groundwater", GW, groom, dem, dem - G, o, ald)
+                zs_out = max(0.0, zs_in - dem) if x.get("userPriority", "senior") != "junior" else zs_in
+                for key, val in (("supplied", G), ("return_flow", T), ("outflow", Uo), ("deficit", dem - G),
+                                 ("ewr_cumulative", z), ("groundwater_used", GW)):
+                    cc[key][i] = val
+                AA[xid] = noise_short(z, Uo)
+                cc["ewr_shortfall"][i] = AA[xid]
+                cc["senior_requirement"][i] = zs_out
+                U[xid] = Uo
+                Z[xid] = z
+                ZS[xid] = zs_out
+                for s_, r_ in (("surface", sroom), ("groundwater", groom)):
+                    if r_:
+                        cc[f"allocation_room_{s_}"][i] = r_[0]
+                        cc[f"allocation_left_{s_}"][i] = r_[1]
+                continue
+
+            # A farm (§2.7).
             d = fd[xid]
             cap = x["damCapacityM3"]
             s_prev = storage[xid]
             area, pd, e_raw, sp_raw = pre[xid]
             j = J[xid]
+            rule_ = supply_rule(x)
             I = natural[i] * shares.get(xid, 0.0)
-            K = H * x["pctUpstreamToDam"]
+            y_ewr = ewr[i] * ewr_share[xid]
+            z = y_ewr + zu
+            zs = sen_y[xid][i] + zs_in
+            if rule_ == "runOfRiver":
+                K = M = 0.0
+            else:
+                K = H * x["pctUpstreamToDam"]
+                M = I * x["pctRunoffToDam"]
             L = H - K
-            M = I * x["pctRunoffToDam"]
             N = I - M
-            O = min(x.get("divertCapacityM3Day") or 0.0, L + N)
+            dm = x.get("divertMonthlyM3Day")
+            dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)
+            O = 0.0 if rule_ == "runOfRiver" else min(dcap, L + N)
+            # The senior users' pass (§2.7c): O first, then K and M pro rata.
+            passed = 0.0
+            need = min(zs, H + I)
+            if L + N - O < need:
+                cut = min(O, need - (L + N - O))
+                O -= cut
+                passed += cut
+                rest = need - (L + N - O)
+                if need >= H + I and K + M > 0:
+                    # Everything passes: K and M exactly 0.
+                    passed += K + M
+                    K = M = 0.0
+                    L, N = H, I
+                elif rest > 0 and K + M > 0:
+                    kc = rest * K / (K + M)
+                    mc = rest - kc
+                    K -= kc
+                    M -= mc
+                    L = H - K
+                    N = I - M
+                    passed += rest
+            # The hands-off flow (§2.7h).
+            ho = x.get("handsOffM3Day")
+            keep_h = max(float(ho[m]) if ho else 0.0, z if x.get("handsOffEwr") else 0.0)
+            if keep_h > 0:
+                o_before = O
+                if cap > 0:
+                    O = min(O, max(0.0, L + N - keep_h))
+                else:
+                    need = min(H + I, keep_h)
+                    if L + N - O < need:
+                        cut = min(O, need - (L + N - O))
+                        O -= cut
+                        rest = need - (L + N - O)
+                        if need >= H + I and K + M > 0:
+                            K = M = 0.0
+                            L, N = H, I
+                        elif rest > 0 and K + M > 0:
+                            kc = rest * K / (K + M)
+                            mc = rest - kc
+                            K -= kc
+                            M -= mc
+                            L = H - K
+                            N = I - M
+            if keep_h > 0 and O < o_before:
+                diag["hands_off_days"] += 1
+            S = L + N - O
             if cap > 0:
                 E = min(e_raw, s_prev + pd + j)
                 Sp = min(sp_raw, s_prev + pd + j - E)
@@ -984,22 +1419,182 @@ def run(doc: dict) -> dict:
             startd = s_prev + pd - E - Sp
             avail = startd + M + O + K + j
             dead = cap * (x.get("damMinPct") or 0.0)
-            D = d["D"][i]
-            G = min(max(avail - dead, 0.0), D)
-            P = avail - G
+            # Off-take water arriving (§2.6a): used first for the demand.
+            arr_up = arr_other = 0.0
+            for t, v in arrived.get(xid, []):
+                if t.get("topUpDam"):
+                    arr_up += v
+                else:
+                    arr_other += v
+            arrives = arr_up + arr_other
+            used_off = max(0.0, min(arrives, dem, s_left))
+            s_left -= used_off
+            rem = dem - used_off
+            # What is left of it tops up the dam from top-up rules (before the
+            # release, which draws on it), else flows on below the unit.
+            left_off = arrives - used_off
+            to_dam = left_off * arr_up / arrives if arrives > 0 else 0.0
+            passed_on = left_off - to_dam
+            avail += to_dam
+            # A release from the dam before irrigation (§2.7a).
+            X = 0.0
+            rel = x.get("damReleaseRule") or "none"
+            outlet_c = x.get("damOutletCapacityM3Day")
+            outlet_c = math.inf if outlet_c is None else outlet_c
+            amts = x.get("damReleaseM3Day")
+            pass_target = None
+            if cap > 0 and rel == "passInflow":
+                pass_target = float(amts[m]) if amts else z
+                X = max(0.0, min(K + M + O, pass_target - S, outlet_c, avail))
+            elif cap > 0 and rel == "fixed" and amts:
+                X = max(0.0, min(float(amts[m]), outlet_c, avail - dead))
+            avail -= X
+            # The river pump's room (§2.7e).
+            if rule_ in ("riverFirst", "runOfRiver"):
+                on = True
+            elif rule_ == "trigger":
+                trig = x.get("supplyTriggerPct", 0.4)
+                stop = max(trig, x.get("supplyStopPct", 0.6))
+                on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap
+                hold = on and not s_prev < trig * cap
+            else:
+                on = False
+            on_river[xid] = on
+            pc = x.get("pumpCapacityM3Day")
+            pc = math.inf if pc is None else pc
+            keep = max(zs, pass_target if pass_target is not None else 0.0, keep_h)
+            proom = max(0.0, min(pc, S - keep)) if on else 0.0
+            # Supply order (§2.7d): primary direct, river first, dam targets, the dam, supplemental.
+            GW = 0.0
+            for k_, u_ in enumerate(ulist):
+                if u_["mode"] == "primary" and u_["target"] == "direct":
+                    GW += pump(k_, rem - GW)
+            gwp = GW
+            Gr = 0.0
+            if rule_ in ("riverFirst", "trigger") and on:
+                Gr = max(0.0, min(proom, rem - gwp, s_left))
+                if rule_ == "trigger" and hold and Gr > 0:
+                    diag["trigger_hold_days"] += 1
+            dr = min(rem - gwp - Gr, s_left - Gr)
+            GWd = 0.0
+            took_dr = False
+            for k_, u_ in enumerate(ulist):
+                if u_["target"] != "dam":
+                    continue
+                hroom = cap - avail - GWd
+                if u_["mode"] == "primary":
+                    want_ = hroom if dr > 1e-12 * rem else 0.0
+                elif u_["mode"] == "supplemental":
+                    asked = dr - (avail + GWd - dead)
+                    want_ = min(hroom, asked)
+                else:
+                    want_ = hroom if (dr > 1e-12 * rem and s_prev < u_["level"] * cap) else 0.0
+                v = pump(k_, want_)
+                GWd += v
+                if u_["mode"] == "supplemental" and v > 0:
+                    took_dr = v >= asked
+            if rule_ == "runOfRiver":
+                Gs = max(0.0, min(max(j, 0.0), rem - gwp, s_left))
+                Gr = max(0.0, min(proom, rem - gwp - Gs, s_left - Gs))
+            else:
+                Gs = min(max(avail + GWd - dead, 0.0), rem - gwp - Gr, s_left - Gr)
+                if took_dr:
+                    Gs = dr
+                Gs = max(0.0, Gs)
+            for k_, u_ in enumerate(ulist):
+                if u_["target"] == "direct" and u_["mode"] == "supplemental":
+                    GW += pump(k_, rem - Gs - Gr - GW)
+            for k_, u_ in enumerate(ulist):
+                if u_["target"] == "direct" and u_["mode"] == "emergency" and s_prev < u_["level"] * cap:
+                    GW += pump(k_, rem - Gs - Gr - GW)
+            G = min(used_off + Gs + Gr + GW, dem)
+            # The demand objects' split of G (§2.7f).
+            T = 0.0
+            beta = x["lossReturnFraction"]
+            if objs[xid]:
+                left_g = G
+                g_crop = 0.0
+                classes = [
+                    [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "first"],
+                    [("c", None)] + [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "shared"],
+                    [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "last"],
+                ]
+                for cls in classes:
+                    want_c = [(kind, ob, d["Dc"][i] if kind == "c" else obj_dem[ob["id"]][i]) for kind, ob in cls]
+                    tot = 0.0
+                    for _, _, w_ in want_c:
+                        tot += w_
+                    for kind, ob, w_ in want_c:
+                        g_ = w_ if left_g >= tot else (left_g * w_ / tot if tot > 0 else 0.0)
+                        if kind == "c":
+                            g_crop = g_
+                        else:
+                            obj_sup[ob["id"]][i] = g_
+                    left_g = max(0.0, left_g - min(tot, left_g))
+                T = beta * (1 - d["e"]) * g_crop
+                for ob in objs[xid]:
+                    r_ = 0.0 if ob.get("destination") == "external" else (ob.get("returnPct") or 0.0)
+                    T += r_ * obj_sup[ob["id"]][i]
+                # basic_needs: Σ MIN(B_k, o_k) on the day's final demand (after a full allocation's factor).
+                bn = 0.0
+                for ob in objs[xid]:
+                    if ob["id"] in obj_B:
+                        bn += min(obj_B[ob["id"]], obj_dem[ob["id"]][i])
+                cc["basic_needs"][i] = bn
+            else:
+                T = beta * (1 - d["e"]) * G
+            P = avail + GWd - Gs
             Q = min(P, cap)
             R = max(P - cap, 0.0)
-            S = L + N - O
-            beta = x["lossReturnFraction"]
-            T = beta * (1 - d["e"]) * G
             ret = x.get("damSeepageReturnPct", 1)
             if ret is None:
                 ret = 1
-            Uo = R + S + T + Sp * ret
+            flow = R + S - Gr + T + Sp * ret + X + passed_on
+            dep = deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i)
+            U0 = flow - dep
             lost = Sp * (1 - ret)
-            V = (H + I + j + pd) - (G - T) - E - (Q - s_prev) - Uo - lost
-            Y = ewr[i] * shares.get(xid, 0.0)
-            z = Y + zu
+            for k_ in range(len(ulist)):
+                used_u[k_] += pumped[k_]
+            if sroom:
+                spend(xid, "surface", G - GW)
+            if groom:
+                spend(xid, "groundwater", GW + GWd)
+            note_limit(lb_days, xid, wy, room, "surface", G - GW, sroom, dem, dem - G, o, ald)
+            note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem, dem - G, o, ald)
+            # Off-takes from this unit (§2.6a), by priority.
+            taken = 0.0
+            ots = [t for t in ot_from.get(xid, []) if rule_limit(t, o, m) > 0]
+            for prio in sorted({t["priority"] for t in ots}):
+                grp = [t for t in ots if t["priority"] == prio]
+                vs = {}
+                frees = {}
+                for t in grp:
+                    hk = t.get("handsOffM3Day")
+                    keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
+                    frees[t["id"]] = max(0.0, U0 - taken - keep_k)
+                    lim = rule_limit(t, o, m)
+                    v = min(frees[t["id"]], lim)
+                    if t.get("sizing", "demand") != "capacity":
+                        v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
+                    vs[t["id"]] = max(0.0, v)
+                tot = sum(vs.values())
+                mx = max(frees.values())
+                if tot > mx and tot > 0:
+                    for t in grp:
+                        vs[t["id"]] = vs[t["id"]] * mx / tot
+                for t in grp:
+                    v = vs[t["id"]]
+                    rule_vol[t["id"]][i] = v
+                    taken += v
+                    lp = t.get("lossPct") or 0.0
+                    arrived.setdefault(t["toNodeId"], []).append((t, v * (1 - lp)))
+                    rp = t.get("lossReturnPct") or 0.0
+                    if rp > 0:
+                        rn = t.get("lossReturnNodeId") or xid
+                        back_to[rn] = back_to.get(rn, 0.0) + v * lp * rp
+            back = back_to.get(xid, 0.0)
+            Uo = U0 - taken + back
+            V = (H + I + j + pd + GW + GWd + arrives + back) - (G - T) - E - (Q - s_prev) - Uo - dep - lost - taken
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
@@ -1007,48 +1602,79 @@ def run(doc: dict) -> dict:
                 ("runoff_to_dam", M), ("runoff_below_dam", N), ("diverted_to_dam", O), ("dam_area", area),
                 ("rain_on_dam", pd), ("dam_evaporation", E), ("dam_seepage", Sp), ("supplied", G),
                 ("interim_storage", P), ("dam_storage", Q), ("spill", R), ("below_dam_not_diverted", S),
-                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", D - G), ("ewr", Y),
+                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", dem - G), ("ewr", y_ewr),
                 ("ewr_cumulative", z), ("ewr_shortfall", aa), ("ewr_shortfall_incremental", ab),
-                ("dam_seepage_lost", lost),
+                ("dam_seepage_lost", lost), ("dam_release", X), ("river_abstraction", Gr), ("groundwater_used", GW),
+                ("groundwater_to_dam", GWd), ("senior_requirement", zs), ("passed_for_senior", passed),
+                ("offtake_out", taken), ("offtake_in", arrives), ("offtake_used", used_off), ("offtake_to_dam", to_dam),
+                ("offtake_loss_return", back),
             ):
                 cc[key][i] = val
-            if cap > 0 and G < D and avail > 0 and avail <= dead + 1e-9 * cap:
+            for s_, r_ in (("surface", sroom), ("groundwater", groom)):
+                if r_:
+                    cc[f"allocation_room_{s_}"][i] = r_[0]
+                    cc[f"allocation_left_{s_}"][i] = r_[1]
+            if cap > 0 and G < dem and avail > 0 and avail <= dead + 1e-9 * cap:
                 diag["dead_storage_days"] += 1
             if R > 0 and cap > 0:
                 diag["spill_days"] += 1
+            diag["borehole_days"] += 1 if GW + GWd > 0 else 0
+            diag["borehole_to_dam_days"] += 1 if GWd > 0 else 0
+            diag["offtake_days"] += 1 if taken > 0 else 0
+            diag["offtake_return_days"] += 1 if back > 0 else 0
+            diag["senior_pass_days"] += 1 if passed > 0 else 0
+            diag["river_pump_days"] += 1 if Gr > 0 else 0
+            diag["release_days"] += 1 if X > 0 else 0
+            diag["curve_days"] += 1 if cap > 0 and area > 0 and usable_curve(x.get("damCurve")) else 0
+            diag["divert_by_month_days"] += 1 if x.get("divertMonthlyM3Day") and O > 0 else 0
+            if objs[xid] and any(obj_sup[ob["id"]][i] < obj_dem[ob["id"]][i] * (1 - 1e-9) for ob in objs[xid]):
+                diag["object_shortage_days"] += 1
             storage[xid] = Q
             U[xid] = Uo
             Z[xid] = z
             AA[xid] = aa
+            ZS[xid] = zs
         sim_out[i] = U[outlet["id"]]
         cat_short[i] = noise_short(ewr[i], sim_out[i])
 
     put(None, "simulated_outflow", sim_out)
+    diag["depletion_owed_days"] = sum(1 for x in nodes for v in col[x["id"]]["depletion_deficit"] if v > 0)
+    diag["cap_bound_days"] = sum(r["days"] for r in lb_days.values())
     put(None, "ewr", ewr)
     put(None, "ewr_shortfall", cat_short)
 
-    # ---- EWR attribution (§2.7b) ----------------------------------------
+    # ---- EWR attribution (§2.7b, §2.7c, §2.6a) ----------------------------
     sites = [(None, outlet["id"])] + [
         (x["id"], x["id"])
         for x in sorted(nodes, key=lambda x: x["id"])
         if x["kind"] == "gauge" and x.get("ewrSite", True) is not False and x["id"] != outlet["id"]
     ]
-    farm_ids = sorted(f["id"] for f in farms)
+    contrib = sorted(x["id"] for x in nodes if x["kind"] in ("farm", "user"))
     depth = {}
-    for x in reversed(order):
+    for x in reversed(topo_order(nodes)):
         dn = x.get("downstreamNodeId")
         depth[x["id"]] = 0 if dn is None else depth[dn] + 1
-    charge = {f: [0.0] * n for f in farm_ids}
+    charge = {f: [0.0] * n for f in contrib}
     site_index = {site_node: k for k, (_, site_node) in enumerate(sites)}
-    n_sites_above = {f: sum(1 for _, sn in sites if f in upstream_set[sn]) for f in farm_ids}
-    binding = {f: [NAN] * n for f in farm_ids if n_sites_above[f] >= 2}
-    charge_irr = {f: [0.0] * n for f in farm_ids}
+    n_sites_above = {f: sum(1 for _, sn in sites if f in upstream_set[sn]) for f in contrib}
+    binding = {f: [NAN] * n for f in contrib if n_sites_above[f] >= 2 and by_id[f]["kind"] == "farm"}
+    charge_irr = {f: [0.0] * n for f in contrib}
     site_series = {}
     for site_key, site_node in sites:
-        members = [f for f in farm_ids if f in upstream_set[site_node]]
+        members = [f for f in contrib if f in upstream_set[site_node]]
         site_series[site_key] = (members, [0.0] * n, [0.0] * n)
+    legs = []  # (from, to, volume series): the internal legs a site may count
+    for t in rules:
+        legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
+    for t in offtakes:
+        legs.append((t["fromNodeId"], t["toNodeId"], rule_vol[t["id"]], None))
+        lp = t.get("lossPct") or 0.0
+        rp = t.get("lossReturnPct") or 0.0
+        if lp > 0 and rp > 0:
+            rn = t.get("lossReturnNodeId") or t["fromNodeId"]
+            legs.append((t["fromNodeId"], rn, [v * lp * rp for v in rule_vol[t["id"]]], t["toNodeId"]))
     for i in range(n):
-        best: dict[str, tuple[float, int, float]] = {}
+        best: dict[str, tuple] = {}
         for site_key, site_node in sites:
             members, charged_s, natural_s = site_series[site_key]
             if site_key is None:
@@ -1056,19 +1682,28 @@ def run(doc: dict) -> dict:
             else:
                 short = -col[site_node]["ewr_shortfall"][i]
             mset = set(members)
+            jint = {f: 0.0 for f in members}
+            for a, b, vol, dst in legs:
+                v = vol[i]
+                if dst is not None:
+                    # A canal seepage leg (§2.6a): into its return unit, from
+                    # the destination when that is upstream of the site too.
+                    if b not in mset:
+                        continue
+                    a = dst if dst in mset else a
+                    if a not in mset:
+                        continue
+                    jint[a] -= v
+                    jint[b] += v
+                    continue
+                if a in mset and b in mset:
+                    jint[a] -= v
+                    jint[b] += v
             imp = {}
             for f in members:
-                jint = 0.0
-                for t in rules:
-                    v = rule_vol[t["id"]][i]
-                    if t["fromNodeId"] in mset and t["toNodeId"] in mset:
-                        if t["fromNodeId"] == f:
-                            jint -= v
-                        if t["toNodeId"] == f:
-                            jint += v
                 cc = col[f]
-                e_f = cc["inflow_upstream"][i] + cc["runoff"][i] + jint - cc["outflow"][i]
-                scale = max(abs(cc["inflow_upstream"][i]), abs(cc["runoff"][i]), abs(cc["outflow"][i]), abs(jint))
+                e_f = cc["inflow_upstream"][i] + cc["runoff"][i] + jint[f] - cc["outflow"][i]
+                scale = max(abs(cc["inflow_upstream"][i]), abs(cc["runoff"][i]), abs(cc["outflow"][i]), abs(jint[f]))
                 imp[f] = e_f if e_f > 1e-12 * scale else 0.0
             members_sorted = sorted(members, key=lambda f: (-depth[f], f))
             E_s = 0.0
@@ -1101,31 +1736,320 @@ def run(doc: dict) -> dict:
             charge_irr[f][i] = -a_irr
 
     # ---- write the node series ------------------------------------------
+    dam_keys = {"dam_release"}
     for x in nodes:
         xid = x["id"]
         cc = col[xid]
+        extra = []
+        if xid in has_bh:
+            extra += ["groundwater_used", "baseflow_depletion", "depletion_deficit", "depletion_store"]
+            if any(u_["target"] == "dam" for u_ in units.get(xid, [])):
+                extra.append("groundwater_to_dam")
+        for s_ in ("surface", "groundwater"):
+            if capped and (xid, s_) in al_used:
+                extra.append(f"allocation_room_{s_}")
+                if any(a["months"] or a["rate"] is not None for a in ald[xid][s_]):
+                    extra.append(f"allocation_left_{s_}")
+        if xid in kf:
+            put(xid, "allocation_demand_factor", kf[xid])
+        if any_senior:
+            extra.append("senior_requirement")
         if x["kind"] == "farm":
             d = fd[xid]
             put(xid, "gross_demand", d["gross"])
             put(xid, "effective_rain", d["eff"])
             put(xid, "soil_water", d["soil"])
             put(xid, "crop_requirement", d["F"])
-            put(xid, "demand", d["D"])
-            for k in names:
+            put(xid, "demand", Dn[xid])
+            base = names[: names.index("dam_seepage_lost") + 1]
+            for k in base:
+                put(xid, k, cc[k])
+            if x["damCapacityM3"] > 0 and (x.get("damReleaseRule") or "none") != "none":
+                put(xid, "dam_release", cc["dam_release"])
+            if supply_rule(x) != "damFirst" or (x.get("supplyRule") or "damFirst") != "damFirst":
+                put(xid, "river_abstraction", cc["river_abstraction"])
+            if any_senior:
+                extra.append("passed_for_senior")
+            if xid in ot_from:
+                extra += ["offtake_out"]
+            if xid in ot_into:
+                extra += ["offtake_in", "offtake_used", "offtake_to_dam"]
+            if any((t.get("lossReturnNodeId") or t["fromNodeId"]) == xid and (t.get("lossReturnPct") or 0) > 0 for t in offtakes):
+                extra.append("offtake_loss_return")
+            if any(ob["id"] in obj_B for ob in objs[xid]):
+                extra.append("basic_needs")
+            for ob in objs[xid]:
+                put(xid, f"object_demand@{ob['id']}", obj_dem[ob["id"]])
+                put(xid, f"object_supplied@{ob['id']}", obj_sup[ob["id"]])
+            for k in extra:
                 put(xid, k, cc[k])
             put(xid, "ewr_charge", charge[xid])
             put(xid, "ewr_charge_irrigation", charge_irr[xid])
             if xid in binding:
                 put(xid, "ewr_binding_site", binding[xid])
+        elif x["kind"] == "user":
+            put(xid, "demand", Dn[xid])
+            for k in ("inflow_upstream", "supplied", "deficit", "outflow", "return_flow", "ewr_cumulative", "ewr_shortfall"):
+                put(xid, k, cc[k])
+            for k in extra:
+                put(xid, k, cc[k])
+            put(xid, "ewr_charge", charge[xid])
+            if xid in binding:
+                put(xid, "ewr_binding_site", binding[xid])
         else:
             for k in ("inflow_upstream", "outflow", "ewr_cumulative", "ewr_shortfall"):
                 put(xid, k, cc[k])
+            if any_senior:
+                put(xid, "senior_requirement", cc["senior_requirement"])
     for site_key, _ in sites:
         _, charged_s, natural_s = site_series[site_key]
         put(site_key, "ewr_charged", charged_s)
         put(site_key, "ewr_natural", natural_s)
-    for t in rules:
+    for t in rules + offtakes:
         if can_move(t):
             put(t["fromNodeId"], f"transfer_rule@{t['id']}", rule_vol[t["id"]])
 
-    return {"startDate": ord_to_iso(start), "endDate": ord_to_iso(end), "days": n, "series": out, "diag": diag}
+    # RunSummary.allocations' run-dependent parts (§2.12a): per capped unit and
+    # source the years the cap bound (capReached) and the days the limit held
+    # use back (limitBound); per scaled unit the demand and volume per year.
+    summary: dict = {}
+    if capped:
+        for (nid, s_, wy), budget in sorted(al_budget.items()):
+            ent = summary.setdefault((nid, s_), {"capReached": [], "limitBound": []})
+            used_ = use_y.get((nid, s_, wy), 0.0)
+            if used_ >= budget - 1e-9 * budget:
+                ent["capReached"].append({"waterYear": wy, "budgetM3": budget, "usedM3": used_})
+            row = lb_days.get((nid, s_, wy))
+            if row:
+                ent["limitBound"].append({"waterYear": wy, **row})
+    elif fa_scaled:
+        for nid, rows_ in fa_scaled.items():
+            summary[(nid, "scaled")] = sorted(rows_, key=lambda r: r["waterYear"])
+    return {"startDate": ord_to_iso(start), "endDate": ord_to_iso(end), "days": n, "series": out, "diag": diag,
+            "summary": summary}
+
+
+# --------------------------------------------------------------------------
+# Helpers for the network (§2.7a curves, §2.7d boreholes, §2.7f schedules,
+# §2.12a allocations, §2.6a off-take order)
+# --------------------------------------------------------------------------
+
+BASIC_LITRES = 25
+
+
+def _is_iso(s: str) -> bool:
+    try:
+        _dt.date.fromisoformat(s)
+        return len(s) == 10
+    except ValueError:
+        return False
+
+
+def wy_length(y: int) -> int:
+    return (_dt.date(y + 1, 10, 1) - _dt.date(y, 10, 1)).days
+
+
+def overlap_days(y: int, a: int, b: int) -> int:
+    lo = max(a, _dt.date(y, 10, 1).toordinal())
+    hi = min(b, _dt.date(y + 1, 9, 30).toordinal())
+    return max(0, hi - lo + 1)
+
+
+def easter(y: int) -> int:
+    """Western (Gregorian) Easter Sunday, the anonymous Gregorian algorithm."""
+    a = y % 19
+    b, c = divmod(y, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l_ = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l_) // 451
+    month = (h + l_ - 7 * m + 114) // 31
+    day = (h + l_ - 7 * m + 114) % 31 + 1
+    return _dt.date(y, month, day).toordinal()
+
+
+def window_covers(w: dict, o: int) -> bool:
+    d = _dt.date.fromordinal(o)
+    wd = w.get("weekdays")
+    if wd and d.isoweekday() not in wd:
+        return False
+    span = w.get("span")
+    if span == "always":
+        return True
+    if span == "range":
+        return iso_to_ord(w["from"]) <= o <= iso_to_ord(w["to"])
+    if span == "yearly":
+        fm, fdy = (int(v) for v in w["from"].split("-"))
+        tm, tdy = (int(v) for v in w["to"].split("-"))
+        md = (d.month, d.day)
+        if (fm, fdy) <= (tm, tdy):
+            return (fm, fdy) <= md <= (tm, tdy)
+        return md >= (fm, fdy) or md <= (tm, tdy)
+    if span == "easter":
+        e = easter(d.year)
+        return e + w["easterFrom"] <= o <= e + w["easterTo"]
+    return False
+
+
+def schedule_factor(sched: list, o: int) -> float:
+    f = 1.0
+    for w in sched:
+        if window_covers(w, o):
+            f = float(w["factor"])
+    return f
+
+
+def usable_curve(rows):
+    if not rows or len(rows) < 2 or len(rows) > 200:
+        return None
+    pts = sorted(rows, key=lambda r: r["volumeM3"])
+    for r in pts:
+        for k in ("levelM", "areaM2", "volumeM3"):
+            if not isinstance(r.get(k), (int, float)) or not math.isfinite(r[k]):
+                return None
+        if r["areaM2"] < 0 or r["volumeM3"] < 0:
+            return None
+    for a, b in zip(pts, pts[1:]):
+        if not b["volumeM3"] > a["volumeM3"] or b["levelM"] < a["levelM"] or b["areaM2"] < a["areaM2"]:
+            return None
+    if not any(r["areaM2"] > 0 for r in pts):
+        return None
+    return pts
+
+
+def curve_area(pts, s0):
+    """Area (m²) at storage s0 and the segment's slope dA/dV (None above the top)."""
+    if s0 <= 0:
+        return 0.0, None
+    prev_v, prev_a = 0.0, 0.0
+    if s0 < pts[0]["volumeM3"]:
+        v1, a1 = pts[0]["volumeM3"], pts[0]["areaM2"]
+        slope = (a1 - prev_a) / (v1 - prev_v)
+        return prev_a + slope * (s0 - prev_v), slope
+    for a, b in zip(pts, pts[1:]):
+        if s0 <= b["volumeM3"]:
+            slope = (b["areaM2"] - a["areaM2"]) / (b["volumeM3"] - a["volumeM3"])
+            return a["areaM2"] + slope * (s0 - a["volumeM3"]), slope
+    return pts[-1]["areaM2"], 0.0
+
+
+def unit_room(u: dict, used: float) -> float:
+    room = u["cap"]
+    if u["annual"] is not None:
+        room = min(room, u["annual"] - used)
+    return max(0.0, room)
+
+
+def deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i):
+    """§2.7d: the lagged stream depletion taken from the flow leaving the node."""
+    if not ulist and not sd_store[xid] and not dd_owed[xid]:
+        return 0.0
+    add = 0.0
+    for u_, p in zip(ulist, pumped):
+        add += u_["d"] * p
+    sd = sd_store[xid] + add
+    k = x.get("streamDepletionLagDays") or 0
+    alpha = 1.0 if k == 0 else 1 - math.exp(-1 / k)
+    due = alpha * sd
+    sd -= due
+    dep = min(dd_owed[xid] + due, max(0.0, flow))
+    dd_owed[xid] = dd_owed[xid] + due - dep
+    sd_store[xid] = sd
+    cc["baseflow_depletion"][i] = dep
+    cc["depletion_deficit"][i] = dd_owed[xid]
+    cc["depletion_store"][i] = sd
+    return dep
+
+
+def read_allocations(model: dict, by_id: dict) -> list[dict]:
+    out = []
+    for a in sorted(model.get("allocations") or [], key=lambda a: a["id"]):
+        x = by_id.get(a.get("nodeId"))
+        if x is None or x["kind"] not in ("farm", "user"):
+            continue
+        v = a.get("volumeM3PerYear")
+        if not isinstance(v, (int, float)) or not v >= 0 or a.get("waterSource") not in ("surface", "groundwater"):
+            continue
+        lo = iso_to_ord(a["validFrom"]) if a.get("validFrom") else -(10**9)
+        hi = iso_to_ord(a["validTo"]) if a.get("validTo") else 10**9
+        if lo > hi:
+            continue
+        rate = a.get("maxRateM3s")
+        out.append({"id": a["id"], "nodeId": a["nodeId"], "waterSource": a["waterSource"], "volume": float(v),
+                    "from": lo, "to": hi, "months": list(a.get("months") or []), "rate": rate})
+    return out
+
+
+def licence_limit(lst: list[dict], o: int) -> float:
+    """§2.12a: Σ rate × 86 400 over the source's allocations in force on the
+    day whose months include it; none in force = no limit."""
+    inforce = [a for a in lst if a["from"] <= o <= a["to"]]
+    if not inforce:
+        return math.inf
+    m = cal_month(o)
+    lim = 0.0
+    for a in inforce:
+        if a["months"] and m not in a["months"]:
+            continue
+        if a["rate"] is None:
+            return math.inf
+        lim += a["rate"] * 86400
+    return lim
+
+
+def note_limit(lb, nid, wy, room, src, use, r_, dem, short, o, ald):
+    """§2.12a Which limit bound: the day's kind, when it counts."""
+    if not r_:
+        return
+    rm, left, limit, budget = r_
+    if not (use >= rm - 1e-9 * rm and short > 1e-9 * dem):
+        return
+    if left <= limit + 1e-9 * budget:
+        kind = "volumeDays"
+    else:
+        lst = ald[nid][src]
+        inforce = [a for a in lst if a["from"] <= o <= a["to"]]
+        outside = bool(inforce) and all(a["months"] and cal_month(o) not in a["months"] for a in inforce)
+        kind = "monthsDays" if outside else "rateDays"
+    row = lb.setdefault((nid, src, wy), {"days": 0, "volumeDays": 0, "rateDays": 0, "monthsDays": 0, "_noise": {}})
+    row["days"] += 1
+    row[kind] += 1
+    # A day whose demand is float noise (≤ 1e-9 m³): the documented test
+    # counts it, the engine doesn't (diff.py KNOWN_CASES, noise-demand).
+    if dem <= 1e-9:
+        nz = row["_noise"]
+        nz["days"] = nz.get("days", 0) + 1
+        nz[kind] = nz.get(kind, 0) + 1
+
+
+def network_order(nodes: list[dict], transfers: list[dict]) -> list[dict]:
+    """Upstream first, and a river off-take's destination after its source
+    (§2.6a): a topological order of the river and the off-takes, ties by id."""
+    by_id = {x["id"]: x for x in nodes}
+    succ: dict[str, set[str]] = {x["id"]: set() for x in nodes}
+    for x in nodes:
+        if x.get("downstreamNodeId") is not None:
+            succ[x["id"]].add(x["downstreamNodeId"])
+    for t in transfers:
+        if t.get("source") == "river" and t.get("enabled", True) and t["fromNodeId"] in by_id and t["toNodeId"] in by_id:
+            succ[t["fromNodeId"]].add(t["toNodeId"])
+    indeg = {k: 0 for k in succ}
+    for k, vs in succ.items():
+        for v in vs:
+            indeg[v] += 1
+    ready = sorted(k for k, d in indeg.items() if d == 0)
+    order = []
+    while ready:
+        k = ready.pop(0)
+        order.append(by_id[k])
+        for v in sorted(succ[k]):
+            indeg[v] -= 1
+            if indeg[v] == 0:
+                ready.append(v)
+                ready.sort()
+    if len(order) != len(nodes):
+        raise Refused("an off-take loop (the generator never makes one)")
+    return order

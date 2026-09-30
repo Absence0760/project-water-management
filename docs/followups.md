@@ -1319,22 +1319,78 @@ the suggested order (the IDs carry the detail):
       test's window; §2.6 the order of the room and band sharing, and the
       room from yesterday's storage; §2.10a the median of an even count). The
       workbook formula dumper moved to `scripts/wbt-import/dumpwb.py`.
-- [ ] **`verify/` phase 2: the rest of the model.** Phase 1 covers the core
-      daily chain only; `verify/model.py`'s `unsupported()` names what it
-      leaves out and the harness refuses an input that uses it. To add, each
-      from its model.md section, with random-generator coverage, a probe for
-      anything the docs leave open and a mutant per rule
-      ([verify/README.md § Phase 2](../verify/README.md#phase-2-not-covered-yet)):
-      boreholes (§2.7d), allocations and the licence cap (§2.12a), demand
-      objects and the basic-needs floor (§2.7f), river off-takes and canal
-      seepage (§2.6a), Reserve rule tables A1–A7 (§2.9c–d), forecast mode
-      (§2.4f), calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
-      development (§2.7g); then other water users, supply rules, dam curves
-      and releases, hands-off flows, rain-source periods, the areal
-      correction, the daily A-pan, CHIRPS fit ranges, keep-dry and the
-      non-default data-quality limits. **Trigger:** the next engine change to
-      any of these features (its PR adds that feature to `verify/` first, so
-      the change lands against an independent reading), or before the first
+- [x] **`verify/` phase 2a** (tracking issue #259; engine 1.53.0, no engine
+      change): boreholes and stream depletion (§2.7d), allocations, the
+      licence cap and full-allocation runs with the summary's `capReached`,
+      `limitBound` and `scaled` rows (§2.12a), demand factors (§2.3 item 4a),
+      demand objects and the basic-needs floor (§2.7f), river off-takes and
+      canal seepage (§2.6a), other water users (§2.7c), supply rules and the
+      river pump (§2.7e), dam survey curves and releases (§2.7a), hands-off
+      flows and River to dam by month (§2.7h), each written from its model.md
+      section, in about a third of the random networks and most of a new set
+      of dense ones, with 35 more mutants (59 in all) and three coverage
+      probes. The examples, the probes and 1 600 random and dense networks
+      agree apart from the float-noise item below; two points §2.12a left
+      open were settled from `runModel` (a later water year a forecast tail
+      runs into is its own part year; a no-demand year's `scaled` row) and
+      written into model.md. CI's `verify` job runs 200 random and 200 dense
+      networks.
+- [ ] **A float-noise demand switches on a dam-target borehole** (found by
+      `verify/` phase 2a, 2026-09-30; engine 1.53.0). A primary or emergency
+      dam-target borehole pumps "only while Dr > 0 (to within 10⁻¹² × D)"
+      (model.md §2.7d), but the engine tests the rest against its own size,
+      so a rounding residual switches it on and it fills the dam by a day's
+      room. Two ways in: the soil-water store leaves a crop requirement of
+      1.4 × 10⁻¹⁴ m³ on a day the effective rain covers it (e = 0.01, so D =
+      1.4 × 10⁻¹² m³), and the emergency borehole pumps 495 m³ into a
+      495 m³ dam (verify random seed 1343, farm day 930); and off-take water
+      that arrives one ulp short of the demand (980.5862268744551 vs
+      980.5862268744552 m³, the loss gross-up and loss not cancelling
+      exactly) leaves a rest of 1.1 × 10⁻¹³ m³, and the emergency borehole
+      pumps 1 590 m³ (dense seed 86, day 46; storage 1 599 vs 3 189 m³ after).
+      The same noise demand (1.4 × 10⁻¹² m³) makes `limitBound` drop a day
+      its documented test counts (deficit > 10⁻⁹ × demand): 198 days against
+      199 in water year 2010 (random and dense seed 145). `verify/diff.py`
+      reports these cases as `KNOWN_CASES` "noise-demand". **Durable fix:**
+      snap noise at the source, a crop requirement below 10⁻¹² of the day's
+      gross demand to 0 and off-take water used within 10⁻¹² × D of D to D,
+      and make the dam-target switch test Dr against 10⁻¹² × the day's full
+      demand D (as documented), not against the rest; then state
+      `limitBound`'s treatment of a noise-level day in §2.12a and drop the
+      `KNOWN_CASES` entry. Bumps `ENGINE_VERSION` (a borehole can pump less).
+      **Trigger:** the next engine change to boreholes (§2.7d), the soil-water
+      store (§2.3) or off-takes (§2.6a), or before a licence evidence pack
+      relies on a dam-target borehole, whichever comes first.
+- [ ] **A no-demand year's `scaled` row reads two ways** (found by `verify/`
+      phase 2a; engine 1.53.0). Under a full allocation a year with no
+      demand can't be scaled; `RunSummary.allocations.scaled` lists the
+      volume registered over its run days (1 263 064 m³), except in the year
+      a forecast tail starts in, where it lists k × demand = 0 (dense seed
+      14: 0 against 973 180 m³ over the year's historical days; probe
+      `scaled-no-demand-tail-year`). model.md §2.12a now says so and the
+      harness pins it. **Durable fix:** one reading for every year, most
+      likely the registered volume over the year's historical days (what
+      the unit would have asked for), in `compareAllocations`' scaled rows;
+      then update §2.12a and the probe. **Trigger:** the next change to
+      full-allocation runs or to the allocation comparison, or a report
+      that shows the scaled rows.
+- [ ] **`verify/` phase 2b: the rest of the model.** Phases 1 and 2a cover
+      the daily chain and the optional inputs above; `verify/model.py`'s
+      `unsupported()` names what they leave out and the harness refuses an
+      input that uses it. To add, each from its model.md section, with
+      random-generator coverage (dense networks too), a probe for anything
+      the docs leave open and a mutant per rule
+      ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)):
+      demand factors by part (`partDemandFactor`, the `demand.scale` op with
+      a part, merged in #252), drought restrictions (once #258 merges),
+      Reserve rule tables A1–A7 (§2.9c–d), forecast mode (§2.4f),
+      calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
+      development (§2.7g), rain-source periods, the areal correction, the
+      daily A-pan, CHIRPS fit ranges, the CHIRPS quantile map (CR-23),
+      keep-dry and the non-default data-quality limits. **Trigger:** the
+      next engine change to any of these features (its PR adds that feature
+      to `verify/` first, so the change lands against an independent
+      reading), #258 merging (drought restrictions), or before the first
       licence evidence pack relies on one of them, whichever comes first.
 - [x] **A fourth full page load of the Settings tab fails in e2e** with
       `net::ERR_INSUFFICIENT_RESOURCES` / "Failed to fetch dynamically
@@ -3733,9 +3789,9 @@ Applicant view and the Applications tab. Left:
       Two decisions against the first sketch here: no PDF key through the
       link (the PDF carries every unit's figures and the applicant's
       statement, which the projection withholds), and no applicant-made
-      link, since applicants read no pack yet ("Applicants' access to their
-      own application's packs", § Evidence report, holds both for when they
-      do).
+      link, since applicants read no pack then (since built in 131:
+      "Applicants' access to their own application's packs", § Evidence
+      report).
 - [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
@@ -4258,19 +4314,43 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `errataRecorded`): draft it again, which records them. The manifest, its
       hash and `errata` are unchanged
       ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
-- [ ] **Applicants' access to their own application's packs** (WP-3.15).
-      Contributors read no pack today (operator decision, 2026-09-29:
-      issuing stays with editors). Durable fix: a read policy for the
-      scenario's owner and members on packs of their application once
-      issued, with the D2 anonymising applied to the manifest they see; then
-      `app_share_link_creatable` / `_visible` (128) let the applicant link
-      their own issued pack and list and revoke the links they made, as for
-      a scenario link. Trigger: the first applicant who needs the pack itself
-      rather than its verify link (WP-3.15's share links to packs landed in
-      128 without it).
-- [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
-      project's editors and the scenario's owner. Trigger: with the pack
-      view.
+- [x] **Applicants' access to their own application's packs** (WP-3.15):
+      done in `131_applicant_packs` (2026-09-30, issue #71). Issuing stays
+      with the editors. An application's parties (its owner and whoever they
+      shared it with) read its issued, superseded and withdrawn-after-issue
+      packs, never a draft, through `SECURITY DEFINER` functions rather than
+      a row policy (the manifest names every unit, and RLS can't hide a
+      column): verify's fields, a pack link's figures and D2's units (their
+      own by name, every other as "Farm n" with its change in whole points;
+      none when a baseline assumption changed). `GET
+      …/scenarios/:sid/packs[/:packId]`, the Application panel's list and
+      the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
+      `app_share_link_creatable` / `_visible` let the application's owner
+      link their own issued pack and list and revoke the links they made.
+- [ ] **An anonymised printable copy of the pack for its applicant.** The
+      applicant's view (131) offers no PDF, manifest or bundle: each carries
+      the whole report, every unit named (the assessors' copy, D2). An
+      applicant who needs a document to attach has the verify code and the
+      assessors' copy. Durable fix: a D2-anonymised print of the applicant's
+      view (the server renderer, a render session scoped to that route), not
+      hashed as the pack (it isn't the pack), saying so and carrying the
+      pack's code. Trigger: an applicant or the client asks for a file of
+      their own copy, or D2 is settled with the client (it may instead open
+      the assessors' copy to the applicant).
+- [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
+      project's editors and the scenario's owner: built 2026-09-30
+      (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,
+      or withdrawing one that was issued (with its reason), emails the
+      project's editors and owners and the application's owner, never the
+      actor; a supersede is told in the new version's email, and a draft
+      withdrawn is told to no one. Queued in the route's transaction, sent
+      by the tick as each recipient under RLS, with the role and address
+      checked again at send; the email carries the version, the short code,
+      the verify link and the recipient's own view of the pack (the
+      applicant's is their copy, 131_applicant_packs), never a figure
+      ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
+      Afrikaans words went through the i18n translator and checker (the
+      native speaker's review is pending with the rest, § Afrikaans).
 
 ## Alerts (WP-2.13)
 

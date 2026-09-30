@@ -648,7 +648,7 @@ result without signing in, until it expires or its owner revokes it.
   sees a baseline link's row. Targeted links widen this for their own
   target only: an application's to its assessors and applicant
   ([Scenario links](#scenario-links-wp-315-115_scenario_share_notessql)),
-  a pack's to the project's editors ([Pack links](#pack-links-wp-315-128_pack_share_notessql)). `water_app`
+  a pack's to the project's editors and its application's applicant ([Pack links](#pack-links-wp-315-128_pack_share_notessql)). `water_app`
   may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
   catalogue test pins both): a revoked link stays as the record of who made
   and withdrew it. An insert trigger stamps `created_by` and `created_at`.
@@ -705,15 +705,22 @@ assessor without an account. The same token model (32 bytes, SHA-256 at
 rest, in the fragment with `&k=pack`), with these differences:
 
 - **Who makes one.** An editor or the owner, and only while the pack is
-  `issued` (`app_share_link_creatable`; the route answers `403` below
-  editor, `404` for a pack not in the project, `409` otherwise). A draft is
-  still changing; a superseded or withdrawn pack no longer stands, so nobody
-  is sent a fresh link to it. Not a contributor: applicants read no pack
-  (112), and making a public link to what you can't read would be a way
-  round that ([followups.md](./followups.md#evidence-report-issue-71)).
-  Editors and the owner list and revoke every pack link
-  (`app_share_link_visible`), and the owner's inventory names the pack by
-  its report's title, its status and version, through the owner's own RLS.
+  `issued` (`app_share_link_creatable`; the route answers `404` for a pack
+  not in the project, `409` otherwise). A draft is still changing; a
+  superseded or withdrawn pack no longer stands, so nobody is sent a fresh
+  link to it. Below editor, only the **application's owner**, for a pack of
+  their own application (131_applicant_packs, as for a scenario link:
+  `app_applicant_pack_meta`'s `canShare`); the route answers `403` to
+  anyone else below editor (the consultant they shared it with included),
+  found or not, and `409` for their own superseded or withdrawn pack. What
+  the link shows is the same public projection whoever made it, so an
+  applicant's link reveals no more than an editor's (it names no unit,
+  their own included). Editors and the owner list and revoke every pack
+  link (`app_share_link_visible`), an applicant the ones they made (a
+  contributor's own `created_by`, as for a scenario link); the owner's
+  inventory names the pack by its report's title, its status and version,
+  through the owner's own RLS, and an applicant's list through
+  `app_applicant_pack_meta` (they read no pack row).
 - **Never wider than verify, plus the pack's own figures.** Only through
   `SECURITY DEFINER app_share_pack`: its `verify` is `app_verify_pack`'s
   object for the pack, unchanged, so a link reveals nothing about the
@@ -1406,7 +1413,7 @@ In short:
   a positive control; the revisions).
   **Pack notes (WP-3.15, 128):** `team` (read and written where the pack is
   read: `note_select` / `note_insert` test it through evidence_pack's own
-  policy, so a contributor, who reads no pack, never sees one) or
+  policy, so a contributor, who reads no pack row, never sees one) or
   `public_participation` (`note_select_pack`, `app_pack_note_visible`,
   `app_pack_note_writable`: posted by a member contributor or above only
   while the pack is issued with a live pack link; editors always read them,
@@ -2210,6 +2217,7 @@ PDF someone else asked for kept the person as a recipient
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
+| Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
@@ -2227,7 +2235,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, evidence pack emails sent (`packNotices`, 133), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
@@ -2764,10 +2772,63 @@ nothing else.
 - **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
   delete drafts; viewers read a baseline pack, and an application pack when
   they read its scenario (`app_scenario_readable`, 045); editors read every
-  pack. Contributors (applicants) and farmers read none and act on none
-  (operator decision, 2026-09-29: issuing stays with the project's editors).
-  An editor shares an issued pack by link ([§ Pack links](#pack-links-wp-315-128_pack_share_notessql)).
+  pack. Farmers read none; contributors act on none (operator decision,
+  2026-09-29: issuing stays with the project's editors) and read no pack
+  row. An editor shares an issued pack by link, and an applicant their own
+  application's ([§ Pack links](#pack-links-wp-315-128_pack_share_notessql)).
   The pack routes' bodies are strict where they create or issue.
+- **An applicant's packs** (131_applicant_packs). An application's parties
+  (`app_scenario_party`: its owner and whoever they shared it with, as a
+  contributor or above) read its packs that were issued (issued,
+  superseded, withdrawn after issue; never a draft or a pack withdrawn
+  before issue) through `GET …/scenarios/:sid/packs[/:packId]`, and only
+  through `SECURITY DEFINER` functions (`app_applicant_packs`,
+  `app_applicant_pack_meta`, `app_applicant_pack`, search path pinned,
+  `EXECUTE` for `water_app`). There is deliberately **no RLS read policy
+  for contributors on `evidence_pack`**: the manifest is the whole report,
+  every unit's names and figures, and RLS picks rows, not columns, so a row
+  policy would hand an applicant every farm. The functions return an
+  allowlist built in SQL, D2's recommended default (pending the client):
+  verify's own object, a pack link's figures (`app_share_pack_projection`,
+  the `k` rule on volumes), and the units (`app_applicant_pack_units`, not
+  callable by `water_app`): their own units, the application's owned nodes
+  its owner *still* links (`app_application_own_nodes`, so a link removed
+  since the draft turns that unit anonymous) and the nodes its proposals
+  add, by name with their supply and reliability; every other farm or
+  water user in both runs only as its kind and a number (per kind, by a
+  hash of its id, so it says nothing of its name or place) with its change
+  in share of demand supplied in whole percentage points. No other unit's
+  name, id, demand, volume or reliability, no holder, allocation, other
+  application, flag, question, setting, model, diff, series hash, warning
+  or applicant statement, and no person but the signers. No units at all
+  when the report changed a baseline assumption (118's rule). The route
+  maps the answer field by field again (`evidence/applicantPacks.ts`),
+  answers `404` alike for a pack not theirs, not issued or of another
+  application, and never offers the PDF, manifest or bundle, which carry
+  the whole report (the assessors' copy). Tests:
+  `evidence/applicant-packs.db.test.ts` (each "cannot" with its control:
+  another applicant, a non-party editor, a draft, a pack never issued, the
+  baseline's; the string scan for every other unit's name and id; the
+  anonymiser's grant; the pack-link rights), `evidence/applicantPacks.test.ts`
+  (the TypeScript allowlist against a row with planted extras), the role
+  ladder and the applicant route sweep.
+- **Who is emailed about a pack** (133_pack_notices, [evidence-pack.md §
+  Notices](./evidence-pack.md#notices)). Only the issue and withdraw routes
+  queue notices, through `app_pack_notice_queue`, which refuses anyone but
+  an editor of the pack's project and a pack not in that state; `water_app`
+  has no write policy on `pack_notice`, so no caller chooses a recipient.
+  The recipients are fixed by `pack_notice_audience`: the project's editors
+  and owners and the application's own scenario owner (never a viewer, a
+  farmer, another applicant or a non-member), at most once per pack,
+  person and event. Each email is built as its recipient under RLS, with
+  their role and address checked again at send (a member removed or
+  demoted since, or an address SES suppressed since, gets nothing), and it
+  carries only what verify already answers anyone (version, short code,
+  withdrawal reason) plus the application's and catchment's names as the
+  recipient reads them: never a figure, and no link a recipient can't use
+  (an editor gets the pack's page; the applicant the public verify page and
+  their own copy, 131's projection, never the editors' pack page).
+  `evidence/notices.db.test.ts` checks each refusal beside its control.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the
   job queue: it reads nothing but through `app_verify_pack`; in the route
