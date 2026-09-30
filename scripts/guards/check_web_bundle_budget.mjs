@@ -1564,13 +1564,21 @@
 //             specs and descriptions, override mode recording object edits,
 //             and four share-page lines in both catalogues; measured 1314
 //             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+//             above that). Headroom ~3 KB.
 // 2026-09-30  total 1319 → 1322 KB (engine 1.48.0, the observed flow's per-day
 //             quality flags as strips with a key on the Runs hydrograph and
 //             the Data tab's flow chart, calibration/flowFlags.ts and
 //             LineChart's lanes: +2 KB (1306 → 1308 with main @ 8266a682);
 //             measured 1317 locally with #252 merged, main @ 17c4a590;
 //             CI runs ~2 KB above that). Headroom ~3 KB.
-//             above that). Headroom ~3 KB.
+// 2026-09-30  total 1322 → 1325 KB (issue #137, the landing page prerendered
+//             once per language: /welcome and /welcome/af). Measured against
+//             main @ c7df4af7: 1,340,999 → 1,342,667 gzip bytes (+1.6 KB;
+//             1311 → 1313 KB locally, CI ~2 KB above): the language switch's
+//             link form (its chunk and CSS, +0.25 KB), the landing's hreflang
+//             and og:locale tags (+0.3 KB), the route's load and entries
+//             (+0.2 KB), the root layout's URL-language step (+0.1 KB), and
+//             chunk-name churn. Headroom ~1 KB on CI (remeasured on the combined UI/UX branch, see the next entry).
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1581,7 +1589,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1322,
+	totalCodeKb: 1325,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

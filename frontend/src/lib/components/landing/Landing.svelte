@@ -12,8 +12,8 @@
 	import { page } from '$app/state';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
-	import { t } from '$lib/i18n/locale.svelte';
-	import { LANDING_PATH } from '$lib/auth/session.svelte';
+	import { language, LANGUAGES, t, wordsLang, type Locale } from '$lib/i18n/locale.svelte';
+	import { LANDING_PATH, landingPath } from '$lib/auth/session.svelte';
 	import Audiences from './Audiences.svelte';
 	import Hero from './Hero.svelte';
 	import HowItWorks from './HowItWorks.svelte';
@@ -23,6 +23,11 @@
 	import Trust from './Trust.svelte';
 	import WhatIf from './WhatIf.svelte';
 	import { ART } from './art.generated';
+
+	// `lang`: the address's language on /welcome and /welcome/<code> (issue
+	// #137), where the language switch is a pair of links between the
+	// addresses. Unset on a signed-out `/`, where it switches in place.
+	let { lang }: { lang?: Locale } = $props();
 
 	// Absolute URLs for the link-preview tags, resolved against the page:
 	// `base` is relative ('.') while prerendering and absolute in the browser.
@@ -36,17 +41,29 @@
 	// (docs/design/landing-art.md § Quality bar). The href resolves against the
 	// page, so the prerendered relative base finds it before hydration.
 	const { width: cw, height: ch } = ART.contours;
+	// The Open Graph locale, as `af_ZA` (the table's Intl locale).
+	const ogLocale = (l: Locale) => language(l).intl.replace('-', '_');
+	const switchHref = (l: Locale) => `${base}${landingPath(l)}`;
 </script>
 
 <svelte:head>
 	<title>{title}</title>
 	<meta name="description" content={description} />
-	<link rel="canonical" href={abs(LANDING_PATH)} />
+	<link rel="canonical" href={abs(landingPath(wordsLang()))} />
+	<!-- The page in each language (issue #137), and /welcome for a reader whose language isn't one of them. -->
+	{#each LANGUAGES as l (l.code)}
+		<link rel="alternate" hreflang={l.code} href={abs(landingPath(l.code))} />
+	{/each}
+	<link rel="alternate" hreflang="x-default" href={abs(LANDING_PATH)} />
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Water Management" />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
-	<meta property="og:url" content={abs(LANDING_PATH)} />
+	<meta property="og:url" content={abs(landingPath(wordsLang()))} />
+	<meta property="og:locale" content={ogLocale(wordsLang())} />
+	{#each LANGUAGES as l (l.code)}
+		{#if l.code !== wordsLang()}<meta property="og:locale:alternate" content={ogLocale(l.code)} />{/if}
+	{/each}
 	<meta property="og:image" content={abs('/landing/og.jpg')} />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
@@ -61,7 +78,7 @@
 			<span>Water Management</span>
 		</a>
 		<nav class="nav" aria-label={t('Account')}>
-			<LanguageSwitch compact />
+			<LanguageSwitch compact addressOf={lang ? switchHref : undefined} />
 			<a class="btn" href="{base}/login">{t('Sign in')}</a>
 		</nav>
 	</header>

@@ -3752,7 +3752,7 @@ Applicant view and the Applications tab. Left:
       the lever left is the ~0.5 s render delay: less script before the
       landing's first paint (the root layout's app-wide code). Trigger: the
       first deploy (Phase 6), tracked on #92 (moved there when #57 closed).
-- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+- [x] **`/welcome` in Afrikaans before hydration** (issue #51, the
       international persona). The page is prerendered once, in English, and
       `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
       `lang` switch together only once the app hydrates and loads the
@@ -3767,6 +3767,13 @@ Applicant view and the Applications tab. Left:
       or browser choice to the right one. Trigger: the landing page is
       linked from somewhere Afrikaans readers arrive first (a WUA's
       Afrikaans newsletter), or a screen-reader user reports it.
+      **Done** (issue #137, 2026-09-30): `/welcome` and `/welcome/af` are
+      prerendered from one route, `routes/welcome/[[lang=locale]]`, each in
+      its language with its own `<html lang>` (`hooks.server.ts`, no inline
+      script), canonical, `hreflang` alternates (`x-default` → `/welcome`)
+      and `og:locale`; the switch there is a pair of links, and `/welcome`
+      sends a visitor whose choice is Afrikaans on to `/welcome/af`
+      (ui.md § Landing page; `landing-language.spec.ts`).
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).

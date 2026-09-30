@@ -39,7 +39,7 @@ sides share.
   query's, the RLS role check's and the Step 2 60-farm load checks).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
-  page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
+  page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot
   charts, vitest. No spreadsheet library ships: the `.xlsx` run export
   writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
   import reads workbooks with its own streaming reader

@@ -106,6 +106,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },
 	srcset: { why: 'landing Diorama: `${base}/landing/hero-<day|dusk>-<width>.<avif|webp>`, the widths from art.generated.ts (numbers)', in: ['lib/components/landing/Diorama.svelte'] },
 	set: { why: 'landing Shot: `${base}/landing/screen-<name>-<light|dark>-<width>.<avif|webp>`, name a literal from Screens.svelte', in: ['lib/components/landing/Shot.svelte'] },
+	addressOf: { why: 'LanguageSwitch: its `addressOf` prop; the landing page passes `${base}` + landingPath(code), "/welcome" or "/welcome/<code>" for a code of the language table (issue #137)', in: ['lib/i18n/LanguageSwitch.svelte'] },
 	abs: { why: 'landing link-preview tags: new URL(`${base}` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
 	// Objects built in code from the builders above.
 	'done.href': { why: 'the invitations page: `${base}/teams/`, `/farm/` or `/projects/` + the encoded id of what was joined', in: ['routes/account/invitations/+page.svelte'] },

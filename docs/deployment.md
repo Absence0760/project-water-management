@@ -560,10 +560,12 @@ says "Too many sign-in attempts from your network. Wait a few minutes, then
 try again." instead of showing it.
 
 `PUBLIC_SITE_URL` also reaches the frontend build as `SITE_ORIGIN`
-(`deploy-frontend.yml`): the prerendered landing page (`/welcome`, issue #57)
-writes its canonical link, `og:url` and `og:image` as absolute URLs from it
+(`deploy-frontend.yml`): the prerendered landing page (`/welcome` and
+`/welcome/af`, issues #57 and #137) writes its canonical link, `hreflang`
+alternates, `og:url` and `og:image` as absolute URLs from it
 (`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
-`/welcome` from `welcome.html` (`spa_rewrite`).
+`/welcome` from `welcome.html` and `/welcome/af` from `welcome/af.html`
+(`spa_rewrite`).
 
 The same build bakes in `ENGINE_BUILD`, the engine's build record
 (`scripts/release/engine-build.mjs`, run just before it: version, git SHA,
