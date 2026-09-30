@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diverts, divertMonthsPreview, divertMonthsTicked, handsOffPreview, handsOffTakers, handsOffTicked, hasSupplySettings, noDamSupplyHint, pumpM3Day, sharedPumpHint } from './supply';
+import { diverts, divertMonthsCell, divertMonthsPreview, divertMonthsTicked, handsOffPreview, handsOffTakers, handsOffTicked, hasSupplySettings, noDamSupplyHint, pumpM3Day, sharedPumpHint } from './supply';
 
 describe('pumpM3Day', () => {
 	it('is pumps × m³/h per pump × 24 h', () => {
@@ -190,6 +190,29 @@ describe('divertMonthsPreview', () => {
 		expect(divertMonthsPreview({ divertMonthlyM3Day: [0.0129, 12_345.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })).toBe(
 			'River to dam takes between 0.0129 and 12 345.5 m³/day by month; nothing in Dec–Sep. The one value above is not used.'
 		);
+	});
+});
+
+describe('divertMonthsCell', () => {
+	it('is null for the one value all year, which the node table edits', () => {
+		expect(divertMonthsCell({ divertMonthlyM3Day: null }, 'Hilltop')).toBeNull();
+		expect(divertMonthsCell({}, 'Hilltop')).toBeNull();
+	});
+
+	it('shows the months’ range, and names it in full for a screen reader', () => {
+		expect(divertMonthsCell({ divertMonthlyM3Day: WINTER }, 'Hilltop')).toEqual({
+			text: 'by month: 0–800',
+			aria: 'River to dam at Hilltop is set by month, between 0 and 800 m³/day'
+		});
+		expect(divertMonthsCell({ divertMonthlyM3Day: new Array(12).fill(500) }, 'Hilltop')).toEqual({
+			text: 'by month: 500',
+			aria: 'River to dam at Hilltop is set by month, 500 m³/day every month'
+		});
+		expect(divertMonthsCell({ divertMonthlyM3Day: [0.0129, 12_345.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'Hilltop')!.text).toBe('by month: 0–12\u202f345.5');
+	});
+
+	it('says by month without a range when no month holds a number (a row the save refuses)', () => {
+		expect(divertMonthsCell({ divertMonthlyM3Day: [] }, 'Hilltop')).toEqual({ text: 'by month', aria: 'River to dam at Hilltop is set by month' });
 	});
 });
 

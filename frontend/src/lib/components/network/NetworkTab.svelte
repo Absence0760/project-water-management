@@ -19,6 +19,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { divertMonthsCell } from './supply';
 	import { cardLabel, GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -581,6 +582,17 @@
 									{#if (f.farmOnly && node.kind !== 'farm') || node.kind === 'user'}
 										{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
 										<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
+									{:else if f.key === 'divertCapacityM3Day' && divertMonthsCell(node, label)}
+										<!-- Set by month (engine ≥ 1.31.0): the run ignores the one value, so the table shows the months, read-only, and points to the node's form. -->
+										{@const c = divertMonthsCell(node, label)!}
+										<td class="num by-month vol" data-testid="divert-by-month-{node.id}">
+											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
+											{#if projectId}
+												<a href="?tab=network&edit={encodeURIComponent(node.id)}" aria-label="{c.aria}: edit it in the node’s form" title="Set by month: the one value isn’t used. Edit the months in the node’s form.">{c.text}</a>
+											{:else}
+												<span aria-hidden="true" title="Set by month: the one value isn’t used.">{c.text}</span><span class="visually-hidden">{c.aria}</span>
+											{/if}
+										</td>
 									{:else}
 									<td class:pct={isPct(f)} class:vol={isVolume(f)}>
 										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
@@ -932,6 +944,13 @@
 	}
 	.net td.na {
 		color: var(--text-muted);
+	}
+	/* River to dam set by month: read-only, lined up with the inputs' digits. */
+	.net td.by-month {
+		text-align: right;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		padding-right: calc(0.35rem + 1px + 0.35rem);
 	}
 	.net tr.sel {
 		background: var(--accent-soft);
@@ -1355,6 +1374,12 @@
 		}
 		.net td :global(input) {
 			text-align: left;
+		}
+		/* A tap target as tall as the inputs beside it. */
+		.net td.by-month a {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
 		}
 		.cell-label {
 			display: block;

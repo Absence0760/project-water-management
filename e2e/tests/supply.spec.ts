@@ -6,7 +6,8 @@
 // §2.7h): set, saved, reloaded and read back; their month fields show 12 345.5
 // and 0.0129 whole for an owner and a viewer, desktop and phone (ui-playbook
 // § 2); and a farm turned into a gauge clears River to dam by month beside
-// the alert that refuses it.
+// the alert that refuses it. The node table shows River to dam set by month
+// read-only and links to the node's form.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, putModel, seedRunnableProject } from '../support/api.ts';
@@ -207,4 +208,37 @@ test('River to dam by month: October’s capacity in every month, and cleared be
 	await expect(alert).toHaveCount(0);
 	// Nothing left to reset, so a gauge has no Supply section.
 	await expect(supply).toHaveCount(0);
+});
+
+test('the node table shows River to dam set by month read-only, and links to the node’s form', async ({ page, owner }) => {
+	void owner;
+	const { id, model } = await seedRunnableProject(page.request, 'Table by month');
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	Object.assign(upper, { divertCapacityM3Day: 400, divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800] });
+	await putModel(page.request, id, model);
+
+	for (const width of [1280, 390]) {
+		await page.setViewportSize({ width, height: 844 });
+		await page.goto(`/projects/${id}?tab=network&grid=nodes`);
+		const grid = page.getByRole('dialog', { name: 'Node table' });
+		// The run ignores the one value, so the table has no input for it, only the months' range.
+		await expect(grid.getByLabel('River to dam at Upper farm, m³/day', { exact: true })).toHaveCount(0);
+		const cell = grid.getByTestId(`divert-by-month-${upper.id}`);
+		const link = cell.getByRole('link', { name: 'River to dam at Upper farm is set by month, between 0 and 800 m³/day: edit it in the node’s form', exact: true });
+		await expect(link).toHaveText('by month: 0–800');
+		// A farm with the one value keeps editing it in the table.
+		await expect(grid.getByLabel('River to dam at Lower farm, m³/day', { exact: true })).toBeEditable();
+		if (width === 390) {
+			await expect(cell.getByText('River to dam m³/day')).toBeVisible(); // the phone card's label
+			await expectNoViolations(page, { include: `[data-testid="divert-by-month-${upper.id}"]` });
+		}
+	}
+
+	await page.getByRole('dialog', { name: 'Node table' }).getByTestId(`divert-by-month-${upper.id}`).getByRole('link').click();
+	const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
+	await expect(sheet).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Node table' })).toHaveCount(0);
+	await expect(sheet.getByRole('group', { name: 'Routing', exact: true }).getByTestId('river-to-dam-months-note')).toHaveText(
+		'River to dam takes up to 800 m³/day; nothing in Oct–Apr. The one value above is not used.'
+	);
 });

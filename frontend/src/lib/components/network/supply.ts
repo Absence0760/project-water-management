@@ -169,6 +169,26 @@ export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>):
 	return `River to dam takes ${amountRange(row, true, true)}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
 }
 
+/**
+ * The node table's River to dam cell on a farm set by month (engine ≥
+ * 1.31.0): the run ignores the one value there, so the table shows the
+ * months' range, read-only, instead of an input, and points to the one-node
+ * form where the months are edited. `text` is the cell ("by month: 0–800",
+ * "by month: 500"), `aria` its accessible name. Null when it isn't set by
+ * month: the table edits the one value. The caller adds where to edit it.
+ */
+export function divertMonthsCell(n: Pick<NetworkNode, 'divertMonthlyM3Day'>, name: string): { text: string; aria: string } | null {
+	const row = n.divertMonthlyM3Day;
+	if (!Array.isArray(row)) return null;
+	const vals = row.filter((v) => Number.isFinite(v));
+	if (!vals.length) return { text: 'by month', aria: `River to dam at ${name} is set by month` };
+	const lo = Math.min(...vals);
+	const hi = Math.max(...vals);
+	const range = lo === hi ? asEntered(lo) : `${asEntered(lo)}–${asEntered(hi)}`;
+	const words = lo === hi ? `${asEntered(lo)} m³/day every month` : `between ${asEntered(lo)} and ${asEntered(hi)} m³/day`;
+	return { text: `by month: ${range}`, aria: `River to dam at ${name} is set by month, ${words}` };
+}
+
 /** The hands-off flow's row when its box is ticked (0 in every month, to fill in) or null when unticked. */
 export const handsOffTicked = (checked: boolean): number[] | null => (checked ? monthsOf(0) : null);
 
