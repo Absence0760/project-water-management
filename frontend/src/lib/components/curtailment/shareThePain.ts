@@ -17,7 +17,7 @@
 // EWR to a group with no demand and printed a negative final demand; the
 // engine bounds the volume left and shows that charge as store less / pass
 // inflow, plan.md Q13). Pure, so it is unit-tested without Svelte.
-import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
 import { fmtDemandLeft, fmtVol } from './curtailment';
 
 /** One stage for one row: volume (m³/day) and the share of demand it is. */
@@ -57,8 +57,13 @@ export interface StageTotals {
 }
 
 export interface Board {
-	/** K_tot, the share of its demand every farm gets at the equal share, as a % ("75%"); null with no farm demand. */
+	/**
+	 * K_tot, the share of its demand every farm gets at the equal share, as a % ("75%"); null with no
+	 * farm demand, or with farm demand under DEMAND_PCT_FLOOR_M3_DAY in total (`shareTooSmall`).
+	 */
 	sharePct: string | null;
+	/** Farm demand in total is under DEMAND_PCT_FLOOR_M3_DAY, so a % of it would mean nothing. */
+	shareTooSmall: boolean;
 	farms: BoardRow[];
 	users: BoardRow[];
 	/** Totals per stage over the farms (plain sums, like the curtailment table's totals row). */
@@ -147,8 +152,10 @@ export function shareThePain(c: CurtailmentSummary, names: Record<string, string
 	const users = (c.otherUsers ?? []).map((u) => userRow(u, names));
 	const farmTotals = totals(farms);
 	const demand = farms.reduce((s, r) => s + r.demandM3Day, 0);
+	const shareTooSmall = c.equitableFraction !== null && demand > 0 && demand < DEMAND_PCT_FLOOR_M3_DAY;
 	return {
-		sharePct: c.equitableFraction === null ? null : fmtDemandLeft(demand, c.equitableFraction).text,
+		sharePct: c.equitableFraction === null || !(demand > 0) || shareTooSmall ? null : fmtDemandLeft(demand, c.equitableFraction).text,
+		shareTooSmall,
 		farms,
 		users,
 		farmTotals,

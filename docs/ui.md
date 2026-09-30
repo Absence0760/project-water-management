@@ -4309,7 +4309,9 @@ read it before.
   % for every farm and its total always equals *Today*'s, so the intro says
   it once ("At the equitable share every hydrological unit would get the
   same K % of its demand*: the same water in total as today, shared
-  equally", or "nothing to share" with no farm demand; issue #177), marked *
+  equally", or "nothing to share" with no farm demand, and "too little for the equitable
+  share's % to mean anything" when farm demand is under
+  `DEMAND_PCT_FLOOR_M3_DAY` in total; issue #177), marked *
   for the fixed `EQUITABLE_SHARE_FOOTNOTE`, with a line that SA restrictions
   are set per user category. A row of two cards gives the farm totals per
   stage; the table has one row per farm (a bar, the whole %, the m³/day), an

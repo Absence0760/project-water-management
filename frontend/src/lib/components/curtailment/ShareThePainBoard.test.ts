@@ -124,6 +124,14 @@ describe('ShareThePainBoard', () => {
 		expect(text(b)).not.toContain('At the equitable share');
 	});
 
+	it('says the share is too small to be a % when farm demand is under the floor', () => {
+		const tiny = { ...c, equitableFraction: 0.5, farms: [{ ...c.farms[0]!, demandM3Day: 0.001 }] };
+		const { body: b } = render(ShareThePainBoard, { props: { curtailment: tiny } });
+		expect(text(b)).toContain('too little for the equitable share');
+		expect(text(b)).not.toContain('At the equitable share');
+		expect(text(b)).not.toContain('the same —');
+	});
+
 	it('shows each farm at the two stages, a renamed farm by its current name', () => {
 		expect(row(body, 'Group')).toBe('Group Demand m³/day 1. Today supplied, % of demand 2. EWR met left after the EWR charge, % of demand');
 		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 60% 60 m³/day');

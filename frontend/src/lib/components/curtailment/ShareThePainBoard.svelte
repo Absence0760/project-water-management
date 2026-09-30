@@ -10,7 +10,7 @@
 	./shareThePain.ts. Presentation only: every figure is the engine's.
 -->
 <script lang="ts">
-	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
+	import { DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
 
 	let {
@@ -42,7 +42,9 @@
 	<p class="muted small" data-testid="share-intro">
 		Each group's supply as a share of its own demand over the same days, in two steps: what it got, and what is left once the
 		EWR is met too.
-		{#if board.sharePct === null}
+		{#if board.shareTooSmall}
+			Farm demand is under {DEMAND_PCT_FLOOR_M3_DAY} m³/day in total, too little for the equitable share's % to mean anything.
+		{:else if board.sharePct === null}
 			No hydrological unit had demand, so there is nothing to share.
 		{:else}
 			At the equitable share every hydrological unit would get the same <strong>{board.sharePct}</strong> of its demand<a

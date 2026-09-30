@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runModel, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type ModelOutput } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, runModel, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type ModelOutput } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
 import { shareThePain, stageCell, userLeftM3Day } from './shareThePain';
 
@@ -140,9 +140,25 @@ describe('shareThePain: farms', () => {
 		expect(row!.ewrNotes).toEqual(['EWR cut exceeds its equitable share by 5 m³/day']);
 	});
 
+	it('has no share, not "no demand", when farm demand is 0 but the engine still gave a fraction', () => {
+		const b = shareThePain(summary([farm({ demandM3Day: 0, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(b.sharePct).toBeNull();
+		expect(b.shareTooSmall).toBe(false);
+	});
+
+	it('flags a share too small to be a % when farm demand is under the floor, and gives one above it', () => {
+		const under = shareThePain(summary([farm({ demandM3Day: DEMAND_PCT_FLOOR_M3_DAY / 2, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(under.sharePct).toBeNull();
+		expect(under.shareTooSmall).toBe(true);
+		const over = shareThePain(summary([farm({ demandM3Day: DEMAND_PCT_FLOOR_M3_DAY * 2, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(over.sharePct).toBe('50%');
+		expect(over.shareTooSmall).toBe(false);
+	});
+
 	it('has no share with no farm demand, and zero totals', () => {
 		const b = shareThePain(summary([farm({ demandM3Day: 0, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], null));
 		expect(b.sharePct).toBeNull();
+		expect(b.shareTooSmall).toBe(false);
 		expect(b.farmTotals.today.pct).toBe('no demand');
 		expect(b.farmTotals.ewr.pct).toBe('no demand');
 	});
@@ -223,7 +239,8 @@ describe('shareThePain over seeded engine runs', () => {
 			}
 			// The identity that made the equal share one sentence rather than a stage (issue #177): its total is today's.
 			expect(c.totals.targetM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);
-			expect(b.sharePct).toBe(b.farmTotals.today.pct);
+			if (b.shareTooSmall) expect([b.sharePct, b.farmTotals.today.pct]).toEqual([null, '—']);
+			else expect(b.sharePct).toBe(b.farmTotals.today.pct);
 			expect(b.farmTotals.today.volumeM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);
 			expect(b.farmTotals.ewr.volumeM3Day).toBeCloseTo(c.totals.volumeLeftM3Day, 6);
 		}
