@@ -5,7 +5,16 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import RestrictionTables from './RestrictionTables.svelte';
 
-const text = (html: string) => html.replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+// Comments stripped until none are left, so one split by another can't survive
+// as a fresh '<!--' (CodeQL js/incomplete-multi-character-sanitization).
+const text = (html: string) => {
+	let s = html;
+	for (let prev = ''; prev !== s; ) {
+		prev = s;
+		s = s.replace(/<!--[\s\S]*?-->/g, '');
+	}
+	return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+};
 const unit = (i: number, cut: number) => ({ nodeId: `n${i}`, name: `Farm ${String(i).padStart(2, '0')}`, avgDemandM3Day: 100, avgRestrictedDemandM3Day: 100 - cut, avgSuppliedM3Day: 90 - cut, avgCutOnRestrictedDaysM3Day: cut ? cut * 4 : null, daysByLevel: cut ? [300, 65] : [365, 0] });
 const summary = (units = [unit(1, 20)], years = 1) =>
 	({

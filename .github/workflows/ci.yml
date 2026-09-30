@@ -586,8 +586,9 @@ jobs:
 
   # The independent cross-check of the engine (verify/README.md): a Python
   # model written only from the docs, run beside runModel on the example
-  # catchments, the probes and 200 random networks, with its mutation
-  # self-test. Stdlib Python; tsx from the pnpm install runs the engine side.
+  # catchments, the probes, 200 random and 200 dense networks (every
+  # phase-2a feature in most), with its mutation self-test. Stdlib Python;
+  # tsx from the pnpm install runs the engine side.
   verify:
     name: Engine cross-check (Python)
     needs: changes
@@ -619,6 +620,7 @@ jobs:
       - name: Cross-check the engine
         env:
           VERIFY_TEST_RANDOM: '200'
+          VERIFY_TEST_DENSE: '200'
         run: pnpm test:verify
 
   # Credential-free Terraform checks (fmt, validate, plan-only `terraform

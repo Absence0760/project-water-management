@@ -522,9 +522,76 @@ describe('which storage, which units, and the EWR trigger (engine 1.54.0)', () =
 		expect(level(out, null)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
 		expect(out.summary.droughtRestriction!.ewrReviews).toBe(1);
 		passed(out);
-		// A shortfall column the trigger didn't follow fails the self-check.
-		const tampered = { ...out, series: out.series.map((x) => (x.nodeId === 'G' && x.key === 'ewr_shortfall' ? { ...x, values: x.values.map((v, t) => (t === 3 ? 0 : v)) } : x)) };
+		// A shortfall column the trigger didn't follow fails the self-check (the outlet's: the catchment column).
+		const tampered = { ...out, series: out.series.map((x) => (x.nodeId === null && x.key === 'ewr_shortfall' ? { ...x, values: x.values.map((v, t) => (t === 3 ? 0 : v)) } : x)) };
 		expect(checkDroughtRestriction(input, tampered)).toMatch(/day 4: drought restriction level 1 ≠ 0/);
+	});
+
+	it('the EWR trigger at the outlet reads the catchment’s EWR, not the outflow node’s share of it (shares summing below 1)', () => {
+		// A and B take 45 % of the natural flow each (no dams, no crops): 90 of 100 m³/day reaches the outlet G.
+		// The catchment's EWR of 95 isn't met (90 < 95); G's own share-weighted EWR, 0.9 × 95 = 85.5, is.
+		const rule: DroughtRestrictionRule = { reviewDates: ['10-01', '10-05'], levels: [{ belowPct: 0.1, cuts: { crops: 0.5 } }], ewrTrigger: { siteNodeId: null, level: 1 } };
+		const input: ModelInput = {
+			settings: { ewrPragmaticM3PerDay: flat(95) as unknown as Monthly, apanMm: flat(0) as unknown as Monthly, lakeEvapFactor: 0, effectiveRainStoreMm: 0, flowShareMethod: 'manual', droughtRestriction: rule },
+			model: {
+				nodes: [node('A', { downstreamNodeId: 'G', flowShareManual: 0.45 }), node('B', { downstreamNodeId: 'G', flowShareManual: 0.45, sortOrder: 1 }), node('G', { kind: 'gauge', areaKm2: 0, flowShareManual: 0, sortOrder: 2 })],
+				crops: [],
+				cropAreas: [],
+				transfers: []
+			},
+			series: { rain_catchment_mm: { startDate: '2020-10-01', values: new Array(10).fill(0) } }
+		};
+		const out = withVerification(input, runModelWith(input, (ctx) => ({ naturalFlowM3Day: new Array(ctx.days).fill(100) })));
+		expect(get(out, null, 'ewr_shortfall')[3]).toBeLessThan(0);
+		expect(get(out, 'G', 'ewr_shortfall')[3]).toBe(0);
+		expect(level(out, null)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+		passed(out);
+	});
+
+	it('a gauge that isn’t an EWR site can’t be the trigger’s site', () => {
+		const nodes = twoUnits(base).model.nodes.map((n) => (n.id === 'G' ? { ...n, downstreamNodeId: 'A', ewrSite: false } : n.id === 'A' ? { ...n, downstreamNodeId: null } : n));
+		expect(droughtRestrictionNodeIssues({ ...base, ewrTrigger: { siteNodeId: 'G', level: 1 } }, nodes).map((i) => i.message)).toEqual(['“G” isn\'t an EWR site']);
+	});
+
+	it('the self-check catches a unit’s own level, a stray cut column and a miscounted EWR review', () => {
+		const ownRule: DroughtRestrictionRule = { ...base, basis: 'own' };
+		const input = twoUnits(ownRule);
+		const out = run(input);
+		const withSeries = (series: RunSeries[]): ModelOutput => ({ ...out, series });
+		// B's own level on day 2 set to 0: the catchment column (the deepest) still says 1, so only the unit's column is wrong.
+		const lowered = withSeries(out.series.map((x) => (x.nodeId === 'B' && x.key === RESTRICTION_SERIES.level.key ? { ...x, values: x.values.map((v, t) => (t === 2 ? 0 : v)) } : x)));
+		expect(checkDroughtRestriction(input, lowered)).toMatch(/B day 2: drought restriction level 0 ≠ 1 \(its own dam\)/);
+		const dropped = withSeries(out.series.filter((x) => !(x.nodeId === 'B' && x.key === RESTRICTION_SERIES.level.key)));
+		expect(checkDroughtRestriction(input, dropped)).toMatch(/B: no restriction_level column under the 'own' basis/);
+		const stray = withSeries([...out.series, { nodeId: null, key: `${RESTRICTION_SERIES.cutPrefix}crops`, values: new Array(10).fill(0.5) } as RunSeries]);
+		expect(checkDroughtRestriction(input, stray)).toMatch(/restriction_cut@crops: a column for a part no level cuts, or under the own basis/);
+		// The EWR trigger's count of reviews after a failed day.
+		const trig: DroughtRestrictionRule = { reviewDates: ['10-01', '10-05'], levels: [{ belowPct: 0.1, cuts: { crops: 0.5 } }], ewrTrigger: { siteNodeId: null, level: 1 } };
+		const tInput = twoUnits(trig, 50);
+		const tOut = run(tInput);
+		const miscounted = { ...tOut, summary: { ...tOut.summary, droughtRestriction: { ...tOut.summary.droughtRestriction!, ewrReviews: 2 } } };
+		expect(checkDroughtRestriction(tInput, miscounted)).toMatch(/EWR-triggered reviews 2 ≠ 1/);
+	});
+
+	it('a run resumed the day of a review after a failed EWR day carries the failure, and the self-check reads it from the summary', () => {
+		const rule: DroughtRestrictionRule = { reviewDates: ['10-01', '10-05'], levels: [{ belowPct: 0.1, cuts: { crops: 0.5 } }], ewrTrigger: { siteNodeId: null, level: 1 }, basis: 'own' };
+		const input = twoUnits(rule, 50);
+		const full = runModelWithoutChecks(input);
+		// 5 October is day 4, a review; the 4th failed its EWR, known only from the snapshot.
+		const snap = captureModelState(input, '2020-10-05');
+		expect(snap.state.restrictionEwrFailed).toBe(true);
+		const tail = runModelFrom(snap, input);
+		expect(level(tail, null)).toEqual(level(full, null).slice(4));
+		expect(level(tail, null)[0]).toBe(1);
+		expect(get(tail, 'A', 'supplied')).toEqual(get(full, 'A', 'supplied').slice(4));
+		expect(tail.summary.droughtRestriction!.start!.ewrFailedBefore).toBe(true);
+		expect(checkDroughtRestriction(input, tail)).toBeNull();
+		// A summary that says the day before met its EWR fails the check, as does a unit's starting storage left out.
+		const start = tail.summary.droughtRestriction!.start!;
+		const met = { ...tail, summary: { ...tail.summary, droughtRestriction: { ...tail.summary.droughtRestriction!, start: { ...start, ewrFailedBefore: false } } } };
+		expect(checkDroughtRestriction(input, met)).toMatch(/day 0: drought restriction level 1 ≠ 0/);
+		const noStorage = { ...tail, summary: { ...tail.summary, droughtRestriction: { ...tail.summary.droughtRestriction!, start: { ...start, damStorageBeforeM3: { A: start.damStorageBeforeM3.A! } } } } };
+		expect(checkDroughtRestriction(input, noStorage)).toMatch(/B: dam_storage column or starting storage missing/);
 	});
 
 	it('the comparison names each change', () => {
@@ -542,7 +609,7 @@ describe('which storage, which units, and the EWR trigger (engine 1.54.0)', () =
 
 describe('a rule from the published restriction notice (engine 1.54.0)', () => {
 	it('one level in force below 100 %, every part cut by the notice’s %, from the day it was published to the next', () => {
-		const { rule, reason } = restrictionRuleFromNotice({ level: 'restricted', pct: 30, publishedAt: '2026-11-03T08:00:00Z', nextExpectedOn: '2027-01-15' });
+		const { rule, reason } = restrictionRuleFromNotice({ level: 'restricted', pct: 30, publishedOn: '2026-11-03', nextExpectedOn: '2027-01-15' });
 		expect(reason).toBeNull();
 		expect(droughtRestrictionIssues(rule)).toEqual([]);
 		expect(rule!.reviewDates).toEqual(['11-03']);
@@ -553,9 +620,9 @@ describe('a rule from the published restriction notice (engine 1.54.0)', () => {
 		expect(rule!.source).toMatch(/published restriction notice of 2026-11-03 \(30 %\)/);
 	});
 	it('no rule for a notice that cuts nothing; 29 February becomes 1 March', () => {
-		expect(restrictionRuleFromNotice({ level: 'none', pct: null, publishedAt: '2026-11-03', nextExpectedOn: null }).rule).toBeNull();
-		expect(restrictionRuleFromNotice({ level: 'advisory', pct: null, publishedAt: '2026-11-03', nextExpectedOn: null }).reason).toMatch(/no % cut/);
-		const leap = restrictionRuleFromNotice({ level: 'advisory', pct: 10, publishedAt: '2028-02-29', nextExpectedOn: null });
+		expect(restrictionRuleFromNotice({ level: 'none', pct: null, publishedOn: '2026-11-03', nextExpectedOn: null }).rule).toBeNull();
+		expect(restrictionRuleFromNotice({ level: 'advisory', pct: null, publishedOn: '2026-11-03', nextExpectedOn: null }).reason).toMatch(/no % cut/);
+		const leap = restrictionRuleFromNotice({ level: 'advisory', pct: 10, publishedOn: '2028-02-29', nextExpectedOn: null });
 		expect(leap.rule!.reviewDates).toEqual(['03-01']);
 		expect(leap.rule!.liftDates).toBeUndefined();
 		expect(leap.rule!.levels[0]!.label).toBe('Advisory notice');

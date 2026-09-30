@@ -1,6 +1,6 @@
 import { droughtRestrictionIssues, RESTRICTION_DATES_MAX, RESTRICTION_LEVELS_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { joinMonthDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 	it('starts from a rule the engine accepts: reviews on 1 October and 1 January, lifted 1 May, three deepening levels', () => {
@@ -43,5 +43,15 @@ describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 		expect('crops' in withCut(l, 'crops', null).cuts).toBe(false);
 		expect(PART_LABEL.crops).toBe('Crops (irrigation of the crop areas)');
 		expect(PART_LABEL.municipal).toBe('Municipal (town) demand objects');
+	});
+});
+
+describe('the published notice’s day (engine 1.54.0)', () => {
+	it('is the day in the project’s time zone, not the timestamp’s UTC day', () => {
+		// 00:30 on 3 November in Johannesburg is 22:30 on the 2nd in UTC.
+		expect(noticeDay('2026-11-02T22:30:00Z', 'Africa/Johannesburg')).toBe('2026-11-03');
+		expect(noticeDay('2026-11-03T08:00:00Z', 'Africa/Johannesburg')).toBe('2026-11-03');
+		expect(noticeDay('2026-11-03T08:00:00Z', 'Pacific/Auckland')).toBe('2026-11-03');
+		expect(noticeDay('2026-11-03T12:00:00Z', 'Pacific/Auckland')).toBe('2026-11-04');
 	});
 });

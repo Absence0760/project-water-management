@@ -1,6 +1,6 @@
 # verify/ — an independent cross-check of the engine
 
-A second implementation of the model's core daily chain, in Python, written
+A second implementation of the model's daily chain, in Python, written
 **only from the documentation**, run beside the engine's public `runModel` on
 the same inputs, day by day and column by column. The engine's own checks
 (model.md §6 Verification) show the model agrees with itself; the Excel audit
@@ -33,19 +33,19 @@ returns. It imports the engine by path and the example catchments from
 
 | File | What |
 | --- | --- |
-| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series; `unsupported(input)` lists what an input uses beyond phase 1; `Refused` is a run the docs say is refused |
+| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series, the allocation summary's run-dependent rows and coverage counts; `unsupported(input)` lists what an input uses beyond phases 1 and 2a; `Refused` is a run the docs say is refused |
 | `run_engine.ts` | `run <in> <out> …` runs `runModel` on each input; `examples <dir>` writes the three example catchments' inputs (`pnpm seed:examples`' data, without the automatic fit) |
-| `generate.py` | This harness's own seeded random-network generator (stdlib `random`; not the engine's fuzz generator, which is never read). Synthetic data only |
-| `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings) |
-| `diff.py` | Runs both sides on the examples, the probes and N random networks and prints, per column, the largest absolute and relative difference and a coverage count |
+| `generate.py` | This harness's own seeded random-network generator (stdlib `random`; not the engine's fuzz generator, which is never read). Synthetic data only. `dense=True` puts every phase-2a feature in most networks (each in about a third otherwise) |
+| `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings), and a few coverage probes for rules the random networks rarely reach |
+| `diff.py` | Runs both sides on the examples, the probes and N random and dense networks and prints, per column, the largest absolute and relative difference, the known differences and a coverage count |
 | `test_verify.py` | The guard: agreement, the mutation self-test and the generator's scope |
 
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2 min locally (examples, probes, 12 random networks, 24 mutants)
-VERIFY_TEST_RANDOM=200 pnpm test:verify            # what CI runs: agreement on 200 random networks
-python3 verify/diff.py --random 100 --seed 1000    # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 59 mutants)
+VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
+python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
 
 It needs Python 3.14 and the repo's `pnpm install` (for `tsx`); no database,
@@ -93,17 +93,58 @@ inputs echoed or labels rather than model results. Summaries (curtailment,
 compliance grids, assurance, the water account) are not compared: they are
 reductions of these series, which the engine's own checks recompute.
 
-## Phase 2 (not covered yet)
+## What phase 2a covers
+
+Added on engine 1.53.0 (tracking issue #259), each written from its
+docs/model.md section, in about a third of the random networks and most of
+the dense ones:
+
+- **Boreholes** (§2.7d): the node's combined capacity and individual
+  boreholes, their modes (`primary`, `supplemental`, `emergency` and the
+  combined `drought` rule, each below its level), the dam target (primary
+  and emergency only on a day the dam is drawn for demand, supplemental for
+  the dam's shortfall, dead storage first), annual caps reset on 1 October,
+  and stream depletion (its lag store and the depletion the river can't pay
+  carried as a deficit); modes and targets on a node without a dam.
+- **Allocations** (§2.12a): the cap per source (the budget prorated by the
+  allocations' validity, the room MIN(left, the licence limit of the day's
+  months and rates), shared by every draw on the source), the `allocation_*`
+  columns, and the summary's `capReached` and `limitBound` rows (with the
+  day's kind); full-allocation runs (k per unit and water year over both
+  sources, with a forecast tail, the floor held, the summary's `scaled`
+  rows); compare-only runs.
+- **Demand factors** (§2.3 item 4a) from `demandFactorFrom`.
+- **Demand objects** (§2.7f): monthly and per-unit sizing (losses, monthly
+  factors), schedules (always, yearly, a date range, Easter-relative, by
+  weekday; the last window wins), the priority classes around the crop,
+  returns and external destinations, and the basic-needs floor under a
+  demand factor.
+- **River off-takes** (§2.6a): network order with off-takes, demand and
+  capacity sizing (shares of the destination's need, the dam top-up), rates
+  by month, daily caps, priorities, hands-off flows (and the EWR), canal
+  losses and their return to a chosen unit, off-take water used first at the
+  destination, and the attribution's seepage legs.
+- **Other water users** (§2.7c): senior and junior, returns, the seniors'
+  requirement passed by the farms upstream, boreholes on users.
+- **Supply rules** (§2.7e): river first, the trigger with its stop level,
+  run of river, pump capacities, what the pump must leave in the river.
+- **Dam curves and releases** (§2.7a): survey curves (sorted, rejected when
+  unusable) with the evaporation limiter on a segment's slope, pass-inflow
+  and fixed releases with the outlet capacity, and the fixed release's room
+  for transfers.
+- **Hands-off flows** (§2.7h): a flow by month and/or the EWR at the farm,
+  on farms with and without a dam; River to dam by month.
+
+Every daily series these produce is compared (the per-rule transfer and
+per-object columns included), and `RunSummary.allocations`' run-dependent
+rows (`capReached`, `limitBound`, `scaled`) within the same tolerance.
+
+## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
 them; diff.py refuses an input that uses one. Tracked as one item in
-docs/followups.md § Verification ("`verify/` phase 2").
+docs/followups.md § Verification ("`verify/` phase 2b").
 
-- boreholes (combined and individual, stream depletion, annual caps, the dam
-  target), §2.7d;
-- allocations and the licence cap, full-allocation runs, §2.12a;
-- demand objects and the basic-needs floor, §2.7f;
-- river off-takes and canal seepage, §2.6a;
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
@@ -111,13 +152,13 @@ docs/followups.md § Verification ("`verify/` phase 2").
 - land cover, §2.5a;
 - time-varying development (sediment, a dam in service from a date,
   abstraction from a date), §2.7g;
-- and the other inputs outside the core chain: other water users (§2.7c),
-  supply rules and the river pump (§2.7e), dam survey curves and releases
-  (§2.7a), hands-off flows and River to dam by month (§2.7h), rain-source
-  periods (§2.4e), the areal rainfall correction (§2.4g), the daily A-pan
-  series (§2.3a), CHIRPS fit ranges (§2.4b), keep-dry periods and the
-  keep-dry guard, listed and kept accumulations, non-default data-quality
-  limits (§2.10a), demand factors and the outlook-only settings.
+- demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
+  with a part), and drought restrictions once #258 merges;
+- rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
+  daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
+  map (CR-23), keep-dry periods and the keep-dry guard, listed and kept
+  accumulations, non-default data-quality limits (§2.10a) and the
+  outlook-only settings.
 
 ## Tolerance
 
@@ -130,32 +171,82 @@ difference is about 1e-8 m³/day (on dam storage of up to millions of m³) and
 report's relative column shows `inf` where the engine's column is all zero
 and Python's differs by float noise (well inside the absolute part). The tolerance is the model's own
 float-noise level (model.md §6: daily balances to 1e-6 m³), not a way to
-absorb a real difference. `KNOWN_DIFFERENCES` in diff.py lists columns where
-the engine is known to depart from its documentation, each with its
-docs/followups.md item; it is empty.
+absorb a real difference. One exception: a dam's area is a power (or a
+curve) of its start-of-day storage, so float noise in an empty dam becomes a
+visible area (an exponent of 0.62 turns 1e-13 m³ into 4e-4 m²), and the
+rain on it and its evaporation follow. On a day both sides started with a
+storage within 1e-6 m³ of 0, those three columns aren't compared; the
+storage itself still is. Likewise `ewr_binding_site` labels a day with a
+charge, so on a day both sides' charge on the unit is within 1e-6 m³ of 0
+(float noise either side of the attribution's 10⁻¹² cut-off: dense seed
+1101, a 1e-8 m³ charge on 12 000 m³ of flow) the label isn't compared; the
+charge still is.
+
+`KNOWN_DIFFERENCES` in diff.py lists columns where the engine is known to
+depart from its documentation, each with its docs/followups.md item; it is
+empty. `KNOWN_CASES` lists departures recognised by their symptom on a few
+inputs (§ Findings): such a case's disagreements are printed as known and
+don't fail the run.
 
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (24
-mutants: the receiver's room ignored, or shared after the source's bands; one
+`test_verify.py` breaks `model.py` one documented rule at a time (59
+mutants). Phase 1's 24: the receiver's room ignored, or shared after the source's bands; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area) and requires each mutant
-to disagree with the engine somewhere. A new
-rule added to `model.py` gets a mutant; a mutant that passes means the cases
-need one that reaches it.
+the return share; the exchange; no catchment area. Phase 2a's 35: a
+borehole's annual cap, the depletion lag and its carried deficit, the
+emergency level, supplemental boreholes before the dam, the 1 October reset;
+the cap's proration, the licence months and rate, the limit-bound kind, a
+full allocation's sources, its tail years and no-demand rows; the floor, the
+per-unit losses, the last schedule window, the priority classes; the canal
+loss, its gross-up and return unit, an off-take's hands-off flow, the dam
+top-up; junior users, user returns, the seniors' pass; the trigger's stop
+level, the pump's capacity and what it must leave; the survey curve, the
+outlet on a pass-inflow release, dead storage and the room for transfers on
+a fixed one; the hands-off flow on a dam, its EWR flag, River to dam by
+month. Each mutant must disagree with the engine somewhere on the examples,
+the probes and the first 12 random and 12 dense networks (the dense ones and
+three coverage probes reach the phase-2a rules a random network rarely
+does). A new rule added to `model.py` gets a mutant; a mutant that passes
+means the cases need one that reaches it.
 
 ## Findings
 
-Result on 2026-09-30 (engine 1.36.0): the examples, the probes and 750 random
-networks (seeds 1–150 and 1000–1599) agree on every compared column (49
-column kinds; largest difference 9e-9 m³/day). No engine behaviour departs
-from its documentation in phase 1, so `KNOWN_DIFFERENCES` is empty.
+Phase 1, 2026-09-30 (engine 1.36.0): the examples, the probes and 750
+random networks (seeds 1–150 and 1000–1599) agree on every compared column
+(49 column kinds; largest difference 9e-9 m³/day). No engine behaviour
+departs from its documentation in phase 1, so `KNOWN_DIFFERENCES` is empty.
+
+Phase 2a, 2026-09-30 (engine 1.53.0): the examples, the 12 probes, 800
+random and 800 dense networks (seeds 1–400 and 1000–1399 of each) agree on
+every compared column (71 column kinds and the three allocation summary
+parts; largest difference 6e-6, a dam area in m², 5e-11 of its column's
+largest value) except on four networks, all one engine departure, listed in
+`KNOWN_CASES` and docs/followups.md § Verification:
+
+- **A float-noise demand switches on a dam-target borehole** (§2.7d). The
+  docs say a primary or emergency dam-target borehole pumps only while the
+  dam is drawn for demand, Dr > 0 to within 10⁻¹² × D. The engine switches it
+  on for a rounding residual: random seed 1343, a crop requirement of
+  1.4e-14 m³ left by the soil-water store (D = 1.4e-12 m³ at e = 0.01), and
+  the emergency borehole pumps 495 m³ into its 495 m³ dam (Python: 0);
+  dense seed 86, off-take water arriving at 980.5862268744551 m³ against a
+  demand of 980.5862268744552 m³, and it pumps 1 590 m³ (dam 3 189 vs
+  1 599 m³ after). The same noise demand drops a day from `limitBound` that
+  its documented test counts (random and dense seed 145: 198 days vs 199 in
+  water year 2010).
+
+Two more disagreements were the harness's own, fixed here: Python kept the
+factor of the year a forecast tail starts in on the tail's days in the next
+water year (the docs meant that year's tail days only; now written into
+§2.12a), and a noise-level storage in an empty dam showed as an area, and a
+noise-level charge as a binding site (§ Tolerance).
 
 Points the docs left open, settled from `runModel`'s outputs (a probe each)
 and written into docs/model.md:
@@ -170,3 +261,10 @@ and written into docs/model.md:
 | `zero-catchment-area` | A run with no catchment area (farm areas summing to 0 and no `catchmentAreaKm2`) is refused | §2.4a |
 | `binding-site-tie` | A tie between two sites' charges goes to the more downstream site (already documented; pinned) | §2.7b |
 | `forecast-tail-warmup` | The warm-up cycles the historical days only, never a forecast tail (already documented; pinned) | §2.4a, §2.4f |
+| `full-allocation-tail-new-year` | Under a full allocation, a later water year a forecast tail runs into is a part year of its own, scaled over its tail days; only the year the tail starts in keeps its historical days' factor | §2.12a |
+| `scaled-no-demand-tail-year` | A no-demand year's `scaled` row lists the volume registered over its run days, except the year a forecast tail starts in, which lists k × demand = 0 (the two readings disagree: docs/followups.md § Verification) | §2.12a |
+
+Coverage probes (rules the docs settle, which the random networks rarely
+reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule
+keeps pumping until the stop level, §2.7e) and `junior-user` (a junior user
+leaves the seniors' requirement, §2.7c).

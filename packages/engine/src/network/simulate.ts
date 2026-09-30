@@ -308,7 +308,8 @@ export interface NodeResult {
 	 * The unit's abstraction demand after the drought restriction (engine ≥
 	 * 1.54.0, docs/model.md §2.7i): what its sources are asked for, ≤ demand.
 	 * `demand` and `deficit` stay the unrestricted demand's, so a cut shows as
-	 * a shortfall. Absent without the rule, and on gauges and other users.
+	 * a shortfall. Absent without the rule, on gauges and other users, and on
+	 * a unit the rule doesn't cut (settings.droughtRestriction.nodeIds).
 	 */
 	restrictedDemand?: Float64Array;
 	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
@@ -695,7 +696,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	/** Whether the EWR trigger's site failed on the day before t (known at the start of day t). */
 	const ewrFailedBefore = (t: number): boolean => {
 		if (!rp || rp.ewrSite < 0) return false;
-		return t === 0 ? rp.initialEwrFailed === true : res[rp.ewrSite]!.ewrShortfall[t - 1]! < 0;
+		if (t === 0) return rp.initialEwrFailed === true;
+		if (!rp.ewrAtOutlet) return res[rp.ewrSite]!.ewrShortfall[t - 1]! < 0;
+		// The catchment's EWR at the outlet, as run.ts's ewr_shortfall column: the outflow against the whole EWR.
+		const q = res[rp.ewrSite]!.outflow[t - 1]!;
+		const e = ewr[t - 1]!;
+		return shortfall(q, e, Math.max(q, e)) < 0;
 	};
 	/** Decide every unit's level on day t (a review, or a fresh run's first day). */
 	const decide = (t: number) => {

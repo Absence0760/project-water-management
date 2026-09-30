@@ -1,7 +1,7 @@
 // Human impacts on the model document (roadmap WP-1.33 …): they are stored,
 // read back, validated and reach a run. Needs Postgres (pnpm dev:db:up).
 import { describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -421,6 +421,18 @@ describe('the drought restriction rule (engine 1.54.0, WP-3.8)', () => {
 		expect(summary.droughtRestriction.daysByLevel[1]).toBeGreaterThan(0);
 		expect(await seriesKeys(u, projectId, run.body.run.id, null, ['restriction_level', 'restriction_cut@crops'])).toEqual(['restriction_level', 'restriction_cut@crops']);
 		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['restricted_demand'])).toEqual(['restricted_demand']);
+
+		// Engine 1.54.0: the listed dam, the listed unit and the outlet's EWR trigger, by name in the summary sheet.
+		const named = { ...rule, basis: 'dams', damNodeIds: [farm.id], nodeIds: [farm.id], ewrTrigger: { siteNodeId: null, level: 1 } };
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: named } })).status).toBe(200);
+		const namedRun = await u.call('POST', `/projects/${projectId}/runs`, { label: 'named' });
+		expect(namedRun.status).toBe(201);
+		const csv = await (await app.request(`/projects/${projectId}/runs/${namedRun.body.run.id}/export/summary.csv`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } })).text();
+		const ruleLine = csv.split('\r\n').find((l) => l.startsWith('Rule,'))!;
+		expect(ruleLine).toContain('the storage of Upper');
+		expect(ruleLine).toContain('cutting Upper only');
+		expect(ruleLine).not.toContain(farm.id);
+		expect(csv).toMatch(/\r\nUpper,[^\r]*\r\n/);
 
 		// Off again: the next run has none of it.
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: null } })).status).toBe(200);

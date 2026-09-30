@@ -176,6 +176,7 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
 	// A person's alert mails and choices are theirs (051_alerts.sql); a rule is the project's.
 	'alert_delivery.user_id': 'cascade',
+	'pack_notice.user_id': 'cascade',
 	'alert_rule.created_by': 'set null',
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
