@@ -26,7 +26,7 @@ it is marked **(judgement)**.
 
 | # | Sketch | What it shows | Already built | Gap |
 | --- | --- | --- | --- | --- |
-| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The three-stage board, equal share ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
+| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The board (today, EWR met; the equal share one sentence in its intro, issue #177) ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
 | S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | ✅ The outlook (R5), the computed review triggers (R6) and the published level on each farm's page (E3); 🚧 WP-3.8's drought restriction rule to apply the triggers in a run | The rule (WP-3.8) |
 | S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | ✅ The impact report's board by year class (R7, §3.7), the verdict from the months; existing *authorised* use on a full-allocation baseline (WP-3.10's allocation mode) | Year classes, the full-allocation run, the summary board |
@@ -134,12 +134,15 @@ until the authorisation-based allocation (model.md §2.11) exists.
 the Runs tab's curtailment panel
 ([ui.md § Share the pain](../ui.md#share-the-pain)). **Decided
 2026-09-28 (plan.md O4, issue #90):** the client wants every category cut
-by the same %, which is the built `ShareRule { kind: 'equal' }`, so the
-per-category restriction above is not built. Still open to the client:
-whether the town's uses count as domestic or irrigation (it decides which
-row a town's demand object sits in, not how the share is cut). Should a
-per-category what-if be wanted later, `ShareRule` is where it goes (a
-second rule kind, labelled as a what-if).
+by the same %, so the per-category restriction above is not built. Still
+open to the client: whether the town's uses count as domestic or
+irrigation (it decides which row a town's demand object sits in, not how
+the share is cut). **Changed (issue #177):** the equitable share is no
+longer a stage. Under the equal share it is an identity (every row the same
+K %, the total always *Today*'s), so the board has two stages (today, EWR
+met) and says the equal share once in its intro. A per-category what-if,
+should one be wanted later, would bring the middle stage back, since its
+rows would then differ (labelled as a what-if).
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
 

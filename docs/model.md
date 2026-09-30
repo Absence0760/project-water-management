@@ -6093,8 +6093,9 @@ the network would check it is feasible; it would ship as a new, separately
 labelled table, not a silent redefinition of M.
 
 **Share the pain (issue #53 R3).** The Runs tab also shows this table as
-three stages per group, each ÷ the group's demand: supplied (K), the
-equitable share (P = K_tot) and volume left (V), with the other water users
+two stages per group, each ÷ the group's demand: supplied (K) and volume
+left (V), with the equitable share (P = K_tot, the same for every farm and
+summing to the supplied total) stated once in the board's intro, and the other water users
 as their own rows (supplied, then supplied + supply cut for a junior user,
 all of it for a senior one). It is a view: every figure comes from this
 table, bounded as *Demand left %* is, and `ENGINE_VERSION` is unchanged
