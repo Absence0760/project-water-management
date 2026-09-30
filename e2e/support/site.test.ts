@@ -16,6 +16,8 @@ let base = '';
 before(async () => {
 	writeFileSync(join(dir, 'index.html'), 'SPA');
 	writeFileSync(join(dir, 'welcome.html'), 'WELCOME');
+	mkdirSync(join(dir, 'welcome'));
+	writeFileSync(join(dir, 'welcome/af.html'), 'WELKOM');
 	writeFileSync(join(dir, 'favicon.svg'), '<svg/>');
 	mkdirSync(join(dir, '_app/immutable'), { recursive: true });
 	writeFileSync(join(dir, '_app/immutable/start.abc.js'), 'JS');
@@ -43,6 +45,8 @@ test('an extension-less SPA route gets index.html', async () => {
 
 test('a prerendered page is served from its own HTML', async () => {
 	assert.equal((await get('/welcome')).body, 'WELCOME');
+	// The landing page in another language (issue #137), from its own file.
+	assert.equal((await get('/welcome/af')).body, 'WELKOM');
 });
 
 test("the build's files are served as they are", async () => {

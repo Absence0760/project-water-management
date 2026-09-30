@@ -132,10 +132,15 @@ other signed-out route still goes to `/login?next=`.
 - **Routing.** `routeAccess` shows a signed-out `/` (`isLandingRoot`); the root
   layout renders `Landing.svelte` there in place of the projects page, loaded
   as its own chunk beside `/auth/me`. `/welcome` (`LANDING_PATH`, public) is
-  the same component, **prerendered** at build time (`routes/welcome/+page.ts`)
-  so crawlers and link previews get the page and its tags without running the
-  app; it renders at once, before the session is known, and even with the API
-  down. The canonical link and `og:url` point at `/welcome`.
+  the same component, **prerendered** at build time, once per language
+  (`routes/welcome/[[lang=locale]]`, issue #137): `/welcome` in English and
+  `/welcome/<code>` in every other language of the table (`/welcome/af`;
+  `landingPath`, the `locale` param matcher), so crawlers, link previews and
+  a visitor before any script get the page and its tags in the address's
+  language without running the app; it renders at once, before the session is
+  known, and even with the API down. The canonical link and `og:url` point at
+  the page's own address, `hreflang` alternates name every language's (and
+  `x-default` → `/welcome`), and `og:locale` is the language's (`af_ZA`).
 - **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
   mark and name, the language switch, **Sign in**), the page, a footer. A
   reading page with a 1200 px column; on a phone the header keeps the mark only.
@@ -147,9 +152,22 @@ other signed-out route still goes to `/login?next=`.
   to action; the footer. Sign-up is open, so **Create an account** links
   `/register` (issue #57's decision); Help stays behind sign-in.
 - **Language.** Translated (English and Afrikaans, § Language): the
-  `landing.*` sections of the translation sheet. `/welcome`'s prerendered HTML
-  is English and switches once the chosen language's words arrive, the one page
-  allowed to, so it never waits on the API.
+  `landing.*` sections of the translation sheet. On `/welcome` and
+  `/welcome/af` the language is the **address's**: each page's HTML is in
+  its language with its own `<html lang>` (`hooks.server.ts`), the route's
+  load hands the page its catalogue so the hydration matches, and the switch
+  is a pair of **links** between the two addresses (`LanguageSwitch`
+  `addressOf`, links however many languages there are: works without
+  script, `aria-current` on the current one, never
+  preloaded on hover; a click also keeps the choice on the device and the
+  account). `/welcome` is also the address for a visitor whose language
+  isn't known yet: once the app runs, a visitor whose choice (the
+  account's, this device's, else the browser's) is another language goes on
+  to that language's address (`replaceState`). `/welcome/af` stays
+  Afrikaans whatever the browser says, and reading it becomes the device's
+  choice when it has none, so the sign-in pages it leads to carry on in
+  Afrikaans. A signed-out `/` switches in place, as the sign-in pages do.
+  `e2e/tests/landing-language.spec.ts`.
 - **Tags.** Title, description, canonical, Open Graph (`og.jpg`, 1200 × 630,
   rendered) and a large Twitter card, with absolute URLs from the build's
   `SITE_ORIGIN` ([deployment.md](./deployment.md)).
@@ -6661,9 +6679,12 @@ methods and verify pages (their readers are assessors).
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
-  The prerendered `/welcome` ships `lang="en"` (`app.html`) because its
-  prerendered words are English; `lang` follows the words once the page
-  hydrates (a per-language prerender is in followups.md § Landing page).
+  The landing page is prerendered once per language (issue #137): `/welcome`
+  ships `lang="en"` (`app.html`) and `/welcome/af` `lang="af"`, set at build
+  time by `hooks.server.ts` from the language its words came out in
+  (`wordsLang()`, so still `en` if the catalogue were incomplete); the root
+  layout leaves it alone until the i18n module is loaded, then keeps it in
+  step as elsewhere ([§ Landing page](#landing-page)).
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
 - **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer

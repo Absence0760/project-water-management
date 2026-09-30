@@ -1555,6 +1555,14 @@
 //             the human-impact tables, the curtailment badge and board note;
 //             measured 1308 locally with #248 merged, main @ 564ede95; CI
 //             runs ~2 KB above that). Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1316 KB (issue #137, the landing page prerendered
+//             once per language: /welcome and /welcome/af). Measured against
+//             main @ c7df4af7: 1,340,999 → 1,342,667 gzip bytes (+1.6 KB;
+//             1311 → 1313 KB locally, CI ~2 KB above): the language switch's
+//             link form (its chunk and CSS, +0.25 KB), the landing's hreflang
+//             and og:locale tags (+0.3 KB), the route's load and entries
+//             (+0.2 KB), the root layout's URL-language step (+0.1 KB), and
+//             chunk-name churn. Headroom ~1 KB on CI.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1565,7 +1573,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1313,
+	totalCodeKb: 1316,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
