@@ -7,11 +7,11 @@
 	// until the person turns them back on), and "download my data" (POPIA,
 	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
+	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
-	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
@@ -69,33 +69,38 @@
 	// The radios show `unit`, not the session's value directly: a radio the
 	// person picked stays picked in the DOM whatever the markup says, so a
 	// failed save has to put the choice back itself. The radios stay live while
-	// a choice saves (disabling one drops the keyboard's focus), and only the
-	// latest choice's answer is taken, so a quick m³ → ML → m³ can't end on ML.
+	// a choice saves (disabling one drops the keyboard's focus). Saves go to the
+	// server one after another, in the order they were made, so the session
+	// always holds the server's latest answer; only the last choice's answer
+	// moves the radios or says Saved, so a quick m³ → ML → m³ can't end on ML.
 	let unit = $state<'m3' | 'ML'>(session.user?.volumeUnit ?? 'm3');
 	let unitSaved = $state(false);
 	let unitError = $state<string | null>(null);
 	let unitSeq = 0;
-	async function chooseUnit(volumeUnit: 'm3' | 'ML') {
+	let unitQueue: Promise<void> = Promise.resolve();
+	function chooseUnit(volumeUnit: 'm3' | 'ML'): Promise<void> {
 		const seq = ++unitSeq;
 		unitSaved = false;
 		unitError = null;
-		try {
-			const user = await api.auth.updateMe({ volumeUnit });
-			if (seq !== unitSeq) return;
-			session.user = user;
-			unit = user.volumeUnit ?? 'm3';
-			unitSaved = true;
-		} catch (err) {
-			if (seq !== unitSeq) return;
-			unitError = msg(err);
+		unitQueue = unitQueue.then(async () => {
+			try {
+				session.user = await api.auth.updateMe({ volumeUnit });
+				if (seq !== unitSeq) return;
+				unitSaved = true;
+			} catch (err) {
+				if (seq !== unitSeq) return;
+				unitError = msg(err);
+			}
 			unit = session.user?.volumeUnit ?? 'm3';
-		}
+		});
+		return unitQueue;
 	}
 
 	// ---- Alert emails paused (SES suppressed the address) ----
 	let resuming = $state(false);
 	let resumed = $state(false);
 	let resumeError = $state<string | null>(null);
+	let alertsHeading: HTMLHeadingElement | undefined = $state();
 	async function resumeMail() {
 		resuming = true;
 		resumeError = null;
@@ -103,8 +108,10 @@
 			await api.alerts.resume();
 			if (session.user) session.user = { ...session.user, mailSuppressed: null };
 			resumed = true;
-			// The banner, and the button just pressed, are gone (WCAG 2.4.3).
-			void focusPageStart();
+			// The banner, and the button just pressed, are gone: focus the section's
+			// title, just above the "back on" status, not the top of the page (WCAG 2.4.3).
+			await tick();
+			alertsHeading?.focus();
 		} catch (err) {
 			resumeError = resumeProblem(err);
 		} finally {
@@ -330,7 +337,7 @@
 				</section>
 
 				<section class="panel" aria-labelledby="alerts-h">
-					<h2 id="alerts-h">{t('Alert emails')}</h2>
+					<h2 id="alerts-h" tabindex="-1" bind:this={alertsHeading}>{t('Alert emails')}</h2>
 					{#if session.user.mailSuppressed}
 						<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
 							<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>

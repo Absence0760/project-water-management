@@ -41,12 +41,17 @@
 			return;
 		}
 		phase = 'reading';
+		const run = ++generation;
 		try {
-			file = { name: f.name, text: await f.text() };
-			preview = await api.allocations.preview(projectId, { kind, fileName: file.name, text: file.text, reference });
+			const read = { name: f.name, text: await f.text() };
+			const answer = await api.allocations.preview(projectId, { kind, fileName: read.name, text: read.text, reference });
+			if (run !== generation) return;
+			file = read;
+			preview = answer;
 			matches = {};
 			phase = 'preview';
 		} catch (err) {
+			if (run !== generation) return;
 			error = msg(err);
 			phase = 'choose';
 		} finally {
@@ -54,7 +59,15 @@
 		}
 	}
 
+	// Bumped by every reset and every file chosen: a file chosen while another
+	// is still read supersedes it (the picker stays live, since disabling it
+	// would drop the focus out of the sheet), and a read or import that
+	// answers after the sheet was closed some other way (Back takes `import=1`
+	// away) leaves the sheet as it now is, so a reopened sheet isn't filled,
+	// or shut, by an older request.
+	let generation = 0;
 	function reset() {
+		generation++;
 		phase = 'choose';
 		preview = null;
 		file = null;
@@ -74,11 +87,13 @@
 		if (!file || !preview) return;
 		phase = 'importing';
 		error = null;
+		const run = generation;
 		try {
 			const sent: Record<string, string | null> = {};
 			for (const [line, id] of Object.entries(matches)) sent[line] = id || null;
 			const r = await api.allocations.commit(projectId, { kind, fileName: file.name, text: file.text, reference, matches: sent });
-			open = false;
+			// The rows are in whatever became of the sheet: the page still says so.
+			if (run === generation) open = false;
 			onimported(
 				`Imported ${fmtNum(r.imported)} row${r.imported === 1 ? '' : 's'} from ${r.source.fileName}` +
 					(r.skipped ? `; ${fmtNum(r.skipped)} with problems were left out` : '') +
@@ -86,6 +101,7 @@
 					'.'
 			);
 		} catch (err) {
+			if (run !== generation) return;
 			error = msg(err);
 			phase = 'preview';
 		}
@@ -113,7 +129,7 @@
 			</div>
 			<div class="field">
 				<label for="alloc-file">File (CSV, up to 2 MB)</label>
-				<input id="alloc-file" type="file" accept=".csv,text/csv" bind:this={input} onchange={choose} disabled={phase === 'reading'} />
+				<input id="alloc-file" type="file" accept=".csv,text/csv" bind:this={input} onchange={choose} />
 			</div>
 			{#if phase === 'reading'}<p class="muted" role="status">Reading the file…</p>{/if}
 		{:else if preview}
@@ -177,7 +193,7 @@
 				{phase === 'importing' ? 'Importing…' : `Import ${fmtNum(valid.length)} row${valid.length === 1 ? '' : 's'}`}
 			</button>
 		{:else}
-			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+			<button type="button" class="btn" onclick={() => (open = false)} disabled={busy}>Close</button>
 		{/if}
 	{/snippet}
 </Dialog>
