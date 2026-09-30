@@ -93,7 +93,7 @@
 --     revisions (the person's own earlier text).
 
 -- ---------------------------------------------------------------------------
--- 1. assert_same_project, from 022_publication.sql
+-- 1. assert_same_project, from 112_evidence_pack.sql
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION assert_same_project() RETURNS trigger
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -112,6 +112,8 @@ CREATE OR REPLACE FUNCTION assert_same_project() RETURNS trigger
 				SELECT project_id INTO ref_project FROM model_run WHERE id = ref_id;
 			ELSIF col LIKE '%publication_id' THEN
 				SELECT project_id INTO ref_project FROM run_publication WHERE id = ref_id;
+			ELSIF col LIKE '%pack_id' THEN
+				SELECT project_id INTO ref_project FROM evidence_pack WHERE id = ref_id;
 			ELSIF col LIKE '%scenario_id' THEN
 				SELECT project_id INTO ref_project FROM scenario WHERE id = ref_id;
 			ELSE
