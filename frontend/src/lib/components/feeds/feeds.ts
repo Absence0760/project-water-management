@@ -200,6 +200,20 @@ export const BBOX_MAX_ROWS = 25;
 /** The cell indices [first, last) a pair of box edges spans, as the server counts them (a box edge on a grid line adds no sliver). */
 const span = (lo: number, hi: number) => Math.max(0, Math.ceil(hi / CELL_DEG - 1e-6) - Math.floor(lo / CELL_DEG + 1e-6));
 
+/** How many 0.05° cells a box covers, as the server counts them. */
+export const bboxCellCount = (b: Bbox) => span(b.south, b.north) * span(b.west, b.east);
+
+/**
+ * For a box that leaves out its sea cells: how many of its cells the last
+ * fetch averaged ("38 of 40 cells"), or null. The count is the ingest's
+ * (last_meta.cellsUsed), which refuses a fetch whose count changed.
+ */
+export function cellsUsedNote(f: Pick<FeedMeta, 'config' | 'lastMeta'>): string | null {
+	const n = f.lastMeta?.cellsUsed;
+	if (!f.config.bbox || !f.config.skipNoData || typeof n !== 'number') return null;
+	return `${n} of ${bboxCellCount(f.config.bbox)} cells`;
+}
+
 /**
  * Parse the bounding-box field, "south, west, north, east" in degrees. Returns
  * the box, or the first problem in words; the limits are the server's

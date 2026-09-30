@@ -52,7 +52,7 @@ import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
 import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
 import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/replace.js';
-import { type FeedSource, feedProvenance, feedSourceText, SOURCES } from './config.js';
+import { bboxCellCount, type FeedSource, feedProvenance, feedSourceText, type GridConfig, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -112,6 +112,30 @@ async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutco
 }
 
 type OkResult = Extract<FetchResult, { ok: true }>;
+
+/**
+ * A skipNoData box's `cellsUsed` (how many of its cells had data), checked
+ * against the box and against the feed's previous fetch. The sea mask is
+ * static, and a fetch checks only its own days (sources/chirps.ts
+ * NoDataPolicy), so a land cell that lost its data between two fetches shows
+ * only here: the count changed. Returns the count to record (the previous one
+ * carried forward when this answer read no day), or the reason to refuse the
+ * answer. Every other feed records none.
+ */
+function checkCellsUsed(feed: FeedRow, result: OkResult): { cellsUsed: number | null } | { error: string } {
+	const grid = feed.source === 'dws' ? null : (feed.config as GridConfig);
+	const prev = feed.cellsUsed ?? null;
+	if (!grid?.bbox || !grid.skipNoData) return { cellsUsed: null };
+	const got = result.meta.cellsUsed;
+	if (got === undefined && result.startDate === null) return { cellsUsed: prev };
+	if (typeof got !== 'number' || !Number.isInteger(got) || got < 1 || got > bboxCellCount(grid.bbox).cells) return { error: INVALID };
+	if (prev !== null && got !== prev) {
+		return {
+			error: `the grid had data in ${got} of the box’s cells, not ${prev} as before, so nothing was written: the sea doesn’t move, so the product’s grid has changed or a file is corrupt. Check the grid, or save the box again (or a new one) to start counting afresh`
+		};
+	}
+	return { cellsUsed: got };
+}
 
 /**
  * A confirmed replacement's fetch (see the header): merge the days into the
@@ -230,6 +254,13 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 		}
 	}
 
+	// Ours, not the fetcher's: checked, then carried forward in the meta both paths below record.
+	const used = checkCellsUsed(feed, result);
+	if ('error' in used) return failed(db, feed, used.error);
+	const fetcherMeta = { ...result.meta };
+	delete fetcherMeta.cellsUsed;
+	const checked: OkResult = { ...result, meta: used.cellsUsed === null ? fetcherMeta : { ...fetcherMeta, cellsUsed: used.cellsUsed } };
+
 	const writes = feedProvenance(feed.source, feed.config);
 	if (writes) {
 		// The version guard, on the locked row: nothing can relabel or refill it between the check and the write.
@@ -243,7 +274,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 					`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
 				);
 			}
-			return stageReplacement(db, feed, result, window, writes, held);
+			return stageReplacement(db, feed, checked, window, writes, held);
 		}
 	}
 
@@ -251,16 +282,16 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 	let lastValue: number | null = null;
 	let merged = 0;
 	let kept = 0;
-	if (result.startDate !== null) {
-		let lastIdx = result.values.length - 1;
-		while (lastIdx >= 0 && result.values[lastIdx] === null) lastIdx--;
+	if (checked.startDate !== null) {
+		let lastIdx = checked.values.length - 1;
+		while (lastIdx >= 0 && checked.values[lastIdx] === null) lastIdx--;
 		if (lastIdx >= 0) {
 			const body = SeriesBody.parse({
 				kind: feed.targetKind,
 				name: feed.targetName,
 				unit: SOURCES[feed.source].unit,
-				startDate: result.startDate,
-				values: result.values
+				startDate: checked.startDate,
+				values: checked.values
 			});
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
@@ -286,13 +317,13 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				if (!(err instanceof ApiError)) throw err;
 				return failed(db, feed, `the series could not take the new days: ${err.message}`);
 			}
-			lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
-			lastValue = result.values[lastIdx]!;
+			lastDate = fromEpochDay(toEpochDay(checked.startDate) + lastIdx);
+			lastValue = checked.values[lastIdx]!;
 		}
 	}
 	// Ours last, so a key of the same name in the fetcher's meta never stands.
 	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
-	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged, kept } : { ...result.meta, merged, kept, through: window.end };
+	const meta = feed.source === 'chirps_gefs' ? { ...checked.meta, merged, kept } : { ...checked.meta, merged, kept, through: window.end };
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	await continueBackfill(db, feed, window);
 	return { merged, lastDate };

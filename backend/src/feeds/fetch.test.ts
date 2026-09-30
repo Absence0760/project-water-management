@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { toEpochDay } from '@water-management/engine/calendar';
 import { FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
 import { writeGrid } from './sources/tiff-write.js';
+import { chirpsFinalUrl, gridMean } from './sources/chirps.js';
+import { bboxCells } from './config.js';
 import { DWS_MAX_YEARS } from './sources/dws.js';
 import type { FeedHttp } from './http.js';
 import {
@@ -221,6 +223,16 @@ describe('runFetch on the fixtures', () => {
 			changed
 		);
 		expect(r).toEqual({ ok: false, error: expect.stringMatching(/cells with data changed from one day to another within one fetch/) });
+	});
+
+	it('a day with no data in any cell, after another day of the fetch had some, reads as a corrupt or changed grid, not the sea', async () => {
+		const cells = bboxCells({ south: -20.3, west: 25.3, north: -20.2, east: 25.4 });
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		const drowned = fixtureHttpWith({ ...f, grid: { ...f.grid, sea: [[4, 6], [4, 7], [5, 6], [5, 7]] } }, '2026.01.02');
+		const url = chirpsFinalUrl('2026-01-02');
+		await expect(gridMean(drowned, url, cells, { mask: '1110' })).rejects.toThrow(/the file looks corrupt, or the grid has changed/);
+		// The first day read: all sea, said so.
+		await expect(gridMean(drowned, url, cells, { mask: null })).rejects.toThrow(/no data in any cell of the bounding box \(all sea/);
 	});
 
 	it('GEFS over a bounding box', async () => {

@@ -912,8 +912,19 @@ merges into:
   The fetch still fails when no cell has data, and when the set of cells with
   data changes between two days of one fetch: the sea mask is static, so a
   land cell going no-data is a corrupt or changed grid, not the sea. The
-  result's meta records `cellsUsed`, how many of the box's cells had data; a
-  change in it from one fetch to the next means the product's grid changed.
+  result's meta records `cellsUsed`, how many of the box's cells had data,
+  and the ingest carries it forward in `last_meta` (`feeds/ingest.ts`
+  `checkCellsUsed`, an integer from 1 to the box's cells): an answer with
+  another count than the previous fetch's is refused as a failed fetch that
+  writes nothing, naming both counts. A fetch checks only its own days, so
+  that is what catches a land cell lost between fetches. Saving the box
+  again (or a new one) is the way out: a config change clears `last_meta`
+  (`data_feed_stamp`), so counting starts afresh. The card shows "3 of 4
+  cells with data". A day with no data in any cell after another day of the
+  fetch had some is reported as a corrupt or changed file, not the sea.
+  `sat`'s final and preliminary products are assumed to share the sea mask:
+  a coverage difference between them would fail the fetch until the final
+  is out.
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;

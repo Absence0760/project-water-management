@@ -158,6 +158,8 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
+	// Three of its four cells are land (the ingest refuses a later fetch whose count changes).
+	await expect(feed).toContainText('· 3 of 4 cells with data');
 });
 
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {

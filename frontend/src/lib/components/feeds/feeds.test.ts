@@ -3,6 +3,7 @@ import { ApiError } from '$lib/api/client';
 import {
 	targetHint,
 	conflictMessage,
+	cellsUsedNote,
 	describePlace,
 	describeWrites,
 	feedWrites,
@@ -54,6 +55,20 @@ describe('parseCells', () => {
 	])('refuses %j', (text, message) => {
 		const r = parseCells(text);
 		expect('error' in r && r.error).toMatch(message);
+	});
+});
+
+describe('cellsUsedNote', () => {
+	const box = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+	it('says how many of a coastal box’s cells had data, from the last fetch', () => {
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: { cellsUsed: 3 } })).toBe('3 of 4 cells');
+		expect(cellsUsedNote({ config: { bbox: { south: -20.5, west: 25, north: -20, east: 25.5 }, skipNoData: true }, lastMeta: { cellsUsed: 97 } })).toBe('97 of 100 cells');
+	});
+	it('is null without the option, before a fetch, or for cells', () => {
+		expect(cellsUsedNote({ config: { bbox: box }, lastMeta: { cellsUsed: 3 } })).toBeNull();
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: null })).toBeNull();
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: { cellsUsed: '3' } })).toBeNull();
+		expect(cellsUsedNote({ config: { cells: [{ lat: 1, lon: 2 }] }, lastMeta: { cellsUsed: 3 } })).toBeNull();
 	});
 });
 

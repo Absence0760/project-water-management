@@ -2637,7 +2637,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     (about 0.5° × 0.5°; a bigger box is `400`, the issue at `config.bbox`,
     architecture.md § Data feeds). A box may add `skipNoData: true`: its
     no-data (sea) cells are left out and the rest renormalised, and each fetch's
-    `lastMeta` carries `cellsUsed` (with `cells` it is a `400`); for `dws`:
+    `lastMeta` carries `cellsUsed`; a fetch with another count than the last
+    one's is refused as failed until the box is saved again (with `cells` it
+    is a `400`); for `dws`:
     `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
     three digits; upper-cased; a reservoir `R`, weather `E` or other station
     is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,

@@ -75,7 +75,11 @@ export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell
 	let weights = 0;
 	if (noData) {
 		const mask = values.map((v) => (v === null ? '0' : '1')).join('');
-		if (!mask.includes('1')) throw new FeedNoDataError('the grid has no data in any cell of the bounding box (all sea, or outside the product’s coverage)');
+		if (!mask.includes('1')) {
+			// Another day of this fetch had data: this file lost it all, which the sea never does.
+			if (noData.mask !== null) throw new FeedFormatError('a day’s grid has no data in any cell of the box, though another day of the fetch had some: the file looks corrupt, or the grid has changed');
+			throw new FeedNoDataError('the grid has no data in any cell of the bounding box (all sea, or outside the product’s coverage)');
+		}
 		noData.mask ??= mask;
 		if (noData.mask !== mask) {
 			throw new FeedFormatError(

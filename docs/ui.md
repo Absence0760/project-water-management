@@ -3422,7 +3422,8 @@ part of the Settings tab's chunk; WP-2.10,
   rows, the server's limits mirrored so a box too big is explained before
   anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
   a box on the coast; its hint says a land cell losing its data, or a box with
-  no land, still fails). The card says where a feed reads: "cell -20.12, 25.17",
+  no land, still fails; the card then adds "· 3 of 4 cells with data",
+  `cellsUsedNote`). The card says where a feed reads: "cell -20.12, 25.17",
   "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
   with the option; `describePlace`). The panel is its own lazy chunk inside
   the Settings tab (`Lazy`, with the standard loading state); its
