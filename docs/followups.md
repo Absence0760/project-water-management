@@ -1194,17 +1194,14 @@ the suggested order (the IDs carry the detail):
       turns up in a saved run's `assurance` check on a new Node version,
       that is this bug in another place: look for another long per-node
       loop read through an object argument.
-- [ ] **The water account's EWR rows aren't redone by a per-run check**
-      (issue #192): `assurance` redoes the reliability and the stress grids
-      from the output's series, but `waterAccount.years[].ewr` (required,
-      met, days not met per site) has no per-run check, because the EWR
-      charge's requirement isn't an output series (`checkWaterAccount` in
-      `testing/invariants.ts` checks closure and 0 ≤ met ≤ required, in the
-      tests only). Its loop now has V1's workaround (`ewrOver`). Durable fix:
-      write each site's requirement as a series (or recompute it in the
-      check as the EWR grid does) and hold the account's EWR rows to it in
-      `checkSupplyAssurance`. Trigger: the next change to the water account
-      or the EWR charge, or any sign of V1 elsewhere.
+- [x] **The water account's EWR rows are redone by a per-run check**
+      (issue #192, engine 1.33.0): `checkSupplyAssurance` holds each
+      site's required, met and days not met, per water year and over the
+      run, to the site's own series: the pragmatic EWR (`ewr` at the
+      outlet, `ewr_cumulative` at a gauge) or a rule-table site's
+      `ewr_rule` (the pragmatic EWR on days without one), and
+      `ewr_shortfall` or `ewr_charge_shortfall`. Its loop has V1's
+      workaround (`ewrOver`).
 - ✅ The engine rejects networks with more than one outflow node.
 - [x] **Client catchment regression on real data:** done 2026-09-27: the
       workbook regression in `run.test.ts` passes against the re-extracted

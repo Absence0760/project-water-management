@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import type { ModelInput, ModelOutput, NetworkNode, WaterBalanceRow } from '../project';
 import { runModel, runModelChecked, runModelWith, withVerification } from '../run';
+import { blankEwrRuleTable } from '../reserve/rules';
 import { randomInput } from '../testing/fuzz';
 import { FARM_COLUMNS } from './columns';
 import { verifyRun } from './verify';
@@ -244,6 +245,25 @@ describe('the assurance self-check (engine 1.33.0, issue #192)', () => {
 		};
 		expect(check(cell(structuredClone(out), (sa) => sa.stress.nodes[0]!.ratio)).detail).toMatch(/^assurance stress grid "/);
 		expect(check(cell(structuredClone(out), (sa) => sa.stress.system.ratio)).detail).toMatch(/^assurance stress grid system /);
+	});
+
+	it('holds the water account’s EWR rows to each site’s own series, the pragmatic EWR and a rule table alike', () => {
+		const met: ModelOutput = structuredClone(out);
+		met.summary.supplyAssurance!.waterAccount.years[0]!.ewr[0]!.metM3 += 1;
+		expect(check(met).detail).toMatch(/^assurance water account EWR at the outlet in \d{4}: required \/ met \/ days not met/);
+		const days: ModelOutput = structuredClone(out);
+		days.summary.supplyAssurance!.waterAccount.total.ewr[0]!.daysNotMet += 1;
+		expect(check(days).detail).toMatch(/^assurance water account EWR at the outlet in the run:/);
+		// The outlet following a demanding rule table (ewrChargeSource 'ruleTable'): positive control, then tampered.
+		const table = { ...blankEwrRuleTable(null), source: 'Invented test table', ewr: Array.from({ length: 12 }, () => [50, 40, 30, 30, 20, 20, 10, 10, 5, 1]) };
+		const byRule: ModelInput = { ...input, settings: { ...input.settings, ewrRules: [table], ewrChargeSource: 'ruleTable' } };
+		const ruled = runModelChecked(byRule);
+		expect(ruled.summary.supplyAssurance!.waterAccount.total.ewr[0]!.ewrSource).toBe('ruleTable');
+		const ruleCheck = (o: ModelOutput) => verifyRun(byRule, o).verification.checks.find((c) => c.id === 'assurance')!;
+		expect(ruleCheck(ruled)).toMatchObject({ passed: true, detail: null });
+		const bad: ModelOutput = structuredClone(ruled);
+		bad.summary.supplyAssurance!.waterAccount.total.ewr[0]!.requiredM3 *= 1.01;
+		expect(ruleCheck(bad).detail).toMatch(/^assurance water account EWR at the outlet in the run:/);
 	});
 
 	it('fails when a farm or water user is missing or listed twice, and passes a run without the summary', () => {

@@ -1952,6 +1952,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
  *   they give, are its own `demand` and `supplied` over that window;
  * - each node's stress grid and the system's (every node together) are
  *   Σ supplied ÷ Σ demand of those columns per water year × month cell.
+ * - the water account's EWR rows follow from each site's own requirement
+ *   and shortfall series (checkAccountEwr).
  * A V8 miscompile once gave a node another node's sums while its id stayed
  * right; this check is what catches that class of fault in a saved run.
  * Sums add in the same order as the code under test, so they agree to the
@@ -2087,5 +2089,61 @@ export function checkSupplyAssurance(input: ModelInput, out: ModelOutput): strin
 		const bad = gridBad(g.nodeId!, g.ratio, p.D, p.G, p.A);
 		if (bad) return bad;
 	}
-	return gridBad('system', st.system.ratio, sysD, sysG, sysAbs);
+	const grid = gridBad('system', st.system.ratio, sysD, sysG, sysAbs);
+	if (grid) return grid;
+	return checkAccountEwr(sa.waterAccount, get, out.days);
+}
+
+/**
+ * The water account's EWR rows (per water year and the run, per site) against
+ * the site's own series: the requirement is the pragmatic EWR (`ewr` at the
+ * outlet, `ewr_cumulative` at a gauge) or, for a rule-table site
+ * (ewrSource 'ruleTable'), its `ewr_rule` on the days it has one and the
+ * pragmatic EWR on the others; the shortfall is `ewr_shortfall`, or
+ * `ewr_charge_shortfall` for a rule-table site. Required = Σ requirement,
+ * met = Σ (requirement + MIN(shortfall, 0)), days not met = days with a
+ * shortfall below 0 (engine ≥ 1.33.0, issue #192).
+ */
+function checkAccountEwr(wa: NonNullable<ModelOutput['summary']['supplyAssurance']>['waterAccount'], get: SeriesMap, days: number): string | null {
+	const sites = wa.total.ewr;
+	const rows = [...wa.years, wa.total];
+	let start = 0;
+	const spans = wa.years.map((y) => {
+		const span = { from: start, to: start + y.days - 1 };
+		start += y.days;
+		return span;
+	});
+	if (start !== days || wa.total.days !== days) return `assurance water account: its years cover ${start} days and its total ${wa.total.days}, the run has ${days}`;
+	spans.push({ from: 0, to: days - 1 });
+	for (let k = 0; k < sites.length; k++) {
+		const site = sites[k]!;
+		const key = site.nodeId ?? 'null';
+		const w = `assurance water account EWR at ${site.nodeId ?? 'the outlet'}`;
+		const pragmatic = site.nodeId === null ? get.get('null|ewr') : get.get(`${key}|ewr_cumulative`);
+		const rule = site.ewrSource === 'ruleTable' ? get.get(`${key}|ewr_rule`) : undefined;
+		const short = get.get(site.ewrSource === 'ruleTable' ? `${key}|ewr_charge_shortfall` : `${key}|ewr_shortfall`);
+		if (!pragmatic || !short || (site.ewrSource === 'ruleTable' && !rule)) return `${w}: the run has no series to check it against`;
+		for (let i = 0; i < rows.length; i++) {
+			const e = rows[i]!.ewr[k];
+			if (!e || e.nodeId !== site.nodeId) return `${w}: ${rows[i]!.waterYear ?? 'the run'} lists its sites in another order`;
+			const { from, to } = spans[i]!;
+			let req = 0;
+			let met = 0;
+			let abs = 0;
+			let notMet = 0;
+			for (let t = from; t <= to; t++) {
+				const rr = rule?.[t];
+				const r = rr !== undefined && Number.isFinite(rr) ? rr : pragmatic[t]!;
+				const sh = short[t]!;
+				req += r;
+				met += r + Math.min(sh, 0);
+				abs += Math.abs(r) + Math.abs(sh);
+				if (sh < 0) notMet++;
+			}
+			const close = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * abs + 1e-9;
+			if (!close(e.requiredM3, req) || !close(e.metM3, met) || e.daysNotMet !== notMet)
+				return `${w} in ${rows[i]!.waterYear ?? 'the run'}: required / met / days not met ${e.requiredM3} / ${e.metM3} / ${e.daysNotMet}, its own daily series give ${req} / ${met} / ${notMet}`;
+		}
+	}
+	return null;
 }
