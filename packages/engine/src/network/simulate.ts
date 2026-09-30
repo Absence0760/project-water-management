@@ -10,6 +10,7 @@ import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
 import type { PlanOfftake } from './offtake';
+import type { AllocationCap } from '../allocations/mode';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -85,9 +86,12 @@ export interface PlanNode {
 	 * the water year each day falls in; null = that source isn't capped.
 	 * Surface use (supplied − groundwater to the crop: the dam, the river pump
 	 * and off-take water used) and groundwater use (pumped to the crop and
-	 * into the dam) per water year stay within it. Absent = no cap.
+	 * into the dam) per water year stay within it, and each day within the
+	 * licence conditions' limit (engine ≥ 1.33.0: 0 outside the months of use,
+	 * else the maximum rates × 86 400; `surfaceLimit`, `groundwaterLimit`).
+	 * Absent = no cap.
 	 */
-	allocationCap?: { surface: Float64Array | null; groundwater: Float64Array | null };
+	allocationCap?: AllocationCap;
 	/** Surface and groundwater use so far this water year, the day before (a resumed run, engine ≥ 1.18.0); absent = 0. */
 	initialAllocationUsedM3?: readonly [number, number];
 	/**
@@ -511,10 +515,20 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 }
 
 /**
+ * A source's room today under an allocation cap: the water year's registered
+ * volume less the use so far, never below 0, and at most the licence
+ * conditions' limit today (engine ≥ 1.33.0). Infinity without a cap.
+ */
+function capRoom(budget: Float64Array | null, limit: Float64Array | null | undefined, used: number, t: number): number {
+	if (!budget) return Infinity;
+	const left = Math.max(0, budget[t]! - used);
+	return limit ? Math.min(left, limit[t]!) : left;
+}
+
+/**
  * What a node may still take today under an allocation cap (engine ≥ 1.18.0):
- * [surface, groundwater], each the water year's registered volume less the
- * use so far, never below 0; Infinity for a source (or a node) without a cap.
- * Records the room in the node's allocation_room columns.
+ * [surface, groundwater], each capRoom; Infinity for a source (or a node)
+ * without a cap. Records the room in the node's allocation_room columns.
  */
 function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null, t: number): [number, number] {
 	const c = node.allocationCap;
@@ -522,8 +536,8 @@ function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null
 	const room = r.allocationRoom!;
 	let s = Infinity;
 	let g = Infinity;
-	if (c.surface) s = room.surface![t] = Math.max(0, c.surface[t]! - used[0]!);
-	if (c.groundwater) g = room.groundwater![t] = Math.max(0, c.groundwater[t]! - used[1]!);
+	if (c.surface) s = room.surface![t] = capRoom(c.surface, c.surfaceLimit, used[0]!, t);
+	if (c.groundwater) g = room.groundwater![t] = capRoom(c.groundwater, c.groundwaterLimit, used[1]!, t);
 	return [s, g];
 }
 
@@ -550,8 +564,8 @@ export function damDrawBound(node: PlanNode, D: number, used: Float64Array | nul
 	const c = node.allocationCap;
 	let s = Infinity;
 	if (c && alloc) {
-		if (c.groundwater) primary = Math.min(primary, Math.max(0, c.groundwater[t]! - alloc[1]!));
-		if (c.surface) s = Math.max(0, c.surface[t]! - alloc[0]!);
+		if (c.groundwater) primary = Math.min(primary, capRoom(c.groundwater, c.groundwaterLimit, alloc[1]!, t));
+		if (c.surface) s = capRoom(c.surface, c.surfaceLimit, alloc[0]!, t);
 	}
 	return Math.min(Math.max(0, D - primary), s);
 }

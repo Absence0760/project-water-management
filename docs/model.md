@@ -6321,9 +6321,30 @@ bits whatever order they came in).
   lists per unit and year the demand before and the volume it was scaled to
   (`scaled`).
 
-Licence conditions (the months of use, a maximum rate, conditions in words;
-migration 103) ride on the input but neither mode applies them yet
-(followups.md § Allocations).
+**Licence conditions** (the months of use, a maximum rate, conditions in
+words; migration 103) ride on the input. From engine 1.33.0 (issue #72) the
+**cap** applies the months and the rate, per source, each day:
+
+```
+limit(n,s,t) = Σ over n's allocations a of source s in force on day t whose months include t's month: rate(a) × 86 400
+               (a rate not stated counts as no limit; no allocation of s in force on t: no limit)
+room(t)      = MIN(MAX(0, budget(y) − use so far in y), limit(t))
+```
+
+so a day in a month none of the in-force allocations may use gives 0, and
+two licences of one source in force together add their rates. The room is
+all a day's draws on that source share (the dam, the river pump and off-take
+water used for surface; every pumping unit, the dam-target ones included, for
+groundwater), and the transfer room's dam-draw bound (§2.6) reads the same
+room. The stored `allocation_room_*` columns are that day's room. An empty
+months list states none; a month or rate that doesn't read is dropped with a
+warning, keeping the volume. Two choices, pending the hydrologist with the
+rest of the cap: the dam draw counts against the surface rate like any other
+surface use (a licence rate usually names the river abstraction, not what a
+farm draws from its own dam), and water not taken stays where it was, so a
+dam holds a winter-only licence's water through the summer. A full
+allocation doesn't apply them (it scales to the volume, keeping the unit's
+own seasonal shape), and the conditions in words are never applied.
 
 **Warm starts** (§2.16): a snapshot keeps each capped unit's use so far in
 the water year (`allocationUsedM3`) and a full allocation's factor for the
@@ -6338,9 +6359,12 @@ to cap or full allocation is fitted against the flows the mode produces.
 
 **Checks** (`verify/checks.ts` `checkAllocations`, the `allocations` self-check
 on every saved run, and the engine fuzz with allocations in a quarter of its
-networks): a room column only for a capped source, falling by exactly the
-day's use within a water year and starting again at the recomputed budget on
-1 October, never below 0, and the day's use never above it; a full
+networks, a third of their allocations with licence conditions): a room
+column only for a capped source, each day MIN(what is left of the year's
+volume, the licence limit recomputed from the input), the left part falling
+by exactly the day's use within a water year and starting again at the
+recomputed budget on 1 October, never below 0, and the day's use never above
+it; a full
 allocation's factor constant within a year and each scaled unit's demand over
 the run's days of a year equal to the volume registered over them; no mode
 column in a run of another mode; and `RunSummary.allocations` equal to

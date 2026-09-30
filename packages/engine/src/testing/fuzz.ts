@@ -368,6 +368,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Registered volumes and the allocation mode (engine ≥ 1.18.0), from their own stream, after everything else.
 	const allocations = randomAllocations(new Rng(seed ^ 0x510e527f), nodes, settings, start, days);
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
+	// Their licence conditions (engine ≥ 1.33.0), from their own stream, so the volumes themselves are what they were.
+	addLicenceConditions(new Rng(seed ^ 0x6c9e0e8b), allocations);
 	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
 	// Hands-off flows and River to dam by month (engine ≥ 1.32.0), from their own stream, last of all.
@@ -633,6 +635,20 @@ function randomAllocations(g: Rng, nodes: NetworkNode[], settings: Partial<Proje
 		}
 	}
 	return out;
+}
+
+/**
+ * Licence conditions (engine ≥ 1.33.0, issue #72) on about a third of the
+ * allocations: months of use (the summer or winter half, one month, or an
+ * empty list, which states none) and a maximum rate from 0 to more than any
+ * day's use.
+ */
+function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
+	for (const a of allocations) {
+		if (!g.bool(0.35)) continue;
+		if (g.bool(0.6)) a.months = g.pick([[10, 11, 12, 1, 2, 3], [4, 5, 6, 7, 8, 9], [g.int(1, 12)], []]);
+		if (g.bool(0.6)) a.maxRateM3s = g.pick([0, g.logFloat(1e-4, 1), 100]);
+	}
 }
 
 /**

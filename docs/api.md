@@ -2103,8 +2103,9 @@ whether a use is lawful.
   storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
   createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
   `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
-  (strings) are licence conditions (103, issue #72), recorded and shown, not
-  yet applied by the engine. `holder`
+  (strings) are licence conditions (103, issue #72), recorded and shown; a
+  cap run (engine ≥ 1.33.0) applies `months` and `maxRateM3s`, never
+  `conditions`. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,

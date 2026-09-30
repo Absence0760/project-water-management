@@ -17,6 +17,11 @@
 //    it included, so that water uses up both volumes; the comparison nets it
 //    (docs/model.md §2.12). Pending the hydrologist (followups.md §
 //    Allocations, issue #90).
+//    The licence conditions bind too (engine ≥ 1.33.0, issue #72): on a day
+//    outside every in-force allocation's months of use the source gives
+//    nothing, and otherwise at most the in-force allocations' maximum rates
+//    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
+//    two.
 //  - 'fullAllocation': "what if every lawful user took their entitlement"
 //    (WP-3.11's background run): each unit's abstraction demand (crops and
 //    demand objects) is scaled, per water year, so it adds up to the
@@ -25,11 +30,11 @@
 //    no demand in a year can't be scaled and takes nothing that year (a
 //    warning names it).
 //
-// Licence conditions (months, the most it may take at once) are recorded on
-// an allocation but not enforced by either mode yet (docs/allocations.md).
+// 'fullAllocation' doesn't apply the licence conditions: it scales demand to
+// the volume, and its months and rate are what a cap run adds on top.
 //
 // Pure, like the rest of the engine.
-import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import type { AllocationEntry, AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 
@@ -72,8 +77,21 @@ export function usableAllocations(list: readonly AllocationEntry[] | undefined, 
 						: a.validFrom && a.validTo && a.validFrom > a.validTo
 							? 'it is valid from after valid to'
 							: null;
-		if (bad) warnings.push(`allocation ${String(a.id)} left out: ${bad}`);
-		else out.push(a);
+		if (bad) {
+			warnings.push(`allocation ${String(a.id)} left out: ${bad}`);
+			continue;
+		}
+		// A licence condition that doesn't read is dropped, not the volume (a stored input edited by hand).
+		let c = a;
+		if (a.months != null && !(Array.isArray(a.months) && a.months.every((m) => Number.isInteger(m) && m >= 1 && m <= 12))) {
+			warnings.push(`allocation ${String(a.id)}: its months of use aren't calendar months 1–12, so they're ignored`);
+			c = { ...c, months: null };
+		}
+		if (a.maxRateM3s != null && !(typeof a.maxRateM3s === 'number' && Number.isFinite(a.maxRateM3s) && a.maxRateM3s >= 0)) {
+			warnings.push(`allocation ${String(a.id)}: its maximum rate isn't a number ≥ 0, so it's ignored`);
+			c = { ...c, maxRateM3s: null };
+		}
+		out.push(c);
 	}
 	return out;
 }
@@ -110,6 +128,42 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
 		const last = Math.min(days - 1, end - start);
 		for (let k = t; k <= last; k++) out[k] = v;
 		t = last + 1;
+	}
+	return out;
+}
+
+/**
+ * The licence conditions' limit on each run day (`cap` mode, engine ≥
+ * 1.33.0, issue #72), m³/day, for one water source: of the allocations of
+ * `source` in force that day (their validity dates), those whose months of
+ * use include the day's month (none stated = every month) give their
+ * maximum rate × 86 400 (none stated = no limit), summed. So a day in a
+ * month none of them may use gives 0. A day no allocation of the source is
+ * in force on has no limit here (the year's budget still binds), and nor
+ * does any day when no allocation of the source states a condition: then
+ * null.
+ */
+export function dailyLimits(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): Float64Array | null {
+	const own = allocs.filter((a) => a.waterSource === source);
+	if (!own.some((a) => (a.months != null && a.months.length > 0) || a.maxRateM3s != null)) return null;
+	const span = own.map((a) => ({
+		lo: a.validFrom ? toEpochDay(a.validFrom) : -Infinity,
+		hi: a.validTo ? toEpochDay(a.validTo) : Infinity,
+		months: a.months?.length ? new Set(a.months) : null,
+		perDay: a.maxRateM3s == null ? Infinity : a.maxRateM3s * 86_400
+	}));
+	const out = new Float64Array(days);
+	for (let t = 0; t < days; t++) {
+		const d = start + t;
+		const m = monthOfEpochDay(d);
+		let inForce = false;
+		let v = 0;
+		for (const a of span) {
+			if (d < a.lo || d > a.hi) continue;
+			inForce = true;
+			if (!a.months || a.months.has(m)) v += a.perDay;
+		}
+		out[t] = inForce ? v : Infinity;
 	}
 	return out;
 }
@@ -176,7 +230,20 @@ interface ModePlanNode {
 	irrigationEfficiency: number;
 	objects?: { demand: Float64Array[]; total: Float64Array };
 	borehole?: unknown;
-	allocationCap?: { surface: Float64Array | null; groundwater: Float64Array | null };
+	allocationCap?: AllocationCap;
+}
+
+/**
+ * A unit's cap (PlanNode.allocationCap): per source, the water year's
+ * registered volume on each day (null = that source isn't capped), and the
+ * licence conditions' limit on each day (m³/day, engine ≥ 1.33.0; absent or
+ * null = none stated).
+ */
+export interface AllocationCap {
+	surface: Float64Array | null;
+	groundwater: Float64Array | null;
+	surfaceLimit?: Float64Array | null;
+	groundwaterLimit?: Float64Array | null;
 }
 
 /** The allocations as a run plans them (buildNetworkPlan). */
@@ -268,7 +335,9 @@ export function planAllocations(
 		if (mode === 'cap') {
 			const surface = yearBudgets(allocs, 'surface', start, days);
 			const groundwater = yearBudgets(allocs, 'groundwater', start, days);
-			p.allocationCap = { surface, groundwater };
+			const surfaceLimit = dailyLimits(allocs, 'surface', start, days);
+			const groundwaterLimit = dailyLimits(allocs, 'groundwater', start, days);
+			p.allocationCap = { surface, groundwater, ...(surfaceLimit ? { surfaceLimit } : {}), ...(groundwaterLimit ? { groundwaterLimit } : {}) };
 			if (!surface) warnings.push(`allocation cap: "${nodes[i]!.name}" has no surface-water volume registered, so its surface use isn't capped`);
 			if (!groundwater && p.borehole) warnings.push(`allocation cap: "${nodes[i]!.name}" has no groundwater volume registered, so its boreholes aren't capped`);
 			continue;
@@ -290,7 +359,7 @@ export function planAllocations(
 
 /** The run series the modes add (engine ≥ 1.18.0), per farm or water user they touch. */
 export const ALLOCATION_SERIES = {
-	surfaceRoom: { key: 'allocation_room_surface', label: 'Allocation cap: surface water it may still take this water year (start of day)' },
-	groundwaterRoom: { key: 'allocation_room_groundwater', label: 'Allocation cap: groundwater it may still take this water year (start of day)' },
+	surfaceRoom: { key: 'allocation_room_surface', label: 'Allocation cap: surface water it may take today (what is left of the water year’s volume, within the licence’s months and rate)' },
+	groundwaterRoom: { key: 'allocation_room_groundwater', label: 'Allocation cap: groundwater it may take today (what is left of the water year’s volume, within the licence’s months and rate)' },
 	demandFactor: { key: 'allocation_demand_factor', label: 'Full allocation: demand × this factor (the water year’s registered volume ÷ its demand)' }
 } as const;

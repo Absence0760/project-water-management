@@ -1242,7 +1242,8 @@ must build WP-2.15 Phase B.
   recorded and shown, not yet applied). Deviations: `fullAllocation` keeps the
   unit's own demand shape rather than a monthly pattern of the allocation
   (the licence's months aren't applied yet), and `conditions` is a list of
-  texts. Left: applying the licence conditions, XLSX and column mapping, the
+  texts. The cap applies the months and the maximum rate from engine 1.33.0
+  (2026-09-30, issue #72). Left: XLSX and column mapping, the
   farm view and the chart
   ([followups.md § Allocations](../followups.md#allocations-wp-310),
   [allocations.md](../allocations.md)).

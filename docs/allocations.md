@@ -36,8 +36,12 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Conditions | licence conditions in words (103), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
 
 Licence conditions are recorded and shown (the list sums them up in one
-line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions") but **not applied**
-yet: neither the comparison nor the allocation mode reads them.
+line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions"). The months and
+the maximum rate bind a run whose allocation mode is **cap** (engine 1.33.0,
+[model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
+the unit takes nothing of that source in a month outside the months of use,
+and at most the rate × 86 400 m³ a day. The comparison and a full-allocation
+run don't read them, and the conditions in words are never applied.
 
 A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
@@ -214,8 +218,8 @@ existing lawful use beside the application's numbers.
   with the demand it was given, not a meter reading. A registered volume can
   be missing, out of date or held by someone else.
 - Not the whole entitlement picture: the Reserve, other users' priority and
-  licence conditions (`months`, rates) aren't applied here, nor by the
-  allocation mode.
+  licence conditions (`months`, rates) aren't applied here; only a cap run
+  applies them (above).
 - Pending the hydrologist: the ±10 % band, and counting supply from the
   farm's own dam as abstraction (the WP says so; a hydrologist may want dam
   filling, s21b, compared with storage instead).
@@ -242,8 +246,6 @@ registration numbers and counts, never names.
 
 Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
 
-- Applying licence conditions: the cap to keep to the months of use and the
-  maximum rate.
 - XLSX import and a column-mapping step for extracts whose headings the alias
   table doesn't know (waits on a real WARMS extract).
 - The farm view (and share views, D3 (c)) showing a farmer their own

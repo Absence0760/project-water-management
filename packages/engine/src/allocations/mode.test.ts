@@ -3,14 +3,15 @@
 // networks with allocations in every mode are in the engine fuzz
 // (../testing/fuzz.ts randomAllocations) and the warm-start invariants.
 import { describe, expect, it } from 'vitest';
-import { toEpochDay, waterYearOf } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { testCatchment } from '../outlook/testCatchment';
 import type { ModelInput, ModelOutput } from '../project';
 import { captureModelState, runModel, runModelChecked, runModelFrom, runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario';
 import { checkResume } from '../testing/warmstartInvariants';
 import type { AllocationEntry } from './compare';
-import { ALLOCATION_SERIES, fullAllocationFactors, registeredOver, usableAllocations, yearBudgets } from './mode';
+import { checkAllocations } from '../verify/checks';
+import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, registeredOver, usableAllocations, yearBudgets } from './mode';
 
 const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((x) => x.nodeId === nodeId && x.key === key)?.values;
 
@@ -221,6 +222,100 @@ describe("allocationMode 'fullAllocation'", () => {
 	});
 });
 
+describe("allocationMode 'cap': licence conditions (engine 1.33.0, issue #72)", () => {
+	// A volume far above any year's use, so only the conditions bind.
+	const volume = meanA * 10;
+	const summer = [10, 11, 12, 1, 2, 3];
+	const monthOf = (out: ModelOutput, t: number) => monthOfEpochDay(toEpochDay(out.startDate) + t);
+
+	it('takes nothing outside the months of use, and as before inside them', () => {
+		const out = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume, months: summer }], 'cap'));
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const G = col(out, 'a', 'supplied')!;
+		const room = col(out, 'a', ALLOCATION_SERIES.surfaceRoom.key)!;
+		const G0 = col(base, 'a', 'supplied')!;
+		let offBefore = 0;
+		let on = 0;
+		for (let t = 0; t < G.length; t++) {
+			if (summer.includes(monthOf(out, t))) {
+				on += G[t]!;
+				continue;
+			}
+			offBefore += G0[t]!;
+			expect(G[t], `day ${t}`).toBe(0);
+			expect(room[t], `day ${t}`).toBe(0);
+		}
+		// Positive controls: the farm irrigates in April to September without the condition, and still does in its months.
+		expect(offBefore).toBeGreaterThan(0);
+		expect(on).toBeGreaterThan(0);
+		// Farm B has no allocation: untouched by A's licence.
+		expect(col(out, 'b', 'supplied')).toEqual(col(base, 'b', 'supplied'));
+	});
+
+	it('takes at most the maximum rate × 86 400 a day, and the rate binds', () => {
+		const G0 = col(base, 'a', 'supplied')!;
+		const perDay = Math.max(...G0) / 2;
+		const out = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume, maxRateM3s: perDay / 86_400 }], 'cap'));
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const G = col(out, 'a', 'supplied')!;
+		for (let t = 0; t < G.length; t++) expect(G[t]!, `day ${t}`).toBeLessThanOrEqual(perDay * (1 + 1e-12));
+		expect(G.filter((g) => Math.abs(g - perDay) <= perDay * 1e-9).length).toBeGreaterThan(10);
+		// The room column is the day's limit while the year's volume is far off.
+		expect(col(out, 'a', ALLOCATION_SERIES.surfaceRoom.key)!.every((r) => r <= perDay * (1 + 1e-12))).toBe(true);
+	});
+
+	it('the self-check catches a room above the licence limit (negative control)', () => {
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume, months: summer }], 'cap');
+		const out = runModelWithoutChecks(x);
+		expect(checkAllocations(x, out)).toBeNull();
+		const bad = structuredClone(out);
+		const room = bad.series.find((s) => s.nodeId === 'a' && s.key === ALLOCATION_SERIES.surfaceRoom.key)!.values;
+		const april = room.findIndex((_, t) => monthOf(out, t) === 4);
+		room[april] = 1000;
+		expect(checkAllocations(x, bad)).toMatch(/surface allocation room 1000 outside \[0, the year's registered [\d.e+]+ and the licence's 0 today\]/);
+	});
+
+	it('resumed from a snapshot inside the months of use, every series is the uninterrupted run’s to the bit', () => {
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2, months: summer, maxRateM3s: Math.max(...col(base, 'a', 'supplied')!) / 2 / 86_400 }], 'cap');
+		const full = runModelChecked(x);
+		expect(full.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		expect(checkResume(x, toEpochDay('2006-01-15') - toEpochDay(full.startDate), runModelWithoutChecks(x))).toBeNull();
+	});
+
+	describe('dailyLimits', () => {
+		const start = toEpochDay('2001-10-01');
+		it('is null when no allocation of the source states a condition', () => {
+			expect(dailyLimits([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 }], 'surface', start, 10)).toBeNull();
+			expect(dailyLimits([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [] }], 'surface', start, 10)).toBeNull();
+			expect(dailyLimits([{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: 1, maxRateM3s: 1 }], 'surface', start, 10)).toBeNull();
+		});
+
+		it('sums the in-force allocations whose months include the day; one with no rate lifts the limit', () => {
+			const a: AllocationEntry[] = [
+				{ id: 'oct', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [10], maxRateM3s: 1 },
+				{ id: 'any', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, maxRateM3s: 0.5 }
+			];
+			const l = dailyLimits(a, 'surface', start, 40)!;
+			expect(l[0]).toBeCloseTo(1.5 * 86_400, 9); // 1 October: both
+			expect(l[31]).toBeCloseTo(0.5 * 86_400, 9); // 1 November: the second only
+			const open = dailyLimits([...a, { id: 'free', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 }], 'surface', start, 40)!;
+			expect(open[0]).toBe(Infinity);
+		});
+
+		it('gives 0 in a month no in-force allocation may use, and no limit on a day none is in force', () => {
+			const a: AllocationEntry[] = [{ id: 'm', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [11], validTo: '2001-11-15' }];
+			const l = dailyLimits(a, 'surface', start, 60)!;
+			expect(l[0]).toBe(0); // October: outside its months
+			expect(l[31]).toBe(Infinity); // November, no rate stated
+			expect(l[50]).toBe(Infinity); // after it ends: nothing in force, the year's budget alone binds
+		});
+
+		it('a rate of 0 allows nothing', () => {
+			expect(dailyLimits([{ id: 'z', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, maxRateM3s: 0 }], 'surface', start, 3)).toEqual(new Float64Array(3));
+		});
+	});
+});
+
 describe('the allocations a run reads', () => {
 	it('leaves out a row whose volume, source or dates don’t read, with a warning', () => {
 		const w: string[] = [];
@@ -236,6 +331,24 @@ describe('the allocations a run reads', () => {
 		);
 		expect(ok.map((a) => a.id)).toEqual(['ok']);
 		expect(w).toHaveLength(4);
+	});
+
+	it('drops a licence condition that doesn’t read, keeping the volume, with a warning', () => {
+		const w: string[] = [];
+		const ok = usableAllocations(
+			[
+				{ id: 'm', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [0, 13] },
+				{ id: 'r', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, maxRateM3s: -1 },
+				{ id: 'fine', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [1, 12], maxRateM3s: 0.2 }
+			],
+			w
+		);
+		expect(ok.map((a) => [a.id, a.months ?? null, a.maxRateM3s ?? null])).toEqual([
+			['m', null, null],
+			['r', null, null],
+			['fine', [1, 12], 0.2]
+		]);
+		expect(w).toHaveLength(2);
 	});
 
 	it('an unknown mode only compares, with a warning', () => {

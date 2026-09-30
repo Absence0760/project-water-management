@@ -2942,7 +2942,7 @@ from the WP:
       `cap`: each unit's surface and groundwater use per water year within
       its whole-year registered volumes; `fullAllocation`: its demand scaled
       per water year to them, keeping its own seasonal shape (not the
-      licence's months: those aren't applied yet, below). Warm starts carry
+      licence's months, which only the cap applies, below). Warm starts carry
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
@@ -2969,11 +2969,13 @@ from the WP:
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
       input.
-- [ ] **Apply licence conditions in the cap**: no supply outside the months
-      of use, and a unit's daily take at most its maximum rate × 86 400. The
-      engine already receives them (`AllocationEntry.months`, `maxRateM3s`).
-      Trigger: a licence whose conditions bind in a scenario an assessor
-      runs, or the client asking.
+- [x] **Apply licence conditions in the cap** (2026-09-30, engine 1.33.0,
+      issue #72): no supply of a source on a day outside the months of use
+      of every allocation of it in force, and at most their maximum rates
+      × 86 400 a day (`dailyLimits`); the day's room is the smaller of that
+      and what is left of the year's volume, and the `allocations`
+      self-check replays both. `fullAllocation` still scales to the volume
+      only ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
