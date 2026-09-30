@@ -2,6 +2,7 @@ import { blankEwrRuleTable, type EwrRuleTable } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	applyPaste,
+	categoryFromText,
 	EXAMPLE_HIGH_FLOWS_CSV,
 	exampleGridCsv,
 	naturalComplete,
@@ -69,6 +70,14 @@ describe('errors', () => {
 		expect(tableErrors(table({ naturalMarMcm: 12.5 }))).toEqual({});
 		expect(tableErrors(table({ naturalMarMcm: null }))).toEqual({});
 		expect(tableErrors(table({ naturalMarMcm: 0 }))).toEqual({ naturalMarMcm: 'The natural MAR must be above 0 and at most 1\u202f000\u202f000 Mm³ a year, or left blank.' });
+	});
+
+	it('the REC (ER9) as typed: spaces dropped, upper-cased, blank is not given; a malformed one is an error on its field', () => {
+		expect(categoryFromText(' b / c ')).toBe('B/C');
+		expect(categoryFromText('a')).toBe('A');
+		expect(categoryFromText('   ')).toBeNull();
+		expect(tableErrors(table({ category: categoryFromText('b/c') }))).toEqual({});
+		expect(Object.keys(tableErrors(table({ category: categoryFromText('b/d') })))).toEqual(['category']);
 	});
 });
 

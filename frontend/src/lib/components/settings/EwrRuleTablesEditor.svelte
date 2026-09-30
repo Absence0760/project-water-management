@@ -1,7 +1,7 @@
 <!--
 	The per-table editor of Settings → Reserve rule tables (EwrRulesSection.svelte,
 	which loads it only once the project has a table, so a project without one
-	downloads none of it): site, source and its kind, what it covers, unit, natural source,
+	downloads none of it): site, source and its kind, the REC, what it covers, unit, natural source,
 	scale, the determination's natural MAR, % points, the EWR and natural grids, paste from a spreadsheet, the
 	plausibility notes and Remove. Helpers in ./ewrRules.ts.
 -->
@@ -13,6 +13,7 @@
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
 	import {
 		applyPaste,
+		categoryFromText,
 		exampleGridCsv,
 		naturalComplete,
 		parseGrid,
@@ -160,6 +161,22 @@
 				</select>
 				<span class="hint" id="{uid}-{i}-kind-h">
 					{#if errs.sourceKind}<span class="err">{errs.sourceKind}</span>{:else}Shown beside the Reserve results and in the printed report as its confidence.{/if}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-rec">Recommended ecological category (REC)</label>
+				<input
+					id="{uid}-{i}-rec"
+					readonly={readonly}
+					maxlength="5"
+					placeholder="e.g. B/C"
+					value={t.category ?? ''}
+					oninput={(e) => (t.category = categoryFromText(e.currentTarget.value))}
+					aria-invalid={errs.category ? 'true' : undefined}
+					aria-describedby="{uid}-{i}-rec-h"
+				/>
+				<span class="hint" id="{uid}-{i}-rec-h">
+					{#if errs.category}<span class="err">{errs.category}</span>{:else}As the determination states it: A to F, or a band like B/C. A label for the evidence report; no result depends on it.{/if}
 				</span>
 			</div>
 			<div class="field">

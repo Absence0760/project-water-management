@@ -5,7 +5,7 @@
 	// there is one layout. Everything comes from one EvidenceReport document
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
-	import { declaredRuleText, describeFitRecord, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
+	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
 	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
@@ -22,6 +22,9 @@
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
+	import UsePlot from './UsePlot.svelte';
+	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
+	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import { bandRange, bandText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
@@ -75,6 +78,11 @@
 	const cov = $derived(report.uncertainty.baseline?.coverage ?? []);
 	const bandsA = $derived(report.uncertainty.baseline?.bands ?? null);
 	const paired = $derived(report.uncertainty.paired);
+	const al = $derived(report.allocations);
+	const use = $derived(useRows(al));
+	/** Page 1's row says why nothing is judged when every year is a part year. */
+	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
+	const modeText = (m: keyof typeof ALLOCATION_MODE_LABEL | null) => (m === null ? 'not recorded (a run before engine 1.18.0)' : ALLOCATION_MODE_LABEL[m]);
 	const fit = $derived((base.settings as { fitRecord?: Parameters<typeof describeFitRecord>[0] | null }).fitRecord ?? null);
 </script>
 
@@ -106,8 +114,11 @@
 						<h3>Ecological Reserve at {site.name}{site.isOutlet ? ' (the catchment outlet)' : ''}</h3>
 						<dl class="kv">
 							<div><dt>Rule table</dt><dd>{site.source}<span class="sub">{site.sourceKind} · {site.component} · {site.unit}</span></dd></div>
-							<div><dt>Recommended ecological category (REC)</dt><dd class="na">Not given (the rule table has no REC yet)</dd></div>
+							<div><dt>Recommended ecological category (REC)</dt>{#if site.category}<dd><span data-testid="evidence-rec">{site.category}</span><span class="sub">from the rule table</span></dd>{:else}<dd class="na" data-testid="evidence-rec">Not given (enter it on the rule table in Settings)</dd>{/if}</div>
 							<div><dt>EWR as % of natural MAR</dt><dd>{site.ewrPctNmar === null ? '–' : `${fmtNum(site.ewrPctNmar, 1)} %`}<span class="sub">computed from the run’s natural flow</span></dd></div>
+							{#if site.belowTableA || site.belowTableB}
+								<div><dt>Months below the table’s driest point</dt><dd>{fmtNum(site.belowTableA)} of {fmtNum(site.monthsA)}{app && site.belowTableB !== null && site.belowTableB !== site.belowTableA ? ` (application ${fmtNum(site.belowTableB)})` : ''}<span class="sub">the requirement is scaled with the flow there, below the table’s driest requirement, so those months are easier to meet (G16){site.belowTableExpectedPct === null ? '' : `; about ${fmtNum(site.belowTableExpectedPct)} % expected with the percentile from the run`}</span></dd></div>
+							{/if}
 							{#if site.naturalMar}
 								<div><dt>Natural MAR, run vs determination</dt><dd>{fmtNum(site.naturalMar.runMcm, 2)} vs {fmtNum(site.naturalMar.tableMcm, 2)} Mm³/a ({signed(site.naturalMar.differencePct, 0)} %)</dd></div>
 							{/if}
@@ -329,6 +340,91 @@
 					</table>
 				</div>
 				<p class="small muted">Supply is the share of demand supplied over the whole run; days and years fully met are over the reporting window (assurance of supply, model.md §2.11a). No change here carries a band: the ensemble doesn’t carry supply per unit yet.</p>
+			{:else if s.id === 'allocations'}
+				{#if al.notAssessed}
+					<p class="na" data-testid="evidence-allocations-na">{al.notAssessed}</p>
+				{:else}
+					<dl class="kv">
+						<div><dt>Allocation mode</dt><dd>{modeText(al.modeA)}{app && al.modeB !== al.modeA ? ` (baseline); ${modeText(al.modeB)} (application)` : ''}</dd></div>
+						<div><dt>Counted as within</dt><dd>{useBandText(al.toleranceA ?? al.toleranceB)} of the registered volume{app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB ? ` (baseline); ${useBandText(al.toleranceB)} (application)` : ''}</dd></div>
+						<div><dt>Registered volumes on no unit of the run{app ? 's' : ''}</dt><dd>{al.notMatchedA}{app && al.notMatchedB !== null && al.notMatchedB !== al.notMatchedA ? ` (application ${al.notMatchedB})` : ''}<span class="sub">counted, not compared</span></dd></div>
+					</dl>
+					<p class="small muted">
+						Modelled use per water year against the volume registered for each unit (WARMS registrations, licences), over whole water years; a part year is listed but not counted.
+						Modelled, not metered: the comparison is arithmetic, not a finding on whether a use is lawful. The report carries volumes only, never the holders’ names.
+					</p>
+					{#if useJudged}<p class="na">{useJudged}</p>{/if}
+					{#if use.rows.some((r) => r.marks.length)}
+						<UsePlot
+							rows={use.rows}
+							axisMax={use.axisMax}
+							tolerance={al.toleranceA ?? al.toleranceB}
+							application={app}
+							title="Modelled use as a share of the registered volume, per unit and water source, each whole water year{app ? ', baseline and application' : ''}"
+							caption="Over and under use of the registered volumes."
+						/>
+					{/if}
+					<h3>Whole water years against the registered volume</h3>
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-allocations">
+							<thead>
+								<tr>
+									<th scope="col">Unit and source</th>
+									<th scope="col">Baseline</th>
+									{#if app}<th scope="col">Application</th>{/if}
+									<th scope="col" class="num">Mean registered (m³/a)</th>
+									<th scope="col" class="num">Mean modelled, baseline (m³/a)</th>
+									{#if app}<th scope="col" class="num">Mean modelled, application (m³/a)</th>{/if}
+								</tr>
+							</thead>
+							<tbody>
+								{#each al.units as u (u.nodeId)}
+									{#each u.sources as src (src.waterSource)}
+										<tr>
+											<th scope="row">{unitSourceLabel(u, src)}{u.onlyIn === 'application' ? ' (added)' : u.onlyIn === 'baseline' ? ' (removed)' : ''}</th>
+											<td>{countsText(src.countsA)}</td>
+											{#if app}<td>{countsText(src.countsB)}</td>{/if}
+											<td class="num">{m3(src.meanRegisteredA ?? src.meanRegisteredB)}{#if app && src.meanRegisteredA !== null && src.meanRegisteredB !== null && Math.abs(src.meanRegisteredA - src.meanRegisteredB) > 0.5}<span class="sub">application {m3(src.meanRegisteredB)}</span>{/if}</td>
+											<td class="num">{m3(src.meanModelledA)}</td>
+											{#if app}<td class="num">{m3(src.meanModelledB)}</td>{/if}
+										</tr>
+									{/each}
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<h3>By water year</h3>
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-allocation-years">
+							<thead>
+								<tr>
+									<th scope="col">Unit and source</th>
+									<th scope="col">Water year</th>
+									<th scope="col" class="num">Registered (m³)</th>
+									<th scope="col" class="num">Modelled, baseline (m³)</th>
+									{#if app}<th scope="col" class="num">Modelled, application (m³)</th>{/if}
+									<th scope="col">Against the registered volume{app ? ', baseline → application' : ''}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each al.units as u (u.nodeId)}
+									{#each u.sources as src (src.waterSource)}
+										{#each src.years as y (y.waterYear)}
+											<tr>
+												<th scope="row">{u.name}<span class="sub">{SOURCE_LABEL[src.waterSource]}</span></th>
+												<td class="nowrap">{waterYearLabel(y.waterYear)}{#if partNote(y, app)}<span class="sub">{partNote(y, app)}</span>{/if}</td>
+												<td class="num">{m3(y.registeredA ?? y.registeredB)}{#if app && y.registeredA !== null && y.registeredB !== null && Math.abs(y.registeredA - y.registeredB) > 0.5}<span class="sub">application {m3(y.registeredB)}</span>{/if}</td>
+												<td class="num">{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span></td>
+												{#if app}<td class="num">{m3(y.modelledB)}<span class="sub">{ratioText(y.modelledB, y.registeredB)}</span></td>{/if}
+												<td>{y.statusA ? STATUS_LABEL[y.statusA] : '–'}{app ? ` → ${y.statusB ? STATUS_LABEL[y.statusB] : '–'}` : ''}</td>
+											</tr>
+										{/each}
+									{/each}
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
 				<dl class="kv">
@@ -533,6 +629,9 @@
 		display: block;
 		font-size: 0.78rem;
 		color: var(--text-muted);
+	}
+	.nowrap {
+		white-space: nowrap;
 	}
 	.na {
 		font-style: italic;

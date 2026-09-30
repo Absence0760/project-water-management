@@ -176,7 +176,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C6 | Validation scores (split sample, dry → wet, independent record) | Out-of-sample skill; short records overfit (evidence: calibration-research.md headline 1) | built: § 3 shows the fit record's validation (`FitProvenance`, ER7), **Not assessed** when the parameters aren't from a stored fit | § 3 |
 | C7 | WR2012 comparison: natural MAR against the scaled reference, monthly pattern, flag and the written explanation of a *query* | National reference (evidence: [Bailey & Pitman 2016]; model.md §2.10c) | built | § 3 WR2012 |
 | C8 | WR2012 five-statistic table with good-fit bands | Current practice (evidence: [Dabrowski 2025] Table 4; CR-28) | built (CR-28, engine 1.19.0, `summary.calibration.wr2012Fit`): shown in § 3's calibration record | § 3 |
-| C9 | EWR site metadata: site, source (gazette notice or desktop), component, unit, REC, EWR % nMAR | How the Reserve is stated (evidence: [Reserve GN]) | partial: source, component, unit and EWR % nMAR (computed from the run) built; REC ask ER9 | § 1 site strip |
+| C9 | EWR site metadata: site, source (gazette notice or desktop), component, unit, REC, EWR % nMAR | How the Reserve is stated (evidence: [Reserve GN]) | built: source, component, unit, EWR % nMAR (computed from the run) and the REC (ER9, the rule table's `category`; *Not given* without one) | § 1 site strip |
 | C10 | Reserve compliance by the assurance rules, per site: months met, by month of the year, deficit, longest run, FDC check; baseline and application | Monthly compliance with contiguity (evidence: [Pollard 2011], [Riddell 2014]) | built (§2.9c), per rule-table site | Page 1 row 1; § 1 heat maps, table |
 | C11 | Days below the daily EWR (the pragmatic EWR) and the shortfall volume | The app's daily EWR sets curtailment; % of time not met (evidence: CR-29) | built | Page 1 rows 2–3 |
 | C12 | MAR and outflow as % of natural MAR, baseline and application | R267 lists MAR; the Reserve is stated in % nMAR (evidence: [R267], [Reserve GN]) | built (means); % nMAR is a division | Page 1 row 4 |
@@ -192,6 +192,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C22 | Known limitations, disclaimers, what the report does not cover (dam safety DW793, groundwater, water quality, s27 socio-economic factors) | Liability (evidence: roadmap WP-3.13; [DamSafety]) | WP-3.13 | Page 1 "does not decide"; Appendix B.1, B.3 |
 | C23 | Sign-off by a registered natural scientist, bound to a statement hash | Professional responsibility (evidence: roadmap WP-3.13, [SACNASP]) | WP-3.13 | Appendix B.2 |
 | C24 | Reproducibility: input series hashes, ops hash, manifest hash and short code, verify link, reproduction bundle, page count | Verify an unaltered, reproducible report (evidence: roadmap WP-3.1, WP-3.14) | partial: series hashes (Appendix A.3) and stored values built; manifest WP-3.14 | Every footer; Appendix A.3, B.4 |
+| C25 | Registered water use: each unit's registered volumes (WARMS registrations, licences) against its modelled use per water year, baseline and application; units by name, never the holder (D3) | s27 "existing lawful water uses"; the licence applicant persona asked for a registered-vs-modelled row (judgement) | built (WP-3.10 comparison per run, each run's own volumes; no band) | Page 1 row "Registered vs modelled use" and flag; § 5 |
 
 ## 4. Information architecture
 
@@ -222,7 +223,7 @@ Fixed content, in this order (mock-up sheet 1):
    condition, grey for a count. Judgement: flags go *above* the numbers so
    they are read before them.
 4. **What changes, application minus baseline**: one table, fixed rows
-   (C10, C11, C11 shortfall, C12, C15, C14), columns *Baseline*,
+   (C10, C11, C11 shortfall, C12, C15, C25, C14), columns *Baseline*,
    *Application*, *Change (paired median, 5–95 %)* with the nominated run's
    own difference beneath, and *Worse in* (k of n sets). One row per EWR
    site when there are several; the outlet first.
@@ -252,6 +253,14 @@ full-allocation background run (WP-3.10).
 | 2 | Uncertainty | The coverage warning if any; the cited ensemble; the ledger of every start on the baseline; the baseline's bands against the nominated run; the paired bands against zero; R1 and R2 | C18 |
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
 | 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply | C14, C15 |
+| 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
+
+§ 5 was added in report version `evidence-2`. Its page-1 row fits the
+fixed-rows rule (G6) because it is always printed: the unit-years above a
+registered volume, summed, or *Not assessed* with the reason (no volumes in
+the runs, none on a unit of theirs, no whole water year). One sum rather
+than a row per unit keeps page 1 fixed in length whatever the catchment's
+register holds; § 5 and the flag name the units.
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
@@ -380,7 +389,7 @@ measure has a test in the build (§11).
 | G13 | Applicant free text only in a labelled Appendix C, verbatim with author | A persuasive narrative on page 1 | Layout rule (judgement) | built (Appendix C) |
 | G14 | One source for the numbers: the report and the compare page read the same engine outputs | A report that disagrees with the app | Shared code paths; a parity test | built (`evidence/report.test.ts` checks page 1 against `compareRuns`) |
 | G15 | No verdict colour; neutral encodings | Arguing with a traffic light | Visual rule (§5 D-U8) | built |
-| G16 | The EWR can't be off: a missing rule table is "Not assessed", and a zero table is flagged | Switching the Reserve off | WP-3.15 item 7; §2.9c warnings | partial: "Not assessed" row and zero-EWR flag built; flows below the table's lowest point not flagged |
+| G16 | The EWR can't be off: a missing rule table is "Not assessed", and a zero table is flagged | Switching the Reserve off | WP-3.15 item 7; §2.9c warnings | built: "Not assessed" row, zero-EWR flag, and a caution flag per site counting the months drier than the table's driest point (the requirement is scaled with the flow there) |
 
 ## 7. The mock-up
 
@@ -437,7 +446,7 @@ Nothing here changes `runModel`'s results.
 | ER6 | The WR2012 five-statistic table (CR-28) | C8 | Built as CR-28 (engine 1.19.0); the report shows it in § 3's calibration record |
 | ER7 | Report the fit record's validation scores, and "Not assessed" with the reason when the parameters aren't from a stored fit | C6 | Phase C (frontend only) |
 | ER8 | Assurance of supply metrics per farm (time-based, volumetric, annual) | C15 | WP-3.4, unchanged |
-| ER9 | EWR site metadata on the rule table: `category` (REC), `reference` (gazette notice), and the EWR as % nMAR computed from the run | C9 | WP-3.7 has `category` and `reference`; bring them to `EwrRuleTable` in Phase C (a settings field, no migration) |
+| ER9 | EWR site metadata on the rule table: `category` (REC), `reference` (gazette notice), and the EWR as % nMAR computed from the run | C9 | Built: `category` on `EwrRuleTable` (A–F or a band like B/C; a settings field, no migration, a label no result depends on) and the EWR % nMAR; the gazette notice is the table's `source`, so no separate `reference` |
 | ER10 | Anonymised downstream users in the report, per Step 3 D2 | C14; farm confidentiality (Step 2 D1) | WP-3.3 decides; Phase C shows all farms to viewers who can already see them |
 | ER11 | The manifest, its hash on every footer, the page count, `/verify` | G11, C24 | WP-3.14, unchanged |
 
@@ -554,6 +563,11 @@ layout from the frozen manifest.
   sections 1–4, Appendices A–C, the heat maps, the paired by-month plot, the
   FDC chart, the draft stamp); ER7 through `FitProvenance`; the links from
   the Runs tab and the scenario comparison.
+- § 5 Registered water use (C25, report version `evidence-2`): each run's
+  own allocations compared per unit and water year
+  (`backend/src/allocations/runUse.ts`), the over/under-use chart
+  (`UsePlot`), the page-1 row *Registered vs modelled use* and its flag
+  ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
 
 Not built, or changed:
 - **ER1 avoided.** One run-scoped endpoint returns the whole document, the
@@ -562,8 +576,8 @@ Not built, or changed:
 - `POST /projects/:id/reports` with `evidence: true` is not built: the
   evidence report prints from the browser only. The server-rendered PDF
   comes with the issued pack (WP-3.14).
-- ER4's per-unit supply bands, ER5 (banded FDC), ER9 (REC per rule
-  table) and the licence-impact board by year class on page 1. Each is
+- ER4's per-unit supply bands, ER5 (banded FDC) and the licence-impact
+  board by year class on page 1. Each is
   tracked in
   [followups.md § Evidence report](../followups.md#evidence-report-issue-71).
 - Page numbers ("page x of y") in the footer: the browser print has none;
@@ -578,7 +592,7 @@ Not built, or changed:
 | # | Question | Proposal | Who decides |
 | --- | --- | --- | --- |
 | ER-D1 | Does the pilot CMA want page 1 as designed (a change table with bands), or a fixed form of its own? | Show this mock-up to the pilot CMA before Phase C | Client, with the pilot CMA (Step 3 §9 Q1) |
-| ER-D2 | Which Reserve determination applies at each EWR site (gazetted notice, desktop), with its REC and % nMAR? | Enter them as ER9 metadata; "Not given" until then | Client's hydrologist (Step 3 §9 Q2) |
+| ER-D2 | Which Reserve determination applies at each EWR site (gazetted notice, desktop), with its REC and % nMAR? | Enter them as ER9 metadata (the rule table's REC field, built); "Not given" until then | Client's hydrologist (Step 3 §9 Q2) |
 | ER-D3 | The project's declared uncertainty thresholds (KGE′ ≥ 0.5, WR2012 up to *query*, low-flow bias ±50 %, 300 sets, ±0.1 pan) | Confirm or replace, then fix them as ER3 before any application | Hydrologist + authority (plan.md Q18) |
 | ER-D4 | Does a coverage warning block issue? | No: print it on page 1 and § 2 (§5 D-U5) | Authority |
 | ER-D5 | Does the authority expect monthly WRYM-style results alongside the daily model? | Add a monthly aggregation appendix if asked | Authority (Step 3 §9 Q5) |
