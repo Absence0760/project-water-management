@@ -1,6 +1,6 @@
 // An applicant's yields (096_contributor_yield, WP-3.6 × WP-3.3, issue #73):
 // a contributor queues a firm yield or curve of a dam of their own
-// application (their farm, or a dam its node.add ops add), reads their own
+// application (their farm, or a dam its node.add or node.insert ops add), reads their own
 // jobs and results, and nothing else: not a hidden neighbour's dam (the same
 // answer as an unknown id), not a saved run, not someone else's application,
 // not an assessor's yield on theirs. The job fails closed once they lose the
@@ -84,6 +84,28 @@ describe('an applicant’s yield on their own application', () => {
 		expect(byNode).toEqual({ [rooikloof.id]: 60_000, [newDam.id]: 30_000 });
 	});
 
+	it('queues one on a dam the application inserts on a reach (node.insert, engine 1.35.0, migration 121), through the API and RLS alike', async () => {
+		const weir = node('Weir dam', outlet.id, { pctRunoffToDam: 1, damCapacityM3: 25_000, damInitialPct: 1, damMinPct: 0, areaKm2: 0 });
+		const s = await applicant.call('POST', `${P()}/scenarios`, {
+			name: 'A weir dam below Rooikloof',
+			baseRunId: published,
+			ops: [{ op: 'node.insert', node: weir, upstreamNodeIds: [rooikloof.id] }]
+		});
+		expect(s.status, JSON.stringify(s.body)).toBe(201);
+		expect(s.body.check.problems).toEqual([]);
+		const res = await ask(applicant, { scenarioId: s.body.scenario.id, nodeId: weir.id });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await tick();
+		expect(await job(res.body.jobId)).toEqual({ status: 'done', last_error: null });
+		const got = await applicant.call('GET', `${P()}/yield?scenarioId=${s.body.scenario.id}`);
+		expect(got.body.results.map((r: { nodeId: string }) => r.nodeId)).toEqual([weir.id]);
+		// Another application's inserted dam is not theirs: the policy refuses a direct job on it.
+		const direct = withUser(other.id, (db) =>
+			db.query(`INSERT INTO job (project_id, kind, payload, acting_user_id) VALUES ($1, 'yield', $2, $3)`, [projectId, { kind: 'firm', scenarioId: s.body.scenario.id, nodeId: weir.id, params: {} }, other.id])
+		);
+		await expect(direct).rejects.toThrow(/row-level security/);
+	});
+
 	it('a hidden neighbour’s dam gets the words an unknown id gets; a saved run and a team scenario are refused', async () => {
 		const hidden = await ask(applicant, { scenarioId: sid, nodeId: kalkoenkrans.id });
 		const unknown = await ask(applicant, { scenarioId: sid, nodeId: crypto.randomUUID() });
@@ -122,6 +144,23 @@ describe('an applicant’s yield on their own application', () => {
 		expect(seen.length).toBeGreaterThan(0);
 		expect(new Set(seen.map((j) => j.acting_user_id))).toEqual(new Set([applicant.id]));
 		await asOwner(`UPDATE job SET status = 'dead', finished_at = now() WHERE project_id = $1 AND status = 'queued'`, [projectId]);
+	});
+
+	it('follows and cancels their own yield job on the job list (GET …/jobs), which shows them no one else’s', async () => {
+		const mine = await ask(applicant, { scenarioId: sid, nodeId: rooikloof.id, kind: 'curve' });
+		expect(mine.status, JSON.stringify(mine.body)).toBe(202);
+		const listed = await applicant.call('GET', `${P()}/jobs`);
+		expect(listed.status).toBe(200);
+		expect(listed.body.jobs.map((j: { id: string }) => j.id)).toContain(mine.body.jobId);
+		expect(new Set(listed.body.jobs.map((j: { kind: string }) => j.kind))).toEqual(new Set(['yield']));
+		// The owner's yield (the test above) is there, unlisted to the applicant; the other applicant lists none of theirs.
+		const all = (await owner.call('GET', `${P()}/jobs`)).body.jobs.map((j: { id: string }) => j.id);
+		expect(all.length).toBeGreaterThan(listed.body.jobs.length);
+		expect((await other.call('GET', `${P()}/jobs`)).body.jobs).toEqual([]);
+		const cancel = await applicant.call('POST', `${P()}/yield/${mine.body.jobId}/cancel`, {});
+		expect(cancel.status).toBe(200);
+		const after = (await applicant.call('GET', `${P()}/jobs`)).body.jobs.find((j: { id: string }) => j.id === mine.body.jobId);
+		expect(after.status).toBe('dead');
 	});
 
 	it('doesn’t see a yield someone else stored on their application, even of their own dam', async () => {

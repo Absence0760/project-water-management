@@ -16,8 +16,10 @@
 #     credentials, all through ONE interface endpoint;
 #   - the worker Lambda (jobs.tf) talks to Postgres, to SQS through the same
 #     SQS interface endpoint (its jobs, fetch, ingest, render and mail-event
-#     queues; jobs.tf), and to SES through the same SES API endpoint for
-#     report and alert emails (the rules are in reports.tf).
+#     queues; jobs.tf), to SES through the same SES API endpoint for
+#     report and alert emails (the rules are in reports.tf), and to S3
+#     through the S3 interface endpoint in packs.tf, only to HEAD an
+#     evidence pack's PDF before recording the hash the renderer answered.
 #
 # The two Lambdas that do need the internet run OUTSIDE the VPC, with no
 # database access: the data feeds' fetcher (feeds.tf) and the report

@@ -20,6 +20,13 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 				['node.id', op.node.id],
 				['node.downstreamNodeId', op.node.downstreamNodeId]
 			];
+		case 'node.move':
+			return [
+				['nodeId', op.nodeId],
+				['downstreamNodeId', op.downstreamNodeId]
+			];
+		case 'node.insert':
+			return [['node.id', op.node.id], ['node.downstreamNodeId', op.node.downstreamNodeId], ...op.upstreamNodeIds.map((id, i) => [`upstreamNodeIds[${i}]`, id] as [string, unknown])];
 		case 'cropArea.set':
 			return [
 				['nodeId', op.nodeId],
@@ -27,6 +34,9 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			];
 		case 'crop.add':
 			return [['crop.id', op.crop.id]];
+		case 'crop.set':
+		case 'crop.remove':
+			return [['cropId', op.cropId]];
 		case 'transfer.add':
 			return [
 				['transfer.id', op.transfer.id],
@@ -43,6 +53,7 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 				['patch.nodeId', op.patch.nodeId]
 			];
 		case 'landCover.remove':
+		case 'landCover.set':
 			return [['patchId', op.patchId]];
 		case 'borehole.add':
 			return [
@@ -56,6 +67,15 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 		case 'ewrRule.set':
 			// null = the outlet: no id to check.
 			return op.table.siteNodeId === null ? [] : [['table.siteNodeId', op.table.siteNodeId]];
+		case 'ewrRule.remove':
+			return op.siteNodeId === null ? [] : [['siteNodeId', op.siteNodeId]];
+		case 'allocation.set':
+			return [
+				['allocation.id', op.allocation.id],
+				['allocation.nodeId', op.allocation.nodeId]
+			];
+		case 'allocation.remove':
+			return [['allocationId', op.allocationId]];
 		case 'settings.set':
 		case 'series.scale':
 			return [];

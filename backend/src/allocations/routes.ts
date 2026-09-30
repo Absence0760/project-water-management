@@ -72,7 +72,7 @@ const FIELDS = {
 	validFrom: isoDate.nullable(),
 	validTo: isoDate.nullable(),
 	reference: text(500),
-	// Licence conditions (103, issue #72): shown; a cap run applies months and maxRateM3s (engine ≥ 1.34.0).
+	// Licence conditions (103, issue #72): shown; a cap run applies months and maxRateM3s (engine ≥ 1.37.0).
 	months: z
 		.array(z.number().int().min(1).max(12))
 		.min(1)

@@ -6,8 +6,10 @@
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
 	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, ENSEMBLE_MEASURES_SINCE, type Band, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
-	import type { OutcomeSettings, SignoffList } from '$lib/api';
+	import type { OutcomeSettings, PackSignoffList, SignoffList } from '$lib/api';
+	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
 	import { chooseSite, matrixSites } from '$lib/components/outcomes/matrix';
+	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
 	import type { ImpactSeries } from '../impactSeries';
 	import { buildLicenceImpactBoard } from '../licenceImpact';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -37,24 +39,27 @@
 		stamp,
 		impactSeries = null,
 		outcomes = null,
+		frozen = false,
 		verify = null,
 		signoffs = null,
-		signoffRunId = null,
+		signoffTarget = null,
 		onsignoffchange
 	}: {
 		report: EvidenceReport;
 		projectId: string;
-		/** "Draft · not issued" until a pack issues it (G12). */
+		/** "Draft · not issued" until a pack issues it (G12); an issued pack's "Issued · version n · date". */
 		stamp: string;
 		/** The daily series page 1's licence impact by year class reads (loadImpactSeries); null when not fetched, and the board says what is missing. */
 		impactSeries?: ImpactSeries | null;
 		/** The project's settings.outcomes (year-class method, Reserve site), as the impact report reads them: a run doesn't record them. */
 		outcomes?: Partial<OutcomeSettings> | null;
-		/** The issued pack's short verification code and link; null for a draft. */
-		verify?: string | null;
-		/** The sign-offs of the run the report is about (B.2); null when not loaded (a frozen pack prints its own). */
-		signoffs?: SignoffList | null;
-		signoffRunId?: string | null;
+		/** An evidence pack's frozen report: what isn't in its manifest (the licence impact board) is left out, and page 1 says so. */
+		frozen?: boolean;
+		/** An issued pack's manifest hash, short code and verify link, printed in every section (G11); null for a draft. */
+		verify?: VerifyRef | null;
+		/** The sign-offs of what the report is (B.2): the run's in the preview, the pack's on a pack; null when not loaded. */
+		signoffs?: SignoffList | PackSignoffList | null;
+		signoffTarget?: SignoffTarget | null;
 		onsignoffchange?: (next: SignoffList['signoffs'] | null) => void;
 	} = $props();
 
@@ -101,7 +106,7 @@
 	 */
 	const board = $derived.by(() => {
 		const appSummary = report.summaries.application;
-		if (!app || !appSummary || !id.application) return null;
+		if (frozen || !app || !appSummary || !id.application) return null;
 		const rules = (base.settings as { ewrRules?: { siteNodeId: string | null }[] }).ewrRules ?? [];
 		const site = chooseSite(outcomes?.siteNodeId, matrixSites(base.model.nodes, rules)).site;
 		return buildLicenceImpactBoard({
@@ -149,9 +154,10 @@
 				{/if}
 				<span class="stamp" data-testid="evidence-stamp">{stamp}</span>
 			</div>
+			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} boardNotFrozen={frozen && app} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				{#if !report.river.length}
 					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>
@@ -661,8 +667,8 @@
 					<p class="small">Errata: none recorded for these runs’ engines in docs/engine-errata.md.</p>
 				{/if}
 				<h3>B.2 Sign-off</h3>
-				{#if signoffs && signoffRunId}
-					<SignoffSection {projectId} runId={signoffRunId} list={signoffs} onchange={(n) => onsignoffchange?.(n)} />
+				{#if signoffs && signoffTarget}
+					<SignoffSection {projectId} target={signoffTarget} list={signoffs} onchange={(n) => onsignoffchange?.(n)} />
 				{:else}
 					<p class="na">Not signed.</p>
 				{/if}
@@ -670,11 +676,19 @@
 				<Disclaimer />
 				<h3>B.4 Verify and reproduce</h3>
 				{#if verify}
-					<p>{verify}</p>
+					<dl class="kv" data-testid="evidence-verify">
+						<div class="wide"><dt>Manifest SHA-256</dt><dd class="mono hash">{verify.sha256}</dd></div>
+						<div><dt>Verify code</dt><dd class="mono">{verify.code}</dd></div>
+						<div><dt>Verify page</dt><dd class="mono hash">{verify.url}</dd></div>
+					</dl>
+					<p class="small">
+						The verify page says whether this pack still stands (issued, superseded or withdrawn), who signed it, and checks a copy of its PDF or
+						manifest in the browser against the hashes recorded at issue. The manifest SHA-256 is of the manifest’s canonical JSON (RFC 8785).
+					</p>
 				{:else}
 					<p class="na">
-						Not issued. A draft has no manifest hash: an issued evidence pack prints its SHA-256, a short code and a verify link here and in every
-						footer, and carries a reproduction bundle (WP-3.14).
+						Not issued. An issued evidence pack prints its manifest SHA-256, a short code and a verify link here, in every section and in every
+						footer.
 					</p>
 				{/if}
 			{:else if s.id === 'applicantStatement' && report.applicantStatement}
@@ -725,6 +739,16 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-muted);
+	}
+	.verify-line {
+		margin: -0.35rem 0 0.75rem;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.kv .wide {
+		grid-column: 1 / -1;
 	}
 	.stamp {
 		flex: none;

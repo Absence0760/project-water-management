@@ -96,7 +96,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 /**
  * A project's allocations as a run reads them (engine AllocationEntry), in id
  * order: the volume, source, validity and match, and the licence conditions
- * (a cap run applies the months and the rate, engine ≥ 1.34.0). Never the holder's name, the
+ * (a cap run applies the months and the rate, engine ≥ 1.37.0). Never the holder's name, the
  * registration number or the property: a run's stored input is readable by
  * every viewer, and the engine needs none of them (D3, docs/allocations.md §
  * Who sees what). Read under the caller's RLS, like the rest of the input.

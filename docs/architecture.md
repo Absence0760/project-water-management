@@ -85,7 +85,11 @@ The same `runModel` runs:
   runs in the same worker: hundreds of full `runModel`s on a run's own input
   (`GET …/runs/:runId/model-input`), with options the server resolved and a
   seed the database drew; the server re-runs a few members before storing
-  the result (`POST …/uncertainty/:uid/result`).
+  the result (`POST …/uncertainty/:uid/result`). The Yield panel's instant
+  preview (issue #73) runs one firm-yield search in the preview worker
+  (`frontend/src/lib/preview/engine.worker.ts`, WP-1.17's worker) on a run's
+  own input, never stored; the `yield` job's result is the stored one
+  ([ui.md § Yield](./ui.md#yield-wp-36)).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series, and the input series themselves, once per
@@ -259,7 +263,7 @@ page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
 the engine (62 KB gzip), most of which the pages load too. Instead,
 `lib/calibration/runner.ts` takes the worker's URL from a virtual module,
-`virtual:autocal-worker-url`, and `autocalWorkerChunk` in
+`virtual:autocal-worker-url`, and `workerChunks` in
 `frontend/vite.config.ts` emits the worker as one more entry of the client
 build (`_app/immutable/workers/autocal.worker-<hash>.js`). Rollup then puts the
 engine code the worker shares with pages in shared chunks, which the worker
@@ -269,6 +273,24 @@ module returns Vite's own worker URL for the source file. The worker's file
 holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
 a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
 the total bundle dropped 919 → 899 KB.
+
+The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17; so far
+the Yield panel's in-browser firm yield, issue #73) is a second entry of the
+page build in the same way (`virtual:preview-worker-url`, one `workerChunks`
+plugin for both, `_app/immutable/workers/preview.worker-<hash>.js`). The
+network run code both workers use then sits in a chunk of its own that only
+the workers load, so the calibration worker's own file is 17 KB and the
+preview worker's 2.6 KB (the yield search). Its runner
+(`lib/preview/runner.ts`) is a dynamic import of the panel, and only the
+worker imports `lib/preview/compute.ts`, the module that calls the engine
+(`compute.test.ts` scans for other importers). One request at a time, latest
+wins: a newer one terminates the worker mid-search, since the engine loop is
+synchronous. The bundle guard checks both workers import from `chunks/`.
+The worker treats its message as untrusted data: `compute.ts` `parseMessage`
+checks it strictly before the engine sees it (known keys only; the yield
+parameters in the backend's `YieldParams` ranges; the input's outline; a
+scenario's ops through `validateScenarioOps`), and answers a malformed
+request with an error carrying its id.
 
 That only pays because a chunk holds whole modules. A module a page and the
 worker both use carries everything either of them calls, with its imports, so
@@ -1313,11 +1335,45 @@ exception: page 1's licence impact by year class is the impact report's board,
 built in the browser from three daily series the page fetches; it moves into
 the builder with the pack. One
 builder is what lets an issued pack (WP-3.14) freeze the document as its
-manifest and rebuild it to check the hash. The evidence report prints from
-the browser only; `report_render` doesn't render it yet (that comes with
-the pack, so no render session needs a second run).
+manifest and rebuild it to check the hash. The evidence report itself
+prints from the browser only; `report_render` doesn't render it. The server
+prints an issued pack instead (below), from its frozen manifest, so no
+render session needs a second run.
 
-## Key choices
+### An evidence pack's PDF
+
+Issuing a pack (119_pack_render; [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf))
+queues a `pack_render` job (`jobs/handlers/pack-render.ts`, as the issuer,
+deduplicated per pack) that prints the pack's own page,
+`/projects/:id/packs/:packId`, with the same machinery as `report_render`:
+a render token for that pack (purpose `pack`, `render_token.pack_id`), a
+render session that may read only the pack and its sign-offs
+(`reports/scope.ts`: the frozen manifest holds the whole report, so the page
+reads no run and not even the project), `main[data-report-ready]`, then
+`page.pdf`. `inline` locally, `sqs` in production (a `render_pack` request,
+a `rendered_pack` answer on the same two queues, `acceptPackRenderResult`
+turning it into a follow-up job as the request's acting user).
+
+What differs from a report:
+
+- **Kept, not expired.** The PDF goes to its own bucket (`PACKS_BUCKET`,
+  MinIO `water-packs` locally; production's is versioned under Object Lock
+  with no lifecycle, infra/packs.tf) under a **content-addressed** key,
+  `packs/<project>/<pack>/<sha256>.pdf`, uploaded with that SHA-256 as its
+  checksum. A second render is a second object, never an overwrite.
+- **Checked, then recorded once.** A production answer's hash is recorded
+  only once the worker has HEADed that key in the packs bucket and found S3's
+  stored checksum equal to it (`headPackPdf`, through an S3 interface
+  endpoint). Only `app_record_pack_pdf` writes the pack's
+  `pdf_key`, `pdf_sha256` and `pdf_pages`: from a running `pack_render` job
+  of that pack, as its acting user, deriving the key from the ids and the
+  hash; the first recorded stands. `GET /verify/:code` then answers the
+  PDF's hash, so anyone holding the PDF can check it.
+- **Its state** is the pack's (`pdf` on `GET …/packs/:packId`: ready,
+  rendering, failed or none), read from its latest `pack_render` job
+  (`evidence/packPdf.ts`); an editor asks again after a failure with
+  `POST …/packs/:packId/pdf`. The download is a report's: a 60-second
+  signed URL on `/packs/*` (`GET …/packs/:packId/pdf`).
 
 ## Key choices
 

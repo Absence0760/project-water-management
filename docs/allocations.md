@@ -37,7 +37,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 
 Licence conditions are recorded and shown (the list sums them up in one
 line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions"). The months and
-the maximum rate bind a run whose allocation mode is **cap** (engine 1.34.0,
+the maximum rate bind a run whose allocation mode is **cap** (engine 1.37.0,
 [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
 the unit takes nothing of that source in a month outside the months of use,
 and at most the rate × 86 400 m³ a day. The comparison and a full-allocation
@@ -163,6 +163,14 @@ decides what the volumes do to a run
   registered user took their entitlement, the background of a cumulative
   assessment (WP-3.11). A scenario can switch it on for one run
   (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
+
+A scenario can also set, replace or remove a volume for one run
+(`allocation.set` / `allocation.remove`, engine ≥ 1.35.0, [scenarios.md §
+Registered volumes](./scenarios.md)): "what if this licence were for 200 000
+m³ a year" under the cap, or the applicant's requested volume in a
+full-allocation background. The op carries only what a run reads (no
+holder, registration number or property); a volume on the applicant's own
+unit is their proposal, one on another's a baseline assumption.
 
 Since every run's input carries the volumes (never the names), a stored run
 replays with the volumes it ran on, a change to a volume makes the latest run

@@ -123,3 +123,50 @@ describe('scopeAllows, for an impact report (082)', () => {
 		expect(scopeAllows(scope, 'GET', '/compare/runs', q(pair))).toBe(false);
 	});
 });
+
+describe('scopeAllows, for an evidence pack (119_pack_render)', () => {
+	const K = '44444444-4444-4444-8444-444444444444';
+	const pack = { projectId: P, packId: K };
+
+	it.each(['/auth/me', `/projects/${P}/packs/${K}`, `/projects/${P}/packs/${K}/`, `/projects/${P}/packs/${K}/signoffs`, `/projects/${P.toUpperCase()}/packs/${K.toUpperCase()}`])(
+		'allows GET %s (the pack page’s reads)',
+		(path) => {
+			expect(scopeAllows(pack, 'GET', path)).toBe(true);
+		}
+	);
+
+	it.each([
+		// The pack's own writes and its PDF download.
+		`/projects/${P}/packs/${K}/pdf`,
+		`/projects/${P}/packs/${K}/issue`,
+		// Another pack of the project, the list, or the same pack under another project.
+		`/projects/${P}/packs/${OTHER}`,
+		`/projects/${P}/packs/${OTHER}/signoffs`,
+		`/projects/${P}/packs`,
+		`/projects/${OTHER}/packs/${K}`,
+		// Nothing of the project or its runs: the manifest holds the whole report.
+		`/projects/${P}`,
+		`/projects/${P}/series`,
+		`/projects/${P}/runs/${R}`,
+		`/projects/${P}/runs/${R}/signoffs`,
+		'/compare/runs',
+		// Encoded or dot segments.
+		`/projects/${P}/packs/${K}/%2e%2e/${OTHER}`,
+		`/projects/${P}/packs/${OTHER}/../${K}`,
+		`/projects/${P}//packs/${K}`
+	])('refuses GET %s', (path) => {
+		expect(scopeAllows(pack, 'GET', path)).toBe(false);
+	});
+
+	it('refuses every write, and any query on its reads', () => {
+		for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) expect(scopeAllows(pack, method, `/projects/${P}/packs/${K}`), method).toBe(false);
+		expect(scopeAllows(pack, 'GET', `/projects/${P}/packs/${K}`, new URLSearchParams('x=1'))).toBe(false);
+		// Positive control: the same read with no query.
+		expect(scopeAllows(pack, 'GET', `/projects/${P}/packs/${K}`, new URLSearchParams())).toBe(true);
+	});
+
+	it('a report session never reads a pack', () => {
+		expect(scopeAllows(scope, 'GET', `/projects/${P}/packs/${K}`)).toBe(false);
+		expect(scopeAllows(scope, 'GET', `/projects/${P}/packs/${K}/signoffs`)).toBe(false);
+	});
+});

@@ -9,6 +9,7 @@ import { buildTopology } from '../network/topology';
 import { blankEwrRuleTable, type EwrRuleTable } from '../reserve/rules';
 import { runModel } from '../run';
 import type { ModelInput, NetworkNode, RunSeries } from '../project';
+import type { AllocationEntry } from '../allocations/compare';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
 import { MASKED_RULE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
@@ -526,6 +527,122 @@ describe('applyScenario: each op', () => {
 	});
 });
 
+describe('hostile op names and fields (a worker message or request body is untrusted)', () => {
+	// Names every plain object inherits: a lookup in a checks table by one of
+	// them must refuse it, never find Object.prototype's own member and call or
+	// write through it (CodeQL js/unvalidated-dynamic-method-call and
+	// js/remote-property-injection, PR #234).
+	const HOSTILE = ['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'];
+	const hostile = (op: Record<string, unknown>) => op as unknown as ScenarioOp;
+
+	it.each(HOSTILE)('node.set, transfer.set and settings.set refuse %s as a problem, never a throw, and touch no prototype', (name) => {
+		const b = base();
+		const r = applyScenario(b, [
+			hostile({ op: 'node.set', nodeId: 'A', field: name, value: { polluted: true } }),
+			hostile({ op: 'transfer.set', transferId: 't1', field: name, value: { polluted: true } }),
+			hostile({ op: 'settings.set', path: name, value: { polluted: true } }),
+			hostile({ op: 'settings.set', path: `gr4j.${name}`, value: { polluted: true } }),
+			hostile({ op: 'series.scale', kind: name, factor: 1 })
+		]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(5);
+		for (const p of r.problems) expect(typeof p).toBe('string');
+		expect(r.problems[0]).toMatch(/can't be set on a farm/);
+		expect(r.problems[1]).toMatch(/is not a transfer field a scenario can set/);
+		expect(r.problems[2]).toMatch(/is not a setting a scenario can change/);
+		expect(r.problems[3]).toMatch(/is not a setting a scenario can change/);
+		expect(r.problems[4]).toMatch(/can't be scaled/);
+		expect(r.input).toEqual(b);
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+	});
+
+	it.each(HOSTILE)('validateScenarioOps refuses %s as a field, path or node field with an error, never a throw', (name) => {
+		const r = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: name, value: 1 },
+			{ op: 'transfer.set', transferId: 't1', field: name, value: 1 },
+			{ op: 'settings.set', path: name, value: 1 },
+			{ op: 'node.add', node: { id: 'N', name: 'New', kind: 'farm', downstreamNodeId: 'G', [name]: 1 } }
+		]);
+		expect(r.errors.slice(0, 3)).toEqual([
+			'ops[0].field: is not a node field a scenario can set',
+			'ops[1].field: is not a transfer field a scenario can set',
+			'ops[2].path: is not a setting a scenario can change'
+		]);
+		for (const e of r.errors) expect(typeof e).toBe('string');
+	});
+
+	it.each(HOSTILE)('the later ops (engine ≥ 1.35.0) refuse %s as a field or id, never a throw, and touch no prototype', (name) => {
+		const b = base();
+		const r = applyScenario(b, [
+			hostile({ op: 'crop.set', cropId: 'c1', field: name, value: { polluted: true } }),
+			hostile({ op: 'landCover.set', patchId: 'lc1', field: name, value: { polluted: true } }),
+			hostile({ op: 'crop.remove', cropId: name }),
+			hostile({ op: 'node.move', nodeId: name, downstreamNodeId: 'G' }),
+			hostile({ op: 'node.move', nodeId: 'A', downstreamNodeId: name }),
+			hostile({ op: 'allocation.remove', allocationId: name }),
+			hostile({ op: 'crop.set', cropId: name, field: 'name', value: 'X' }),
+			hostile({ op: 'landCover.set', patchId: name, field: 'densityPct', value: 0.1 }),
+			hostile({ op: 'ewrRule.remove', siteNodeId: name }),
+			hostile({ op: 'allocation.set', allocation: { id: 'al9', nodeId: name, waterSource: 'surface', volumeM3PerYear: 1 } }),
+			hostile({ op: 'allocation.set', allocation: { id: name, nodeId: name, waterSource: 'surface', volumeM3PerYear: 1 } }),
+			hostile({
+				op: 'node.insert',
+				upstreamNodeIds: [name],
+				node: node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })
+			})
+		]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(12);
+		for (const p of r.problems) expect(typeof p).toBe('string');
+		expect(r.problems[0]).toMatch(/is not a crop field a scenario can set/);
+		expect(r.problems[1]).toMatch(/is not a land-cover field a scenario can set/);
+		expect(r.input).toEqual(b);
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+		// Positive control: the id is only ever compared, so a volume that names it on a real unit is stored as data.
+		const kept = applyScenario(b, [hostile({ op: 'allocation.set', allocation: { id: name, nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1 } })]);
+		expect(kept.problems).toEqual([]);
+		expect(kept.input.model.allocations).toEqual([{ id: name, nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1 }]);
+		expect(Object.getPrototypeOf(kept.input.model.allocations![0])).toBe(Object.prototype);
+
+		const v = validateScenarioOps([
+			{ op: 'crop.set', cropId: 'c1', field: name, value: 1 },
+			{ op: 'landCover.set', patchId: 'lc1', field: name, value: 1 }
+		]);
+		expect(v.errors).toEqual(['ops[0].field: is not a crop field a scenario can set', 'ops[1].field: is not a land-cover field a scenario can set']);
+	});
+
+	it('the later ops keep only their allowlisted keys: a hostile key in an allocation, crop, patch or inserted node is dropped (positive controls apply)', () => {
+		const withKey = (o: object) => JSON.parse(JSON.stringify(o).replace(/^\{/, '{"__proto__":{"polluted":true},"constructor":1,'));
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'allocation.set', allocation: withKey({ id: 'al9', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 }) },
+			{ op: 'node.insert', upstreamNodeIds: ['A'], node: withKey(node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })) },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: 'Maize' },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.25 }
+		]);
+		expect(errors).toEqual([]);
+		const alloc = (ops[0] as Extract<ScenarioOp, { op: 'allocation.set' }>).allocation;
+		const inserted = (ops[1] as Extract<ScenarioOp, { op: 'node.insert' }>).node;
+		for (const o of [alloc, inserted]) {
+			expect(Object.hasOwn(o, '__proto__')).toBe(false);
+			expect(Object.hasOwn(o, 'constructor')).toBe(false);
+		}
+		const r = applyScenario(base(), ops);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops[0]!.name).toBe('Maize');
+		expect(r.input.model.landCover![0]!.densityPct).toBe(0.25);
+		expect(r.input.model.allocations).toEqual([{ id: 'al9', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 }]);
+		expect(r.input.model.nodes.find((n) => n.id === 'A')!.downstreamNodeId).toBe('N');
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+	});
+
+	it.each(HOSTILE)('an unknown op name %s is refused by the validator and is a problem in applyScenario', (name) => {
+		expect(validateScenarioOps([{ op: name }]).errors[0]).toMatch(/^ops\[0\]\.op: must be one of node\.set/);
+		const r = applyScenario(base(), [hostile({ op: name })]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(1);
+	});
+});
+
 describe('applyScenario: edit groups (consecutive node.set on one node, checked once)', () => {
 	const set = (nodeId: string, field: string, value: unknown) => ({ op: 'node.set', nodeId, field, value }) as ScenarioOp;
 	/** A on the trigger rule (it has a dam). */
@@ -922,6 +1039,314 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 	});
 });
 
+describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
+	const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+	const texts = (a: ModelInput, b: ModelInput) => diffInputs(snap(a), snap(b)).map((c) => c.text);
+
+	it('node.move makes a node drain into another, carrying what drains into it, and never touches the base', () => {
+		const b = deepFreeze(base());
+		// C drains into A: move A (with C behind it) to drain into B instead.
+		const r = applyScenario(b, [{ op: 'node.move', nodeId: 'A', downstreamNodeId: 'B' }]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')!.downstreamNodeId).toBe('B');
+		expect(nodeOf(r.input, 'C')!.downstreamNodeId).toBe('A');
+		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
+		expect(nodeOf(b, 'A')!.downstreamNodeId).toBe('G');
+		expect(texts(b, r.input)).toEqual(['Farm A: drains into Farm B (was Outlet gauge)']);
+	});
+
+	it('node.move refuses a loop, the outflow, itself and missing nodes, and changes nothing then', () => {
+		// A drains into C, which drains into A: a loop (a model rule).
+		const loop = one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'C' });
+		expect(loop.problems).toEqual(['op 1 (node.move): the network has a loop through "Farm A"; the network has a loop through "Farm C"']);
+		expect(loop.input.model).toEqual(base().model);
+		expect(one({ op: 'node.move', nodeId: 'G', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): "Outlet gauge" is the outflow node and can\'t be moved']);
+		expect(one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): "Farm A" can\'t drain into itself']);
+		expect(one({ op: 'node.move', nodeId: 'Z', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): node Z not found']);
+		expect(one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'Z' }).problems).toEqual(['op 1 (node.move): node Z not found']);
+		// A river off-take whose destination would drain into its source is refused too (a model rule).
+		const b = base();
+		b.model.transfers = [{ id: 'r1', fromNodeId: 'B', toNodeId: 'C', months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' }];
+		expect(applyScenario(b, [{ op: 'node.move', nodeId: 'C', downstreamNodeId: 'B' }]).problems[0]).toMatch(/^op 1 \(node\.move\): river off-take "Farm B" → "Farm C": its destination drains into its source/);
+	});
+
+	it('node.insert puts a new node on a reach: the named nodes drain into it, it drains where they did', () => {
+		const weir = node('W', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 });
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [{ op: 'node.insert', node: weir, upstreamNodeIds: ['A', 'B'] }]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'W')!.downstreamNodeId).toBe('G');
+		expect(['A', 'B', 'C'].map((id) => nodeOf(r.input, id)!.downstreamNodeId)).toEqual(['W', 'W', 'A']);
+		expect(r.applied[0]!.notes).toEqual(['"Farm A" now drains into "New weir"', '"Farm B" now drains into "New weir"']);
+		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
+		expect(texts(b, r.input)).toEqual([
+			'Gauge "New weir" added (0 km², drains into Outlet gauge)',
+			'Farm A: drains into New weir (was Outlet gauge)',
+			'Farm B: drains into New weir (was Outlet gauge)',
+			'EWR sites: Outlet gauge (outlet) → Outlet gauge (outlet), New weir (added New weir (new node))'
+		]);
+		// An on-channel dam below C alone: C drains into it, it into A.
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 80_000 });
+		const d = one({ op: 'node.insert', node: dam, upstreamNodeIds: ['C'] });
+		expect(d.problems).toEqual([]);
+		expect(nodeOf(d.input, 'C')!.downstreamNodeId).toBe('D');
+	});
+
+	it('node.insert refuses a node that doesn’t drain there, an empty or repeating list, and what node.add refuses, changing nothing', () => {
+		const n = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const r = one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'C'] });
+		expect(r.problems).toEqual(['op 1 (node.insert): "Farm C" doesn\'t drain into the node the new one drains into, so the new node can\'t sit between them']);
+		expect(r.input.model).toEqual(base().model);
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: [] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names no node: with none, add the node instead']);
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'A'] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names a node more than once']);
+		expect(one({ op: 'node.insert', node: { ...n, id: 'A' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): node id A is already in use']);
+		expect(one({ op: 'node.insert', node: { ...n, name: 'farm b' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): duplicate node name "farm b"']);
+		// The outflow drains into nothing, so nothing can be inserted below it.
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['G'] }).problems[0]).toMatch(/"Outlet gauge" doesn't drain into the node the new one drains into/);
+	});
+
+	it('classifies a move of the own land-free leaf as the proposal, any other move as baseline; an insert as node.add', () => {
+		const b = base();
+		const pump = node('P', { name: 'Pump', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		b.model.nodes.push(pump);
+		const move = (nodeId: string): ScenarioOp => ({ op: 'node.move', nodeId, downstreamNodeId: 'B' });
+		expect(classifyOp(move('P'), ['P'], b)).toBe('proposal');
+		expect(classifyOp(move('P'), ['P'])).toBe('baseline');
+		expect(classifyOp(move('P'), ['A'], b)).toBe('baseline');
+		// A has land, and C drains into it.
+		expect(classifyOp(move('A'), ['A'], b)).toBe('baseline');
+		Object.assign(nodeOf(b, 'A')!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		expect(classifyOp(move('A'), ['A'], b)).toBe('baseline');
+		expect(classifyOp(move('A'), ['A', 'C'], b)).toBe('baseline');
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		expect(classifyOp({ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
+		expect(classifyOp({ op: 'node.insert', node: { ...dam, kind: 'gauge' }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
+		expect(classifyOp({ op: 'node.insert', node: { ...dam, areaKm2: 1 }, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
+		// A senior other water user (the default priority) curtails the farms above it (model.md §2.7c): not the proposal's to insert.
+		const user = node('U', { name: 'New town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(100) });
+		expect(classifyOp({ op: 'node.insert', node: user, upstreamNodeIds: ['B'] }, [], b)).toBe('baseline');
+		expect(classifyOp({ op: 'node.insert', node: { ...user, userPriority: 'junior' }, upstreamNodeIds: ['B'] }, [], b)).toBe('proposal');
+		// An inserted node is the scenario's own: moving it next is the proposal too.
+		expect(classifyScenario(base(), [{ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }, { op: 'node.move', nodeId: 'D', downstreamNodeId: 'A' }], [])).toEqual(['proposal', 'baseline']);
+		expect(classifyScenario(base(), [{ op: 'node.add', node: { ...dam, downstreamNodeId: 'B' } }, { op: 'node.move', nodeId: 'D', downstreamNodeId: 'A' }], [])).toEqual(['proposal', 'proposal']);
+	});
+
+	it('masked: a hidden node moves and takes new nodes by its mask name, and a loop through it keeps its words (the shape is visible)', () => {
+		const mask: ScenarioMask = { nodes: { B: 'Farm 1', C: 'Farm 2' } };
+		const r = applyScenario(base(), [{ op: 'node.move', nodeId: 'B', downstreamNodeId: 'A' }], { mask });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'B')!.name).toBe('Farm B');
+		expect(applyScenario(base(), [{ op: 'node.move', nodeId: 'A', downstreamNodeId: 'C' }], { mask }).problems).toEqual([
+			'op 1 (node.move): the network has a loop through "Farm A"; the network has a loop through "Farm 2"'
+		]);
+		const dam = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		expect(applyScenario(base(), [{ op: 'node.insert', node: dam, upstreamNodeIds: ['B'] }], { mask }).applied[0]!.notes).toEqual(['"Farm 1" now drains into "New dam"']);
+	});
+});
+
+describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registered volumes', () => {
+	const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+	const texts = (a: ModelInput, b: ModelInput) => diffInputs(snap(a), snap(b)).map((c) => c.text);
+	const alloc = (over: Partial<AllocationEntry> = {}): AllocationEntry => ({ id: 'al1', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 120_000, ...over });
+	const withAllocations = () => {
+		const b = base();
+		b.model.allocations = [alloc(), alloc({ id: 'al2', nodeId: 'B', volumeM3PerYear: 50_000 })];
+		return b;
+	};
+
+	it('crop.set changes a crop’s name, factors or own efficiency, and run comparison lists it', () => {
+		const b = deepFreeze(base());
+		const factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5];
+		const r = applyScenario(b, [
+			{ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: factors },
+			{ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: 0.9 },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: '  Drip lucerne ' }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops).toEqual([{ id: 'c1', name: 'Drip lucerne', cropFactor: factors, irrigationEfficiency: 0.9 }]);
+		expect(b.model.crops[0]!.name).toBe('Lucerne');
+		expect(texts(b, r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Drip lucerne/), expect.stringMatching(/irrigation efficiency: the farm's → 90/)]));
+		// The run: a lower crop factor lowers the farms' demand for it.
+		const lower = applyScenario(base(), [{ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: new Array(12).fill(0.1) }]).input;
+		const d = (x: ModelInput) => runModel(x).series.find((s) => s.nodeId === 'A' && s.key === 'demand')!.values.reduce((s, v) => s + v, 0);
+		expect(d(lower)).toBeLessThan(d(base()));
+	});
+
+	it('crop.set refuses a missing crop, a bad value, a field it can’t set and a duplicate name', () => {
+		expect(one({ op: 'crop.set', cropId: 'cx', field: 'name', value: 'X' }).problems).toEqual(['op 1 (crop.set): crop cx not found']);
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: [1] } as unknown as ScenarioOp).problems).toEqual(['op 1 (crop.set): cropFactor must be 12 crop factors ≥ 0']);
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: 0 }).problems).toEqual(['op 1 (crop.set): irrigationEfficiency must be above 0']);
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'id', value: 'c9' } as unknown as ScenarioOp).problems).toEqual(['op 1 (crop.set): "id" is not a crop field a scenario can set']);
+		const b = base();
+		b.model.crops.push({ id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.7) });
+		expect(applyScenario(b, [{ op: 'crop.set', cropId: 'c2', field: 'name', value: 'LUCERNE' }]).problems).toEqual(['op 1 (crop.set): duplicate crop name "lucerne"']);
+	});
+
+	it('crop.remove drops the crop and every farm’s area of it, counting only what a masked caller sees', () => {
+		const r = one({ op: 'crop.remove', cropId: 'c1' });
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops).toEqual([]);
+		expect(r.input.model.cropAreas).toEqual([]);
+		expect(r.applied[0]!.notes).toEqual(['dropped 2 crop area(s)']);
+		expect(texts(base(), r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Lucerne/)]));
+		expect(one({ op: 'crop.remove', cropId: 'cx' }).problems).toEqual(['op 1 (crop.remove): crop cx not found']);
+		// C (hidden) grows it too: the applicant is told of their own farm's area only.
+		const masked = applyScenario(base(), [{ op: 'crop.remove', cropId: 'c1' }], { mask: { nodes: { B: 'Farm 1', C: 'Farm 2' } } });
+		expect(masked.applied[0]!.notes).toEqual(['dropped 1 crop area(s)']);
+		expect(masked.input.model.cropAreas).toEqual([]);
+	});
+
+	it('crop.set and crop.remove are the proposal only on a crop the scenario added', () => {
+		const add: ScenarioOp = { op: 'crop.add', crop: { id: 'c9', name: 'Olives', cropFactor: new Array(12).fill(0.5) } };
+		const set = (cropId: string): ScenarioOp => ({ op: 'crop.set', cropId, field: 'irrigationEfficiency', value: 0.95 });
+		expect(classifyOp(set('c1'), ['A', 'B', 'C'], base())).toBe('baseline');
+		expect(classifyOp({ op: 'crop.remove', cropId: 'c1' }, ['A', 'B', 'C'], base())).toBe('baseline');
+		expect(classifyOp(set('c9'), [], base(), ['c9'])).toBe('proposal');
+		expect(classifyScenario(base(), [add, set('c9'), { op: 'crop.remove', cropId: 'c9' }, set('c1')], [])).toEqual(['proposal', 'proposal', 'proposal', 'baseline']);
+		// A crop.add that didn't apply (its id taken) adds nothing to change.
+		expect(classifyScenario(base(), [{ ...add, crop: { ...add.crop, id: 'c1' } } as ScenarioOp, set('c1')], [])).toEqual(['proposal', 'baseline']);
+	});
+
+	it('landCover.set changes a patch in place; run comparison lists the area, the cover and the reductions', () => {
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [
+			{ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.1 },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'factors', value: { mar: 0.2, lowFlow: 0.3 } }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.landCover).toEqual([{ id: 'lc1', nodeId: 'B', coverClass: 'pine', areaKm2: 1, densityPct: 0.1, factors: { mar: 0.2, lowFlow: 0.3 } }]);
+		expect(texts(b, r.input)).toEqual(['Farm B: land cover "pine" 0.5 km² → 0.1 km² condensed, reductions changed']);
+		// A patch at no cover: its area alone moves, and its cover alone does, each listed.
+		const bare = base();
+		bare.model.landCover![0]!.densityPct = 0;
+		expect(texts(bare, one({ op: 'landCover.set', patchId: 'lc1', field: 'areaKm2', value: 2 }, bare).input)).toEqual(['Farm B: land cover "pine" 0 km² → 0 km² condensed (area 1 km² → 2 km²)']);
+		const none = base();
+		none.model.landCover![0]!.areaKm2 = 0;
+		expect(texts(none, one({ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.9 }, none).input)).toEqual(['Farm B: land cover "pine" 0 km² → 0 km² condensed, its patches’ cover changed']);
+		// The same patches in another order are no change, even where float sums depend on the order (0.1 + 0.2 + 0.3).
+		const two = base();
+		two.model.landCover = [0.1, 0.2, 0.3].map((a, i) => ({ id: `p${i}`, nodeId: 'B', coverClass: 'pine' as const, areaKm2: a, densityPct: 1, factors: i ? { mar: 0.1 * i, lowFlow: 0.2 } : null }));
+		const swapped = structuredClone(two);
+		swapped.model.landCover!.reverse();
+		expect(texts(two, swapped)).toEqual([]);
+		// Another class is another patch group: removed from one, added to the other.
+		expect(texts(base(), one({ op: 'landCover.set', patchId: 'lc1', field: 'coverClass', value: 'eucalyptus' }).input)).toHaveLength(2);
+	});
+
+	it('landCover.set keeps only a reduction’s two known keys', () => {
+		const op = { op: 'landCover.set', patchId: 'lc1', field: 'factors', value: { mar: 0.1, lowFlow: 0.2, junk: 1 } } as unknown as ScenarioOp;
+		expect(validateScenarioOps([op]).ops).toEqual([{ ...op, value: { mar: 0.1, lowFlow: 0.2 } }]);
+		expect(one(op).input.model.landCover![0]!.factors).toEqual({ mar: 0.1, lowFlow: 0.2 });
+	});
+
+	it('landCover.set refuses a missing patch, a bad value and nodeId; classified by the patch’s farm', () => {
+		expect(one({ op: 'landCover.set', patchId: 'lx', field: 'areaKm2', value: 1 }).problems).toEqual(['op 1 (landCover.set): land-cover patch lx not found']);
+		expect(one({ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 2 }).problems).toEqual(['op 1 (landCover.set): densityPct must be at most 1']);
+		expect(one({ op: 'landCover.set', patchId: 'lc1', field: 'nodeId', value: 'A' } as unknown as ScenarioOp).problems).toEqual(['op 1 (landCover.set): "nodeId" is not a land-cover field a scenario can set']);
+		const op: ScenarioOp = { op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0 };
+		expect(classifyOp(op, ['B'], base())).toBe('proposal');
+		expect(classifyOp(op, ['A'], base())).toBe('baseline');
+		expect(classifyOp(op, ['B'])).toBe('baseline');
+	});
+
+	it('ewrRule.remove removes a site’s table however it is keyed, always a baseline assumption', () => {
+		// base() keys the outlet's table by its id (G) and has one at the farm A.
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [{ op: 'ewrRule.remove', siteNodeId: null }]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.settings.ewrRules).toEqual([blankEwrRuleTable('A')]);
+		expect(b.settings.ewrRules).toHaveLength(2);
+		expect(texts(b, r.input)).toEqual([expect.stringMatching(/^EWR rule table at Outlet gauge/)]);
+		expect(one({ op: 'ewrRule.remove', siteNodeId: 'G' }).input.settings.ewrRules).toEqual([blankEwrRuleTable('A')]);
+		// Removed once, it's gone: a second remove is a problem, and so is a site with none.
+		expect(applyScenario(base(), [{ op: 'ewrRule.remove', siteNodeId: null }, { op: 'ewrRule.remove', siteNodeId: 'G' }]).problems).toEqual(['op 2 (ewrRule.remove): there is no EWR rule table at the outlet']);
+		expect(one({ op: 'ewrRule.remove', siteNodeId: 'B' }).problems).toEqual(['op 1 (ewrRule.remove): there is no EWR rule table at node B']);
+		expect(classifyOp({ op: 'ewrRule.remove', siteNodeId: null }, ['A', 'B', 'C', 'G'], base())).toBe('baseline');
+	});
+
+	it('allocation.set adds or replaces a registered volume by id; allocation.remove removes one', () => {
+		const b = deepFreeze(withAllocations());
+		const r = applyScenario(b, [
+			{ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: 200_000, months: [3, 1, 2], maxRateM3s: 0.05 }) },
+			{ op: 'allocation.set', allocation: alloc({ id: 'al3', nodeId: 'C', waterSource: 'groundwater', volumeM3PerYear: 10_000, storageM3: 5_000 }) },
+			{ op: 'allocation.remove', allocationId: 'al2' }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.allocations).toEqual([
+			alloc({ volumeM3PerYear: 200_000, months: [1, 2, 3], maxRateM3s: 0.05 }),
+			alloc({ id: 'al3', nodeId: 'C', waterSource: 'groundwater', volumeM3PerYear: 10_000, storageM3: 5_000 })
+		]);
+		expect(b.model.allocations).toHaveLength(2);
+		const t = texts(b, r.input);
+		expect(t).toContain('Farm A: registered volume surface 120 000 m³/a → surface 200 000 m³/a, months 1 2 3, at most 0.05 m³/s');
+		expect(t).toContain('Registered volume added to Farm C (groundwater 10 000 m³/a, storage 5 000 m³)');
+		expect(t).toContain('Registered volume removed from Farm B (was surface 50 000 m³/a)');
+		// A licence condition on its own is listed too.
+		expect(texts(b, one({ op: 'allocation.set', allocation: alloc({ maxRateM3s: 0.02 }) }, withAllocations()).input)).toEqual(['Farm A: registered volume surface 120 000 m³/a → surface 120 000 m³/a, at most 0.02 m³/s']);
+	});
+
+	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
+		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a farm or other water user; "Outlet gauge" is a gauge']);
+		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);
+		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
+		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);
+		expect(one({ op: 'allocation.remove', allocationId: 'al9' }).problems).toEqual(['op 1 (allocation.remove): registered volume al9 not found']);
+	});
+
+	it('node.remove keeps the unit’s registered volumes and says they are no longer on a unit in the run, counting only those the caller sees', () => {
+		const b = deepFreeze(withAllocations());
+		const r = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }]);
+		expect(r.problems).toEqual([]);
+		expect(r.applied[0]!.notes).toContain('its 1 registered volume(s) are no longer on a unit in the run');
+		expect(r.input.model.allocations).toEqual(b.model.allocations);
+		// A unit with none says nothing of them.
+		expect(applyScenario(b, [{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes.join(' ')).not.toMatch(/registered volume/);
+		// A volume hidden from the applicant is not theirs to count.
+		const masked = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }], { mask: { allocations: ['al2'] } });
+		expect(masked.problems).toEqual([]);
+		expect(masked.applied[0]!.notes.join(' ')).not.toMatch(/registered volume/);
+	});
+
+	it('a volume on the own unit is the proposal; on another’s, or replacing another’s, baseline', () => {
+		const b = withAllocations();
+		expect(classifyOp({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: 1 }) }, ['A'], b)).toBe('proposal');
+		expect(classifyOp({ op: 'allocation.set', allocation: alloc({ id: 'new' }) }, ['A'], b)).toBe('proposal');
+		expect(classifyOp({ op: 'allocation.set', allocation: alloc({ id: 'new' }) }, ['A'])).toBe('baseline');
+		expect(classifyOp({ op: 'allocation.set', allocation: alloc({ id: 'new', nodeId: 'B' }) }, ['A'], b)).toBe('baseline');
+		// al2 is B's: moving it onto A takes another's volume.
+		expect(classifyOp({ op: 'allocation.set', allocation: alloc({ id: 'al2' }) }, ['A'], b)).toBe('baseline');
+		expect(classifyOp({ op: 'allocation.remove', allocationId: 'al1' }, ['A'], b)).toBe('proposal');
+		expect(classifyOp({ op: 'allocation.remove', allocationId: 'al2' }, ['A'], b)).toBe('baseline');
+	});
+
+	it('the run caps use at a scenario’s volume (allocationMode cap)', () => {
+		const b = withAllocations();
+		b.settings.allocationMode = 'cap';
+		const use = (x: ModelInput) => runModel(x).series.find((s) => s.nodeId === 'A' && s.key === 'supplied')!.values.reduce((s, v) => s + v, 0);
+		const capped = applyScenario(b, [{ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: 1_000 }) }]).input;
+		expect(use(capped)).toBeLessThan(use(b));
+	});
+
+	it('masked: a hidden volume answers exactly as a free id, and one reusing its id moves to a fresh id', () => {
+		const mask: ScenarioMask = { nodes: { B: 'Farm 1', C: 'Farm 2' }, allocations: ['al2'] };
+		const told = (r: ReturnType<typeof applyScenario>, id: string) => JSON.stringify([r.applied, r.problems]).replaceAll(id, 'ID');
+		const rm = (id: string): ScenarioOp => ({ op: 'allocation.remove', allocationId: id });
+		const h = applyScenario(withAllocations(), [rm('al2')], { mask });
+		expect(h.problems).toEqual([expect.stringMatching(/not found$/)]);
+		expect(told(h, 'al2')).toBe(told(applyScenario(withAllocations(), [rm('free')], { mask }), 'free'));
+		expect(applyScenario(withAllocations(), [rm('al2')]).problems).toEqual([]);
+		const set = (id: string): ScenarioOp => ({ op: 'allocation.set', allocation: alloc({ id, volumeM3PerYear: 9 }) });
+		const reuse = applyScenario(deepFreeze(withAllocations()), [set('al2')], { mask });
+		expect(reuse.problems).toEqual([]);
+		expect(told(reuse, 'al2')).toBe(told(applyScenario(withAllocations(), [set('free')], { mask }), 'free'));
+		expect(reuse.reIds).toEqual([{ kind: 'allocation', id: 'al2', as: 'al2-2' }]);
+		expect(reuse.input.model.allocations).toEqual([alloc(), alloc({ id: 'al2', nodeId: 'B', volumeM3PerYear: 50_000 }), alloc({ id: 'al2-2', volumeM3PerYear: 9 })]);
+		// Classified as it applies: a new volume on the own unit, never a replacement of the hidden one.
+		expect(classifyScenario(withAllocations(), [set('al2')], ['A'], { mask })).toEqual(['proposal']);
+		expect(classifyScenario(withAllocations(), [set('al2')], ['A'])).toEqual(['baseline']);
+	});
+});
+
 describe('classifyOp', () => {
 	const owned = ['A'];
 	const b = base();
@@ -1020,6 +1445,59 @@ describe('validateScenarioOps', () => {
 		expect(ops[12]).toEqual({ op: 'demand.scale', factor: 0.85 });
 		expect(ops[13]).toEqual({ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm' });
 		expect(ops[14]).toEqual({ op: 'ewrRule.set', table: { ...blankEwrRuleTable(null), source: 'Invented study', highFlows: [{ label: 'Freshet', months: [11], peakM3s: 2, durationDays: 3, perYear: 1 }] } });
+	});
+
+	it('takes the later ops (engine ≥ 1.35.0), rebuilt from known fields, and names each error by path', () => {
+		const n = node('N', { downstreamNodeId: 'G' });
+		const raw = [
+			{ op: 'node.move', nodeId: 'A', downstreamNodeId: 'B', junk: 1 },
+			{ op: 'node.insert', node: { ...n, junk: 1 }, upstreamNodeIds: ['A', 'B'] },
+			{ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: new Array(12).fill(0.4) },
+			{ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: null },
+			{ op: 'crop.remove', cropId: 'c1' },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'factors', value: { mar: 0.1, lowFlow: 0.2 } },
+			{ op: 'ewrRule.remove', siteNodeId: null },
+			{ op: 'ewrRule.remove', siteNodeId: 'W' },
+			{ op: 'allocation.set', allocation: { id: 'al1', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000, holder: 'dropped' } },
+			{ op: 'allocation.set', allocation: { id: 'al2', nodeId: 'A', waterSource: 'groundwater', volumeM3PerYear: 0, storageM3: null, validFrom: '2020-10-01', validTo: null, months: [10, 11], maxRateM3s: 0.1 } },
+			{ op: 'allocation.remove', allocationId: 'al1' }
+		];
+		const { ops, errors } = validateScenarioOps(raw);
+		expect(errors).toEqual([]);
+		expect(ops).toHaveLength(raw.length);
+		expect(ops[0]).toEqual({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'B' });
+		expect('junk' in (ops[1] as { node: object }).node).toBe(false);
+		expect(ops[8]).toEqual({ op: 'allocation.set', allocation: { id: 'al1', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 } });
+		const bad = validateScenarioOps([
+			{ op: 'node.move', nodeId: 'A' },
+			{ op: 'node.insert', node: n, upstreamNodeIds: [] },
+			{ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'A'] },
+			{ op: 'crop.set', cropId: 'c1', field: 'sortOrder', value: 1 },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: ' ' },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'factors', value: { mar: 2, lowFlow: 0 } },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'nodeId', value: 'A' },
+			{ op: 'ewrRule.remove' },
+			{ op: 'allocation.set', allocation: { id: 'x', nodeId: null, waterSource: 'rain', volumeM3PerYear: 1e12 } },
+			{ op: 'allocation.set', allocation: { id: 'x', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1, months: [1, 1], validFrom: '2021-01-01', validTo: '2020-01-01' } },
+			{ op: 'allocation.remove' }
+		]);
+		expect(bad.ops).toEqual([]);
+		expect(bad.errors).toEqual([
+			'ops[0].downstreamNodeId: missing',
+			'ops[1].upstreamNodeIds: must be a list of at least one node id (the nodes that will drain into the new one; with none, add the node instead)',
+			'ops[2].upstreamNodeIds: names a node more than once',
+			'ops[3].field: is not a crop field a scenario can set',
+			'ops[4].value: must be a name of 1–100 characters',
+			'ops[5].value: must be { mar, lowFlow }, each 0–1',
+			'ops[6].field: is not a land-cover field a scenario can set',
+			'ops[7].siteNodeId: missing',
+			'ops[8].allocation.nodeId: must be an id (1–100 characters)',
+			'ops[8].allocation.waterSource: must be one of surface, groundwater',
+			'ops[8].allocation.volumeM3PerYear: must be a number of m³ from 0 to below 10¹²',
+			'ops[9].allocation.months: names a month more than once',
+			'ops[9].allocation.validTo: is before valid from (2021-01-01)',
+			'ops[10].allocationId: missing'
+		]);
 	});
 
 	it('checks ewrRule.set’s table with the Settings form’s own checks (engine ≥ 1.6.0)', () => {

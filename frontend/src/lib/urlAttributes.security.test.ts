@@ -58,6 +58,11 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
+	packHref: {
+		why: 'BUILDER: "{base}/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
+		in: ['lib/components/packs/PackActions.svelte', 'lib/components/report/evidence/EvidencePage.svelte', 'lib/components/scenarios/ApplicationPanel.svelte', 'lib/components/scenarios/ApplicationsTab.svelte']
+	},
+	manifestUrl: { why: 'pack page: URL.createObjectURL of the manifest JSON it builds, a blob: URL for the download', in: ['routes/projects/[id]/packs/[packId]/+page.svelte'] },
 	curtailmentHref: { why: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'routes/teams/[id]/portfolio/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
 	historyHref: { why: 'BUILDER: compare/attribution.ts "/projects/" + encoded project id + "?tab=history"', in: ['lib/components/compare/CompareView.svelte'] },
 	// Local builders and constants in the component itself: a literal "?", "#" or "{base}/" head.
@@ -68,7 +73,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	termsHref: { why: 'TermsSummary: its `termsHref` prop, "/terms" by default; the register page passes `${base}/terms`', in: ['lib/components/legal/TermsSummary.svelte'] },
 	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
-	back: { why: 'EvidencePage: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id', in: ['lib/components/report/evidence/EvidencePage.svelte'] },
+	back: {
+		why: 'EvidencePage, the pack page: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
+		in: ['lib/components/report/evidence/EvidencePage.svelte', 'routes/projects/[id]/packs/[packId]/+page.svelte']
+	},
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	filterHref: { why: 'ApplicationsTab: withoutParam(page.url, "status") or withParam(page.url, "status", f)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },
@@ -86,7 +94,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
-	'register.registerUrl': { why: 'SignoffSection: liability/registration.ts constant https:// link to the ECSA or SACNASP public register', in: ['lib/components/liability/SignoffSection.svelte'] },
+	'register.registerUrl': {
+		why: 'SignoffSection, the public verify page: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
+		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte']
+	},
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	glossaryPath: { why: 'help glossary: "/help/glossary/<slug>#<id>", the slug from TOPIC_SLUGS and the id from the static help text (lib/help/glossaryLinks.ts)', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/RichText.svelte', 'routes/help/glossary/+page.svelte', 'routes/help/glossary/[topic]/+page.svelte', 'routes/help/guides/[id]/+page.svelte', 'routes/help/search/+page.svelte'] },
 	topicPath: { why: 'help glossary: "/help/glossary/<slug>" from the TOPIC_SLUGS table (lib/help/glossaryLinks.ts)', in: ['routes/help/glossary/+page.svelte'] },
@@ -109,6 +120,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'it.also.href': { why: 'NeedsAttention: attention.ts, farmDrawerHref', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	// Values that come from outside the component, each checked where it enters.
+	'api.packs.pdfUrl': {
+		why: 'an issued evidence pack’s PDF download: PUBLIC_API_URL + an encoded path of the project and pack ids (lib/api/client.ts packs.pdfUrl); the API answers 302 to a signed URL of its own (119_pack_render)',
+		in: ['routes/projects/[id]/packs/[packId]/+page.svelte']
+	},
 	'current.url': { why: 'the report PDF link: serverPdf.ts reportsApi.get sets it from api.reports.pdfUrl (PUBLIC_API_URL + an encoded path), never from the response (serverPdf.test.ts)', in: ['lib/components/report/ServerPdf.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'api.farm.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/farm/[projectId]/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },

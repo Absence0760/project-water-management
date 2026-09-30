@@ -117,6 +117,29 @@ describe('reliability (hand-worked)', () => {
 		expect(supplyAssurance(x).reliability[0]).toMatchObject({ waterYears: 1, partWaterYears: 0, annualReliability: 1 });
 	});
 
+	// Failure-run edges of the day loop (tallyWindow, issue #192).
+	const runs = (demand: number[], supplied: number[], window?: { from: number; to: number }) => {
+		const x = pure();
+		x.demandNodes[0] = { ...x.demandNodes[0]!, demand, supplied };
+		if (window) x.window = { ...window, reportStart: '2001-09-29', reportEnd: '2001-10-04' };
+		return supplyAssurance(x).reliability[0]!;
+	};
+
+	it('a failure run still open on the window’s last day counts: runs, longest and largest deficit', () => {
+		// Met, met, then short on the last four days (deficits 1, 2, 3, 4): one run, never ended by a met day.
+		expect(runs([10, 10, 10, 10, 10, 10], [10, 10, 9, 8, 7, 6])).toMatchObject({ failureRuns: 1, longestFailureDays: 4, meanFailureDays: 4, maxFailureDeficitM3: 10, meanFailureDeficitM3: 10 });
+	});
+
+	it('a day without demand ends a failure run, and is neither met nor failed', () => {
+		// Short, short, no demand, short, met, met: two runs (2 days, deficit 3; 1 day, deficit 5).
+		expect(runs([10, 10, 0, 10, 10, 10], [9, 8, 0, 5, 10, 10])).toMatchObject({ demandDays: 5, metDays: 2, failureRuns: 2, longestFailureDays: 2, meanFailureDays: 1.5, maxFailureDeficitM3: 5, meanFailureDeficitM3: 4 });
+	});
+
+	it('a window that starts inside a failure run counts only its days in the window', () => {
+		// Short on days 0–3, met after; the window starts on day 2: one run of 2 days (deficits 3 + 4).
+		expect(runs([10, 10, 10, 10, 10, 10], [9, 8, 7, 6, 10, 10], { from: 2, to: 5 })).toMatchObject({ demandDays: 4, failureRuns: 1, longestFailureDays: 2, maxFailureDeficitM3: 7, meanFailureDeficitM3: 7 });
+	});
+
 	it('only the reporting window counts', () => {
 		const x = pure();
 		x.window = { from: 3, to: 5, reportStart: '2001-10-02', reportEnd: '2001-10-04' };

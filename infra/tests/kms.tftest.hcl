@@ -420,6 +420,26 @@ override_resource {
   }
 }
 
+# Evidence pack PDFs (packs.tf, 119_pack_render)
+override_resource {
+  target          = aws_s3_bucket.packs
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-packs-000000000000"
+    bucket = "water-management-packs-000000000000"
+    # The /packs/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-packs-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.packs
+  override_during = plan
+  values = {
+    id = "packs-oac-id"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan

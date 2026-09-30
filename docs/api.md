@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
-| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run; both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -1715,7 +1715,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
-  with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`, and
+  with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.34.0:
+  the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
   one row per water year (Oct–Sep, `waterYear` = its start year) and one for
@@ -1926,6 +1928,7 @@ below work on it too, for an editor.
 | GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
+| GET | `/projects/:id/scenarios/:sid/results?runId=` | – | `{ run, results }`: one run of the application (the newest by default; `{ run: null, results: null }` before any) as its applicant sees it against its base (below). `run`: `id, label, engineVersion, startDate, endDate, createdAt, baseRunId, current` (`current`: made from the ops and base the application has now). `404` for a run that isn't one of its runs or an application the caller doesn't read; `409` for a team scenario (the compare page compares those), or when the run's base is no longer a published run | any reader of the application (contributor and up) |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
@@ -1938,6 +1941,29 @@ below work on it too, for an editor.
   They never
   receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
   answer them `403`.
+- **What a contributor sees of a run** (`…/results`, 118; D2's default,
+  pending the client; [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+  `results = { allProposals, ewrSites, catchment, units, downstream,
+  unitsWithheld, model }`. `ewrSites[]`: each EWR site (`name` null for the
+  outlet, a gauge's name, else the anonymous one) with `base` and
+  `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
+  `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
+  application }` always; `figures` (mean natural flow and outlet flow, base
+  and application) and `series` (the outlet's daily `outflow` and `ewr`,
+  base and application) only at five or more farm holders and when every op
+  was a proposal, else null with `withheld: 'few_farm_holders' |
+  'baseline_assumptions'` (and `deficitM3` null). `units[]`: their own units
+  (their farm links as they read them now) and the ones the ops add
+  (`added`), `{ nodeId, name, kind, base, application }` with demand,
+  supply, share met, EWR charge and dam figures. `downstream[]`: every other
+  farm or water user below those units, `{ nodeId, name, kind,
+  supplyChangePct }`: the anonymous name `…/base` gives it and the change in
+  its mean supply as a whole percentage (null when it had none in the
+  base). `units` and `downstream` are `[]` with `unitsWithheld:
+  'baseline_assumptions'` when an op was a baseline assumption. `model`:
+  what ran on their units (nodes, crops, crop areas, transfers, land cover,
+  boreholes, demand objects), an item an op added under a hidden item's id
+  shown by that id (the run holds it under a fresh one, `check.reIds`).
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
 
@@ -2001,11 +2027,13 @@ covers the manifest, the hash, the short code and the lifecycle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)). `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
+| POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
 | POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
 | GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
 
@@ -2017,8 +2045,14 @@ covers the manifest, the hash, the short code and the lifecycle).
   signoffs }`. `title` is the report's (the scenario's name, or the
   project's); `createdBy` and `issuedBy` are display names (null once the
   account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
-  `signoffs` is a count. The PDF and bundle fields stay `null` until they
-  are built.
+  `signoffs` is a count. `pdfSha256` and `pdfPages` are set once, when the
+  PDF is recorded (119_pack_render); the bundle fields stay `null` until it
+  is built.
+- `PackPdfState = { status: 'ready' | 'rendering' | 'failed' | 'none',
+  error }`: `ready` once the PDF is recorded; `rendering` while its render
+  job is queued, running, retrying or waiting for the renderer's answer;
+  `failed` when the last render gave up (`error` says why; an editor asks
+  again with `POST …/pdf`); `none` for a pack never issued.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.
@@ -2029,7 +2063,8 @@ covers the manifest, the hash, the short code and the lifecycle).
   `application: { runId, engineVersion } | null`; eleven confirmations, the
   run statement's ten and `pack`; `errata` of either run's engine.
 - `PackVerification = { status, version, issuedAt, catchment,
-  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256,
+  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256 (null
+  until the PDF is recorded),
   successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
@@ -2111,7 +2146,7 @@ whether a use is lawful.
   createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
   `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
   (strings) are licence conditions (103, issue #72), recorded and shown; a
-  cap run (engine ≥ 1.34.0) applies `months` and `maxRateM3s`, never
+  cap run (engine ≥ 1.37.0) applies `months` and `maxRateM3s`, never
   `conditions`. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.
@@ -2492,7 +2527,7 @@ A job runs later, in the worker, as the editor who queued it.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
+| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50. A contributor lists only their own yield jobs (RLS, 096), which is how the Yield panel follows one on the Applicant view | viewer (a contributor: their own yield jobs) |
 | POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry; an automatic re-run included, which may be due later) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field (a client can't queue an automatic re-run) | editor |
 
 - `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.
@@ -2532,7 +2567,7 @@ scenario (its ops on its base run's inputs), never the live model.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job. A contributor (an applicant) only with `scenarioId` of an application they own and `nodeId` their own farm or a dam its `node.add` ops add (`403` for a run or an application that isn't theirs; a dam hidden from them is the `400` an unknown node gets). `409` for a forecast run (issue #51: a yield is judged on history; the Network tab offers only ordinary runs), and for a scenario whose base is one | editor, or a contributor on their own application |
+| POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job. A contributor (an applicant) only with `scenarioId` of an application they own and `nodeId` their own farm or a dam its `node.add` or `node.insert` ops add (`403` for a run or an application that isn't theirs; a dam hidden from them is the `400` an unknown node gets). `409` for a forecast run (issue #51: a yield is judged on history; the Network tab offers only ordinary runs), and for a scenario whose base is one | editor, or a contributor on their own application |
 | GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node. A contributor reads only the results they computed | contributor (RLS: their own) |
 | GET | `/projects/:id/yield/jobs?nodeId=&runId=\|scenarioId=` | – | `{ jobs: YieldJob[] }`: this dam's pending yield jobs (queued, running, or failed and waiting to retry), whoever queued them, newest first, at most 20; `nodeId` required, at most one of `runId` / `scenarioId` (`400` for both). A done or dead job drops off: read its result with `GET /yield?jobId=`. A contributor sees only their own jobs | contributor (RLS: their own) |
 | POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }`: a queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
@@ -2965,7 +3000,10 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   (never the baseline's own project or run); everything else, the
   run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
-  ([security.md § Render tokens](./security.md#render-tokens)).
+  ([security.md § Render tokens](./security.md#render-tokens)). A pack's
+  render session (an issued evidence pack's PDF, 119_pack_render) may `GET`
+  only `/auth/me`, `/projects/:id/packs/:packId` and its `/signoffs`, with
+  no query: not the project, its runs, the pack list or the pack's PDF.
 
 ## History
 

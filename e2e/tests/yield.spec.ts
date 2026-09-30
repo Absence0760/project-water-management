@@ -5,6 +5,8 @@
 // and its table, passing axe (WCAG 2.2 AA). A queued firm yield can be
 // cancelled. A viewer sees the results with no run buttons. A job queued
 // elsewhere (another tab, before a reload) is picked up and followed to the end.
+// The panel's in-browser preview (the preview worker, WP-1.17) shows the firm
+// yield at once, not stored, and agrees with the job's stored result.
 import type { Page } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { holdYieldJobRunning, releaseYieldJob } from '../support/db.ts';
@@ -87,4 +89,87 @@ test('the panel follows a yield job it did not queue: running after a reload, th
 	await expect(panel.getByTestId('yield-firm')).toBeVisible();
 	await expect(panel.getByTestId('yield-status')).toHaveCount(0);
 	await expect(panel.getByRole('button', { name: 'Work out the yield' })).toBeEnabled();
+});
+
+test('the in-browser preview shows the firm yield at once, follows the pattern, and matches the stored job', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Yield preview');
+	await createRun(page.request, project.id, 'Base');
+
+	const panel = await openUpperFarm(page, project.id);
+	const preview = panel.getByTestId('yield-preview');
+	await expect(preview).toHaveAttribute('data-state', 'done');
+	await expect(preview.getByRole('heading', { name: 'Preview Not stored' })).toBeVisible();
+	const value = preview.getByTestId('yield-preview-value');
+	await expect(value).toContainText('historical firm yield, constant draft');
+	// Nothing stored by it.
+	await expect(panel.getByTestId('yield-empty')).toBeVisible();
+	const previewed = (await value.locator('strong').textContent())!;
+	expect(previewed).toMatch(/ m³\/day$/);
+
+	// The job, on the same run, pattern and assurance, stores the same number.
+	await panel.getByRole('button', { name: 'Work out the yield' }).click();
+	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
+	await runJobsTick({ schedule: false });
+	await expect(panel.getByTestId('yield-firm').locator('dd strong')).toHaveText(previewed);
+	// The preview names its engine: here the backend's too, so no note.
+	const worked = (await panel.getByTestId('yield-firm').getByText(/\(engine [\d.]+\)$/).textContent())!;
+	const engine = /\(engine ([\d.]+)\)$/.exec(worked)![1];
+	await expect(preview.getByTestId('yield-preview-engine')).toHaveText(`engine ${engine}`);
+	await expect(preview.getByTestId('yield-engine-differs')).toHaveCount(0);
+
+	// Another pattern: a new preview for it.
+	await panel.getByLabel('Draft pattern').selectOption('demand');
+	await expect(value).toContainText("historical firm yield, this hydrological unit's demand shape");
+	await expect(preview).toHaveAttribute('data-state', 'done');
+	await expectNoViolations(page, { include: '[data-testid="yield-panel"]' });
+
+	// A viewer previews too (nothing is stored), with no run buttons.
+	const viewer = await signIn('Yield preview viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	// As if the backend were released on another engine than this web build:
+	// the stored result says so, and the preview notes the difference.
+	await viewer.page.route(
+		(url) => url.pathname === `/projects/${project.id}/yield`,
+		async (route) => {
+			if (route.request().method() !== 'GET') return route.fallback();
+			const response = await route.fetch();
+			const body = (await response.json()) as { results: { engineVersion: string }[] };
+			await route.fulfill({ response, json: { results: body.results.map((r) => ({ ...r, engineVersion: '0.9.0' })) } });
+		}
+	);
+	const theirs = await openUpperFarm(viewer.page, project.id);
+	await expect(theirs.getByTestId('yield-preview')).toHaveAttribute('data-state', 'done');
+	await expect(theirs.getByTestId('yield-preview-value').locator('strong')).toHaveText(previewed);
+	await expect(theirs.getByTestId('yield-firm')).toContainText('(engine 0.9.0)');
+	await expect(theirs.getByTestId('yield-engine-differs')).toHaveText(
+		`The stored yield below was worked out on engine 0.9.0 and this preview on engine ${engine}, so the two can differ by what changed between those versions.`
+	);
+	await expect(theirs.getByRole('button', { name: 'Work out the yield' })).toHaveCount(0);
+});
+
+test("under a scenario the preview applies the scenario's ops, as the stored job does", async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Yield preview scenario');
+	const runId = await createRun(page.request, project.id, 'Base');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name: 'Upper dam +20 %', baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }] }
+	});
+	expect(res.status()).toBe(201);
+	const { scenario } = (await res.json()) as { scenario: { id: string } };
+
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenario.id}`);
+	await page.getByLabel('Dam', { exact: true }).selectOption({ label: 'Upper farm' });
+	const panel = page.getByRole('region', { name: 'Yield of Upper farm' });
+	const preview = panel.getByTestId('yield-preview');
+	await expect(preview).toHaveAttribute('data-state', 'done');
+	const previewed = (await preview.getByTestId('yield-preview-value').locator('strong').textContent())!;
+
+	await panel.getByRole('button', { name: 'Work out the yield' }).click();
+	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
+	await runJobsTick({ schedule: false });
+	// The stored result is on the raised dam, and the preview's number is its number.
+	await expect(panel.getByTestId('yield-firm')).toContainText('180 000 m³');
+	await expect(panel.getByTestId('yield-firm').locator('dd strong')).toHaveText(previewed);
 });

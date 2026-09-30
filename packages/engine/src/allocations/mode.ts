@@ -17,7 +17,7 @@
 //    it included, so that water uses up both volumes; the comparison nets it
 //    (docs/model.md §2.12). Pending the hydrologist (followups.md §
 //    Allocations, issue #90).
-//    The licence conditions bind too (engine ≥ 1.34.0, issue #72): on a day
+//    The licence conditions bind too (engine ≥ 1.37.0, issue #72): on a day
 //    outside every in-force allocation's months of use the source gives
 //    nothing, and otherwise at most the in-force allocations' maximum rates
 //    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
@@ -156,7 +156,7 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
 
 /**
  * The licence conditions' limit on each run day (`cap` mode, engine ≥
- * 1.34.0, issue #72), m³/day, for one water source: of the allocations of
+ * 1.37.0, issue #72), m³/day, for one water source: of the allocations of
  * `source` in force that day (their validity dates), those whose months of
  * use include the day's month (none stated = every month) give their
  * maximum rate × 86 400 (none stated = no limit), summed. So a day in a
@@ -258,7 +258,7 @@ interface ModePlanNode {
 /**
  * A unit's cap (PlanNode.allocationCap): per source, the water year's
  * registered volume on each day (null = that source isn't capped), and the
- * licence conditions' limit on each day (m³/day, engine ≥ 1.34.0; absent or
+ * licence conditions' limit on each day (m³/day, engine ≥ 1.37.0; absent or
  * null = none stated).
  */
 export interface AllocationCap {

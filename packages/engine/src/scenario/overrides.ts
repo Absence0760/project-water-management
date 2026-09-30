@@ -8,14 +8,23 @@ import { withMonthlyRates } from '../network/transferRates';
 import { DAM_AREA_EXPONENT, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
+	CROP_SET_FIELDS,
+	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
+	SETTINGS_PATHS,
+	TRANSFER_SET_FIELDS,
+	allocationOpIssues,
+	allowed,
+	cropFieldError,
 	demandScaleError,
 	ewrRuleTableOpIssues,
 	isIsoDate,
+	landCoverFieldError,
 	nodeAddFieldError,
 	nodeFieldError,
+	reductions,
 	settingsValueError,
 	transferFieldError,
 	type ScenarioOp
@@ -25,6 +34,7 @@ import { resolveDamCurve } from '../network/dam';
 import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
+import type { AllocationEntry } from '../allocations/compare';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
 export interface AppliedOp {
@@ -91,6 +101,8 @@ export interface ScenarioMask {
 	transfers?: readonly string[];
 	landCover?: readonly string[];
 	boreholes?: readonly string[];
+	/** Registered volumes (engine ≥ 1.35.0, allocation.set): those on units the applicant can't see. */
+	allocations?: readonly string[];
 }
 
 /** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #90). */
@@ -117,7 +129,7 @@ export interface ApplyOptions {
 	mask?: ScenarioMask;
 }
 
-type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole';
+type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole' | 'allocation';
 type Named = { id: string; name: string };
 type Identified = { id: string; name?: string };
 interface Masked {
@@ -145,9 +157,10 @@ const ID_LISTS = {
 	crop: (m: ModelInput['model']) => m.crops as Identified[],
 	transfer: (m: ModelInput['model']) => m.transfers as Identified[],
 	landCover: (m: ModelInput['model']) => (m.landCover ?? []) as Identified[],
-	borehole: (m: ModelInput['model']) => (m.boreholes ?? []) as Identified[]
+	borehole: (m: ModelInput['model']) => (m.boreholes ?? []) as Identified[],
+	allocation: (m: ModelInput['model']) => (m.allocations ?? []) as Identified[]
 } as const;
-const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes' } as const;
+const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes', allocation: 'allocations' } as const;
 
 /**
  * A copy of `model` with the masked nodes under their mask names and the
@@ -175,7 +188,7 @@ function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly
 		return t;
 	};
 	const crops = new Map<string, [string, string]>();
-	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map() } as Masked['ids'];
+	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map(), allocation: new Map() } as Masked['ids'];
 	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
 		const hidden = new Set(mask[MASK_KEY[kind]] ?? []);
 		if (!hidden.size) continue;
@@ -309,6 +322,35 @@ function findTransfer(d: Draft, transferId: string): Transfer {
 	return d.model.transfers.find((t) => t.id === transferId) ?? fail(`transfer ${transferId} not found`);
 }
 
+/** node.add's and node.insert's new node, checked and pushed (never a new outflow: it drains into an existing node). */
+function addNode(d: Draft, raw0: NetworkNode): NetworkNode {
+	const m = d.model;
+	const raw = raw0 as unknown as Record<string, unknown>;
+	for (const k of ['id', 'name', 'kind', 'downstreamNodeId'] as const) if (typeof raw?.[k] !== 'string') fail(`the new node needs a ${k}`);
+	if (m.nodes.some((n) => n.id === raw0.id)) fail(`node id ${raw0.id} is already in use`);
+	if (!m.nodes.some((n) => n.id === raw0.downstreamNodeId)) fail(`the new node drains into unknown node ${raw0.downstreamNodeId}`);
+	for (const [k, v] of Object.entries(raw)) {
+		if (['id', 'name', 'kind', 'downstreamNodeId'].includes(k)) continue;
+		if (k === 'sortOrder') {
+			if (!Number.isInteger(v)) fail("the new node's sortOrder must be a whole number");
+			continue;
+		}
+		const e = nodeAddFieldError(k, v);
+		if (e) fail(`the new node's ${k} ${e}`);
+	}
+	const [node] = upgradeLegacyModel({ nodes: [cloneData(raw0)] }).nodes as NetworkNode[];
+	node!.name = node!.name.trim();
+	node!.sortOrder ??= m.nodes.length;
+	m.nodes.push(node!);
+	return node!;
+}
+
+/** The outlet is one EWR site whether a table names it null (as Settings saves it) or by the outlet node's id (as the run reads both). */
+function ewrSiteKey(d: Draft): (id: string | null | undefined) => string | null {
+	const outflowId = d.model.nodes.find((n) => n.downstreamNodeId === null)?.id;
+	return (id) => (id === undefined || id === null || id === outflowId ? null : id);
+}
+
 /**
  * A farm dam whose capacity an op changed keeps its geometry along its own
  * area–volume relation (engine ≥ 1.10.0, docs/model.md §2.13, ../network/damResize.ts):
@@ -359,35 +401,44 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 	switch (op.op) {
 		case 'node.set': {
 			const n = findNode(d, op.nodeId);
-			if (!(NODE_SET_FIELDS[n.kind] as readonly string[]).includes(op.field)) fail(`"${op.field}" can't be set on a ${n.kind}`);
-			const e = nodeFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
+			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
+			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
+			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);
+			const e = nodeFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
 			const oldCap = n.damCapacityM3;
-			(n as unknown as Record<string, unknown>)[op.field] = op.field === 'name' ? (op.value as string).trim() : cloneData(op.value);
-			if (op.field === 'damCapacityM3' && n.kind === 'farm') {
+			(n as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			if (field === 'damCapacityM3' && n.kind === 'farm') {
 				const note = resizeDamGeometry(n, oldCap);
 				if (note && see.node(n.id)) notes.push(note);
 			}
 			break;
 		}
-		case 'node.add': {
-			const raw = op.node as unknown as Record<string, unknown>;
-			for (const k of ['id', 'name', 'kind', 'downstreamNodeId'] as const) if (typeof raw?.[k] !== 'string') fail(`the new node needs a ${k}`);
-			if (m.nodes.some((n) => n.id === op.node.id)) fail(`node id ${op.node.id} is already in use`);
-			if (!m.nodes.some((n) => n.id === op.node.downstreamNodeId)) fail(`the new node drains into unknown node ${op.node.downstreamNodeId}`);
-			for (const [k, v] of Object.entries(raw)) {
-				if (['id', 'name', 'kind', 'downstreamNodeId'].includes(k)) continue;
-				if (k === 'sortOrder') {
-					if (!Number.isInteger(v)) fail('the new node\'s sortOrder must be a whole number');
-					continue;
-				}
-				const e = nodeAddFieldError(k, v);
-				if (e) fail(`the new node's ${k} ${e}`);
+		case 'node.add':
+			addNode(d, op.node);
+			break;
+		case 'node.insert': {
+			// The nodes re-pointed first, against the network as it stands: each must drain into the new node's downstream node.
+			const ups = Array.isArray(op.upstreamNodeIds) ? op.upstreamNodeIds : fail('upstreamNodeIds must be a list of node ids');
+			if (!ups.length) fail('upstreamNodeIds names no node: with none, add the node instead');
+			if (new Set(ups).size !== ups.length) fail('upstreamNodeIds names a node more than once');
+			const down = typeof op.node?.downstreamNodeId === 'string' ? op.node.downstreamNodeId : null;
+			const upstream = ups.map((id) => findNode(d, id));
+			const node = addNode(d, op.node);
+			for (const u of upstream) {
+				if (u.downstreamNodeId !== down) fail(`"${u.name}" doesn't drain into the node the new one drains into, so the new node can't sit between them`);
+				u.downstreamNodeId = node.id;
+				notes.push(`"${u.name}" now drains into "${node.name}"`);
 			}
-			const [node] = upgradeLegacyModel({ nodes: [cloneData(op.node)] }).nodes as NetworkNode[];
-			node!.name = node!.name.trim();
-			node!.sortOrder ??= m.nodes.length;
-			m.nodes.push(node!);
+			break;
+		}
+		case 'node.move': {
+			const n = findNode(d, op.nodeId);
+			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow node and can't be moved`);
+			const to = findNode(d, op.downstreamNodeId);
+			if (to.id === n.id) fail(`"${n.name}" can't drain into itself`);
+			// A loop (the new downstream node drains into this one) is a model rule, checked after the op.
+			n.downstreamNodeId = to.id;
 			break;
 		}
 		case 'node.remove': {
@@ -412,6 +463,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
 			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
 			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId));
+			// Registered volumes (engine ≥ 1.35.0) stay, as the file keeps them: the run lists them as on no unit
+			// (notInRunAllocationIds). Said here so the change isn't silent; counted only where the caller sees them.
+			const orphaned = (m.allocations ?? []).filter((a) => a.nodeId === n.id && see.item(a.id)).length;
+			if (orphaned) notes.push(`its ${orphaned} registered volume(s) are no longer on a unit in the run`);
 			if (Array.isArray(d.settings.ewrRules)) {
 				// Settings are catchment-wide and the applicant sees them in full.
 				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there', () => true);
@@ -438,6 +493,24 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			m.crops.push({ ...cloneData(c), name: c.name.trim() });
 			break;
 		}
+		case 'crop.set': {
+			const c = m.crops.find((x) => x.id === op.cropId) ?? fail(`crop ${op.cropId} not found`);
+			// Written by the allowlist's own name for the field, never the op's text.
+			const field = allowed(CROP_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a crop field a scenario can set`);
+			const e = cropFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			(c as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			break;
+		}
+		case 'crop.remove': {
+			if (!m.crops.some((x) => x.id === op.cropId)) fail(`crop ${op.cropId} not found`);
+			m.crops = m.crops.filter((x) => x.id !== op.cropId);
+			// Counts only the areas on nodes the caller sees: in masked mode a hidden farm growing it is not theirs to count.
+			const counted = m.cropAreas.filter((a) => a.cropId === op.cropId && see.node(a.nodeId)).length;
+			m.cropAreas = m.cropAreas.filter((a) => a.cropId !== op.cropId);
+			if (counted) notes.push(`dropped ${counted} crop area(s)`);
+			break;
+		}
 		case 'transfer.add': {
 			const t = op.transfer;
 			if (typeof t?.id !== 'string') fail('the new transfer needs an id');
@@ -461,13 +534,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'transfer.set': {
 			const t = findTransfer(d, op.transferId);
-			const e = transferFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
-			if ((op.field === 'fromNodeId' || op.field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
+			const field = allowed(TRANSFER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a transfer field a scenario can set`);
+			const e = transferFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			if ((field === 'fromNodeId' || field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
-			if (op.field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
-			else (t as unknown as Record<string, unknown>)[op.field] = op.field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
+			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
+			else (t as unknown as Record<string, unknown>)[field] = field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
 			break;
 		}
 		case 'transfer.remove': {
@@ -489,6 +563,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			m.landCover = m.landCover!.filter((p) => p.id !== op.patchId);
 			break;
 		}
+		case 'landCover.set': {
+			const p = (m.landCover ?? []).find((x) => x.id === op.patchId) ?? fail(`land-cover patch ${op.patchId} not found`);
+			const field = allowed(LAND_COVER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a land-cover field a scenario can set`);
+			const e = landCoverFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			(p as unknown as Record<string, unknown>)[field] = field === 'factors' ? reductions(op.value) : cloneData(op.value);
+			break;
+		}
 		case 'borehole.add': {
 			const b = op.borehole;
 			if (typeof b?.id !== 'string') fail('the new borehole needs an id');
@@ -506,8 +588,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		case 'settings.set': {
 			const e = settingsValueError(op.path, op.value);
 			if (e) fail(`${op.path} ${e}`);
+			// Written by the allowlist's own path, never the op's text.
+			const path = allowed(SETTINGS_PATHS, op.path) ?? fail(`"${String(op.path)}" is not a setting a scenario can change`);
 			const value = cloneData(op.value);
-			const [head, leaf] = op.path.split('.') as [string, string | undefined];
+			const [head, leaf] = path.split('.') as [string, string | undefined];
 			const s = d.settings as Record<string, unknown>;
 			if (leaf === undefined) s[head] = value;
 			else {
@@ -517,14 +601,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			break;
 		}
 		case 'series.scale': {
-			if (!(SCALABLE_SERIES_KINDS as readonly string[]).includes(op.kind)) fail(`${op.kind} can't be scaled`);
+			const kind = allowed(SCALABLE_SERIES_KINDS, op.kind) ?? fail(`${String(op.kind)} can't be scaled`);
 			if (!(Number.isFinite(op.factor) && op.factor >= 0 && op.factor <= SERIES_SCALE_MAX)) fail(`factor must be 0–${SERIES_SCALE_MAX}`);
 			for (const k of ['from', 'to'] as const) if (op[k] !== undefined && !isIsoDate(op[k])) fail(`${k} must be an ISO date`);
-			const s = d.series[op.kind] ?? fail(`the base has no ${op.kind} series`);
+			const s = d.series[kind] ?? fail(`the base has no ${kind} series`);
 			const start = toEpochDay(s.startDate);
 			const a = op.from === undefined ? 0 : Math.max(0, toEpochDay(op.from) - start);
 			const b = op.to === undefined ? s.values.length - 1 : Math.min(s.values.length - 1, toEpochDay(op.to) - start);
-			if (a > b) fail(`no day of ${op.kind} falls in ${op.from ?? 'its start'} – ${op.to ?? 'its end'}`);
+			if (a > b) fail(`no day of ${kind} falls in ${op.from ?? 'its start'} – ${op.to ?? 'its end'}`);
 			const values = s.values.slice();
 			let n = 0;
 			for (let t = a; t <= b; t++) {
@@ -533,7 +617,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				values[t] = v * op.factor;
 				n++;
 			}
-			d.series = { ...d.series, [op.kind]: { startDate: s.startDate, values } satisfies DailySeries };
+			d.series = { ...d.series, [kind]: { startDate: s.startDate, values } satisfies DailySeries };
 			notes.push(`${n} day(s) scaled`);
 			break;
 		}
@@ -567,9 +651,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			// As the run reads it (resolveEwrRules): the source trimmed, no natural grid unless it is the source, a kind, a REC and a natural MAR only when stated.
 			const { sourceKind, category, naturalMarMcm, ...rest } = table!;
 			const t: EwrRuleTable = { ...rest, ...(sourceKind != null ? { sourceKind } : {}), ...(category != null ? { category } : {}), ...(naturalMarMcm != null ? { naturalMarMcm } : {}), source: rest.source.trim(), natural: rest.naturalSource === 'table' ? rest.natural : null };
-			// The outlet is its own site whether a table names it null (as Settings does) or by its node's id (as the run reads both).
-			const outflowId = m.nodes.find((n) => n.downstreamNodeId === null)?.id;
-			const site = (id: string | null | undefined) => (id === undefined || id === null || id === outflowId ? null : id);
+			const site = ewrSiteKey(d);
 			if (site(t.siteNodeId) !== null) {
 				const n = findNode(d, t.siteNodeId!);
 				if (n.kind !== 'gauge') fail(`an EWR site is the outlet or a gauge; "${n.name}" is ${n.kind === 'user' ? 'an other water user' : `a ${n.kind}`}`);
@@ -583,6 +665,35 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (e) fail(e);
 			// No note: what it replaced is the op's "was", which the editor describes (like node.set's).
 			d.settings.ewrRules = next;
+			break;
+		}
+		case 'ewrRule.remove': {
+			if (op.siteNodeId !== null && typeof op.siteNodeId !== 'string') fail('siteNodeId must be a node id, or null for the outlet');
+			const site = ewrSiteKey(d);
+			const list: EwrRuleTable[] = Array.isArray(d.settings.ewrRules) ? d.settings.ewrRules : [];
+			const key = site(op.siteNodeId);
+			// Named by id, never by a node's name: a table can only be sited at the outlet or a gauge, which every caller sees.
+			if (!list.some((x) => x && typeof x === 'object' && site(x.siteNodeId) === key)) fail(`there is no EWR rule table at ${key === null ? 'the outlet' : `node ${key}`}`);
+			d.settings.ewrRules = list.filter((x) => !(x && typeof x === 'object' && site(x.siteNodeId) === key));
+			break;
+		}
+		case 'allocation.set': {
+			const { allocation, issues } = allocationOpIssues(op.allocation);
+			if (!allocation) fail(`the registered volume isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
+			const a = allocation!;
+			const n = findNode(d, a.nodeId!);
+			if (n.kind === 'gauge') fail(`a registered volume is held for a farm or other water user; "${n.name}" is a gauge`);
+			// Months as a sorted set, as the backend stores them.
+			const entry: AllocationEntry = { ...a, ...(Array.isArray(a.months) ? { months: monthSet(a.months) } : {}) };
+			const list = m.allocations ?? [];
+			const at = list.findIndex((x) => x.id === a.id);
+			// A replaced volume keeps its place, so the list's order (the run's) is the base's.
+			m.allocations = at < 0 ? [...list, entry] : list.map((x, i) => (i === at ? entry : x));
+			break;
+		}
+		case 'allocation.remove': {
+			if (!(m.allocations ?? []).some((x) => x.id === op.allocationId)) fail(`registered volume ${op.allocationId} not found`);
+			m.allocations = m.allocations!.filter((x) => x.id !== op.allocationId);
 			break;
 		}
 		default:
@@ -713,6 +824,9 @@ export type OpClass = 'proposal' | 'baseline';
 /** A gauge (an EWR site), or a node with land or a manual flow share: part of how the catchment's runoff is split. */
 const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0 || n.areaHiKm2 > 0 || n.areaLoKm2 > 0 || n.flowShareManual != null;
 
+/** A senior other water user (the default priority, USER_DEFAULTS): farms upstream of it pass its demand (model.md §2.7c). */
+const seniorUser = (n: NetworkNode) => n.kind === 'user' && (n.userPriority ?? 'senior') === 'senior';
+
 /**
  * Is this op the applicant's proposal, or a change to the baseline
  * assumptions an assessor must see called out? docs/scenarios.md
@@ -721,10 +835,13 @@ const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0 || 
  *
  * `ownedNodeIds` are the applicant's own nodes, plus any the scenario added
  * (classifyScenario adds those for you). `input` is the input the op applies
- * to; ops that target a transfer or land-cover patch by id, or remove a node,
- * need it to see which nodes they touch, and are 'baseline' without it.
+ * to; ops that target a transfer, land-cover patch or registered volume by
+ * id, or remove or move a node, need it to see which nodes they touch, and
+ * are 'baseline' without it. `addedCropIds` are the crops the scenario itself
+ * added (classifyScenario passes them): changing or removing one of those is
+ * the proposal's, any other crop is catchment-wide data.
  */
-export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input?: ModelInput): OpClass {
+export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input?: ModelInput, addedCropIds: Iterable<string> = []): OpClass {
 	const owned = ownedNodeIds instanceof Set ? (ownedNodeIds as Set<string>) : new Set(ownedNodeIds);
 	const mine = (id: string | undefined | null) => typeof id === 'string' && owned.has(id);
 	const ok = (x: boolean): OpClass => (x ? 'proposal' : 'baseline');
@@ -733,6 +850,7 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'series.scale':
 		// The Reserve's rule table: never the applicant's to propose, whoever's node the site is.
 		case 'ewrRule.set':
+		case 'ewrRule.remove':
 			return 'baseline';
 		case 'node.set':
 			// Any other field of the applicant's own node is theirs to propose: its dam, irrigation,
@@ -749,10 +867,28 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 			const ewrSite = Array.isArray(input?.settings.ewrRules) && input.settings.ewrRules.some((t) => t?.siteNodeId === op.nodeId);
 			return ok(mine(op.nodeId) && !!n && !sharesRunoff(n) && !ewrSite);
 		}
+		case 'node.insert':
+			// As node.add: a new structure on the reach. The nodes it re-points keep their values and their order along the river.
+			// A senior other water user (the default priority) is the exception: farms upstream of it must pass its demand
+			// (model.md §2.7c), so inserting one above others' farms curtails them, which is not the proposal's to decide.
+			return ok(!sharesRunoff(op.node) && !seniorUser(op.node));
+		case 'node.move': {
+			// Moving the applicant's own abstraction point (a leaf with no land) is where they propose to take water;
+			// moving anything else, or a node others drain into, redraws the river as modelled.
+			const n = input?.model.nodes.find((x) => x.id === op.nodeId);
+			const leaf = !!input && !input.model.nodes.some((x) => x.downstreamNodeId === op.nodeId);
+			const ewrSite = Array.isArray(input?.settings.ewrRules) && input.settings.ewrRules.some((t) => t?.siteNodeId === op.nodeId);
+			return ok(mine(op.nodeId) && !!n && !sharesRunoff(n) && !seniorUser(n) && leaf && !ewrSite);
+		}
 		case 'cropArea.set':
 			return ok(mine(op.nodeId));
 		case 'crop.add':
 			return 'proposal';
+		case 'crop.set':
+		case 'crop.remove':
+			// A crop's factors and efficiency apply on every farm that grows it, farms the applicant may not
+			// see among them: only a crop the scenario itself added is the proposal's to change.
+			return ok(new Set(addedCropIds).has(op.cropId));
 		case 'transfer.add':
 			return ok(mine(op.transfer.fromNodeId) && mine(op.transfer.toNodeId));
 		case 'transfer.set': {
@@ -769,6 +905,20 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'landCover.remove': {
 			const p = input?.model.landCover?.find((x) => x.id === op.patchId);
 			return ok(!!p && mine(p.nodeId));
+		}
+		case 'landCover.set': {
+			const p = input?.model.landCover?.find((x) => x.id === op.patchId);
+			return ok(!!p && mine(p.nodeId));
+		}
+		case 'allocation.set': {
+			// The volume the applicant asks for on their own unit is the proposal; one on another's unit, or
+			// replacing another's volume, is a baseline assumption.
+			const was = input?.model.allocations?.find((x) => x.id === op.allocation.id);
+			return ok(!!input && mine(op.allocation.nodeId) && (!was || mine(was.nodeId)));
+		}
+		case 'allocation.remove': {
+			const was = input?.model.allocations?.find((x) => x.id === op.allocationId);
+			return ok(!!was && mine(was.nodeId));
 		}
 		case 'borehole.add':
 			return ok(mine(op.borehole.nodeId));
@@ -796,9 +946,11 @@ export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], o
 	const cur = options.mask ? { ...base, model: maskModel(base.model, options.mask, ops).model } : base;
 	const { before, applied } = step(cur, ops, null);
 	const added = new Set(applied.map((a) => a.index));
+	const crops = new Set<string>();
 	return ops.map((op, i) => {
-		const c = classifyOp(op, owned, before[i]);
-		if (added.has(i) && op.op === 'node.add') owned.add(op.node.id);
+		const c = classifyOp(op, owned, before[i], crops);
+		if (added.has(i) && (op.op === 'node.add' || op.op === 'node.insert')) owned.add(op.node.id);
+		if (added.has(i) && op.op === 'crop.add') crops.add(op.crop.id);
 		return c;
 	});
 }

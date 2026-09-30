@@ -31,6 +31,8 @@ import type {
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
 	SignoffStatement,
+	PackManifest,
+	PackSignoffStatement,
 	RegistrationBodyCode,
 	RunSummary,
 	ScenarioOp,
@@ -935,6 +937,82 @@ export interface ScenarioBase {
 	anonymisedNodeIds: string[];
 }
 
+/** One EWR site's months, base or application (ApplicantResults). */
+export interface ApplicantEwrFigures {
+	months: number;
+	met: number;
+	rate: number | null;
+	longestNotMetRun: number;
+	/** Only with the catchment figures (k and every change a proposal); else null. */
+	deficitM3: number | null;
+}
+
+export interface ApplicantCatchmentFigures {
+	meanNaturalFlowM3Day: number;
+	meanSimulatedOutflowM3Day: number;
+	ewrDaysNotMet: number;
+	ewrFractionDaysNotMet: number;
+}
+
+export interface ApplicantUnitFigures {
+	avgDemandM3Day: number;
+	avgSuppliedM3Day: number;
+	avgDeficitM3Day: number;
+	fractionSupplied: number;
+	avgEwrChargeM3Day: number;
+	daysEwrNotMet: number;
+	damEndM3: number | null;
+	damLowM3: number | null;
+}
+
+/** Why the catchment figures or the per-unit figures are left out. */
+export type ApplicantWithheld = 'baseline_assumptions' | 'few_farm_holders';
+
+interface ApplicantSeriesPair {
+	base: { startDate: string; values: (number | null)[] };
+	application: { startDate: string; values: (number | null)[] };
+}
+
+/**
+ * GET …/scenarios/:sid/results (WP-3.3, D2's default, pending the client): a
+ * run of an application as its applicant sees it against its base. Every
+ * other farm or water user only downstream of theirs, by the anonymous name
+ * the base gives it ("Farm 3") and a whole percentage.
+ */
+export interface ApplicantResults {
+	allProposals: boolean;
+	ewrSites: { nodeId: string | null; name: string | null; isOutlet: boolean; base: ApplicantEwrFigures | null; application: ApplicantEwrFigures | null }[];
+	catchment: {
+		ewrDaysNotMet: { base: number; application: number };
+		ewrFractionDaysNotMet: { base: number; application: number };
+		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
+		series: { outflow: ApplicantSeriesPair; ewr: ApplicantSeriesPair } | null;
+		withheld: ApplicantWithheld | null;
+	};
+	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
+	downstream: { nodeId: string; name: string; kind: 'farm' | 'user'; supplyChangePct: number | null }[];
+	unitsWithheld: ApplicantWithheld | null;
+	/** What ran on their units, by the ids they gave. */
+	model: {
+		nodes: { id: string; name: string; kind: string }[];
+		crops: { id: string; name: string }[];
+		cropAreas: { nodeId: string; cropId: string; areaM2: number }[];
+		boreholes?: { id: string; nodeId: string; name: string }[];
+	};
+}
+
+export interface ApplicantResultsRun {
+	id: string;
+	label: string;
+	engineVersion: string;
+	startDate: string;
+	endDate: string;
+	createdAt: string;
+	baseRunId: string;
+	/** Made from the application's changes and base as they are now. */
+	current: boolean;
+}
+
 /**
  * The scenario's ops applied to its base run: which applied (`applied[].index`
  * into ops, with notes on side effects), which don't (`problems`, one line
@@ -1420,6 +1498,100 @@ export interface SignoffList {
 	signoffs: Signoff[];
 }
 
+/** GET /projects/:id/packs/:packId/signoffs: the pack statement in place of the run's (docs/api.md § Evidence packs). */
+export interface PackSignoffList extends Omit<SignoffList, 'statement'> {
+	statement: PackSignoffStatement;
+}
+
+// --- Evidence packs (WP-3.14, issue #71, docs/evidence-pack.md, docs/api.md § Evidence packs) ---
+
+export type PackStatus = 'draft' | 'issued' | 'superseded' | 'withdrawn';
+
+/** One evidence pack as the API returns it (backend evidence/packs.ts PackMeta). */
+export interface Pack {
+	id: string;
+	/** The report's title: the scenario's name, or the project's for baseline evidence. */
+	title: string;
+	mode: 'application' | 'baseline';
+	scenarioId: string | null;
+	baselineRunId: string;
+	scenarioRunId: string | null;
+	version: number;
+	supersedesId: string | null;
+	supersededById: string | null;
+	status: PackStatus;
+	manifestSha256: string;
+	/** The manifest hash's first 12 hex digits, `xxxx-xxxx-xxxx`. */
+	shortCode: string;
+	/** The web page that verifies it, `/verify/<shortCode>`. */
+	verifyPath: string;
+	reportVersion: string;
+	engineVersion: string;
+	/** The server-rendered PDF's SHA-256, once recorded (119_pack_render); null until then. */
+	pdfSha256: string | null;
+	pdfPages: number | null;
+	bundleSha256: string | null;
+	createdAt: string;
+	createdBy: string | null;
+	issuedAt: string | null;
+	issuedBy: string | null;
+	/** Why it was withdrawn; null otherwise. */
+	statusReason: string | null;
+	/** How many sign-offs it has. */
+	signoffs: number;
+}
+
+/** What stands between a draft and its issue, as stored (an editor's read of a draft; else null). */
+export interface PackIssueChecks {
+	issuable: boolean;
+	signed: boolean;
+	runsVerified: boolean;
+}
+
+/** GET /projects/:id/packs/:packId. */
+export interface PackDetail {
+	pack: Pack;
+	manifest: PackManifest;
+	/** The stored manifest still hashes to its recorded SHA-256. */
+	manifestMatches: boolean;
+	signoffs: Signoff[];
+	/** Where its server-rendered PDF is (119_pack_render). */
+	pdf: PackPdfState;
+	issue: PackIssueChecks | null;
+}
+
+/** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts; docs/evidence-pack.md § The PDF). */
+export interface PackPdfState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	/** Why the last render gave up (`failed`). */
+	error: string | null;
+}
+
+/** GET /verify/:code (public): only what the pack prints (app_verify_pack). */
+export interface PackVerification {
+	status: Exclude<PackStatus, 'draft'>;
+	version: number;
+	issuedAt: string;
+	catchment: string;
+	engineVersion: string;
+	reportVersion: string;
+	manifestSha256: string;
+	shortCode: string;
+	pdfSha256: string | null;
+	successorSha256: string | null;
+	withdrawnReason: string | null;
+	methodology: { version: string | null; sha256: string | null };
+	errata: { id: string; summary: string }[];
+	signers: {
+		fullName: string;
+		registrationBody: string;
+		registrationCategory: string | null;
+		registrationField: string | null;
+		registrationNo: string;
+		signedAt: string;
+	}[];
+}
+
 /** POST /projects/:id/runs/:runId/signoffs. */
 export interface SignoffRequest {
 	fullName: string;
@@ -1460,7 +1632,7 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. A cap run applies the months and the rate (engine ≥ 1.34.0); the conditions in words are only shown. */
+	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. A cap run applies the months and the rate (engine ≥ 1.37.0); the conditions in words are only shown. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];

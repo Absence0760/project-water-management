@@ -189,7 +189,7 @@ describe('the allocation settings (issue #72)', () => {
 		expect([s.allocationMode, s.allocationTolerance]).toEqual(['cap', 0.2]);
 	});
 
-	it('a capped run keeps to the stored licence’s months of use and maximum rate (engine 1.34.0)', async () => {
+	it('a capped run keeps to the stored licence’s months of use and maximum rate (engine 1.37.0)', async () => {
 		await asOwner('DELETE FROM allocation WHERE project_id = $1', [projectId]);
 		// A volume far above the demand, so only the conditions bind: January only, at most 0.0001 m³/s (8.64 m³ a day).
 		const created = await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmA.id, volumeM3PerYear: 1e9, months: [1], maxRateM3s: 0.0001 });

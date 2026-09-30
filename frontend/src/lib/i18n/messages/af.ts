@@ -1103,6 +1103,22 @@ export const af: Catalogue = {
 	'bbfcbbe8': 'Die Reserwe se reëltabel by {site} vervang',
 	// the catchment outlet
 	'bb27ae88': 'die opvanggebied se uitloop',
+	// The Reserve’s rule table removed at {site}
+	'53b61e58': 'Die Reserwe se reëltabel by {site} verwyder',
+	// {unit} moved to drain into {to}
+	'af1f1542': '{unit} verskuif sodat dit in {to} uitloop',
+	// A new hydrological unit or site, “{name}”, placed on the river above {unit}
+	'3f82be67': '’n Nuwe hidrologiese eenheid of punt, “{name}”, op die rivier stroomop van {unit} geplaas',
+	// A crop changed: {field}
+	'18dd5e62': '’n Gewas verander: {field}',
+	// A crop removed
+	'7f49f9ea': '’n Gewas verwyder',
+	// Land cover changed: {field}
+	'24dbb535': 'Grondbedekking verander: {field}',
+	// A registered volume set on {unit}
+	'a415f573': '’n Geregistreerde volume by {unit} gestel',
+	// A registered volume removed
+	'167c0b8e': '’n Geregistreerde volume verwyder',
 	// Mean flow out of the catchment
 	'1c38859d': 'Gemiddelde vloei uit die opvanggebied',
 	// Mean water supplied to the hydrological units

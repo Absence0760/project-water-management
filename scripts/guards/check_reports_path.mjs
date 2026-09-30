@@ -1,23 +1,27 @@
 #!/usr/bin/env node
-// The site's /reports/* path belongs to CloudFront, not the SPA.
+// The site's /reports/* and /packs/* paths belong to CloudFront, not the SPA.
 //
 // In production the distribution sends every /reports/* request to the
-// private reports bucket, and serves it only to a CloudFront signed URL the
-// API minted (infra/s3_cloudfront.tf, the /reports/* ordered_cache_behavior;
-// docs/security.md § Reports). That behaviour is matched before the default
-// (SPA) one, so a frontend page, endpoint or static file under /reports
-// would work in `pnpm dev` and e2e and then answer 403 (no signature) or a
-// bucket miss in production, silently. The report PDF keys are
-// reports/<project>/<report>.pdf, which is why the path isn't renamed.
+// private reports bucket, and every /packs/* request to the private packs
+// bucket (issued evidence packs' PDFs, infra/packs.tf), and serves each only
+// to a CloudFront signed URL the API minted (infra/s3_cloudfront.tf, the
+// /reports/* and /packs/* ordered_cache_behaviors; docs/security.md §
+// Reports). Those behaviours are matched before the default (SPA) one, so a
+// frontend page, endpoint or static file under /reports or /packs would work
+// in `pnpm dev` and e2e and then answer 403 (no signature) or a bucket miss
+// in production, silently. The PDF keys are reports/<project>/<report>.pdf
+// and packs/<project>/<pack>/<sha256>.pdf, which is why the paths aren't
+// renamed.
 //
-// This guard fails when the frontend could own a URL under /reports:
-//   - a top-level route segment `reports` in frontend/src/routes, looking
-//     through route groups (`(app)/reports`) and SvelteKit's character
-//     escapes (`[x+72]eports`);
+// This guard fails when the frontend could own a URL under either:
+//   - a top-level route segment `reports` or `packs` in frontend/src/routes,
+//     looking through route groups (`(app)/reports`) and SvelteKit's
+//     character escapes (`[x+72]eports`);
 //   - a top-level dynamic segment (`[slug]`, `[x=matcher]`, `[...rest]`,
 //     `[[optional]]`, or a segment mixing text and a parameter), which
-//     would also match /reports/...;
-//   - anything under frontend/static/reports (copied to the build as is).
+//     would also match /reports/... and /packs/...;
+//   - anything under frontend/static/reports or frontend/static/packs
+//     (copied to the build as is).
 // Prerendered pages come from routes, so the route checks cover them.
 //
 // Run:   node scripts/guards/check_reports_path.mjs
@@ -28,13 +32,14 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const RESERVED = 'reports';
+/** The top-level paths CloudFront owns. */
+export const RESERVED = ['reports', 'packs'];
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 export const WHY =
-	'CloudFront routes /reports/* to the private reports bucket and serves it only to signed URLs the API mints ' +
-	'(infra/s3_cloudfront.tf, the /reports/* behaviour; docs/security.md § Reports). A frontend route or static file there ' +
-	'works locally but is unreachable in production. Put report pages under /projects/:id/ instead.';
+	'CloudFront routes /reports/* to the private reports bucket and /packs/* to the private packs bucket, and serves them only to signed URLs the API mints ' +
+	'(infra/s3_cloudfront.tf, the /reports/* and /packs/* behaviours; docs/security.md § Reports). A frontend route or static file there ' +
+	'works locally but is unreachable in production. Put report and pack pages under /projects/:id/ instead.';
 
 /** A route group segment, `(name)`: adds nothing to the URL. */
 const isGroup = (seg) => /^\([^)]*\)$/.test(seg);
@@ -56,8 +61,9 @@ export const isDynamic = (seg) => decodeEscapes(seg).includes('[');
 export function routeProblem(segments) {
 	const first = segments.find((s) => !isGroup(s));
 	if (first === undefined) return null;
-	if (isDynamic(first)) return `a top-level dynamic route segment "${first}" also matches /${RESERVED}/…`;
-	if (decodeEscapes(first) === RESERVED) return `a top-level route "/${RESERVED}"`;
+	if (isDynamic(first)) return `a top-level dynamic route segment "${first}" also matches ${RESERVED.map((r) => `/${r}/…`).join(' and ')}`;
+	const name = decodeEscapes(first);
+	if (RESERVED.includes(name)) return `a top-level route "/${name}"`;
 	return null;
 }
 
@@ -77,7 +83,7 @@ export function findProblems({ routeDirs, staticFiles }) {
 		if (p) out.push(`frontend/src/routes/${segs.join('/')}: ${p}`);
 	}
 	for (const f of staticFiles) {
-		if (f === RESERVED || f.startsWith(`${RESERVED}/`)) out.push(`frontend/static/${f}: a static file served at /${f}`);
+		if (RESERVED.some((r) => f === r || f.startsWith(`${r}/`))) out.push(`frontend/static/${f}: a static file served at /${f}`);
 	}
 	return out;
 }
@@ -118,7 +124,7 @@ function main() {
 		console.error(WHY);
 		process.exit(1);
 	}
-	console.log(`/${RESERVED}/* is free for CloudFront: no frontend route or static file under it.`);
+	console.log(`${RESERVED.map((r) => `/${r}/*`).join(' and ')} are free for CloudFront: no frontend route or static file under them.`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

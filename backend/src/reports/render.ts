@@ -2,7 +2,8 @@
 // docs/architecture.md § Server-side reports).
 //
 // It opens the SAME route a person prints from (/projects/:id/report?run=…,
-// with `&against=<project>:<run>` for an impact report), so there is one
+// with `&against=<project>:<run>` for an impact report, or an issued evidence
+// pack's page, /projects/:id/packs/:packId, 119_pack_render), so there is one
 // implementation of every chart and table:
 //   1. exchange the single-use render token for a render session
 //      (POST /auth/render-session): a cookie that reads this one project and
@@ -36,7 +37,8 @@ export class RenderError extends Error {
 	}
 }
 
-export interface RenderTarget {
+/** A run's report: the report route, /projects/:id/report?run=…. */
+export interface ReportTarget {
 	projectId: string;
 	runId: string;
 	/** An impact report's baseline (the report route's `against`); absent for the plain report. */
@@ -44,6 +46,16 @@ export interface RenderTarget {
 	/** The raw render token (reports/tokens.ts). */
 	token: string;
 }
+
+/** An issued evidence pack: its own page, /projects/:id/packs/:packId (119_pack_render). */
+export interface PackTarget {
+	projectId: string;
+	packId: string;
+	/** The raw render token (reports/tokens.ts issuePackRenderToken). */
+	token: string;
+}
+
+export type RenderTarget = ReportTarget | PackTarget;
 
 export interface RenderOptions {
 	/** Where the site is served: the report route is `${siteUrl}/projects/…`. */
@@ -97,8 +109,14 @@ export function renderOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): Rend
 }
 
 /** The report route's query for a target: its run, and an impact report's baseline. */
-export function reportQuery(t: Pick<RenderTarget, 'runId' | 'against'>): string {
+export function reportQuery(t: Pick<ReportTarget, 'runId' | 'against'>): string {
 	return new URLSearchParams({ run: t.runId, ...(t.against ? { against: `${t.against.projectId}:${t.against.runId}` } : {}) }).toString();
+}
+
+/** The page a target prints, under the site: the report route, or the pack's page. */
+export function targetPath(t: Omit<ReportTarget, 'token'> | Omit<PackTarget, 'token'>): string {
+	const project = `/projects/${encodeURIComponent(t.projectId)}`;
+	return 'packId' in t ? `${project}/packs/${encodeURIComponent(t.packId)}` : `${project}/report?${reportQuery(t)}`;
 }
 
 /** Pages in a Chromium PDF (its page objects are never in compressed object streams). */
@@ -231,7 +249,7 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 			throw sessionRefusal(res.status(), body);
 		}
 		const page = await context.newPage();
-		const url = `${o.siteUrl}/projects/${encodeURIComponent(t.projectId)}/report?${reportQuery(t)}`;
+		const url = `${o.siteUrl}${targetPath(t)}`;
 		await Promise.race([page.goto(url, { waitUntil: 'domcontentloaded', timeout: o.timeoutMs }), left]);
 		// Ready, or one of the page's own "can't show this" messages.
 		const settled = page.locator('main[data-report-ready="true"], main > [role="alert"], main > .alert-info');

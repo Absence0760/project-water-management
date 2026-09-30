@@ -190,8 +190,10 @@ workbook (as in 1a) with **no manual edits**.
   vs simulated vs observed flow, EWR line, days not met), per-farm charts
   (demand vs supplied, dam storage, spill), a Shortfalls table, and calibration
   stats. Charts use uPlot and handle a full multi-decade daily record without lag.
-- ⬜ A browser-side instant preview: change a parameter and see the effect
-  without saving, using the same engine.
+- 🚧 A browser-side instant preview: change a parameter and see the effect
+  without saving, using the same engine. The preview worker is built (issue
+  #73, `lib/preview/engine.worker.ts`), so far for the Yield panel's instant
+  firm yield; the preview of an unsaved model is still to come (WP-1.17).
 - ✅ Members panel (owner manages; anyone can leave).
 - ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or

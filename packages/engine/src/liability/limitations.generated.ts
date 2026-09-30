@@ -118,9 +118,16 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
 		"id": "L1",
 		"source": "finding",
+		"severity": "Medium (licence applications that insert a senior other water user on a reach)",
+		"title": "A new senior water user inserted above existing farms is classed as a changed assumption, not the applicant's proposal",
+		"status": "Decided (conservative, engine 1.35.0; Needs hydrologist)"
+	},
+	{
+		"id": "L2",
+		"source": "finding",
 		"severity": "Medium (capped runs whose licences state months of use or a maximum rate)",
 		"title": "The cap applies a licence's months of use and maximum rate to every surface draw, the farm's own dam included, and not while no licence of the source is in force",
-		"status": "Decided (engine 1.34.0, issue #72; pending the hydrologist)"
+		"status": "Decided (engine 1.37.0, issue #72; pending the hydrologist)"
 	},
 	{
 		"id": "Q3",

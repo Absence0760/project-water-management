@@ -379,9 +379,12 @@ must build WP-2.15 Phase B.
       - `series.scale { kind, factor, from?, to? }`;
       - `demand.scale { factor, nodeIds?, months?, category? }` (added
         later, issue #53 R1, engine 0.41.0: [scenarios.md](../scenarios.md));
-      - later ops for the new physics fields: `allocation.set`,
-        `ewrSite.set` (built as `ewrRule.set`, engine ≥ 1.6.0, issue #64),
-        `borehole.add` (built, WP-3.9).
+      - later ops for the new physics fields: `allocation.set` (built with
+        `allocation.remove`, engine ≥ 1.35.0, issue #73),
+        `ewrSite.set` (built as `ewrRule.set`, engine ≥ 1.6.0, issue #64,
+        and `ewrRule.remove`, engine ≥ 1.35.0), `borehole.add` (built,
+        WP-3.9); and `node.move`, `node.insert`, `crop.set`, `crop.remove`,
+        `landCover.set` (built, engine ≥ 1.35.0, issue #73).
     - Each op is classified as **proposal** (the applicant's own or new
       nodes, crops, pumps and boreholes) or **baseline assumption** (any
       `settings.*`, EWR tables, calibration, flow-share method, series,
@@ -843,7 +846,9 @@ must build WP-2.15 Phase B.
   fractions (pending the hydrologist). Not built yet, in
   [followups.md § Firm yield](../followups.md#firm-yield-wp-36): the
   contributor policies (waiting for WP-3.3's role), the in-browser preview
-  through WP-1.17's worker, and finding a job started elsewhere.
+  through WP-1.17's worker, and finding a job started elsewhere. All three
+  since built (issue #73; the preview on a run and a team scenario, not yet
+  on an application).
 
 - **Goal.** The yield of a proposed or raised dam, the headline number of
   a storage application.
@@ -1240,7 +1245,7 @@ must build WP-2.15 Phase B.
   allocations on every run's input, `settings.allocationTolerance`, and
   licence conditions (migration 103: `months`, `max_rate_m3s`, `conditions`,
   recorded and shown; the cap applies the months and the maximum rate from
-  engine 1.34.0, 2026-09-30). Deviations: `fullAllocation` keeps the unit's
+  engine 1.37.0, 2026-09-30). Deviations: `fullAllocation` keeps the unit's
   own demand shape rather than a monthly pattern of the allocation (it
   doesn't apply the licence's months), and `conditions` is a list of texts.
   Left: XLSX and column mapping, the
