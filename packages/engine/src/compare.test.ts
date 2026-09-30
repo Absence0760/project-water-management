@@ -650,7 +650,7 @@ describe('diffInputs', () => {
 		]);
 	});
 
-	it('lists a demand object’s note changed, and not one that differs only in spaces (engine 1.43.0: demandObject.set may change it)', () => {
+	it('lists a demand object’s note changed, and not one that differs only in spaces (engine 1.45.0: demandObject.set may change it)', () => {
 		const a = snapshot();
 		const town = {
 			id: 'do',
@@ -679,7 +679,7 @@ describe('diffInputs', () => {
 		]);
 	});
 
-	it('lists a demand object’s people served, and reads none and null alike (engine 1.38.0)', () => {
+	it('lists a demand object’s people served, and reads none and null alike (engine 1.44.0)', () => {
 		const a = snapshot();
 		const town = {
 			id: 'do',

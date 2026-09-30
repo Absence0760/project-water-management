@@ -201,6 +201,18 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+- [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
+      engine 1.44.0, issue #123; to put to the hydrologist through #90).
+      A restriction what-if holds a domestic or municipal object's floor
+      (25 l a person a day), on a full-allocation run too, but a full
+      allocation alone rescales the object, floor included, to the unit's
+      registered volume (0 in a year with nothing registered), and the
+      results then never show it below basic needs. Domestic use and basic
+      human needs aren't licensed uses. Decide: (a) hold the floor after the
+      allocation factor on every day, or (b) keep the rescale and report the
+      floor from the demand before it, so those days show as below basic
+      needs. Either is a change to `allocations/mode.ts` `planAllocations`
+      or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -3201,7 +3213,7 @@ from the WP:
       report. Trigger: the evidence report (or a WUA screen) needing to
       grade demands by source, or the first catchment with objects from
       more than one source.
-- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.38.0,
+- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
       issue #123, migration 124; agreed in issue #90 Q13). A domestic or
       municipal demand object has a floor of population × 25 l a day (its
       `population`, or a per-person object's count); a `demand.scale`

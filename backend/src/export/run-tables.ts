@@ -1005,7 +1005,7 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 	const names = new Map((c.ewrSites ?? []).map((s) => [s.nodeId, s.name]));
 	for (const f of c.farms) if (!names.has(f.nodeId)) names.set(f.nodeId, f.name);
 	const site = (id: string) => names.get(id) ?? id;
-	// The basic-needs floor (engine ≥ 1.38.0, issue #123): two columns at the end, only when a farm has one.
+	// The basic-needs floor (engine ≥ 1.44.0, issue #123): two columns at the end, only when a farm has one.
 	const floor = c.farms.some((f) => f.basicNeedsM3Day !== undefined);
 	const floorHeaders = floor ? ['Basic-needs floor (m³/day)', 'Held back of the cut for basic needs (m³/day)'] : [];
 	const floorCells = (f: CurtailmentRow): Cell[] => (floor ? [f.basicNeedsM3Day ?? null, f.basicNeedsHeldM3Day ?? null] : []);
@@ -1456,7 +1456,7 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
  * Each unit's demand objects over the whole run (engine ≥ 1.7.0, docs/model.md
  * §2.7f): demand, supply, deficit and days short, the days a schedule
  * switched one off (engine ≥ 1.17.0), and a domestic or municipal one's
- * basic-needs floor (engine ≥ 1.38.0, issue #123): the people it serves, the
+ * basic-needs floor (engine ≥ 1.44.0, issue #123): the people it serves, the
  * floor, the days and the volume supplied below it (apart from the
  * shortfall) and what it got per person. Only in runs with objects; the
  * floor columns only when an object has one.

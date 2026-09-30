@@ -733,7 +733,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
       (planned-work.md § Catchment map).
     - **Restrictions and basic needs:** a 25 l/person/day domestic floor,
       DWS % cuts, municipal levels as an optional display. Built in engine
-      1.38.0 (issue #123, model.md §2.7f, followups.md "Restrictions: the
+      1.44.0 (issue #123, model.md §2.7f, followups.md "Restrictions: the
       basic-needs floor").
     - **Afrikaans:** the client's native-speaker translator reviews the
       farmer text before farmers are invited in Afrikaans (followups.md

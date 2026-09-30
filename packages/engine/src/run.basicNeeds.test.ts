@@ -1,4 +1,4 @@
-// The basic-needs floor (engine 1.38.0, issue #123, docs/model.md §2.7f): a
+// The basic-needs floor (engine 1.44.0, issue #123, docs/model.md §2.7f): a
 // restriction (the demand.scale factor) never cuts a domestic or municipal
 // demand object below population × 25 l per person a day; days and volume
 // supplied below the floor are reported apart from the ordinary shortfall;
@@ -12,6 +12,7 @@ import { cloneInput, randomInput } from './testing/fuzz';
 import { checkAll } from './testing/invariants';
 import { verifyRun } from './verify/verify';
 import { ENGINE_VERSION } from './version';
+import { curtailmentSeriesKeys, prepareCurtailment, type CurtailmentRun } from './views/farmProjection';
 
 const flat = (v: number) => new Array(12).fill(v);
 
@@ -92,10 +93,10 @@ function get(out: { series: RunSeries[] }, nodeId: string | null, key: string): 
 }
 const passed = (out: ReturnType<typeof run>) => expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
 
-describe('the basic-needs floor of a demand object (engine 1.38.0)', () => {
-	it('is engine 1.38.0 or later', () => {
+describe('the basic-needs floor of a demand object (engine 1.44.0)', () => {
+	it('is engine 1.44.0 or later', () => {
 		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
-		expect(maj! > 1 || (maj === 1 && min! >= 38)).toBe(true);
+		expect(maj! > 1 || (maj === 1 && min! >= 44)).toBe(true);
 	});
 
 	it('is population × 25 l a day, from a per-unit count or an entered population, on domestic and municipal objects only', () => {
@@ -180,6 +181,41 @@ describe('the basic-needs floor of a demand object (engine 1.38.0)', () => {
 		expect(bad.summary.warnings.join()).toMatch(/population -5 is not a number ≥ 0; it has no basic-needs floor/);
 	});
 
+	describe('with a full allocation (engine 1.44.0)', () => {
+		// 3 days of October: the restricted unit wants 10 (crops, 200 × 0.05) + 25 (the village at its floor) = 105 m³.
+		const withAllocation = (volumeM3PerYear: number, factor: number | null) => {
+			const m = model([village()], [400, 400, 400], factor);
+			m.input.model.allocations = [{ id: 'al', nodeId: 'A', waterSource: 'surface', volumeM3PerYear }];
+			m.input.settings = { ...m.input.settings, allocationMode: 'fullAllocation' };
+			return run(m);
+		};
+
+		it('never rescales a restricted object below its floor: MAX(factor × demand, MIN(floor, demand))', () => {
+			// Registered over the 3 days: 52.5 m³, half the 105 wanted. The crops take the factor, the village keeps its 25.
+			const half = withAllocation((52.5 * 365) / 3, 0.05);
+			passed(half);
+			expect(get(half, 'A', 'allocation_demand_factor')[0]).toBeCloseTo(0.5, 12);
+			get(half, 'A', 'object_demand@village').forEach((v) => expect(v).toBeCloseTo(25, 12));
+			get(half, 'A', 'crop_requirement').forEach((v) => expect(v).toBeCloseTo(2.5, 12));
+			expect(half.summary.farms[0]!.demandObjects![0]!.daysBelowBasicNeeds).toBe(0);
+		});
+
+		it('keeps the floor in a year with nothing registered (factor 0)', () => {
+			const none = withAllocation(0, 0.05);
+			passed(none);
+			expect(get(none, 'A', 'object_demand@village')).toEqual([25, 25, 25]);
+			expect(get(none, 'A', 'crop_requirement')).toEqual([0, 0, 0]);
+			expect(get(none, 'A', BASIC_NEEDS_SERIES.key)).toEqual([25, 25, 25]);
+		});
+
+		it('without a restriction, rescales the whole demand to the registered volume, floor included (audit W1, needs the hydrologist)', () => {
+			// 230 + 200 = 430 m³/day wanted, 43 registered a day: factor 0.1, the village 23 m³/day, under its 25.
+			const plain = withAllocation(43 * 365, null);
+			passed(plain);
+			get(plain, 'A', 'object_demand@village').forEach((v) => expect(v).toBeCloseTo(23, 9));
+		});
+	});
+
 	it('has no basic_needs column and no floor figures without a floor', () => {
 		const none = run(model([village({ category: 'livestock' })], natural, 0.1));
 		expect(none.series.some((s) => s.key === BASIC_NEEDS_SERIES.key)).toBe(false);
@@ -194,6 +230,42 @@ describe('the basic-needs floor of a demand object (engine 1.38.0)', () => {
 		expect(row.basicNeedsM3Day).toBe(25);
 		expect(row.volumeLeftM3Day).toBeGreaterThanOrEqual(25);
 		expect(row.basicNeedsHeldM3Day).toBe(0);
+	});
+
+	it('reads the floor back from a saved run for the curtailment over any window, and none from a run before 1.44.0', () => {
+		// The restricted village run: the saved run's series re-windowed over the whole run give the stored row.
+		const m = model([village()], natural, 0.1);
+		const input = m.input;
+		const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects! });
+		expect(keys).toContainEqual({ nodeId: 'A', key: BASIC_NEEDS_SERIES.key });
+		const noFloor = model([village({ category: 'livestock' })], natural, 0.1).input;
+		expect(curtailmentSeriesKeys(noFloor.model.nodes, noFloor.model.transfers, { demandObjects: noFloor.model.demandObjects! })).not.toContainEqual({ nodeId: 'A', key: BASIC_NEEDS_SERIES.key });
+		// A run that stores no basic_needs column (before 1.44.0): `has` says so, and the key isn't asked for.
+		expect(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects! }, (_, key) => key !== BASIC_NEEDS_SERIES.key)).not.toContainEqual({
+			nodeId: 'A',
+			key: BASIC_NEEDS_SERIES.key
+		});
+		const byKey = new Map(out.series.map((x) => [`${x.nodeId ?? ''}|${x.key}`, x.values]));
+		const saved = (hide?: string): CurtailmentRun => ({
+			startDate: out.startDate,
+			endDate: out.endDate,
+			nodes: input.model.nodes,
+			transfers: input.model.transfers,
+			crops: input.model.crops,
+			cropAreas: input.model.cropAreas,
+			apanMm: input.settings.apanMm,
+			demandObjects: input.model.demandObjects!,
+			series: (nodeId, key) => (key === hide ? undefined : byKey.get(`${nodeId ?? ''}|${key}`))
+		});
+		const window = { from: 0, to: out.days - 1, reportStart: out.startDate, reportEnd: out.endDate };
+		const row = prepareCurtailment(saved()).over(window).curtailment.farms[0]!;
+		const stored = out.summary.curtailment!.farms[0]!;
+		expect(row.basicNeedsM3Day).toBe(stored.basicNeedsM3Day);
+		expect(row.volumeLeftM3Day).toBe(stored.volumeLeftM3Day);
+		expect(row.basicNeedsHeldM3Day).toBe(stored.basicNeedsHeldM3Day);
+		const old = prepareCurtailment(saved(BASIC_NEEDS_SERIES.key)).over(window).curtailment.farms[0]!;
+		expect(old.basicNeedsM3Day).toBeUndefined();
+		expect(old.basicNeedsHeldM3Day).toBeUndefined();
 	});
 
 	it('is caught by the self-check when the restriction cuts through the floor', () => {

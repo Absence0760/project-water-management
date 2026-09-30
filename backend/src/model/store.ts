@@ -354,7 +354,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			enabled: o.enabled,
 			// No schedule and an empty one run alike (engine 1.17.0); store both as NULL.
 			schedule: o.schedule?.length ? o.schedule : null,
-			// The people it serves, for the basic-needs floor (engine 1.38.0); absent and null alike = its count.
+			// The people it serves, for the basic-needs floor (engine 1.44.0); absent and null alike = its count.
 			population: o.population ?? null,
 			note: o.note
 		})),

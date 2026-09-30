@@ -534,7 +534,7 @@ function runNetwork(
 	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	// Each unit's enabled demand objects' names, in the plan's order (engine ≥ 1.7.0).
 	const objectNames = new Map<string, string[]>();
-	// Each unit's basic-needs floor per day (engine ≥ 1.38.0, docs/model.md §2.7f); null without one.
+	// Each unit's basic-needs floor per day (engine ≥ 1.44.0, docs/model.md §2.7f); null without one.
 	const basicNeeds = plan.nodes.map((n) => (n.objects ? unitBasicNeeds(n.objects) : null));
 	for (const [nodeId, list] of demandObjectsByNode(upgradeLegacyModel(input.model), [])) objectNames.set(nodeId, list.map((o) => o.name));
 	nodes.forEach((node, i) => {
@@ -582,7 +582,7 @@ function runNetwork(
 				push(node.id, objectDemandKey(id), DEMAND_OBJECT_SERIES.demandLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, po.demand[k]!);
 				push(node.id, objectSuppliedKey(id), DEMAND_OBJECT_SERIES.suppliedLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, r.objectSupplied![k]!);
 			});
-			// The basic-needs floor (engine ≥ 1.38.0): only on a unit with a domestic or municipal object with people.
+			// The basic-needs floor (engine ≥ 1.44.0): only on a unit with a domestic or municipal object with people.
 			const floor = basicNeeds[i];
 			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
@@ -711,7 +711,7 @@ function runNetwork(
 					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
 					// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned.
 					...(plan.nodes[i]!.objects ? { returned: sim.workings![i]!.returnFlow } : {}),
-					// Its basic-needs floor (engine ≥ 1.38.0): the volume left never goes below it.
+					// Its basic-needs floor (engine ≥ 1.44.0): the volume left never goes below it.
 					...(basicNeeds[i] ? { basicNeeds: basicNeeds[i]! } : {}),
 					ewrBindingSiteId: bind < 0 ? null : nodes[attribution.sites[bind]!.node]!.id
 				}
@@ -1505,7 +1505,7 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 		if (s) for (let t = 0; t < s.length; t++) if (s[t] === 0) off++;
 		const avgDemand = mean(d);
 		const avgSupplied = mean(g);
-		// The basic-needs floor (engine ≥ 1.38.0, docs/model.md §2.7f): days and volume below it, apart from the shortfall.
+		// The basic-needs floor (engine ≥ 1.44.0, docs/model.md §2.7f): days and volume below it, apart from the shortfall.
 		const floor = po.floor[k];
 		let basic = {};
 		if (floor !== null && floor !== undefined) {

@@ -43,10 +43,10 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	await expect(group.getByLabel('Share returned (%)')).toHaveValue('0');
 	await group.getByLabel('Destination').selectOption('internal');
 	await group.getByLabel('Share returned (%)').fill('40');
-	// The basic-needs floor (engine 1.38.0, issue #123): a town given in m³/day has none until its people are entered.
+	// The basic-needs floor (engine 1.44.0, issue #123): a town given in m³/day has none until its people are entered.
 	await expect(group.getByTestId(/^demand-object-floor-/)).toHaveText(/^No basic-needs floor/);
 	await group.getByLabel('People served').fill('2000');
-	await expect(group.getByTestId(/^demand-object-floor-/)).toHaveText('Basic-needs floor 50 m³/day (25 litres a person a day): a restriction never cuts it below that.');
+	await expect(group.getByTestId(/^demand-object-floor-/)).toHaveText(/^Basic-needs floor 50 m³\/day \(2\D000 people served\), 25 litres a person a day: a restriction never cuts it below that/);
 	await expectNoViolations(page, { include: '.detail' });
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
@@ -77,13 +77,15 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	const supplied = ungroup(await row.getByRole('cell').nth(3).innerText());
 	expect(supplied).toBeGreaterThan(0);
 	expect(supplied).toBeLessThanOrEqual(400);
-	// Its floor, and what it got per person, in their own columns (engine 1.38.0).
+	// Its floor, and what it got per person, in their own columns (engine 1.44.0).
 	const table = uses.getByTestId('demand-objects-table');
 	const col = async (name: string) => (await table.getByRole('columnheader').allInnerTexts()).findIndex((h) => h.replace(/\s+/g, ' ').startsWith(name));
 	const floorAt = await col('Basic-needs floor');
 	expect(floorAt).toBeGreaterThan(0);
 	// Column headers count the row header (the object's name); cells don't.
 	await expect(row.getByRole('cell').nth(floorAt - 1)).toHaveText('50');
-	const perPerson = ungroup(await row.getByRole('cell').nth((await col('Supplied l/person/day')) - 1).innerText());
+	const perPerson = ungroup(await row.getByRole('cell').nth((await col('Per person')) - 1).innerText());
 	expect(perPerson).toBeCloseTo((supplied * 1000) / 2000, -1);
+	// The floor columns stack rather than widen the table: it fits its panel without scrolling sideways.
+	expect(await table.evaluate((t) => t.parentElement!.scrollWidth <= t.parentElement!.clientWidth)).toBe(true);
 });

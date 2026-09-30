@@ -2067,13 +2067,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
   m³/day, or the per-unit profile, blank = 1), and **Where the number comes
   from**. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
-  municipal object has **People served** (engine ≥ 1.38.0, issue #123, blank =
+  municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
-  by month) for its basic-needs floor. The line below gives
+  by month) for its basic-needs floor, with a hint under it saying which
+  number a blank field counts. The line below gives
   its mean m³/day as the engine sizes it, and for a domestic or municipal
-  object a second line gives its **Basic-needs floor** (m³/day, 25 litres a
-  person a day, which a restriction never cuts through) or says it has none
-  until its people are entered; **Use October's demand for every
+  object a second line (`demandObjectFloor.ts`) gives its **Basic-needs
+  floor** (m³/day, 25 litres a person a day, and whose people it counts),
+  says "at least its whole demand" when the floor is as large as the most it
+  asks for in any month (the engine's day floor is MIN(floor, demand)), or
+  says it has none until its people are entered; **Use October's demand for every
   month** fills a monthly row. **On/off schedule** (engine ≥ 1.17.0, issue
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
@@ -2093,11 +2096,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   objects**: per object its unit, priority, demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out"). When an object has a
-  basic-needs floor (engine ≥ 1.38.0), four more columns: **Basic-needs
-  floor** (m³/day), **Days below the floor**, **Below the floor** (m³/day,
-  the part of the deficit below it) and **Supplied** (l/person/day, the
-  municipal restriction level, for display); "–" on an object without one
-  (`HumanImpactTables.test.ts`, `e2e/tests/demand-objects.spec.ts`).
+  basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
+  (l/day supplied at the tap, beside Supplied %: the municipal restriction
+  level, for display), **Basic-needs floor** (m³/day) and **Below the
+  floor** (the days, with the mean m³/day below it on a second line, stacked
+  so the table keeps its width); "–" on an object without one, which the
+  intro says means no floor (`HumanImpactTables.test.ts`,
+  `e2e/tests/demand-objects.spec.ts`).
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -4379,8 +4384,12 @@ read it before.
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
   cut beyond its equitable share, a senior user's charge that stands, a
   junior user's charge beyond what it takes, or what a unit's basic-needs
-  floor keeps of the cut (engine ≥ 1.38.0, issue #123: stage 2 never goes
-  below it; the per-farm table badges the row the same way). The share is the engine's
+  floor keeps of the cut (engine ≥ 1.44.0, issue #123: stage 2 never goes
+  below it, and the paragraph under the board says so; the per-farm table
+  badges the row in the same words, `basicNeedsNote`;
+  `e2e/tests/basic-needs-floor.spec.ts` seeds a unit whose EWR cut goes
+  beyond its share and checks the badge, the board's note and the volume
+  left at the floor). The share is the engine's
   equal one: every category is cut by the same %, which the client
   confirmed (O4, issue #90,
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to

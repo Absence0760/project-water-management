@@ -69,7 +69,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		if (o.sizing === 'perUnit' && (o.count === null || o.count === undefined || o.litresPerUnitDay === null || o.litresPerUnitDay === undefined))
 			add(`doPerUnit:${o.id}`, `demand object "${o.name}": a demand per unit needs a count and litres per unit per day`);
 		if (o.destination === 'external' && o.returnPct > 0) add(`doExternal:${o.id}`, `demand object "${o.name}" is piped out of the catchment, so nothing returns from it; set its return share to 0`);
-		// The people it serves, for the basic-needs floor (engine ≥ 1.38.0): a number ≥ 0, or none.
+		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): a number ≥ 0, or none.
 		if (o.population !== null && o.population !== undefined && !(typeof o.population === 'number' && Number.isFinite(o.population) && o.population >= 0))
 			add(`doPopulation:${o.id}`, `demand object "${o.name}": the people it serves must be a number ≥ 0`);
 		// Its schedule (engine ≥ 1.17.0): each window runs as entered, and not too many of them.

@@ -419,7 +419,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
 	});
 
-	it('engine 1.38.0: adds the basic-needs floor and what it held back, only when a farm has a floor', () => {
+	it('engine 1.44.0: adds the basic-needs floor and what it held back, only when a farm has a floor', () => {
 		const plain = [...curtailmentLines(c)];
 		expect(plain.join('\n')).not.toMatch(/Basic-needs floor/);
 		const floored = [...curtailmentLines({ ...c, farms: [{ ...farm, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 }], totals: { ...c.totals, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 } })];
@@ -432,7 +432,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(total.slice(-2)).toEqual(['25', '7.5']);
 	});
 
-	it('engine 1.38.0: lists the demand objects with their basic-needs floor apart from the shortfall', () => {
+	it('engine 1.44.0: lists the demand objects with their basic-needs floor apart from the shortfall', () => {
 		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
 		const town = { ...object, id: 't', name: 'Town', category: 'industrial' as const };
 		const withFloor = { ...object, basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 1, avgBelowBasicNeedsM3Day: 5, avgSuppliedLitresPerPersonDay: 20 };

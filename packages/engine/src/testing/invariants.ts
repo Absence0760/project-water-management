@@ -186,7 +186,7 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	for (const o of x.model.demandObjects ?? []) {
 		if (o.monthlyM3Day) o.monthlyM3Day = o.monthlyM3Day.map((v) => v * 2);
 		if (o.count !== null) o.count *= 2;
-		// The basic-needs floor (engine ≥ 1.38.0) scales with the people, so a restricted object's demand doubles too.
+		// The basic-needs floor (engine ≥ 1.44.0) scales with the people, so a restricted object's demand doubles too.
 		if (o.population !== null && o.population !== undefined) o.population *= 2;
 	}
 	let o1: ModelOutput;
@@ -386,4 +386,31 @@ export function checkWaterAccount(out: ModelOutput): string | null {
 		if (w.years[i]!.openingStorageM3 !== w.years[i - 1]!.closingStorageM3) return `water account ${w.years[i]!.waterYear}: opening storage ≠ last year's closing`;
 	}
 	return null;
+}
+
+/**
+ * The oracle for a restriction with the basic-needs floor (engine ≥ 1.44.0,
+ * docs/model.md §2.7f), worked from the model's fields, not the engine's
+ * helpers: what a unit's demand on day t gains over f × its unrestricted
+ * demand, Σ over its enabled domestic and municipal objects with people of
+ * MAX(0, MIN(floor, b) − f × b), where b is the object's unrestricted demand
+ * that day (its `object_demand@` column in `base`) and floor = people × 25 l
+ * ÷ 1000, ÷ (1 − losses) when sized per unit. 0 for f ≥ 1. A restricted
+ * unit's demand is exactly f × D0 + this.
+ */
+export function floorLift(input: ModelInput, base: ModelOutput, nodeId: string, t: number, f: number): number {
+	if (!(f < 1)) return 0;
+	let lift = 0;
+	for (const o of input.model.demandObjects ?? []) {
+		if (o.nodeId !== nodeId || o.enabled === false || (o.category !== 'domestic' && o.category !== 'municipal')) continue;
+		const people = o.population ?? (o.sizing === 'perUnit' ? o.count : null);
+		if (!(typeof people === 'number' && people > 0)) continue;
+		const floor = (people * 25) / 1000 / (o.sizing === 'perUnit' ? 1 - o.lossPct : 1);
+		// An object on a gauge or user runs nowhere (the engine skips it): no column, nothing to hold.
+		const col = base.series.find((s) => s.nodeId === nodeId && s.key === `object_demand@${o.id}`);
+		if (!col) continue;
+		const b = col.values[t]!;
+		lift += Math.max(0, Math.min(floor, b) - f * b);
+	}
+	return lift;
 }
