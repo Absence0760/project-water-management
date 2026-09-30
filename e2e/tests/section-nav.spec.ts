@@ -19,6 +19,7 @@ const SETTINGS_LINKS = [
 	'Flow share',
 	'EWR',
 	'Reserve rules',
+	'Restrictions',
 	'Simulation period',
 	'Data quality',
 	'Outcome matrix',
