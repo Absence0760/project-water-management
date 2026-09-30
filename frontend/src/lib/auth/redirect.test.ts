@@ -73,6 +73,16 @@ describe('routeAccess', () => {
 		expect(routeAccess('/shares', '', false)).toBe('login');
 	});
 
+	it('opens an evidence pack’s verify page signed in or out, with or without a code (WP-3.14); /verify-email stays its own path', () => {
+		for (const p of ['/verify', '/verify/abcd-ef01-2345', '/verify/' + 'a'.repeat(64)]) {
+			expect(routeAccess(p, '', false)).toBe('show');
+			expect(routeAccess(p, '', true)).toBe('show');
+		}
+		expect(isPublicPath('/app/verify/abcd-ef01-2345', '/app')).toBe(true);
+		expect(routeAccess('/verifyx', '', false)).toBe('login');
+		expect(termsGateApplies({ termsCurrent: false }, '/verify/abcd-ef01-2345')).toBe(false);
+	});
+
 	it('shows a signed-out visitor the landing page at / and /welcome; a signed-in one keeps / as the projects (issue #57)', () => {
 		expect(routeAccess('/', '', false)).toBe('show');
 		expect(routeAccess('/app/', '/app', false)).toBe('show');

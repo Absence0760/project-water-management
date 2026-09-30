@@ -14,12 +14,15 @@ lifecycle and verification. The routes are in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
 
-**Built so far (2026-09-29):** the table, the manifest and its hash, the pack
-sign-off, drafting, issue, supersede, withdraw, delete of drafts, and the
-public verify lookup. **Not built yet:** the pack's own page and the verify
-page (the next step), the server-rendered PDF, the reproduction bundle and
-`reproduce:pack` (each tracked in
-[followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+**Built so far (2026-09-30):** the table, the manifest and its hash, the pack
+sign-off, drafting, issue, supersede, withdraw, delete of drafts, the public
+verify lookup, and their screens: the pack's own page, its actions and
+sign-off, the pack lists on the evidence report and the Applications tab and
+panel, and the public verify page with its in-browser file check
+([ui.md § Evidence pack](./ui.md#evidence-pack),
+[§ Verify page](./ui.md#verify-page)). **Not built yet:** the
+server-rendered PDF, the reproduction bundle and `reproduce:pack` (each
+tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
 
 ## What a pack holds
 
@@ -38,6 +41,14 @@ The report goes through JSON before it is hashed, as the API serves it and
 as `jsonb` stores it: a `NaN` becomes `null` and an undefined member is
 dropped. So the hash taken when the draft is made is the hash of what is
 stored, and the server checks that on the draft and again on issue.
+
+The report's page 1 also shows the licence impact by year class, which the
+browser builds from the two runs' daily series and the project's
+year-class settings (`settings.outcomes`). A `pack-1` manifest carries
+neither, so the pack's page leaves the board out and says so, rather than
+show something its hash doesn't cover. Moving the board into the engine's
+report, and so into the manifest, is tracked in
+[followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, and room for the PDF and bundle
@@ -168,7 +179,11 @@ builds exactly that object; the route adds only `shortCode`.
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
 content, hash its manifest (or, once built, its PDF) and compare with the
-hashes verify returns; the verify page will do that in the browser.
+hashes verify returns. The verify page does that in the browser
+([ui.md § Verify page](./ui.md#verify-page)): the file is hashed with
+WebCrypto and never uploaded, and a JSON file is compared in its canonical
+form too, so a manifest saved pretty-printed still matches. The pack's page
+downloads the manifest as those canonical bytes.
 
 ## Guards
 

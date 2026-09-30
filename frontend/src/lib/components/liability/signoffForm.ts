@@ -71,3 +71,22 @@ export function scrolledToEnd(el: { scrollTop: number; clientHeight: number; scr
 
 /** The first 12 hex digits of a hash: enough to compare by eye, with the full hash in its title. */
 export const shortHash = (sha256: string) => sha256.slice(0, 12);
+
+/** What a sign-off is of (WP-3.13 a run; WP-3.14 an evidence pack, issue #71). */
+export type SignoffTarget = { kind: 'run'; id: string } | { kind: 'pack'; id: string };
+
+/** The engines a statement is about, in words: one run's, or a pack's two runs' ("1.20.0", or "1.20.0 (baseline) and 1.21.0 (application)"). */
+export function statementEngines(s: { engineVersion: string } | { baseline: { engineVersion: string }; application: { engineVersion: string } | null }): string {
+	if ('engineVersion' in s) return s.engineVersion;
+	if (!s.application || s.application.engineVersion === s.baseline.engineVersion) return s.baseline.engineVersion;
+	return `${s.baseline.engineVersion} (baseline) and ${s.application.engineVersion} (application)`;
+}
+
+/**
+ * What a pack's signer is told before signing: their name and registration
+ * are printed on the pack and answered publicly by its verify page (GET
+ * /verify/:code returns them to anyone holding the code, evidence-pack.md §
+ * Verification).
+ */
+export const PACK_SIGNER_PUBLIC =
+	'Your full name, your registration (body, category, field and number) and the date you sign are printed on the pack and shown publicly, to anyone holding its code, on its verify page. They stay there for as long as the pack exists, even if it is withdrawn.';
