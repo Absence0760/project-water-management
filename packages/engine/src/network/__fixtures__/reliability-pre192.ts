@@ -628,6 +628,9 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 			const d = n.offtakeIn;
 			if (o) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! + o[t]!;
 			if (d) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! - d[t]!;
+			// Canal seepage back to the river (engine 1.42.0, after #192): mirrored so the comparison stays like for like.
+			const b = (n as { offtakeReturn?: ArrayLike<number> }).offtakeReturn;
+			if (b) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! - b[t]!;
 		}
 	}
 	return c;

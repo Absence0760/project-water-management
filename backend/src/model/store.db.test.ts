@@ -129,7 +129,7 @@ describe('model store', () => {
 			],
 			// The second with its own rate per month (engine 1.14.0, 090): months and max rate follow the list.
 			transfers: [
-				{ ...transfer(3, 1000), monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand', topUpDam: false },
+				{ ...transfer(3, 1000), monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand', topUpDam: false, lossReturnPct: 0, lossReturnNodeId: null },
 				// A river off-take (engine 1.14.0, 091) with every field of its own set.
 				{
 					...transfer(0, null),
@@ -142,7 +142,10 @@ describe('model store', () => {
 					handsOffEwr: true,
 					lossPct: 0.15,
 					sizing: 'capacity',
-					topUpDam: true
+					topUpDam: true,
+					// Canal seepage back to the river (engine 1.42.0, 126): 40 % of the losses, below the source.
+					lossReturnPct: 0.4,
+					lossReturnNodeId: farm.id
 				}
 			],
 			landCover: [
