@@ -878,6 +878,10 @@ export interface Scenario {
 	id: string;
 	name: string;
 	description: string;
+	/** Answers to the evidence report's Appendix C prompts (engine APPLICANT_PROMPTS, 129_scenario_statement); '' = not given. */
+	purposeAndNeed: string;
+	mitigation: string;
+	monitoring: string;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
