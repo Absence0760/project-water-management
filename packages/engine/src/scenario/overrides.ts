@@ -108,7 +108,7 @@ export interface ScenarioMask {
 	boreholes?: readonly string[];
 	/** Registered volumes (engine ≥ 1.35.0, allocation.set): those on units the applicant can't see. */
 	allocations?: readonly string[];
-	/** Demand objects (engine ≥ 1.39.0, demandObject.*): those on units the applicant can't see. */
+	/** Demand objects (engine ≥ 1.41.0, demandObject.*): those on units the applicant can't see. */
 	demandObjects?: readonly string[];
 }
 
@@ -739,7 +739,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 
 /**
  * Do ops `a` and `b` (in that order) belong to one edit? Consecutive
- * `node.set` ops on the same node do, and (engine ≥ 1.39.0) consecutive
+ * `node.set` ops on the same node do, and (engine ≥ 1.41.0) consecutive
  * `demandObject.set` ops on the same demand object: the network rules are
  * checked once, after the last of them (docs/scenarios.md § Edit groups).
  */

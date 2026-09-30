@@ -1,4 +1,4 @@
-// Demand objects through the "Add a change" form (engine ≥ 1.39.0;
+// Demand objects through the "Add a change" form (engine ≥ 1.41.0;
 // docs/scenarios.md § Op catalogue, docs/ui.md § Scenarios): an editor adds
 // a village on Upper farm, sized as people × litres a day, and changes its
 // share returned; the list reads each change and classes it by the object's

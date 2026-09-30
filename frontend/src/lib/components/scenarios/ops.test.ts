@@ -302,7 +302,7 @@ describe('buildOp', () => {
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
 	});
 
-	it('builds and describes a demand object to add, change and remove (engine 1.39.0)', () => {
+	it('builds and describes a demand object to add, change and remove (engine 1.41.0)', () => {
 		const add = buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: ' Village ', doCategory: 'municipal', doSizing: 'monthly', doMonthlyM3Day: '300' }), m, id);
 		expect(add.ok, JSON.stringify(add)).toBe(true);
 		const op = (add as { op: ScenarioOp }).op;

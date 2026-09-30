@@ -1530,8 +1530,9 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
-// 2026-09-30  total 1301 → 1306 KB (engine 1.39.0, the demand-object scenario
-//             ops: measured 1303 with main @ 285c1c75). demandObject.add /
+// 2026-09-30  total 1301 → 1309 KB (engine 1.41.0, the demand-object scenario
+//             ops: measured 1303 with main @ 285c1c75, 1306 with main @
+//             82248f4e and its licence impact board merged). demandObject.add /
 //             .set / .remove in the engine's scenario code (validator with the
 //             schedule's window checks, apply, classification, the mask kind),
 //             their "Add a change" forms, field specs and descriptions,
@@ -1547,7 +1548,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1306,
+	totalCodeKb: 1309,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

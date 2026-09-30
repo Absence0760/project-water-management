@@ -111,7 +111,7 @@ export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>)
 		boreholes: outside(m.boreholes, shown.boreholes),
 		// Registered volumes on units they can't see (engine ≥ 1.35.0, allocation.set / .remove).
 		allocations: outside(m.allocations, shown.allocations),
-		// Demand objects on units they can't see (engine ≥ 1.39.0, demandObject.*).
+		// Demand objects on units they can't see (engine ≥ 1.41.0, demandObject.*).
 		demandObjects: outside(m.demandObjects, shown.demandObjects)
 	};
 }

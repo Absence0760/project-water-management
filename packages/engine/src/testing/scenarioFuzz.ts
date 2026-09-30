@@ -314,7 +314,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			bores.push(id);
 		}
 	}
-	// Demand-object ops (engine ≥ 1.39.0), from a stream of their own for the same reason: an object
+	// Demand-object ops (engine ≥ 1.41.0), from a stream of their own for the same reason: an object
 	// added on a unit (now and then on a user or gauge, or a missing node: a problem), fields set
 	// one or a few at a time on one object (an edit group), and removals. A sizing switched without
 	// its numbers, or a return from an object piped out, breaks a model rule (a problem).

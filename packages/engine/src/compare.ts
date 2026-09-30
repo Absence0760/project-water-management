@@ -1428,7 +1428,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
-			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.39.0).
+			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.41.0).
 			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();
 			if (moved || scheduleChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}${noteChanged ? `, note "${(x.note ?? '').trim()}" → "${(y.note ?? '').trim()}"` : ''}` });

@@ -681,7 +681,7 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 }
 
 // ---------------------------------------------------------------------------
-// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.39.0)
+// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.41.0)
 // ---------------------------------------------------------------------------
 
 /**
@@ -857,9 +857,9 @@ export type ScenarioOp =
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
 	| { op: 'borehole.remove'; boreholeId: string }
-	/** A new demand object on a unit (engine ≥ 1.39.0): a town, household, livestock or any other demand that isn't a crop. */
+	/** A new demand object on a unit (engine ≥ 1.41.0): a town, household, livestock or any other demand that isn't a crop. */
 	| { op: 'demandObject.add'; demandObject: DemandObject }
-	/** Change one field of a demand object (engine ≥ 1.39.0). */
+	/** Change one field of a demand object (engine ≥ 1.41.0). */
 	| DemandObjectSetOp
 	| { op: 'demandObject.remove'; demandObjectId: string }
 	| SettingsSetOp

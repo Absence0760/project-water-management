@@ -1369,7 +1369,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 });
 
-describe('demand-object ops (engine ≥ 1.39.0)', () => {
+describe('demand-object ops (engine ≥ 1.41.0)', () => {
 	const withObject = () => {
 		const b = base();
 		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Town' })];

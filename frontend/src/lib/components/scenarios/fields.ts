@@ -217,7 +217,7 @@ export const LAND_COVER_FIELD_SPECS: Record<LandCoverSetField, FieldSpec> = {
 export const LAND_COVER_FIELDS = LAND_COVER_SET_FIELDS.map((field) => ({ field, label: LAND_COVER_FIELD_SPECS[field].label }));
 
 // ---------------------------------------------------------------------------
-// demandObject.set (engine ≥ 1.39.0)
+// demandObject.set (engine ≥ 1.41.0)
 // ---------------------------------------------------------------------------
 
 /**

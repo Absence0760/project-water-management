@@ -234,7 +234,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	for (const id of bBores.keys()) if (!aBores.has(id) || changedBores.some((x) => x.id === id)) ops.push({ op: 'borehole.remove', boreholeId: id });
 	for (const x of aBores.values()) if (!bBores.has(x.id) || changedBores.includes(x)) ops.push({ op: 'borehole.add', borehole: plain(x) });
 
-	// --- demand objects (engine ≥ 1.39.0): as land cover, removed, added (one moved to another unit is removed and
+	// --- demand objects (engine ≥ 1.41.0): as land cover, removed, added (one moved to another unit is removed and
 	// added again), and an object changed in place is demandObject.set per changed field, its ops next to each other
 	// (one edit group, checked against the save rules once after the last: a sizing switched with its count and litres)
 	const bObjs = new Map((b.demandObjects ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => [x.id, x]));

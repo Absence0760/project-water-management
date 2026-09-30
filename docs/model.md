@@ -3156,7 +3156,7 @@ river pump and River to dam, §2.7h, doesn't switch demand objects).
   crops and its objects alike; the client wants every category cut by the
   same % (#53 O4, issue #90), so no per-category restriction is planned.
   One object is added, changed (its demand, count, schedule…) or removed by
-  the scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.39.0,
+  the scenario ops `demandObject.add` / `.set` / `.remove` (engine ≥ 1.41.0,
   [scenarios.md](./scenarios.md)), classed by the object's unit.
 - *Restrictions and basic needs (decided, not built).* The client agreed
   (issue #90) that a restriction never cuts domestic supply below a

@@ -23,7 +23,7 @@ applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { mask?: ScenarioMa
 
 `mask` (the hidden nodes, id → the anonymous name the ops meet them by, and
 the ids of the hidden crops, transfers, land-cover patches, boreholes and,
-from engine 1.35.0, registered volumes, and from engine 1.39.0 demand
+from engine 1.35.0, registered volumes, and from engine 1.41.0 demand
 objects) is
 how an application is judged in its applicant's namespace
 ([§ Applications](#applications-wp-33)); without it `renamed` and `reIds`
@@ -69,7 +69,7 @@ are empty and nothing below changes.
   change together, in any order: a `trigger` farm goes straight to run of
   river with `supplyRule` → `runOfRiver` and `damCapacityM3` → 0 (either
   first), and both trigger levels rise without minding which comes first.
-  Likewise (engine ≥ 1.39.0) consecutive `demandObject.set` ops on the same
+  Likewise (engine ≥ 1.41.0) consecutive `demandObject.set` ops on the same
   demand object: a monthly object becomes one sized per unit with `sizing`,
   `count` and `litresPerUnitDay` together, in any order, and one piped out
   with `destination` → `external` and `returnPct` → 0.
@@ -115,9 +115,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `landCover.set` | `patchId, field, value` | Changes one field of a patch in place (engine ≥ 1.35.0): `coverClass`, `areaKm2` (≥ 0), `densityPct` (0–1) or `factors` (`{ mar, lowFlow }`, each 0–1, or null for the class's). Not `nodeId`: a patch on another farm is `landCover.remove` and `landCover.add`. "Clear half the wattle" is `densityPct` → half. |
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
-| `demandObject.add` | `demandObject` | Adds a demand object on a unit (engine ≥ 1.39.0, [model.md §2.7f](./model.md)): a town, households, livestock or water piped out, supplied from the unit's own dam, river pump and boreholes with its crops. Every field as the model document has it (`schedule` and `note` may be left out: none, empty); only a farm node (a unit) takes one. The save rules apply as the op is applied: a monthly object needs 12 values, a per-unit one a count and litres, nothing returns from one piped out, and each schedule window must be one the run can read. |
-| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.39.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null) or `note` (at most 1000 characters). Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got changes nothing. |
-| `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.39.0). `node.remove` drops the node's objects too. |
+| `demandObject.add` | `demandObject` | Adds a demand object on a unit (engine ≥ 1.41.0, [model.md §2.7f](./model.md)): a town, households, livestock or water piped out, supplied from the unit's own dam, river pump and boreholes with its crops. Every field as the model document has it (`schedule` and `note` may be left out: none, empty); only a farm node (a unit) takes one. The save rules apply as the op is applied: a monthly object needs 12 values, a per-unit one a count and litres, nothing returns from one piped out, and each schedule window must be one the run can read. |
+| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.41.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null) or `note` (at most 1000 characters). Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got changes nothing. |
+| `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.41.0). `node.remove` drops the node's objects too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 | `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
@@ -432,7 +432,7 @@ hostile op names and fields; CodeQL js/remote-property-injection and
 js/unvalidated-dynamic-method-call, PR #234). The later ops' `crop.set` and
 `landCover.set` fields go through the same path (`CROP_SET_FIELDS`,
 `LAND_COVER_SET_FIELDS`), and so do `demandObject.set`'s
-(`DEMAND_OBJECT_SET_FIELDS`, engine ≥ 1.39.0); their other ops name ids
+(`DEMAND_OBJECT_SET_FIELDS`, engine ≥ 1.41.0); their other ops name ids
 only, matched by equality. A demand object's schedule is rebuilt from each
 window's eight known fields.
 
@@ -489,7 +489,7 @@ window's eight known fields.
   scenario's volumes reach the allocation self-check. `overrides.test.ts` has each later op's cases: what it does, its
   problems, the base untouched, its run-comparison lines, its class
   (masked too), a cap run under a scenario's volume, and hidden volumes
-  answering exactly as free ids. The demand-object ops (engine ≥ 1.39.0)
+  answering exactly as free ids. The demand-object ops (engine ≥ 1.41.0)
   come from a stream of their own as well (objects added on units, now and
   then on a user, a gauge or a missing node; one to three fields set on one
   object, which may break a save rule; removals), so `checkAll` and no
@@ -510,7 +510,7 @@ moving a node or inserting one mid-river, `crop.set` and removing a crop,
 `landCover.set`) are built, engine ≥ 1.35.0 (issue #73).
 - **Scaling demand objects by category** ([followups.md](./followups.md)):
   `demand.scale` on a unit scales its crops and objects together;
-  `demandObject.set` changes one object's own numbers (engine ≥ 1.39.0).
+  `demandObject.set` changes one object's own numbers (engine ≥ 1.41.0).
 - **Changing a node's kind**: remove it and add a new node.
 - **Scaling observed flow** (see above: deliberately not a scenario).
 - **Climate and stochastic transforms** (WP-4.11) will sit beside
@@ -774,7 +774,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   rate; "Upper farm: add a registered volume, surface 100 000 m³/a".
   **Remove a registered volume**. Each form refuses what the engine's
   validator refuses, in its own words.
-- **Demand objects in the form** (engine ≥ 1.39.0). **Add a demand
+- **Demand objects in the form** (engine ≥ 1.41.0). **Add a demand
   object**: the unit, name, category and how the demand is given (m³/day
   by month, one value for every month or 12, or a count × litres a day);
   its return share, priority and destination start at the category's
@@ -834,7 +834,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   `landCover.set` per field, engine ≥ 1.35.0; one moved to another farm is
   removed and added again), `borehole.remove` / `.add` (a borehole edited
   in place is removed and added again) and `demandObject.remove` / `.add` /
-  `.set` (engine ≥ 1.39.0: an object edited in place is `demandObject.set`
+  `.set` (engine ≥ 1.41.0: an object edited in place is `demandObject.set`
   per changed field, its ops next to each other as one edit group, so a
   sizing switched with its count and litres records as it is; one moved to
   another unit is removed and added again; no schedule, null and an empty
@@ -914,7 +914,7 @@ farm, a crop's irrigation efficiency, and a new registered volume on Upper
 farm, each through the form with its wording and class, one refused in the
 form's words, kept over a reload and run; the run's model has the new
 shape and the volume, and the catchment's own model is untouched; axe).
-`e2e/tests/scenario-demand-objects.spec.ts` (engine ≥ 1.39.0: a village
+`e2e/tests/scenario-demand-objects.spec.ts` (engine ≥ 1.41.0: a village
 added on Upper farm as people × litres a day, a missing count refused, its
 share returned changed with "Now: …" and an out-of-range value refused, both
 classed by the farm, run with the village in the run's model and none in the
@@ -955,7 +955,7 @@ scenario is `'team'`, and behaves exactly as above).
   the engine's `applyScenario(…, { mask })`). An application's ops meet
   every node the projection anonymises under its anonymous name, and every
   crop, transfer, land-cover patch, borehole, registered volume (engine ≥
-  1.35.0) and demand object (engine ≥ 1.39.0) it leaves out under an
+  1.35.0) and demand object (engine ≥ 1.41.0) it leaves out under an
   opaque id (and, for a crop, borehole or demand object, name) that none of the ops holds,
   whoever checks or runs it. So:
   - the engine's notes and problems quote only names and ids the applicant

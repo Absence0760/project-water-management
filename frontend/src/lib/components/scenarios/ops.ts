@@ -457,7 +457,7 @@ export interface OpDraft {
 	coverClass: string;
 	coverAreaKm2: string;
 	densityPct: string;
-	/** demandObject.set / .remove: the object (engine ≥ 1.39.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
+	/** demandObject.set / .remove: the object (engine ≥ 1.41.0); demandObject.add: the new one's main fields, the rest its category's defaults. */
 	demandObjectId: string;
 	doName: string;
 	doCategory: DemandObjectCategory;

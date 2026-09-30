@@ -51,7 +51,7 @@
 	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
 	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
 	const allocations = $derived(input.model.allocations ?? []);
-	// Demand objects (engine ≥ 1.39.0): on units only.
+	// Demand objects (engine ≥ 1.41.0): on units only.
 	const objects = $derived(input.model.demandObjects ?? []);
 	const demandObject = $derived(objects.find((o) => o.id === d.demandObjectId));
 	// node.insert: the nodes that drain into the picked node, which the new one can sit above.

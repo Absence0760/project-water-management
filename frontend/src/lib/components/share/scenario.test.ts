@@ -107,7 +107,7 @@ describe('changeRows', () => {
 		]);
 	});
 
-	it('words the demand-object ops (engine ≥ 1.39.0) without an object’s name, since one may be on another unit', () => {
+	it('words the demand-object ops (engine ≥ 1.41.0) without an object’s name, since one may be on another unit', () => {
 		const o = { id: 'd', nodeId: 'n-other', name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' } as const;
 		const ops: ScenarioOp[] = [
 			{ op: 'demandObject.add', demandObject: { ...o, nodeId: OWN, name: 'Cottages' } },
