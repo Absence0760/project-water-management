@@ -1316,6 +1316,12 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #71: measured 1202 with main @
+//             e8cd5bc9 merged, against main's 1200). The errata section of
+//             the validation statement (liability/ValidationStatement: the
+//             errata table, keyed on the run's engine and its fit's) and the
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
 // 2026-09-29  total 1201 → 1226 KB (issue #71, the licensing evidence
 //             report: measured 1226 against 1201 on its base 84fb2a6b). The
 //             report is a lazy chunk of its own (report/evidence/
