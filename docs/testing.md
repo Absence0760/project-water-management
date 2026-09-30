@@ -86,6 +86,7 @@ one to the job the test runs in:
 | `backend/src/reports/render.origin.db.test.ts` | Chromium (no DB) | `db-test` |
 | `backend/src/evidence/packs.db.test.ts` (the describes that issue a pack) | MinIO (issuing stores the reproduction bundle) | `db-test` (starts MinIO) |
 | `backend/src/history/write-routes.db.test.ts` (`POST …/packs/:packId/issue` only) | MinIO | `db-test` |
+| `e2e/tests/evidence-pack.spec.ts` | MinIO (it issues packs) | e2e shards |
 | `e2e/tests/server-report.spec.ts` | MinIO + Mailpit | e2e shards |
 | `e2e/tests/alerts-mailpit.spec.ts` | Mailpit | e2e shards |
 

@@ -6,7 +6,7 @@ import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Pack } from '$lib/api';
-import { checkFile, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
+import { checkableAccept, checkableFiles, checkFile, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
 
 const tz = process.env.TZ;
 afterEach(() => {
@@ -106,6 +106,25 @@ describe('checkFile (the verify page’s in-browser check)', () => {
 	it('matches the manifest byte for byte, and the PDF when one is recorded', async () => {
 		expect(await checkFile(new TextEncoder().encode(canonical), { manifestSha256, pdfSha256 })).toEqual({ result: 'manifest', sha256: manifestSha256, canonical: false });
 		expect(await checkFile(pdf, { manifestSha256, pdfSha256 })).toEqual({ result: 'pdf', sha256: pdfSha256 });
+	});
+
+	it('matches the reproduction bundle when one is recorded, and not when none is (positive control beside it)', async () => {
+		const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+		const bundleSha256 = hex(zip);
+		expect(await checkFile(zip, { manifestSha256, pdfSha256, bundleSha256 })).toEqual({ result: 'bundle', sha256: bundleSha256 });
+		expect(await checkFile(zip, { manifestSha256, pdfSha256, bundleSha256: null })).toEqual({ result: 'no-match', sha256: bundleSha256 });
+		const changed = zip.slice();
+		changed[6] = 4;
+		expect((await checkFile(changed, { manifestSha256, pdfSha256, bundleSha256 })).result).toBe('no-match');
+	});
+
+	it('names the files a pack can be checked with, and the picker’s types', () => {
+		expect(checkableFiles({ pdfSha256: null, bundleSha256: null })).toBe('manifest');
+		expect(checkableFiles({ pdfSha256: 'a', bundleSha256: null })).toBe('PDF or manifest');
+		expect(checkableFiles({ pdfSha256: null, bundleSha256: 'b' })).toBe('reproduction bundle or manifest');
+		expect(checkableFiles({ pdfSha256: 'a', bundleSha256: 'b' })).toBe('PDF, reproduction bundle or manifest');
+		expect(checkableAccept({ pdfSha256: null, bundleSha256: 'b' })).toBe('.zip,application/zip,.json,application/json');
+		expect(checkableAccept({ pdfSha256: null, bundleSha256: null })).toBe('.json,application/json');
 	});
 
 	it('matches a manifest saved pretty-printed, in its canonical form', async () => {

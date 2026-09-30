@@ -5,9 +5,15 @@
 // footer the server PDF prints; then the public verify page, signed out: the
 // verdict and signers, a wrong code, the downloaded manifest matching (as is
 // and pretty-printed) and a one-byte change refused; then withdrawn, with its
-// public reason. An application's packs in the Applications tab and panel,
+// public reason. The reproduction bundle downloads from the pack and checks
+// on the verify page. An application's packs in the Applications tab and panel,
 // and a new version superseding the first. Synthetic catchment and invented
 // rule table, as evidence-report.spec.ts.
+//
+// Needs MinIO (`pnpm dev:s3:up`; CI starts it): issuing a pack stores its
+// reproduction bundle there. Locally, without it the spec is skipped and says
+// why; in CI it never skips.
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -30,6 +36,14 @@ const TABLE = {
 	natural: null,
 	scale: 1
 };
+const S3 = process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9002';
+test.beforeAll(async () => {
+	const up = await fetch(`${S3}/minio/health/live`, { signal: AbortSignal.timeout(1500) })
+		.then((r) => r.ok)
+		.catch(() => false);
+	test.skip(!up && !process.env.CI, 'needs MinIO (issuing a pack stores its reproduction bundle): pnpm dev:s3:up');
+});
+
 const ready = (page: Page) => expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 
 interface ApiPack {
@@ -39,6 +53,7 @@ interface ApiPack {
 	shortCode: string;
 	manifestSha256: string;
 	issuedAt: string | null;
+	bundleSha256: string | null;
 }
 
 /** A nominated baseline with the declared rule, and the ensemble run to it on River & reserve (the browser runs it). */
@@ -168,6 +183,14 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	expect(download.suggestedFilename()).toBe(`evidence-pack-${code}-manifest.json`);
 	const manifest = await readFile((await download.path())!);
 
+	// So does the reproduction bundle, through the API's redirect: its bytes are the ones recorded.
+	expect(issued.bundleSha256).toMatch(/^[0-9a-f]{64}$/);
+	await expect(page.getByTestId('pack-bundle-sha')).toHaveText(issued.bundleSha256!);
+	const [bundleDownload] = await Promise.all([page.waitForEvent('download'), page.getByTestId('pack-bundle-download').click()]);
+	expect(bundleDownload.suggestedFilename()).toBe(`pack-${code}.zip`);
+	const bundle = await readFile((await bundleDownload.path())!);
+	expect(createHash('sha256').update(bundle).digest('hex')).toBe(issued.bundleSha256);
+
 	// The evidence report lists it now.
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);
 	await ready(page);
@@ -190,11 +213,14 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 
 	// A copy checked in the browser: the manifest as downloaded, pretty-printed, and with one byte changed.
 	const check = pub.getByTestId('verify-check');
-	await expect(check.getByRole('heading', { name: 'Check a manifest' })).toBeVisible();
+	await expect(check.getByRole('heading', { name: 'Check a reproduction bundle or manifest' })).toBeVisible();
+	await expect(pub.getByTestId('verify-bundle-sha')).toContainText(issued.bundleSha256!);
 	const file = pub.getByTestId('verify-file');
 	const verdict = pub.getByTestId('verify-check-result');
 	await file.setInputFiles({ name: 'manifest.json', mimeType: 'application/json', buffer: manifest });
 	await expect(verdict).toContainText('Matches. “manifest.json” is this pack’s manifest, unchanged.');
+	await file.setInputFiles({ name: `pack-${code}.zip`, mimeType: 'application/zip', buffer: bundle });
+	await expect(verdict).toContainText(`Matches. “pack-${code}.zip” is this pack’s reproduction bundle, unchanged.`);
 	await file.setInputFiles({ name: 'pretty.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(JSON.parse(manifest.toString('utf8')), null, 2)) });
 	await expect(verdict).toContainText('(compared in its canonical JSON form, as the hash is taken)');
 	const changed = Buffer.from(manifest);
@@ -202,7 +228,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	expect(at).toBeGreaterThan(5);
 	changed[at] = '2'.charCodeAt(0);
 	await file.setInputFiles({ name: 'changed.json', mimeType: 'application/json', buffer: changed });
-	await expect(verdict).toContainText('Doesn’t match. “changed.json” is not this pack’s manifest');
+	await expect(verdict).toContainText('Doesn’t match. “changed.json” is not this pack’s reproduction bundle or manifest');
 	await expectNoViolations(pub);
 	await pub.emulateMedia({ colorScheme: 'dark' });
 	await expectNoViolations(pub);

@@ -589,6 +589,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ pack: Pack }>('POST', `${p(id)}/packs/${enc(packId)}/withdraw`, { reason }).then((r) => r.pack),
 			/** The pack statement (with its hash), whether the caller may sign, and its sign-offs (viewer). */
 			signoffs: (id: string, packId: string) => request<PackSignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
+			/**
+			 * An issued pack's reproduction bundle (a plain link: the cookie goes with
+			 * it). The API checks the reader, then redirects to a one-minute signed
+			 * GET, as a report PDF (docs/evidence-pack.md § Reproduction).
+			 */
+			bundleUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/bundle`,
 			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
 			sign: (id: string, packId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff)

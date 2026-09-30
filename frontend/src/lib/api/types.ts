@@ -1569,6 +1569,8 @@ export interface PackVerification {
 	manifestSha256: string;
 	shortCode: string;
 	pdfSha256: string | null;
+	/** The reproduction bundle's SHA-256 (120_pack_bundle); null for a pack issued before bundles. */
+	bundleSha256: string | null;
 	successorSha256: string | null;
 	withdrawnReason: string | null;
 	methodology: { version: string | null; sha256: string | null };
