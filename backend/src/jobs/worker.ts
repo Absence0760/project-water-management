@@ -10,6 +10,11 @@
 //                          feed or report schedule queues anything (e2e specs
 //                          that queue their own work, so they never run
 //                          another spec's feed)
+//   --once --project <id>  (repeatable) one tick that claims only those
+//                          projects' jobs: the e2e suite's tick
+//                          (e2e/support/jobs.ts), so a test never runs, or
+//                          sees running, a job another test queued in the
+//                          shared e2e database
 //
 // It connects as water_app (DATABASE_URL), like the API, and runs each job as
 // its acting user (runner.ts). Killing it mid-job is safe: the job's lease
@@ -22,6 +27,7 @@ config({ path: ['.env.development.local', '.env.development'] });
 
 import pg from 'pg';
 import { closePool } from '../db/pool.js';
+import { projectArgs } from './args.js';
 import { envInt, runTick, type TickResult } from './runner.js';
 
 const summary = (r: TickResult) =>
@@ -34,11 +40,16 @@ const summary = (r: TickResult) =>
 if (process.argv.includes('--once')) {
 	try {
 		const schedule = !process.argv.includes('--no-schedule');
-		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds'), feeds: schedule, reports: schedule, alerts: schedule })));
+		const projectIds = projectArgs(process.argv);
+		console.log(
+			summary(await runTick({ allFeeds: process.argv.includes('--all-feeds'), feeds: schedule, reports: schedule, alerts: schedule, projectIds }))
+		);
 	} finally {
 		await closePool();
 	}
 } else {
+	// The loop is the whole queue's worker; a scope belongs to a single tick.
+	if (projectArgs(process.argv)) throw new Error('--project scopes a single tick: use it with --once');
 	await loop();
 }
 
