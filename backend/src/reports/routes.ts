@@ -312,9 +312,9 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	if (t.kind === 'pack') {
 		await withUser(t.userId, async (db) => {
-			// The pack, still readable by the requester (RLS: evidence_pack is theirs) and past draft.
+			// The pack, still readable by the requester (RLS: evidence_pack is theirs) and issued.
 			const { rows } = await db.query<{ ok: boolean }>(
-				`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM evidence_pack WHERE id = $2 AND project_id = $1 AND status <> 'draft') AS ok`,
+				`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM evidence_pack WHERE id = $2 AND project_id = $1 AND issued_at IS NOT NULL) AS ok`,
 				[t.projectId, t.packId]
 			);
 			if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this evidence pack');

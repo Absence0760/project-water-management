@@ -15,8 +15,8 @@
 //      history covers, `exempt: '<why>'`.
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, signUp, tokenIn } from '../__tests__/helpers.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -609,6 +609,9 @@ describe('every write route records its change', () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i % 9 === 0 ? 25 : i % 4 === 0 ? 3 : 0));
 		expect((await owner!.call('PUT', `/projects/${ctx.projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
 	}, 60_000);
+
+	// Issuing the pack queues its PDF's render (pack_render, 116_pack_render); nothing here runs it, so no later file's tick may claim it.
+	afterAll(() => retirePendingJobs(ctx.packProjectId as string | undefined));
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);
 	for (const e of recorded) {

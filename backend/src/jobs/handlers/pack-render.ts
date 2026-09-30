@@ -86,15 +86,16 @@ export const packRenderHandler = defineHandler({
 	role: 'editor',
 	payload: PackRenderPayload,
 	async run({ db, job, payload }) {
-		const { rows } = await db.query<{ status: string; hasPdf: boolean }>(
-			'SELECT status, pdf_key IS NOT NULL AS "hasPdf" FROM evidence_pack WHERE project_id = $1 AND id = $2',
+		const { rows } = await db.query<{ issued: boolean; hasPdf: boolean }>(
+			'SELECT issued_at IS NOT NULL AS issued, pdf_key IS NOT NULL AS "hasPdf" FROM evidence_pack WHERE project_id = $1 AND id = $2',
 			[job.projectId, payload.packId]
 		);
 		const pack = rows[0];
 		if (!pack) throw new JobError('the evidence pack is gone, or you can no longer see it', { retry: false });
 		// Recorded already (a redelivered answer, a second request): the first PDF stands.
 		if (pack.hasPdf) return;
-		if (pack.status === 'draft') throw new JobError('a draft evidence pack is not printed', { retry: false });
+		// Only a pack that was issued is printed (a draft, or a draft withdrawn unissued, never is).
+		if (!pack.issued) throw new JobError('an evidence pack that was never issued is not printed', { retry: false });
 
 		if (payload.result) {
 			if (!payload.result.ok) {

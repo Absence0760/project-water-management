@@ -14,15 +14,16 @@
 --      (CASCADE, indexed, same-project), run_id now NULL for a pack. Exactly
 --      one of them is set, and the purpose says which. render_token_issue
 --      (latest: 082_report_against) checks a pack token: the issuer reads the
---      pack (RLS, as themselves) and it is past draft (only an issued pack
---      is printed). app_consume_render_token (latest: 082) consumes either
+--      pack (RLS, as themselves) and it was issued (issued_at is set: only a
+--      pack that was issued is printed, never a draft, nor a draft withdrawn
+--      before it was issued). app_consume_render_token (latest: 082) consumes either
 --      purpose and returns pack_id too: a new return type, so drop and
 --      create, and grant again.
 --   3. app_record_pack_pdf(pack, sha256, pages): the one way the PDF columns
 --      are written. water_app has no UPDATE grant on them (112 withheld it:
 --      the hash is printed and verified publicly, so an editor's UPDATE must
 --      never set it). SECURITY DEFINER; it records only
---        - for a pack past draft,
+--        - for a pack that was issued (issued_at set),
 --        - from a running pack_render job of that pack whose acting user is
 --          the caller (so only the job handler's transaction, never a
 --          route's),
@@ -36,7 +37,7 @@
 --      render-results answer about a pack (reports/schedule.ts
 --      acceptPackRenderResult), as app_report_render_target does for a
 --      report: the project and the acting user of the pack's latest render
---      request, while the pack has no PDF.
+--      request, while the pack was issued and has no PDF.
 
 -- ---------------------------------------------------------------------------
 -- 1. job: the new kind. From 108_auto_calibration's list.
@@ -64,14 +65,14 @@ ALTER TABLE render_token
 		END
 	);
 COMMENT ON COLUMN render_token.pack_id IS
-	'The evidence pack a pack render session may read (116_pack_render); NULL for a report token. Readable by the issuer and past draft at issue (render_token_issue).';
+	'The evidence pack a pack render session may read (116_pack_render); NULL for a report token. Readable by the issuer and issued, at issue (render_token_issue).';
 
 CREATE TRIGGER render_token_same_project BEFORE INSERT OR UPDATE ON render_token
 	FOR EACH ROW EXECUTE FUNCTION assert_same_project('pack_id');
 
 -- Latest definition: 082_report_against.sql. The purpose follows the target;
 -- a pack token's pack is one the issuer reads (this function is SECURITY
--- INVOKER, so evidence_pack's RLS is theirs) and is past draft.
+-- INVOKER, so evidence_pack's RLS is theirs) and was issued.
 CREATE OR REPLACE FUNCTION render_token_issue() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
@@ -94,8 +95,8 @@ CREATE OR REPLACE FUNCTION render_token_issue() RETURNS trigger
 			IF NOT EXISTS (SELECT 1 FROM evidence_pack p WHERE p.id = NEW.pack_id AND p.project_id = NEW.project_id) THEN
 				RAISE EXCEPTION 'not permitted' USING ERRCODE = 'insufficient_privilege';
 			END IF;
-			IF EXISTS (SELECT 1 FROM evidence_pack p WHERE p.id = NEW.pack_id AND p.status = 'draft') THEN
-				RAISE EXCEPTION 'a draft evidence pack is not printed' USING ERRCODE = 'check_violation';
+			IF EXISTS (SELECT 1 FROM evidence_pack p WHERE p.id = NEW.pack_id AND p.issued_at IS NULL) THEN
+				RAISE EXCEPTION 'an evidence pack that was never issued is not printed' USING ERRCODE = 'check_violation';
 			END IF;
 			RETURN NEW;
 		END IF;
@@ -158,7 +159,7 @@ CREATE FUNCTION app_record_pack_pdf(p_pack uuid, p_sha256 text, p_pages integer)
 		IF p_sha256 IS NULL OR p_sha256 !~ '^[0-9a-f]{64}$' OR p_pages IS NULL OR p_pages < 1 THEN
 			RAISE EXCEPTION 'a pack''s PDF is a SHA-256 and at least one page' USING ERRCODE = 'check_violation';
 		END IF;
-		SELECT p.id, p.project_id, p.status, p.pdf_key INTO v FROM evidence_pack p WHERE p.id = p_pack FOR UPDATE;
+		SELECT p.id, p.project_id, p.issued_at, p.pdf_key INTO v FROM evidence_pack p WHERE p.id = p_pack FOR UPDATE;
 		-- The caller's own running render job of this pack: nothing else writes these columns.
 		IF NOT FOUND OR NOT EXISTS (
 			SELECT 1 FROM job j
@@ -167,8 +168,8 @@ CREATE FUNCTION app_record_pack_pdf(p_pack uuid, p_sha256 text, p_pages integer)
 		) THEN
 			RAISE EXCEPTION 'a pack''s PDF is recorded by its render job' USING ERRCODE = 'insufficient_privilege';
 		END IF;
-		IF v.status = 'draft' THEN
-			RAISE EXCEPTION 'a draft evidence pack has no PDF' USING ERRCODE = 'check_violation';
+		IF v.issued_at IS NULL THEN
+			RAISE EXCEPTION 'an evidence pack that was never issued has no PDF' USING ERRCODE = 'check_violation';
 		END IF;
 		-- The first PDF recorded stands (a redelivered answer, a second render).
 		IF v.pdf_key IS NOT NULL THEN
@@ -196,7 +197,7 @@ CREATE FUNCTION app_pack_render_target(p_pack uuid)
 			WHERE j.project_id = p.project_id AND j.kind = 'pack_render' AND j.payload->>'packId' = p.id::text AND NOT (j.payload ? 'result')
 			ORDER BY j.created_at DESC LIMIT 1
 		) j ON true
-		WHERE p.id = p_pack AND p.status <> 'draft' AND p.pdf_key IS NULL
+		WHERE p.id = p_pack AND p.issued_at IS NOT NULL AND p.pdf_key IS NULL
 	$$;
 
 REVOKE ALL ON FUNCTION app_record_pack_pdf(uuid, text, integer), app_pack_render_target(uuid) FROM PUBLIC;

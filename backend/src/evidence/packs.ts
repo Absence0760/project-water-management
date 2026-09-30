@@ -398,7 +398,7 @@ export const packRoutes = new Hono<AuthEnv>()
 			},
 			{ readOnly: true }
 		);
-		if (!found.key) throw new ApiError(409, found.pack.status === 'draft' ? 'a draft pack has no PDF: issue it first' : 'the PDF is not ready');
+		if (!found.key) throw new ApiError(409, found.pack.issuedAt ? 'the PDF is not ready' : 'a pack that was never issued has no PDF');
 		const url = await packDownloadUrl(found.key, packFileName(found.name, found.pack.version, found.pack.shortCode));
 		c.header('Cache-Control', 'no-store');
 		c.header('Referrer-Policy', 'no-referrer');
@@ -411,7 +411,7 @@ export const packRoutes = new Hono<AuthEnv>()
 		const jobId = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			const pack = await loadPack(db, id, packId, true);
-			if (pack.status === 'draft') throw new ApiError(409, 'a draft pack has no PDF: issue it first');
+			if (!pack.issuedAt) throw new ApiError(409, 'a pack that was never issued has no PDF');
 			if (pack.pdfSha256) throw new ApiError(409, 'this pack’s PDF is recorded already; it is never printed again');
 			return (await queuePackRender(db, id, packId)).jobId;
 		});

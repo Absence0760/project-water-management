@@ -7,8 +7,13 @@
 // listed fields; nothing for a draft), the guards as water_app and as the
 // schema owner (immutable once issued, forward-only status, sign-off target
 // rules), who reads a pack, the runs a pack keeps, an account deletion, and a
-// project with an issued pack being kept. Each "can't" has its positive
-// control.
+// project with an issued pack being kept. The issued pack's PDF too
+// (116_pack_render): the render issuing queues, its render session, the
+// renderer's answers (retry, failure, the PDF recorded once), and who
+// downloads it. Each "can't" has its positive control.
+//
+// REPORT_RENDERER is `sqs` for the PDF tests, with the queue send captured:
+// a render is the render_pack message it would send, with no Chromium.
 import {
 	declaredRuleRequest,
 	packManifestText,
@@ -19,9 +24,20 @@ import {
 	type PackManifest
 } from '@water-management/engine';
 import { createHash } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const { sent } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[] }));
+vi.mock('../jobs/transport.js', async (orig) => ({
+	...(await orig<typeof import('../jobs/transport.js')>()),
+	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
+}));
+
+import { anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { enqueueJob } from '../jobs/queue.js';
+import { runTick } from '../jobs/runner.js';
+import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
+import { acceptPackRenderResult } from '../reports/schedule.js';
 import { trimRuns } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -90,6 +106,9 @@ async function sign(u: User, packId: string, name = 'Dr A. Hydrologist') {
 }
 
 const issue = (u: User, packId: string) => u.call('POST', `${packPath(packId)}/issue`);
+
+// Whatever this file queued and left (issuing v2 queues its PDF's render, a retry waits two minutes): no later file's tick may claim it.
+afterAll(() => retirePendingJobs(projectId));
 
 beforeAll(async () => {
 	[owner, editor, viewer, stranger, contributor, farmer] = (await Promise.all(
@@ -327,6 +346,152 @@ describe('issuing, superseding and withdrawing', () => {
 		expect((await anon('GET', '/verify/0000-0000-0000')).status).toBe(404);
 		expect((await anon('GET', '/verify/not-a-code')).status).toBe(404);
 		expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
+	});
+
+	// The PDF of the issued v1 (116_pack_render; docs/evidence-pack.md § The PDF), as production makes it.
+	describe('its PDF', () => {
+		const PDF_SHA = sha256('the printed pack');
+		const pdfJobs = () =>
+			asOwner(
+				`SELECT status, dedupe_key AS "dedupeKey", acting_user_id AS "actingUserId", payload ? 'result' AS "isResult", last_error AS error,
+					round(extract(epoch FROM run_after - created_at) / 60)::int AS "delayMin"
+				 FROM job WHERE project_id = $1 AND kind = 'pack_render' AND payload->>'packId' = $2 ORDER BY created_at, id`,
+				[projectId, v1.id]
+			);
+		const tick = () => runTick({ feeds: false, reports: false, alerts: false });
+		const answer = (result: PackRenderResult) => acceptPackRenderResult({ v: 1, type: 'rendered_pack', packId: v1.id, result });
+		const pdfState = async () => (await viewer.call('GET', packPath(v1.id))).body.pdf;
+		/** A request carrying only a cookie (the render session's), as the headless browser sends it. */
+		const asCookie = async (cookie: string, path: string) => (await app.request(path, { headers: { origin: 'http://localhost:7777', cookie } })).status;
+
+		beforeAll(() => {
+			vi.stubEnv('REPORT_RENDERER', 'sqs');
+			vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		});
+		afterAll(() => {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		});
+
+		it('issuing queued one render, as the issuer, one per pack; the pack says it is rendering', async () => {
+			expect(await pdfJobs()).toEqual([{ status: 'queued', dedupeKey: `pack_render:${v1.id}`, actingUserId: owner.id, isResult: false, error: null, delayMin: 0 }]);
+			expect(await pdfState()).toEqual({ status: 'rendering', error: null });
+			// No PDF yet: nothing to download, and nothing recorded.
+			expect((await viewer.call('GET', `${packPath(v1.id)}/pdf`)).status).toBe(409);
+			expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.pdfSha256).toBeNull();
+		});
+
+		it('the render sends a render_pack request whose token opens a session reading this pack and nothing else', async () => {
+			await tick();
+			expect((await pdfJobs())[0]!.status).toBe('done');
+			const requests = sent.filter((m) => m.type === 'render_pack');
+			expect(requests).toHaveLength(1);
+			const request = PackRenderRequestMessage.parse(requests[0]);
+			expect(request).toMatchObject({ packId: v1.id, projectId });
+			// Handed to the renderer: still rendering until its answer comes back.
+			expect(await pdfState()).toEqual({ status: 'rendering', error: null });
+
+			const exchanged = await anon('POST', '/auth/render-session', { token: request.token });
+			expect(exchanged.status, JSON.stringify(exchanged.body)).toBe(200);
+			const cookie = exchanged.headers.get('set-cookie')!.split(';')[0]!;
+			expect(await asCookie(cookie, packPath(v1.id))).toBe(200);
+			expect(await asCookie(cookie, `${packPath(v1.id)}/signoffs`)).toBe(200);
+			for (const path of [at(), `${at()}/packs`, `${packPath(v1.id)}/pdf`, runPath(baseRun), `${at()}/series`, '/projects']) expect(await asCookie(cookie, path), path).toBe(403);
+			// Single use.
+			expect((await anon('POST', '/auth/render-session', { token: request.token })).body.code).toBe('render_token_refused');
+		});
+
+		it('a retryable failure asks again after two minutes', async () => {
+			expect(await answer({ ok: false, error: 'the page took too long', retry: true })).toBe('queued');
+			await tick();
+			const jobs = await pdfJobs();
+			expect(jobs.map((j) => [j.dedupeKey, j.status, j.isResult])).toEqual([
+				[`pack_render:${v1.id}`, 'done', false],
+				[`pack_result:${v1.id}`, 'done', true],
+				[`pack_retry:${v1.id}:1`, 'queued', false]
+			]);
+			expect(jobs[2]!.delayMin).toBe(2);
+			expect(await pdfState()).toEqual({ status: 'rendering', error: null });
+		});
+
+		it('a final failure fails the PDF with the renderer’s reason, and an editor may ask again (positive control: 202)', async () => {
+			expect(await answer({ ok: false, error: 'the render session was refused', retry: false })).toBe('queued');
+			await tick();
+			expect((await pdfJobs()).at(-1)).toMatchObject({ isResult: true, status: 'dead', error: 'the renderer failed: the render session was refused' });
+			expect(await pdfState()).toEqual({ status: 'failed', error: 'the renderer failed: the render session was refused' });
+			// A viewer can't ask; an editor can.
+			expect((await viewer.call('POST', `${packPath(v1.id)}/pdf`)).status).toBe(403);
+			const again = await editor.call('POST', `${packPath(v1.id)}/pdf`);
+			expect(again.status, JSON.stringify(again.body)).toBe(202);
+			expect(await pdfState()).toEqual({ status: 'rendering', error: null });
+			await tick();
+			expect(sent.filter((m) => m.type === 'render_pack' && m.packId === v1.id)).toHaveLength(2);
+		});
+
+		it('the PDF only its render job records: not a member’s call, and not a job’s after the first', async () => {
+			await expect(withUser(owner.id, (db) => db.query('SELECT app_record_pack_pdf($1, $2, 3)', [v1.id, PDF_SHA]))).rejects.toMatchObject({ code: '42501' });
+			const [pack] = await asOwner('SELECT pdf_key, pdf_sha256 FROM evidence_pack WHERE id = $1', [v1.id]);
+			expect(pack).toEqual({ pdf_key: null, pdf_sha256: null });
+		});
+
+		it('records the renderer’s PDF once: its key, hash and pages, on the pack and on verify', async () => {
+			expect(await answer({ ok: true, pages: 7, bytes: 123_456, ms: 2_000, sha256: PDF_SHA })).toBe('queued');
+			await tick();
+			expect((await pdfJobs()).at(-1)).toMatchObject({ isResult: true, status: 'done' });
+			const [pack] = await asOwner('SELECT pdf_key, pdf_sha256, pdf_pages FROM evidence_pack WHERE id = $1', [v1.id]);
+			expect(pack).toEqual({ pdf_key: `packs/${projectId}/${v1.id}/${PDF_SHA}.pdf`, pdf_sha256: PDF_SHA, pdf_pages: 7 });
+			expect(await pdfState()).toEqual({ status: 'ready', error: null });
+			expect((await viewer.call('GET', packPath(v1.id))).body.pack).toMatchObject({ pdfSha256: PDF_SHA, pdfPages: 7 });
+			expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.pdfSha256).toBe(PDF_SHA);
+
+			// A second answer (a redelivery, a late render) is about a pack with its PDF: dropped.
+			expect(await answer({ ok: true, pages: 8, bytes: 1, ms: 1, sha256: sha256('another print') })).toBe('unknown_pack');
+			// Even from a running render job of the pack, the first PDF stands (false, nothing changes).
+			const { job } = await withUser(owner.id, (db) => enqueueJob(db, { projectId, kind: 'pack_render', payload: { packId: v1.id }, maxAttempts: 1 }));
+			const jobId = job.id;
+			await asOwner(`UPDATE job SET status = 'running', locked_until = now() + interval '1 minute', lease_token = gen_random_uuid(), started_at = now() WHERE id = $1`, [jobId]);
+			const second = await withUser(owner.id, (db) => db.query<{ r: boolean }>('SELECT app_record_pack_pdf($1, $2, 8) AS r', [v1.id, sha256('another print')]));
+			expect(second.rows[0]!.r).toBe(false);
+			await asOwner(`UPDATE job SET status = 'done', finished_at = now(), locked_until = NULL, lease_token = NULL WHERE id = $1`, [jobId]);
+			expect((await asOwner('SELECT pdf_sha256 FROM evidence_pack WHERE id = $1', [v1.id]))[0]!.pdf_sha256).toBe(PDF_SHA);
+			// Nor may anyone ask for another print.
+			const again = await editor.call('POST', `${packPath(v1.id)}/pdf`);
+			expect(again.status).toBe(409);
+			expect(again.body.error).toMatch(/recorded already/);
+		});
+
+		it('a viewer downloads it through a short-lived signed URL of the packs bucket; a contributor is refused, a stranger 404', async () => {
+			const res = await app.request(`${packPath(v1.id)}/pdf`, { headers: { origin: 'http://localhost:7777', cookie: viewer.cookie } });
+			expect(res.status).toBe(302);
+			expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+			expect(res.headers.get('cache-control')).toBe('no-store');
+			const location = res.headers.get('location')!;
+			expect(location).toContain(`/water-packs/packs/${projectId}/${v1.id}/${PDF_SHA}.pdf?`);
+			expect(location).toContain('X-Amz-Expires=60&');
+			expect(location).toMatch(/filename%3D%22pack-catchment-evidence-pack-v1-[0-9a-f-]+\.pdf%22/);
+			expect((await contributor.call('GET', `${packPath(v1.id)}/pdf`)).status).toBe(403);
+			expect((await farmer.call('GET', `${packPath(v1.id)}/pdf`)).status).toBe(403);
+			expect((await stranger.call('GET', `${packPath(v1.id)}/pdf`)).status).toBe(404);
+		});
+
+		it('a draft has no PDF: no download, no render asked, no render token (409s, the trigger)', async () => {
+			const d = await draft(editor, baseRun);
+			expect((await viewer.call('GET', `${packPath(d.id)}/pdf`)).status).toBe(409);
+			const ask = await editor.call('POST', `${packPath(d.id)}/pdf`);
+			expect(ask.status).toBe(409);
+			expect(ask.body.error).toMatch(/never issued/);
+			expect((await editor.call('GET', packPath(d.id))).body.pdf).toEqual({ status: 'none', error: null });
+			await expect(
+				withUser(editor.id, (db) =>
+					db.query(`INSERT INTO render_token (token_hash, user_id, project_id, pack_id, expires_at) VALUES ($1, app_current_user_id(), $2, $3, now())`, [
+						Buffer.alloc(32, 7),
+						projectId,
+						d.id
+					])
+				)
+			).rejects.toMatchObject({ code: '23514' });
+			expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
+		});
 	});
 
 	it('issues a new version, which supersedes the old one in the same step', async () => {

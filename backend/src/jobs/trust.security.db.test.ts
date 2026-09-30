@@ -26,7 +26,7 @@ vi.mock('./transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { rank, type Role } from '../projects/access.js';
@@ -38,6 +38,8 @@ import { runTick } from './runner.js';
 type User = Awaited<ReturnType<typeof signUp>>;
 
 const cleanup: string[] = [];
+/** Projects holding an issued evidence pack: the schema keeps them (112), so their pending jobs are retired instead. */
+const kept = new Set<string>();
 beforeEach(() => {
 	vi.stubEnv('FEED_FETCHER', 'sqs');
 	vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'memory://fetch-requests');
@@ -48,7 +50,10 @@ afterEach(async () => {
 	sent.length = 0;
 	vi.unstubAllEnvs();
 	// Each project goes with its jobs, so no later file's tick picks them up.
-	for (const pid of cleanup.splice(0)) await asOwner('DELETE FROM project WHERE id = $1', [pid]);
+	for (const pid of cleanup.splice(0)) {
+		if (kept.has(pid)) await retirePendingJobs(pid);
+		else await asOwner('DELETE FROM project WHERE id = $1', [pid]);
+	}
 });
 
 const tick = () => runTick({ feeds: false, reports: false, alerts: false });
@@ -188,9 +193,12 @@ async function feedOf(owner: User, projectId: string) {
  * An issued evidence pack of a project's run, planted past evidence_pack_guard
  * (replica role, as cross-project-refs.security.db.test.ts arranges its
  * packs): issuing one through the API needs an issuable report, which these
- * catchments lack, and the sweep needs only the row.
+ * catchments lack, and the sweep needs only the row. Its project is then
+ * kept (evidence_pack_guard refuses deleting it), so afterEach retires its
+ * jobs rather than deleting it.
  */
 async function issuedPack(projectId: string, runId: string, userId: string): Promise<string> {
+	kept.add(projectId);
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();
 	try {
