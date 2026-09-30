@@ -135,6 +135,8 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/crop=/);
 	await expect(page.getByTestId('crop-row')).toHaveCount(2);
+	// The Edit button that opened the sheet went with its row: the focus moves to the next crop's.
+	await expect(page.getByRole('button', { name: 'Edit Lucerne' })).toBeFocused();
 	await expect(page.getByRole('img', { name: 'Lower farm: 12 ha, Orchard 12 ha' })).toBeVisible();
 });
 

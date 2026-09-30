@@ -11,6 +11,7 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
@@ -65,16 +66,29 @@
 	}
 
 	// ---- Volume unit (the farm view's) ----
+	// The radios show `unit`, not the session's value directly: a radio the
+	// person picked stays picked in the DOM whatever the markup says, so a
+	// failed save has to put the choice back itself. The radios stay live while
+	// a choice saves (disabling one drops the keyboard's focus), and only the
+	// latest choice's answer is taken, so a quick m³ → ML → m³ can't end on ML.
+	let unit = $state<'m3' | 'ML'>(session.user?.volumeUnit ?? 'm3');
 	let unitSaved = $state(false);
 	let unitError = $state<string | null>(null);
+	let unitSeq = 0;
 	async function chooseUnit(volumeUnit: 'm3' | 'ML') {
+		const seq = ++unitSeq;
 		unitSaved = false;
 		unitError = null;
 		try {
-			session.user = await api.auth.updateMe({ volumeUnit });
+			const user = await api.auth.updateMe({ volumeUnit });
+			if (seq !== unitSeq) return;
+			session.user = user;
+			unit = user.volumeUnit ?? 'm3';
 			unitSaved = true;
 		} catch (err) {
+			if (seq !== unitSeq) return;
 			unitError = msg(err);
+			unit = session.user?.volumeUnit ?? 'm3';
 		}
 	}
 
@@ -89,6 +103,8 @@
 			await api.alerts.resume();
 			if (session.user) session.user = { ...session.user, mailSuppressed: null };
 			resumed = true;
+			// The banner, and the button just pressed, are gone (WCAG 2.4.3).
+			void focusPageStart();
 		} catch (err) {
 			resumeError = resumeProblem(err);
 		} finally {
@@ -301,11 +317,11 @@
 						{#if unitError}<div class="alert alert-error" role="alert">{unitError}</div>{/if}
 						<div class="radios">
 							<label class="radio">
-								<input type="radio" name="volume-unit" value="m3" checked={(session.user.volumeUnit ?? 'm3') === 'm3'} onchange={() => chooseUnit('m3')} />
+								<input type="radio" name="volume-unit" value="m3" bind:group={unit} onchange={() => chooseUnit('m3')} />
 								{t('Cubic metres (m³)')}
 							</label>
 							<label class="radio">
-								<input type="radio" name="volume-unit" value="ML" checked={session.user.volumeUnit === 'ML'} onchange={() => chooseUnit('ML')} />
+								<input type="radio" name="volume-unit" value="ML" bind:group={unit} onchange={() => chooseUnit('ML')} />
 								{t('Megalitres (ML)')}
 							</label>
 						</div>

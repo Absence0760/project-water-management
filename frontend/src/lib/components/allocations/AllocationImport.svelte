@@ -64,6 +64,11 @@
 	$effect(() => {
 		if (!open) reset();
 	});
+	// While the file is read or imported the sheet stays open (Escape and the ✕ do nothing):
+	// closing it then would drop the preview under a request still running, and a reopened
+	// sheet would be overwritten when that request came back. It closes itself on success.
+	const busy = $derived(phase === 'reading' || phase === 'importing');
+	const mayClose = () => !busy;
 
 	async function commit() {
 		if (!file || !preview) return;
@@ -87,7 +92,7 @@
 	}
 </script>
 
-<Dialog bind:open side wide title="Import registered volumes">
+<Dialog bind:open side wide title="Import registered volumes" beforeclose={mayClose}>
 	<div class="import" data-testid="allocation-import">
 		{#if phase === 'choose' || phase === 'reading'}
 			<p class="muted intro">
@@ -162,6 +167,7 @@
 			</div>
 			<p class="muted small hash" title={preview.sha256}>File SHA-256 {preview.sha256.slice(0, 12)}…, kept with every row</p>
 		{/if}
+		{#if phase === 'importing'}<p class="muted" role="status" data-testid="allocation-importing">Importing… the sheet closes when it's done.</p>{/if}
 		{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}
 	</div>
 	{#snippet actions()}

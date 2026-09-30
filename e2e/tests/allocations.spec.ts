@@ -7,7 +7,8 @@
 // sees the volumes but no names and can't import. Axe-scanned, and on a
 // phone. Licence conditions entered in the sheet show in the list, and a run
 // capped at the registered volumes (settings.allocationMode, engine 1.18.0)
-// says so above its comparison (issue #72). Synthetic data only.
+// says so above its comparison (issue #72). The import sheet can't be closed
+// while the import runs. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -55,7 +56,20 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await page.getByLabel('Hydrological unit for line 3').selectOption({ label: 'Lower farm' });
 	await expect(summary).toContainText('2 matched to a hydrological unit, 0 not matched');
 	await expectNoViolations(page);
+	// While the import runs the sheet stays open: Escape and the ✕ don't drop it under the request.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route(/\/allocations\/import\/commit$/, async (route) => {
+		await held;
+		await route.fallback();
+	});
 	await page.getByRole('button', { name: 'Import 2 rows' }).click();
+	await expect(page.getByTestId('allocation-importing')).toHaveText("Importing… the sheet closes when it's done.");
+	await page.keyboard.press('Escape');
+	await page.getByRole('button', { name: 'Close dialog' }).click();
+	await expect(wizard).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Importing…' })).toBeDisabled();
+	release();
 	await expect(page.getByRole('status').filter({ hasText: 'Imported 2 rows' })).toHaveText('Imported 2 rows from allocations.csv; 1 with problems were left out.');
 
 	// The list: each volume with its farm, holder (an editor sees names) and source file.
