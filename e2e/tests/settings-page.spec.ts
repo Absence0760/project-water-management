@@ -32,7 +32,7 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	const menu = settingsMenu(page);
 	for (const [name, first, last] of [
 		['Model inputs', 'Demand', 'Data quality'],
-		['How results are read', 'Outcome matrix', 'Seasonal outlook'],
+		['How results are read', 'Outcome matrix', 'Evidence'],
 		['Runs, feeds and reports', 'Automatic runs', 'Scheduled reports']
 	] as const) {
 		const links = menu.getByRole('list', { name, exact: true }).getByRole('link');

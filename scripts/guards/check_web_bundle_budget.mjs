@@ -1316,6 +1316,23 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1226 KB (issue #71, the licensing evidence
+//             report: measured 1226 against 1201 on its base 84fb2a6b). The
+//             report is a lazy chunk of its own (report/evidence/
+//             EvidenceReport.svelte with its summary, grids and SVG plots,
+//             15.6 KB + 1.8 KB CSS), loaded only in the report page's
+//             `&evidence` mode; its shell (EvidencePage) adds ~3 KB to the
+//             report page, where Disclaimer / SignoffSection / inputs.ts now
+//             sit in a chunk the two share; Settings' Evidence rule fields
+//             are another lazy chunk (2.8 KB); the declared-rule text and
+//             check (engine uncertainty/options.ts, which the settings diff
+//             in compare.ts reads) ~1.3 KB in the shared engine chunk; help
+//             text ~0.5 KB. Trimmed first: EvidenceReport imported the
+//             engine's monthName from uncertainty/ensemble.ts, so the
+//             calibration worker's whole engine (37 → 3 KB worker, a 34 KB
+//             chunk) became a shared chunk the report page loaded
+//             statically; it now uses $lib/format/months' identical helper.
+//             No new dependency. Headroom 0 KB: the next change is measured.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1326,7 +1343,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1201,
+	totalCodeKb: 1226,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
