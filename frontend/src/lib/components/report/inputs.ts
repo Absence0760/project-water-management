@@ -54,7 +54,7 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 			'CHIRPS bias correction',
 			s.chirpsBiasCorrection === 'none'
 				? 'none (raw CHIRPS)'
-				: // Engine ≥ 1.47.0 (CR-23): the gap map; a snapshot without it ran without.
+				: // Engine ≥ 1.53.0 (CR-23): the gap map; a snapshot without it ran without.
 					`monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}${s.chirpsQuantileMap ? `; gap days quantile-mapped onto the catchment rain (wet days ≥ ${s.chirpsQuantileMap.wetDayMm} mm)` : ''}`
 		],
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.

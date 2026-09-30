@@ -327,7 +327,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 			? clonePlain(pinned.chirpsCorrection)
 			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), {
 					...fitOpts,
-					// The gap map (engine ≥ 1.47.0, CR-23): fitted with the factors, on the same days.
+					// The gap map (engine ≥ 1.53.0, CR-23): fitted with the factors, on the same days.
 					...(settings.chirpsQuantileMap ? { quantileMap: settings.chirpsQuantileMap } : {})
 				});
 	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
@@ -619,7 +619,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
 	}
-	// The CHIRPS gap map (engine ≥ 1.47.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
 	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
 	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
 		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → CHIRPS bias correction)');

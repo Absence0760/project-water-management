@@ -104,7 +104,7 @@ export interface RainSourceQuantileMap {
 }
 
 /**
- * settings.chirpsQuantileMap (engine ≥ 1.47.0, CR-23): the CHIRPS gap fill's
+ * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23): the CHIRPS gap fill's
  * quantile map. Fitted on the §2.4b fit period's shared days, so it has no era
  * of its own; only the wet-day threshold is set.
  */
@@ -389,12 +389,12 @@ export interface ProjectSettings {
 	 */
 	chirpsFitPeriod: ChirpsFitPeriod;
 	/**
-	 * Opt-in quantile mapping of the CHIRPS gap fill (engine ≥ 1.47.0, CR-23,
+	 * Opt-in quantile mapping of the CHIRPS gap fill (engine ≥ 1.53.0, CR-23,
 	 * ./rain.ts, docs/model.md §2.4b *Quantile map*): after the monthly
 	 * factor, map CHIRPS' wet days onto the catchment rain's over the fit
 	 * period, month by month, keeping every calendar month's corrected total.
 	 * Only with `chirpsBiasCorrection: 'monthly'`. Absent or null = the
-	 * monthly factor alone, as every run before 1.47.0.
+	 * monthly factor alone, as every run before 1.53.0.
 	 */
 	chirpsQuantileMap?: ChirpsQuantileMap | null;
 	/**

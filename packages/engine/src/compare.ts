@@ -197,7 +197,7 @@ export interface RunComparison {
 		fitWindowsA?: string[];
 		fitWindowsB?: string[];
 		/**
-		 * Engine ≥ 1.47.0 (CR-23): each run's CHIRPS gap map in words
+		 * Engine ≥ 1.53.0 (CR-23): each run's CHIRPS gap map in words
 		 * (chirpsQuantileMapText; null = off, as every run before it); both
 		 * absent when neither run had one. A different map counts in `changed`.
 		 */
@@ -722,7 +722,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.29.0; a snapshot without it takes the default, 'all', which is what older runs did.
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
-	// Engine ≥ 1.47.0 (CR-23); a snapshot without it ran without (null, the default).
+	// Engine ≥ 1.53.0 (CR-23); a snapshot without it ran without (null, the default).
 	chirpsQuantileMap: {
 		label: 'CHIRPS quantile map',
 		fmt: (v) => {

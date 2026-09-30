@@ -454,7 +454,7 @@ keeps that record.
 
 - **Rain used** (column R): the first non-blank of catchment rain, CHIRPS
   (bias-corrected per calendar month since engine 0.7.0, §2.4b, audit B1;
-  the workbook used it raw; from engine 1.47.0 optionally quantile-mapped
+  the workbook used it raw; from engine 1.53.0 optionally quantile-mapped
   too, §2.4b *Quantile map*) or forecast rain. GR4J reads it without a
   threshold (§2.4a). Irrigation demand reads it thresholded: rain at or
   below `settings.calibration.rainThresholdMm` counts as 0 (§2.3).
@@ -823,8 +823,8 @@ Engine ≥ 0.7.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
 Setting: `settings.chirpsBiasCorrection`, `'monthly'` (default) or `'none'`;
 from engine 0.29.0 `settings.chirpsFitPeriod`, which years the factors are
 fitted on ([below](#fit-period-and-per-range-factors-engine--0290-issue-40));
-and from engine 1.47.0 the opt-in `settings.chirpsQuantileMap`, which also
-reshapes the gap fill's wet days ([below](#quantile-map-engine--1470-cr-23)).
+and from engine 1.53.0 the opt-in `settings.chirpsQuantileMap`, which also
+reshapes the gap fill's wet days ([below](#quantile-map-engine--1530-cr-23)).
 
 **Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
 the catchment rain is blank. CHIRPS is a 0.05° satellite-and-gauge product.
@@ -909,8 +909,8 @@ review of issue #4 phase 6.
   window, so a shorter simulation period doesn't change them. A monthly
   factor is *linear scaling* (Teutschbein & Seibert 2012, *J. Hydrol.*
   456–457): it corrects the monthly volume, not the number of wet days or the
-  intensity distribution. The opt-in quantile map (engine ≥ 1.47.0,
-  [below](#quantile-map-engine--1470-cr-23)) corrects those too.
+  intensity distribution. The opt-in quantile map (engine ≥ 1.53.0,
+  [below](#quantile-map-engine--1530-cr-23)) corrects those too.
 
 #### Fit period and per-range factors (engine ≥ 0.29.0, issue #40)
 
@@ -995,10 +995,10 @@ reference windows (`chirpsFactors`, calendar months), and a change of fit
 period flags "Forcing changed since fit". A run saved before 0.29.0 compares
 as `'all'`, with no reference windows to compare.
 
-#### Quantile map (engine ≥ 1.47.0, CR-23)
+#### Quantile map (engine ≥ 1.53.0, CR-23)
 
 `settings.chirpsQuantileMap`: `null` (the default, and every run before
-1.47.0) or `{ wetDayMm }` (0.1–10 mm, 1 mm when turned on;
+1.53.0) or `{ wetDayMm }` (0.1–10 mm, 1 mm when turned on;
 `QM_WET_DAY_MM_MIN/MAX/DEFAULT`). Only with `chirpsBiasCorrection:
 'monthly'`: under `'none'` a run ignores it and warns. Off, the gap days
 are exactly CHIRPS × the factor, as before; a test pins that absent and
@@ -1135,7 +1135,7 @@ and the series explorer:
 | `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so a stored legacy run's `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. With listed fit ranges (engine ≥ 0.29.0), the day's own range's factor. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
-| `rain_chirps_mapped` (engine ≥ 1.47.0) | CHIRPS after the quantile map ([above](#quantile-map-engine--1470-cr-23)) on **every** day it has a value: what a gap day reads. A month the map doesn't map keeps `rain_chirps_corrected`. Only output when the map is on and fitted some month | NaN where `rain_chirps_corrected` is |
+| `rain_chirps_mapped` (engine ≥ 1.53.0) | CHIRPS after the quantile map ([above](#quantile-map-engine--1530-cr-23)) on **every** day it has a value: what a gap day reads. A month the map doesn't map keeps `rain_chirps_corrected`. Only output when the map is on and fitted some month | NaN where `rain_chirps_corrected` is |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
@@ -1148,7 +1148,7 @@ pooled, or none), the unclamped own factor, whether it was clamped, the shared
 days and the catchment and CHIRPS rain on them, and the days CHIRPS filled in;
 then the pooled factor and the water years left out of the fit, with (engine
 ≥ 0.18.0) which were far below CHIRPS, each doubted keep-dry, and the day
-counts left out or kept in; (engine ≥ 1.47.0) the quantile map's month
+counts left out or kept in; (engine ≥ 1.53.0) the quantile map's month
 table and counts when it was on; then (engine ≥ 0.29.0) the fit period, the
 reference windows and each listed range's factors (`chirpsFactorLines` in
 `backend/src/export/run-tables.ts`). Run comparison notes when the two runs'
@@ -1566,7 +1566,7 @@ wet-day distribution, and GR4J turns heavier days into more flow
   before 1.21.0.
 - **The map, opt-in per period** (`quantileMap`,
   `packages/engine/src/quantileMap.ts`, a pure mapper that from engine
-  1.47.0 serves the CHIRPS gap fill too, §2.4b *Quantile map*). Per calendar month, the scaled series' wet days
+  1.53.0 serves the CHIRPS gap fill too, §2.4b *Quantile map*). Per calendar month, the scaled series' wet days
   over the period and the primary record's trusted wet days over the era
   are each summarised as a 101-point quantile table (every percentile, by
   linear interpolation between order statistics). A wet day (scaled value
@@ -1600,7 +1600,7 @@ confirmation (docs/followups.md).
 
 **Not done here.** A replacement from a gridded product alone (no gauge)
 is still a `missing` period (§2.4c) filled from CHIRPS. CHIRPS itself can
-be quantile-mapped as well (opt-in, engine ≥ 1.47.0, §2.4b *Quantile map*),
+be quantile-mapped as well (opt-in, engine ≥ 1.53.0, §2.4b *Quantile map*),
 with its wet-day frequency matched too, which a replacement gauge's map
 deliberately doesn't do.
 
@@ -5685,7 +5685,7 @@ it never changes a run's results.
     covering ≥ 99 % of the run: half the members use the rain as a run does
     (station rain, bias-corrected CHIRPS where it is blank, §2.4b), half use
     **CHIRPS alone**, every day bias-corrected by the run's own monthly
-    factors, and with the CHIRPS quantile map on (engine ≥ 1.47.0, §2.4b)
+    factors, and with the CHIRPS quantile map on (engine ≥ 1.53.0, §2.4b)
     mapped as the run maps its gap days (the station series dropped,
     correction and map then off, the run window pinned). The spread between them is the rain-data uncertainty
     the record can't settle.

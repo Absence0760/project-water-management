@@ -502,13 +502,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   two ranges overlapping), replaced whole by a `PATCH`. Anything else is a
   `400`; settings stored before it read back as `all`.
   [model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40).
-  `chirpsQuantileMap` (engine ≥ 1.47.0, CR-23) is `null` (the default: the
+  `chirpsQuantileMap` (engine ≥ 1.53.0, CR-23) is `null` (the default: the
   CHIRPS that fills a gap takes the monthly factor alone) or `{ wetDayMm }`
   (0.1–10 mm; no other key), replaced whole by a `PATCH`. It only acts with
   `chirpsBiasCorrection: monthly` (a run under `none` ignores it and warns).
   Anything else is a `400` (the engine's `chirpsQuantileMapError`, which a
   table test holds to the schema); settings stored before it read back as
-  `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1470-cr-23).
+  `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
   `rainSource` (engine ≥ 0.30.0, issue #40 (b)) is a list (0–100, default
   `[]`) of periods whose catchment rain comes from another series, replaced
   whole by a `PATCH`: `{ start, end, series, factors, provenance?,
@@ -654,7 +654,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   and `fittedOn` the reference window in words: the factors per fit range the
   fit's rain used; from engine 0.30.0 optional `rainSource`, validated like
   the setting, absent = none; from engine 0.31.0 optional `pe`, validated like
-  the setting, absent = `{ kind: 'pan' }`; from engine 1.47.0 optional
+  the setting, absent = `{ kind: 'pan' }`; from engine 1.53.0 optional
   `chirpsQuantileMap`, validated like the setting, present only when the fit
   ran with the CHIRPS gap map on, absent = off) is the
   pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction mode and

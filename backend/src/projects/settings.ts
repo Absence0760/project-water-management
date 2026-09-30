@@ -500,7 +500,7 @@ const ArealRain = z
 	.strict();
 
 /**
- * settings.chirpsQuantileMap (engine ≥ 1.47.0, CR-23, docs/model.md §2.4b
+ * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b
  * *Quantile map*): the CHIRPS gap fill's wet-day threshold; null = off.
  * Replaced whole on a patch. The engine's chirpsQuantileMapError applies the
  * same rules to a stored value (a table test holds the two together).
@@ -795,7 +795,7 @@ export const FitRecord = z
 				pe: PeInput.optional(),
 				// Engine ≥ 1.13.0: the areal rainfall correction (null = none). Optional, as above; absent = ran with none.
 				arealRain: ArealRain.nullable().optional(),
-				// Engine ≥ 1.47.0 (CR-23): the CHIRPS gap map, recorded only when on. Optional, as above; absent = off.
+				// Engine ≥ 1.53.0 (CR-23): the CHIRPS gap map, recorded only when on. Optional, as above; absent = off.
 				chirpsQuantileMap: ChirpsQuantileMap.nullable().optional(),
 				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
 				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
@@ -908,7 +908,7 @@ export const SettingsPatch = z
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
 		// Which part of the record the CHIRPS factors are fitted on (engine rain.ts, issue #40); replaced whole.
 		chirpsFitPeriod: ChirpsFitPeriod,
-		// The CHIRPS gap map (engine ≥ 1.47.0, CR-23); replaced whole, null = off.
+		// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); replaced whole, null = off.
 		chirpsQuantileMap: ChirpsQuantileMap.nullable(),
 		// Periods whose catchment rain comes from another series (engine rainSourcePeriods.ts, issue #40 (b)); replaced whole.
 		rainSource: RainSource,

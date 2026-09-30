@@ -730,7 +730,7 @@ describe('CHIRPS bias factors block', () => {
 		]);
 	});
 
-	it('lists the CHIRPS gap map, month by month, when it was on (engine ≥ 1.47.0)', () => {
+	it('lists the CHIRPS gap map, month by month, when it was on (engine ≥ 1.53.0)', () => {
 		const months = Array.from({ length: 12 }, (_, i) => ({
 			month: i + 1,
 			basis: [6, 7, 8].includes(i + 1) ? null : i + 1 === 9 ? ('season' as const) : ('month' as const),

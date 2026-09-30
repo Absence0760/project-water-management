@@ -159,7 +159,7 @@ bottom:
    the `chirpsFitPeriod` setting itself is also a settings line ("CHIRPS fit
    period: whole record → listed water years: …"); a run saved before 0.29.0
    compares as the whole record, with no windows to compare. From engine
-   1.47.0 the CHIRPS gap map (CR-23) is part of it too: `chirpsFit`
+   1.53.0 the CHIRPS gap map (CR-23) is part of it too: `chirpsFit`
    carries each side's map in words (`quantileMapA/B`, null = off, only
    when either run had one) and a different map counts as a change; the
    note says "quantile map: off → …", and the `chirpsQuantileMap` setting

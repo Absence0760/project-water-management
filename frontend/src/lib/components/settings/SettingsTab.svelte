@@ -197,7 +197,7 @@
 		if (!on && areal) lastAreal = $state.snapshot(areal) as EditableArealRain;
 		s.arealRain = storedArealRain(withArealRain(on, lastAreal));
 	}
-	// The CHIRPS gap map (engine ≥ 1.47.0, CR-23); the threshold it was switched off with is kept until saved.
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); the threshold it was switched off with is kept until saved.
 	let lastGapMap = $state<ChirpsQuantileMap | null>(null);
 	function setGapMapOn(on: boolean) {
 		if (!on && s.chirpsQuantileMap) lastGapMap = { ...s.chirpsQuantileMap };
@@ -919,7 +919,7 @@
 				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 		</div>
-		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.47.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
+		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
 		<fieldset class="plain" data-testid="chirps-quantile-map">
 			<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
 			<label class="check">

@@ -647,7 +647,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       days), keeping every year-month's total. The default (no map) runs
       exactly as before ([model.md §2.4e *Daily
       intensity*](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
-- [x] **CR-23: quantile-map the CHIRPS gap fill (done, engine 1.47.0).**
+- [x] **CR-23: quantile-map the CHIRPS gap fill (done, engine 1.53.0).**
       Opt-in `settings.chirpsQuantileMap`: fitted with the monthly factors
       on the §2.4b fit period's shared days, CHIRPS' wet-day rate matched to
       the catchment's and its wet days mapped onto the catchment's, per
@@ -655,9 +655,9 @@ collected as a checklist in issue #46; tick it there as they answer.
       each calendar month's corrected total kept. Pinned with the factors,
       recorded in a fit's forcing, compared in "What changed". Off by
       default: a run without it is unchanged ([model.md §2.4b *Quantile
-      map*](./model.md#quantile-map-engine--1470-cr-23)).
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [ ] **Confirm the daily-intensity defaults with the hydrologist (issue
-      #66, and CR-23's CHIRPS gap map, engine 1.47.0).** Built on documented
+      #66, and CR-23's CHIRPS gap map, engine 1.53.0).** Built on documented
       defaults: a heavy day is ≥ 20 mm; the check warns beyond 5 share
       points; a wet day is ≥ 1 mm; both maps work by calendar month, pooling
       the 3-month season below 30 wet days on either side and leaving a
@@ -671,7 +671,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       hydrologist's answer, or the first client run with either map on. The
       shared constants are in `packages/engine/src/quantileMap.ts`, the
       heavy-day ones in `rainSourcePeriods.ts` ([model.md §2.4b *Quantile
-      map*](./model.md#quantile-map-engine--1470-cr-23)).
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;

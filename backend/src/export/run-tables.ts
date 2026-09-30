@@ -283,7 +283,7 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	if (c.flaggedDaysLeftOut) yield csvRow(['Days of flagged zero runs left out (treated as missing)', c.flaggedDaysLeftOut]);
 	if (c.missingDaysLeftOut) yield csvRow(['Days listed as missing left out', c.missingDaysLeftOut]);
 	if (c.keptDryDaysInFit) yield csvRow(['Kept-dry days kept in the fit', c.keptDryDaysInFit]);
-	// Engine ≥ 1.47.0 (CR-23): the gap map, when it was on.
+	// Engine ≥ 1.53.0 (CR-23): the gap map, when it was on.
 	if (c.quantileMap) {
 		const q = c.quantileMap;
 		yield csvRow(['CHIRPS quantile map', chirpsQuantileMapText(q)]);
