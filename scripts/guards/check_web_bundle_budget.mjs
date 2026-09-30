@@ -1320,9 +1320,8 @@
 //             e8cd5bc9 merged, against main's 1200). The errata section of
 //             the validation statement (liability/ValidationStatement: the
 //             errata table, keyed on the run's engine and its fit's) and the
-//             generated errata list it reads (engine liability/errata). The
-//             Runs tab chunk measures 60 KB, at its ceiling: the next Runs-tab
-//             feature must lazy-load. No new dependency. Headroom ~3 KB.
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
