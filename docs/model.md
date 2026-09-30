@@ -3624,7 +3624,10 @@ from the client's hydrologist: which table applies at which site (and
 whether total or low-flow), whether the percentile should come from the run
 or the gazette's natural curve, linear or log interpolation, whether the
 requirement below the driest point should scale or hold, and whether the
-daily charge should follow the rule table (`ewrChargeSource`).
+daily charge should follow the rule table (`ewrChargeSource`). Each open
+choice is a row of the engine audit (A1–A4,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so it is printed in
+the known limitations on every validation statement and sign-off.
 
 **Sources.** Full references are in
 [calibration-research.md § References](./calibration-research.md#references).
@@ -3923,7 +3926,9 @@ how an event is found in daily flow (engine 1.9.0: at least half the
 duration at or above half the peak, above) and whether the level should
 sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
-this is signed off.
+this is signed off; each is a row of the engine audit (A5–A7,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so the known
+limitations list it.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 

@@ -3664,8 +3664,13 @@ Left, from the design and the persona review (§11), each with its trigger.
       requirement shrinks with the flow), with the share expected by
       construction when the percentile is from the run. The scaling rule
       itself stays pending the hydrologist (model.md §2.9c).
-- [ ] **The Reserve method's open choices are not in the known-limitations
-      list.** model.md §2.9c lists them as pending the hydrologist (the
+- [x] **The Reserve method's open choices are not in the known-limitations
+      list.** Done 2026-09-29: engine-audit rows A1–A7 (below the driest
+      point, interpolation, the percentile's source and the ±15 % MAR
+      tolerance, the charge source, low flows on base flow, finding a
+      high-flow event, capping and counting events), each pending the
+      hydrologist, regenerated with `pnpm gen:liability`; plan.md question 17
+      and engine-audit's open question 12 carry them. Was: model.md §2.9c lists them as pending the hydrologist (the
       requirement below the driest point scaled or held, linear or log
       interpolation, the percentile from the run or the table, the charge
       source), and the evidence report's G16 flag says so, but
