@@ -5835,10 +5835,18 @@ settings snapshot. A run resumed from a snapshot (§2.16) whose capture run
 stored the column stores it too, computed for its own days, so the two keep
 the same columns (and an input without the flow record, an outlook member's,
 stores none, never a column of zeros). Its codes equal the uninterrupted
-run's only when the resumed input carries the record's history: the suspect
-class reads the whole stored record (its outlier limit and flat stretches),
-as the gap fill does; every resume in the app either carries it or has no
-flow record. The run's self-checks hold it to its record
+run's to the bit when the resumed input carries the record's history. The
+suspect class reads the whole stored record (its outlier limit and flat
+stretches), so the engine enforces the rest: the snapshot records whether
+the scored record had readings before its day (`flowRecordHistory`), and a
+resumed input that carries the record without them leaves the suspect class
+out (`recordFlowFlags`' `suspect: false`: those days take their rating class)
+and warns "Resumed from … without the observed flow record's history: its
+quality flags leave out the suspect class …". The gauged-range, infilled and
+missing classes need no history and still match. A record that starts after
+the snapshot's day has no history to miss. (The gap fill, which interpolates
+across the snapshot's day, reads the history too; its columns are not
+guarded this way.) The run's self-checks hold it to its record
 (`checkFlowQuality`, part of `checkBalance`, §6 Verification). The same
 change fixed the self-check failing every run with a gap-filled record: the
 filled values (`observed_flow_filled`, NaN on the days not filled) were

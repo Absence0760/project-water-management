@@ -23,7 +23,7 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, hasReadingBefore, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -419,17 +419,30 @@ function runNetwork(
 	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18, ./calibrate/dayFlags.ts): the classes the fit
 	// reads, beside the scored `observed_flow` (the outlet's or the calibration site's), only when a day is flagged.
 	// A run resumed from a snapshot whose capture run stored them stores them too, so the two have the same columns.
+	// A resumed run whose input leaves out the record's history (the capture's record had readings before the
+	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
+	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
 	let outletFlowFlags: Uint8Array | null = null;
+	let flowRecordHistory = false;
 	if (calKind) {
 		const siteId = calSite?.nodeId ?? null;
+		const record = series[calibrationSeriesKey(calKind, siteId)];
+		if (captureAt !== undefined) flowRecordHistory = hasReadingBefore(record, start + captureAt);
+		const noHistory = !!resume?.flowRecordHistory && !hasReadingBefore(record, start);
+		if (noHistory) {
+			warnings.push(
+				`Resumed from ${startDate} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
+			);
+		}
 		const flags = recordFlowFlags({
 			kind: calKind,
-			series: series[calibrationSeriesKey(calKind, siteId)],
+			series: record,
 			start,
 			days,
 			settings,
 			siteNodeId: siteId,
-			flowFill
+			flowFill,
+			...(noHistory ? { suspect: false } : {})
 		});
 		const kept = resume?.columns.some((c) => c.key === FLOW_QUALITY_COLUMN.key && c.nodeId === siteId) ?? false;
 		if (kept || hasFlaggedDay(flags)) push(siteId, FLOW_QUALITY_COLUMN.key, FLOW_QUALITY_COLUMN.label, FLOW_QUALITY_COLUMN.unit, flags);
@@ -979,7 +992,8 @@ function runNetwork(
 				fits: prepared.fits!
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
-			columns: []
+			columns: [],
+			...(flowRecordHistory ? { flowRecordHistory: true as const } : {})
 		};
 	}
 

@@ -166,6 +166,41 @@ describe('observed_flow_quality', () => {
 		expect(checkResume(inp, 100)).toBeNull();
 	});
 
+	it('a resumed run given the flow record without its history leaves the suspect class out and says so; with the history it matches', () => {
+		// A flat stretch across the snapshot's day (2020-10-01, run day 366): the full run calls its days suspect.
+		const values = record().values.slice();
+		for (let t = 340; t < 400; t++) values[t] = 1.1;
+		const inp = input({ qualityFlags: { ...defaultQualityFlags(), ratings: RATING } }, { flow_observed_m3s: { startDate: START, values } });
+		const at = toEpochDay('2020-10-01') - toEpochDay(START);
+		const { output, snapshot } = runModelCapturing(inp, '2020-10-01');
+		const full = col(output)!.values;
+		expect(full.slice(at, 400).every((c) => c === FLOW_FLAG_CODE.suspect)).toBe(true);
+		const stored = () => JSON.parse(JSON.stringify(snapshot));
+		// With the history: the uninterrupted run's codes, no warning.
+		const withHistory = runModelFrom(stored(), inp);
+		expect(col(withHistory)!.values).toEqual(full.slice(at));
+		expect(withHistory.summary.warnings.some((w) => w.includes('quality flags leave out the suspect class'))).toBe(false);
+		// Without it (every series from the snapshot's day on): no suspect day, and a warning naming why.
+		const cut = (s: { startDate: string; values: (number | null)[] }) => ({ startDate: '2020-10-01', values: s.values.slice(at) });
+		const bare = runModelFrom(stored(), { ...inp, series: { rain_catchment_mm: cut(inp.series.rain_catchment_mm!), flow_observed_m3s: cut(inp.series.flow_observed_m3s!) } });
+		const codes = col(bare)!.values;
+		expect(codes.includes(FLOW_FLAG_CODE.suspect)).toBe(false);
+		expect(bare.summary.warnings).toContainEqual(expect.stringMatching(/^Resumed from 2020-10-01 without the observed flow record's history: its quality flags leave out the suspect class/));
+		// The rating classes don't need the history: those days match.
+		for (let t = 0; t < codes.length; t++) if (full[at + t] !== FLOW_FLAG_CODE.suspect) expect(codes[t], `day ${t}`).toBe(full[at + t]);
+		expect(checkFlowQuality({ ...inp, settings: { ...inp.settings, simulationStart: '2020-10-01' } }, bare)).toBeNull();
+	});
+
+	it('a record that starts after the snapshot’s day has no history to miss: no warning', () => {
+		const late = { startDate: '2020-11-01', values: record().values.slice(0, 300) };
+		const inp = input({ qualityFlags: { ...defaultQualityFlags(), ratings: RATING } }, { flow_observed_m3s: late });
+		const { snapshot } = runModelCapturing(inp, '2020-10-01');
+		const at = toEpochDay('2020-10-01') - toEpochDay(START);
+		const rain = inp.series.rain_catchment_mm!;
+		const bare = runModelFrom(JSON.parse(JSON.stringify(snapshot)), { ...inp, series: { rain_catchment_mm: { startDate: '2020-10-01', values: rain.values.slice(at) }, flow_observed_m3s: late } });
+		expect(bare.summary.warnings.some((w) => w.includes('quality flags leave out the suspect class'))).toBe(false);
+	});
+
 	it('a resumed run without the flow record (an outlook member’s input: rain and A-pan) has no column, not one of zeros', () => {
 		const inp = input({ qualityFlags: { ...defaultQualityFlags(), ratings: RATING } }, { flow_observed_m3s: record() });
 		const { output, snapshot } = runModelCapturing(inp, '2020-10-01');

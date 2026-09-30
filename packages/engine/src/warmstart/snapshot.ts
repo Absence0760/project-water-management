@@ -103,6 +103,12 @@ export interface ModelState {
 	 * column before each, so a resumed run has the same columns.
 	 */
 	columns: { nodeId: string | null; key: string; label: string; unit: string; after: { nodeId: string | null; key: string } | null }[];
+	/**
+	 * The scored flow record had readings before the snapshot's day (engine ≥ 1.48.0): its per-day quality flags'
+	 * suspect class reads the whole record, so a resumed input without that history can't reproduce them
+	 * (../run.ts leaves the class out and warns). Absent = no such history.
+	 */
+	flowRecordHistory?: true;
 }
 
 /**

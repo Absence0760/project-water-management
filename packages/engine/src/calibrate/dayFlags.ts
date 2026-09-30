@@ -83,6 +83,11 @@ export interface FlowFlagInput {
 	infilled?: ArrayLike<number> | null;
 	/** The project's data-check limits (settings.dataQuality): which days are outliers or flat stretches. Absent = the defaults. */
 	dataQuality?: DataQualitySettings;
+	/**
+	 * false: leave the suspect class out (no day is suspect). A resumed run whose input lacks the record's history
+	 * (../run.ts) can't judge it: outliers and flat stretches are read over the whole stored record. Default true.
+	 */
+	suspect?: boolean;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */
@@ -91,7 +96,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	const s = x.series;
 	if (!s) return out;
 	const offset = toEpochDay(s.startDate) - x.start;
-	const rows = x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
+	const rows = x.suspect === false ? null : x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
 	const from = Math.max(0, -offset);
@@ -102,7 +107,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
 		out[t] = x.infilled?.[t]
 			? FLOW_FLAG_CODE.infilled
-			: rows.outlier[i] || rows.flatline[i]
+			: rows && (rows.outlier[i] || rows.flatline[i])
 				? FLOW_FLAG_CODE.suspect
 				: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
@@ -135,6 +140,8 @@ export interface RecordFlowFlagInput {
 	siteNodeId: string | null;
 	/** The run's gap-filled records (PreparedRun.flowFill): only the outlet's records are filled. */
 	flowFill?: Partial<Record<string, { code: ArrayLike<number> }>> | null;
+	/** false: leave the suspect class out (FlowFlagInput.suspect). */
+	suspect?: boolean;
 }
 
 /**
@@ -152,8 +159,20 @@ export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 		days: x.days,
 		rating: ratingOf(q, x.kind),
 		infilled: x.siteNodeId === null ? observedInfillMask(x.flowFill?.[x.kind]) : null,
-		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {})
+		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {}),
+		...(x.suspect === false ? { suspect: false } : {})
 	});
+}
+
+/** A reading (a finite value ≥ 0, as flowDayFlags reads one) in `s` on an epoch day before `day`. */
+export function hasReadingBefore(s: DailySeries | undefined, day: number): boolean {
+	if (!s) return false;
+	const n = Math.min(s.values.length, day - toEpochDay(s.startDate));
+	for (let i = 0; i < n; i++) {
+		const v = s.values[i];
+		if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return true;
+	}
+	return false;
 }
 
 /** A day whose class is neither in the gauged range nor missing: what the run's quality column is stored for. */
