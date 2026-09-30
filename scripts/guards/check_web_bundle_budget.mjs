@@ -1333,6 +1333,10 @@
 //             chunk) became a shared chunk the report page loaded
 //             statically; it now uses $lib/format/months' identical helper.
 //             No new dependency. Headroom 0 KB: the next change is measured.
+// 2026-09-29  total 1226 → 1231 KB (issue #71: measured 1228 with main @
+//             b681786e merged; main grew ~2 KB since the entry above, #206's
+//             CHIRPS final-day marker and #212's Summary readiness signal).
+//             Nothing of the evidence report changed. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1343,7 +1347,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1226,
+	totalCodeKb: 1231,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
