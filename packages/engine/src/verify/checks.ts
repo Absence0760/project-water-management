@@ -18,7 +18,7 @@ import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
-import { isRiverOfftake, offtakeOf } from '../network/offtake';
+import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
@@ -249,6 +249,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		// River off-takes (engine ≥ 1.14.0): delivered in, taken out of the flow leaving the unit.
 		const XIN = get.get(`${n.id}|offtake_in`);
 		const XOUT = get.get(`${n.id}|offtake_out`);
+		// Their conveyance losses seeping back to the river below this unit (engine ≥ 1.42.0), part of its outflow.
+		const XRET = get.get(`${n.id}|offtake_loss_return`);
 		for (let t = 0; t < out.days; t++) {
 			if (SET) {
 				qPrev += SET[t]!;
@@ -256,14 +258,15 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			}
 			const xin = XIN?.[t] ?? 0;
 			const xout = XOUT?.[t] ?? 0;
-			if (xin < 0 || xout < 0) return `${n.id} day ${t}: river off-take in ${xin} / out ${xout} must be ≥ 0`;
+			const xret = XRET?.[t] ?? 0;
+			if (xin < 0 || xout < 0 || xret < 0) return `${n.id} day ${t}: river off-take in ${xin} / out ${xout} / seepage returned ${xret} must be ≥ 0`;
 			const T = unitReturn(G![t]!, returnPerSupplied, objs, t);
 			const pd = Pd?.[t] ?? 0;
 			const ev = Ev?.[t] ?? 0;
 			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
 			const dep = DEP?.[t] ?? 0;
 			const spl = SPL?.[t] ?? 0;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin;
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret;
 			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
@@ -287,7 +290,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const AB = ABs![t]!;
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
-			totIn += I![t]! + pd + gw + xin;
+			totIn += I![t]! + pd + gw + xin + xret;
 			totOut += G![t]! - T + ev + dep + spl + xout;
 			qPrev = Q![t]!;
 		}
@@ -657,6 +660,10 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   when asked), so never more than the river there; the outflow is what was
  *   left, reduced by exactly Σ v;
  * - at the destination, Σ v × (1 − loss) = offtake_in;
+ * - at the farm each rule's seepage rejoins (engine ≥ 1.42.0: the source or
+ *   a farm below it), Σ v × loss × its return share = offtake_loss_return,
+ *   which joins the outflow after the farm's own off-takes (so the flow the
+ *   source's rules saw is outflow − offtake_loss_return + Σ v);
  * - no water left in the river it could have taken: when every rule from a
  *   source is sized to capacity, Σ v ≥ MIN(Σ capacities, flow − the most any
  *   rule must leave).
@@ -668,6 +675,11 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 		.filter((tr) => tr.enabled && isRiverOfftake(tr) && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
 		.map((tr) => ({ tr, o: offtakeOf(tr, 0, 0, '', '', warnings), volume: get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`) }));
 	if (!rules.length) return null;
+	// Where each rule's returned seepage rejoins (engine ≥ 1.42.0), as planOfftakes resolves it; −1 = none returns.
+	const index = new Map(input.model.nodes.map((n, i) => [n.id, i]));
+	const returnAt = rules.map((r) => (r.o.lossReturn > 0 ? (offtakeReturnAt(r.tr, index.get(r.tr.fromNodeId)!, input.model.nodes, index) ?? -1) : -1));
+	const returnUnits = new Set(input.model.nodes.filter((n) => get.has(`${n.id}|offtake_loss_return`)).map((n) => n.id));
+	for (const [k, at] of returnAt.entries()) if (at >= 0 && rules[k]!.volume && !returnUnits.has(input.model.nodes[at]!.id)) return `river off-take ${rules[k]!.tr.id}: no offtake_loss_return series on ${input.model.nodes[at]!.id}, where its seepage rejoins`;
 	const d0 = toEpochDay(out.startDate);
 	const sources = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.fromNodeId))];
 	const dests = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.toNodeId))];
@@ -677,7 +689,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 		const month = monthOfEpochDay(d0 + t);
 		for (const src of sources) {
 			const mine = rules.filter((r) => r.volume && r.tr.fromNodeId === src);
-			const U = get.get(`${src}|outflow`)![t]!;
+			// The flow left after the off-takes: the outflow without the seepage rejoining below the source (engine ≥ 1.42.0).
+			const U = get.get(`${src}|outflow`)![t]! - (get.get(`${src}|offtake_loss_return`)?.[t] ?? 0);
 			const taken = get.get(`${src}|offtake_out`)?.[t];
 			const Zs = get.get(`${src}|senior_requirement`)?.[t] ?? 0;
 			const Z = get.get(`${src}|ewr_cumulative`)![t]!;
@@ -707,6 +720,12 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			for (const r of rules) if (r.volume && r.tr.toNodeId === dst) got += r.volume[t]! * (1 - r.o.loss);
 			const xin = get.get(`${dst}|offtake_in`)?.[t];
 			if (xin === undefined || Math.abs(xin - got) > tol(got)) return `${dst} day ${t}: offtake_in ${xin} ≠ what its river off-takes delivered, ${got}`;
+		}
+		for (const unit of returnUnits) {
+			let back = 0;
+			for (const [k, r] of rules.entries()) if (r.volume && returnAt[k]! >= 0 && input.model.nodes[returnAt[k]!]!.id === unit) back += r.volume[t]! * r.o.loss * r.o.lossReturn;
+			const xret = get.get(`${unit}|offtake_loss_return`)![t]!;
+			if (Math.abs(xret - back) > tol(back)) return `${unit} day ${t}: offtake_loss_return ${xret} ≠ the river off-takes' losses seeping back there, ${back}`;
 		}
 	}
 	return null;
@@ -1102,6 +1121,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const XUSED = g('offtake_used');
 		const XDAM = g('offtake_to_dam');
 		const XOUT = g('offtake_out');
+		// Conveyance losses seeping back below this unit (engine ≥ 1.42.0): they join the outflow.
+		const XRET = g('offtake_loss_return');
 		if (!!XIN !== !!XUSED || !!XIN !== !!XDAM) return `${n.id}: river off-take working columns (offtake_used, offtake_to_dam) ${XIN ? 'missing' : 'without an off-take in'}`;
 		const topUps = XIN ? offtakeInto(input, n.id, get) : null;
 		if (typeof topUps === 'string') return topUps;
@@ -1173,6 +1194,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const xused = XUSED?.[t] ?? 0;
 			const xdam = XDAM?.[t] ?? 0;
 			const xout = XOUT?.[t] ?? 0;
+			const xret = XRET?.[t] ?? 0;
 			if (XIN) {
 				let delivered = 0;
 				let toppers = 0;
@@ -1262,10 +1284,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				return objs ? `${where}: return flow ${tt} ≠ β·(1 − e) × the crops' part of G + Σ each demand object's return share × its part` : `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			const spl = SPL?.[t] ?? 0;
 			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
-			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x + xpass - dep - xout, Math.max(r, ss, tt, sp, x, xin, xout)))
-				return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${XIN ? ' + off-take water passed on' : ''}${bore ? ' − stream depletion' : ''}${XOUT ? ' − taken by river off-takes' : ''}`;
-			const vv = h + i + j + pd + gw + gd + xin - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
-			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd, xin, xout);
+			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x + xpass - dep - xout + xret, Math.max(r, ss, tt, sp, x, xin, xout, xret)))
+				return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${XIN ? ' + off-take water passed on' : ''}${bore ? ' − stream depletion' : ''}${XOUT ? ' − taken by river off-takes' : ''}${XRET ? ' + off-take losses seeping back' : ''}`;
+			const vv = h + i + j + pd + gw + gd + xin + xret - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
+			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd, xin, xout, xret);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
 		}
@@ -1637,6 +1659,16 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		if (err) return err;
 	}
 	const byRule = input.settings.ewrChargeSource === 'ruleTable';
+	// River off-takes' seepage returning to the river (engine ≥ 1.42.0): each rule's daily return and the farm it joins.
+	const nodeIndex = new Map(nodes.map((n, i) => [n.id, i]));
+	const returnLegs = ruleVol
+		? rules.flatMap((r, k) => {
+				if (!isRiverOfftake(r)) return [];
+				const o = offtakeOf(r, 0, 0, '', '', []);
+				const at = o.lossReturn > 0 ? offtakeReturnAt(r, nodeIndex.get(r.fromNodeId)!, nodes, nodeIndex) : undefined;
+				return at === undefined ? [] : [{ source: r.fromNodeId, destination: r.toNodeId, at: nodes[at]!.id, volume: Float64Array.from(ruleVol[k]!, (v) => v * o.loss * o.lossReturn) }];
+			})
+		: [];
 	const siteInfo = sites.map((s, si) => {
 		const up = ancestors(s.id);
 		const key = si === 0 ? 'null' : s.id;
@@ -1649,7 +1681,13 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			farms: farms.filter((f) => up.has(f.id)),
 			exact: !crossed || !!ruleVol,
 			// The rules with both ends upstream, when the per-rule volumes say what each moved (J_int); null = the farms' own J.
-			internal: crossed && ruleVol ? rules.flatMap((r, k) => (up.has(r.fromNodeId) && up.has(r.toNodeId) ? [{ from: r.fromNodeId, to: r.toNodeId, volume: ruleVol[k]! }] : [])) : null,
+			// A return rejoining upstream of the site moves into its farm from the destination (from the source when the destination is outside).
+			internal: crossed && ruleVol
+				? [
+						...rules.flatMap((r, k) => (up.has(r.fromNodeId) && up.has(r.toNodeId) ? [{ from: r.fromNodeId, to: r.toNodeId, volume: ruleVol[k]! as ArrayLike<number> }] : [])),
+						...returnLegs.flatMap((x) => (up.has(x.at) ? [{ from: up.has(x.destination) ? x.destination : x.source, to: x.at, volume: x.volume }] : []))
+					]
+				: null,
 			// The shortfall the charge follows (engine ≥ 1.3.0): the rule table's where it drives the charge.
 			D: get.get(`${key}|ewr_charge_shortfall`) ?? get.get(`${key}|ewr_shortfall`)!,
 			charged: get.get(`${key}|ewr_charged`),

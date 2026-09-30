@@ -123,6 +123,33 @@ describe('attributeEwrShortfall — Q17 net-impact pro rata at EWR sites', () =>
 		expect(out.sites[0]!.natural[0]).toBe(-40);
 	});
 
+	it('credits a river off-take’s returned seepage where its losses were charged (engine 1.42.0)', () => {
+		// S takes 100 by a canal to D (loss 25 %, 40 % of it seeping back below L, 10 a day); D uses 60 and passes 15.
+		// S → L → gauge g → outlet o; D → o. As a transfer, the off-take charges D its 25 losses; the 10 back joins L's outflow.
+		const input = build({
+			kind: ['farm', 'farm', 'farm', 'gauge', 'gauge'],
+			down: [1, 3, 4, 4, -1],
+			H: [[0], [900], [0], [910], [925]],
+			I: [[1000], [0], [0], [0], [0]],
+			U: [[900], [910], [15], [910], [925]],
+			transfers: [{ from: 0, to: 2, volume: [100] }],
+			sites: [
+				[4, [-1000]],
+				[3, [-1000]]
+			]
+		});
+		const back = { source: 0, destination: 2, at: 1, volume: [10] };
+		const withBack = attributeEwrShortfall({ ...input, returns: [back] }, { perSite: true }).perSite!;
+		const without = attributeEwrShortfall(input, { perSite: true }).perSite!;
+		// Outlet: D is inside, so the 10 moves from D to L: e_D = 100 − 10 − 15 = 75 (its 60 used and 15 lost), e_L = 0.
+		expect(r9([withBack[0]![0]![0]!, withBack[0]![1]![0]!, withBack[0]![2]![0]!])).toEqual([0, 0, -75]);
+		// Without the leg D is charged the full 25 lost (85) although 10 came back.
+		expect(r9([without[0]![2]![0]!])).toEqual([-85]);
+		// Gauge g: D is outside, so S exported 100 of which 10 came back: e_S = 1000 − 10 − 900 = 90, e_L = 0.
+		expect(r9([withBack[1]![0]![0]!, withBack[1]![1]![0]!])).toEqual([-90, 0]);
+		expect(r9([without[1]![0]![0]!])).toEqual([-100]);
+	});
+
 	it('charges a transfer out of a site’s catchment to its source, and credits the import to the receiver', () => {
 		// A (above gauge g) sends 30 to C (below g, above the outlet). At g, A's
 		// transfer is an export: e_A,g = I 50 + J_int 0 − U 20 = 30 (the transfer

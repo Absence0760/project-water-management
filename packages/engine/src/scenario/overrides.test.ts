@@ -1070,6 +1070,25 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(applyScenario(b, [{ op: 'node.move', nodeId: 'C', downstreamNodeId: 'B' }]).problems[0]).toMatch(/^op 1 \(node\.move\): river off-take "Farm B" → "Farm C": its destination drains into its source/);
 	});
 
+	it('sets where an off-take’s canal seepage rejoins (engine 1.42.0): below the source or a farm below it, and a removed unit returns none', () => {
+		const b = base();
+		b.model.transfers = [{ id: 'r1', fromNodeId: 'C', toNodeId: 'B', months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', lossPct: 0.2 }];
+		const ok = applyScenario(b, [
+			{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnPct', value: 0.5 },
+			{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'A' }
+		]);
+		expect(ok.problems).toEqual([]);
+		expect(ok.input.model.transfers[0]).toMatchObject({ lossReturnPct: 0.5, lossReturnNodeId: 'A' });
+		// B is not below C on the river: skipped, with the rule as its problem.
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a farm downstream of it/);
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'Z' }]).problems[0]).toMatch(/node Z not found/);
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnPct', value: 1.5 }]).problems[0]).toMatch(/lossReturnPct/);
+		const gone = applyScenario(ok.input, [{ op: 'node.remove', nodeId: 'A' }]);
+		expect(gone.problems).toEqual([]);
+		expect(gone.input.model.transfers[0]).toMatchObject({ lossReturnPct: 0, lossReturnNodeId: null });
+		expect(gone.applied[0]!.notes.join()).toMatch(/seepage no longer returns to the river \(it rejoined below "Farm A"\)/);
+	});
+
 	it('node.insert puts a new node on a reach: the named nodes drain into it, it drains where they did', () => {
 		const weir = node('W', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 });
 		const b = deepFreeze(base());

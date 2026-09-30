@@ -3283,13 +3283,16 @@ from the WP:
       plan.md question 20. Durable fix: the client's numbers in the private
       per-workbook settings, and the sensitivity note in the private repo
       updated. Trigger: the answer to question 20.
-- [ ] **Canal seepage back to the river.** An off-take's conveyance losses
-      leave the catchment (model.md §2.6a), the conservative side for the
-      EWR. Some of a canal's seepage reaches the river lower down. Durable
-      fix: a return share of the losses and the unit it rejoins at, like a
-      dam's seepage return (WP-3.5), with the balance and the attribution
-      following. Trigger: a hydrologist wanting canal seepage credited, or a
-      measured loss split.
+- [x] **Canal seepage back to the river** (2026-09-30, engine 1.42.0,
+      migration 126). An off-take's `lossReturnPct` (default 0, so every
+      stored rule runs as before) returns that share of its conveyance losses
+      to the river the same day, below the source or below the farm
+      `lossReturnNodeId` downstream of it along the river (model.md §2.6a).
+      The balance, the water account (`conveyanceLossM3` net of it), the
+      self-checks, the EWR attribution (credited where the losses were
+      charged), the run comparison, the scenario ops, the API, the model
+      checks and the Transfers tab follow; the run stores
+      `offtake_loss_return` on the return unit.
 - [x] **Calibrating at a gauge inside the network.** Done 2026-09-30,
       engine 1.41.0: `settings.calibrationSiteNodeId` (null = the outlet,
       the default, so nothing changes for a project that never sets it).

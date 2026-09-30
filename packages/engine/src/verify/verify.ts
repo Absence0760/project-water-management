@@ -152,6 +152,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	// River off-takes (engine ≥ 1.14.0): what they took less what arrived is lost on the way (conveyance losses).
 	const hasOfftakes = farms.some((n) => series.has(`${n.id}|offtake_out`));
 	const [fOtOut, fOtIn] = hasOfftakes ? (['offtake_out', 'offtake_in'].map(totals) as Float64Array[]) : [null, null];
+	// The share of them that seeps back to the river (engine ≥ 1.42.0) is in the outflow, not lost.
+	const fOtRet = farms.some((n) => series.has(`${n.id}|offtake_loss_return`)) ? totals('offtake_loss_return') : null;
 	// A dam whose capacity changes (engine ≥ 1.30.0) starts at its share of the first day's capacity.
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3 * (capacityScaleOf(n, toEpochDay(out.startDate), out.days, [])?.[0] ?? 1), 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
@@ -183,7 +185,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.seepLost += fSeepLost![t]!;
 			r.release += fRelease![t]!;
 			if (fSet) r.set += fSet[t]!;
-			if (fOtOut) r.conveyance += fOtOut[t]! - fOtIn![t]!;
+			if (fOtOut) r.conveyance += fOtRet ? fOtOut[t]! - fOtIn![t]! - fOtRet[t]! : fOtOut[t]! - fOtIn![t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;

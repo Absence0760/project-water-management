@@ -583,9 +583,9 @@ export const TIPS: HelpTipText[] = [
 		id: 'transfer-offtake',
 		term: 'River off-take',
 		short: 'A transfer that takes from the river leaving its source hydrological unit, not from a dam: a canal or pipe fed from a weir.',
-		units: 'hands-off m³/day; losses %',
+		units: 'hands-off m³/day; losses %; share of the losses seeping back %',
 		category: 'transfers',
-		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam']
+		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam', 'transfer.lossReturnPct', 'transfer.lossReturnNodeId']
 	},
 	{
 		id: 'transfer-min-storage',

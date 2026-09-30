@@ -288,7 +288,9 @@ export const TRANSFER_SET_FIELDS = [
 	'handsOffEwr',
 	'lossPct',
 	'sizing',
-	'topUpDam'
+	'topUpDam',
+	'lossReturnPct',
+	'lossReturnNodeId'
 ] as const;
 export type TransferSetField = (typeof TRANSFER_SET_FIELDS)[number];
 
@@ -309,11 +311,14 @@ const TRANSFER_FIELD_CHECKS: Record<TransferSetField, Check> = {
 	handsOffEwr: boolean,
 	lossPct: (v) => (isNum(v) && v >= 0 && v < 1 ? null : 'must be at least 0 and below 1'),
 	sizing: oneOf(TRANSFER_SIZINGS),
-	topUpDam: boolean
+	topUpDam: boolean,
+	// Engine ≥ 1.42.0: the share of the conveyance losses seeping back to the river, and the unit it rejoins below (null = the source).
+	lossReturnPct: frac,
+	lossReturnNodeId: nullable(id)
 };
 
-/** The transfer fields a new transfer may leave out (engine ≥ 1.14.0 additions). */
-export const TRANSFER_OPTIONAL = new Set<string>(['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam']);
+/** The transfer fields a new transfer may leave out (engine ≥ 1.14.0 and 1.42.0 additions). */
+export const TRANSFER_OPTIONAL = new Set<string>(['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam', 'lossReturnPct', 'lossReturnNodeId']);
 
 const TRANSFER_FIELD_CHECK = checksOf(TRANSFER_FIELD_CHECKS);
 

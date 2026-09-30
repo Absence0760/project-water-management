@@ -150,6 +150,8 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		// River off-takes (engine 1.14.0): only on a unit an off-take draws on or reaches.
 		offtake_out: 0,
 		offtake_in: 0,
+		// Canal seepage back to the river (engine 1.42.0): only below an off-take that returns some.
+		offtake_loss_return: 0,
 		offtake_used: 0,
 		offtake_to_dam: 0,
 		// Registered volumes (engine 1.18.0): a cap's room per source, a full allocation's demand factor; none here.
