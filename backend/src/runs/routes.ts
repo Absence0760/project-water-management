@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { damCapacityOn, fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -247,7 +247,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				previousStorageM3,
 				previousSoilWaterMm,
 				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
-				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.crops ?? [], r.crop_areas ?? [], r.apan_mm),
+				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});
 		});
@@ -426,9 +426,19 @@ const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]):
  * The day trace's parameters. `irrigationEfficiency` is the one the run used
  * (D = F ÷ e): a farm whose crops carry their own (engine ≥ 0.43.0) runs on
  * them combined (engine demand.ts modelFarmEfficiency), else its own.
+ * `divertCapacityM3Day` is the day's: a farm with River to dam by month
+ * (engine ≥ 1.31.0) ran on that month's value.
  */
-function dayParams(n: NetworkNode, crops: readonly CropDef[], cropAreas: readonly CropArea[], apanMm: unknown): Record<(typeof DAY_PARAMS)[number], unknown> {
+function dayParams(
+	n: NetworkNode,
+	crops: readonly CropDef[],
+	cropAreas: readonly CropArea[],
+	apanMm: unknown,
+	date: string
+): Record<(typeof DAY_PARAMS)[number], unknown> {
 	const p = pick(n as unknown as Record<string, unknown>, DAY_PARAMS);
+	if (n.kind === 'farm' && Array.isArray(n.divertMonthlyM3Day) && n.divertMonthlyM3Day.length === 12)
+		p.divertCapacityM3Day = n.divertMonthlyM3Day[waterYearIndex(Number(date.slice(5, 7)))] ?? null;
 	if (n.kind === 'farm' && typeof n.irrigationEfficiency === 'number' && n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1) {
 		p.irrigationEfficiency = modelFarmEfficiency(n.irrigationEfficiency, n.id, crops, cropAreas, Array.isArray(apanMm) ? apanMm : []);
 	}

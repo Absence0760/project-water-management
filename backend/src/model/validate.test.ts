@@ -130,6 +130,37 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
 	});
 
+	it('hands-off flow and River to dam by month (engine 1.31.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id, { damCapacityM3: 20_000 });
+		const parse = (over: object, on: object = farm) => ModelBody.safeParse({ nodes: [out, { ...on, ...over }], crops: [], cropAreas: [], transfers: [] });
+		expect(ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] }).nodes[1]).toMatchObject({ handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
+		const set = { handsOffM3Day: [0, 0, 0, 120, 120, 120, 120, 0, 0, 0, 0, 0.5], handsOffEwr: true, divertMonthlyM3Day: [900, 900, 900, 900, 900, 900, 0, 0, 0, 0, 0, 0] };
+		const ok = parse(set);
+		expect(ok.success).toBe(true);
+		expect(ok.data!.nodes[1]).toMatchObject(set);
+		expect(modelProblems(model([out, { ...farm, ...set } as never]))).toEqual([]);
+		expect(parse({ handsOffM3Day: null, divertMonthlyM3Day: null }).success).toBe(true);
+		const eleven = Array(11).fill(1);
+		for (const bad of [
+			{ handsOffM3Day: eleven },
+			{ handsOffM3Day: [...eleven, 1, 1] },
+			{ handsOffM3Day: [...eleven, -1] },
+			{ handsOffM3Day: [...eleven, Infinity] },
+			{ handsOffM3Day: [...eleven, '1'] },
+			{ handsOffEwr: 'yes' },
+			{ divertMonthlyM3Day: eleven },
+			{ divertMonthlyM3Day: [...eleven, -0.1] },
+			{ divertMonthlyM3Day: [...eleven, Number.NaN] }
+		])
+			expect(parse(bad).success, JSON.stringify(bad)).toBe(false);
+		// Farms only is a model rule.
+		for (const over of [{ handsOffM3Day: Array(12).fill(10) }, { handsOffEwr: true }, { divertMonthlyM3Day: Array(12).fill(10) }]) {
+			const gauge = node('Gauge', null, over);
+			expect(modelProblems(model([gauge, node('B', gauge.id)])).join(), JSON.stringify(over)).toMatch(/"Gauge": only a farm has a hands-off flow/);
+		}
+	});
+
 	it('monthly transfer rates (engine 1.14.0): default null, twelve rates ≥ 0, months and max rate kept in step', () => {
 		const out = node('Gauge', null);
 		const a = node('A', out.id, { damCapacityM3: 1000 });

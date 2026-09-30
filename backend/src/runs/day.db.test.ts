@@ -112,6 +112,25 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		}
 	});
 
+	it("gives River to dam by month's value for the day's month as divertCapacityM3Day (issue #204)", async () => {
+		// Water-year order Oct–Sep: January is index 3.
+		const byMonth = [50, 50, 50, 20, 50, 50, 50, 50, 50, 50, 50, 50];
+		const monthly = { ...farm, divertMonthlyM3Day: byMonth, handsOffM3Day: Array(12).fill(5), handsOffEwr: true };
+		const model = { nodes: [outlet, monthly], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		try {
+			const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'River to dam by month' });
+			expect(run.status).toBe(201);
+			const res = await owner.call('GET', `/projects/${projectId}/runs/${run.body.run.id}/day?${new URLSearchParams({ date: '2020-01-06', nodeId: farm.id })}`);
+			expect(res.status).toBe(200);
+			expect(res.body.params.divertCapacityM3Day).toBe(20);
+		} finally {
+			// Positive control: the one value again once the months are gone.
+			expect((await owner.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, farm] })).status).toBe(200);
+			expect((await day(owner, '2020-01-06')).body.params.divertCapacityM3Day).toBe(50);
+		}
+	});
+
 	it('returns the soil-water store the day started from, so the carried-over rain can be redone (N3)', async () => {
 		// 10 mm on the 6th: 10 000 m² × 0.65 × 10 / 1000 = 65 m³, more than the day's gross demand; the rest is kept.
 		const res = await day(viewer, '2020-01-07');
