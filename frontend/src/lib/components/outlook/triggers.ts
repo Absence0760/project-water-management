@@ -5,7 +5,7 @@
 // holds, as a rule by storage band for that day of the year) and each row's
 // sentence its describeTriggerRow; this module only formats them. It counts
 // years; it never picks a level.
-import { describeTriggerRow } from '@water-management/engine';
+import { describeDroughtRestriction, describeTriggerRow, restrictionRuleFromTriggers, type DroughtRestrictionRule } from '@water-management/engine';
 import type { Outlook, OutlookTriggerTable } from '$lib/api/types';
 import { fmtDay, fmtNum } from '$lib/format/number';
 import { waterYearLabel } from './view';
@@ -81,4 +81,18 @@ export function buildTriggersView(outlook: Pick<Outlook, 'triggers'>): TriggersV
 		failures: t.failures.map((f) => `${f.label}, ${waterYearLabel(f.waterYear)}, from ${m3(f.bandFromM3)}: ${f.message}`),
 		monotone: table.monotone
 	};
+}
+
+/**
+ * An outlook's trigger table as the drought restriction rule (engine ≥
+ * 1.46.0, WP-3.8, docs/model.md §2.15a, §2.7i): the engine's
+ * restrictionRuleFromTriggers over the outlook's own levels, in words, with
+ * what it couldn't carry. null without a table, or when no band's level cuts
+ * demand (then `notes` says so and there is nothing to save).
+ */
+export function triggerRuleView(outlook: Pick<Outlook, 'triggers' | 'levels'>): { rule: DroughtRestrictionRule | null; words: string | null; notes: string[] } | null {
+	const table = outlook.triggers?.table;
+	if (!table) return null;
+	const { rule, notes } = restrictionRuleFromTriggers(table, outlook.levels);
+	return { rule, words: rule ? grouped(describeDroughtRestriction(rule)) : null, notes };
 }

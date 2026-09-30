@@ -22,7 +22,9 @@
 	import { onDestroy, untrack } from 'svelte';
 	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE } from '@water-management/engine';
 	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type RunMeta } from '$lib/api';
-	import { buildTriggersView } from './triggers';
+	import { buildTriggersView, triggerRuleView } from './triggers';
+	import type { DroughtRestrictionRule } from '@water-management/engine';
+	import type { Project } from '$lib/api';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
@@ -43,7 +45,9 @@
 		projectId,
 		run,
 		outlook: outlookSettings,
-		canEdit
+		canEdit,
+		droughtRestriction = null,
+		onProjectChange
 	}: {
 		projectId: string;
 		/** The shown run: the outlook's base. */
@@ -51,6 +55,10 @@
 		/** settings.outlook (the season and the planning share); an older API sends none. */
 		outlook: OutlookSettings | undefined;
 		canEdit: boolean;
+		/** settings.droughtRestriction (engine ≥ 1.46.0): the rule the triggers would replace; null = none. */
+		droughtRestriction?: DroughtRestrictionRule | null;
+		/** Saving the triggers as the drought restriction rule changed the project's settings: the page takes the new project. */
+		onProjectChange?: (p: Project) => void;
 	} = $props();
 
 	const settings = $derived(resolveOutlook({ outlook: outlookSettings }));
@@ -85,6 +93,26 @@
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 	const triggers = $derived(outlook && shown?.kind === 'complete' ? buildTriggersView(outlook) : null);
+	// The trigger table as the drought restriction rule (engine ≥ 1.46.0, WP-3.8): an editor saves it to Settings.
+	const triggerRule = $derived(outlook && shown?.kind === 'complete' ? triggerRuleView(outlook) : null);
+	let ruleSaving = $state(false);
+	let ruleSaved = $state(false);
+	let ruleError = $state<string | null>(null);
+	async function useTriggersAsRule() {
+		if (!triggerRule?.rule) return;
+		ruleSaving = true;
+		ruleError = null;
+		ruleSaved = false;
+		try {
+			const p = await api.projects.update(projectId, { settings: { droughtRestriction: triggerRule.rule }, reason: 'Drought restrictions from the seasonal outlook’s review triggers' });
+			onProjectChange?.(p);
+			ruleSaved = true;
+		} catch (err) {
+			ruleError = msg(err);
+		} finally {
+			ruleSaving = false;
+		}
+	}
 
 	// Publishing to farmers (R5, E3): the project's current publication, and the level an editor picks.
 	let publication = $state<OutlookPublication | null>(null);
@@ -354,7 +382,29 @@
 								{#each [...triggers.warnings, ...triggers.failures] as w (w)}<li>{w}</li>{/each}
 							</ul>
 						{/if}
-						<p class="hint">These count past years from each storage; they are not a rule the app applies. The WUA decides what to do on the review date.</p>
+						<p class="hint">
+							These count past years from each storage. The WUA decides what to do on the review date; it can also make the table the model’s
+							drought restriction rule, so runs follow it.
+						</p>
+						{#if triggerRule}
+							<div class="as-rule" data-testid="triggers-as-rule">
+								{#if triggerRule.words}
+									<p class="small">As a drought restriction rule (Settings → Drought restrictions): <span data-testid="triggers-rule-words">{triggerRule.words}</span>.</p>
+								{/if}
+								{#if triggerRule.notes.length}
+									<ul class="warnings" data-testid="triggers-rule-notes">
+										{#each triggerRule.notes as n (n)}<li>{n}</li>{/each}
+									</ul>
+								{/if}
+								{#if triggerRule.rule && canEdit && onProjectChange}
+									<button type="button" disabled={ruleSaving} onclick={useTriggersAsRule} data-testid="triggers-use-rule">
+										{droughtRestriction ? 'Replace the drought restriction rule with this' : 'Use as the drought restriction rule'}
+									</button>
+									{#if ruleSaved}<p class="small" role="status" data-testid="triggers-rule-saved">Saved to Settings → Drought restrictions. Runs from now on follow it.</p>{/if}
+									{#if ruleError}<p class="err" role="alert">{ruleError}</p>{/if}
+								{/if}
+							</div>
+						{/if}
 					{/if}
 				</div>
 			{/if}

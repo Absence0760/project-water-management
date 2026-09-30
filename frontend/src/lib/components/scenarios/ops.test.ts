@@ -69,6 +69,13 @@ describe('describeOp', () => {
 	const b = base();
 	const d = (op: ScenarioOp, input: ModelInput | null = b) => describeOp(op, input, namesOf([b.model], [op]));
 
+	it('says what a drought restriction op changes: off when the base has none (engine 1.46.0)', () => {
+		const rule = { reviewDates: ['10-05'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
+		expect(d({ op: 'settings.set', path: 'droughtRestriction', value: rule })).toBe('Drought restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %');
+		const withRule = { ...b, settings: { ...b.settings, droughtRestriction: rule } } as ModelInput;
+		expect(d({ op: 'settings.set', path: 'droughtRestriction', value: null }, withRule)).toBe('Drought restriction rule: reviewed 5 Oct; Level 1 (below 70 %): crops 50 % → off');
+	});
+
 	it('says what each op changes, with the value it replaces', () => {
 		expect(d(raise)).toBe('Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³');
 		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.75 })).toBe('Lower farm: Irrigation efficiency 90 % → 75 %');
@@ -200,6 +207,17 @@ describe('buildOp', () => {
 		expect(ok('pumpCapacityM3Day', '-1')).toEqual({ ok: false, error: 'Must be at least 0' });
 		expect(ok('supplyRule', '')).toEqual({ ok: false, error: 'Supply rule: pick one' });
 		expect(draftSpec({ kind: 'node.set', field: 'supplyRule' })).toMatchObject({ t: 'enum' });
+	});
+
+	it('builds the drought restriction rule whole from the editor’s copy, off as null, and says what is wrong first (engine 1.46.0)', () => {
+		const rule = { reviewDates: ['01-01'], levels: [{ belowPct: 0.5, cuts: { crops: 0.4 } }] };
+		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: rule }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'droughtRestriction', value: rule } });
+		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: null }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'droughtRestriction', value: null } });
+		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: { ...rule, reviewDates: [] } }), m)).toEqual({
+			ok: false,
+			error: 'Drought restriction rule: review dates: needs at least one review date'
+		});
+		expect(draftSpec({ kind: 'settings.set', field: 'droughtRestriction' })).toEqual({ t: 'restriction' });
 	});
 
 	it('says what is wrong with a PE input before anything is saved', () => {

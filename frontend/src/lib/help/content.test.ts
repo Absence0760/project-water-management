@@ -94,6 +94,8 @@ const RUN_KEYS = [
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)
 	'river_abstraction',
+	// The drought restriction rule (engine 1.46.0, WP-3.8)
+	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',
 	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
@@ -112,7 +114,7 @@ const PREVIEW_KEYS = [
 
 const settings = defaultProjectSettings();
 // Settings with no default (absent until someone sets them): typed, so each is a real field.
-const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule'];
+const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction'];
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
 	crop: new Set(Object.keys(CROP)),

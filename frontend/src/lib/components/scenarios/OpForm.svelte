@@ -42,6 +42,8 @@
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
 	// ewrRule.set (engine ≥ 1.6.0): the outlet and every gauge still marked as an EWR site; the table itself is the Settings tab's editor.
 	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
+	// settings.set droughtRestriction (engine ≥ 1.46.0, WP-3.8): the rule, in the Settings tab's own editor.
+	const loadRestrictionEditor = () => import('$lib/components/settings/DroughtRestrictionFields.svelte');
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
@@ -95,6 +97,8 @@
 		d.value = s ? valueText(s, current) : '';
 		d.months = s?.t === 'months' && Array.isArray(current) ? [...(current as number[])] : [];
 		if (s?.t === 'pe') d.pe = peDraftOf(current, input.settings);
+		// The rule as it is now (a copy, edited whole), or off.
+		if (s?.t === 'restriction') d.restriction = current ? (JSON.parse(JSON.stringify(current)) as OpDraft['restriction']) : null;
 	}
 	/** Switch the PE input's kind: a new monthly row starts from the PE GR4J runs on now (the Settings form's rule). */
 	function pickPeKind(kind: PeKind) {
@@ -153,7 +157,18 @@
 </script>
 
 {#snippet valueField(s: ValueSpec, label: string)}
-	{#if s.t === 'pe'}
+	{#if s.t === 'restriction'}
+		<fieldset class="restriction" data-testid="op-restriction">
+			<legend>{label}</legend>
+			<Lazy load={loadRestrictionEditor}>
+				{#snippet children(DroughtRestrictionFields)}
+					<DroughtRestrictionFields bind:value={d.restriction} />
+				{/snippet}
+			</Lazy>
+			<!-- Unset is off, as the engine runs it, so there is always a "now". -->
+			<span class="hint" data-testid="op-current">{nowText(s, current ?? null)}</span>
+		</fieldset>
+	{:else if s.t === 'pe'}
 		<fieldset class="pe">
 			<legend>{label}</legend>
 			<div class="form-row">
@@ -817,14 +832,17 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 	}
-	.pe {
+	.pe,
+	.restriction {
 		flex: 1 1 100%;
+		min-width: 0;
 		margin: 0 0 0.75rem;
 		padding: 0.4rem 0.6rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 	}
 	.pe legend,
+	.restriction legend,
 	.months legend {
 		font-weight: 500;
 		font-size: 0.85rem;

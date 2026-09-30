@@ -1541,6 +1541,14 @@
 //             editor now also in the form's chunk), field specs and
 //             descriptions, override mode recording object edits, and four
 //             share-page lines in both catalogues. Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1324 KB (engine 1.46.0, WP-3.8's drought
+//             restriction rule, on #252 @ 2ce0af99: measured 1311 → 1322,
+//             +10.5 KB, raised by that rounded up). The rule in the engine
+//             (network/restriction.ts, its daily step in simulate, the
+//             droughtRestriction self-check, the triggers-to-rule mapping and
+//             the run comparison's lines), the Settings editor (its own chunk,
+//             also the scenario form's), the Units & supply tables and the
+//             outlook's "Use as the drought restriction rule". Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1551,7 +1559,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1313,
+	totalCodeKb: 1324,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

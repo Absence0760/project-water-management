@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
+	// The human-impact tables of a run (engine ≥ 0.22.0): drought restrictions (engine ≥ 1.46.0, WP-3.8), land cover (WP-1.35),
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
 	// for a run that has any of them (humanImpacts.ts), on Units & supply
@@ -8,6 +8,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
+	import { restrictionView } from './restrictions';
 
 	let {
 		summary,
@@ -35,7 +36,74 @@
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
 	// The basic-needs floor (engine ≥ 1.44.0, issue #123): its columns only when an object has one.
 	const anyFloor = $derived(objects.some(({ o }) => o.basicNeedsM3Day !== undefined));
+	// The drought restriction rule (engine ≥ 1.46.0, WP-3.8): its days per level and each unit's cut.
+	const restrict = $derived(restrictionView(summary.droughtRestriction));
 </script>
+
+{#if restrict}
+	<h3>Drought restrictions</h3>
+	<p class="muted small" data-testid="restriction-rule">
+		The model’s restriction rule ({restrict.rule}{restrict.source ? `; from ${restrict.source}` : ''}), decided {restrict.reviews}
+		{restrict.reviews === 1 ? 'time' : 'times'} in the run from the farm dams’ storage at the start of the review day. A model rule, not the
+		restriction notice farmers see. The cut shows as a shortfall: supplied is measured against the full demand.
+	</p>
+	<div class="table-wrap">
+		<table class="data restriction-days" data-testid="restriction-days-table">
+			<caption class="visually-hidden">Days at each drought restriction level, by water year</caption>
+			<thead>
+				<tr>
+					<th scope="col">Water year</th>
+					<th scope="col" class="num">Days</th>
+					{#each restrict.levels as l (l)}<th scope="col" class="num">{l}</th>{/each}
+					<th scope="col" class="num">Days restricted</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each restrict.years as y (y.label)}
+					<tr class:flag={y.restricted > 0}>
+						<th scope="row">{y.label}</th>
+						<td class="num">{y.days}</td>
+						{#each y.byLevel as d, i (i)}<td class="num">{d}</td>{/each}
+						<td class="num">{y.restricted}</td>
+					</tr>
+				{/each}
+				<tr class="total">
+					<th scope="row">Whole run</th>
+					<td class="num">{restrict.total.days}</td>
+					{#each restrict.total.byLevel as d, i (i)}<td class="num">{d}</td>{/each}
+					<td class="num">{restrict.total.restricted}</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+	<div class="table-wrap">
+		<table class="data restriction-units" data-testid="restriction-units-table">
+			<caption class="visually-hidden">Each hydrological unit’s demand before and after the drought restriction</caption>
+			<thead>
+				<tr>
+					<th scope="col">Hydrological unit</th>
+					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">After the restriction<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Cut<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Cut<br /><span class="u">% of demand</span></th>
+					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each restrict.units as u (u.nodeId)}
+					<tr>
+						<th scope="row">{u.name}</th>
+						<td class="num">{fmtNum(u.demand)}</td>
+						<td class="num">{fmtNum(u.restricted)}</td>
+						<td class="num">{fmtNum(u.cut)}</td>
+						<td class="num">{fmtPct(u.cutShare)}</td>
+						<td class="num">{fmtNum(u.supplied)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
 
 {#if objects.length}
 	<h3>Demand objects</h3>

@@ -9,6 +9,8 @@
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
 	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
+	// Settings → Drought restrictions (engine ≥ 1.46.0, WP-3.8): its own chunk, for the same reason.
+	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
@@ -193,8 +195,9 @@
 	let rulesErr = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	let evidenceErr = $state<string | null>(null);
+	let restrictErr = $state<string | null>(null);
 	const blocked = $derived(
-		!!evidenceErr || !!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!evidenceErr || !!restrictErr || !!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -211,6 +214,7 @@
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: reserveError },
+			{ id: 'set-restrict', message: restrictErr },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
@@ -1086,6 +1090,20 @@
 			nodes={editor?.model.nodes ?? []}
 		/>
 	</div>
+
+	<!-- Drought restrictions (engine ≥ 1.46.0, WP-3.8) ---------------------------------------->
+	<section class="panel" id="set-restrict" aria-labelledby="restrict-h">
+		<div class="panel-head">
+			<h2 id="restrict-h">Drought restrictions <HelpTip key="settings.droughtRestriction" /></h2>
+			<span class="muted small">Cut demand by level when the farm dams fall below a share of their capacity</span>
+		</div>
+		<Lazy load={loadDroughtRestriction}>
+			{#snippet children(DroughtRestrictionFields)}
+				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={restrictErr} {readonly} />
+			{/snippet}
+		</Lazy>
+		<FieldHistoryLine field="settings:droughtRestriction" />
+	</section>
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" id="set-period" aria-labelledby="per-h">
