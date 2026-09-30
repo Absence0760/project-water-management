@@ -386,7 +386,7 @@ describe('dam storage (WP-3.5)', () => {
 		await expect(asOwner(`UPDATE node SET hands_off_ewr = NULL WHERE id = $1`, [farm.id])).rejects.toThrow(/null/i);
 		for (const col of ['hands_off_m3_day', 'divert_monthly_m3_day']) {
 			await expect(asOwner(`UPDATE node SET ${col} = array_fill(1::float8, ARRAY[13]) WHERE id = $1`, [farm.id]), `${col}: 13 values`).rejects.toThrow(/check/i);
-			// A NULL element: 0 <= ALL alone lets it through (NULL, not false), so the check names it (migration 112).
+			// A NULL element: 0 <= ALL alone lets it through (NULL, not false), so the check names it (migration 114).
 			await expect(asOwner(`UPDATE node SET ${col} = '{1,1,1,1,1,NULL,1,1,1,1,1,1}' WHERE id = $1`, [farm.id]), `${col}: a NULL month`).rejects.toThrow(/check/i);
 		}
 		// Positive control: 12 values ≥ 0 go in.

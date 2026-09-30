@@ -1247,7 +1247,7 @@ a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
 
-Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 112,
+Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114,
 issue #204, [model.md §2.7h](./model.md)): every node carries
 `handsOffM3Day` (12 finite m³/day values ≥ 0 by water-year month, Oct–Sep, or
 `null` = none), `handsOffEwr` (boolean) and `divertMonthlyM3Day` (12 finite

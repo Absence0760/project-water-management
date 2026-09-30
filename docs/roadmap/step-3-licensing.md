@@ -1059,7 +1059,7 @@ must build WP-2.15 Phase B.
 > hands-off flow binds it too (a decision of issue #204). It cuts only the
 > diversion O, not the dam split's K and M (the on-channel dam). New
 > self-check `checkOperatingRules`, scenario `node.set` fields and the run
-> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 112
+> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 114
 > (`node.hands_off_m3_day`, `hands_off_ewr`, `divert_monthly_m3_day`, farms
 > only, [data-model.md](../data-model.md)), saved and read by the model API
 > with the engine's save rules ([api.md](../api.md)), set in the one-node form
