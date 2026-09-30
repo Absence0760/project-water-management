@@ -51,18 +51,6 @@ NOT_COMPARED = {
 # unless an engine behaviour is recorded in docs/followups.md.
 KNOWN_DIFFERENCES: dict[str, str] = {}
 
-# Engine behaviours that depart from the docs on a few inputs, recognised by
-# their symptom (below) rather than by column: the case's disagreements are
-# reported as known, never failing. Each names its docs/followups.md item.
-KNOWN_CASES: dict[str, str] = {
-    "noise-demand": (
-        "a float-noise demand (≤ 1e-9 m³, or the rest after off-take water) switches on a primary or emergency "
-        "dam-target borehole, and a noise-demand day drops out of limitBound (docs/followups.md § Verification, "
-        "\"a float-noise demand switches on a dam-target borehole\")"
-    ),
-}
-
-
 def run_engine(pairs: list[tuple[Path, Path]]) -> None:
     tsx = ROOT / "backend" / "node_modules" / ".bin" / "tsx"
     args = [str(tsx), str(HERE / "run_engine.ts"), "run"]
@@ -157,18 +145,7 @@ def _public(rows: list[dict]) -> list[dict]:
     return [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
 
 
-def _limit_bound_less_noise(rows: list[dict]) -> list[dict]:
-    """Python's limitBound rows less its noise-demand days (KNOWN_CASES)."""
-    out = []
-    for r in rows:
-        nz = r.get("_noise") or {}
-        q = {k: v - nz.get(k, 0) for k, v in r.items() if not k.startswith("_") and k != "waterYear"}
-        if q["days"] > 0:
-            out.append({"waterYear": r["waterYear"], **q})
-    return out
-
-
-def compare_summary(py: dict, eng: dict | None, known: list[str] | None = None) -> tuple[dict, list[str]]:
+def compare_summary(py: dict, eng: dict | None) -> tuple[dict, list[str]]:
     """RunSummary.allocations' run-dependent parts (model.md §2.12a): per
     capped unit and source the years the cap bound (`capReached`) and the
     days each limit held use back (`limitBound`); per scaled unit the demand
@@ -176,7 +153,6 @@ def compare_summary(py: dict, eng: dict | None, known: list[str] | None = None) 
     ok) and the disagreements."""
     parts: dict[str, list] = {}
     bad: list[str] = []
-    known = known if known is not None else []
     mode = (eng or {}).get("mode")
     if mode not in ("cap", "fullAllocation"):
         if py:
@@ -200,9 +176,6 @@ def compare_summary(py: dict, eng: dict | None, known: list[str] | None = None) 
                             for f in fields:
                                 worst = max(worst, abs(ra[f] - rb[f]))
                                 ok = ok and _close(ra[f], rb[f])
-                    if not ok and part == "limitBound" and _limit_bound_less_noise(a) == b:
-                        known.append(f"allocations.limitBound ({nid}, {src['waterSource']}): the engine leaves out python's noise-demand days")
-                        ok = True
                     parts.setdefault(part, []).append((worst, ok))
                     if not ok:
                         bad.append(f"allocations.{part} ({nid}, {src['waterSource']}): python {_public(a)} vs engine {b}")
@@ -225,40 +198,6 @@ def compare_summary(py: dict, eng: dict | None, known: list[str] | None = None) 
         if key not in seen and (v if isinstance(v, list) else (v["capReached"] or v["limitBound"])):
             bad.append(f"allocations {key}: only in python")
     return parts, bad
-
-
-def known_case(py: dict, eng: dict, r: dict) -> str | None:
-    """The KNOWN_CASES entry a case's disagreement is, if any: on the first
-    day any column disagrees, a farm's groundwater_to_dam differs while the
-    engine's demand left for the dam and boreholes (demand − off-take water
-    used) is float noise, ≤ 1e-9 of the demand (or ≤ 1e-9 m³)."""
-    bad = [(c["day"], k) for k, c in r["columns"].items() if not c["ok"] and c["day"] is not None]
-    if not bad:
-        return None
-    ps = {(s["nodeId"], s["key"]): s["values"] for s in py["series"]}
-    es = {(s["nodeId"], s["key"]): s["values"] for s in eng["series"]}
-    d0 = min(_first_bad_day(ps[k], es[k]) for _, k in bad)
-    for (node, key) in es:
-        if key != "groundwater_to_dam" or (node, key) not in ps:
-            continue
-        a, b = _num(ps[(node, key)][d0]), _num(es[(node, key)][d0])
-        if abs(a - b) <= ATOL:
-            continue
-        dem = _num(es[(node, "demand")][d0])
-        used = _num(es[(node, "offtake_used")][d0]) if (node, "offtake_used") in es else 0.0
-        rest = dem - used
-        if 0 < rest <= 1e-9 * max(dem, 1.0):
-            return "noise-demand"
-    return None
-
-
-def _first_bad_day(a: list, b: list) -> int:
-    scale = max((abs(_num(v)) for v in b if v is not None), default=0.0)
-    for d, (x, y) in enumerate(zip(a, b)):
-        x, y = _num(x), _num(y)
-        if math.isnan(x) != math.isnan(y) or (not math.isnan(x) and abs(x - y) > ATOL + RTOL * scale):
-            return d
-    return len(a)
 
 
 def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: int = 0) -> list[tuple[str, Path, Path]]:
@@ -301,7 +240,6 @@ def evaluate(cases, impl=model, notes=None, stop_first=False) -> dict:
     coverage: dict[str, list[int]] = {}
     refused = 0
     failures: list[str] = []
-    known: list[str] = []
     for name, p, eng_path in cases:
         if stop_first and failures:
             break
@@ -325,19 +263,13 @@ def evaluate(cases, impl=model, notes=None, stop_first=False) -> dict:
         if r["window"]:
             failures.append(f"{name}: run window {r['window']}")
             continue
-        why = known_case(py, eng, r)
-        if why:
-            known.append(f"{name}: {why}: {KNOWN_CASES[why]}")
-            continue
         for k in r["only_python"]:
             failures.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in python")
         for k in r["only_engine"]:
             if notes is not None:
                 notes.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in the engine's output")
-        kn: list[str] = []
-        parts, bad = compare_summary(py.get("summary") or {}, eng.get("allocations"), kn)
+        parts, bad = compare_summary(py.get("summary") or {}, eng.get("allocations"))
         failures.extend(f"{name}: {b}" for b in bad)
-        known.extend(f"{name}: noise-demand: {b}" for b in kn)
         for part, rows in parts.items():
             agg = per_key.setdefault(f"allocations.{part}", {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
             for worst, ok in rows:
@@ -358,7 +290,7 @@ def evaluate(cases, impl=model, notes=None, stop_first=False) -> dict:
                         f"{name}: {key} ({node or 'catchment'}) max |Δ| {c['abs']:.3g} (rel {c['rel']:.3g}) on day {c['day']}"
                         + (" (NaN on one side)" if c["nan"] else "")
                     )
-    return {"per_key": per_key, "coverage": coverage, "refused": refused, "failures": failures, "known": known}
+    return {"per_key": per_key, "coverage": coverage, "refused": refused, "failures": failures}
 
 
 def main(argv=None) -> int:
@@ -401,10 +333,6 @@ def main(argv=None) -> int:
     if args.verbose:
         for n_ in notes:
             print("note: " + n_)
-    if r["known"]:
-        print(f"\n{len(r['known'])} known difference(s), not failing:")
-        for k_ in r["known"][:20]:
-            print("  " + k_[:300])
     if failures:
         print(f"\n{len(failures)} disagreement(s):")
         for f in failures[:60]:

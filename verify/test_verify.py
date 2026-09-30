@@ -286,10 +286,6 @@ class Generator(unittest.TestCase):
         self.assertEqual(json.dumps(generate.random_input(7)), json.dumps(generate.random_input(7)))
         self.assertEqual(json.dumps(generate.random_input(7, True)), json.dumps(generate.random_input(7, True)))
 
-    def test_known_cases_name_their_followup(self):
-        for key, why in diff.KNOWN_CASES.items():
-            self.assertIn("followups.md", why, key)
-
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():
             self.assertIn("followups.md", why, key)
