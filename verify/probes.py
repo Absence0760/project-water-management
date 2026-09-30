@@ -181,6 +181,90 @@ def forecast_tail_warmup() -> dict:
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def scaled_no_demand_tail_year() -> dict:
+    """A full allocation on a farm with no demand at all, over two water
+    years, the second ending in a six-day forecast tail. Neither year can be
+    scaled; the summary's row for the ordinary year keeps the registered
+    volume over its run days, while the row for the year the tail starts in
+    is k × its demand, 0 (§2.12a; docs/followups.md § Verification)."""
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5, damCapacityM3=0)]
+    alloc = [{
+        "id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 36500, "storageM3": None,
+        "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None,
+    }]
+    start = dt.date(2019, 10, 1)
+    hist = (dt.date(2021, 3, 31) - start).days + 1
+    series = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": [float(k % 4) for k in range(hist)]},
+        "rain_forecast_mm": {"startDate": "2021-04-01", "values": [3.0, 0.0, 5.0, 0.0, 1.0, 2.0]},
+    }
+    s = _settings(allocationMode="fullAllocation")
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": [], "allocations": alloc},
+            "series": series}
+
+
+def full_allocation_tail_new_year() -> dict:
+    """A full allocation whose forecast tail starts on 26 September and runs
+    into the next water year: the tail's September days keep the factor of
+    the year it started in (over that year's historical days), while its
+    October days are a part year of their own, scaled to the volume
+    prorated over them (§2.12a, §2.4f)."""
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    crops, areas = _crop("f", 200000)
+    alloc = [{
+        "id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 36500, "storageM3": None,
+        "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None,
+    }]
+    start = dt.date(2019, 10, 1)
+    hist = (dt.date(2020, 9, 25) - start).days + 1
+    series = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": [float(k % 7 == 0) * 6 for k in range(hist)]},
+        "rain_forecast_mm": {"startDate": "2020-09-26", "values": [0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]},
+    }
+    s = _settings(allocationMode="fullAllocation", apanMm=[150] * 12)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "allocations": alloc},
+            "series": series}
+
+
+# Coverage probes: rules the docs settle but random networks rarely reach in
+# a way a one-line change would show; each has a mutant in test_verify.py.
+
+
+def _steady(days: int, mm: float, start="2020-01-01") -> dict:
+    return {"rain_catchment_mm": {"startDate": start, "values": [mm] * days}}
+
+
+def _crop(node: str, m2: float) -> tuple[list, list]:
+    return [{"id": "c", "name": "c", "cropFactor": [1.0] * 12}], [{"nodeId": node, "cropId": "c", "areaM2": m2}]
+
+
+def trigger_hysteresis() -> dict:
+    """A trigger farm (§2.7e) whose dam starts below its 40 % trigger and
+    rises while the pump covers most of the demand: the river pump stays on
+    until the dam holds 70 % (the stop level), not only while it is below
+    the trigger."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=1, damCapacityM3=20000, damInitialPct=0.35, pctRunoffToDam=0.05,
+              supplyRule="trigger", supplyTriggerPct=0.4, supplyStopPct=0.7, pumpCapacityM3Day=300),
+    ]
+    crops, areas = _crop("f", 120000)
+    s = _settings(effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": _steady(90, 20.0)}
+
+
+def junior_user() -> dict:
+    """A junior water user (§2.7c) above a senior one on the same reach
+    takes only what the river carries beyond the senior's requirement."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "user", "o", userDemandM3Day=[3000] * 12, userPriority="senior", userReturnPct=0),
+        _node("j", "user", "s", userDemandM3Day=[3000] * 12, userPriority="junior", userReturnPct=0),
+        _node("f", "farm", "j", areaKm2=2),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -190,4 +274,8 @@ PROBES = {
     "negative-reading": negative_reading(),
     "zero-catchment-area": zero_catchment_area(),
     "binding-site-tie": binding_site_tie(),
+    "scaled-no-demand-tail-year": scaled_no_demand_tail_year(),
+    "full-allocation-tail-new-year": full_allocation_tail_new_year(),
+    "trigger-hysteresis": trigger_hysteresis(),
+    "junior-user": junior_user(),
 }

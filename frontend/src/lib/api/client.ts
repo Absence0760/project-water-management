@@ -39,6 +39,8 @@ import type {
 	AllocationSource,
 	ApiKey,
 	ApiKeyCreate,
+	ApplicantPack,
+	ApplicantPackMeta,
 	Ensemble,
 	ImportReport,
 	ImportResult,
@@ -637,9 +639,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays, targetKind: 'scenario', targetId: scenarioId }).then(
 					(r) => r.link
 				),
-			/** The links to one evidence pack (128): every one, to its project's editors. */
+			/** The links to one evidence pack (128): every one to its project's editors, the ones they made to its applicant (131). */
 			listForPack: (id: string, packId: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links?packId=${enc(packId)}`).then((r) => r.links),
-			/** Link an issued evidence pack (an editor). */
+			/** Link an issued evidence pack (an editor, or the applicant for their own application's, 131). */
 			createForPack: (id: string, packId: string, label: string, expiresInDays: number) =>
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays, targetKind: 'pack', targetId: packId }).then((r) => r.link),
 			/** Withdraw a link (the owner; an assessor or the applicant for a scenario link; an editor for a pack link): it stops working at once. */
@@ -730,6 +732,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		scenarios: {
 			list: (id: string) => request<{ scenarios: Scenario[] }>('GET', `${p(id)}/scenarios`).then((r) => r.scenarios),
+			/** An application's issued packs, newest first, for its parties (131; an applicant reads no pack row). */
+			packs: (id: string, sid: string) => request<{ packs: ApplicantPackMeta[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => r.packs),
+			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
+			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
 			create: (id: string, body: { name: string; baseRunId: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[] }) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios`, body),
