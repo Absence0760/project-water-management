@@ -202,7 +202,7 @@ resource "aws_iam_role_policy" "worker_packs" {
 
 resource "aws_security_group" "vpce_s3" {
   name        = "${local.project}-vpce-s3"
-  description = "S3 interface endpoint: 443 from the worker Lambda only."
+  description = "S3 interface endpoint: 443 from the API and worker Lambdas only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-vpce-s3" }
 }
@@ -241,7 +241,8 @@ resource "aws_vpc_endpoint" "s3" {
     private_dns_only_for_inbound_resolver_endpoint = false
   }
 
-  # Only the worker, only a read of packs/ in the packs bucket.
+  # Only the worker's read of packs/, and the API's put of a bundle
+  # (pack_bundles.tf), in the packs bucket.
   policy = data.aws_iam_policy_document.s3_endpoint.json
 
   tags = { Name = "${local.project}-s3" }
@@ -255,6 +256,16 @@ data "aws_iam_policy_document" "s3_endpoint" {
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  # The API stores a pack's reproduction bundle when it issues it (pack_bundles.tf).
+  statement {
+    sid       = "ApiPutsPackBundles"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.packs.arn}/packs/*.zip"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
     }
   }
 }

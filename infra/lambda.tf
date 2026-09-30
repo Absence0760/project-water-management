@@ -181,6 +181,10 @@ resource "aws_lambda_function" "backend" {
       REPORT_DOWNLOADS       = "cloudfront"
       CLOUDFRONT_KEY_PAIR_ID = aws_cloudfront_public_key.report_downloads[var.report_download_signing_key].id
       CLOUDFRONT_PUBLIC_KEY  = var.report_download_public_keys[var.report_download_signing_key]
+
+      # Evidence packs (pack_bundles.tf): issuing a pack stores its
+      # reproduction bundle here, through the S3 endpoint (packs.tf).
+      PACKS_BUCKET = aws_s3_bucket.packs.bucket
     }
   }
 
@@ -194,6 +198,8 @@ resource "aws_lambda_function" "backend" {
     aws_vpc_endpoint.ses,
     aws_vpc_endpoint.sqs,
     aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.s3,
+    aws_iam_role_policy.api_pack_bundles,
     # A rotation switches the API only once the key group trusts the new key.
     aws_cloudfront_key_group.report_downloads,
   ]

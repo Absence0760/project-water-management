@@ -1416,8 +1416,22 @@ first deploy):
   them.
 - **Downloads**: the `/packs/*` behaviour serves the bucket through its own
   OAC to CloudFront signed URLs from the report-download key group only,
-  exactly as `/reports/*` (§ Reports); `GET …/packs/:packId/pdf` redirects
-  to one (60 s). The API needs no new setting and no S3 grant.
+  exactly as `/reports/*` (§ Reports); `GET …/packs/:packId/pdf` and
+  `GET …/packs/:packId/bundle` redirect to one (60 s).
+- **The reproduction bundle** ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction),
+  120_pack_bundle, infra/pack_bundles.tf): the API builds it when it issues
+  a pack, in the issue's transaction, and puts it at
+  `packs/<project>/<pack>/<sha256>.zip` with that checksum and
+  `If-None-Match: *` before recording its hash; if the put fails nothing is
+  issued. The API role holds only `s3:PutObject` on `packs/*.zip` in the
+  packs bucket (SSE-S3, so no KMS grant; the bucket policy names no writer),
+  reaches S3 through the same S3 interface endpoint as the worker (the
+  endpoint policy's second statement allows exactly that put; SG rules API →
+  endpoint on 443), and needs `PACKS_BUCKET` (Terraform sets it; the API
+  refuses to start without it). **No added cost**: no new endpoint. An
+  issue that fails after its put leaves an unrecorded object, held for the
+  retention period like a PDF orphan; issuing again writes no second
+  version (the key is the bundle's hash, and the put is conditional).
 - **Removing a pack's PDF** (the governance bypass; the operator's, never
   the app's): with the administrator's credentials,
   `aws s3api delete-object --bucket water-management-packs-<account> --key packs/<project>/<pack>/<sha256>.pdf --version-id <version> --bypass-governance-retention --profile water-management`.
