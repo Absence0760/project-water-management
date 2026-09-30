@@ -70,6 +70,8 @@ import {
 	fillSummaryInWindow,
 	flowFillWarning,
 	GAP_FILL_KINDS,
+	gapFillRecordLabel,
+	hasReadingBefore,
 	resolveFlowGapFill,
 	specFills,
 	type FlowFillSummary,
@@ -97,6 +99,12 @@ export interface PrepareOptions {
 	pinned?: PreparedFits;
 	/** Return the fits the run used as PreparedRun.fits. */
 	captureFits?: boolean;
+	/**
+	 * A resumed run (../run.ts runModelFrom): the records whose gap fill read readings before the snapshot's day
+	 * (ModelState.flowFillHistory). One whose input has neither the record's nor its donor's readings before the
+	 * run's start can't be filled as the uninterrupted run filled it, so it is left unfilled, with a warning.
+	 */
+	resumedFill?: { kinds: readonly GapFillKind[] };
 }
 
 /**
@@ -334,7 +342,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
-	const flowFill = flowFillsFor(settings, series, start, days, warnings);
+	const flowFill = flowFillsFor(settings, series, start, days, warnings, options.resumedFill);
 	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
 	const readFilled = settings.qualityFlags.infilled === 'include';
 	const aligned = (kind: SeriesKind) =>
@@ -399,13 +407,28 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 }
 
 /** Each record settings.flowGapFill fills, aligned to the run, with its warning; null when none is. */
-function flowFillsFor(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, warnings: string[]): Partial<Record<GapFillKind, WindowFill>> | null {
+function flowFillsFor(
+	settings: ProjectSettings,
+	series: ModelInput['series'],
+	start: number,
+	days: number,
+	warnings: string[],
+	resumed?: PrepareOptions['resumedFill']
+): Partial<Record<GapFillKind, WindowFill>> | null {
 	let out: Partial<Record<GapFillKind, WindowFill>> | null = null;
 	for (const kind of GAP_FILL_KINDS) {
 		const spec = settings.flowGapFill[kind];
 		const record = series[kind];
 		if (!specFills(spec) || !record) continue;
 		const donor = spec.donor ? (series[spec.donor] ?? null) : null;
+		// The fill reads the whole record (a gap's bounds, the highest reading it clamps to) and the donor's overlap
+		// with it (the ratio). Resumed without the history it read, it would fill other values: leave it out, and say so.
+		if (resumed?.kinds.includes(kind) && !hasReadingBefore(record, start) && !hasReadingBefore(donor, start)) {
+			warnings.push(
+				`Resumed from ${fromEpochDay(start)} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
+			);
+			continue;
+		}
 		const f = fillFlowGaps(kind, record, spec, donor);
 		const summary = fillSummaryInWindow(f, start, days);
 		const code = new Uint8Array(days);
@@ -570,6 +593,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
+	// Engine ≥ 1.49.0: where the dam evaporation factors came from (a lake-factor preset's note), provenance only.
+	s.lakeEvapFactorSource = typeof raw?.lakeEvapFactorSource === 'string' ? raw.lakeEvapFactorSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
 	if (s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);

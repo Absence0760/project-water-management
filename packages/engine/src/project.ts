@@ -289,6 +289,16 @@ export interface ProjectSettings {
 	 */
 	lakeEvapFactorMonthly?: Monthly | null;
 	/**
+	 * Where the dam evaporation factors came from (engine ≥ 1.49.0): free text,
+	 * e.g. the lake-factor preset the Settings form filled them from
+	 * (`LAKE_FACTOR_PRESETS`, ./evaporation/lakeFactorPresets.ts) with its
+	 * citation and pan conversion. Provenance only: the model never reads it.
+	 * Recorded with each run (the settings snapshot), so run comparison and the
+	 * report show it. '' = none; optional so settings stored before it still
+	 * type.
+	 */
+	lakeEvapFactorSource?: string;
+	/**
 	 * What the project's registered volumes (ProjectModel.allocations) do to a
 	 * run (engine ≥ 1.18.0, issue #72, ./allocations/mode.ts, docs/model.md
 	 * §2.12a): 'none' (the default) compares only; 'cap' keeps each unit's
@@ -723,6 +733,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		allocationMode: 'none',
 		allocationTolerance: 0.1,
 		lakeEvapFactorMonthly: null,
+		lakeEvapFactorSource: '',
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.5, lo: 0.5 },

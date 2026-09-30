@@ -27,6 +27,9 @@ import { levelCut, resolveDroughtRestriction, restrictedObjectDemand, restrictio
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
 import { DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
+import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
+import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
+import { FLOW_FILL_COLUMNS } from '../flowGapFill';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
 
@@ -53,7 +56,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+// observed_flow_filled / observed_flow_other_filled (engine ≥ 1.23.0) are NaN on every day the gap fill didn't fill.
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -126,6 +130,59 @@ export function checkRainSource(out: ModelOutput): string | null {
 	return null;
 }
 
+/**
+ * The `observed_flow_quality` column (engine ≥ 1.48.0, ../calibrate/dayFlags.ts
+ * recordFlowFlags) against the record it flags: stored once, beside the
+ * scored `observed_flow` (the calibration site's node, else the catchment's),
+ * as many days long, each day a class code; missing exactly where the record
+ * has no reading and no gap fill, infilled exactly on the filled days, and
+ * the gauged-range classes agreeing with the record's rating (settings
+ * .qualityFlags; a gauge inside the network has none, and no fill). Human
+ * use is never set. A run with filled days stores the column (they are
+ * flagged). A column with no flagged day is allowed: a run resumed from a
+ * snapshot keeps its capture run's column whatever its own days hold.
+ */
+export function checkFlowQuality(input: ModelInput, out: ModelOutput): string | null {
+	const cols = out.series.filter((s) => s.key === FLOW_QUALITY_COLUMN.key);
+	const site = out.summary.calibration?.siteNodeId ?? null;
+	const fillCode = out.series.find((s) => s.nodeId === site && s.key === FLOW_FILL_COLUMNS.observed_flow.code.key)?.values;
+	if (!cols.length) {
+		if (out.summary.calibration && fillCode?.some((v) => v !== 0)) return `the scored record has gap-filled days but no ${FLOW_QUALITY_COLUMN.key} column`;
+		return null;
+	}
+	if (cols.length > 1) return `${cols.length} ${FLOW_QUALITY_COLUMN.key} columns; one is stored, beside the scored record`;
+	const q = cols[0]!;
+	if (q.nodeId !== site) return `${FLOW_QUALITY_COLUMN.key} is stored at ${q.nodeId ?? 'the catchment'}, but the run scores ${site ?? 'the outlet'}`;
+	const obsCol = out.series.find((s) => s.nodeId === site && s.key === 'observed_flow');
+	if (!obsCol) return `${FLOW_QUALITY_COLUMN.key} has no observed_flow beside it`;
+	const obs = obsCol.values;
+	if (q.values.length !== obs.length) return `${FLOW_QUALITY_COLUMN.key} has ${q.values.length} days, observed_flow ${obs.length}`;
+	// The scored record's kind (summary.calibration is set whenever the column is).
+	const kind = out.summary.calibration?.flowKind;
+	const rating = site === null && kind ? resolveQualityFlags(input.settings.qualityFlags).ratings[kind] : undefined;
+	const hi = rating?.gaugedMaxM3s ?? null;
+	const lo = rating?.gaugedMinM3s ?? null;
+	const SEC = 86_400;
+	for (let t = 0; t < obs.length; t++) {
+		const c = q.values[t]!;
+		const f = FLOW_DAY_FLAGS[c];
+		if (!Number.isInteger(c) || !f) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${c}, not a class code`;
+		if (f === 'humanUse') return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is human use, which no run sets`;
+		const filled = !!fillCode?.[t];
+		const reading = Number.isFinite(obs[t]!);
+		if ((f === 'infilled') !== filled) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${f} where the gap fill ${filled ? 'filled the day' : 'filled nothing'}`;
+		if (!filled && (f === 'missing') === reading) return `${FLOW_QUALITY_COLUMN.key}[day ${t}] is ${f} where observed_flow is ${obs[t]}`;
+		if (!reading) continue;
+		const m3s = obs[t]! / SEC;
+		const above = hi !== null && m3s > hi * (1 + 1e-12);
+		if (f === 'aboveRating' && (hi === null || m3s <= hi * (1 - 1e-12))) return `day ${t} is flagged above the highest gauging, but reads ${m3s} m³/s (highest gauging ${hi ?? 'none'})`;
+		if (f === 'belowRating' && (lo === null || !(m3s > 0) || m3s >= lo * (1 + 1e-12))) return `day ${t} is flagged below the lowest gauging, but reads ${m3s} m³/s (lowest gauging ${lo ?? 'none'})`;
+		if (f === 'inRange' && (above || (lo !== null && m3s > 0 && m3s < lo * (1 - 1e-12))))
+			return `day ${t} reads ${m3s} m³/s, outside the gauged range ${lo ?? '0'} … ${hi ?? '∞'} m³/s, but is flagged in range`;
+	}
+	return null;
+}
+
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
@@ -138,6 +195,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	}
 	const rainSourceProblem = checkRainSource(out);
 	if (rainSourceProblem) return rainSourceProblem;
+	const flowQualityProblem = checkFlowQuality(input, out);
+	if (flowQualityProblem) return flowQualityProblem;
 	const nodes = input.model.nodes;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null)!;
 	let totIn = 0;

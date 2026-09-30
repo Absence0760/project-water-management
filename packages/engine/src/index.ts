@@ -41,6 +41,7 @@ export * from './rainSourcePeriods';
 export * from './rainThreshold';
 export * from './evaporation/fao56Table5';
 export * from './evaporation/apanDaily';
+export * from './evaporation/lakeFactorPresets';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';

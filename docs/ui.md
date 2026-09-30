@@ -2735,7 +2735,15 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). The alternative catchment gauge and the reanalysis (engine ≥
+was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+flags**: on a flow record a run reads (the outlet's gauge or logger record,
+or the calibration site's record when calibration scores a gauge inside the
+network), the days Fit automatically would flag (above
+or below the record's gauged range, suspect, infilled; model.md §2.10h) are
+strips along the foot of the chart with a key in words, as on the Runs
+hydrograph, computed from the stored record under the current settings
+(`recordFlowFlags`, so a gauge's record has no gauged range and no fill) and
+naming what Fit automatically does with each class now. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -3014,6 +3022,22 @@ which checks every catchment tab).
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
+  below it the **Dam evaporation preset** picker (engine ≥ 1.49.0, "Fill
+  from a preset…": flat 0.75, or the WR90 monthly lake factors converted to
+  A-pan at this project's monthly A-pan by WR90's or Taljaard's 2023 pan
+  equation; model.md §2.7a item 4). Picking one ticks **Vary it by month**,
+  fills the monthly row and the **Dam evaporation factor source** note
+  (`settings.lakeEvapFactorSource`, up to 600 characters, with a
+  field-history line), then goes back to "Fill from a preset…"; all stay
+  editable and nothing is saved until Save. A WR90 preset with any month's
+  A-pan at 0 fills nothing and says "enter the monthly A-pan first"; one
+  with a month below the conversion's floor (55.4 mm WR90, 38.5 mm
+  Taljaard) fills nothing and names the months. When
+  the note names a preset whose values at the current A-pan no longer
+  match the row (the A-pan or a factor changed since), an amber note says
+  so ("fill it again, or update the note"). The Pan-coefficient preset
+  picker goes back to "Choose a preset…" after a pick the same way (it used
+  to keep showing the preset),
   and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
   workbook parity and rarely changed), days in February. The closed
   disclosure's summary names the value ("Advanced: days in February,
@@ -4489,7 +4513,20 @@ read it before.
   its calibration statistics applied), never the project's current ones, so
   an old run shows what it was fitted and scored with. Each is clipped to the
   hydrograph's days; one that runs past them says "(partly outside the run)",
-  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). **The
+  observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
+  run's `observed_flow_quality` column, stored only when a day is flagged)
+  are thin strips along the foot of the plot, behind the lines, one strip
+  per flagged class (above the highest gauging, below the lowest, suspect,
+  infilled; top to bottom in that order, each in its own `--series-*`
+  colour), so a class reads by its place as well as its colour. A key under
+  the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
+  with its days and what Fit automatically does with them under the run's
+  own settings snapshot: "Above the highest gauging: 14 days; Fit
+  automatically: censored at the highest gauging" (`calibration/flowFlags.ts`). They
+  follow the scored record: on a run scored at a gauge inside the network
+  they are on the calibration site's hydrograph, not the outlet's. The figure
+  carries `data-lanes`. A plain
   drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it

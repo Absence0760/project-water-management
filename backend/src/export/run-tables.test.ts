@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, OBSERVED_FLOW_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	allocationCapLines,
@@ -65,6 +65,11 @@ describe('series column order', () => {
 		const cat = ['rain_chirps_corrected', 'is_summer', 'rain_used', 'ewr', 'rain_chirps', 'rain_final', 'natural_flow'];
 		// Final rainfall, then CHIRPS as uploaded and corrected, right after rain used.
 		expect(cat.sort(seriesKeyOrder('catchment'))).toEqual(['natural_flow', 'ewr', 'rain_used', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'is_summer']);
+		// The quality flags (engine ≥ 1.48.0) after the observed records and their gap fill, before the EWR.
+		const obs = ['ewr', 'observed_flow_quality', 'observed_flow_fill', 'observed_flow', 'simulated_outflow'];
+		expect(obs.sort(seriesKeyOrder('catchment'))).toEqual(['simulated_outflow', 'observed_flow', 'observed_flow_fill', 'observed_flow_quality', 'ewr']);
+		// At a calibration site (a gauge node), beside the gauge's records.
+		expect(['observed_flow_quality', 'outflow', 'observed_flow'].sort(seriesKeyOrder('node'))).toEqual(['outflow', 'observed_flow', 'observed_flow_quality']);
 	});
 });
 
@@ -893,7 +898,10 @@ describe('farm column guide', () => {
 	it('gives every farm daily column its letter and formula', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
-		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
+		expect(lines).toHaveLength(2 + FARM_COLUMNS.length + 2 + OBSERVED_FLOW_COLUMNS.length);
+		// The observed flow record's columns follow, the quality flags' codes spelled out (engine ≥ 1.48.0).
+		expect(lines[2 + FARM_COLUMNS.length]).toBe('Observed flow columns (the catchment daily CSV or a calibration site’s)');
+		expect(lines.find((l) => l.startsWith(',observed_flow_quality,'))).toContain('3 above the highest gauging');
 		expect(lines).toContain('V,balance_residual,"(H + I + J + rain on dam + GW + GWd) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW, GWd and Dep only with boreholes)"');
 	});
 });

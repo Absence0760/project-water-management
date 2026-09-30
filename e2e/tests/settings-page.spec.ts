@@ -6,7 +6,7 @@
 // example catchments for a real fit record.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject } from '../support/api.ts';
+import { addMember, createProject, updateSettings } from '../support/api.ts';
 import { DEMO, KLEINBERG, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
@@ -115,6 +115,49 @@ test('Vary it by month sits beside its box, and the page reflows at 1280 and on 
 	await expect(header(page).getByRole('link', { name: 'Fit the parameters', exact: true })).toBeVisible();
 	await expect(fitSummary(page)).toBeVisible();
 	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+});
+
+test('a dam evaporation preset fills the monthly factors and their source, needs the A-pan first, and says when the A-pan moves on', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Lake preset');
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await openSettings(page, project.id);
+	const preset = page.getByLabel('Dam evaporation preset');
+	const source = page.getByLabel('Dam evaporation factor source');
+	// A new project has no A-pan: a WR90 preset can't convert its S-pan factors, and says so.
+	await preset.selectOption({ label: 'WR90 lake factors, WR90 pan conversion' });
+	await expect(page.getByTestId('lake-preset-error')).toContainText('enter the monthly A-pan first');
+	await expect(page.getByTestId('lake-factor-row')).toHaveCount(0);
+
+	// Oct–Sep A-pan (mm/month), a Western Cape-like year.
+	await updateSettings(page.request, project.id, { apanMm: [180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130] });
+	await openSettings(page, project.id);
+	await preset.selectOption({ label: 'WR90 lake factors, WR90 pan conversion' });
+	await expect(page.getByTestId('lake-preset-error')).toHaveCount(0);
+	// January: 0.84 × (0.8793 × 285 − 16.2354) ÷ 285 = 0.691; June: 0.517.
+	const row = page.getByTestId('lake-factor-row');
+	await expect(row.getByLabel('Dam evaporation factor, Jan, × A-pan')).toHaveValue('0.691');
+	await expect(row.getByLabel('Dam evaporation factor, Jun, × A-pan')).toHaveValue('0.517');
+	await expect(page.getByRole('checkbox', { name: 'Vary it by month' })).toBeChecked();
+	await expect(source).toHaveValue(/^WR90 lake factors, WR90 pan conversion preset: .*Midgley.*0\.8793/);
+	// The picker resets: it is an action, not a setting.
+	await expect(preset).toHaveValue('');
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	// Saved, and the note still matches the values.
+	await openSettings(page, project.id);
+	await expect(row.getByLabel('Dam evaporation factor, Jan, × A-pan')).toHaveValue('0.691');
+	await expect(source).toHaveValue(/^WR90 lake factors, WR90 pan conversion preset:/);
+	await expect(page.getByTestId('lake-preset-stale')).toHaveCount(0);
+	// Changing the A-pan leaves the factors behind the preset the note names.
+	await page.getByLabel('A-pan evaporation, Jan, mm').fill('300');
+	await expect(page.getByTestId('lake-preset-stale')).toContainText('“WR90 lake factors, WR90 pan conversion”');
+	// Filling again brings them back in step.
+	await preset.selectOption({ label: 'WR90 lake factors, WR90 pan conversion' });
+	await expect(page.getByTestId('lake-preset-stale')).toHaveCount(0);
+	await expect(source).toHaveValue(/mm: 180 230 270 300 /);
 	await expectNoViolations(page);
 });
 
