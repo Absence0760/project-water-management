@@ -4039,6 +4039,37 @@ this is signed off; each is a row of the engine audit (A5–A7,
 [engine-audit.md § Findings](./engine-audit.md#findings)), so the known
 limitations list it.
 
+### 2.9e No-flow days, and users served in full while an EWR site fails (engine ≥ 1.33.0, issue #71)
+
+Two river measures the licensing evidence report asked for
+([design/evidence-report.md](./design/evidence-report.md), the
+environmentalist's review), both read off the run's own daily series
+(`packages/engine/src/reserve/riverMeasures.ts`), so no result the engine had
+before changes. Both count **every day of the run**, like the outlet's EWR
+days (G7: never a chosen window).
+
+- **No-flow days** (`summary.catchment.noFlow`): days the simulated outflow at
+  the outlet is below **1 L/s** (`NO_FLOW_M3_DAY` = 0.001 m³/s = 86.4
+  m³/day), with the longest spell. The threshold is where a DWS gauge record,
+  published to three decimals of m³/s, reads 0.000: the zero-flow reading a
+  benchmark report counts, not a model-resolution artefact. A day at exactly
+  86.4 m³/day flows. Absent without an outlet.
+- **Served in full while the site fails** (`summary.servedWhileEwrFails`): per
+  EWR site (the outlet first, then the gauges marked as EWR sites, by node
+  id, as the EWR charge lists them, §2.7b), the days the site's EWR was not
+  met, and for each farm and water user upstream of it with demand on some
+  day, the days its whole demand was met (the deficit within 10⁻⁹ of the
+  demand, §2.11a's "fully met") on those failing days. A site is judged on
+  the daily requirement its charge follows (`basis`): the pragmatic EWR (the
+  site's cumulative share at a gauge), or with `settings.ewrChargeSource:
+  'ruleTable'` the Reserve rule table's day. A unit with no demand that day
+  is neither served nor not. It says the river's shortfall was not shared
+  with those users on those days; it is not a charge or a finding.
+
+Both are banded by the uncertainty ensemble (§2.10e, `noFlowDays`,
+`ewrSiteDaysNotMet`); the evidence report prints them on page 1 and in § 4
+(ui.md § Evidence report).
+
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:
@@ -5359,7 +5390,20 @@ it never changes a run's results.
   - natural and simulated-outflow volume per water year, and both MARs;
   - the monthly Reserve compliance rate per site with a rule table (§2.9c);
   - monthly **flow-duration curves** of simulated outflow at 5 … 99 %
-    exceedance, each read against the month's mean outlet EWR.
+    exceedance, each read against the month's mean outlet EWR;
+  - from engine 1.33.0 (`ENSEMBLE_MEASURES_SINCE`, issue #71): the outlet's
+    **no-flow days** (§2.9e), the **days each EWR site's EWR is not met**,
+    **each farm's and water user's share of demand supplied** (the member
+    stores each unit's mean demand and supply, so a group's share is Σ
+    supplied ÷ Σ demand) and the **Reserve's FDC check** (ER5): per site with
+    a rule table, per calendar month, the impacted flow-duration curve at the
+    table's own points, in the table's unit, the curve §2.9c compares with
+    the EWR curve. Members stored before 1.33.0 lack them: a summary stored
+    then has no such band, and a paired summary recomputed over them has
+    bands of no pairs and `carriesMeasures: false`, which the evidence report
+    prints as "no band: the ensemble was stored before engine 1.33.0". The
+    server requires them on a posted member (a result is stored only on the
+    engine it was started on), so a client can't thin a band by dropping one.
 - **One runoff model per ensemble.** Each ensemble records its `model`, and
   paired bands refuse two different ones, so a band stored from a legacy run
   (engine < 1.0.0) is never paired with a GR4J one.
@@ -5383,6 +5427,14 @@ it never changes a run's results.
   the pairs with a rate on both sides; `null` below the 30-member gate. A
   summary stored before it has no `worse`, and the evidence report then
   prints no "worse in" for the row.
+  From engine 1.33.0 the paired summary also bands, member by member, the
+  change in no-flow days and in each EWR site's days not met (with the share
+  of pairs with more), in each unit's share supplied (with the share of
+  pairs with less), and with `own` (the application's own units, which the
+  evidence report passes) the change in their group's Σ supplied ÷ Σ demand;
+  and the application's own Reserve FDC check curve under the same parameter
+  sets (a band on the curve, not a difference, so the chart can draw it
+  beside the baseline's).
 - **The declared rule and the cited ensemble** (issue #71,
   `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
   G4): a project may declare one rule for its evidence,

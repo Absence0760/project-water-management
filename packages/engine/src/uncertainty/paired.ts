@@ -16,6 +16,11 @@ import { ENGINE_VERSION } from '../version';
 import { band, type Band } from './bands';
 import {
 	ensembleContext,
+	ewrSitesOf,
+	memberGroupSupply,
+	memberSupplyFraction,
+	reserveFdcBands,
+	unitsOf,
 	memberInput,
 	memberMetrics,
 	type EnsembleHeader,
@@ -70,7 +75,9 @@ export function pairedHeader(baseline: EnsembleHeader, output: ModelOutput): Ens
 	return {
 		...baseline,
 		farms: (output.summary.curtailment?.farms ?? []).map((f) => ({ nodeId: f.nodeId, name: f.name })),
-		reserveSites: (output.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name }))
+		reserveSites: (output.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name })),
+		units: unitsOf(output),
+		ewrSites: ewrSitesOf(output)
 	};
 }
 
@@ -124,10 +131,28 @@ export interface PairedSummary {
 	/** Farms in only one of the runs (no difference to take). */
 	unpaired: string[];
 	decisionRule: string;
+	// Engine ≥ 1.33.0 (ENSEMBLE_MEASURES_SINCE, issue #71). Absent on summaries stored before.
+	/** Every pair carries the measures below; false when the baseline's members were stored before engine 1.33.0 (their bands then have no pairs). */
+	carriesMeasures?: boolean;
+	/** The change in no-flow days at the outlet, and the share of the pairs with more. */
+	noFlowDays?: Band;
+	noFlowDaysWorse?: number | null;
+	/** EWR sites in both runs: the change in days the site's EWR is not met, and the share of the pairs with more. */
+	ewrSites?: { key: string; name: string; band: Band; worse: number | null }[];
+	/** Units in both runs: the change in the share of demand supplied (0–1), and the share of the pairs in which it is lower. */
+	supply?: { nodeId: string; name: string; band: Band; worse: number | null }[];
+	/** With `own` (the applicant's units): the change in Σ supplied ÷ Σ demand over them, and the share of the pairs in which it is lower. */
+	ownSupply?: { band: Band; worse: number | null };
+	/** The other run's own Reserve FDC check (ER5; not a difference): per site in both runs, 12 water-year months × the table's points. */
+	reserveFdc?: { key: string; name: string; months: Band[][] }[];
 }
 
 /** Bands on other − baseline, member by member. */
-export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'header' | 'members'>, paired: Pick<PairedResult, 'header' | 'members'>): PairedSummary {
+export function summarisePaired(
+	baseline: Pick<EnsembleResult, 'options' | 'header' | 'members'>,
+	paired: Pick<PairedResult, 'header' | 'members'>,
+	opts: { own?: readonly string[] } = {}
+): PairedSummary {
 	const byIndex = new Map(pairedMembers(baseline).map((m) => [m.index, m.metrics!]));
 	const pairs = paired.members.flatMap((p) => {
 		const a = byIndex.get(p.index);
@@ -143,16 +168,19 @@ export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'head
 			}),
 			min
 		);
-	const share = (f: (x: MemberMetrics) => number) => (pairs.length < min ? null : pairs.filter(({ a, b }) => f(b) > f(a)).length / pairs.length);
-	/** Share of the pairs with a rate on both sides in which the other run's rate is lower (fewer months met). */
-	const lowerShare = (f: (x: MemberMetrics) => number | null | undefined) => {
+	/** Share of the pairs with the measure on both sides in which `worse` holds (other, baseline); null below minMembers such pairs. */
+	const shareOf = (f: (x: MemberMetrics) => number | null | undefined, worse: (y: number, x: number) => boolean) => {
 		const both = pairs.flatMap(({ a, b }) => {
 			const x = f(a);
 			const y = f(b);
-			return typeof x === 'number' && typeof y === 'number' ? [y < x] : [];
+			return typeof x === 'number' && typeof y === 'number' ? [worse(y, x)] : [];
 		});
 		return both.length < min ? null : both.filter(Boolean).length / both.length;
 	};
+	/** Share of the pairs in which the other run's value is higher (more days, more shortfall). */
+	const share = (f: (x: MemberMetrics) => number | null | undefined) => shareOf(f, (y, x) => y > x);
+	/** Share of the pairs with a rate on both sides in which the other run's rate is lower (fewer months met, less supplied). */
+	const lowerShare = (f: (x: MemberMetrics) => number | null | undefined) => shareOf(f, (y, x) => y < x);
 	const baseFarms = new Map(baseline.header.farms.map((f) => [f.nodeId, f.name]));
 	const otherFarms = new Map(paired.header.farms.map((f) => [f.nodeId, f.name]));
 	const bothFarms = paired.header.farms.filter((f) => baseFarms.has(f.nodeId));
@@ -160,6 +188,11 @@ export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'head
 	const baseSites = new Set(baseline.header.reserveSites.map((s) => s.key));
 	const years = baseline.header.waterYears;
 	const o = baseline.options;
+	const baseUnits = new Set((baseline.header.units ?? []).map((u) => u.nodeId));
+	const baseEwrSites = new Set((baseline.header.ewrSites ?? []).map((s) => s.key));
+	const fdcSites = paired.header.reserveSites.filter((s) => baseSites.has(s.key));
+	const otherMembers = pairs.map((p) => p.b);
+	const own = opts.own;
 	return {
 		members: pairs.length,
 		gated: pairs.length < min,
@@ -176,6 +209,18 @@ export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'head
 			.filter((s) => baseSites.has(s.key))
 			.map((s) => ({ ...s, band: d((x) => x.reserveRate[s.key]), worse: lowerShare((x) => x.reserveRate[s.key]) })),
 		unpaired,
+		carriesMeasures: pairs.length > 0 && pairs.every(({ a, b }) => a.noFlowDays !== undefined && b.noFlowDays !== undefined),
+		noFlowDays: d((x) => x.noFlowDays),
+		noFlowDaysWorse: share((x) => x.noFlowDays),
+		// A baseline header stored before engine 1.33.0 has no site or unit list: the other run's, which the pairs then can't fill (n = 0).
+		ewrSites: (paired.header.ewrSites ?? [])
+			.filter((s) => !baseline.header.ewrSites || baseEwrSites.has(s.key))
+			.map((s) => ({ ...s, band: d((x) => x.ewrSiteDaysNotMet?.[s.key]), worse: share((x) => x.ewrSiteDaysNotMet?.[s.key]) })),
+		supply: (paired.header.units ?? [])
+			.filter((u) => !baseline.header.units || baseUnits.has(u.nodeId))
+			.map((u) => ({ ...u, band: d((x) => memberSupplyFraction(x, u.nodeId)), worse: lowerShare((x) => memberSupplyFraction(x, u.nodeId)) })),
+		...(own ? { ownSupply: { band: d((x) => memberGroupSupply(x, own)), worse: lowerShare((x) => memberGroupSupply(x, own)) } } : {}),
+		reserveFdc: fdcSites.map((s) => ({ ...s, months: reserveFdcBands(otherMembers, s.key, (f) => band(otherMembers.map(f), min)) })),
 		decisionRule:
 			`Each of the baseline's ${pairs.length} kept parameter sets (kept by its rule: seed ${o.seed}, ${o.members} sampled) is run on both runs' inputs with the same forcing; ` +
 			`the bands are the ${o.percentiles[0]}th to ${o.percentiles[2]}th percentiles of the difference (other − baseline), shown only with at least ${min} pairs.`

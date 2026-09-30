@@ -134,6 +134,12 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		const days = r.rows.find((x) => x.id === 'ewrDays')!;
 		expect(days.change?.band?.p50).not.toBeNull();
 		expect(days.change?.worse?.n).toBe(r.uncertainty.paired?.members);
+		// The engine-1.33.0 measures, recomputed with the scenario's own units (the backend passes them: Upper has no
+		// crop, so no demand and no pairs for its own-supply band, which exists all the same).
+		expect(r.uncertainty.paired?.carriesMeasures).toBe(true);
+		expect(r.uncertainty.paired?.ownSupply?.band.n).toBe(0);
+		expect(r.rows.find((x) => x.id === 'noFlowDays')!.change?.worse?.n).toBe(r.uncertainty.paired?.members);
+		expect(r.servedWhileFailing.notAssessed).toBeNull();
 		expect(r.checks.filter((c) => !c.passed && c.blocksIssue).map((c) => c.id)).toEqual([]);
 		expect(r.issuable).toBe(true);
 		// The input diff and the ledger of application runs on this baseline.
@@ -211,7 +217,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-3');
+		expect(r.version).toBe('evidence-4');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
