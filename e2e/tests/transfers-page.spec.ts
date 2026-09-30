@@ -142,6 +142,10 @@ for (const [width, height] of [
 		const box = await rulesListBox(page);
 		expect(box.sh).toBeLessThanOrEqual(box.ch);
 		expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(height);
+		// A rule on a dam, off-season rates and the "in every month" shortcut stays near the old table's row
+		// (120 px): the card redesign first made each ~225 px, so thirty rules scrolled twice as far.
+		const heights = await page.getByTestId('transfer-rule').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+		expect(Math.max(...heights)).toBeLessThanOrEqual(width >= 1440 ? 150 : 176);
 		// Everything fits: nothing scrolls sideways to reach Priority, On or Remove.
 		expect(box.sw).toBeLessThanOrEqual(box.cw);
 		await expect(page.getByRole('button', { name: /^Remove transfer 1 / })).toBeInViewport();
@@ -283,13 +287,20 @@ test('each rule is a card: its groups side by side and top-aligned, its rates wh
 	await openTransfers(page, project.id);
 	await expect(page.getByTestId('transfer-rule')).toHaveCount(3);
 
-	// The head line: number, From → To, the switch and Remove on one row.
+	// Wide, the head is a column on the card's left, level with the rates: the number, From over To, then the
+	// switch and Remove, all left of the month fields (a head line across the top made each card ~50 px taller).
 	const card = ruleCard(page, 2);
 	const title = (await card.getByRole('heading', { level: 3 }).boundingBox())!;
-	for (const el of [card.getByLabel('Source of transfer 2', { exact: true }), card.getByLabel('Destination of transfer 2', { exact: true }), card.getByLabel('transfer 2 enabled', { exact: true }), card.getByRole('button', { name: /^Remove transfer 2 / })]) {
-		const b = (await el.boundingBox())!;
-		expect(Math.abs(b.y + b.height / 2 - (title.y + title.height / 2))).toBeLessThan(8);
-	}
+	const from = (await card.getByLabel('Source of transfer 2', { exact: true }).boundingBox())!;
+	const to = (await card.getByLabel('Destination of transfer 2', { exact: true }).boundingBox())!;
+	const on = (await card.getByLabel('transfer 2 enabled', { exact: true }).boundingBox())!;
+	const rm = (await card.getByRole('button', { name: /^Remove transfer 2 / }).boundingBox())!;
+	const oct0 = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
+	expect(from.y).toBeGreaterThan(title.y + title.height - 1);
+	expect(to.y).toBeGreaterThan(from.y + from.height - 1);
+	expect(on.y).toBeGreaterThan(to.y + to.height - 1);
+	expect(Math.abs(rm.y + rm.height / 2 - (on.y + on.height / 2))).toBeLessThan(8);
+	for (const b of [title, from, to, on, rm]) expect(b.x + b.width).toBeLessThan(oct0.x);
 	// Rates, limits and source side by side, each group starting on the same line (nothing floats mid-card).
 	const tops = await card.locator('.grp').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
 	expect(tops).toHaveLength(3);

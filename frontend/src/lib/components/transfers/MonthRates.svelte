@@ -4,14 +4,22 @@
 	// with one max rate in its ticked months shows that rate in each of them;
 	// the first edit writes the rule's own monthly list, with its months and
 	// max rate kept in step (engine withMonthlyRates), which runs the same until
-	// a month is changed. Under the fields: the months in words and a button
-	// that puts the largest rate in every month.
+	// a month is changed. Above the fields, on the group's title line (the
+	// caller's `title`): the months in words and a button that puts the largest
+	// rate in every month. One line, not a line of its own under the fields,
+	// so thirty rules don't cost thirty extra lines.
+	import type { Snippet } from 'svelte';
 	import { transferRatesM3s, withMonthlyRates, type Transfer } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
 
-	let { rule, label, disabled = false }: { rule: Transfer; /** "transfer 1": names the fields. */ label: string; disabled?: boolean } = $props();
+	let {
+		rule,
+		label,
+		disabled = false,
+		title
+	}: { rule: Transfer; /** "transfer 1": names the fields. */ label: string; disabled?: boolean; /** The group's title, at the head line's start. */ title?: Snippet } = $props();
 
 	const rates = $derived(transferRatesM3s(rule));
 	const top = $derived(Math.max(0, ...rates));
@@ -26,6 +34,17 @@
 
 <fieldset class="rates" data-testid="month-rates">
 	<legend class="visually-hidden">Max rate of {label} by month, m³/s (blank = off)</legend>
+	<div class="head">
+		{@render title?.()}
+		<div class="sum">
+			<span class="summary muted">{summary}</span>
+			{#if !disabled && top > 0 && rates.some((r) => r !== top)}
+				<button type="button" class="btn btn-sm btn-ghost all" onclick={() => Object.assign(rule, withMonthlyRates(new Array(12).fill(top)))}>
+					{fmtNum(top, 4, true)} in every month
+				</button>
+			{/if}
+		</div>
+	</div>
 	<div class="cells">
 		{#each WATER_YEAR_MONTHS as m, k (m)}
 			<div class="cell" class:on={rates[k]! > 0}>
@@ -42,14 +61,6 @@
 				/>
 			</div>
 		{/each}
-	</div>
-	<div class="foot">
-		<span class="summary muted">{summary}</span>
-		{#if !disabled && top > 0 && rates.some((r) => r !== top)}
-			<button type="button" class="btn btn-sm btn-ghost all" onclick={() => Object.assign(rule, withMonthlyRates(new Array(12).fill(top)))}>
-				{fmtNum(top, 4, true)} in every month
-			</button>
-		{/if}
 	</div>
 </fieldset>
 
@@ -110,12 +121,20 @@
 		-webkit-appearance: none;
 		margin: 0;
 	}
-	.foot {
+	/* The title and the summary share a line, wrapping to two only where the group is too narrow for both. */
+	.head {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
+		gap: 0.1rem 0.75rem;
+		margin-bottom: 0.3rem;
+	}
+	.sum {
+		display: flex;
+		align-items: center;
 		gap: 0.5rem;
-		margin-top: 0.3rem;
+		margin-left: auto;
 		min-height: 24px;
 	}
 	.summary {
@@ -123,7 +142,6 @@
 		overflow-wrap: anywhere;
 	}
 	.all {
-		margin-left: auto;
 		font-size: 0.75rem;
 		min-height: 24px;
 		padding: 0 0.4rem;

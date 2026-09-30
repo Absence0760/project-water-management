@@ -82,6 +82,21 @@ export const ALWAYS_SHOWN: TabId = 'overview';
  */
 export const VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT = false;
 
+/**
+ * The sections hidden from the sidebar until a person chooses their own
+ * (their saved `hiddenTabs` is null: never chosen, or "Reset to default"):
+ * the ones most days don't need. History is the model's change log,
+ * Allocations the registered-volume comparison and Applications the
+ * licensing inbox. Each still opens from a link and is one tick away in
+ * Choose sections.
+ */
+export const DEFAULT_HIDDEN_TABS: readonly TabId[] = ['allocations', 'applications', 'history'];
+
+/** The sections a person hides: their own choice, or the default when they never made one (null). */
+export function hiddenChoice(stored: readonly string[] | null | undefined): readonly string[] {
+	return stored ?? DEFAULT_HIDDEN_TABS;
+}
+
 export interface TabPrefs {
 	/** A viewer's "Show model inputs" toggle. Undefined → the default above. */
 	showModelInputs?: boolean;

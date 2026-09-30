@@ -144,15 +144,17 @@ test('neighbouring help tips show their own close-up, with their feature ringed'
 	expect(seen[2]!.ring).not.toEqual(seen[1]!.ring);
 });
 
-test('the help contents: static groups under headings, the glossary one link per topic (issue #162)', async ({ page, owner }) => {
+test('the help contents: groups under headings, the glossary one link per topic (issue #162)', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto('/help/glossary');
 	const nav = page.getByRole('navigation', { name: 'Help' });
 
-	// Each group's name is a heading, not a link, and names its list of links.
+	// Each group's name is a heading, not a link, and names its list of links;
+	// the group holding the page you're on is the one open.
 	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Reference']);
 	await expect(nav.getByRole('link', { name: /^(Start here|How it works|How to|Reference)$/i })).toHaveCount(0);
+	await expect(nav.getByRole('button', { name: 'Reference' })).toHaveAttribute('aria-expanded', 'true');
 	const reference = nav.getByRole('list', { name: 'Reference' });
 	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
 	const names = (await topics.allTextContents()).map((t) => t.trim());
@@ -197,6 +199,67 @@ test('a glossary topic spans the help column, with "On this page" pinned to its 
 	await expect(onPage).toBeInViewport();
 });
 
+// All four groups open made the sticky contents column ~1180 px tall, so it
+// scrolled inside itself at 1440×960 and 1280×800. One group opens at a time
+// (the current page's), and the column fits both windows with any one open.
+for (const viewport of [
+	{ width: 1440, height: 960 },
+	{ width: 1280, height: 800 }
+]) {
+	test(`the help contents fit a ${viewport.width}×${viewport.height} window without scrolling, every page reachable by keyboard`, async ({
+		page,
+		owner
+	}) => {
+		void owner;
+		await page.setViewportSize(viewport);
+		const side = page.getByRole('complementary', { name: 'Help contents' });
+		const nav = side.getByRole('navigation', { name: 'Help' });
+		const fits = async (where: string) => {
+			const m = await side.evaluate((el) => ({ over: el.scrollHeight - el.clientHeight, bottom: el.getBoundingClientRect().bottom }));
+			expect(m.over, where).toBeLessThanOrEqual(0);
+			expect(m.bottom, where).toBeLessThanOrEqual(viewport.height);
+		};
+
+		// A page in each group opens that group, marks the page, and fits.
+		for (const [path, group] of [
+			['/help/guides/the-whole-process', 'Start here'],
+			['/help/guides/how-calibration-works', 'How it works'],
+			['/help/guides/add-a-transfer', 'How to'],
+			['/help/glossary/input-data', 'Reference']
+		] as const) {
+			await page.goto(path);
+			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			await expect(nav.getByRole('button', { name: group })).toHaveAttribute('aria-expanded', 'true');
+			await expect(nav.getByRole('button', { expanded: true })).toHaveCount(1);
+			await expect(nav.locator('a[aria-current="page"]')).toBeVisible();
+			await fits(path);
+		}
+
+		// From the overview, the keyboard opens each group in turn (closing the
+		// last) and reaches its first page; together they list every guide and topic.
+		await page.goto('/help');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		const seen = new Set<string>();
+		for (const group of ['Start here', 'How it works', 'How to', 'Reference']) {
+			const button = nav.getByRole('button', { name: group });
+			await button.focus();
+			await page.keyboard.press('Enter');
+			await expect(button).toHaveAttribute('aria-expanded', 'true');
+			await expect(nav.getByRole('button', { expanded: true })).toHaveCount(1);
+			const list = nav.getByRole('list', { name: group });
+			const links = list.getByRole('link');
+			await page.keyboard.press('Tab');
+			await expect(links.first()).toBeFocused();
+			for (const href of await links.evaluateAll((els) => els.map((a) => a.getAttribute('href')!))) seen.add(href);
+			await fits(`/help, ${group} open`);
+		}
+		// Every link in the contents (hidden ones included) but the overview's.
+		const all = await nav.locator('ul.links a').evaluateAll((els) => els.map((a) => a.getAttribute('href')!));
+		expect(all.length).toBeGreaterThan(25);
+		expect([...seen].sort()).toEqual([...all].sort());
+	});
+}
+
 test('on a phone the help contents fold behind a button above the page', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 390, height: 800 });
@@ -211,6 +274,8 @@ test('on a phone the help contents fold behind a button above the page', async (
 
 	await toggle.click();
 	await expect(nav).toBeVisible();
+	// One group's pages at a time here too: open How to, then pick a page.
+	await nav.getByRole('button', { name: 'How to' }).click();
 	await nav.getByRole('link', { name: 'Add a transfer' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Add a transfer' })).toBeVisible();
 	// Choosing a page folds the contents away again.

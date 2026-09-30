@@ -8,7 +8,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedManyAllocations } from '../support/allocations.ts';
-import { addMember, createRun } from '../support/api.ts';
+import { addMember, createRun, showAllSections } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { createScenario } from '../support/scenarios.ts';
 
@@ -156,6 +156,8 @@ test.describe('phone', () => {
 		test.setTimeout(120_000);
 		void owner;
 		const p = await seedBig(page, 'Phone overlays');
+		// The Sections menu at its longest: every section, not the default that hides three.
+		await showAllSections(page.request);
 		const unit = p.units[0]!;
 		const within = async (name: string | RegExp, full: boolean) => {
 			const d = page.getByRole('dialog', { name });

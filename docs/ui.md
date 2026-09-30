@@ -411,7 +411,9 @@ the same file, which the help pages share. It is layout only: the URLs stay
   its accessible name says "Hidden (n)"; see Tabs by role below),
   the project's name (a link to its Summary; a long name is clamped to two
   lines, the full name its tooltip and accessible name), the section labels
-  shown, with a
+  shown (each section a group named by its label; "Catchment" and the labels
+  are styled as Help's side panel's group headings, the text colour, bold and
+  uppercase, which `app-sidebar.spec.ts` compares), with a
   viewer's **Show model inputs** at the end. **Data** carries an amber badge
   counting the series behind: the series a run is driven by (recorded rain,
   A-pan evaporation; never a forecast or a flow) ending more than
@@ -486,16 +488,22 @@ Project page's headline facts still link to their tabs (a deep link, as above).
 
 **Your own sections** (`workspace/SectionsMenu.svelte`,
 `e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
-hides the sections they don't use. The **Choose sections** button (icon only
+hides the sections they don't use. Until they choose, three are hidden by
+default (`DEFAULT_HIDDEN_TABS` in `lib/workspace/tabs.ts`): **History** (the
+model's change log), **Allocations** (registered volumes against modelled
+use) and **Applications** (the licensing inbox), the sections most days don't
+need; each is one tick away and still opens from a link. The **Choose sections** button (icon only
 on the sidebar's "Catchment" line, in words at the foot of the phone's
 Sections menu; once some are hidden, a count on the corner of the sidebar's
 icon, kept within its 24 px button so the slot never scrolls sideways, and
 "Hidden (n)" in the phone's words) opens a dialog with a
 checkbox per section the role shows here, opening right beside the button
 (centred on a phone), grouped as the sidebar is (the groups side by side,
-one column on a phone), with **Reset to default** and
-**Done**. Summary is always shown (its box is ticked and disabled). The
-choice is the account's (`user.preferences.hiddenTabs`, `PATCH /auth/me`,
+one column on a phone), with **Reset to default** (back to those three hidden; off while the person
+has no choice of their own) and **Done**. Summary is always shown (its box is ticked and disabled). The
+choice is the account's (`user.preferences.hiddenTabs`, `null` until they make
+one, `[]` when they chose to show every section; `hiddenChoice` resolves it;
+`PATCH /auth/me`,
 [api.md § Auth](./api.md)), so it applies in every catchment and on every
 device; each change saves at once, in order, with the boxes kept live (a
 failed save says so and holds until a reload). It goes through `prefs.hidden`:
@@ -1278,7 +1286,10 @@ Each table (`ProjectTable.svelte`, container on its wrapper) folds Lowest
 dam and Last run into a line under the name at 1100 px or narrower (a
 1280 px window beside the app sidebar), and at 730 px every figure: the
 pill, units short, the freshness badge, the last run and the lowest dam
-stack under the name, with Add data and ⋯ stacked on the right.
+stack under the name, with Add data and ⋯ stacked on the right. The rain
+badge wraps inside its cell at any width (until 2026-09-29 it stayed on one
+line and ran under Last run; `projects.spec.ts` checks it at 1440, 1024 and
+320 px).
 
 **A click anywhere on a project's row opens it.** The name link stretches
 over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:
@@ -2280,7 +2291,10 @@ has a rate in any month, since its rates and limits go with it, and says
 Discard on the save bar still brings it back until the model is saved; a blank
 rule goes at once. Focus moves to the next rule's heading (the previous one's
 for the last). An off rule's card is tinted, with a neutral edge instead of
-the accent one, and says **off** in words (not faded text).
+the accent one, and says **off** in words (not faded text). Where the card is
+widest (1280 and 1440 windows) the head line is a column on the card's left
+instead, level with the rates: the number, From over To, then the switch and
+Remove.
 
 The card's body holds three top-aligned groups:
 
@@ -2288,9 +2302,12 @@ The card's body holds three top-aligned groups:
   twelve m³/s fields in water-year order, six to a row (four in a phone's
   card, all twelve in one row where the group is 58rem wide), each wide
   enough to show 0.0129 or 12.345 whole, with tabular figures; a blank month
-  is off. Under them the months in words with the largest rate, and **… in
-  every month**, which puts the largest rate in all twelve (both to four
-  decimals, so the button names the rate it copies). A workbook rule with one
+  is off (the title says m³/s; "blank = off" is in the fields' group name and
+  each blank field says *off*). On the title's line, at its right, the months
+  in words with the largest rate, and **… in every month**, which puts the
+  largest rate in all twelve (both to four decimals, so the button names the
+  rate it copies); they wrap under the title only where the group is too
+  narrow for both. A workbook rule with one
   rate in its ticked months shows that rate in each of them and runs as
   before; the first edit gives it its own rate per month (`monthlyRateM3s`,
   with `months` and `maxRateM3s` kept in step).
@@ -2307,7 +2324,13 @@ The card's body holds three top-aligned groups:
   the destination’s dam. The fields sit two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip. The groups sit side by
-side where the card is 70rem wide (1280 and 1440 windows); from 46rem the
+side where the card is 70rem wide (1280 and 1440 windows), beside the head
+column; there the Limits and Source titles are dropped (dividers mark the
+groups and every field names itself), a dam source's two fields stack in a
+narrow column and a river off-take's sit two to a row. A rule on a dam is
+147 px tall at 1440 (the table's row was 120 px; the first cards were 225 px,
+so thirty rules scrolled twice as far), 173 px at 1280 when its summary
+wraps. From 46rem the
 rates sit beside the limits with the source across under them (the grid
 modal, narrow windows); below that (a phone) everything stacks, From and To
 each take a full row with their word, the source's selects take the card's
@@ -5211,9 +5234,10 @@ unit's own fields). A field never changed since it was set shows nothing.
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at
   first paint, and again after a model save, a settings save or a restore.
-  The page shares it through context and sets it only for members whose tabs
-  include History (not farmers or applicants), so no one else fetches or sees
-  it. A failed fetch leaves the lines hidden; the fields work as before.
+  The page shares it through context and sets it only for members whose role
+  sees History (not farmers or applicants), so no one else fetches or sees
+  it; hiding History from one's own sidebar (it is hidden by default) keeps
+  the lines. A failed fetch leaves the lines hidden; the fields work as before.
 
 e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer, a field's line
 after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: header line, window fit and a
@@ -5520,14 +5544,22 @@ exists, says so with a link to Runs & results.
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, then four static groups, *Start here*,
+(`help/HelpNav.svelte`: the overview, then four groups, *Start here*,
 *How it works*, *How to* and *Reference*, the last the glossary's index and
 one link per topic) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
-indented under a thin rule, so a group reads as a block (issue #162). The
-contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
-against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window). The column fits the window exactly
+indented under a thin rule, so a group reads as a block (issue #162). One
+group shows its pages at a time: the heading holds a disclosure button
+(`aria-expanded`, a chevron), the group holding the page you're on opens by
+itself as you move between pages, and opening another closes it (on the
+overview and search the last one opened stays open). With all four open the
+list was ~1180 px tall, so the sticky column scrolled inside itself at
+1440×960 and 1280×800; with one open it is ~570 px at most and fits both
+(`help.spec.ts` checks each group, opened from the keyboard, and that together
+they reach every link). The contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
+against the app sidebar, beside the text, sticky while you read, scrolling on their own only in a
+window shorter than the overview plus the longest group (~620 px), where the alternative is
+clipping links. The column fits the window exactly
 (the page's top gutter above it and below it), and the reading space at the end of a long page belongs
 to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
 guide) doesn't scroll. They
