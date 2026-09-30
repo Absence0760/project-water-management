@@ -1082,8 +1082,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`app_applicant_pack_units(report, own)`, IMMUTABLE, not `water_app`'s:
   the report's users, their own by name, `own` being
   `app_application_own_nodes`, 071, plus the nodes only in the application
-  run; every other unit in both runs as `{ kind, n, changePts }`, numbered
-  per kind by `md5` of its id, the change rounded to whole points; NULL
+  run; every other unit in both runs as `{ nodeId, kind, changePts }`, the
+  change rounded to whole points, **for the server only**: the route keeps
+  those downstream of the application in its run's stored model and names
+  them as the results view does, then drops the id; NULL
   when the report changed a baseline assumption). Nothing else of the
   manifest ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - **Cites both runs**: `model_run_cited` (latest body here) has a clause for

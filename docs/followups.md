@@ -4319,8 +4319,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       packs, never a draft, through `SECURITY DEFINER` functions rather than
       a row policy (the manifest names every unit, and RLS can't hide a
       column): verify's fields, a pack link's figures and D2's units (their
-      own by name, every other as "Farm n" with its change in whole points;
-      none when a baseline assumption changed). `GET
+      own by name, the others downstream of the application under the names
+      the results view gives them, with their change in whole points; none
+      when a baseline assumption changed). `GET
       …/scenarios/:sid/packs[/:packId]`, the Application panel's list and
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner

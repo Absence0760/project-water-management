@@ -6365,17 +6365,19 @@ Part of the workspace, so English, like the rest of the Applicant view
   withdraw their links too; making one needs it issued), **Verify page**,
   where it stands (`standingLine`: issued and standing; replaced, with
   **Open the version that replaced it**; withdrawn, with the reason), and a
-  note that this is their copy: their own units by name, every other only
-  by a number, as the rest of the application; the assessors' copy, its PDF
+  note that this is their copy: their own units by name, the others
+  downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
 - **Hydrological units**: *Yours* (share of demand supplied, baseline, with
   the application, the change in points and its likely range; a unit the
-  application adds says so) and *Everyone else* (a one-line count of who
-  gets less and who more, then "Farm n" / "Water user n" with the change in
-  whole points, and a line saying the numbers are the pack's own). When the
+  application adds says so) and *Everyone else downstream* (a one-line
+  count of who gets less and who more, then each farm or water user
+  downstream of the application under the name the results view and the
+  map give it, "Farm 3", with the change in whole points; when the run's
+  base is no longer published, a line says why none is shown). When the
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
@@ -6386,7 +6388,8 @@ Part of the workspace, so English, like the rest of the Applicant view
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
-  view, their farm named and the neighbour as "Farm 1", no download, the
+  view, their farm named and the neighbour beside it, not downstream, not
+  listed (as in the results view), no download, the
   errata found since issue, a share link opened signed out, axe, the phone
   layout).
 

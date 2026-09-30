@@ -466,7 +466,7 @@ row; they read a projection the database builds (D2's recommended default,
 | the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
 | their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: ranked per kind in the order of a hash of the node's id, so the number says nothing of its name or place; a rank within this pack, not a label, so "Farm 3" in one version need not be "Farm 3" in the next |
+| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the application's own units now, as the results view; when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the
@@ -481,8 +481,10 @@ verify page). An anonymised printable copy for the applicant is a follow-up
 
 **Share links.** The application's owner (not the consultant they shared it
 with) makes a link to their own pack while it is issued, and lists and
-revokes the links they made, whatever its standing; the editors still list
-and revoke every link. The link shows the public projection above
+revokes the links they made, whatever its standing, while they are still
+its party; the editors still list and revoke every link. Someone who made a
+link as an editor and was demoted since, and isn't a party, no longer sees
+or revokes it. The link shows the public projection above
 ([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
 applicant's own included.
 
@@ -500,8 +502,11 @@ Tests: `backend/src/evidence/applicant-packs.db.test.ts`,
 `evidence/applicantPacks.test.ts`,
 `frontend/src/lib/components/packs/applicantPack.test.ts` and
 `e2e/tests/applicant-pack.spec.ts` (the applicant opens their issued pack
-from the Application panel, sees their farm by name and the neighbour as
-"Farm 1", makes a link, and it opens signed out).
+from the Application panel, sees their farm by name and not the neighbour
+beside it, which isn't downstream, as in their results view, makes a link,
+and it opens signed out); `evidence/applicant-pack-units.db.test.ts` (the other units are the
+results view's downstream units under the same names; no upstream or side
+unit).
 
 ## Notices
 
