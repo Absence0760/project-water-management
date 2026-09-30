@@ -271,7 +271,7 @@ export interface EvidenceSite {
 	sourceKind: string;
 	component: string;
 	unit: string;
-	/** The recommended ecological category: not a field of the rule table yet (ER9), so always "Not given". */
+	/** The recommended ecological category (REC) from the baseline's rule table (ER9): "A" … "F" or a band like "B/C"; null = not given. */
 	category: string | null;
 	/** The EWR as % of the natural MAR at the site, computed from the run (engine ≥ 1.19.0); null when it can't be. */
 	ewrPctNmar: number | null;
@@ -290,6 +290,20 @@ export interface EvidenceSite {
 	rateA: number | null;
 	rateB: number | null;
 	monthsA: number;
+	/**
+	 * Complete months whose natural flow is drier than the rule table's driest
+	 * point (G16), baseline and application (B null for baseline evidence, or
+	 * when the application has no such site): the requirement is scaled with
+	 * the flow there (model.md §2.9c).
+	 */
+	belowTableA: number;
+	belowTableB: number | null;
+	/**
+	 * With the percentile from the run, the share of months expected below the
+	 * driest point by construction (100 − its %, the run's own duration curve);
+	 * null with the table's natural curve, which places months on its own.
+	 */
+	belowTableExpectedPct: number | null;
 	/** By calendar month (water-year order): complete years and met, baseline and application. */
 	byMonth: { month: number; years: number; metA: number; metB: number | null }[];
 	/** The calendar month whose FDC check the report plots: the one with the largest drop in months met, else the driest month. */

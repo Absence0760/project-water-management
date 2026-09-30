@@ -3656,16 +3656,37 @@ Left, from the design and the persona review (§11), each with its trigger.
       [model.md §2.9e](./model.md#29e-no-flow-days-and-users-served-in-full-while-an-ewr-site-fails-engine--1320-issue-71)),
       both runs, the longest spell, and the paired band with "worse in"
       (`MemberMetrics.noFlowDays`).
-- [ ] **A flag for flows below the rule table's lowest point** (G16). A
-      natural flow below the table's lowest percentile reads the lowest
-      requirement, which can hide a failure. Durable fix: count those months
-      per site in `ewrAssurance` and flag them on page 1. Trigger: before the
-      pilot.
+- [x] **A flag for flows below the rule table's lowest point** (G16). A
+      natural flow drier than the table's driest point gets a requirement
+      scaled down with the flow (model.md §2.9c), below the table's driest
+      requirement, which makes those months easier to meet. Durable fix:
+      count those months per site and flag them on page 1. **Done:** the
+      evidence report counts each site's months with `beyond: 'drier'`
+      (baseline and application, `belowTableA/B`), prints them in § 1's site
+      strip and flags them as a caution on page 1 with their effect (the
+      requirement shrinks with the flow), with the share expected by
+      construction when the percentile is from the run. The scaling rule
+      itself stays pending the hydrologist (model.md §2.9c).
 - [x] **Days a user is served in full while the site fails** (environmentalist).
       Built (engine 1.32.0): per EWR site, not only the outlet, the days each
       unit upstream got its whole demand while the site's EWR failed
       (`summary.servedWhileEwrFails`), in a § 4 table and a "read these
       first" count naming them.
+- [x] **The Reserve method's open choices are not in the known-limitations
+      list.** Done 2026-09-29: engine-audit rows A1–A7 (below the driest
+      point, interpolation, the percentile's source and the ±15 % MAR
+      tolerance, the charge source, low flows on base flow, finding a
+      high-flow event, capping and counting events), each pending the
+      hydrologist, regenerated with `pnpm gen:liability`; plan.md question 17
+      and engine-audit's open question 12 carry them. Was: model.md §2.9c lists them as pending the hydrologist (the
+      requirement below the driest point scaled or held, linear or log
+      interpolation, the percentile from the run or the table, the charge
+      source), and the evidence report's G16 flag says so, but
+      `docs/engine-audit.md` has no row for them, so the generated Known
+      limitations (printed on every validation statement) omit them. Durable
+      fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
+      choices, then `pnpm gen:liability`. Trigger: the next change to the
+      engine-audit tables, or before the pilot, whichever is first.
 - [ ] **The driest month's FDC beside the largest-change month.** § 1 plots
       one month (`fdcMonth`: the largest drop in months met, else the
       driest). Durable fix: plot both when they differ. Trigger: the next
@@ -3695,10 +3716,15 @@ Left, from the design and the persona review (§11), each with its trigger.
       applicant's own supply, the other users' rows and § 4's Change column
       carry them; an ensemble stored before 1.32.0 prints *no band* with the
       reason.
-- [ ] **REC per rule table (ER9).** The site strip prints REC *Not given*.
+- [x] **REC per rule table (ER9).** The site strip prints REC *Not given*.
       Durable fix: `category` and `reference` on `EwrRuleTable` (a settings
-      field, a baseline assumption in the diff). Trigger: the client's
-      hydrologist answers ER-D2.
+      field, a baseline assumption in the diff). **Done:** an optional
+      `category` (A–F or a band like B/C) on the rule table: Settings, the
+      settings API, `ewrRule.set`, the run-comparison diff and the § 1 site
+      strip (*Not given* and the assessor question only when absent). A
+      label: no result changes, no `ENGINE_VERSION` bump. No separate
+      `reference`: the table's required `source` is the gazette notice.
+      The values themselves still wait on ER-D2.
 - [x] **Banded FDC (ER5).** Built (engine 1.32.0): each member carries the
       Reserve's FDC check curve per site and month at the table's points
       (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %

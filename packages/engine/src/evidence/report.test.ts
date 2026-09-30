@@ -429,6 +429,72 @@ describe('absence is printed, never omitted (rule 3, G6, G16)', () => {
 	});
 });
 
+describe('the Reserve site strip: the REC (ER9) and months below the table (G16)', () => {
+	const withTable = (i: EvidenceInput, over: Record<string, unknown>): EvidenceInput => {
+		const settings = { ...i.baseline.inputs.settings, ewrRules: [{ ...reserveTable(), ...over }] as never };
+		return { ...i, baseline: { ...i.baseline, inputs: { ...i.baseline.inputs, settings } } };
+	};
+	const recQuestion = (r: ReturnType<typeof evidenceReport>) => r.questions.filter((q) => q.includes('(REC)'));
+
+	it('prints the REC from the baseline’s rule table, and asks for it only when absent', () => {
+		const r = evidenceReport(withTable(input(), { category: 'B/C' }));
+		expect(r.river[0]!.category).toBe('B/C');
+		expect(recQuestion(r)).toEqual([]);
+		// Control: no REC on the table is "not given", and the assessor's question names the site.
+		const none = evidenceReport(input());
+		expect(none.river[0]!.category).toBeNull();
+		expect(recQuestion(none)).toEqual([expect.stringMatching(/^The recommended ecological category \(REC\) is not given at Gauge: /)]);
+	});
+
+	it('matches the outlet’s table whether it names no site or the outflow node', () => {
+		expect(evidenceReport(withTable(input(), { siteNodeId: 'G', category: 'C' })).river[0]!.category).toBe('C');
+		// A table at another site is not the outlet's, and a malformed REC is not printed.
+		expect(evidenceReport(withTable(input(), { siteNodeId: 'F1', category: 'C' })).river[0]!.category).toBeNull();
+		expect(evidenceReport(withTable(input(), { category: 'Z' })).river[0]!.category).toBeNull();
+	});
+
+	it('does not change a result: the rest of the report is the same with or without a REC', () => {
+		const strip = (r: ReturnType<typeof evidenceReport>) => ({ ...r, river: r.river.map((x) => ({ ...x, category: null })), questions: [], identity: null, verification: null, appendix: null });
+		expect(canonicalJson(strip(evidenceReport(withTable(input(), { category: 'A' }))))).toBe(canonicalJson(strip(evidenceReport(withTable(input(), {})))));
+	});
+
+	/** The input with the first `n` baseline months (and `m` application months) drier than the table's driest point. */
+	const drier = (n: number, m: number | null = null): EvidenceInput => {
+		const i = input();
+		const mark = (run: EvidenceRunInput, k: number): EvidenceRunInput => {
+			const summary = structuredClone(run.summary);
+			summary.ewrAssurance![0]!.months.forEach((x, j) => (x.beyond = j < k ? 'drier' : x.beyond === 'drier' ? null : x.beyond));
+			return { ...run, summary };
+		};
+		return { ...i, baseline: mark(i.baseline, n), application: { ...i.application!, ...mark(i.application!, m ?? n) } };
+	};
+
+	it('counts the months below the table per site, and flags them as a caution with their effect', () => {
+		const r = evidenceReport(drier(3));
+		const s = r.river[0]!;
+		expect([s.belowTableA, s.belowTableB]).toEqual([3, 3]);
+		const f = r.flags.find((x) => x.id === 'belowTable-outlet')!;
+		expect(f.level).toBe('caution');
+		expect(s.belowTableExpectedPct).toBe(1);
+		expect(f.text).toBe(
+			`At Gauge the natural flow is drier than the rule table’s driest point in 3 of ${s.monthsA} months: the requirement there is scaled with the flow, a rule pending the hydrologist. With the percentile from the run, about 1 % of months fall there by construction.`
+		);
+		expect(f.effect).toMatch(/^The requirement shrinks with the flow in those months, below the table’s driest requirement/);
+	});
+
+	it('names both runs’ counts when they differ', () => {
+		const r = evidenceReport(drier(2, 5));
+		expect([r.river[0]!.belowTableA, r.river[0]!.belowTableB]).toEqual([2, 5]);
+		expect(r.flags.find((x) => x.id === 'belowTable-outlet')!.text).toMatch(/in 2 of \d+ months in the baseline and 5 in the application:/);
+	});
+
+	it('has no such flag when no month is below the table (control)', () => {
+		const r = evidenceReport(drier(0));
+		expect([r.river[0]!.belowTableA, r.river[0]!.belowTableB]).toEqual([0, 0]);
+		expect(r.flags.map((x) => x.id)).not.toContain('belowTable-outlet');
+	});
+});
+
 describe('baseline evidence (the nominated run alone)', () => {
 	const r = evidenceReport(input({ application: null, changes: [] }));
 

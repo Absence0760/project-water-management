@@ -454,7 +454,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
   outlet, else a gauge's node id; checked by the run, not here), `source`
   1–500 chars, optional `sourceKind` (engine ≥ 1.5.0: `gazetted` | `desktop`
-  | `other` | `null`, absent = not stated), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
+  | `other` | `null`, absent = not stated), optional `category` (ER9, issue
+  #71: the REC, `A` … `F` or a band of two neighbouring classes like `B/C`,
+  `null`/absent = not given; a label, no result depends on it), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
