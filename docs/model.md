@@ -3372,7 +3372,10 @@ recorded". The source is a record, never an input: a run is the same to the
 bit with any source or none (`run.demandSource.test.ts` on random networks).
 The run carries it on the object's summary (`DemandObjectSummary.source`), and
 the demand-objects table and the summary CSV show it with each source's share
-of the objects' demand. Which source a demand *should* have (whether a
+of the objects' demand (`network/demandSources.ts`); the licensing evidence
+report's § 6 lists the applicant's objects with their sources and the same
+shares, and cautions on page 1 when less than half of that demand is from
+meter records (report format `evidence-9`, [evidence-pack.md](./evidence-pack.md)). Which source a demand *should* have (whether a
 catchment has meter records the modeller skipped) is the modeller's call; the
 app records it and never guesses one.
 

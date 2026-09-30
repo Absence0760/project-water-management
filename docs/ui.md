@@ -2130,7 +2130,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   the rest) and a line above the table giving each source's share of the
   objects' demand, best source first ("Of their demand, 60% is from meter
   records, 30% from a per-capita norm and 10% not recorded.",
-  `runs/demandSources.ts`, `e2e/tests/demand-source.spec.ts`); the summary
+  `runs/demandSources.ts` over the engine's `demandBySource`, which the
+  evidence report's § 6 shares, `e2e/tests/demand-source.spec.ts`); the summary
   CSV's demand-objects block gains a Source column the same way.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
@@ -6342,6 +6343,24 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     "Not capped" for the run that doesn't cap it. Units by their unit name,
     never the holder's. *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
+  - **6 The applicant's demand objects** (application only, report format
+    `evidence-9`, issue #259): every demand object on the applicant's units
+    (theirs, or a unit the application adds), as the application ran it and
+    one it removes as the baseline did (`evidence-demand-objects`): its unit,
+    name and category, what the application does to it (*Added*,
+    *Changed*, *Removed*, *Unchanged*), its sizing in words
+    (`demandObjects.ts` `sizingText`: "20 m³/day every month", a range and
+    mean by month, or "400 × 230 l a day, 10 % losses"), its source with the
+    note under it as entered, its mean demand in each run and its share
+    supplied in the application. Above the table the by-source line the
+    run's demand-objects table prints ("Of their demand, 30% is from meter
+    records and 70% not recorded", `evidence-demand-sources`) with the rule.
+    Page 1 gets a caution when most of that demand isn't from meter records,
+    and the checks' *Expect questions about* one per object with no source;
+    the notes stay in § 6, never on page 1. *Not assessed* when the
+    applicant has no demand object (`evidence-demand-objects-na`). A pack
+    drafted before `evidence-9` has no § 6: its sections print as they
+    always did.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every
@@ -6350,7 +6369,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     issued* for a draft), **Appendix C** (application only): the fixed prompts
     first (`evidence-8`), each prompt's heading and question, then the
     scenario's answer verbatim or *Not given.*; then the scenario's
-    description and the run's notes, verbatim. The only free text. A pack
+    description and the run's notes, verbatim. The only free text the
+    applicant writes as a statement (§ 6's source notes are model data, one
+    line each). A pack
     drafted before `evidence-8` froze no prompts, so its Appendix C says they
     aren't part of the pack rather than printing *Not given*.
 - **Evidence packs of this report** (screen only, under the checks): the
@@ -6372,8 +6393,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
-- Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
-  `e2e/tests/evidence-allocations.spec.ts`.
+- Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
+  `e2e/tests/evidence-allocations.spec.ts`, and for § 6 with objects
+  `e2e/tests/evidence-demand-objects.spec.ts`.
 
 ### Evidence pack
 
