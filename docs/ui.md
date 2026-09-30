@@ -5141,14 +5141,16 @@ see (WP-2.3); every place it shows says so.
   From engine 1.54.0: **Start from the published notice** (editors) reads
   the project's current publication and, after asking when a rule is set,
   fills the rule from its notice (one level below 100 % at the notice's %,
-  from the day it was published to the next expected one), or says why it
+  from the day it was published, in the project's time zone, to the next
+  expected one), or says why it
   can't (nothing published, no % cut); **Storage the level reads** (*Every
   farm dam (their total)*, the default; *Some dams (their total)* with a
   checkbox per farm dam; *Each unit's own dam*, with a note that a unit
   without one isn't restricted by storage); **Units it cuts** (*Every
   hydrological unit*, or a checkbox per unit); and the **EWR trigger**
   (*Also restrict when the EWR wasn't met the day before a review*, the
-  site: the outlet or a gauge, and the level: at least which). An id the
+  site: the outlet or a gauge that is an EWR site, and the level: at least
+  which). An id the
   model hasn't got blocks Save with its name.
 - **Units & supply → Drought restrictions** (`#res-restrictions`, its own
   panel and menu entry, before Other uses, for a run with the rule;

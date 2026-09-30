@@ -375,7 +375,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (1–6, mildest first), source? (≤ 500 characters), basis?: 'total' |
   'dams' | 'own', damNodeIds? (with 'dams' only, 1–500 farm dam ids),
   nodeIds? (1–500 farm ids, the units cut), ewrTrigger?: { siteNodeId: a
-  gauge id or null for the outlet, level: 1…levels } }`, or `null` / absent
+  gauge id (an EWR site) or null for the outlet (the catchment's EWR), level: 1…levels } }`, or `null` / absent
   for off (the default). Replaced whole, never merged; the engine's
   `droughtRestrictionIssues` checks it (`400 drought restriction rule: …`:
   real month-days, not 29 February, no date twice, thresholds strictly
@@ -1831,7 +1831,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
   with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
-  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.34.0:
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0), `droughtRestriction` (engine ≥ 1.54.0, only with `settings.droughtRestriction`) and `assurance` (engine ≥ 1.34.0:
   the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,

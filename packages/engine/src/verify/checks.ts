@@ -23,9 +23,9 @@ import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
-import { levelCut, resolveDroughtRestriction, restrictedObjectDemand, restrictionCutKey, restrictionLevelFor, RESTRICTION_SERIES } from '../network/restriction';
+import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -1244,7 +1244,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const lvl = LV ? LV[t]! : 0;
 			const dr = DR ? DR[t]! : d;
 			if (objs) {
-				const cuts = rule ? { cut: (c: DemandObject['category']) => levelCut(rule, lvl, c), crop: f * (1 - levelCut(rule, lvl, 'crops')) / e } : null;
+				const cuts = rule ? { cut: (c: DemandObject['category']) => checkedCut(rule, lvl, c), crop: f * (1 - checkedCut(rule, lvl, 'crops')) / e } : null;
 				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom, objFactors, cuts);
 				if (bad) return bad;
 				let od = 0;
@@ -1456,7 +1456,7 @@ function checkObjectsDay(
 	const gotBy = [0, 0, 0];
 	for (let k = 0; k < n; k++) {
 		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.54.0).
-		const d = restriction ? restrictedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
+		const d = restriction ? checkedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
 		const fl = objs.floor[k];
@@ -2052,6 +2052,27 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 }
 
 /**
+ * The drought restriction rule's three formulas (docs/model.md §2.7i), written
+ * out here rather than imported from network/restriction.ts, so a slip in the
+ * engine's own (a `<` become `<=`, the floor dropped) can't pass its check:
+ * the level is the number of thresholds the share is below (they fall level
+ * by level); a level's cut on a part (0 at level 0 or for a part it doesn't
+ * list); an object's demand after the cut, never below MIN(floor, demand).
+ */
+function checkedLevel(share: number, thresholds: readonly number[]): number {
+	let k = 0;
+	for (const th of thresholds) if (share < th) k++;
+	return k;
+}
+function checkedCut(rule: DroughtRestrictionRule, level: number, part: DemandPart): number {
+	return level > 0 ? (rule.levels[level - 1]!.cuts[part] ?? 0) : 0;
+}
+function checkedObjectDemand(d: number, cut: number, floor: number | null): number {
+	const r = d * (1 - cut);
+	return floor === null ? r : Math.max(r, Math.min(floor, d));
+}
+
+/**
  * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, ../network/restriction.ts,
  * docs/model.md §2.7i), from the run's own columns and the input's rule:
  * - without the rule (or with one it can't use) no restriction column and no
@@ -2142,22 +2163,28 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 			q += (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
 			c += cap;
 		}
-		return c > 0 ? restrictionLevelFor(q / c, thresholds) : 0;
+		return c > 0 ? checkedLevel(q / c, thresholds) : 0;
 	};
-	// The EWR trigger's site: null = the outlet (the node nothing drains into), else a gauge.
+	// The EWR trigger's site: null = the outlet (the node nothing drains into), else a gauge that is an EWR site.
+	// At the outlet the trigger reads the catchment's EWR column (the outflow against the whole EWR), not the
+	// outflow node's own share-weighted one.
 	const trig = rule.ewrTrigger;
-	const siteId = trig ? (trig.siteNodeId === null ? (nodes.find((n) => n.downstreamNodeId === null)?.id ?? null) : nodes.some((n) => n.id === trig.siteNodeId && n.kind === 'gauge') ? trig.siteNodeId : null) : null;
-	const siteShort = siteId ? get.get(`${siteId}|ewr_shortfall`) : undefined;
+	const outletId = nodes.find((n) => n.downstreamNodeId === null)?.id ?? null;
+	const siteId = trig ? (trig.siteNodeId === null ? outletId : nodes.some((n) => n.id === trig.siteNodeId && n.kind === 'gauge' && n.ewrSite !== false) ? trig.siteNodeId : null) : null;
+	const siteShort = siteId ? get.get(siteId === outletId ? 'null|ewr_shortfall' : `${siteId}|ewr_shortfall`) : undefined;
 	if (siteId && !siteShort) return `${siteId}: ewr_shortfall column missing for the drought restriction rule's EWR trigger`;
 	const failedBefore = (t: number) => (!siteShort ? false : t === 0 ? resumed?.ewrFailedBefore === true : siteShort[t - 1]! < 0);
 	// Each unit's levels, day by day.
 	const own = new Map(units.map((u) => [u.id, isDam(u) ? damOf(u) : null]));
+	if (basis === 'own') for (const d of own.values()) if (d && (!d.Q || d.before0 === undefined)) return `${d.n.id}: dam_storage column or starting storage missing`;
 	const held = new Map(units.map((u) => [u.id, resumed?.levelsBefore?.[u.id] ?? 0]));
 	const unitLevels = new Map(units.map((u) => [u.id, new Array<number>(out.days).fill(0)]));
 	let ewrReviews = 0;
+	let reviewCount = 0;
 	for (let t = 0; t < out.days; t++) {
 		const e = eventOf(day0 + t);
 		if (e === 1 || (t === 0 && e === 0 && startDecides)) {
+			reviewCount++;
 			const failed = failedBefore(t);
 			if (failed) ewrReviews++;
 			const ewr = failed && trig ? trig.level : 0;
@@ -2188,9 +2215,9 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	// Each part's cut column: a shared basis only.
 	for (const part of DEMAND_PARTS) {
 		const col = get.get(`null|${restrictionCutKey(part)}`);
-		const cuts = basis !== 'own' && rule.levels.some((_, i) => levelCut(rule, i + 1, part) > 0);
+		const cuts = basis !== 'own' && rule.levels.some((_, i) => checkedCut(rule, i + 1, part) > 0);
 		if (!!col !== cuts) return `${restrictionCutKey(part)}: ${col ? 'a column for a part no level cuts, or under the own basis' : 'no column for a part a level cuts'}`;
-		if (col) for (let t = 0; t < out.days; t++) if (col[t] !== levelCut(rule, LV[t]!, part)) return `day ${t}: ${restrictionCutKey(part)} ${col[t]} ≠ level ${LV[t]}'s cut ${levelCut(rule, LV[t]!, part)}`;
+		if (col) for (let t = 0; t < out.days; t++) if (col[t] !== checkedCut(rule, LV[t]!, part)) return `day ${t}: ${restrictionCutKey(part)} ${col[t]} ≠ level ${LV[t]}'s cut ${checkedCut(rule, LV[t]!, part)}`;
 	}
 	// Each unit's demand after the cut.
 	const inScope = new Set(units.map((u) => u.id));
@@ -2212,13 +2239,13 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
 			const lv = lvs[t]!;
-			let want = (F[t]! * (1 - levelCut(rule, lv, 'crops'))) / e;
+			let want = (F[t]! * (1 - checkedCut(rule, lv, 'crops'))) / e;
 			let scale = Math.max(F[t]! / e, D[t]!);
 			if (objs)
 				for (let k = 0; k < objs.demand.length; k++) {
 					const d = objs.demand[k]![t]!;
 					const fl = objs.floor[k]!;
-					const r = restrictedObjectDemand(d, levelCut(rule, lv, objs.category[k]!), fl);
+					const r = checkedObjectDemand(d, checkedCut(rule, lv, objs.category[k]!), fl);
 					if (fl !== null && r < dayFloor(fl, d) - tol(d)) return `${where}: demand object ${k}'s restricted demand ${r} is below MIN(its basic-needs floor ${fl}, its demand ${d})`;
 					want += r;
 					scale = Math.max(scale, d);
@@ -2248,6 +2275,7 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		const c = years.get(y.waterYear);
 		if (!c || c[0] !== y.days || y.daysByLevel.some((v, i) => v !== c[i + 1])) return `water year ${y.waterYear}: the drought restriction summary's days don't match the level column`;
 	}
+	if (sum.reviews !== reviewCount) return `the drought restriction summary's reviews ${sum.reviews} ≠ ${reviewCount}`;
 	if (trig && siteId && sum.ewrReviews !== ewrReviews) return `the drought restriction summary's EWR-triggered reviews ${sum.ewrReviews} ≠ ${ewrReviews}`;
 	if (sum.units.length !== units.length) return `the drought restriction summary lists ${sum.units.length} units, the rule cuts ${units.length}`;
 	for (const u of sum.units) {

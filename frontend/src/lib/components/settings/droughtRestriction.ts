@@ -14,6 +14,7 @@ import {
 	type DroughtRestrictionLevel,
 	type DroughtRestrictionRule
 } from '@water-management/engine';
+import { projectToday } from '$lib/components/projects/freshness';
 
 /** Each part of demand as the editor's row names it. */
 export const PART_LABEL: Record<DemandPart, string> = {
@@ -84,4 +85,14 @@ export function withCut(level: DroughtRestrictionLevel, part: DemandPart, cut: n
 	if (cut === null) delete cuts[part];
 	else cuts[part] = cut;
 	return { ...level, cuts };
+}
+
+/**
+ * The calendar day a restriction notice was published, in the project's time
+ * zone (YYYY-MM-DD): the rule's review date. Not the timestamp's UTC day,
+ * which is the day before for a notice published just after midnight in
+ * South Africa (UTC+2). Without a known zone, the viewer's own day.
+ */
+export function noticeDay(publishedAt: string, timeZone: string | null | undefined): string {
+	return projectToday(timeZone, new Date(publishedAt));
 }

@@ -656,7 +656,7 @@ function runNetwork(
 		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
-		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit while the rule is on.
+		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit the rule cuts.
 		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
 		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
 		const ul = sim.restrictionUnitLevel?.[i];
@@ -1418,7 +1418,7 @@ export function buildNetworkPlan(
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
 	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
 	const restriction = restrictionRule
-		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0 })), start!, days, warnings, topo.outflow)
+		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
 		: null;
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
