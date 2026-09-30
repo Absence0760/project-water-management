@@ -6423,11 +6423,22 @@ room. The stored `allocation_room_*` columns are that day's room. An empty
 months list states none; a month or rate that doesn't read is dropped with a
 warning, keeping the volume, and a cap run warns about a rate that can't
 deliver its volume in its months (a rate of 0 by name: an export's blank
-field is often a 0). Two choices, pending the hydrologist with the
-rest of the cap: the dam draw counts against the surface rate like any other
-surface use (a licence rate usually names the river abstraction, not what a
-farm draws from its own dam), and water not taken stays where it was, so a
-dam holds a winter-only licence's water through the summer. A full
+field is often a 0). Two choices, **Needs hydrologist** (engine-audit.md
+L2, #90). First, the months and the rate limit only the draws (from the
+dam, the river pump and a water user's river take), never water going *into*
+the dam: the river inflow and diversion (K, M, O), off-take water sent to the
+dam (`XtoDam`) and transfers in stay unlimited. A licence rate usually names
+the river abstraction, not what a farm draws from its own dam, so a
+winter-fill licence (months 4–9, 200 000 m³ a year) on a farm with a
+100 000 m³ dam and 500 m³ a day of demand from October to March gives about
+91 000 m³ of deficit, a spilling dam and about 0 m³ of modelled use, while
+filling the dam in summer stays unlimited: the water stays in the dam and
+can't be drawn in summer. For the impact downstream and on the Reserve that
+understates use, so it is not the conservative reading. Second, on a day no
+allocation of the source is in force the limit is none, while the year's
+budget still counts that licence's share: one for months 6–8 at 0.01 m³/s,
+valid October to March, puts half its volume in the budget, which the farm
+may take from April in any month at any rate. A full
 allocation doesn't apply them (it scales to the volume, keeping the unit's
 own seasonal shape), and the conditions in words are never applied.
 
