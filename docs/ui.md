@@ -6095,9 +6095,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the band shaded, one neutral hue, a year past 300 % an arrowhead at the
     edge); the whole years above, within and below per unit and source with
     the mean volumes; and every water year's registered volume and modelled
-    use, part years listed but not counted. Units by their unit name, never
-    the holder's. *Not assessed* when the runs carry no volumes, or none on a
-    unit of theirs.
+    use, part years listed but not counted. In a cap run, *What the cap held
+    back* (`evidence-allocation-cap`, `evidence-6`): per unit and source it
+    caps, the days the licence limit held use back by limit and the years
+    the volume was used up, in the Allocations page's words (`capYearsText`),
+    "Not capped" for the run that doesn't cap it. Units by their unit name,
+    never the holder's. *Not assessed* when the runs carry no volumes, or
+    none on a unit of theirs.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every

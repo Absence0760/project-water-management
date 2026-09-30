@@ -1256,9 +1256,41 @@ the suggested order (the IDs carry the detail):
       hydrologist, not a
       calculation error. Still open: the regression suite against the
       re-extracted workbook.
-- [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
-      formulas, which the engine no longer follows. Decide whether to delete it
-      or rebuild it against the audited model. Operator call.
+- [x] **`verify/` (Python cross-check):** it transcribed the workbook's
+      formulas, which the engine no longer follows. **Decided (operator,
+      2026-09-30): rebuild, not delete** (roadmap D4 / WP-1.6 option (b)).
+      **Done, phase 1:** `verify/` is now an independent cross-check of the
+      audited engine ([verify/README.md](../verify/README.md), model.md §6
+      Verification): a stdlib Python model of the core daily chain written
+      only from the docs, run beside `runModel` on the example catchments,
+      eight probes and random networks from its own seeded generator, every
+      daily series compared to float noise, with a 24-mutant self-test
+      (`pnpm test:verify`, CI job `verify`, 200 random networks). On engine
+      1.36.0 the examples, the probes and 750 random networks agree on every
+      column (largest difference 9e-9 m³/day); no engine departure from its
+      documentation. Six points the docs left open were settled from
+      `runModel`'s outputs and written into model.md (§2.4a no catchment
+      area, `uh_store`; §2.4b a negative reading; §2.4d the accumulation run
+      test's window; §2.6 the order of the room and band sharing, and the
+      room from yesterday's storage; §2.10a the median of an even count). The
+      workbook formula dumper moved to `scripts/wbt-import/dumpwb.py`.
+- [ ] **`verify/` phase 2: the rest of the model.** Phase 1 covers the core
+      daily chain only; `verify/model.py`'s `unsupported()` names what it
+      leaves out and the harness refuses an input that uses it. To add, each
+      from its model.md section, with random-generator coverage, a probe for
+      anything the docs leave open and a mutant per rule
+      ([verify/README.md § Phase 2](../verify/README.md#phase-2-not-covered-yet)):
+      boreholes (§2.7d), allocations and the licence cap (§2.12a), demand
+      objects and the basic-needs floor (§2.7f), river off-takes and canal
+      seepage (§2.6a), Reserve rule tables A1–A7 (§2.9c–d), forecast mode
+      (§2.4f), calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
+      development (§2.7g); then other water users, supply rules, dam curves
+      and releases, hands-off flows, rain-source periods, the areal
+      correction, the daily A-pan, CHIRPS fit ranges, keep-dry and the
+      non-default data-quality limits. **Trigger:** the next engine change to
+      any of these features (its PR adds that feature to `verify/` first, so
+      the change lands against an independent reading), or before the first
+      licence evidence pack relies on one of them, whichever comes first.
 - [x] **A fourth full page load of the Settings tab fails in e2e** with
       `net::ERR_INSUFFICIENT_RESOURCES` / "Failed to fetch dynamically
       imported module" against the Vite dev server (:7801). Done 2026-09-24:
@@ -1709,8 +1741,10 @@ the suggested order (the IDs carry the detail):
       added; no SheetJS in the app); the bulk route pages the fetch, so the
       5 MB limit doesn't bind. The formulas are one expression tree that the
       engine evaluates, held to `runModel` on random networks. AB (a
-      diagnostic that needs every upstream AA) is left out. Whether this
-      replaces the `verify/` Python cross-check is the operator's call in #90.
+      diagnostic that needs every upstream AA) is left out. It doesn't
+      replace the `verify/` Python cross-check: the operator chose to rebuild
+      that too (2026-09-30), and the two are complementary, one farm's
+      formulas in Excel against the whole network from the docs (§ Verification).
       Original entry: an `.xlsx` for one farm, inputs as values, each working
       column as a live formula and a column comparing Excel's value with the
       model's, so Excel recomputes the model independently. Trigger was: after
@@ -3074,16 +3108,14 @@ from the WP:
       A source whose licence states conditions stores `allocation_left_*`
       beside the room. Checked from the columns by `checkAllocations`; shown
       under the picked unit on the Allocations page, in the compare
-      endpoint's `capYears` and the summary CSV's *Allocation cap by water
-      year* ([allocations.md](./allocations.md), [model.md § Which limit
+      endpoint's `capYears`, the summary CSV's *Allocation cap by water
+      year* and the evidence report's § 5 ([allocations.md](./allocations.md), [model.md § Which limit
       bound](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
-- [ ] **Cite the cap's limit days in the evidence report.** The report's
-      § 5 (#71) reads the comparison (`compareAllocations` of the run's
-      series) and the mode, never `RunSummary.allocations`, so a capped run
-      doesn't say which limit held use back there. The durable fix: carry
-      each run's `capReached` / `limitBound` into `EvidenceAllocationSource`
-      and one line per source in § 5 (a bumped evidence version). Trigger:
-      an evidence pack issued for a capped run.
+- [x] **Cite the cap's limit days in the evidence report** (2026-09-30,
+      report version `evidence-6`). § 5 carries each cap run's
+      `capReached` / `limitBound` per unit and source
+      (`EvidenceAllocationSource.capA` / `capB`) and prints them in *What the
+      cap held back* ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,

@@ -31,6 +31,19 @@ export async function sidewaysOverflow(page: Page) {
 	});
 }
 
+/**
+ * Resize the viewport and wait until the page has rendered at the new size.
+ * The browser re-evaluates media queries in its next rendering update (HTML
+ * "update the rendering"), not when a script reads layout, so a box read
+ * straight after setViewportSize can still come from the old width's layout:
+ * the help page at 390 px measured with its 900 px sidebar column still there.
+ * Two animation frames guarantee that update has run.
+ */
+export async function resizeTo(page: Page, size: { width: number; height: number }) {
+	await page.setViewportSize(size);
+	await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+}
+
 export async function expectNoSidewaysScroll(page: Page) {
 	const o = await sidewaysOverflow(page);
 	expect(o.culprits, `page is ${o.scrollWidth}px wide in a ${o.clientWidth}px viewport`).toEqual([]);

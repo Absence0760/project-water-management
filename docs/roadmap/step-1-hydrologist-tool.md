@@ -430,6 +430,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.6 `verify/` decision
 
+> **Status (2026-09-30):** the operator chose (b), rebuild. `verify/` is now
+> an independent cross-check of the engine written only from the docs
+> (verify/README.md, model.md §6 Verification): phase 1, the core daily
+> chain, runs in CI (`pnpm test:verify`); phase 2 is tracked in
+> followups.md § Verification. `dumpwb.py` moved to `scripts/wbt-import/`.
+> The plan below is the one that was weighed.
+
 - **Goal:** resolve the half-built Python cross-check. It transcribes b023's
   formulas, which engine 0.4.0 deliberately no longer follows.
 - **Options:**
@@ -2039,7 +2046,7 @@ Questions for the hydrologist: the WP-1.1 pack.
 | D1 | Calibration record (issue #1) | Which observed flow record the fit scores against, with or without excluded periods | The outlet's own record (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
 | D2 | Audit questions H1, N1–N4, Q1, Q3, Q5, Q7, Q11–Q13, Q17, Q18 | Per engine-audit.md | Per engine-audit.md recommendations; N1 backfill e = 1 − `return_flow_pct` | Hydrologist |
 | D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term). **Taken that way:** `settings.runoffModel`, GR4J by default since engine 0.11.0, legacy for workbook comparison only (WP-1.24), removed in engine 1.0.0 (WP-1.25, issue #16) | Operator + hydrologist |
-| D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6) | Operator |
+| D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6). **Decided (2026-09-30): rebuild**, as an independent cross-check written from the docs (verify/README.md; phase 1 done, phase 2 in followups.md § Verification) | Operator |
 | D5 | GitHub gates | Public repo; GitHub Enterprise (required reviewers on private repos) | Public, after the scrub | Operator |
 | D6 | History with client terms | `git filter-repo --replace-text`; publish a fresh squashed repo; accept (if terms are only public facts) | Decide after `git log -S`; a squashed fresh repo is the safest if farm names are in history. **Decided (2026-09):** `filter-repo`, then the repo recreated from the clean history (WP-1.7) | Operator + client |
 | D7 | Region | af-south-1; eu-west-1; us-east-1 | af-south-1 (POPIA, latency); budget ≈ $70 | Operator, after client Q15 |
