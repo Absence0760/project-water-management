@@ -5,6 +5,7 @@
 	// amounts sit below it. The outlet capacity and seepage share are ordinary
 	// number fields in the Farm dam group (./fields.ts).
 	import { DAM_RELEASE_RULES, type DamReleaseRule, type NetworkNode } from '@water-management/engine';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { curveNotes, curveText, parseDamCurve } from './damCurve';
@@ -15,6 +16,7 @@
 
 	const id = (k: string) => `dam-${k}-${node.id}`;
 	const label = $derived(node.name || 'this hydrological unit');
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	const RULE_LABEL: Record<DamReleaseRule, string> = {
 		none: 'None: the dam releases nothing',
 		passInflow: 'Pass inflow: up to what the river below still needs',
@@ -127,6 +129,7 @@
 			</div>
 		{/if}
 	{/if}
+	<FieldHistoryLine field="node:{node.id}:damCurve" {unit} />
 
 	<h3 class="sub">Releases <HelpTip key="node.damReleaseRule" /></h3>
 	<div class="field">
@@ -143,6 +146,7 @@
 				A compensation or low-flow release is a common licence condition; pick a rule to model one.
 			{/if}
 		</span>
+		<FieldHistoryLine field="node:{node.id}:damReleaseRule" {unit} />
 	</div>
 	{#if rule === 'passInflow'}
 		<label class="check">
@@ -166,6 +170,7 @@
 			onchange={(next) => (node.damReleaseM3Day = next)}
 		/>
 	{/if}
+	<FieldHistoryLine field="node:{node.id}:damReleaseM3Day" {unit} />
 </div>
 
 <style>

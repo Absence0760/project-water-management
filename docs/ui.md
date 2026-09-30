@@ -5297,7 +5297,7 @@ unit's own fields). A field never changed since it was set shows nothing.
 - **Where:** the node sheet's numeric fields and **Drains into**, its
   Supply section (the supply rule, the river pump capacity, the trigger's two
   levels, the hands-off flow and its EWR tick) and **Set River to dam by
-  month**, the farm
+  month**, the dam's survey curve, release rule and release months, the farm
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
