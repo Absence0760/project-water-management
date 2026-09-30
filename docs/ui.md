@@ -267,20 +267,23 @@ English only: its readers are licensing assessors, like the methods page's.
   the newer version by its code; *Withdrawn. Don't rely on it*, with the
   reason the editor gave), then the catchment, version, issue date, engine,
   report format, methodology statement with its SHA-256, the manifest
-  SHA-256 and the PDF's (or *No server PDF recorded for this pack*). **Signed
+  SHA-256, the PDF's (or *No server PDF recorded for this pack*) and the
+  reproduction bundle's, with a line saying anyone holding the bundle
+  re-runs the pack with `pnpm reproduce:pack`. **Signed
   off by** lists each signer's name, date and registration as the report
   prints it (*self-declared*), with the professional body's register as a
   link and its address in full; the register URLs are the engine's, never the
   database's. **Errata recorded in the pack** are those the manifest
   recorded when it was drafted.
-- **Check a PDF or manifest.** Choose or drop a file: it is hashed in the
+- **Check a PDF, reproduction bundle or manifest** (the heading names only
+  what the pack has hashes for, `checkableFiles`). Choose or drop a file: it is hashed in the
   browser (WebCrypto SHA-256, `packs/pack.ts` `checkFile`) and compared with
   the recorded hashes; the page says so, and that the file is never
   uploaded. A JSON file that doesn't match byte for byte is compared once
   more in its canonical form (RFC 8785, as the hash is taken), so a manifest
   saved pretty-printed still matches and any change to what it says doesn't.
-  While no PDF hash is recorded, the check offers the manifest only and says
-  why.
+  While no PDF hash is recorded, the check doesn't offer a PDF and says
+  why; a bundle matches as *this pack's reproduction bundle*.
 - **A code that answers nothing** (unknown, malformed, a draft, a pack
   withdrawn before issue) is one answer: *No issued evidence pack has this
   code*. The code is read in any case, with or without dashes, or as the full
@@ -6031,8 +6034,11 @@ pack.
   baseline run in Runs), the status badge, **Download PDF** (the browser's
   print), **Download manifest** (the canonical RFC 8785 bytes the hash is
   taken of, `evidence-pack-<code>-manifest.json`, so the file checks on the
-  verify page), **Verify page** once issued, and the version, code, manifest
-  hash and PDF hash (or that none is recorded).
+  verify page), **Download reproduction bundle** once issued (the API's
+  redirect to a signed GET, `pack-<code>.zip`;
+  [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
+  **Verify page** once issued, and the version, code, manifest hash, PDF hash
+  (or that none is recorded) and the bundle's hash.
 - **Where it stands** (`packs/PackActions.svelte`): a draft's checklist from
   the API (the frozen report may be issued, both runs still carry the
   server's stamp, signed under the current pack statement), each ticked or

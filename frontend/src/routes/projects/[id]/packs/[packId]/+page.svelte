@@ -136,6 +136,8 @@
 	);
 
 	let manifestUrl = $state<string | null>(null);
+	/** The bundle's download (the API redirects to a signed GET); an issued pack has one. */
+	const bundleUrl = $derived(pack?.bundleSha256 ? api.packs.bundleUrl(projectId, pack.id) : null);
 	$effect(() => {
 		if (!detail) return;
 		const url = URL.createObjectURL(new Blob([manifestFileText(detail.manifest)], { type: 'application/json' }));
@@ -196,10 +198,13 @@
 				<button type="button" class="btn btn-primary" onclick={() => window.print()}>Download PDF</button>
 			{/if}
 			{#if manifestUrl}<a class="btn" href={manifestUrl} download={manifestFileName(pack.shortCode)} data-testid="pack-manifest-download">Download manifest</a>{/if}
+			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
 				<span class="mono hash">{pack.manifestSha256}</span>. {#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>{pack.pdfPages ? ` (${pack.pdfPages} pages)` : ''}.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
+				{#if pack.bundleSha256}Reproduction bundle SHA-256 <span class="mono hash" data-testid="pack-bundle-sha">{pack.bundleSha256}</span> (re-run it with
+					<span class="mono">pnpm reproduce:pack</span>).{/if}
 			</p>
 			{#if pdf?.status === 'rendering'}
 				<p class="muted small" role="status" data-testid="pack-pdf-state" data-state="rendering">

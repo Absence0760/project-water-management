@@ -20,7 +20,7 @@
 	import { api, ApiError, type PackVerification } from '$lib/api';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { checkFile, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
+	import { checkableAccept, checkableFiles, checkFile, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
 	import { fmtDate } from '$lib/format/number';
 
 	const code = $derived(page.params.code ?? '');
@@ -151,6 +151,14 @@
 						<dt>PDF SHA-256</dt>
 						<dd>{#if v.pdfSha256}<span class="mono hash">{v.pdfSha256}</span>{:else}<span class="muted">No server PDF recorded for this pack.</span>{/if}</dd>
 					</div>
+					<div class="wide">
+						<dt>Reproduction bundle SHA-256</dt>
+						<dd data-testid="verify-bundle-sha">
+							{#if v.bundleSha256}<span class="mono hash">{v.bundleSha256}</span><span class="sub"
+									>Anyone holding the bundle re-runs the pack’s model runs with <span class="mono">pnpm reproduce:pack</span> and the app’s source code.</span
+								>{:else}<span class="muted">No reproduction bundle recorded for this pack.</span>{/if}
+						</dd>
+					</div>
 				</dl>
 			</section>
 
@@ -187,25 +195,25 @@
 			</section>
 
 			<section class="card" aria-labelledby="check-h" data-testid="verify-check">
-				<h2 id="check-h">Check a {v.pdfSha256 ? 'PDF or manifest' : 'manifest'}</h2>
+				<h2 id="check-h">Check a {checkableFiles(v)}</h2>
 				<p>
-					Choose or drop the {v.pdfSha256 ? 'pack’s PDF or its manifest' : 'pack’s manifest (JSON)'}. It is hashed here, in your browser, with SHA-256 and compared with
+					Choose or drop the pack’s {checkableFiles(v)}{v.pdfSha256 || v.bundleSha256 ? '' : ' (JSON)'}. It is hashed here, in your browser, with SHA-256 and compared with
 					the hash recorded when the pack was issued. <strong>The file is never uploaded.</strong>
 				</p>
 				{#if !v.pdfSha256}<p class="small muted">No server PDF is recorded for this pack, so a PDF can’t be checked here; its manifest can.</p>{/if}
 				<label class="drop" class:dragging ondragover={(e) => ((e.preventDefault(), (dragging = true)))} ondragleave={() => (dragging = false)} ondrop={drop}>
 					<span>Drop a file here, or choose one</span>
-					<input type="file" accept={v.pdfSha256 ? '.pdf,.json,application/pdf,application/json' : '.json,application/json'} onchange={(e) => checkOne(e.currentTarget.files?.[0])} data-testid="verify-file" />
+					<input type="file" accept={checkableAccept(v)} onchange={(e) => checkOne(e.currentTarget.files?.[0])} data-testid="verify-file" />
 				</label>
 				<div aria-live="polite" data-testid="verify-check-result">
 					{#if checking}
 						<p class="muted">Hashing…</p>
 					{:else if check}
 						{#if check.result === 'no-match'}
-							<p class="verdict bad"><strong>Doesn’t match.</strong> “{check.name}” is not this pack’s {v.pdfSha256 ? 'PDF or manifest' : 'manifest'}: it has been changed, or it is another file.</p>
+							<p class="verdict bad"><strong>Doesn’t match.</strong> “{check.name}” is not this pack’s {checkableFiles(v)}: it has been changed, or it is another file.</p>
 						{:else}
 							<p class="verdict good">
-								<strong>Matches.</strong> “{check.name}” is this pack’s {check.result === 'pdf' ? 'PDF' : 'manifest'}, unchanged{check.result === 'manifest' && check.canonical
+								<strong>Matches.</strong> “{check.name}” is this pack’s {check.result === 'pdf' ? 'PDF' : check.result === 'bundle' ? 'reproduction bundle' : 'manifest'}, unchanged{check.result === 'manifest' && check.canonical
 									? ' (compared in its canonical JSON form, as the hash is taken)'
 									: ''}.
 							</p>

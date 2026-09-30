@@ -6,7 +6,9 @@
 #     DeleteSuppressedDestination when someone turns mail back on) through
 #     the SES API interface endpoint in ses.tf (its endpoint policy names the
 #     API and worker roles and their actions only), to SQS (job wake-ups) through the
-#     SQS interface endpoint in jobs.tf, and to Secrets Manager (its runtime
+#     SQS interface endpoint in jobs.tf, to S3 (only to put an issued
+#     evidence pack's reproduction bundle, pack_bundles.tf) through the S3
+#     interface endpoint in packs.tf, and to Secrets Manager (its runtime
 #     secret, once per cold start, secrets.tf) through the endpoint below. It
 #     makes no other outbound calls; CloudWatch Logs delivery is done by the
 #     Lambda service, not through the function's ENI;
@@ -111,7 +113,7 @@ resource "aws_default_security_group" "default" {
 
 resource "aws_security_group" "api_lambda" {
   name        = "${local.project}-api-lambda"
-  description = "API Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+  description = "API Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-api-lambda" }
 }

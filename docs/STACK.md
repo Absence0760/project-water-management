@@ -58,7 +58,8 @@ sides share.
   ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
   http://localhost:8026, `pnpm dev:mail:up`).
-- **MinIO**: docker-compose, S3-compatible storage for report PDFs (API
+- **MinIO**: docker-compose, S3-compatible storage for report PDFs and
+  evidence packs' reproduction bundles (issuing a pack needs it; API
   **9002**, console http://localhost:9003, `pnpm dev:s3:up`; the community
   fork's image, since upstream stopped publishing one).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
@@ -129,6 +130,9 @@ pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>
 pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]
                              # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
                              # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
+pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
+                             # check an evidence pack's reproduction bundle and re-run its runs offline; exit 0 when it reproduces
+                             # (no DB, no network; scripts/reproduce-pack/, evidence-pack.md § Reproduction)
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 

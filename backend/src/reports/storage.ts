@@ -224,6 +224,64 @@ export function assertDownloadSigner(): void {
 }
 
 /**
+ * The object key of a pack's reproduction bundle (122_pack_bundle;
+ * docs/evidence-pack.md § Reproduction), beside its PDF in the packs bucket:
+ * its ids and the zip's own SHA-256 (app_record_pack_bundle builds the same
+ * key in SQL, and the issue route checks the two agree).
+ */
+export function packBundleKey(projectId: string, packId: string, sha256: string): string {
+	if (!UUID.test(projectId) || !UUID.test(packId)) throw new Error('packBundleKey: ids must be UUIDs');
+	if (!SHA256.test(sha256)) throw new Error('packBundleKey: the hash must be a lowercase hex SHA-256');
+	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/${sha256}.zip`;
+}
+
+/** A bundle's download file name: the name its README tells the reader to pass to `pnpm reproduce:pack`. */
+export const packBundleFileName = (shortCode: string) => `pack-${shortCode.replace(/[^0-9a-f-]/gi, '')}.zip`;
+
+/**
+ * Store a pack's reproduction bundle under packBundleKey, as putPackPdf
+ * stores its PDF: the upload carries its SHA-256, so the store refuses bytes
+ * that aren't the ones hashed (and an Object Lock bucket gets the integrity
+ * checksum it requires). The API does this when it issues the pack.
+ */
+export async function putPackBundle(key: string, body: Uint8Array, sha256: string): Promise<void> {
+	if (!SHA256.test(sha256)) throw new Error('putPackBundle: the hash must be a lowercase hex SHA-256');
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	const checksum = Buffer.from(sha256, 'hex').toString('base64');
+	let stored;
+	try {
+		// If-None-Match: never a second version of a key (Object Lock keeps every version for the retention period).
+		stored = await c.send(
+			new sdk.PutObjectCommand({ Bucket: packsBucket(), Key: key, Body: body, ContentType: 'application/zip', ChecksumSHA256: checksum, IfNoneMatch: '*' })
+		);
+	} catch (err) {
+		// 412: the key is taken, by these very bytes: it names their SHA-256, and every put under it
+		// carried that checksum, which the store checks (an issue that rolled back after its put, then
+		// issued again). S3 and MinIO both honour conditional writes (packs.db.test.ts).
+		if (isPreconditionFailed(err)) return;
+		throw err;
+	}
+	assertStoredChecksum(key, checksum, stored.ChecksumSHA256);
+}
+
+/** A conditional write refused because the object exists (HTTP 412). */
+export function isPreconditionFailed(err: unknown): boolean {
+	const e = err as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+	return e?.name === 'PreconditionFailed' || e?.$metadata?.httpStatusCode === 412;
+}
+
+/**
+ * The store answers a put with the SHA-256 it computed over the bytes it
+ * kept; before the hash is recorded (and published by verify) it must be the
+ * one the bytes were built with. S3 and MinIO refuse a put whose bytes don't
+ * match the checksum sent, so this catches a store that skipped the check.
+ */
+export function assertStoredChecksum(key: string, sent: string, stored: string | undefined): void {
+	if (stored !== sent) throw new Error(`the store answered ${key} with SHA-256 ${stored ?? '(none)'}, not the ${sent} sent: not recorded`);
+}
+
+/**
  * A signed GET for a PDF, downloaded under `fileName` (REPORT_DOWNLOADS picks
  * S3 or CloudFront). Signing is local: no request is made.
  */

@@ -67,6 +67,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOBS_QUEUE_URL: SQS('jobs'),
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
+		PACKS_BUCKET: 'water-management-packs-000000000000',
 		REPORT_DOWNLOADS: 'cloudfront',
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
 		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey
@@ -305,7 +306,7 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 	const DEV_VALUE_OK: Record<string, string> = {
 		ALERTS_ENABLED: 'true is a real decision in both',
 		REPORTS_BUCKET: 'a name only: each role’s IAM policy grants Terraform’s bucket alone, so a wrong one fails every put',
-		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s role may put and the worker’s read only Terraform’s packs bucket'
+		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {

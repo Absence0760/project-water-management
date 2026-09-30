@@ -27,7 +27,9 @@ export default defineConfig({
 					// catchment, never asserting its figures); fit-sweep.test.ts fits one
 					// synthetic cell with a tiny budget; examples/catchments.test.ts
 					// holds the seeded example catchments to the current schema and engine.
-					include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+					// ../scripts/reproduce-pack: the root reproduce:pack command, which
+					// runs on this workspace's tsx (package.json).
+					include: ['src/**/*.test.ts', 'scripts/**/*.test.ts', '../scripts/reproduce-pack/**/*.test.ts'],
 					exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.test.ts', 'src/**/*.perf.test.ts'],
 					// No wall-clock claim here (the perf projects make those), so the
 					// timeout only catches a hang. Vitest 2 never timed out a synchronous

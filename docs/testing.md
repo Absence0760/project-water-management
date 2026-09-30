@@ -57,6 +57,12 @@ thrash: like the budgets, it runs alone. Run it when you touch
    suite after every small edit: re-run the failing file until it passes.
 4. Don't pipe e2e output into `grep`/`head`/`tail`: the web servers hold the
    pipe open and the command hangs after the tests finish. Redirect to a file.
+5. In a fresh checkout or git worktree, run `pnpm check` (or
+   `pnpm -C frontend exec svelte-kit sync`) once before the frontend's
+   vitest: `frontend/tsconfig.json` extends `.svelte-kit/tsconfig.json`,
+   which `svelte-kit sync` writes, and without it every frontend test file
+   fails at startup with "Could not resolve 'node:module' … Tsconfig not
+   found" (Vite's dependency optimiser can't find the tsconfig).
 
 ## Layout checks and fonts
 
@@ -78,6 +84,9 @@ one to the job the test runs in:
 | --- | --- | --- |
 | `backend/src/reports/render.db.test.ts` | MinIO + Chromium | `db-test` (starts MinIO, cached Chromium) |
 | `backend/src/reports/render.origin.db.test.ts` | Chromium (no DB) | `db-test` |
+| `backend/src/evidence/packs.db.test.ts` (the describes that issue a pack) | MinIO (issuing stores the reproduction bundle) | `db-test` (starts MinIO) |
+| `backend/src/history/write-routes.db.test.ts` (`POST …/packs/:packId/issue` only) | MinIO | `db-test` |
+| `e2e/tests/evidence-pack.spec.ts` | MinIO (it issues packs) | e2e shards |
 | `e2e/tests/server-report.spec.ts` | MinIO + Mailpit | e2e shards |
 | `e2e/tests/alerts-mailpit.spec.ts` | Mailpit | e2e shards |
 
@@ -87,7 +96,8 @@ one to the job the test runs in:
 job doesn't pay a second Chromium install (the cache restore plus the apt
 `install-deps` step) for one file. Locally it runs with
 `pnpm -C backend exec vitest run --project db src/reports`.
-A new test of this kind follows the same rule and goes in the table.
+A new test of this kind follows the same rule and goes in the table; the
+MinIO check is `backend/src/__tests__/minio.ts` (`minioUp`).
 The only skips CI allows are for the gitignored client data (`data/`, the
 source workbooks), which CI never has (CLAUDE.md rule 10).
 

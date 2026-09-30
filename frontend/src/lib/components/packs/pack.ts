@@ -76,32 +76,45 @@ export async function sha256Hex(bytes: ArrayBuffer | Uint8Array, subtle: SubtleC
 /** What the file check found. */
 export type FileCheck =
 	| { result: 'pdf'; sha256: string }
+	| { result: 'bundle'; sha256: string }
 	| { result: 'manifest'; sha256: string; canonical: boolean }
 	| { result: 'no-match'; sha256: string };
 
 /**
- * Check a file against a verified pack: its SHA-256 against the PDF's and the
- * manifest's. A JSON file that doesn't match byte for byte is tried once more
+ * Check a file against a verified pack: its SHA-256 against the PDF's, the
+ * reproduction bundle's and the manifest's. A JSON file that doesn't match byte for byte is tried once more
  * as a manifest in its canonical form (RFC 8785, as the hash is taken), so a
  * manifest saved pretty-printed still checks; any change to what it says
  * changes the canonical text too. `hash` is sha256Hex (a parameter for tests).
  */
 export async function checkFile(
 	bytes: Uint8Array,
-	v: Pick<PackVerification, 'manifestSha256' | 'pdfSha256'>,
+	v: Pick<PackVerification, 'manifestSha256' | 'pdfSha256'> & Partial<Pick<PackVerification, 'bundleSha256'>>,
 	hash: (b: Uint8Array) => Promise<string> = (b) => sha256Hex(b)
 ): Promise<FileCheck> {
 	const sha256 = await hash(bytes);
 	if (v.pdfSha256 && sha256 === v.pdfSha256) return { result: 'pdf', sha256 };
+	if (v.bundleSha256 && sha256 === v.bundleSha256) return { result: 'bundle', sha256 };
 	if (sha256 === v.manifestSha256) return { result: 'manifest', sha256, canonical: false };
 	const canonical = canonicalOf(bytes);
 	if (canonical !== null && (await hash(new TextEncoder().encode(canonical))) === v.manifestSha256) return { result: 'manifest', sha256, canonical: true };
 	return { result: 'no-match', sha256 };
 }
 
+/** What a verified pack's file check takes, in words: "manifest", "PDF or manifest", "PDF, reproduction bundle or manifest". */
+export function checkableFiles(v: Pick<PackVerification, 'pdfSha256'> & Partial<Pick<PackVerification, 'bundleSha256'>>): string {
+	const kinds = [...(v.pdfSha256 ? ['PDF'] : []), ...(v.bundleSha256 ? ['reproduction bundle'] : []), 'manifest'];
+	return kinds.length === 1 ? kinds[0]! : `${kinds.slice(0, -1).join(', ')} or ${kinds.at(-1)}`;
+}
+
+/** The file types the check's picker offers. */
+export function checkableAccept(v: Pick<PackVerification, 'pdfSha256'> & Partial<Pick<PackVerification, 'bundleSha256'>>): string {
+	return [...(v.pdfSha256 ? ['.pdf', 'application/pdf'] : []), ...(v.bundleSha256 ? ['.zip', 'application/zip'] : []), '.json', 'application/json'].join(',');
+}
+
 /** The RFC 8785 text of a file that is a JSON manifest, or null for anything else. */
 function canonicalOf(bytes: Uint8Array): string | null {
-	if (bytes.byteLength > 50 * 1024 * 1024 || bytes[0] === 0x25 /* %PDF */) return null;
+	if (bytes.byteLength > 50 * 1024 * 1024 || bytes[0] === 0x25 /* %PDF */ || (bytes[0] === 0x50 && bytes[1] === 0x4b) /* PK: a zip */) return null;
 	try {
 		const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 		if (!value || typeof value !== 'object' || Array.isArray(value)) return null;

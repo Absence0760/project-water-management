@@ -81,6 +81,7 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/packs/:packId/signoffs',
 			'POST /projects/:id/packs/:packId/signoffs',
 			'POST /projects/:id/packs/:packId/issue',
+			'GET /projects/:id/packs/:packId/bundle',
 			'POST /projects/:id/packs/:packId/withdraw',
 			'GET /projects/:id/packs/:packId/pdf',
 			'POST /projects/:id/packs/:packId/pdf'
