@@ -63,6 +63,13 @@ export interface FeedRow {
 	lastDataDate: string | null;
 	/** The last day the latest successful fetch asked for (last_meta.through): fetchWindow's progress through empty days. */
 	readThrough: string | null;
+	/**
+	 * How many of a skipNoData box's cells had data in the latest successful
+	 * fetch (last_meta.cellsUsed, carried forward by the ingest), or null. The
+	 * ingest refuses an answer with another count; saving a new box resets it
+	 * (data_feed_stamp clears last_meta when the config changes).
+	 */
+	cellsUsed?: number | null;
 	/** CHIRPS: the last day through which the series holds final values (last_meta.finalThrough, ingest.ts): fetchWindow doesn't re-read them. */
 	finalThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
@@ -190,6 +197,7 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 		`SELECT id, project_id AS "projectId", source, config, target_kind AS "targetKind", target_name AS "targetName", enabled,
 			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
 			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
+			CASE WHEN last_meta->>'cellsUsed' ~ '^[0-9]{1,4}$' THEN (last_meta->>'cellsUsed')::int END AS "cellsUsed",
 			CASE WHEN last_meta->>'finalThrough' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'finalThrough' END AS "finalThrough",
 			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
