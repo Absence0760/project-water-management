@@ -654,7 +654,7 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | --- | --- |
 | `ci.yml` `test` | `pnpm test:scripts`, `pnpm check`, `pnpm test`, `pnpm build`, the CSP meta policy, the **bundle budget** (`pnpm check:bundle`) and `infra/scripts/package-lambdas.sh` (the packaging the backend release runs) |
 | `ci.yml` `db-test` | `pnpm test:backend:db` against a Postgres 17 service container |
-| `ci.yml` `e2e-build`, `e2e`, `e2e-report` | Playwright (Chromium) in 14 shards: the site is built once and shared, each shard runs `--shard=N/14` against its own Postgres, and the shards' blob reports merge into one HTML `playwright-report` ([e2e/README.md § CI](../e2e/README.md#ci-14-shards)) |
+| `ci.yml` `e2e-build`, `e2e`, `e2e-report` | Playwright (Chromium) in 14 shards: the site is built once and shared, each shard runs its time-balanced `--test-list` (from `e2e/shard-timings.json`) against its own Postgres, and the shards' blob reports merge into one HTML `playwright-report`, where the report job also checks every test ran on exactly one shard and uploads the `e2e-timings` artifact ([e2e/README.md § CI](../e2e/README.md#ci-14-shards)) |
 | `ci.yml` `workflow-lint` | actionlint v1.7.12, the workflow guard, and the unit tests of every guard (`pnpm test:guards`) |
 | `ci.yml` `renderer-image` | `bin/check-renderer-image.sh`: the release's own `docker buildx build` of the renderer image (one `linux/amd64` manifest, no attestations, which Lambda requires), then the Lambda smoke test, so a broken Dockerfile fails here and not at release |
 | `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |

@@ -17,6 +17,7 @@ import type { ScenarioOp } from '../scenario/ops';
 import type { NetworkNode, ProjectModel } from '../project';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
+import { licenceImpactSection } from './impact';
 import {
 	EVIDENCE_REPORT_VERSION,
 	type EvidenceAllocationCounts,
@@ -313,6 +314,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
 	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
+	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(cumulativeRow(cumulative));
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
@@ -387,6 +389,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		servedWhileFailing: served,
 		cumulative,
 		allocations,
+		licenceImpact,
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],

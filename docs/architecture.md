@@ -1333,10 +1333,10 @@ stored members, and hands it all to the engine's pure builder
 and nothing time-dependent, so the same input always gives the same
 document: the refusal checks, the flags, page 1's rows and every section's
 figures are decided there, and the frontend
-(`lib/components/report/evidence/`, its own chunk) only draws them. One
-exception: page 1's licence impact by year class is the impact report's board,
-built in the browser from three daily series the page fetches; it moves into
-the builder with the pack. One
+(`lib/components/report/evidence/`, its own chunk) only draws them. That
+includes page 1's licence impact by year class (`evidence-5`): the backend
+loads the three daily series it reads and the project's `settings.outcomes`,
+the builder computes the board, and the page only words it. One
 builder is what lets an issued pack (WP-3.14) freeze the document as its
 manifest and rebuild it to check the hash. The evidence report itself
 prints from the browser only; `report_render` doesn't render it. The server
