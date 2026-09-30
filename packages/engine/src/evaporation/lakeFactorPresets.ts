@@ -28,10 +28,19 @@
 //     still accurate enough to be used for hydrological calculations".
 //   - Equation (16) / Table 5-9, "Old general equations – monthly" (Midgley et
 //     al. 1994): S = −16.2354 + 0.8793 × A. "These equations can only be used
-//     as written and cannot be inverted" (§2.6.1.4).
+//     as written and cannot be inverted" (§2.6.1.4, p. 43).
 //   - Equation (33) / Table 5-10, "New general equations – monthly" (fitted
 //     to 10 SA stations' paired pans): S = −11.1745 + 0.8706 × A, which §5.2.5
 //     suggests for estimating monthly pan evaporation.
+// Checked 2026-09-30 against the thesis PDF (SUNScholar, taljaard_revision_2023.pdf;
+// page numbers are the thesis's printed ones): Table 2-3 (p. 45) matches all 12
+// lake factors; Eq. 16 (p. 44) and Table 5-9 (p. 152) match WR90's; Eq. 33
+// (p. 158) and Table 5-10 (p. 152) match Taljaard's. Both equations are single
+// general ("all stations") monthly equations, not per-month coefficients, in
+// the "A-pan to S-pan" columns (x = A-pan, y = S-pan), on monthly totals in mm.
+// Linsley et al. was NOT checked against the book (borrow-only online); a
+// secondary source, USGS SIR 2012-5202 citing Kohler et al. (1959), gives
+// annual US pan coefficients of 0.60-0.80, so 0.7-0.8 is the upper part of it.
 // - Linsley, R.K., Kohler, M.A. & Paulhus, J.L.H. (1982). Hydrology for
 //   Engineers, 3rd ed.: open water ≈ 0.7–0.8 × Class-A pan (the engine's flat
 //   default, 0.75, docs/engine-audit.md N2).
@@ -79,7 +88,7 @@ export interface LakeFactorPreset {
 
 const WR90_CAVEATS = [
 	'WR90 lake factors are national monthly values for large reservoirs; a shallow farm dam heats and cools faster, so its seasonal lag is smaller than they assume.',
-	'The pan conversion is a regression fitted to paired S- and A-pans; station-specific equations differ from it (Taljaard 2023 Tables 5-8 and 5-11).',
+	'The pan conversion is a regression fitted to paired S- and A-pans; station-specific equations differ from it (Taljaard 2023 Table 5-8).',
 	'The factors are computed at the monthly A-pan means: fill again after changing the A-pan. With a daily A-pan series they multiply each day’s value, so a month whose daily total differs from its mean gets a proportionally scaled loss, not the exact regression.'
 ];
 

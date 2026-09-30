@@ -2422,11 +2422,22 @@ Sources and caveats:
   check at three reservoirs found the lake factors "still accurate enough"
   (§5.3.5); the WR90 pan equation "can only be used as written and cannot
   be inverted" (§2.6.1.4), which is how it is used here (A-pan → S-pan).
-  WR2012's own lake factors were not checked: the WR2012 manuals (WRC TT
-  689/690-16) were unreachable.
+  Checked against the thesis PDF on 2026-09-30 (printed page numbers):
+  the 12 lake factors (Table 2-3, p. 45), WR90's equation (Eq. 16, p. 44;
+  Table 5-9, p. 152) and Taljaard's (Eq. 33, p. 158; Table 5-10, p. 152) all
+  match. Each equation is one general monthly equation (not per month),
+  A-pan → S-pan, on monthly totals in mm.
+  WR2012's own lake factors were not found: the thesis doesn't mention
+  WR2012, and the WR2012 resource centre (waterresourceswr2012.co.za) is
+  behind a login, so the manuals (WRC TT 689/690-16) couldn't be read.
+  WR2012 evaporation data are S-pan climatologies with 12 monthly values;
+  whether its lake factors differ from WR90's is unknown.
+- The "0.7–0.8 × Class-A pan" range cites Linsley, Kohler & Paulhus (1982),
+  whose text couldn't be read (borrow-only). USGS SIR 2012-5202, citing
+  Kohler et al. (1959), gives annual US pan coefficients of 0.60–0.80.
 - The lake factors are for large reservoirs; a shallow farm dam heats and
   cools faster and lags the pan less. The pan equations are national
-  regressions; station-specific ones differ (Taljaard Tables 5-8, 5-11).
+  regressions; station-specific ones differ (Taljaard Table 5-8).
 - The factors are computed at the monthly A-pan means. A daily A-pan series
   (§2.3a) multiplies each day's value by them, so a month whose daily
   total differs from the mean gets a proportionally scaled loss, not the
