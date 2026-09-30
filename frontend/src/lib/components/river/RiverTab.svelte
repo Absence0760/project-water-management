@@ -1,7 +1,7 @@
 <script lang="ts">
 	// River & reserve (issue #17, option A · Outcomes): one run's river, for
 	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
-	// The page header and run picker, three KPI tiles (river.ts riverKpis), then
+	// The page header and run picker, two KPI tiles (river.ts riverKpis), then
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
 	// 30 days / 1 year / All switch and the days below the reserve shaded; the
 	// Summary shows the days below by month and links here, issue #162) beside
@@ -36,7 +36,7 @@
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
 	import { riverAnchor } from './links';
-	import { deltaLabel, ewrRuleText, pickRiverRun, riverKpis, riverNavGroups } from './river';
+	import { ewrRuleText, pickRiverRun, riverKpis, riverNavGroups } from './river';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
@@ -237,7 +237,7 @@
 						<dt>{k.term}{#if k.help} <HelpTip key={k.help} />{/if}</dt>
 						<dd class="value" class:none={k.value === '–'}>{k.value}{#if k.unit}<small>{k.unit}</small>{/if}</dd>
 						{#each k.sub as line, i (i)}<dd class="sub">{line}</dd>{/each}
-						{#if k.delta}<dd class="sub change"><Delta m={k.delta} spec={k.spec} /> {deltaLabel(k.id)}</dd>{/if}
+						{#if k.delta}<dd class="sub change"><Delta m={k.delta} spec={k.spec} /> vs previous run</dd>{/if}
 					</div>
 				{/each}
 			</dl>
@@ -352,18 +352,14 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
-	/* Three tiles: one row, then two over one on narrow screens (the outflow across the row). */
+	/* Two tiles side by side, at every width. */
 	.kpis {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		margin-bottom: 0.4rem;
 	}
 	@media (max-width: 760px) {
 		.kpis {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
-		}
-		.kpis > :last-child {
-			grid-column: 1 / -1;
 		}
 	}
 	.stat dt {

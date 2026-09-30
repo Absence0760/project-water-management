@@ -42,16 +42,21 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	const c = ((await res.json()) as { run: { summary: { catchment: Catchment } } }).run.summary.catchment;
 	// EWR not met, worded as the Summary's card is (issue #162: this tile said "Reserve met" for the same figure).
 	// The Worst month tile is gone (issue #175): it restated the largest share in the EWR by month grid's All years row.
-	await expect(riverTiles(page).locator('dt')).toContainText(['EWR not met', 'Days below the reserve', 'Mean simulated outflow']);
+	// So is Days below the reserve (issue #177): it repeated this tile's count, and its days a year are a sub line here.
+	await expect(riverTiles(page).locator('dt')).toHaveText(['EWR not met', 'Mean simulated outflow']);
 	await expect(riverTile(page, 'ewr')).toContainText(`${(c.ewrFractionDaysNotMet * 100).toFixed(1)}%of days`);
-	await expect(riverTile(page, 'ewr')).toContainText(`${grouped(c.ewrDaysNotMet)} of 1\u202f096 days at the outflow gauge`);
-	await expect(riverTile(page, 'below').locator('dd.value')).toHaveText(`${grouped(c.ewrDaysNotMet)}days`);
-	await expect(riverTile(page, 'below')).toContainText(/\d+(\.\d)? in an average year/);
+	// Both from the pragmatic test the tile counts: its days of the record, then per average year (1 096 days here).
+	const perYear = (c.ewrDaysNotMet * 365.25) / 1096;
+	const perYearText = perYear < 10 ? String(Math.round(perYear * 10) / 10) : grouped(Math.round(perYear));
+	await expect(riverTile(page, 'ewr').locator('dd.sub')).toContainText([
+		`${grouped(c.ewrDaysNotMet)} of 1\u202f096 days at the outflow gauge`,
+		`${perYearText} ${perYearText === '1' ? 'day' : 'days'} in an average year`
+	]);
+	await expect(page.locator('[data-kpi="below"]')).toHaveCount(0);
 	await expect(riverTile(page, 'outflow')).toContainText(`${Math.round((100 * c.meanSimulatedOutflowM3Day) / c.meanNaturalFlowM3Day)}% of natural`);
 	await expect(page.locator('[data-kpi="worst"]')).toHaveCount(0);
 	// Same inputs twice, so every change is zero, against the run before.
 	await expect(riverTile(page, 'ewr')).toContainText(/0 pp\s*no change\s*vs previous run/);
-	await expect(riverTile(page, 'below')).toContainText(/0\s*no change\s*a year vs previous run/);
 	await expect(page.getByText('Changes are against the previous run, Baseline.')).toBeVisible();
 
 	// The chart and the bars, then the panels that were Runs & results' River & Reserve group.
@@ -89,7 +94,7 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	expect(await innerScrollers(page)).toEqual([]);
 });
 
-test('the flow chart: 30 days / 1 year / All, and the days below the reserve shaded to the tile’s count', async ({ page, owner }) => {
+test('the flow chart: 30 days / 1 year / All, and the days below the reserve shaded to the EWR not met tile’s count', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River chart');
 	await createRun(page.request, id, 'Baseline');
@@ -107,7 +112,7 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	await expect(fig).toHaveAttribute('data-view-start', '2019-10-01');
 	await expect(windows.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
 
-	const below = (await riverTile(page, 'below').locator('dd.value').textContent())!.replace(/\D/g, '');
+	const below = /^([\d\u202f]+) of /.exec((await riverTile(page, 'ewr').locator('dd.sub').first().textContent())!)![1]!.replace(/\D/g, '');
 	expect(Number(below)).toBeGreaterThan(0);
 	await expect(fig).toHaveAttribute('data-shaded', /^\d+$/);
 	await expect(fig).toContainText(`Shaded: the ${grouped(Number(below))} days the outflow was below the pragmatic EWR line (EWR not met).`);
@@ -252,7 +257,7 @@ test('the Summary links here: its reserve strip', async ({ page, owner }) => {
 	// (The Summary's mean outflow line, which linked here too, was dropped in #171; the outflow is this page's tile.)
 	await page.getByRole('region', { name: 'Days below the reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
-	await expect(riverTiles(page)).toHaveCount(3);
+	await expect(riverTiles(page)).toHaveCount(2);
 });
 
 test('before the first run: the frame, and a way to run the model', async ({ page, owner }) => {
@@ -280,7 +285,7 @@ test('a viewer reads it too, with no run button', async ({ page, owner, signIn }
 	await createRun(page.request, id, 'Baseline');
 	await viewer.page.goto(`/projects/${id}`);
 	await viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true }).click();
-	await expect(riverTiles(viewer.page)).toHaveCount(3);
+	await expect(riverTiles(viewer.page)).toHaveCount(2);
 	await expect(viewer.page.getByTestId('river-context')).toContainText('Baseline');
 	await expect(viewer.page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
 });

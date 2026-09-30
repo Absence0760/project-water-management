@@ -88,22 +88,27 @@ describe('pickRiverRun', () => {
 
 describe('riverKpis', () => {
 	const days = 730;
-	it('gives EWR not met, days below (and per year) and the mean outflow; no worst month (issue #175)', () => {
+	it('gives EWR not met (with the days a year) and the mean outflow; no days-below tile (issue #177), no worst month (issue #175)', () => {
 		const notMet = Array(12).fill(0);
 		notMet[10] = 12;
 		const ks = riverKpis(summary({}, { ewrCompliance: grid(notMet) }), days, null);
-		expect(ks.map((k) => k.id)).toEqual(['ewr', 'below', 'outflow']);
+		expect(ks.map((k) => k.id)).toEqual(['ewr', 'outflow']);
 		// Framed as the Summary's card is (issue #162): the share not met, and the days not met of the record.
 		expect(tile(ks, 'ewr')).toMatchObject({ term: 'EWR not met', value: '10.0%', unit: 'of days', flagged: true, delta: null });
-		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge']);
-		expect(tile(ks, 'below')).toMatchObject({ value: '73', unit: 'days', sub: ['37 in an average year'] });
+		// The days-below tile's figures, as sub lines from the same pragmatic test: the count, then per average year.
+		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year']);
 		expect(tile(ks, 'outflow')).toMatchObject({ value: '0.500', unit: 'm³/s', sub: ['50% of natural'] });
 	});
-	it('adds the rule-table months to the reserve tile when the project has one', () => {
+	it('adds the rule-table months to the reserve tile when the project has one, after the pragmatic lines and named as the rules', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null);
-		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', 'Reserve rules: 91.7% of months']);
+		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year', 'Reserve rules: 91.7% of months']);
 	});
-	it('compares with the previous run: the share not met, days below per year (runs differ in length) and outflow', () => {
+	it('gives a short or dry run its days a year to one decimal (no trailing zero), and one day as "day"', () => {
+		expect(tile(riverKpis(summary({ ewrDaysNotMet: 5, ewrFractionDaysNotMet: 5 / 730 }), days, null), 'ewr').sub[1]).toBe('2.5 days in an average year');
+		expect(tile(riverKpis(summary({ ewrDaysNotMet: 0, ewrFractionDaysNotMet: 0 }), days, null), 'ewr').sub[1]).toBe('0 days in an average year');
+		expect(tile(riverKpis(summary({ ewrDaysNotMet: 1, ewrFractionDaysNotMet: 1 / 365.25 }), 365.25, null), 'ewr').sub[1]).toBe('1 day in an average year');
+	});
+	it('compares with the previous run: the share not met (runs differ in length, so not the count) and outflow', () => {
 		const cur = Array(12).fill(0);
 		cur[10] = 12;
 		const prev = Array(12).fill(0);
@@ -117,7 +122,6 @@ describe('riverKpis', () => {
 		// 20% not met before, 10% now: down 10 points, which is better.
 		expect(tile(ks, 'ewr').delta?.delta).toBeCloseTo(-0.1);
 		expect(tile(ks, 'ewr').spec.better).toBe('lower');
-		expect(tile(ks, 'below').delta?.delta).toBeCloseTo(73 * 365.25 / 730 - 73);
 		expect(tile(ks, 'outflow').delta?.delta).toBeCloseTo(-0.5);
 	});
 });
