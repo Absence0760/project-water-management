@@ -51,6 +51,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'updated_at',
 		'updated_by'
 	],
+	// An evidence pack's manifest, hash, runs and version are frozen; only its lifecycle, set once each, moves (112_evidence_pack.sql, evidence_pack_guard).
+	evidence_pack: ['bundle_key', 'bundle_sha256', 'pdf_key', 'pdf_pages', 'pdf_sha256', 'status', 'status_reason', 'superseded_by_pack_id'],
 	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
 	share_link: ['revoked_at', 'revoked_by'],
 	// An API key likewise: never its hash, scopes or series, only its revocation (039_api_keys.sql).
@@ -180,6 +182,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
+	// An evidence pack is the project's evidence; it stays with who drafted or issued it cleared (112_evidence_pack.sql).
+	'evidence_pack.created_by': 'set null',
+	'evidence_pack.issued_by': 'set null',
 	'farm_link.added_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
