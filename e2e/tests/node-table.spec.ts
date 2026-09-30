@@ -1,4 +1,4 @@
-// The node table (Network › Grids › Node table, issue #17). On a desktop it
+// The node table (Network › Tables › Node table, issue #17). On a desktop it
 // is a table with a column per field; on a phone each row is a card with
 // visible field labels, the same inputs, validation and save row, so nothing
 // scrolls sideways. The desktop test pins the table's editing as it was

@@ -11,7 +11,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { supplyIssues } from '$lib/model/validate';
-	import { noDamSupplyHint, pumpM3Day, SUPPLY_RULE_HELP } from './supply';
+	import { noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
@@ -20,6 +20,7 @@
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
 	const problems = $derived(supplyIssues(node));
 	const noDam = $derived(noDamSupplyHint(node));
+	const shared = $derived(sharedPumpHint(node));
 
 	// The calculator: not stored. Filling both sets the capacity; typing a capacity clears them.
 	let pumps = $state<number | null>(null);
@@ -98,6 +99,7 @@
 		<p class="problem" role="alert">{cap(p)}</p>
 	{/each}
 	{#if noDam}<p class="hint note" role="note">{noDam}</p>{/if}
+	{#if shared}<p class="hint note" role="note" data-testid="shared-pump-note">{shared}</p>{/if}
 </div>
 
 <style>

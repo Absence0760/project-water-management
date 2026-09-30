@@ -636,7 +636,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   their own `ModelEditor` loaded with the scenario's model (the base run's
   snapshot with the listed ops applied, `stepInputs(...).after`). The live
   model is never loaded or saved there. The Network shows its node table
-  inline (`only="table"`), not the map: the map's Grids menu and a farm
+  inline (`only="table"`), not the map: the map's Tables menu and a farm
   card's planted-areas link open the page's grid modal and farm drawer,
   which edit and save the catchment's own model (issue #17), so override
   mode must never offer them. The workspace page doesn't open those
@@ -705,7 +705,7 @@ read only; a `trigger` farm taken to run of river one change at a time
 through the form, both ops of the half-made edit saying why until the dam
 change completes it; override mode recording one edit in each table as changes
 (the node table inline, showing the scenario's model with the raise applied,
-no Grids menu; a stray `grid=` / `farm=` on the tab opening nothing),
+no Tables menu; a stray `grid=` / `farm=` on the tab opening nothing),
 refusing a kind change, the catchment's model read back through the API
 unchanged before and after recording, undone as one edit, with axe; submit,
 withdraw, delete releasing the base; axe in light,

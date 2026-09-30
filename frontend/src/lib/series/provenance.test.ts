@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, observedOriginsOf, originOfInput, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
+import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, feedMark, observedOriginsOf, originOfInput, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -109,5 +109,26 @@ describe('observed records’ source and unit (issue #66, 107_series_source.sql)
 		expect(originOfInput({}, 'flow_observed_m3s')).toBeNull();
 		expect(originOfInput(null, 'flow_observed_m3s')).toBeUndefined();
 		expect(originOfInput({}, undefined)).toBeUndefined();
+	});
+});
+
+describe('feedMark', () => {
+	it('names the feed that wrote the series, with its source label', () => {
+		expect(feedMark({ source: 'chirps', days: 400 }, 400)).toBe('Written by the CHIRPS daily rainfall feed');
+		expect(feedMark({ source: 'chirps_gefs', days: 16 })).toBe('Written by the CHIRPS-GEFS rainfall forecast feed');
+		expect(feedMark({ source: 'dws', days: 30 }, null)).toBe('Written by the DWS gauge flow feed');
+		// An unknown source (a newer backend) still says something true.
+		expect(feedMark({ source: 'era5', days: 3 }, 3)).toBe('Written by the era5 feed');
+	});
+
+	it('says how many days when the feed wrote only some of the days with a value', () => {
+		expect(feedMark({ source: 'chirps', days: 1312 }, 5000)).toBe('1\u202f312 days written by the CHIRPS daily rainfall feed');
+		expect(feedMark({ source: 'chirps', days: 1 }, 2)).toBe('1 day written by the CHIRPS daily rainfall feed');
+	});
+
+	it('is null without a feed or when the feed holds no day any more', () => {
+		expect(feedMark(null, 10)).toBeNull();
+		expect(feedMark(undefined)).toBeNull();
+		expect(feedMark({ source: 'chirps', days: 0 }, 10)).toBeNull();
 	});
 });

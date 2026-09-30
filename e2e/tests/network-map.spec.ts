@@ -12,11 +12,11 @@ import { closeModal, openNodeTable } from '../support/network.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
-/** Opens the header's Grids menu (a disclosure) and returns one of its links. */
+/** Opens the header's Tables menu (a disclosure) and returns one of its links. */
 async function gridLink(page: Page, name: string) {
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
-	return page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name, exact: true });
+	return page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name, exact: true });
 }
 
 async function savedCropArea(page: Page, projectId: string, farm: string): Promise<number> {
@@ -94,7 +94,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/edit=/);
 
-	// The node table is a grid (Grids → Node table), every column as before.
+	// The node table is a grid (Tables → Node table), every column as before.
 	const table = await openNodeTable(page);
 	await expect(page).toHaveURL(/[?&]grid=nodes/);
 	await expect(table.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -109,6 +109,36 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await page.goto(`/projects/${project.id}?tab=network&view=node`);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toBeVisible();
 	await expect(page).toHaveURL(/[?&]edit=/);
+});
+
+test('the map key names only what the drawing has, in groups, drawn like the map', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map key');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const key = page.getByTestId('map-key');
+
+	// Both units have dams and the only gauge is the outlet: no plain-unit or gauge entry to hunt for.
+	await expect(key.getByText('Hydrological unit with a dam', { exact: true })).toBeVisible();
+	await expect(key.getByText('Hydrological unit', { exact: true })).toHaveCount(0);
+	await expect(key.getByText('Gauge', { exact: true })).toHaveCount(0);
+	await expect(key.getByText('Outflow gauge', { exact: true })).toBeVisible();
+	// The dam swatch is the map's dam symbol, wave included.
+	await expect(key.locator('li', { hasText: 'with a dam' }).locator('path.dam-water')).toHaveCount(1);
+
+	// Shapes, lines and colours are separate, headed groups.
+	await expect(key.locator('.key-h')).toHaveText(['Nodes', 'Lines', 'Colour: supply']);
+	await expect(key.getByText('River, thicker with more area upstream')).toBeVisible();
+	// A colour band fills both unit shapes, so it matches the squares on the map too.
+	const band = key.locator('li[data-supply]').first();
+	await expect(band.locator('circle.farm')).toHaveCount(1);
+	await expect(band.locator('rect.farm')).toHaveCount(1);
+	// Drawn in the map's own colours.
+	const river = await page.locator('svg.schematic path.river').first().evaluate((e) => getComputedStyle(e).stroke);
+	expect(await key.locator('path.arrow-river').evaluate((e) => getComputedStyle(e).fill)).toBe(river);
+
+	await page.getByLabel('Colour hydrological units by').selectOption({ label: 'Dam level, end of latest run' });
+	await expect(key.locator('.key-h').last()).toHaveText('Colour: dam level');
 });
 
 test('colour farms by dam level (end of the latest run), with its own words', async ({ page, owner }) => {
@@ -213,9 +243,9 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	// The menu closes on Escape.
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeVisible();
 	await page.keyboard.press('Escape');
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
+	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
 
 	// Transfers too; Back closes a grid as well.

@@ -320,21 +320,35 @@
 	.field select {
 		width: 100%;
 	}
+	/* Each section is a card with its title in a tinted header band, so one
+	   section's fields don't run into the next's. The legend floats so it sits
+	   inside the card rather than on its border. The card itself stays
+	   --surface: read-only inputs are --surface-2 and would vanish on it. */
 	fieldset {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 0.25rem 0 0;
-		padding: 0.75rem 0 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		margin: 1rem 0 0;
+		padding: 0 1rem 0.75rem;
+		min-width: 0;
 	}
 	legend {
+		float: left;
+		width: calc(100% + 2rem);
+		margin: 0 -1rem 0.75rem;
+		padding: 0.55rem 1rem;
+		background: var(--surface-2);
+		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius) var(--radius) 0 0;
 		font-weight: 600;
-		font-size: 0.9rem;
-		padding: 0 0.4rem 0 0;
+		font-size: 1rem;
+	}
+	legend + :global(*) {
+		clear: both;
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-		gap: 0 1rem;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 0.5rem 1.25rem;
 	}
 	.lbl {
 		display: inline-flex;
@@ -400,6 +414,14 @@
 		flex: 1;
 	}
 	@media (max-width: 640px) {
+		fieldset {
+			padding: 0 0.75rem 0.5rem;
+		}
+		legend {
+			width: calc(100% + 1.5rem);
+			margin: 0 -0.75rem 0.75rem;
+			padding: 0.55rem 0.75rem;
+		}
 		.actions .btn {
 			min-height: 44px;
 		}

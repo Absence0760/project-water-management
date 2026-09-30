@@ -1,8 +1,17 @@
-# Local dev services. Start with `pnpm dev:db:up` (Postgres) and
-# `pnpm dev:mail:up` (Mailpit).
+# Local dev services. `pnpm dev` starts Postgres itself (`pnpm dev:db:up`);
+# `pnpm dev:mail:up` (Mailpit) and `pnpm dev:s3:up` (MinIO) are opt-in.
 #
 # Postgres is published on 5434 — this workstation already runs Supabase's
 # container Postgres on 5432 and native Postgres on 5433.
+#
+# The project name is fixed so every checkout (the main one and each git
+# worktree) drives the same containers: they have fixed container_names, so a
+# per-directory project name would make `up` from a worktree fail with a name
+# conflict while the main checkout's container runs. Per-worktree isolation
+# lives inside this one Postgres (water_test_w<n>, water_e2e…), not in
+# separate containers.
+name: project-water-management
+
 services:
   postgres:
     image: postgres:17-alpine
