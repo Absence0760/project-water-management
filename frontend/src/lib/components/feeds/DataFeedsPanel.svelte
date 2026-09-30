@@ -240,7 +240,8 @@
 	}
 </script>
 
-<section class="panel" id="set-feeds" aria-labelledby="{uid}-h">
+<!-- Its #set-feeds anchor is on the wrapper in SettingsTab.svelte, which lazy-loads this panel. -->
+<section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds</h2>
 		{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
@@ -420,9 +421,16 @@
 							/>
 							<span class="hint" id="{uid}-bbox-h">
 								“south, west, north, east” in degrees. The rainfall is the area-weighted mean of every 0.05° cell the box overlaps, a cell
-								partly inside counting for its share; at most 100 cells in 25 rows (about 0.5° × 0.5°). A box over the sea fails: keep it on
-								land.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40; try
+								partly inside counting for its share; at most 100 cells in 25 rows (about 0.5° × 0.5°). A sea cell in the box fails the fetch
+								unless the sea cells are left out.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40; try
 									−20.20, 25.10, −20.10, 25.20.{/if}
+							</span>
+						</div>
+						<div class="field">
+							<label class="check"><input type="checkbox" bind:checked={draft.skipNoData} aria-describedby="{uid}-skip-h" /> Leave out sea cells</label>
+							<span class="hint" id="{uid}-skip-h">
+								For a box on the coast: cells with no data (the sea) are left out and the rest averaged. A land cell that loses its data
+								still fails the fetch, and so does a box with no land.
 							</span>
 						</div>
 					{:else}
@@ -497,6 +505,18 @@
 </section>
 
 <style>
+	/* The box and its words on one line; a full-height target on a phone. */
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+	}
+	@media (pointer: coarse), (max-width: 640px) {
+		.check {
+			min-height: var(--tap);
+		}
+	}
 	.hint {
 		font-size: 0.8rem;
 		max-width: 75ch;

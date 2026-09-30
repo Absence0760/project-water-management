@@ -131,6 +131,32 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 	await expect(feed).toContainText(`OK; newest data ${day(-3)}, checked ${projectToday()}.`);
 });
 
+test('a coastal box leaves out its sea cells when asked, and fetches the land’s rainfall', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Coastal box');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'CHIRPS-GEFS rainfall forecast' });
+	await panel.getByLabel('Area').selectOption({ label: 'Bounding box' });
+	// The sample grid's corner, whose south-east cell is sea (chirps-sample.json `sea`).
+	await panel.getByLabel('Bounding box').fill('-20.30, 25.30, -20.20, 25.40');
+	const skip = panel.getByRole('checkbox', { name: 'Leave out sea cells' });
+	await expect(skip).toHaveAccessibleDescription(/cells with no data \(the sea\) are left out and the rest averaged/);
+	await skip.check();
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toContainText('box -20.30, 25.30 to -20.20, 25.40, sea cells left out · daily');
+	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await runJobsTick();
+	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
+});
+
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Failing feed');

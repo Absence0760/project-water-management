@@ -3395,8 +3395,14 @@ part of the Settings tab's chunk; WP-2.10,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
   rows, the server's limits mirrored so a box too big is explained before
-  anything is sent). The card says where a feed reads: "cell -20.12, 25.17",
-  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (`describePlace`).
+  anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
+  a box on the coast; its hint says a land cell losing its data, or a box with
+  no land, still fails). The card says where a feed reads: "cell -20.12, 25.17",
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
+  with the option; `describePlace`). The panel is its own lazy chunk inside
+  the Settings tab (`Lazy`, with the standard loading state); its
+  `#set-feeds` anchor sits on the wrapper, so the section menu and a link
+  find it while the chunk loads.
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
   days*, the default, or *rnl: from 1981, final days only*: one product end
   to end, never one spliced onto the other) and an optional **Start date**,

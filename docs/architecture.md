@@ -905,7 +905,15 @@ merges into:
   fetch reads one strip per grid row per day, so the worst case costs what 25
   listed cells in 25 rows do; a bigger box is a `400`. A sea cell inside the
   box fails the fetch, as a listed one does, rather than shrink the area the
-  mean covers; its message says to shrink the box or list cells.
+  mean covers; its message says to shrink the box, list cells, or leave out
+  sea cells. **`skipNoData: true`** (a box only; listed cells stay strict)
+  is that opt-in for a coastal catchment: cells reading no data are left out
+  and the others' weights renormalised (`sources/chirps.ts` `NoDataPolicy`).
+  The fetch still fails when no cell has data, and when the set of cells with
+  data changes between two days of one fetch: the sea mask is static, so a
+  land cell going no-data is a corrupt or changed grid, not the sea. The
+  result's meta records `cellsUsed`, how many of the box's cells had data; a
+  change in it from one fetch to the next means the product's grid changed.
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;

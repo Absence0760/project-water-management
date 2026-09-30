@@ -155,6 +155,11 @@ describe('bounding box → grid cells (bboxCells, gridCells)', () => {
 describe('GridConfig with a bounding box', () => {
 	const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
 
+	it('takes skipNoData with a box', () => {
+		expect(FeedInput.parse({ source: 'chirps', config: { bbox, skipNoData: true } }).config).toEqual({ bbox, skipNoData: true });
+		expect(FeedInput.safeParse({ source: 'chirps', config: { cells, skipNoData: true } }).error!.issues[0]).toMatchObject({ path: ['config', 'skipNoData'] });
+	});
+
 	it('takes a box for CHIRPS and CHIRPS-GEFS', () => {
 		expect(FeedInput.parse({ source: 'chirps', config: { bbox } }).config).toEqual({ bbox });
 		expect(FeedInput.parse({ source: 'chirps_gefs', config: { bbox } }).config).toEqual({ bbox });
@@ -176,7 +181,10 @@ describe('GridConfig with a bounding box', () => {
 		['a box across 180°', { bbox: { south: -20.2, west: 179.9, north: -20.1, east: -179.9 } }],
 		['a box beyond the grid', { bbox: { south: -60.1, west: 25, north: -59.9, east: 25.1 } }],
 		['a box with an unknown key', { bbox: { ...bbox, crs: 'EPSG:4326' } }],
-		['a box missing an edge', { bbox: { south: -20.2, west: 25.1, north: -20.1 } }]
+		['a box missing an edge', { bbox: { south: -20.2, west: 25.1, north: -20.1 } }],
+		['skipNoData with listed cells (they stay strict)', { cells, skipNoData: true }],
+		['skipNoData that isn’t a boolean', { bbox, skipNoData: 'yes' }],
+		['skipNoData inside the box', { bbox: { ...bbox, skipNoData: true } }]
 	])('refuses %s', (_, config) => {
 		expect(FeedInput.safeParse({ source: 'chirps', config }).success).toBe(false);
 	});

@@ -2632,7 +2632,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     east, no crossing of 180°, the same ranges), read as the area-weighted mean
     of every 0.05° cell the box overlaps and at most 100 cells in 25 rows
     (about 0.5° × 0.5°; a bigger box is `400`, the issue at `config.bbox`,
-    architecture.md § Data feeds); for `dws`:
+    architecture.md § Data feeds). A box may add `skipNoData: true`: its
+    no-data (sea) cells are left out and the rest renormalised, and each fetch's
+    `lastMeta` carries `cellsUsed` (with `cells` it is a `400`); for `dws`:
     `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
     three digits; upper-cased; a reservoir `R`, weather `E` or other station
     is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,

@@ -287,6 +287,8 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect(big.body.details[0]).toMatchObject({ path: ['config', 'bbox'], message: expect.stringMatching(/at most 100 of the 0\.05° grid cells in at most 25 rows/) });
 		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } } })).status).toBe(400);
 
+		// Leaving out sea cells is a box's option: listed cells stay strict.
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], skipNoData: true } })).status).toBe(400);
 		const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
 		const made = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { bbox, startDate: addDays(-20) } });
 		expect(made.status).toBe(201);

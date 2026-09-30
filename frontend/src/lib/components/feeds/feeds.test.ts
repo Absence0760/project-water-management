@@ -99,6 +99,10 @@ describe('draftToBody', () => {
 		expect(draftToBody({ ...box, product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { bbox: { south: -20.3 }, product: 'rnl', startDate: '1985-01-01' } } });
 		expect(draftToBody({ ...box, source: 'chirps_gefs' })).toMatchObject({ body: { config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } } } });
 		expect(draftToBody({ ...box, bbox: '-20.1, 25, -20.3, 25.2' })).toEqual({ error: expect.stringMatching(/south edge/), field: 'bbox' });
+		// Leaving out sea cells: sent only when ticked, and only with a box (listed cells stay strict).
+		expect(draftToBody({ ...box, skipNoData: true })).toMatchObject({ body: { config: { bbox: { south: -20.3 }, skipNoData: true } } });
+		expect((draftToBody(box) as { body: { config: object } }).body.config).not.toHaveProperty('skipNoData');
+		expect((draftToBody({ ...box, area: 'cells', cells: '-20.12, 25.17', skipNoData: true }) as { body: { config: object } }).body.config).not.toHaveProperty('skipNoData');
 	});
 
 
@@ -178,6 +182,7 @@ describe('descriptions', () => {
 		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: 1, lon: 2 }, { lat: 3, lon: 4 }] } })).toBe('2 cells');
 		expect(describePlace({ source: 'chirps', config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } } })).toBe('box -20.30, 25.00 to -20.10, 25.20');
 		expect(describePlace({ source: 'chirps_gefs', config: { bbox: { south: -20.125, west: 25.1, north: -20.1, east: 25.175 } } })).toBe('box -20.125, 25.10 to -20.10, 25.175');
+		expect(describePlace({ source: 'chirps', config: { bbox: { south: -20.3, west: 25.3, north: -20.2, east: 25.4 }, skipNoData: true } })).toBe('box -20.30, 25.30 to -20.20, 25.40, sea cells left out');
 		expect(describeTarget({ targetKind: 'rain_forecast_mm', targetName: '' })).toBe('Rainfall — forecast');
 		expect(describeTarget({ targetKind: 'flow_observed_m3s', targetName: 'Weir' })).toBe('Flow — observed gauge · Weir');
 	});

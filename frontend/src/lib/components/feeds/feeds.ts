@@ -30,7 +30,7 @@ export interface Bbox {
 export interface FeedMeta {
 	id: string;
 	source: FeedSource;
-	config: { cells?: GridCell[]; bbox?: Bbox; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
+	config: { cells?: GridCell[]; bbox?: Bbox; skipNoData?: boolean; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
@@ -97,7 +97,7 @@ export interface FeedList {
 
 export interface FeedBody {
 	source: FeedSource;
-	config: ({ cells: GridCell[] } | { bbox: Bbox }) & { product?: ChirpsProduct; startDate?: string } | { station: string };
+	config: ({ cells: GridCell[] } | { bbox: Bbox; skipNoData?: true }) & { product?: ChirpsProduct; startDate?: string } | { station: string };
 	targetKind: string;
 	targetName: string;
 	schedule: 'daily' | 'hourly';
@@ -126,6 +126,8 @@ export interface FeedDraft {
 	cells: string;
 	/** "south, west, north, east" in degrees. */
 	bbox: string;
+	/** A bounding box only: leave out its sea (no-data) cells and average the rest. */
+	skipNoData: boolean;
 	station: string;
 	targetKind: string;
 	targetName: string;
@@ -141,6 +143,7 @@ export const emptyDraft = (source: FeedSource = 'chirps', kinds: string[] = []):
 	area: 'cells',
 	cells: '',
 	bbox: '',
+	skipNoData: false,
 	station: '',
 	targetKind: kinds[0] ?? '',
 	targetName: '',
@@ -237,11 +240,11 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 		if (!DWS_RIVER_GAUGE.test(station)) return { error: 'Only a DWS river gauge can be fed (an H code, e.g. A2H012): a reservoir’s (R) daily table is its spillway discharge, not the river’s flow.', field: 'station' };
 		return { body: { ...common, config: { station } } };
 	}
-	let place: { cells: GridCell[] } | { bbox: Bbox };
+	let place: { cells: GridCell[] } | { bbox: Bbox; skipNoData?: true };
 	if (d.area === 'bbox') {
 		const box = parseBbox(d.bbox);
 		if ('error' in box) return { error: box.error, field: 'bbox' };
-		place = box;
+		place = d.skipNoData ? { ...box, skipNoData: true } : box;
 	} else {
 		const cells = parseCells(d.cells);
 		if ('error' in cells) return { error: cells.error, field: 'cells' };
@@ -305,7 +308,7 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	const b = f.config.bbox;
 	// At least two decimals (a box is usually drawn on the 0.05° grid); a plain "-", as the cell line writes it.
 	const deg = (v: number) => (Math.abs(Math.round(v * 100) - v * 100) < 1e-6 ? v.toFixed(2) : String(v));
-	if (b) return `box ${deg(b.south)}, ${deg(b.west)} to ${deg(b.north)}, ${deg(b.east)}`;
+	if (b) return `box ${deg(b.south)}, ${deg(b.west)} to ${deg(b.north)}, ${deg(b.east)}${f.config.skipNoData ? ', sea cells left out' : ''}`;
 	const cells = f.config.cells ?? [];
 	if (cells.length === 1) return `cell ${cells[0]!.lat}, ${cells[0]!.lon}`;
 	return `${cells.length} cells`;

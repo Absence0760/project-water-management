@@ -151,10 +151,20 @@ export const GridConfig = z
 		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional(),
 		/** CHIRPS only: which v3 daily product (absent = `sat`). FeedInput checks it against the source and the start date. */
-		product: z.enum(CHIRPS_DAILY_PRODUCTS).optional()
+		product: z.enum(CHIRPS_DAILY_PRODUCTS).optional(),
+		/**
+		 * A bounding box only: leave out the box's no-data (sea) cells and
+		 * renormalise the others' weights (sources/chirps.ts NoDataPolicy). Listed
+		 * cells stay strict: a listed sea cell is a mistake in the list.
+		 */
+		skipNoData: z.boolean().optional()
 	})
 	.strict()
 	.superRefine((g, ctx) => {
+		if (g.skipNoData !== undefined && g.bbox === undefined) {
+			ctx.addIssue({ code: 'custom', path: ['skipNoData'], message: 'only a bounding box can leave out its sea cells; listed cells must each have data' });
+			return;
+		}
 		if ((g.cells === undefined) === (g.bbox === undefined)) {
 			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'give either grid cells or a bounding box (bbox), not both' });
 			return;
