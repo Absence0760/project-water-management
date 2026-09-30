@@ -64,7 +64,7 @@ MUTANTS = [
     ),
     ("a run with no catchment area runs (on 0 m³ of natural flow)", "    if not area_km2 > 0:\n        raise Refused", "    if False:\n        raise Refused"),
     ("the receiver's room counts what it sent earlier the same day", "- sched[dst]\n", "- sched[dst] + drawn[dst]\n"),
-    ("no soil-water store (N3)", "w = min(smax, available - used)", "w = 0.0"),
+    ("no soil-water store (N3)", "w = min(smax, max(0.0, available - used))", "w = 0.0"),
     ("flagged zero runs run as recorded (B2)", 'mode = zr.get("mode", "missing")', 'mode = "asRecorded"'),
     ("accumulations stay on their reading day (B4)", 'if acc_mode == "spread":', "if False:"),
     (
@@ -132,7 +132,7 @@ MUTANTS = [
     ("the rate limit is ignored", '        lim += a["rate"] * 86400\n', '        return math.inf\n'),
     (
         "every limit-bound day counts as the volume",
-        "if left <= limit + 1e-9 * budget:",
+        "if left <= limit + 1e-9 * max(budget, 1.0):",
         "if True:",
     ),
     (
@@ -140,7 +140,7 @@ MUTANTS = [
         'both = sorted(bysrc.get("surface", []) + bysrc.get("groundwater", []), key=lambda a: a["id"])',
         'both = sorted(bysrc.get("surface", []), key=lambda a: a["id"])',
     ),
-    ("the tail-start year's no-demand row keeps its volume", "if tot > 0 or y == tail_y:", "if tot > 0:"),
+    ("the tail-start year's no-demand row lists k × demand, 0", "if dem_y.get(y, 0.0) > 0:", "if dem_y.get(y, 0.0) > 0 or y == tail_y:"),
     (
         "a forecast tail's later water years keep the factor of the year it started in",
         ("if i >= hist and water_year(days[i]) == tail_y:\n                    continue", "if i >= hist:\n                    continue"),
