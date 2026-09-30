@@ -1182,6 +1182,20 @@ the suggested order (the IDs carry the detail):
       on every saved run by the `assurance` self-check, and in the opt-in
       stress test `backend/src/model/assurance-jit.perf.test.ts`
       (`pnpm test:backend:perf`).
+- [x] **A transfer rule that moves nothing relaxed its siblings' reserve**
+      (found reviewing #73; [engine-audit.md N6](./engine-audit.md#findings),
+      erratum ER-11, engine 1.36.0): rules of one priority from one dam shared
+      the free water above the *lowest* reserve among them, so a rate-0 or
+      lower-reserve rule let the others take the dam below their own reserves
+      (two 50 % rules from a full 1 000 m³ dam moved 800 m³ with a 0 % rate-0
+      rule beside them, 500 m³ without it). Each rule now draws only above its
+      own reserve (the water is shared band by band between reserves, model.md
+      §2.6), a rule with no rate this month is not active, and
+      `checkTransferLimits` checks the reserve per rule on every saved run.
+      Tests: `run.test.ts` › "rules of one priority from one dam keep each
+      rule's own reserve", `run.invariants.test.ts` › "engine 1.36.0: several
+      rules from one dam …". The open entry PR #237 carries for this is closed
+      by it.
 - [ ] **Report the V8 miscompile upstream** (issue #192; tracked in #232): reduce it to a
       standalone script for crbug.com/v8 (the Sandspruit stress reproduces
       it; a harness calling `supplyAssurance` alone never did, at 51

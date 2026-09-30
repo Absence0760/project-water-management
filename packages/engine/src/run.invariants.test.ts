@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { OPERATING_DEFAULTS, upgradeLegacyModel, type ModelInput } from './project';
-import { randomInput } from './testing/fuzz';
+import { randomInput, Rng } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 import { clientCatchmentDirs } from './testing/client-catchment-fixture';
@@ -145,6 +145,36 @@ describe('engine invariants on random networks', () => {
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		expect(tested).toBeGreaterThan(0);
+	});
+
+	it('engine 1.36.0: several rules from one dam, at mixed reserves and rates (some 0), never take it below a rule\'s own reserve, in any list order', () => {
+		// The random networks rarely put three rules on one dam at one priority, which the old
+		// shared-free-water bug needed; these do on purpose. checkAll includes checkTransferLimits
+		// (its per-rule reserve check) and order invariance.
+		let tested = 0;
+		for (let seed = 1; seed <= 400 && tested < 120; seed++) {
+			const input = randomInput(seed, { maxDays: 120 });
+			const farms = input.model.nodes.filter((n) => n.kind === 'farm');
+			const src = farms.find((n) => n.damCapacityM3 > 0);
+			if (!src || farms.length < 3) continue;
+			const g = new Rng(seed * 7919);
+			src.damInitialPct = g.pick([1, 0.9, 0.6, 0.4]);
+			const others = farms.filter((n) => n !== src);
+			input.model.transfers = Array.from({ length: g.int(3, 5) }, (_, k) => ({
+				id: `r${k}`,
+				fromNodeId: src.id,
+				toNodeId: g.pick(others).id,
+				months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+				maxRateM3s: g.pick([0, g.logFloat(1e-4, 0.05), g.logFloat(0.01, 2)]),
+				dailyCapM3: null,
+				minStoragePct: g.pick([0, 0.2, 0.5, 0.5, 0.8]),
+				enabled: true,
+				priority: g.pick([0, 0, 0, 1])
+			}));
+			tested++;
+			expect(checkAll(input, seed), `seed ${seed}`).toBeNull();
+		}
+		expect(tested).toBeGreaterThan(50);
 	});
 
 	it('monthly rates (engine 1.14.0): writing every rule as its one rate in its months, month by month, changes nothing to the bit', () => {

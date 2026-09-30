@@ -388,6 +388,8 @@ interface Rule {
  * - minimum storage: −J ≤ yesterday's storage − the lowest reserve among
  *   today's outgoing rules (never below 0); a rule's reserve is the source
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
+ *   and, per rule, no rule takes the dam below its own reserve
+ *   (checkRuleReserves, engine ≥ 1.36.0);
  * - room at the destination (audit N4): a farm that sends nothing receives
  *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
  *   evaporation − seepage) + the most its dam is drawn today + a fixed
@@ -403,6 +405,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const get = seriesMap(out);
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const rules: Rule[] = [];
+	const ruleDefs: Transfer[] = [];
 	for (const tr of input.model.transfers) {
 		const a = byId.get(tr.fromNodeId);
 		const b = byId.get(tr.toNodeId);
@@ -410,7 +413,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || isRiverOfftake(tr)) continue;
 		// The month's own rate (engine ≥ 1.14.0), or the one max rate in the listed months.
 		// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
-		rules.push({ from: a.id, to: b.id, on: transferActiveMonths(tr), limit: transferDailyLimit(tr), reserve: Math.max(tr.minStoragePct, a.damMinPct), priority: tr.priority ?? 0 });
+		rules.push({ from: a.id, to: b.id, on: transferActiveMonths(tr), limit: transferDailyLimit(tr), reserve: Math.max(tr.minStoragePct, a.damMinPct), priority: Number.isFinite(tr.priority) ? tr.priority : 0 });
+		ruleDefs.push(tr);
 	}
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
@@ -506,7 +510,39 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
 		}
 	}
-	return checkOfftakes(input, out, get);
+	return checkRuleReserves(rules, ruleDefs, out, get, storage, capOn) ?? checkOfftakes(input, out, get);
+}
+
+/**
+ * No rule takes its source dam below its own reserve (engine ≥ 1.36.0), read
+ * from each rule's own volume (transfer_rule@, engine ≥ 1.6.0; skipped for an
+ * older run). Rules of a lower priority draw first, so a rule of priority p
+ * starts from A = yesterday's storage − what the lower priorities took. Of its
+ * own priority, the rules keeping at least its reserve r draw only above their
+ * own, so together they take at most MAX(0, A − r · capacity): the rule itself
+ * too. A rule that moves nothing, or keeps less, doesn't count against it.
+ */
+function checkRuleReserves(rules: readonly Rule[], defs: readonly Transfer[], out: ModelOutput, get: SeriesMap, storage: (id: string, t: number) => number, capOn: (id: string, t: number) => number): string | null {
+	const vol = readRuleVolumes(defs, out.days, (id, k) => get.get(`${id}|${k}`));
+	if (!vol) return null;
+	for (let t = 0; t < out.days; t++) {
+		for (let k = 0; k < rules.length; k++) {
+			const r = rules[k]!;
+			let earlier = 0;
+			let above = 0;
+			for (let j = 0; j < rules.length; j++) {
+				const o = rules[j]!;
+				if (o.from !== r.from) continue;
+				if (o.priority < r.priority) earlier += vol[j]![t]!;
+				else if (o.priority === r.priority && o.reserve >= r.reserve) above += vol[j]![t]!;
+			}
+			if (!(above > 0)) continue;
+			const prev = storage(r.from, t);
+			const free = Math.max(0, prev - earlier - capOn(r.from, t) * r.reserve);
+			if (above > free + tol(Math.max(prev, above))) return `${r.from} day ${t}: rule ${defs[k]!.id} and the rules of its priority keeping at least its reserve sent ${above} > storage ${prev} − ${earlier} sent first − its reserve = ${free}`;
+		}
+	}
+	return null;
 }
 
 /**
