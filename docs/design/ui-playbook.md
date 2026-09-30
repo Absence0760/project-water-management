@@ -707,6 +707,15 @@ Interaction details that bit:
   with Summary alone on the first. Flow the links like words (inline blocks)
   so a group breaks where it must, and move what doesn't fit into More
   rather than growing a third row (`common/SectionNav.svelte`).
+- **A fit measures every state it can draw, and every margin the line
+  holds.** SectionNav's fit measured each link only in its "widest" state,
+  bold, and gave More no trailing gap; with Inter under Linux Chromium,
+  which rounds each glyph's advance to whole pixels, regular weight set up
+  to 4 px wider than semibold, and a line's last margin still takes room, so
+  CI's bar kept a link too many and More wrapped to a third row while a Mac
+  fit (#264). Measure each variant the element can take and use the widest;
+  count trailing margins; and when a layout check fails only in CI, run it
+  in CI's browser before guessing (`e2e/README.md` § Fonts).
 - **A reading page's header says what the page decides.** A long form has
   no count to show; Settings & calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the

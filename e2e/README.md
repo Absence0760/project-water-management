@@ -160,6 +160,26 @@ comes from the DejaVu fonts in `e2e/fonts/` (`fonts.conf`, passed to Chromium
 as `FONTCONFIG_FILE` in `playwright.config.ts`); macOS Chromium doesn't read
 fontconfig, so there monospace is the Mac's own. `tests/fonts.spec.ts` fails if
 body text isn't Inter, or (on Linux) the pin stops reaching the browser.
+
+The same font still renders a little differently per platform: Linux Chromium
+rounds each glyph's advance to whole pixels, macOS doesn't, so a width that
+fits to the pixel can pass on a Mac and fail in CI (#264). To see CI's
+rendering from a Mac, run the browser in the pinned Linux image and point the
+tests at it (the site, the API and the fonts stay on the Mac; `exposeNetwork`
+tunnels its localhost):
+
+```bash
+docker run -d --rm --name pw-linux -p 3333:3333 --init \
+  -v "$PWD/e2e/fonts:/e2efonts:ro" -e FONTCONFIG_FILE=/e2efonts/fonts.conf \
+  mcr.microsoft.com/playwright:v1.63.0-noble \
+  sh -c 'cd /tmp && npx -y playwright@1.63.0 run-server --port 3333 --host 0.0.0.0'
+PW_TEST_CONNECT_WS_ENDPOINT=ws://localhost:3333/ PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>' \
+  pnpm test:e2e tests/section-nav.spec.ts > e2e.log 2>&1
+```
+
+Keep the image tag on the pinned Playwright version. A spec that sets its own
+`launchOptions` (`auth-layout.spec.ts`'s classic scrollbar) can't apply them
+to a remote browser, so it fails there; run it natively.
 Nothing to install: the font files are committed (DejaVu's licence is
 `fonts/LICENSE-DejaVu`). The display face, Outfit, is a web font too. When a layout check fails, fix the layout or
 measure what fits; don't widen a margin until it passes on one machine.

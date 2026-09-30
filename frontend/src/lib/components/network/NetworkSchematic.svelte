@@ -5,6 +5,7 @@
 	// edit it, or (editors) drag it onto another node to change what it drains
 	// into. The "Drains into" selects are the keyboard path to the same edit;
 	// the list below the drawing is its text equivalent.
+	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
 	import { MediaQuery } from 'svelte/reactivity';
 	import type { NetworkNode, Transfer } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
@@ -105,17 +106,10 @@
 	// drawn. Measured on a canvas in the drawing's font (.label / .meta below);
 	// the meta line's digits are tabular there, so they're measured as zeros.
 	// A canvas measures in whatever face has loaded, so they are measured again
-	// once the page's fonts finish loading (the web font may land after the
-	// drawing, and the fallback's widths would stand otherwise).
+	// once the page's fonts finish loading (onFontsLoaded: the web font may land
+	// after the drawing, and the fallback's widths would stand otherwise).
 	let fontsLoaded = $state(0);
-	$effect(() => {
-		const fonts = document.fonts;
-		if (!fonts) return;
-		const loaded = () => fontsLoaded++;
-		if (fonts.status === 'loading') fonts.ready.then(loaded, () => {});
-		fonts.addEventListener('loadingdone', loaded);
-		return () => fonts.removeEventListener('loadingdone', loaded);
-	});
+	$effect(() => onFontsLoaded(() => fontsLoaded++));
 	const widths = $derived.by(() => {
 		void fontsLoaded;
 		const ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');

@@ -2574,7 +2574,8 @@ to its own redesign.
   next onto a row of its own, and Runs & results took three rows at 1280 px
   with Summary alone on the first. What still doesn't fit goes, in page
   order, into **More** at the end of the bar (`navFitCount`, from a hidden
-  copy of every link measured in its widest, marked state, refitted when the
+  copy of every link measured both plain and marked, the wider of the two,
+  with More's own trailing gap counted like every link's, refitted when the
   bar's width, the labels or the fonts change). At 1440 and 1280 px every
   page's links fit without More; at 1024 px Settings and Runs use it.
 - **More** is a disclosure button ("More sections", `aria-expanded`) with a
