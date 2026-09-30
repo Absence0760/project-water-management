@@ -111,7 +111,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (capacity ÷ 3 m)' }) },
 	damAreaExponent: { label: 'Dam area exponent', spec: num('') },
 	damSeepagePerDay: { label: 'Dam seepage per day', spec: pct() },
-	divertCapacityM3Day: { label: 'Diversion capacity', spec: num('m³/day') },
+	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/day') },
 	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct() },
 	lossReturnFraction: { label: 'Share of losses returning', spec: pct() },
 	damReleaseRule: { label: 'Dam release rule', spec: { t: 'enum', options: plain(DAM_RELEASE_RULES, { none: 'none', passInflow: 'pass inflow', fixed: 'fixed release' }) } },

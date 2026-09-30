@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasSupplySettings, noDamSupplyHint, pumpM3Day } from './supply';
+import { hasSupplySettings, noDamSupplyHint, pumpM3Day, sharedPumpHint } from './supply';
 
 describe('pumpM3Day', () => {
 	it('is pumps × m³/h per pump × 24 h', () => {
@@ -44,5 +44,26 @@ describe('hasSupplySettings', () => {
 		expect(hasSupplySettings({ supplyRule: 'damFirst', pumpCapacityM3Day: null })).toBe(false);
 		expect(hasSupplySettings({ supplyRule: 'riverFirst' })).toBe(true);
 		expect(hasSupplySettings({ pumpCapacityM3Day: 0 })).toBe(true);
+	});
+});
+
+describe('sharedPumpHint', () => {
+	const farm = { kind: 'farm' as const, divertCapacityM3Day: 500, supplyRule: 'riverFirst' as const, pumpCapacityM3Day: 1200 };
+
+	it('notes a farm that fills its dam from the river and also pumps the river to irrigate', () => {
+		expect(sharedPumpHint(farm)).toMatch(/River to dam.*two pumps.*split its capacity/);
+		expect(sharedPumpHint({ ...farm, supplyRule: 'trigger' })).not.toBeNull();
+		// No limit is still a pump.
+		expect(sharedPumpHint({ ...farm, pumpCapacityM3Day: null })).not.toBeNull();
+	});
+
+	it('says nothing without a river pump, without a diversion, on run of river, or on another kind', () => {
+		expect(sharedPumpHint({ ...farm, supplyRule: 'damFirst' })).toBeNull();
+		expect(sharedPumpHint({ ...farm, supplyRule: undefined })).toBeNull();
+		expect(sharedPumpHint({ ...farm, pumpCapacityM3Day: 0 })).toBeNull();
+		expect(sharedPumpHint({ ...farm, divertCapacityM3Day: 0 })).toBeNull();
+		// Run of river has no dam, so the diversion is ignored (docs/model.md §2.7e).
+		expect(sharedPumpHint({ ...farm, supplyRule: 'runOfRiver' })).toBeNull();
+		expect(sharedPumpHint({ ...farm, kind: 'user' })).toBeNull();
 	});
 });
