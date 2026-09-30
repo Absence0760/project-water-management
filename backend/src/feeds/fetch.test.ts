@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fixtureHttp } from './fixtures.js';
+import { readFileSync } from 'node:fs';
+import { toEpochDay } from '@water-management/engine/calendar';
+import { FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
+import { writeGrid } from './sources/tiff-write.js';
+import { chirpsFinalUrl, gridMean } from './sources/chirps.js';
+import { bboxCells } from './config.js';
 import { DWS_MAX_YEARS } from './sources/dws.js';
 import type { FeedHttp } from './http.js';
 import {
@@ -16,6 +21,17 @@ import {
 } from './fetch.js';
 
 const grid = { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] };
+
+/** The fixtures, but the final CHIRPS file of the day `dotted` (YYYY.MM.DD) drawn from another grid fixture. */
+function fixtureHttpWith(other: Parameters<typeof fixtureValue>[0], dotted: string): FeedHttp {
+	const base = fixtureHttp(() => '2026-03-10');
+	const day = toEpochDay(dotted.replaceAll('.', '-'));
+	const { width, height } = other.grid;
+	const values = new Float32Array(width * height);
+	for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) values[r * width + c] = fixtureValue(other, day, r, c);
+	const file = writeGrid({ width, height, originLon: other.grid.originLon, originLat: other.grid.originLat, scale: other.grid.scale, values });
+	return { ...base, range: async (url, start, end) => (url.endsWith(`sat.${dotted}.tif`) ? file.subarray(start, end + 1) : base.range(url, start, end)) };
+}
 const tz = process.env.TZ;
 afterEach(() => {
 	process.env.TZ = tz;
@@ -226,6 +242,83 @@ describe('runFetch on the fixtures', () => {
 		expect(none).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0, outside: 5 } });
 	});
 
+	it('CHIRPS over a bounding box: the area-weighted mean of the cells it overlaps, as computed by hand', async () => {
+		// Rows 1 (−20.05…−20.10, whole) and 2 (−20.10…−20.13 of −20.15, 0.6); columns 2 (25.12…25.15 of 25.10, 0.6) and 3 (whole).
+		const bbox = { south: -20.13, west: 25.12, north: -20.05, east: 25.2 };
+		const days = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'];
+		const r = await runFetch({ source: 'chirps', config: { bbox }, start: days[0]!, end: days.at(-1)!, today: '2026-03-10' }, http);
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		const cos = (lat: number) => Math.cos((lat * Math.PI) / 180);
+		const parts = [
+			{ row: 1, col: 2, w: 0.6 * cos(-20.075) },
+			{ row: 1, col: 3, w: cos(-20.075) },
+			{ row: 2, col: 2, w: 0.36 * cos(-20.125) },
+			{ row: 2, col: 3, w: 0.6 * cos(-20.125) }
+		];
+		const byHand = days.map((d) => {
+			const k = toEpochDay(d);
+			const sum = parts.reduce((s, p) => s + p.w * fixtureValue(f, k, p.row, p.col), 0);
+			return Math.round((sum / parts.reduce((s, p) => s + p.w, 0)) * 100) / 100;
+		});
+		expect(byHand.some((v) => v > 0)).toBe(true);
+		expect(r).toEqual({ ok: true, startDate: days[0], values: byHand, meta: { days: 4, prelimDays: 0, product: 'sat', finalThrough: '2026-01-04' } });
+	});
+
+	it('a box with skipNoData over the fixture sea cell: the renormalised mean of the land cells, and how many it used', async () => {
+		// Rows 4–5 × columns 6–7 of the sample grid; the cell at row 5, col 7 is sea (chirps-sample.json `sea`).
+		const bbox = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		expect(f.grid.sea).toEqual([[5, 7]]);
+		const days = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'];
+		const r = await runFetch({ source: 'chirps', config: { bbox, skipNoData: true }, start: days[0]!, end: days.at(-1)!, today: '2026-03-10' }, http);
+		const cos = (lat: number) => Math.cos((lat * Math.PI) / 180);
+		// The three land cells, whole cells each: the sea cell's weight is left out, the rest renormalised.
+		const land = [
+			{ row: 4, col: 6, w: cos(-20.225) },
+			{ row: 4, col: 7, w: cos(-20.225) },
+			{ row: 5, col: 6, w: cos(-20.275) }
+		];
+		const byHand = days.map((d) => {
+			const k = toEpochDay(d);
+			return Math.round((land.reduce((s, p) => s + p.w * fixtureValue(f, k, p.row, p.col), 0) / land.reduce((s, p) => s + p.w, 0)) * 100) / 100;
+		});
+		expect(byHand.some((v) => v > 0)).toBe(true);
+		expect(r).toEqual({ ok: true, startDate: days[0], values: byHand, meta: { days: 4, prelimDays: 0, product: 'sat', cellsUsed: 3, finalThrough: '2026-01-04' } });
+		// The forecast the same.
+		const g = await runFetch({ source: 'chirps_gefs', config: { bbox, skipNoData: true }, start: '2026-03-10', end: '2026-03-25', today: '2026-03-10' }, http);
+		expect(g).toMatchObject({ ok: true, meta: { days: 16, cellsUsed: 3 } });
+	});
+
+	it('a box with skipNoData still fails when no cell has data, and when a land cell reads no data on one day of the fetch', async () => {
+		const sea = { south: -20.3, west: 25.35, north: -20.25, east: 25.4 };
+		const allSea = await runFetch({ source: 'chirps', config: { bbox: sea, skipNoData: true }, start: '2026-01-01', end: '2026-01-01', today: '2026-03-10' }, http);
+		expect(allSea).toEqual({ ok: false, error: 'the source’s data could not be read: the grid has no data in any cell of the bounding box (all sea, or outside the product’s coverage)' });
+
+		// 2026-01-02's file has a second no-data cell: a corrupt or changed grid, not the sea.
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		const changed = fixtureHttpWith({ ...f, grid: { ...f.grid, sea: [...f.grid.sea, [4, 6]] } }, '2026.01.02');
+		const r = await runFetch(
+			{ source: 'chirps', config: { bbox: { south: -20.3, west: 25.3, north: -20.2, east: 25.4 }, skipNoData: true }, start: '2026-01-01', end: '2026-01-03', today: '2026-03-10' },
+			changed
+		);
+		expect(r).toEqual({ ok: false, error: expect.stringMatching(/cells with data changed from one day to another within one fetch/) });
+	});
+
+	it('a day with no data in any cell, after another day of the fetch had some, reads as a corrupt or changed grid, not the sea', async () => {
+		const cells = bboxCells({ south: -20.3, west: 25.3, north: -20.2, east: 25.4 });
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		const drowned = fixtureHttpWith({ ...f, grid: { ...f.grid, sea: [[4, 6], [4, 7], [5, 6], [5, 7]] } }, '2026.01.02');
+		const url = chirpsFinalUrl('2026-01-02');
+		await expect(gridMean(drowned, url, cells, { mask: '1110' })).rejects.toThrow(/the file looks corrupt, or the grid has changed/);
+		// The first day read: all sea, said so.
+		await expect(gridMean(drowned, url, cells, { mask: null })).rejects.toThrow(/no data in any cell of the bounding box \(all sea/);
+	});
+
+	it('GEFS over a bounding box', async () => {
+		const r = await runFetch({ source: 'chirps_gefs', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } }, start: '2026-03-10', end: '2026-03-25', today: '2026-03-10' }, http);
+		expect(r).toMatchObject({ ok: true, startDate: '2026-03-10', meta: { days: 16, issued: '2026-03-10' } });
+	});
+
 	it('CHIRPS: how far the leading days are final (finalThrough), and none when the first day is preliminary', async () => {
 		const r = await runFetch({ source: 'chirps', config: grid, start: '2026-01-20', end: '2026-03-09', today: '2026-03-10' }, http);
 		expect(r).toMatchObject({ ok: true, meta: { finalThrough: '2026-01-29', prelimDays: 37 } });
@@ -247,6 +340,15 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 	it('a cell over the fixture sea', async () => {
 		const r = await runFetch({ source: 'chirps', config: { cells: [{ lat: -20.27, lon: 25.37, weight: 1 }] }, start: '2026-01-01', end: '2026-01-01', today: '2026-03-10' }, fixtureHttp(() => '2026-03-10'));
 		expect(r).toEqual({ ok: false, error: expect.stringMatching(/^the source’s data could not be read: the grid has no data at -20.27, 25.37/) });
+	});
+
+	it('a bounding box over the fixture sea fails loudly and says how to fix it (a box never skips a cell)', async () => {
+		const bbox = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+		const r = await runFetch({ source: 'chirps', config: { bbox }, start: '2026-01-01', end: '2026-01-01', today: '2026-03-10' }, fixtureHttp(() => '2026-03-10'));
+		expect(r).toEqual({
+			ok: false,
+			error: 'the source’s data could not be read: the grid has no data at -20.275, 25.375 (the sea, or outside the product’s coverage), inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)'
+		});
 	});
 
 	it('no GEFS issue today or yesterday', async () => {
@@ -323,6 +425,25 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'dws', config: grid }).success).toBe(false);
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps', config: { station: 'X0H000' } }).success).toBe(false);
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps', config: grid, extra: 1 }).success).toBe(false);
+	});
+
+	// A bounding box's limits are all that keeps a queue message from making
+	// the fetcher read many cells: the schema checks them again here.
+	it('checks a bounding box: a valid one parses; too big, with cells, or with an unknown key is refused', () => {
+		const base = { source: 'chirps', start: '2026-01-01', end: '2026-01-02', today: '2026-01-03' };
+		const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox } })).toMatchObject({ success: true, data: { config: { bbox } } });
+		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps_gefs', config: { bbox } }).success).toBe(true);
+		// 400 cells in 20 rows.
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { south: -21, west: 25, north: -20, east: 26 } } }).success).toBe(false);
+		// 26 rows of one cell.
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { south: -21.3, west: 25, north: -20, east: 25.05 } } }).success).toBe(false);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { ...grid, bbox } }).success).toBe(false);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox: { ...bbox, cells: 1000 } } }).success).toBe(false);
+		// Leaving out sea cells is a box's option only.
+		expect(FetchRequestSchema.safeParse({ ...base, config: { bbox, skipNoData: true } }).success).toBe(true);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { ...grid, skipNoData: true } }).success).toBe(false);
+		expect(FetchRequestSchema.safeParse({ ...base, config: { ...grid, skipNoData: false } }).success).toBe(false);
 	});
 
 	// The fetcher is the door to the internet: a request can't make it read
