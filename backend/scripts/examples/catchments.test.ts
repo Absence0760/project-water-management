@@ -154,6 +154,7 @@ describe('example catchments: showcase the current features', () => {
 			exclusionsChanged: false,
 			qualityFlagsChanged: false,
 			flowKindChanged: false,
+			siteChanged: false,
 			forcingChanged: false,
 			chirpsSourceChanged: false,
 			apanDailyChanged: false,

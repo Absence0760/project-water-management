@@ -28,7 +28,8 @@
 		chirpsSource,
 		apanDaily,
 		chirpsFactors,
-		observedOrigin
+		observedOrigin,
+		nodeName
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -45,7 +46,11 @@
 		chirpsFactors?: ChirpsFactorSet[] | null;
 		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
 		observedOrigin?: SeriesOrigin | null;
+		/** A node's name by id, to name the gauge a fit was scored at (engine ≥ 1.41.0); omitted = not known. */
+		nodeName?: (id: string) => string | undefined;
 	} = $props();
+	// Where the fit was scored (engine ≥ 1.41.0): nothing for the outlet.
+	const siteText = (id: string | null | undefined) => (id ? ` at the gauge ${nodeName?.(id) ? `“${nodeName(id)}”` : 'inside the network'}` : '');
 	// The fitted record's gap filling (engine ≥ 1.23.0), in words.
 	const fillText = (f: FitRecord['flowGapFill']) => {
 		if (!f?.spec) return 'none';
@@ -106,7 +111,7 @@
 					<dd>{a.ruleExclusions.length ? a.ruleExclusions.map((x) => `${exclusionLabel(x)} (${x.reason})`).join('; ') : 'none'}</dd>
 				</div>
 			{/if}
-			<div><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}, {windowText(record)}</dd></div>
+			<div data-testid="fit-record-to"><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}{siteText(record.siteNodeId)}, {windowText(record)}</dd></div>
 			{#if record.forcing}
 				<div data-testid="fit-pe">
 					<dt>GR4J potential evaporation <HelpTip key="settings.pe" /></dt>

@@ -11,7 +11,7 @@
 // Applying the kept fit is the page's job (its fit record carries the rules,
 // ./provenance.ts AutoFitRecord); nothing here saves anything.
 import { ENGINE_VERSION } from '../version';
-import { CALIBRATION_FLOW_KINDS, resolvePe, type CalibrationFlowKind, type ModelInput, type ProjectSettings } from '../project';
+import { resolvePe, type CalibrationFlowKind, type ModelInput, type ProjectSettings } from '../project';
 import { mergeSettings } from '../prepare';
 import { runModel } from '../run';
 import { calibrate, prepareCalibration, type CalibrationProgress, type CalibrationReport } from './calibrate';
@@ -64,6 +64,8 @@ export interface AutoCalibrationReport {
 	budget: number;
 	/** The record fitted to, and the other one validated against (when the project has both). */
 	flowKind: string;
+	/** Where it was scored (engine ≥ 1.41.0, settings.calibrationSiteNodeId): null = the outlet; absent before. */
+	siteNodeId?: string | null;
 	validationRecord: CalibrationFlowKind | null;
 	/** Each water year's flagged share, and which the exclusion rule left out. */
 	years: FlaggedYearShare[];
@@ -116,6 +118,8 @@ export interface AutoCalibrationPlan {
 	rules: CalibrationRules;
 	engineVersion: string;
 	flowKind: string;
+	/** The calibration site (engine ≥ 1.41.0): null = the outlet; absent on a plan from before. */
+	siteNodeId?: string | null;
 	validationRecord: CalibrationFlowKind | null;
 	years: FlaggedYearShare[];
 	ruleExclusions: CalibrationExclusion[];
@@ -133,7 +137,7 @@ export function planAutoCalibration(input: ModelInput): AutoCalibrationPlan {
 	const rules = resolveCalibrationRules(input.settings.calibrationRules, notes);
 	// The exclusions come from the flags of the record fitted to, over the window as the settings have it.
 	const pb = prepareCalibration(input);
-	const other = CALIBRATION_FLOW_KINDS.find((k) => k !== pb.flowKind && input.series?.[k]) ?? null;
+	const other = pb.records.find((k) => k !== pb.flowKind) ?? null;
 	const refusal = autoCalibrationRefusal(settings, rules, other);
 	if (refusal) throw new Error(refusal);
 	const flagged = flaggedYearExclusions(pb.flowFlags!, pb.windowDays!, pb.startDate, rules.exclusions.maxFlaggedShare);
@@ -149,6 +153,7 @@ export function planAutoCalibration(input: ModelInput): AutoCalibrationPlan {
 		rules,
 		engineVersion: ENGINE_VERSION,
 		flowKind: pb.flowKind,
+		siteNodeId: pb.siteNodeId,
 		validationRecord: other,
 		years: flagged.years,
 		ruleExclusions: flagged.exclusions,
@@ -227,6 +232,7 @@ export function finishAutoCalibration(plan: AutoCalibrationPlan, fitted: readonl
 		starts: rules.run.starts,
 		budget: rules.run.budget,
 		flowKind: plan.flowKind,
+		siteNodeId: plan.siteNodeId ?? null,
 		validationRecord: plan.validationRecord,
 		years: plan.years,
 		ruleExclusions: plan.ruleExclusions,
