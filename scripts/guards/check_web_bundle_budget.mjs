@@ -1316,6 +1316,14 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  ceilings unchanged (issue #69: measured with main @ 675277da
+//             merged). CHIRPS by bounding box (the Area choice, the box
+//             field, parseBbox, "Leave out sea cells") took the Settings tab
+//             chunk to 61,316 of its 61,440 bytes, so Data feeds is now its
+//             own lazy chunk (DataFeedsPanel via Lazy in SettingsTab, 9.6 KB):
+//             the Settings tab chunk 60 → 52 KB (53,246 bytes), the total
+//             1197 → 1199 KB (the split's chunk overhead and the checkbox). No
+//             new dependency. Headroom ~8 KB tab chunk, ~2 KB total.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
