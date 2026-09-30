@@ -51,7 +51,7 @@
 	let draft = $state<FeedDraft>(emptyDraft());
 	let formError = $state<string | null>(null);
 	/** The field formError is about (a client-side check), for aria-invalid and focus. */
-	let formField = $state<'cells' | 'station' | 'start' | null>(null);
+	let formField = $state<'cells' | 'bbox' | 'station' | 'start' | null>(null);
 	let heading = $state<HTMLElement>();
 	let attachButton = $state<HTMLButtonElement>();
 	/**
@@ -246,7 +246,7 @@
 		{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
 	</div>
 	<p class="hint muted">
-		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells over the
+		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells or a box over the
 		catchment, or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
 		no value for never erases what is there. A feed that stops shows as failing or stale here.
 	</p>
@@ -391,21 +391,58 @@
 						</span>
 					{/if}
 					<div class="field">
-						<label for="{uid}-cells">Grid cells</label>
-						<textarea
-							id="{uid}-cells"
-							rows="3"
-							required
-							spellcheck="false"
-							bind:value={draft.cells}
-							aria-invalid={formField === 'cells' || undefined}
-							aria-describedby="{uid}-cells-h{formField === 'cells' ? ` ${uid}-err` : ''}"
-						></textarea>
-						<span class="hint" id="{uid}-cells-h">
-							One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
-							holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
-						</span>
+						<label for="{uid}-area">Area</label>
+						<select
+							id="{uid}-area"
+							bind:value={draft.area}
+							onchange={() => {
+								// A problem with the other way of naming the area no longer applies.
+								if (formField === 'cells' || formField === 'bbox') formError = formField = null;
+							}}
+						>
+							<option value="cells">Grid cells</option>
+							<option value="bbox">Bounding box</option>
+						</select>
 					</div>
+					{#if draft.area === 'bbox'}
+						<div class="field">
+							<label for="{uid}-bbox">Bounding box</label>
+							<input
+								id="{uid}-bbox"
+								type="text"
+								required
+								autocomplete="off"
+								spellcheck="false"
+								inputmode="decimal"
+								bind:value={draft.bbox}
+								aria-invalid={formField === 'bbox' || undefined}
+								aria-describedby="{uid}-bbox-h{formField === 'bbox' ? ` ${uid}-err` : ''}"
+							/>
+							<span class="hint" id="{uid}-bbox-h">
+								“south, west, north, east” in degrees. The rainfall is the area-weighted mean of every 0.05° cell the box overlaps, a cell
+								partly inside counting for its share; at most 100 cells in 25 rows (about 0.5° × 0.5°). A box over the sea fails: keep it on
+								land.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40; try
+									−20.20, 25.10, −20.10, 25.20.{/if}
+							</span>
+						</div>
+					{:else}
+						<div class="field">
+							<label for="{uid}-cells">Grid cells</label>
+							<textarea
+								id="{uid}-cells"
+								rows="3"
+								required
+								spellcheck="false"
+								bind:value={draft.cells}
+								aria-invalid={formField === 'cells' || undefined}
+								aria-describedby="{uid}-cells-h{formField === 'cells' ? ` ${uid}-err` : ''}"
+							></textarea>
+							<span class="hint" id="{uid}-cells-h">
+								One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
+								holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
+							</span>
+						</div>
+					{/if}
 				{/if}
 				{#if formError}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
 				{#if asking}

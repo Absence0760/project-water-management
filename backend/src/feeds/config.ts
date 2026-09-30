@@ -1,5 +1,5 @@
 // What a data feed is (018_feeds.sql, roadmap WP-2.10): a source, where in
-// that source to read (grid cells or a gauge station), and which of the
+// that source to read (grid cells, a box of them, or a gauge station), and which of the
 // project's series the values merge into. Pure: the routes, the handlers and
 // the fetcher Lambda all validate with these schemas.
 import type { SeriesKind } from '@water-management/engine';
@@ -68,20 +68,108 @@ export const CHIRPS_DAILY_PRODUCTS = ['sat', 'rnl'] as const;
 export type ChirpsDailyProduct = (typeof CHIRPS_DAILY_PRODUCTS)[number];
 export const CHIRPS_PRODUCT_FIRST_DAY: Record<ChirpsDailyProduct, string> = { sat: '1998-01-01', rnl: CHIRPS_FIRST_DAY };
 
-/** CHIRPS / CHIRPS-GEFS: the rainfall is the weighted mean of these 0.05° cells. */
+/** The CHIRPS grid's cell size in degrees; its cell edges fall on multiples of it (the product's grid starts at 180° W, 60° S / 60° N). */
+export const CHIRPS_CELL_DEG = 0.05;
+/** The most cells a bounding box may cover, and the most grid rows (a fetch reads one strip per row per day, sources/tiff.ts). */
+export const BBOX_MAX_CELLS = 100;
+export const BBOX_MAX_ROWS = 25;
+export const BBOX_LIMIT_MESSAGE = `a bounding box covers at most ${BBOX_MAX_CELLS} of the 0.05° grid cells in at most ${BBOX_MAX_ROWS} rows (about 0.5° × 0.5°, and at most 1.25° from south to north)`;
+
+const Cell = z.object({ lat: Lat, lon: Lon, weight: z.number().finite().positive().max(1000).default(1) }).strict();
+/**
+ * A box in degrees (south < north, west < east, no antimeridian crossing).
+ * The feed reads every 0.05° cell the box overlaps, weighted by area (gridCells).
+ */
+const Bbox = z
+	.object({ south: Lat, west: Lon, north: Lat, east: Lon })
+	.strict()
+	.refine((b) => b.south < b.north, { message: 'the south edge must be below the north edge', path: ['north'] })
+	.refine((b) => b.west < b.east, { message: 'the west edge must be west of the east edge (a box may not cross 180°)', path: ['east'] });
+export type Bbox = z.output<typeof Bbox>;
+
+/** A grid cell a feed reads: its centre and its weight in the mean (sources/chirps.ts gridMean). */
+export interface WeightedCell {
+	lat: number;
+	lon: number;
+	weight: number;
+}
+
+/**
+ * Cell edges within this many cells of a box edge count as on it, so float
+ * error in a box drawn on grid lines (−20.1 / 0.05 = −402.00000000000006)
+ * never adds a sliver cell.
+ */
+const EDGE_EPS = 1e-6;
+const round = (x: number) => Number(x.toFixed(9));
+
+/** The cell indices [first, last) a box edge pair spans along one axis. */
+function span(lo: number, hi: number): [number, number] {
+	return [Math.floor(lo / CHIRPS_CELL_DEG + EDGE_EPS), Math.ceil(hi / CHIRPS_CELL_DEG - EDGE_EPS)];
+}
+
+/**
+ * The 0.05° cells a bounding box overlaps: each cell's centre, weighted by
+ * the share of the cell inside the box × cos(the centre's latitude), so the
+ * mean is area weighted (a 0.05° cell is narrower further from the equator).
+ * Pure; `bboxCellCount` is the same count without the list.
+ */
+export function bboxCells(b: Bbox): WeightedCell[] {
+	const [r0, r1] = span(b.south, b.north);
+	const [c0, c1] = span(b.west, b.east);
+	const out: WeightedCell[] = [];
+	for (let r = r0; r < r1; r++) {
+		const bottom = r * CHIRPS_CELL_DEG;
+		const fLat = (Math.min(b.north, bottom + CHIRPS_CELL_DEG) - Math.max(b.south, bottom)) / CHIRPS_CELL_DEG;
+		const lat = round((r + 0.5) * CHIRPS_CELL_DEG);
+		for (let c = c0; c < c1; c++) {
+			const left = c * CHIRPS_CELL_DEG;
+			const fLon = (Math.min(b.east, left + CHIRPS_CELL_DEG) - Math.max(b.west, left)) / CHIRPS_CELL_DEG;
+			out.push({ lat, lon: round((c + 0.5) * CHIRPS_CELL_DEG), weight: round(Math.min(1, fLat) * Math.min(1, fLon) * Math.cos((lat * Math.PI) / 180)) });
+		}
+	}
+	return out;
+}
+
+/** How many grid rows and cells a box covers, without listing them. */
+export function bboxCellCount(b: Bbox): { rows: number; cells: number } {
+	const [r0, r1] = span(b.south, b.north);
+	const [c0, c1] = span(b.west, b.east);
+	const rows = Math.max(0, r1 - r0);
+	return { rows, cells: rows * Math.max(0, c1 - c0) };
+}
+
+/**
+ * CHIRPS / CHIRPS-GEFS: the rainfall is the weighted mean of these 0.05°
+ * cells (`cells`, 1–25 points, each naming the cell that holds it), or of
+ * the cells a bounding box overlaps (`bbox`, gridCells). Exactly one of the two.
+ */
 export const GridConfig = z
 	.object({
-		cells: z
-			.array(z.object({ lat: Lat, lon: Lon, weight: z.number().finite().positive().max(1000).default(1) }).strict())
-			.min(1)
-			.max(25),
+		cells: z.array(Cell).min(1).max(25).optional(),
+		bbox: Bbox.optional(),
 		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
 		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional(),
 		/** CHIRPS only: which v3 daily product (absent = `sat`). FeedInput checks it against the source and the start date. */
 		product: z.enum(CHIRPS_DAILY_PRODUCTS).optional()
 	})
-	.strict();
+	.strict()
+	.superRefine((g, ctx) => {
+		if ((g.cells === undefined) === (g.bbox === undefined)) {
+			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'give either grid cells or a bounding box (bbox), not both' });
+			return;
+		}
+		if (g.bbox) {
+			const n = bboxCellCount(g.bbox);
+			if (n.cells === 0) ctx.addIssue({ code: 'custom', path: ['bbox'], message: 'the bounding box is too thin to cover a grid cell' });
+			else if (n.cells > BBOX_MAX_CELLS || n.rows > BBOX_MAX_ROWS) {
+				ctx.addIssue({ code: 'custom', path: ['bbox'], message: `${BBOX_LIMIT_MESSAGE}; this one covers ${n.cells} cells in ${n.rows} rows: shrink it, or list cells instead` });
+			}
+		}
+	});
+
+/** The weighted cells a grid feed reads: its own list, or its box's cells. */
+export const gridCells = (config: GridConfig): WeightedCell[] => (config.bbox ? bboxCells(config.bbox) : config.cells!);
 
 /** DWS: a station code, e.g. X0H000 (letter, digit, letter, three digits; synthetic here). */
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;

@@ -96,6 +96,41 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
 });
 
+test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area’s rainfall', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Box feed');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Area').selectOption({ label: 'Bounding box' });
+	await expect(panel.getByLabel('Grid cells')).toHaveCount(0);
+	const box = panel.getByLabel('Bounding box');
+	await expect(box).toHaveAccessibleDescription(/“south, west, north, east” in degrees.*try −20\.20, 25\.10, −20\.10, 25\.20\./);
+	// A box over the limit is caught before anything is sent, on its field.
+	await box.fill('-21, 25, -20, 26');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	await expect(panel.getByRole('alert')).toContainText('The box covers 400 grid cells in 20 rows; at most 100 cells in 25 rows');
+	await expect(box).toBeFocused();
+	await expect(box).toHaveAttribute('aria-invalid', 'true');
+	// The sample box as the hint writes it, typeset minus signs and all.
+	await box.fill('−20.20, 25.10, −20.10, 25.20');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(feed).toContainText('CHIRPS daily rainfall → Rainfall — CHIRPS');
+	await expect(feed).toContainText('box -20.20, 25.10 to -20.10, 25.20 · CHIRPS sat v3.0 · daily');
+	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await runJobsTick();
+
+	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	// Preliminary days reach three days back on the fixtures (chirps-sample.json prelimLagDays).
+	await expect(feed).toContainText(`OK; newest data ${day(-3)}, checked ${projectToday()}.`);
+});
+
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Failing feed');

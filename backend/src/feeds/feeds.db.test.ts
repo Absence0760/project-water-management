@@ -279,6 +279,26 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
 	});
 
+	it('CHIRPS by bounding box: attaches, fetches the area mean into the series; a box over the limit is a 400 that says it', async () => {
+		const owner = await signUp('Boxer');
+		const pid = await project(owner);
+		const big = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { bbox: { south: -21, west: 25, north: -20, east: 26 } } });
+		expect(big.status).toBe(400);
+		expect(big.body.details[0]).toMatchObject({ path: ['config', 'bbox'], message: expect.stringMatching(/at most 100 of the 0\.05° grid cells in at most 25 rows/) });
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } } })).status).toBe(400);
+
+		const bbox = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+		const made = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { bbox, startDate: addDays(-20) } });
+		expect(made.status).toBe(201);
+		expect(made.body.feed.config).toEqual({ bbox, startDate: addDays(-20) });
+		await owner.call('POST', `/projects/${pid}/feeds/${made.body.feed.id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(addDays(-20));
+		expect(s.values.filter((v) => v !== null).length).toBeGreaterThan(0);
+		expect((await feedRow(made.body.feed.id))).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3) });
+	});
+
 	it('a later fetch never re-reads before the feed’s startDate, where the series holds the owner’s own days', async () => {
 		const owner = await signUp('Floor');
 		const pid = await project(owner);

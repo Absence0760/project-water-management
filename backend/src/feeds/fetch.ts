@@ -8,8 +8,8 @@
 // untrusted input and validates it (FetchResult below) before anything merges.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
-import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
-import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError } from './errors.js';
+import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells } from './config.js';
+import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedNoDataError } from './errors.js';
 import type { FeedHttp } from './http.js';
 import { fetchChirps, fetchGefs } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
@@ -160,13 +160,13 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 		switch (req.source) {
 			case 'chirps': {
 				const product = chirpsProduct(req.config);
-				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end, product);
+				const r = await fetchChirps(http, gridCells(req.config as GridConfig), req.start, req.end, product);
 				return r.values.length
 					? { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, prelimDays: r.prelimDays, product } }
 					: { ok: true, startDate: null, values: [], meta: { days: 0, product } };
 			}
 			case 'chirps_gefs': {
-				const r = await fetchGefs(http, (req.config as GridConfig).cells, req.today);
+				const r = await fetchGefs(http, gridCells(req.config as GridConfig), req.today);
 				if (!r) throw new FeedFormatError('no forecast was issued today or yesterday');
 				return { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, issued: r.issued } };
 			}
@@ -184,6 +184,10 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 		}
 	} catch (err) {
 		if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) console.error('feed fetch failed:', err);
+		// A box can't skip a sea cell: that would quietly shrink the area the mean is over.
+		if (err instanceof FeedNoDataError && 'bbox' in req.config && req.config.bbox) {
+			return { ok: false, error: feedErrorMessage(new FeedFormatError(`${err.message}, inside the bounding box: shrink the box to the land, or list the cells instead`)) };
+		}
 		return { ok: false, error: feedErrorMessage(err) };
 	}
 }

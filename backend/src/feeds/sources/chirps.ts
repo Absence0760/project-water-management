@@ -21,7 +21,7 @@
 // after: that splice would be a break of its own (issue #40 part c).
 // Units are mm/day; the sea is -9999.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { FeedFormatError, FeedUnavailableError } from '../errors.js';
+import { FeedFormatError, FeedNoDataError, FeedUnavailableError } from '../errors.js';
 import type { FeedHttp } from '../http.js';
 import { openGrid, readPoints } from './tiff.js';
 
@@ -58,7 +58,7 @@ export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell
 	let weights = 0;
 	values.forEach((v, i) => {
 		const c = cells[i]!;
-		if (v === null) throw new FeedFormatError(`the grid has no data at ${c.lat}, ${c.lon} (the sea, or outside the product’s coverage)`);
+		if (v === null) throw new FeedNoDataError(`the grid has no data at ${c.lat}, ${c.lon} (the sea, or outside the product’s coverage)`);
 		if (v < 0 || v > 2000) throw new FeedFormatError(`the grid has an implausible rainfall of ${v} mm at ${c.lat}, ${c.lon}`);
 		sum += v * c.weight;
 		weights += c.weight;

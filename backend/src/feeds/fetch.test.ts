@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fixtureHttp } from './fixtures.js';
+import { readFileSync } from 'node:fs';
+import { toEpochDay } from '@water-management/engine/calendar';
+import { FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
 import { DWS_MAX_YEARS } from './sources/dws.js';
 import type { FeedHttp } from './http.js';
 import {
@@ -147,6 +149,33 @@ describe('runFetch on the fixtures', () => {
 		expect(none).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0, outside: 5 } });
 	});
 
+	it('CHIRPS over a bounding box: the area-weighted mean of the cells it overlaps, as computed by hand', async () => {
+		// Rows 1 (−20.05…−20.10, whole) and 2 (−20.10…−20.13 of −20.15, 0.6); columns 2 (25.12…25.15 of 25.10, 0.6) and 3 (whole).
+		const bbox = { south: -20.13, west: 25.12, north: -20.05, east: 25.2 };
+		const days = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'];
+		const r = await runFetch({ source: 'chirps', config: { bbox }, start: days[0]!, end: days.at(-1)!, today: '2026-03-10' }, http);
+		const f = JSON.parse(readFileSync(`${FIXTURE_DIR}chirps-sample.json`, 'utf8'));
+		const cos = (lat: number) => Math.cos((lat * Math.PI) / 180);
+		const parts = [
+			{ row: 1, col: 2, w: 0.6 * cos(-20.075) },
+			{ row: 1, col: 3, w: cos(-20.075) },
+			{ row: 2, col: 2, w: 0.36 * cos(-20.125) },
+			{ row: 2, col: 3, w: 0.6 * cos(-20.125) }
+		];
+		const byHand = days.map((d) => {
+			const k = toEpochDay(d);
+			const sum = parts.reduce((s, p) => s + p.w * fixtureValue(f, k, p.row, p.col), 0);
+			return Math.round((sum / parts.reduce((s, p) => s + p.w, 0)) * 100) / 100;
+		});
+		expect(byHand.some((v) => v > 0)).toBe(true);
+		expect(r).toEqual({ ok: true, startDate: days[0], values: byHand, meta: { days: 4, prelimDays: 0, product: 'sat' } });
+	});
+
+	it('GEFS over a bounding box', async () => {
+		const r = await runFetch({ source: 'chirps_gefs', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 } }, start: '2026-03-10', end: '2026-03-25', today: '2026-03-10' }, http);
+		expect(r).toMatchObject({ ok: true, startDate: '2026-03-10', meta: { days: 16, issued: '2026-03-10' } });
+	});
+
 	it('CHIRPS with nothing published yet: ok, no days', async () => {
 		const r = await runFetch({ source: 'chirps', config: grid, start: '2026-03-09', end: '2026-03-09', today: '2026-03-10' }, http);
 		expect(r).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, product: 'sat' } });
@@ -159,6 +188,15 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 	it('a cell over the fixture sea', async () => {
 		const r = await runFetch({ source: 'chirps', config: { cells: [{ lat: -20.27, lon: 25.37, weight: 1 }] }, start: '2026-01-01', end: '2026-01-01', today: '2026-03-10' }, fixtureHttp(() => '2026-03-10'));
 		expect(r).toEqual({ ok: false, error: expect.stringMatching(/^the source’s data could not be read: the grid has no data at -20.27, 25.37/) });
+	});
+
+	it('a bounding box over the fixture sea fails loudly and says how to fix it (a box never skips a cell)', async () => {
+		const bbox = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+		const r = await runFetch({ source: 'chirps', config: { bbox }, start: '2026-01-01', end: '2026-01-01', today: '2026-03-10' }, fixtureHttp(() => '2026-03-10'));
+		expect(r).toEqual({
+			ok: false,
+			error: 'the source’s data could not be read: the grid has no data at -20.275, 25.375 (the sea, or outside the product’s coverage), inside the bounding box: shrink the box to the land, or list the cells instead'
+		});
 	});
 
 	it('no GEFS issue today or yesterday', async () => {
