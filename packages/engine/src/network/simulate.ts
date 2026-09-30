@@ -542,7 +542,7 @@ export function damDrawBound(node: PlanNode, D: number, used: Float64Array | nul
 		if (c.groundwater) primary = Math.min(primary, Math.max(0, c.groundwater[t]! - alloc[1]!));
 		if (c.surface) s = Math.max(0, c.surface[t]! - alloc[0]!);
 	}
-	return Math.min(primary > 0 ? Math.max(0, D - primary) : D, s);
+	return Math.min(Math.max(0, D - primary), s);
 }
 
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; captureAt?: number } = {}): NetworkResult {

@@ -419,22 +419,29 @@ describe('transfer room (audit N4, issue #200)', () => {
 		expect(moved(i, o, 3, d[3]! - 200)).toBeNull();
 	});
 
-	it("the primary borehole's annual volume clears on 1 October before the transfers are settled", () => {
-		// A January need of 600 m³/day is ~280 in September and ~380 in October, above the borehole's 200.
-		const i = withTransfer({}, 20, 600);
-		i.series.rain_catchment_mm!.startDate = '2021-09-21';
-		i.model.boreholes = [primary()];
-		const o = run(i, new Array(20).fill(0));
-		passed(o);
-		const d = col(o, 'A', 'demand')!;
-		const got = col(o, 'A', 'transfer')!;
-		const gw = col(o, 'A', 'groundwater_used')!;
-		// 21–30 September use the 2 000 m³; 1 October (day 10) pumps again, and the room already knows it.
-		for (let t = 0; t < d.length; t++) expect(d[t]).toBeGreaterThan(200);
-		expect(gw[9]).toBeCloseTo(200, 9);
-		expect(gw[10]).toBeCloseTo(200, 9);
-		for (let t = 0; t < d.length; t++) expect(got[t]).toBeCloseTo(d[t]! - gw[t]!, 9);
-		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+	it("the primary borehole's annual volume clears on 1 October before the transfers are settled, whatever the time zone (rule 7)", () => {
+		const tz = process.env.TZ;
+		process.env.TZ = 'Pacific/Kiritimati';
+		try {
+			// A January need of 600 m³/day is ~280 in September and ~380 in October, above the borehole's 200.
+			const i = withTransfer({}, 20, 600);
+			i.series.rain_catchment_mm!.startDate = '2021-09-21';
+			i.model.boreholes = [primary()];
+			const o = run(i, new Array(20).fill(0));
+			passed(o);
+			const d = col(o, 'A', 'demand')!;
+			const got = col(o, 'A', 'transfer')!;
+			const gw = col(o, 'A', 'groundwater_used')!;
+			// 21–30 September use the 2 000 m³; 1 October (day 10) pumps again, and the room already knows it.
+			for (let t = 0; t < d.length; t++) expect(d[t]).toBeGreaterThan(200);
+			expect(gw[9]).toBeCloseTo(200, 9);
+			expect(gw[10]).toBeCloseTo(200, 9);
+			for (let t = 0; t < d.length; t++) expect(got[t]).toBeCloseTo(d[t]! - gw[t]!, 9);
+			for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
+		} finally {
+			if (tz === undefined) delete process.env.TZ;
+			else process.env.TZ = tz;
+		}
 	});
 
 	it("an allocation cap: once the surface volume is used, the dam isn't drawn and the transfer stops", () => {

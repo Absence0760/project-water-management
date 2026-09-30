@@ -267,7 +267,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * dam-target unit fills only for the demand the river leaves. Under an
  * allocation cap (engine ≥ 1.18.0) the surface gives at most `sRoom` and the
  * units together pump at most `gRoom` (the day's allocation_room columns;
- * Infinity without a cap). Call it once per day, in order.
+ * Infinity without a cap). Call it once per day, in order. It assumes a fresh
+ * run: each unit starts at 0, not a resumed run's saved volumes.
  */
 function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const used = b ? b.units.map(() => 0) : [];
@@ -516,7 +517,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
  * allocation_room_groundwater), capped at allocation_room_surface. The
  * primary direct units pump first, for the demand the off-take water left
  * (D − offtake_used), so replaying them from those columns gives each unit's
- * volume so far this water year.
+ * volume so far this water year. Like boreholeReplay it assumes a fresh run:
+ * each unit starts at 0, not a resumed run's saved volumes.
  */
 function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model']['boreholes']>, get: SeriesMap, day0: number, days: number, D: readonly number[]): Float64Array {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
@@ -533,7 +535,7 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
 		let room = 0;
 		for (let k = 0; k < units.length; k++) room += Math.max(0, Math.min(units[k]!.capacityM3Day, units[k]!.annualCapM3 - used[k]!));
 		const primary = Math.min(room, gRoom);
-		out[t] = Math.min(primary > 0 ? Math.max(0, d - primary) : d, RS?.[t] ?? Infinity);
+		out[t] = Math.min(Math.max(0, d - primary), RS?.[t] ?? Infinity);
 		// Today's pumping, as groundwaterDay's first step: in order, each for what the others left.
 		let gLeft = gRoom;
 		let got = 0;
