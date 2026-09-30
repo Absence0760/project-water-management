@@ -35,15 +35,39 @@ export const MORIASI_CAVEAT =
 	'Ratings from Moriasi et al. (2007), whose thresholds were set for monthly flows. This run is scored on daily flows, which score lower for the same skill, so read them as a guide, not a pass mark.';
 
 /**
- * The engine build's own test results, injected at build time from CI
- * (WP-3.13). Not wired yet (docs/followups.md): until it is, a statement says
- * the build's results were not recorded rather than claiming them.
+ * The engine build's own test results (WP-3.13): the web release workflow
+ * runs the engine's invariant suite and a soak, then writes this record
+ * (scripts/release/engine-build.mjs) for the site build to inject
+ * (frontend/vite.config.ts `__ENGINE_BUILD__`). A build without one (local,
+ * e2e, CI) says the build's results were not recorded rather than claiming them.
  */
 export interface EngineBuild {
 	version: string;
 	gitSha: string;
 	invariantsPassed: boolean;
 	soakCases: number;
+}
+
+/**
+ * The build record as the site build injected it (a JSON string, or empty),
+ * or null when there is none or it isn't one: a malformed record is never
+ * shown as a result.
+ */
+export function parseEngineBuild(raw: string | null | undefined): EngineBuild | null {
+	if (!raw) return null;
+	let v: unknown;
+	try {
+		v = JSON.parse(raw);
+	} catch {
+		return null;
+	}
+	if (typeof v !== 'object' || v === null) return null;
+	const o = v as Record<string, unknown>;
+	if (typeof o.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(o.version)) return null;
+	if (typeof o.gitSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(o.gitSha)) return null;
+	if (typeof o.invariantsPassed !== 'boolean') return null;
+	if (typeof o.soakCases !== 'number' || !Number.isInteger(o.soakCases) || o.soakCases < 0) return null;
+	return { version: o.version, gitSha: o.gitSha, invariantsPassed: o.invariantsPassed, soakCases: o.soakCases };
 }
 
 export interface ValidationMetric {
@@ -81,6 +105,13 @@ export interface ValidationStatement {
 	runoffCoefficient: { value: number; plausible: boolean } | null;
 	/** Water years whose catchment rain reads far below CHIRPS (quality.ts 'lowvschirps'). */
 	flaggedYears: FlaggedYear[];
+	/**
+	 * True when a run from before engine 1.30.1 kept only the first
+	 * OLD_EXAMPLE_CAP flagged years and hit that cap, so `flaggedYears` may
+	 * be short; the data-quality line still names every year. Re-running on
+	 * the current engine lists them all.
+	 */
+	flaggedYearsMayBeCut: boolean;
 	/** Every data-quality check that fired, as its one-sentence text. */
 	dataQuality: string[];
 	/** The engine's self-checks on this run (./verify); null on runs from before they existed. */
@@ -93,6 +124,18 @@ export interface ValidationInput {
 	summary: RunSummary;
 	engineVersion: string;
 	legacy: boolean;
+}
+
+/** Up to engine 1.30.0 the low-vs-CHIRPS check kept this many flagged years as examples (quality.ts MAX_EXAMPLES). */
+const OLD_EXAMPLE_CAP = 5;
+
+/** a < b for two X.Y.Z versions (an unparsable one counts as old). */
+function versionBefore(a: string, b: string): boolean {
+	const pa = a.split('.').map(Number);
+	const pb = b.split('.').map(Number);
+	if (pa.length !== 3 || pa.some((n) => !Number.isInteger(n))) return true;
+	for (let i = 0; i < 3; i++) if (pa[i]! !== pb[i]!) return pa[i]! < pb[i]!;
+	return false;
 }
 
 /** The validation statement of one saved run. */
@@ -126,6 +169,7 @@ export function validationStatement(run: ValidationInput, build: EngineBuild | n
 		flaggedYears: checks
 			.filter((x) => x.check === 'lowvschirps')
 			.flatMap((x) => x.examples.map((e) => ({ seriesKind: x.seriesKind, start: e.date, end: e.endDate ?? null, ratio: e.value }))),
+		flaggedYearsMayBeCut: versionBefore(run.engineVersion, '1.30.1') && checks.some((x) => x.check === 'lowvschirps' && x.examples.length >= OLD_EXAMPLE_CAP),
 		dataQuality: [...checks.map((x) => x.text), ...(s.dataQuality?.areaMismatches?.length ? [`${s.dataQuality.areaMismatches.length} farm area(s) differ from high + low MAP area by more than 1 %.`] : [])],
 		selfChecks: s.verification ? { passed: s.verification.passed, failed: s.verification.checks.filter((k) => !k.passed).map((k) => k.label) } : null,
 		limitations
