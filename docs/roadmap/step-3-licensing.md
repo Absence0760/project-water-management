@@ -1045,8 +1045,9 @@ must build WP-2.15 Phase B.
 > item 2b), and moving an imported workbook's probable run-of-river units
 > (issue #54 item 2d) once the hydrologist confirms.
 >
-> **Hands-off flow and River to dam by month: engine built 2026-09-29
-> (engine 1.31.0, issue #204), off by default; pending the hydrologist.**
+> **Hands-off flow and River to dam by month: engine, backend and UI built
+> 2026-09-29 (engine 1.31.0, issue #204), off by default; pending the
+> hydrologist.**
 > Per farm: `handsOffM3Day` (12 values by water-year month, null = none),
 > `handsOffEwr` (also keep the EWR required at the farm, Z) and
 > `divertMonthlyM3Day` (River to dam's capacity by month, replacing the one
@@ -1058,8 +1059,13 @@ must build WP-2.15 Phase B.
 > hands-off flow binds it too (a decision of issue #204). It cuts only the
 > diversion O, not the dam split's K and M (the on-channel dam). New
 > self-check `checkOperatingRules`, scenario `node.set` fields and the run
-> comparison lines ([model.md §2.7h](../model.md)). Backend columns, the API
-> and the node form follow in the same issue. Answers issue #90 Q15.
+> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 111
+> (`node.hands_off_m3_day`, `hands_off_ewr`, `divert_monthly_m3_day`, farms
+> only, [data-model.md](../data-model.md)), saved and read by the model API
+> with the engine's save rules ([api.md](../api.md)), set in the one-node form
+> (Supply's **Hands-off flow** and Routing's **Set River to dam by month**,
+> [ui.md](../ui.md)) and by the scenario `node.set` ops
+> ([scenarios.md](../scenarios.md)). Answers issue #90 Q15.
 >
 > **Scenario ops for the supply fields built 2026-09-26.** `node.set` takes
 > `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct` and `supplyStopPct`
