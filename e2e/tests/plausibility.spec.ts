@@ -2,10 +2,12 @@
 // on a synthetic catchment shows the six checks (five before engine 1.55.0, four before 1.19.0) in their own Runs & results
 // panel, with the latest run of another runoff model overlaid on the
 // dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
-// API can't make one any more). Names and numbers are invented.
+// API can't make one any more). Then the Compare page sets two runs' recession
+// diagnostics and validation signatures side by side, and says so when a run
+// made before engine 1.55.0 has none. Names and numbers are invented.
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { plantLegacyRun } from '../support/db.ts';
+import { plantLegacyRun, plantPreSignaturesRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('a run shows the plausibility checks, with the other runoff model overlaid on the low-flow curves', async ({ page, owner }) => {
@@ -88,3 +90,54 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await expect(panel.getByText(/^Held-out recessions: /)).toBeVisible();
 	await expectNoViolations(page);
 });
+
+test('the compare page sets two runs’ recession diagnostics and validation signatures side by side', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Compare signatures');
+	await putModel(page.request, project.id, sampleModel());
+	await updateSettings(page.request, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] });
+	const days = 1096;
+	const flow = syntheticFlow(days);
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2019-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: flow });
+	const before = await createRun(page.request, project.id, 'Before new data');
+	// New data: the record's low flows halved. The simulated flow doesn't move, so the observed BFI and the low-flow biases do.
+	const low = [...flow].sort((x, y) => x - y)[Math.floor(days * 0.4)]!;
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: flow.map((v) => (v < low ? v / 2 : v)) });
+	const after = await createRun(page.request, project.id, 'After new data');
+	const older = await createRun(page.request, project.id, 'Older run');
+	await plantPreSignaturesRun(older);
+
+	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
+	const cmp = page.getByRole('region', { name: 'Plausibility checks' });
+	const table = cmp.getByTestId('plausibility-compare');
+	const row = (check: string | RegExp) => table.getByRole('row').filter({ hasText: check });
+	// The recession diagnostics: a verdict each side, a change only on the same record.
+	await expect(row('Recessions, simulated vs observed').getByRole('rowheader')).toHaveText('Outlet');
+	await expect(row('Recessions, simulated vs observed').getByRole('cell').nth(1)).toHaveText(/\((agrees|disagrees|not judged.*)\)$|^not judged/);
+	// The signatures on the outlet's gauge record: both runs, and what changed.
+	const hughes = row('Base-flow index, Hughes et al. (2003)');
+	await expect(hughes.getByRole('rowheader')).toHaveText('Outlet');
+	await expect(hughes.getByRole('cell').nth(1)).toHaveText(/^\d\.\d\d observed, \d\.\d\d simulated \([+−]\d\.\d\d, (within|outside) ±0\.15\)$/);
+	await expect(hughes.getByRole('cell').nth(2)).toHaveText(/^\d\.\d\d observed, \d\.\d\d simulated /);
+	// The observed BFI moved with the halved low flows; the simulated didn't.
+	await expect(hughes.getByRole('cell').nth(3)).toHaveText(/^simulated \+0\.00; observed [+−]\d\.\d\d$/);
+	await expect(row('Base-flow index, Eckhardt (2005)')).toHaveCount(1);
+	await expect(row('Low-flow FDC slope bias, Q70–Q95').getByRole('cell').nth(3)).toHaveText(/^[+−][\d\u202f]+ points$/);
+	await expect(row('Low-flow volume bias (%BiasFLV)').getByRole('cell').nth(3)).toHaveText(/^[+−][\d\u202f]+ points$/);
+	await expect(row('Skill on held-out recessions, simulated')).toHaveCount(1);
+	await expect(cmp.getByRole('note')).toHaveCount(0);
+	await expectNoViolations(page);
+
+	// Against a run made before engine 1.55.0: its side says so, with no change, and a note says why.
+	await page.goto(`/compare?a=${project.id}:${older}&b=${project.id}:${after}`);
+	await expect(cmp.getByRole('note')).toHaveText('Run A was made before engine 1.55.0, so it has no validation signatures: run the model again to compare them.');
+	for (const check of ['Base-flow index, Hughes et al. (2003)', 'Low-flow volume bias (%BiasFLV)', 'Skill on held-out recessions, simulated']) {
+		await expect(row(check).getByRole('cell').nth(1)).toHaveText('not in this run (made before engine 1.55.0)');
+		await expect(row(check).getByRole('cell').nth(3)).toHaveText('–');
+	}
+	// Its recession diagnostics (engine 1.19.0) are still there, and match the newer run's on the same inputs.
+	await expect(row('Recessions, simulated vs observed').getByRole('cell').nth(3)).toHaveText(/^(rate \+0\.00×; b \+0\.00|–)$/);
+	await expectNoViolations(page);
+});
+
