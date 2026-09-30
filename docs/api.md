@@ -398,9 +398,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   record attached`); the check runs only when the site changes, so a stored
   site whose gauge or record has gone doesn't block other saves (a fit then
   refuses it, saying why). A copy or an imported project document moves it to
-  the copy's gauge. It is part of the run's recorded settings, but a run
-  never reads it: the run's calibration statistics and EWR agreement stay the
-  outlet's. `dataQuality` (the data-check limits) takes
+  the copy's gauge. A run reads it too: its calibration statistics are
+  scored at the site (`RunSummary.calibration.siteNodeId`, below), and a
+  stored site the run can't use (its gauge gone, or no record attached any
+  more) warns (`Calibration site: …`) while the run scores the outlet. `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
   `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
@@ -1518,7 +1519,16 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `otherPeriod`): whether the run's parameters were fitted on the days scored,
   i.e. whether the scores are in-sample ([model.md §2.10](./model.md)); the
   run comparison's `calibration.fitStatus` is `{ a, b }` of it (`null` when a
-  run predates it). When the project has both a gauge and a logger record,
+  run predates it). Engine ≥ 1.41.0: scored at `settings.calibrationSiteNodeId`
+  when it names a usable gauge inside the network, and then carrying
+  `siteNodeId` and `siteName` (absent at the outlet): the gauge's record
+  against its simulated outflow, with that record stored as the node series
+  `observed_flow` (and `observed_flow_other`) beside the node's `outflow`.
+  `summary.catchment.ewrAgreementSites` (engine ≥ 1.41.0, absent when none)
+  is the EWR test against observed flow at each gauge EWR site with a record
+  of its own, `{ nodeId, name, flowKind, agreement }[]` with `agreement`
+  shaped like `catchment.ewrAgreement` ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
+  When the project has both a gauge and a logger record,
   the run also stores the one not scored as the catchment series
   `observed_flow_other` (labelled "Observed flow" for the gauge, "Observed
   flow (logger)" for the logger, like `observed_flow`).

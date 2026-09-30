@@ -274,7 +274,8 @@ measured at a **gauge node inside the network** (engine ≥ 1.4.0, issue #64,
   records are the first of each kind by name among the series with **no
   site**, as before; each gauge's are the first of each flow kind by name
   among its own, given to the engine as `<kind>@<node id>`. A run's
-  plausibility checks read a gauge's record, and so does calibration when
+  plausibility checks read a gauge's record, so does a gauge EWR site's own
+  EWR test, and so do calibration and the run's calibration statistics when
   `settings.calibrationSiteNodeId` names that gauge (engine ≥ 1.41.0,
   [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410);
   the API checks a new site is such a gauge with a record, and a copy or an
