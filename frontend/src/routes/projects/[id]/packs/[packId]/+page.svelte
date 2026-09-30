@@ -20,7 +20,10 @@
 	// can't be read leaves the pack readable, without the moves. A "can't
 	// show this" is a main > [role="alert"]; a quiet reload's inline alert
 	// (only after a change on this page, which a render never makes) keeps
-	// the loaded pack and data-report-ready.
+	// the loaded pack and data-report-ready. Once issued, the bar (never
+	// printed) says where the server PDF is (detail.pdf): its download when
+	// ready, "printing" while it renders, and why it failed, with an
+	// editor's "Try again" (POST …/pdf).
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -100,6 +103,25 @@
 	const reload = () => load(projectId, packId, true);
 
 	const pack = $derived(detail?.pack ?? null);
+	/** Where the server-rendered PDF is (119_pack_render): ready, rendering, failed or none. */
+	const pdf = $derived(detail?.pdf ?? null);
+
+	let renderingAgain = $state(false);
+	let renderError = $state<string | null>(null);
+	/** An editor asks again for a PDF whose render gave up (POST …/pdf), then reads the pack again. */
+	async function renderAgain() {
+		if (!pack) return;
+		renderingAgain = true;
+		renderError = null;
+		try {
+			await api.packs.renderPdf(projectId, pack.id);
+			await reload();
+		} catch (e) {
+			renderError = e instanceof Error ? e.message : String(e);
+		} finally {
+			renderingAgain = false;
+		}
+	}
 	const report = $derived(detail?.manifest.report ?? null);
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
 	const ready = $derived(status === 'loaded');
@@ -167,13 +189,30 @@
 		<div class="bar no-print">
 			<a href={back}>← Back</a>
 			<PackBadge status={pack.status} version={pack.version} />
-			<button type="button" class="btn btn-primary" onclick={() => window.print()}>Download PDF</button>
+			{#if pdf?.status === 'ready'}
+				<a class="btn btn-primary" href={api.packs.pdfUrl(projectId, pack.id)} data-testid="pack-pdf-download">Download PDF</a>
+				<button type="button" class="btn" onclick={() => window.print()}>Print this page</button>
+			{:else}
+				<button type="button" class="btn btn-primary" onclick={() => window.print()}>Download PDF</button>
+			{/if}
 			{#if manifestUrl}<a class="btn" href={manifestUrl} download={manifestFileName(pack.shortCode)} data-testid="pack-manifest-download">Download manifest</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
-				<span class="mono hash">{pack.manifestSha256}</span>. {#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
+				<span class="mono hash">{pack.manifestSha256}</span>. {#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>{pack.pdfPages ? ` (${pack.pdfPages} pages)` : ''}.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
 			</p>
+			{#if pdf?.status === 'rendering'}
+				<p class="muted small" role="status" data-testid="pack-pdf-state" data-state="rendering">
+					The server is printing this pack’s PDF, whose SHA-256 the verify page will show.
+					<button type="button" class="btn btn-sm" onclick={reload}>Check again</button>
+				</p>
+			{:else if pdf?.status === 'failed'}
+				<div class="alert alert-error" role="alert" data-testid="pack-pdf-state" data-state="failed">
+					The server couldn’t print this pack’s PDF{pdf.error ? `: ${pdf.error}` : '.'}
+					{#if canEdit}<button type="button" class="btn btn-sm" onclick={renderAgain} disabled={renderingAgain}>Try again</button>{/if}
+					{#if renderError}<span data-testid="pack-pdf-retry-error">({renderError})</span>{/if}
+				</div>
+			{/if}
 		</div>
 		<PackActions {projectId} {pack} issue={detail.issue} manifestMatches={detail.manifestMatches} {canEdit} onchange={reload} />
 		<Lazy load={loadReport}>

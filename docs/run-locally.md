@@ -291,6 +291,15 @@ worker running a PDF stays "queued"; `pnpm dev:jobs:tick` renders it once.
 Scheduled reports are queued by the worker's tick when their time comes (a
 schedule never sends for a time that had passed when it was saved).
 
+An **issued evidence pack's PDF** is made the same way
+([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)): issuing a pack
+queues its render, and the worker prints the pack's own page
+(`/projects/:id/packs/:packId`), stores the PDF in MinIO's `water-packs`
+bucket (`PACKS_BUCKET`, created on first use) under its SHA-256, and records
+that hash on the pack. MinIO keeps it like any object: the production
+bucket's Object Lock retention (infra/packs.tf) has no local stand-in. Without
+the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
+
 ## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The

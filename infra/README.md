@@ -10,6 +10,7 @@ here has been applied yet; see [Operator steps](#operator-steps) for the order.
 browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-management.jaredhoward.com
                     ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
                     ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
+                    ├─ /packs/*   → signed URLs only (key group) → S3 packs (OAC)   evidence pack PDFs
                     └─ /api/*     → CF Function strips /api → Lambda Function URL   Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
@@ -28,7 +29,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
    worker ──SendMessage (endpoint)──► SQS render-requests ──► renderer Lambda (container image, Chromium;
    worker ◄── SQS render-results ◄──SendMessage (public)──────┘   NO VPC, no DB; reports.tf)
                                                                   ├──HTTPS──► the site via CloudFront (render session)
-                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── CloudFront /reports/* (OAC, signed URLs the API mints)
+                                                                  ├──PutObject──► S3 reports (private, SSE, 7 days) ◄── CloudFront /reports/* (OAC, signed URLs the API mints)
+                                                                  └──PutObject──► S3 packs (private, SSE, Object Lock 10 y; packs.tf) ◄── CloudFront /packs/*
                      (each queue: a DLQ after 5 receives; alarms)
 ```
 
@@ -134,7 +136,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   repository, no VPC, no database or secret, 2048 MB, 120 s, reserved
   concurrency `renderer_reserved_concurrency` (2), its role limited to
   receiving `render-requests`, sending `render-results` and putting objects
-  under `reports/` in the reports bucket. It is created only once its first
+  under `reports/` in the reports bucket and, for an issued evidence pack,
+  under `packs/` in the packs bucket (`packs.tf`). It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
   The image is pinned by content: its Playwright base by tag *and* digest
@@ -191,6 +194,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
+| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that, and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
@@ -469,6 +473,8 @@ Idle to light use, on-demand, us-east-1:
 | SQS polling by the six event sources (`jobs`, `fetch-requests`, `ingest-results`, `render-requests`, `render-results`, `mail-events`: ~0.65 M receives a month each, ~2.9 M past the free tier) | ~1.16 |
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
+| S3 packs bucket (an issued pack's PDF, ~1 MB, kept 10 years) | ~0 |
+| S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`) | 7.30 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |

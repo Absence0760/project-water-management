@@ -60,6 +60,35 @@ export const REPORT_RETENTION_DAYS = 7;
 
 export const reportsBucket = () => process.env.REPORTS_BUCKET?.trim() || 'water-reports';
 
+/**
+ * Issued evidence packs' PDFs (119_pack_render; docs/evidence-pack.md § The
+ * PDF): their own bucket, because a pack's PDF is kept for good. Production's
+ * is versioned with an Object Lock default retention and no lifecycle
+ * (infra/packs.tf), so an object can't be deleted or overwritten while the
+ * pack's verify link answers with its hash; locally it is a plain MinIO bucket,
+ * created on first use like the reports one.
+ */
+export const packsBucket = () => process.env.PACKS_BUCKET?.trim() || 'water-packs';
+
+const SHA256 = /^[0-9a-f]{64}$/;
+
+/**
+ * The object key of a pack's PDF: its ids and the PDF's own SHA-256
+ * (app_record_pack_pdf builds the same key in SQL). Content-addressed, so a
+ * second render (a retry, a redelivered request) is a second object, never an
+ * overwrite of the one recorded; only the first recorded counts.
+ */
+export function packPdfKey(projectId: string, packId: string, sha256: string): string {
+	if (!UUID.test(projectId) || !UUID.test(packId)) throw new Error('packPdfKey: ids must be UUIDs');
+	if (!SHA256.test(sha256)) throw new Error('packPdfKey: the hash must be a lowercase hex SHA-256');
+	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/${sha256}.pdf`;
+}
+
+/** A pack PDF's download file name: the catchment, "evidence-pack", its version and short code. */
+export function packFileName(projectName: string, version: number, shortCode: string): string {
+	const slug = reportFileName(projectName, 'x').replace(/-report-x\.pdf$/, '');
+	return `${slug}-evidence-pack-v${version}-${shortCode.replace(/[^0-9a-f-]/gi, '')}.pdf`;
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The object key of a report's PDF. */
@@ -82,7 +111,7 @@ export function reportFileName(projectName: string, date: string): string {
 }
 
 let client: Promise<{ s3: S3Client; sdk: typeof import('@aws-sdk/client-s3') }> | undefined;
-let bucketReady: Promise<void> | undefined;
+const bucketsReady = new Map<string, Promise<void>>();
 
 function s3() {
 	client ??= import('@aws-sdk/client-s3').then((sdk) => {
@@ -104,30 +133,83 @@ function s3() {
 	return client;
 }
 
-/** Locally, create the bucket once if MinIO doesn't have it (production's comes from Terraform). */
-async function ensureBucket(): Promise<void> {
+/** Locally, create a bucket once if MinIO doesn't have it (production's come from Terraform). */
+async function ensureBucket(bucket: string): Promise<void> {
 	if (storageKind() === 's3') return;
-	bucketReady ??= (async () => {
-		const { s3: c, sdk } = await s3();
-		try {
-			await c.send(new sdk.HeadBucketCommand({ Bucket: reportsBucket() }));
-		} catch {
-			await c.send(new sdk.CreateBucketCommand({ Bucket: reportsBucket() })).catch((err: { name?: string }) => {
-				if (err.name !== 'BucketAlreadyOwnedByYou' && err.name !== 'BucketAlreadyExists') throw err;
-			});
-		}
-	})().catch((err) => {
-		bucketReady = undefined;
-		throw err;
-	});
-	return bucketReady;
+	let ready = bucketsReady.get(bucket);
+	if (!ready) {
+		ready = (async () => {
+			const { s3: c, sdk } = await s3();
+			try {
+				await c.send(new sdk.HeadBucketCommand({ Bucket: bucket }));
+			} catch {
+				await c.send(new sdk.CreateBucketCommand({ Bucket: bucket })).catch((err: { name?: string }) => {
+					if (err.name !== 'BucketAlreadyOwnedByYou' && err.name !== 'BucketAlreadyExists') throw err;
+				});
+			}
+		})().catch((err) => {
+			bucketsReady.delete(bucket);
+			throw err;
+		});
+		bucketsReady.set(bucket, ready);
+	}
+	return ready;
 }
 
 /** Store a PDF (server-side encrypted in production by the bucket's default). */
 export async function putPdf(key: string, body: Uint8Array): Promise<void> {
-	await ensureBucket();
+	await ensureBucket(reportsBucket());
 	const { s3: c, sdk } = await s3();
 	await c.send(new sdk.PutObjectCommand({ Bucket: reportsBucket(), Key: key, Body: body, ContentType: 'application/pdf' }));
+}
+
+/**
+ * Store an evidence pack's PDF under packPdfKey. The upload carries its own
+ * SHA-256 (x-amz-checksum-sha256), so the store refuses bytes that aren't the
+ * ones hashed, and an Object Lock bucket (production's) gets the integrity
+ * checksum it requires of every put.
+ */
+export async function putPackPdf(key: string, body: Uint8Array, sha256: string): Promise<void> {
+	if (!SHA256.test(sha256)) throw new Error('putPackPdf: the hash must be a lowercase hex SHA-256');
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	await c.send(
+		new sdk.PutObjectCommand({
+			Bucket: packsBucket(),
+			Key: key,
+			Body: body,
+			ContentType: 'application/pdf',
+			ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64')
+		})
+	);
+}
+
+/**
+ * Whether the packs bucket holds a pack PDF under `key` whose stored SHA-256
+ * checksum is `sha256` (hex): the worker's check of the renderer's answer
+ * before the hash is recorded for good (jobs/handlers/pack-render.ts). A HEAD
+ * with checksum mode on, so S3 returns the checksum it verified at upload;
+ * the object's bytes aren't read. `missing` when there is no such object,
+ * `mismatch` (with what is stored) when its checksum is another hash or none.
+ */
+export async function headPackPdf(
+	key: string,
+	sha256: string
+): Promise<{ ok: true } | { ok: false; reason: 'missing' } | { ok: false; reason: 'mismatch'; stored: string | null }> {
+	if (!SHA256.test(sha256)) throw new Error('headPackPdf: the hash must be a lowercase hex SHA-256');
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	let head: { ChecksumSHA256?: string };
+	try {
+		head = await c.send(new sdk.HeadObjectCommand({ Bucket: packsBucket(), Key: key, ChecksumMode: 'ENABLED' }));
+	} catch (err) {
+		const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+		if (e.name === 'NotFound' || e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return { ok: false, reason: 'missing' };
+		throw err;
+	}
+	const stored = head.ChecksumSHA256 ?? null;
+	const expected = Buffer.from(sha256, 'hex').toString('base64');
+	return stored === expected ? { ok: true } : { ok: false, reason: 'mismatch', stored };
 }
 
 /**
@@ -146,13 +228,26 @@ export function assertDownloadSigner(): void {
  * S3 or CloudFront). Signing is local: no request is made.
  */
 export async function downloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL_SECONDS, now = Date.now()): Promise<string> {
+	return signedGet(reportsBucket(), key, fileName, expiresIn, now);
+}
+
+/**
+ * A signed GET for an evidence pack's PDF (packPdfKey), as downloadUrl: a
+ * pre-signed GET on the packs bucket locally, a CloudFront signed URL on the
+ * site's /packs/* path in production (infra/packs.tf).
+ */
+export async function packDownloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL_SECONDS, now = Date.now()): Promise<string> {
+	return signedGet(packsBucket(), key, fileName, expiresIn, now);
+}
+
+async function signedGet(bucket: string, key: string, fileName: string, expiresIn: number, now: number): Promise<string> {
 	const disposition = `attachment; filename="${fileName}"`;
 	if (reportDownloads() === 'cloudfront') {
 		const keyPairId = process.env.CLOUDFRONT_KEY_PAIR_ID?.trim() ?? '';
 		const privateKey = process.env.CLOUDFRONT_PRIVATE_KEY ?? '';
 		if (!keyPairId || !privateKey.trim()) throw new Error('REPORT_DOWNLOADS=cloudfront needs CLOUDFRONT_KEY_PAIR_ID and CLOUDFRONT_PRIVATE_KEY');
 		const site = (process.env.SITE_URL || 'http://localhost:7777').trim().replace(/\/+$/, '');
-		// The bucket's key is the path (the /reports/* behaviour), and S3 sets the
+		// The bucket's key is the path (the /reports/* or /packs/* behaviour), and S3 sets the
 		// file name from the forwarded query; the signature covers both.
 		const url = `${site}/${key}?response-content-disposition=${encodeURIComponent(disposition)}`;
 		return signCloudFrontUrl(url, Math.floor(now / 1000) + expiresIn, { keyPairId, privateKey });
@@ -161,7 +256,7 @@ export async function downloadUrl(key: string, fileName: string, expiresIn = DOW
 	const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 	return getSignedUrl(
 		c,
-		new sdk.GetObjectCommand({ Bucket: reportsBucket(), Key: key, ResponseContentDisposition: disposition }),
+		new sdk.GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: disposition }),
 		{ expiresIn }
 	);
 }
@@ -175,5 +270,5 @@ export async function deletePdf(key: string): Promise<void> {
 /** Tests: forget the client, so a changed environment takes effect. */
 export function resetStorageClient(): void {
 	client = undefined;
-	bucketReady = undefined;
+	bucketsReady.clear();
 }
