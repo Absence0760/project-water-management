@@ -2113,7 +2113,7 @@ reproduction bundle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
@@ -2153,9 +2153,14 @@ reproduction bundle).
   engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256 (null
   until the PDF is recorded), bundleSha256,
   successorSha256, withdrawnReason, methodology: { version, sha256 },
-  errata: { id, summary }[], signers: { fullName, registrationBody,
+  errata: { id, summary }[], errataFoundSince: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
-  and nothing else (`app_verify_pack`, security.md § Evidence packs).
+  and nothing else (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
+  `errata` is what the manifest recorded when the pack was drafted, never
+  changed; `errataFoundSince` (132) lists the errata of the current list
+  (engine-errata.md) that apply to either run's engine, or to the engine of
+  the automatic fit its parameters came from, and aren't among `errata`:
+  found since issue ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
 ### An applicant's packs
 
 An application's parties (its owner, and whoever they shared it with) read

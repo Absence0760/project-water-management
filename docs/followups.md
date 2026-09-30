@@ -4246,13 +4246,16 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the issue's transaction today, estimated 5–10 s at 300 outputs × 30
       years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
       trigger for that part, an issue slower than 15 s in the API's logs.
-- [ ] **Errata found after issue on verify.** Verify lists the errata the
+- [x] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
-      same engine version, isn't shown. Durable fix: the verify route adds
-      `errataFor` over the current list for the runs' engine versions (and
-      the fit's), marked "found since issue". Trigger: the first erratum
-      added while an issued pack exists, or the verify page, whichever is
-      first.
+      same engine version, isn't shown. Built: `app_verify_pack` (132) also
+      returns each run's engine and its fit's, which the API turns into
+      `errataFoundSince` (`errataFor` over the current list, less the
+      recorded ids) and never returns itself; the verify page lists them
+      under "Errata found since issue", and the pack's page in its unprinted
+      bar (on a draft, "found since this draft was made"). The manifest, its
+      hash and `errata` are unchanged
+      ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
 - [x] **Applicants' access to their own application's packs** (WP-3.15):
       done in `131_applicant_packs` (2026-09-30, issue #71). Issuing stays
       with the editors. An application's parties (its owner and whoever they

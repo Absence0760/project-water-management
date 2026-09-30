@@ -20,6 +20,7 @@ const verify = (over: Partial<SharePack['verify']> = {}): SharePack['verify'] =>
 	withdrawnReason: null,
 	methodology: { version: 'm1', sha256: null },
 	errata: [],
+	errataFoundSince: [],
 	signers: [],
 	...over
 });
