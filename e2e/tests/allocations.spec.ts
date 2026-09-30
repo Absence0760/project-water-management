@@ -133,4 +133,7 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	const capped = await createRun(page.request, project.id, 'Capped');
 	await page.goto(`/projects/${project.id}?tab=allocations&run=${capped}`);
 	await expect(page.getByTestId('allocation-mode-note')).toContainText('This run capped each unit’s use at its registered volume per water year');
+	// And, for the picked unit, on how many days each limit held its use back (engine 1.40.0): 1000 m³ is used up
+	// before the months end, so the volume binds.
+	await expect(page.getByTestId('allocation-cap-years')).toHaveText('The cap held use back on 80 days in 1 water year: 80 with the volume used up. The registered volume was used up in 2021/22.');
 });

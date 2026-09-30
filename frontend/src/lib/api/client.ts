@@ -31,6 +31,7 @@ import type {
 	ProjectAlerts,
 	Unsubscribed,
 	Allocation,
+	AllocationCapYears,
 	AllocationImportRequest,
 	AllocationInput,
 	AllocationList,
@@ -787,7 +788,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
 			/** A run's modelled use against the registered volumes, per water year. */
 			compare: (id: string, runId: string, tolerance?: number) =>
-				request<{ run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode }; comparison: AllocationComparison }>(
+				request<{ run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode }; comparison: AllocationComparison; capYears: AllocationCapYears[] }>(
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)
