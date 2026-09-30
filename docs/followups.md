@@ -3581,10 +3581,13 @@ Left, each with its trigger:
       record, and the frontend build injects it (a Vite `define`) for the
       report to pass in. Trigger: before the first evidence pack (WP-3.14),
       which must state it.
-- [ ] **Methodology statement and engine errata** (`docs/methodology/`,
-      versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
-      per engine version). Only the limitations list is generated so far.
-      Trigger: WP-3.14, the pack that records their version and hash.
+- [x] **Methodology statement and engine errata** (issue #71, 2026-09-29):
+      `docs/methodology/v1.md` (versioned, its SHA-256 pinned by
+      `methodology.test.ts`) and `docs/engine-errata.md`, both generated into
+      the engine by `pnpm gen:liability`. The validation statement and the
+      sign-off statement (`signoff-4`) cite the methodology by version and
+      hash and list the errata of the run's engine version. The pack records
+      the same (WP-3.14).
 - [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
       'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
       `pack_id` column with a check that exactly one target is set. A

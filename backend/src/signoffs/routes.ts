@@ -86,8 +86,8 @@ async function statementFor(
 	runId: string
 ): Promise<{ statement: SignoffStatement; sha256: string; legacy: boolean; forecast: boolean; verified: boolean }> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<{ engine_version: string; scenario: boolean; legacy: boolean; forecast: boolean }>(
-		`SELECT engine_version, scenario_id IS NOT NULL AS scenario,
+	const { rows } = await db.query<{ engine_version: string; scenario: boolean; fit_engine_version: string | null; legacy: boolean; forecast: boolean }>(
+		`SELECT engine_version, scenario_id IS NOT NULL AS scenario, inputs->'settings'->'fitRecord'->>'engineVersion' AS fit_engine_version,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 			"trigger" = 'forecast' AS forecast
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
@@ -95,7 +95,7 @@ async function statementFor(
 	);
 	const r = rows[0];
 	if (!r) throw new ApiError(404, 'not found');
-	const statement = signoffStatement({ id: runId, engineVersion: r.engine_version, scenario: r.scenario });
+	const statement = signoffStatement({ id: runId, engineVersion: r.engine_version, scenario: r.scenario, fitEngineVersion: r.fit_engine_version });
 	// Its server stamp (077, runs/stamp.ts): a run written past the model run is never signed.
 	const verified = await runVerified(db, runId);
 	return { statement, sha256: sha256(signoffStatementText(statement)), legacy: r.legacy, forecast: r.forecast, verified };

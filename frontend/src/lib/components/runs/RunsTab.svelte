@@ -729,7 +729,7 @@
 					</section>
 					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
 					<div class="panel" id="res-validation">
-						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} />
+						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} fitEngineVersion={shownRun.settings?.fitRecord?.engineVersion ?? null} />
 					</div>
 					<section class="panel" id="res-publication">
 						{#if publicationError}

@@ -87,7 +87,7 @@ Otherwise (an uploaded or edited forecast):
 ## 2. The professional sign-off statement
 
 Source: `packages/engine/src/liability/signoff.ts`, `signoffStatement()`.
-Version `signoff-3`. English only.
+Version `signoff-4`. English only.
 
 A registered professional signs one model run. The dialog asks for the
 signer's name and registration number, and the professional body (SACNASP
@@ -99,12 +99,14 @@ field or category outside catchment hydrology may sign after an inline
 warning to sign only within their competence. The report prints each
 signer's category, field and number as self-declared, with the register's
 address written out. The dialog then shows ten
-confirmations, each ticked on its own, then the run's known limitations
-(generated from `docs/engine-audit.md`), then five notes that are printed but
+confirmations, each ticked on its own, then the methodology statement it
+cites by version and hash (`docs/methodology/`), the run's known limitations
+(generated from `docs/engine-audit.md`) and the errata of the run's engine
+version (`docs/engine-errata.md`), then five notes that are printed but
 not confirmed. The backend stores a SHA-256 hash of the exact statement shown,
 so a signature is bound to these words and to the version numbers. The
 report's sign-off section lists each signature with the versions and hash it
-recorded. Sign-offs made under `signoff-1` or `signoff-2` keep that version
+recorded. Sign-offs made under `signoff-1` to `signoff-3` keep that version
 and hash; the report says they confirmed an earlier wording, and prints
 "category and field not recorded" for them.
 
@@ -120,7 +122,7 @@ Confirmations:
 >    *(a scenario run, instead)* The scenario represents the proposed works and water use, as described to me by the applicant and checked against the sources I cite.
 > 8. The assurance levels and demand patterns used suit the water use assessed.
 > 9. I have reviewed the results for plausibility.
-> 10. I have read the known limitations listed below and considered them for this run.
+> 10. I have read the methodology statement cited below, and the known limitations and the errata of this engine version listed below, and considered them for this run.
 
 Notes printed with the statement:
 
@@ -293,6 +295,9 @@ shows the full disclaimer, it needs an Afrikaans version too.
   Body, category and field are fixed choices; candidates can't sign;
   confirmation 1 names the category and field; the first note points to the
   register's address printed on the report.
+- **Sign-off `signoff-4` (issue #71).** The statement cites the methodology
+  statement by version and SHA-256 and lists the errata of the run's engine
+  version; confirmation 10 covers both. No other wording changed.
 - **Farmer notices (after the Consumer Protection Act research).** The farm
   view's estimate line moved from the foot of the page to a callout before
   the first figure on every farm screen; a farmer acknowledges a short

@@ -255,7 +255,7 @@ test('a run scenario shows its run’s validation statement under the comparison
 	await expect(panel.getByRole('heading', { name: 'Known limitations' })).toHaveCount(0);
 
 	await panel.getByRole('heading', { name: 'Validation statement' }).click();
-	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', 'Known limitations']);
+	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', /^Errata of engine \d+\.\d+\.\d+$/, 'Known limitations']);
 	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
 	await expectNoViolations(page);
 

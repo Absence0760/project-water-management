@@ -943,7 +943,7 @@ results for plausibility; and that they read its known limitations
   `signoff-1` and `-2` rows), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-3` today; rows made earlier keep `signoff-1` or `signoff-2`, and
+  (`signoff-4` today; rows made earlier keep `signoff-1` to `signoff-3`, and
   every row keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
