@@ -95,8 +95,20 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await runItem.getByRole('button', { name: /^Delete/ }).click();
 	await answerConfirm(page, true, 'Delete this note?');
 	await expect(runDialog).toContainText('No notes yet.');
+	// A half-typed note: Escape asks first, and Keep editing keeps it; Close asks too, and Discard closes.
+	await runDialog.getByLabel('Add a note').fill('Half a thought');
+	await page.keyboard.press('Escape');
+	await answerConfirm(page, false, 'Discard your note?');
+	await expect(runDialog.getByLabel('Add a note')).toHaveValue('Half a thought');
 	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await answerConfirm(page, true, 'Discard your note?');
+	await expect(runDialog).toBeHidden();
 	await expect(page.getByRole('button', { name: 'Add a note on this run' })).toBeVisible();
+	// Opened again, it starts empty and closes without a question.
+	await page.getByRole('button', { name: 'Add a note on this run' }).click();
+	await expect(runDialog.getByLabel('Add a note')).toHaveValue('');
+	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(runDialog).toBeHidden();
 });
 
 for (const size of [

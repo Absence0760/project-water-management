@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { plantSignoff2 } from '../support/db.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const ready = (page: Page) => expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
@@ -49,9 +50,21 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	// The server PDF's running footer comes from the page.
 	await expect(page.locator('main')).toHaveAttribute('data-report-footer', /^Sign-off catchment · Baseline · Model estimates; see the Disclaimer \(section \d+, version 2026-09-28\.2\)\./);
 
-	await signoff.getByRole('button', { name: 'Sign off this run…' }).click();
+	const signButton = signoff.getByRole('button', { name: 'Sign off this run…' });
+	await signButton.click();
 	const dialog = page.getByRole('dialog', { name: 'Sign off this run' });
 	await expect(dialog).toBeVisible();
+	// Nothing filled in: Escape closes it, and the focus goes back to the button (the dialog is
+	// removed as it closes, which used to drop the focus on the page's body).
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+	await expect(signButton).toBeFocused();
+	// Something filled in: Escape asks first, and keeping it keeps what was typed.
+	await signButton.click();
+	await dialog.getByLabel('Full name', { exact: true }).fill('Dr A. Hydrologist');
+	await page.keyboard.press('Escape');
+	await answerConfirm(page, false, 'Discard the sign-off?');
+	await expect(dialog.getByLabel('Full name', { exact: true })).toHaveValue('Dr A. Hydrologist');
 	await expectNoViolations(page, { include: 'dialog[open]' });
 
 	const submit = dialog.getByRole('button', { name: 'Sign off', exact: true });
