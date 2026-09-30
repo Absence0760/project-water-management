@@ -1,21 +1,25 @@
 <script lang="ts">
 	// The report's professional sign-off section (WP-3.13): the run's
 	// sign-offs, or a plain statement that it has none, and for an editor the
-	// way to sign. The dialog is its own chunk, loaded when opened.
-	import type { Signoff, SignoffList } from '$lib/api';
+	// way to sign. The same for an evidence pack (WP-3.14, issue #71): its
+	// target is the pack, its statement the pack statement. The dialog is its
+	// own chunk, loaded when opened.
+	import type { PackSignoffList, Signoff, SignoffList } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { registrationBody, registrationLine } from '@water-management/engine';
-	import { shortHash } from './signoffForm';
+	import { shortHash, type SignoffTarget } from './signoffForm';
 
 	const loadDialog = () => import('./SignoffDialog.svelte');
 
 	let {
 		projectId,
-		runId,
+		target,
 		list,
 		onchange
-	}: { projectId: string; runId: string; list: SignoffList; onchange: (signoffs: Signoff[] | null) => void } = $props();
+	}: { projectId: string; target: SignoffTarget; list: SignoffList | PackSignoffList; onchange: (signoffs: Signoff[] | null) => void } = $props();
+
+	const what = $derived(target.kind === 'pack' ? 'evidence pack' : 'run');
 
 	let open = $state(false);
 	let justSigned = $state('');
@@ -48,7 +52,7 @@
 			</dl>
 		{/each}
 		<p class="muted small">
-			Each signer confirmed, for this run as it was made, the statement of the version recorded with their sign-off, and read its known limitations.
+			Each signer confirmed, {target.kind === 'pack' ? 'for this evidence pack as its manifest SHA-256 identifies it' : 'for this run as it was made'}, the statement of the version recorded with their sign-off, and read its known limitations.
 			Registration details are the signer’s own declaration: this app does not check them against the professional body’s register. A
 			sign-off can’t be changed or withdrawn.
 		</p>
@@ -59,7 +63,7 @@
 			</p>
 		{/if}
 	{:else}
-		<p><strong>Not signed off.</strong> No registered professional has signed this run.</p>
+		<p><strong>Not signed off.</strong> No registered professional has signed this {what}.</p>
 	{/if}
 
 	<ol class="statements">
@@ -69,7 +73,7 @@
 	{#if justSigned}<p class="alert alert-info no-print" role="status">{justSigned}</p>{/if}
 	{#if list.cannotSign === null}
 		<p class="no-print">
-			<button type="button" class="btn" onclick={() => (open = true)}>Sign off this run…</button>
+			<button type="button" class="btn" onclick={() => (open = true)}>Sign off this {what}…</button>
 		</p>
 	{:else if list.cannotSign !== 'requires editor role'}
 		<p class="muted small no-print">{list.cannotSign[0]!.toUpperCase() + list.cannotSign.slice(1)}.</p>
@@ -82,7 +86,7 @@
 			<SignoffDialog
 				bind:open
 				{projectId}
-				{runId}
+				{target}
 				{list}
 				onsigned={(s: Signoff) => {
 					justSigned = `Signed off by ${s.fullName}.`;
