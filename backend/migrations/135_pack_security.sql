@@ -1,5 +1,5 @@
--- 134_pack_security — the security review of issue #71's applicant packs
--- and pack notices (reviews/security-71-packs.md), forward from
+-- 135_pack_security — the security review of issue #71's applicant packs
+-- and pack notices (a security audit of #269 and #270), forward from
 -- 131_applicant_packs and 133_pack_notices (already applied: they are
 -- checksummed, so they aren't edited). Each function starts from 131's
 -- definition, its latest (CLAUDE.md rule 3).
@@ -138,7 +138,7 @@ CREATE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 	END
 	$$;
 COMMENT ON FUNCTION app_applicant_pack(uuid, uuid) IS
-	'An application''s issued pack for its party (131_applicant_packs, 134_pack_security): verify''s fields, a pack link''s figures, D2''s units with the other units'' ids for the server to name (never returned), and the application run. Never the manifest.';
+	'An application''s issued pack for its party (131_applicant_packs, 135_pack_security): verify''s fields, a pack link''s figures, D2''s units with the other units'' ids for the server to name (never returned), and the application run. Never the manifest.';
 REVOKE ALL ON FUNCTION app_applicant_pack(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_applicant_pack(uuid, uuid) TO water_app;
 

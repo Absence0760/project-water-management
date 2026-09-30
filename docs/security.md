@@ -717,7 +717,7 @@ rest, in the fragment with `&k=pack`), with these differences:
   applicant's link reveals no more than an editor's (it names no unit,
   their own included). Editors and the owner list and revoke every pack
   link (`app_share_link_visible`), an applicant the ones they made while
-  they are still the pack's party (134: their own `created_by` and
+  they are still the pack's party (135: their own `created_by` and
   `app_applicant_pack_meta` answering them, so an editor demoted since
   neither reads nor revokes the links they made then); the owner's
   inventory names the pack by its report's title, its status and version,
@@ -2797,8 +2797,8 @@ nothing else.
   its owner *still* links (`app_application_own_nodes`, so a link removed
   since the draft turns that unit anonymous) and the nodes its proposals
   add, by name with their supply and reliability; every other farm or
-  water user **downstream of the application only** (134_pack_security,
-  after the review in `reviews/security-71-packs.md`), under the anonymous
+  water user **downstream of the application only** (135_pack_security,
+  after a security audit of #269 and #270), under the anonymous
   name the applicant already sees on `/base` and the results view ("Farm
   3", `projectBaseForApplicant`), with its change in share of demand
   supplied in whole percentage points. The database hands the route those
@@ -2836,7 +2836,7 @@ nothing else.
   Notices](./evidence-pack.md#notices)). Only the issue and withdraw routes
   queue notices, through `app_pack_notice_queue`, which refuses anyone but
   an editor of the pack's project and a pack not in that state; `water_app`
-  holds only `SELECT` on `pack_notice` (134) and there is no write policy, so no
+  holds only `SELECT` on `pack_notice` (135) and there is no write policy, so no
   caller chooses a recipient (`catalogue.db.test.ts` pins the grant).
   The recipients are fixed by `pack_notice_audience`: the project's editors
   and owners and the application's own scenario owner at any role above
