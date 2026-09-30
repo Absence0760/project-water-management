@@ -6,7 +6,7 @@ docs/model.md from the engine's observed outputs, not from its code.
 
 Stdlib only. `run(input_doc)` takes a ModelInput document (the JSON the
 engine's `runModel` takes) and returns
-    { startDate, endDate, days, series: [{ nodeId, key, values }] }
+    { startDate, endDate, days, series: [{ nodeId, key, values }], diag, summary }
 with NaN where a day has no value.
 
 Phase 1 covers: rain used (source order, threshold, CHIRPS fill with the
@@ -16,7 +16,13 @@ return share (N1), the farm dam balance (evaporation, rain on the dam,
 seepage and its return share, minimum operating level, spill), routing down
 the tree, dam-to-dam transfers (priority, bands at each rule's reserve, pro
 rata, the receiver's room) and the EWR at sites with its attribution (Q17).
-`unsupported(input_doc)` lists what an input uses beyond that.
+Phase 2a adds boreholes and stream depletion (§2.7d), allocations, the
+licence cap and full-allocation runs (§2.12a, with the summary's capReached,
+limitBound and scaled rows), demand factors (§2.3 item 4a), demand objects
+and the basic-needs floor (§2.7f), river off-takes and canal seepage (§2.6a),
+other water users (§2.7c), supply rules and the river pump (§2.7e), dam
+survey curves and releases (§2.7a) and hands-off flows with River to dam by
+month (§2.7h). `unsupported(input_doc)` lists what an input uses beyond that.
 """
 
 from __future__ import annotations
@@ -594,6 +600,10 @@ def unsupported(doc: dict) -> list[str]:
     for n in m.get("nodes", []):
         if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
             out.append("time-varying development")
+        if n.get("partDemandFactor"):
+            out.append("demand factors by part (demand.scale by part)")
+    if s.get("chirpsQuantileMap"):
+        out.append("CHIRPS quantile map")
     if s.get("rainSource"):
         out.append("rain-source periods")
     if s.get("arealRain"):
@@ -632,7 +642,13 @@ def run(doc: dict) -> dict:
     out: list[dict] = []
     diag = dict(rain["diag"])
     diag.update(chirps_days=0, forecast_days=0, forecast_tail=0, room_bound=0, band_split=0, transfer_days=0,
-                charge_days=0, multi_site_charge_days=0, dead_storage_days=0, spill_days=0)
+                charge_days=0, multi_site_charge_days=0, dead_storage_days=0, spill_days=0,
+                # Phase 2a: days (unit-days) each feature did something.
+                borehole_days=0, borehole_to_dam_days=0, borehole_annual_cap_days=0, depletion_owed_days=0,
+                cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
+                offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
+                river_pump_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
+                divert_by_month_days=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -806,6 +822,8 @@ def run(doc: dict) -> dict:
                 f_ = dfac(x, i)
                 v = base[wm[i]] * f_ * s
                 if B is not None and f_ < 1:
+                    if min(B, base[wm[i]] * s) > v:
+                        diag["floor_days"] += 1
                     v = max(v, min(B, base[wm[i]] * s))
                 dem.append(v)
                 flo.append(min(B, v) if B is not None else NAN)
@@ -839,8 +857,14 @@ def run(doc: dict) -> dict:
     if alloc_mode == "fullAllocation":
         for nid, bysrc in ald.items():
             both = sorted(bysrc.get("surface", []) + bysrc.get("groundwater", []), key=lambda a: a["id"])
+            # Each water year over its run days; the year a forecast tail
+            # starts in over its historical days only (§2.4f). A later year,
+            # all tail, is an ordinary part year.
+            tail_y = water_year(days[hist]) if hist < n else None
             yrs: dict[int, list[int]] = {}
-            for i in range(hist):
+            for i in range(n):
+                if i >= hist and water_year(days[i]) == tail_y:
+                    continue
                 yrs.setdefault(water_year(days[i]), []).append(i)
             fac_y: dict[int, float] = {}
             vol_y: dict[int, float] = {}
@@ -865,14 +889,20 @@ def run(doc: dict) -> dict:
                 tot = 0.0
                 for i in idx:
                     tot += D_base[nid][i]
-                # A year with no demand can't be scaled: the row keeps its volume.
-                reg = fac_y.get(y, 0.0) * tot if tot > 0 else vol_y.get(y, 0.0)
+                # A year with no demand can't be scaled: the row keeps its
+                # volume, except the year a forecast tail starts in, whose row
+                # is k × its demand, 0 (probe scaled-no-demand-tail-year).
+                if tot > 0 or y == tail_y:
+                    reg = fac_y.get(y, 0.0) * tot
+                else:
+                    reg = vol_y.get(y, 0.0)
                 scaled_rows.append({"waterYear": y, "demandM3": tot, "registeredM3": reg})
             ks = []
-            tail_y = water_year(days[hist]) if hist < n else None
             for i in range(n):
-                ks.append(fac_y[tail_y] if i >= hist else fac_y[water_year(days[i])])
+                y = water_year(days[i])
+                ks.append(fac_y.get(y, 0.0))
             kf[nid] = ks
+            diag["full_allocation_units"] += 1
     Dn: dict[str, list[float]] = {}
     for nid, dd in D_base.items():
         if nid in kf:
@@ -1263,6 +1293,8 @@ def run(doc: dict) -> dict:
             def pump(k_, want_):
                 nonlocal g_left
                 v = max(0.0, min(unit_room(ulist[k_], used_u[k_] + pumped[k_]), want_, g_left))
+                if ulist[k_]["annual"] is not None and want_ > v and v < ulist[k_]["cap"] and v < g_left:
+                    diag["borehole_annual_cap_days"] += 1
                 pumped[k_] += v
                 g_left -= v
                 return v
@@ -1279,6 +1311,10 @@ def run(doc: dict) -> dict:
                     if u_["mode"] == "supplemental":
                         GW += pump(k_, dem - take - GW)
                 G = take + GW
+                diag["user_days"] += 1 if G > 0 else 0
+                diag["borehole_days"] += 1 if GW > 0 else 0
+                if x.get("userPriority", "senior") == "junior" and take < min(dem - GW, H) * (1 - 1e-9):
+                    diag["junior_short_days"] += 1
                 T = (x.get("userReturnPct") or 0.0) * G
                 flow = H - take + T
                 dep = deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i)
@@ -1353,6 +1389,7 @@ def run(doc: dict) -> dict:
             ho = x.get("handsOffM3Day")
             keep_h = max(float(ho[m]) if ho else 0.0, z if x.get("handsOffEwr") else 0.0)
             if keep_h > 0:
+                o_before = O
                 if cap > 0:
                     O = min(O, max(0.0, L + N - keep_h))
                 else:
@@ -1371,6 +1408,8 @@ def run(doc: dict) -> dict:
                             M -= mc
                             L = H - K
                             N = I - M
+            if keep_h > 0 and O < o_before:
+                diag["hands_off_days"] += 1
             S = L + N - O
             if cap > 0:
                 E = min(e_raw, s_prev + pd + j)
@@ -1417,6 +1456,7 @@ def run(doc: dict) -> dict:
                 trig = x.get("supplyTriggerPct", 0.4)
                 stop = max(trig, x.get("supplyStopPct", 0.6))
                 on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap
+                hold = on and not s_prev < trig * cap
             else:
                 on = False
             on_river[xid] = on
@@ -1433,6 +1473,8 @@ def run(doc: dict) -> dict:
             Gr = 0.0
             if rule_ in ("riverFirst", "trigger") and on:
                 Gr = max(0.0, min(proom, rem - gwp, s_left))
+                if rule_ == "trigger" and hold and Gr > 0:
+                    diag["trigger_hold_days"] += 1
             dr = min(rem - gwp - Gr, s_left - Gr)
             GWd = 0.0
             took_dr = False
@@ -1576,6 +1618,17 @@ def run(doc: dict) -> dict:
                 diag["dead_storage_days"] += 1
             if R > 0 and cap > 0:
                 diag["spill_days"] += 1
+            diag["borehole_days"] += 1 if GW + GWd > 0 else 0
+            diag["borehole_to_dam_days"] += 1 if GWd > 0 else 0
+            diag["offtake_days"] += 1 if taken > 0 else 0
+            diag["offtake_return_days"] += 1 if back > 0 else 0
+            diag["senior_pass_days"] += 1 if passed > 0 else 0
+            diag["river_pump_days"] += 1 if Gr > 0 else 0
+            diag["release_days"] += 1 if X > 0 else 0
+            diag["curve_days"] += 1 if cap > 0 and area > 0 and usable_curve(x.get("damCurve")) else 0
+            diag["divert_by_month_days"] += 1 if x.get("divertMonthlyM3Day") and O > 0 else 0
+            if objs[xid] and any(obj_sup[ob["id"]][i] < obj_dem[ob["id"]][i] * (1 - 1e-9) for ob in objs[xid]):
+                diag["object_shortage_days"] += 1
             storage[xid] = Q
             U[xid] = Uo
             Z[xid] = z
@@ -1585,6 +1638,8 @@ def run(doc: dict) -> dict:
         cat_short[i] = noise_short(ewr[i], sim_out[i])
 
     put(None, "simulated_outflow", sim_out)
+    diag["depletion_owed_days"] = sum(1 for x in nodes for v in col[x["id"]]["depletion_deficit"] if v > 0)
+    diag["cap_bound_days"] = sum(r["days"] for r in lb_days.values())
     put(None, "ewr", ewr)
     put(None, "ewr_shortfall", cat_short)
 
@@ -1959,9 +2014,15 @@ def note_limit(lb, nid, wy, room, src, use, r_, dem, short, o, ald):
         inforce = [a for a in lst if a["from"] <= o <= a["to"]]
         outside = bool(inforce) and all(a["months"] and cal_month(o) not in a["months"] for a in inforce)
         kind = "monthsDays" if outside else "rateDays"
-    row = lb.setdefault((nid, src, wy), {"days": 0, "volumeDays": 0, "rateDays": 0, "monthsDays": 0})
+    row = lb.setdefault((nid, src, wy), {"days": 0, "volumeDays": 0, "rateDays": 0, "monthsDays": 0, "_noise": {}})
     row["days"] += 1
     row[kind] += 1
+    # A day whose demand is float noise (≤ 1e-9 m³): the documented test
+    # counts it, the engine doesn't (diff.py KNOWN_CASES, noise-demand).
+    if dem <= 1e-9:
+        nz = row["_noise"]
+        nz["days"] = nz.get("days", 0) + 1
+        nz[kind] = nz.get(kind, 0) + 1
 
 
 def network_order(nodes: list[dict], transfers: list[dict]) -> list[dict]:
