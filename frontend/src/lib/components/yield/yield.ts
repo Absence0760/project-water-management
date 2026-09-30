@@ -95,6 +95,17 @@ export function curveChart(curve: CurveResult): { series: ChartSeries[]; xy: { x
  */
 export const PREVIEW_TOLERANCE = 0.001;
 
+/**
+ * The preview runs the web build's engine and the job the backend's, and the
+ * two are released separately (web@, backend@), so between releases a stored
+ * yield can come from another engine than the preview. A note naming both
+ * when they differ; null when they agree or nothing is stored.
+ */
+export function engineDiffersNote(previewEngine: string, stored: Pick<YieldResult, 'engineVersion'> | null): string | null {
+	if (!stored || stored.engineVersion === previewEngine) return null;
+	return `The stored yield below was worked out on engine ${stored.engineVersion} and this preview on engine ${previewEngine}, so the two can differ by what changed between those versions.`;
+}
+
 /** A scenario the preview can apply in the browser: its base run and its saved ops. */
 export interface PreviewScenario {
 	baseRunId: string;
