@@ -20,7 +20,7 @@
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
-	import UsePlot from './UsePlot.svelte';
+	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
 	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
