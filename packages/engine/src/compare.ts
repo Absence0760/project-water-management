@@ -1050,6 +1050,8 @@ const RULE_FIELDS: Record<string, ScalarField> = {
 	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
 	// Engine ≥ 1.5.0: gazetted, desktop estimate or other; absent = not stated.
 	sourceKind: { label: 'kind of source', fmt: (v) => ewrSourceConfidence(v as EwrRuleSourceKind | null | undefined) ?? 'not stated' },
+	// ER9: the recommended ecological category, a label (no result depends on it); absent = not given.
+	category: { label: 'recommended ecological category (REC)', fmt: (v) => (v ? String(v) : 'not given') },
 	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
 	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },

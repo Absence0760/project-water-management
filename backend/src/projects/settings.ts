@@ -350,6 +350,8 @@ const EwrRuleTable = z
 		source: z.string().trim().min(1).max(EWR_RULE_SOURCE_MAX),
 		// Engine ≥ 1.5.0 (WP-3.7), optional so a table saved before stays valid: gazetted, desktop or other.
 		sourceKind: z.enum(EWR_RULE_SOURCE_KINDS).nullable().optional(),
+		// ER9 (issue #71), optional: the recommended ecological category, "A" … "F" or a band like "B/C" (ewrRuleTableIssues checks the form).
+		category: z.string().max(3).nullable().optional(),
 		component: z.enum(EWR_RULE_COMPONENTS),
 		unit: z.enum(EWR_RULE_UNITS),
 		points: z.array(z.number().finite()).max(EWR_RULE_POINTS_MAX),

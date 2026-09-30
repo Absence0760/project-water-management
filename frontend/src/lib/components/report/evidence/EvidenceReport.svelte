@@ -151,8 +151,11 @@
 						<h3>Ecological Reserve at {site.name}{site.isOutlet ? ' (the catchment outlet)' : ''}</h3>
 						<dl class="kv">
 							<div><dt>Rule table</dt><dd>{site.source}<span class="sub">{site.sourceKind} · {site.component} · {site.unit}</span></dd></div>
-							<div><dt>Recommended ecological category (REC)</dt><dd class="na">Not given (the rule table has no REC yet)</dd></div>
+							<div><dt>Recommended ecological category (REC)</dt>{#if site.category}<dd><span data-testid="evidence-rec">{site.category}</span><span class="sub">from the rule table</span></dd>{:else}<dd class="na" data-testid="evidence-rec">Not given (enter it on the rule table in Settings)</dd>{/if}</div>
 							<div><dt>EWR as % of natural MAR</dt><dd>{site.ewrPctNmar === null ? '–' : `${fmtNum(site.ewrPctNmar, 1)} %`}<span class="sub">computed from the run’s natural flow</span></dd></div>
+							{#if site.belowTableA || site.belowTableB}
+								<div><dt>Months below the table’s driest point</dt><dd>{fmtNum(site.belowTableA)} of {fmtNum(site.monthsA)}{app && site.belowTableB !== null && site.belowTableB !== site.belowTableA ? ` (application ${fmtNum(site.belowTableB)})` : ''}<span class="sub">the requirement is scaled with the flow there, below the table’s driest requirement, so those months are easier to meet (G16){site.belowTableExpectedPct === null ? '' : `; about ${fmtNum(site.belowTableExpectedPct)} % expected with the percentile from the run`}</span></dd></div>
+							{/if}
 							{#if site.naturalMar}
 								<div><dt>Natural MAR, run vs determination</dt><dd>{fmtNum(site.naturalMar.runMcm, 2)} vs {fmtNum(site.naturalMar.tableMcm, 2)} Mm³/a ({signed(site.naturalMar.differencePct, 0)} %)</dd></div>
 							{/if}

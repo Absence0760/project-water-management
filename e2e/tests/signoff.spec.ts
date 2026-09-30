@@ -24,6 +24,9 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	const validation = page.locator('#rep-validation');
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
 	await expect(validation.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	// The Reserve method's open choices are on it too (engine-audit A1–A7, issue #71).
+	await expect(validation.getByRole('rowheader', { name: 'A1', exact: true })).toBeVisible();
+	await expect(validation.getByText(/^Below a rule table.s driest point the requirement is scaled down with the flow/)).toBeVisible();
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
 	// The methodology statement by version and hash, and the errata of this run's engine (none known for the current one).
 	await expect(validation.getByText('Methodology statement', { exact: true })).toBeVisible();

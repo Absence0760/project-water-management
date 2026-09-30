@@ -6,6 +6,7 @@ import {
 	ewrSourceConfidence,
 	ewrRuleListIssues,
 	ewrRuleTableIssues,
+	isEwrCategory,
 	ewrRuleTableNotes,
 	resolveEwrRules,
 	type EwrRuleTable
@@ -200,6 +201,31 @@ describe("the determination's natural MAR (engine ≥ 1.11.0, issue #46)", () =>
 		const w: string[] = [];
 		expect(resolveEwrRules([table({ naturalMarMcm: -3 })], w)).toEqual([]);
 		expect(w).toEqual([expect.stringMatching(/^EWR rule table for the outlet skipped: it isn't usable \(The natural MAR must be above 0/)]);
+	});
+});
+
+describe('recommended ecological category (REC, ER9)', () => {
+	it('accepts one class A … F, a band of two neighbouring ones, absent and null', () => {
+		for (const c of ['A', 'B', 'C', 'D', 'E', 'F', 'A/B', 'B/C', 'E/F']) expect(ewrRuleTableIssues(table({ category: c }))).toEqual([]);
+		expect(ewrRuleTableIssues(table({ category: null }))).toEqual([]);
+		expect(ewrRuleTableIssues(table())).toEqual([]);
+	});
+
+	it('refuses anything else on its own field', () => {
+		for (const c of ['', 'G', 'b', 'B/D', 'C/B', 'B-C', 'B/', 'AB', ' B', 'B/C/D', 'Class B', 3 as never]) {
+			expect(fields(table({ category: c })), String(c)).toEqual(['category']);
+		}
+		expect(isEwrCategory('B/C')).toBe(true);
+		expect(isEwrCategory('C/B')).toBe(false);
+	});
+
+	it('is carried through resolve only when set, so an older table resolves unchanged', () => {
+		expect(resolveEwrRules([table({ category: 'B/C' })], [])[0]!.category).toBe('B/C');
+		expect(resolveEwrRules([table()], [])[0]).not.toHaveProperty('category');
+		expect(resolveEwrRules([table({ category: null })], [])[0]).not.toHaveProperty('category');
+		const w: string[] = [];
+		expect(resolveEwrRules([table({ category: 'Z' })], w)).toEqual([]);
+		expect(w).toEqual([expect.stringMatching(/^EWR rule table for the outlet skipped: it isn't usable \(The REC is one category/)]);
 	});
 });
 

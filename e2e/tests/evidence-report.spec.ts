@@ -18,6 +18,7 @@ const RULE = { members: 30, bounds: 'typical', panOffset: 0.1, thresholds: { obj
 const TABLE = {
 	siteNodeId: null,
 	source: 'Invented rule table for tests',
+	category: 'B/C',
 	component: 'total',
 	unit: 'mcm',
 	points: POINTS,
@@ -194,6 +195,8 @@ test('a run that isn’t the nomination is refused; a baseline-assumption applic
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);
 	await ready(page);
 	await expect(page.getByTestId('evidence-report')).toHaveAttribute('data-evidence-mode', 'baseline');
+	// § 1's site strip prints the rule table's REC (ER9).
+	await expect(page.getByTestId('evidence-rec')).toHaveText('B/C');
 	await expect(page.getByRole('heading', { level: 2, name: 'Appendix C. Applicant’s statement' })).toHaveCount(0);
 
 	// A team scenario owns no node: its change moves a baseline assumption (G3).
