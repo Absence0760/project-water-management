@@ -396,16 +396,21 @@
 	.sub.warn {
 		color: var(--warning);
 	}
+	/* The rain badge and the flag wrap inside their cell: "Rain to 28 Aug 2025
+	   (13 months ago)" is wider than the Data column (and a 320 px phone's name
+	   cell), and kept on one line it ran under Last run. A rounded box, not a
+	   capsule, since it may take two lines (as the EWR pill does). */
 	.fresh,
 	.flag {
+		max-width: 100%;
+		border-radius: var(--radius-sm);
 		text-transform: none;
 		font-weight: 500;
-		white-space: nowrap;
+		line-height: 1.35;
 	}
 	.flag {
 		display: inline-block;
 		margin-top: 0.25rem;
-		white-space: normal;
 	}
 	.run {
 		font-size: 0.8rem;

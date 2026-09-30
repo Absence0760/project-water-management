@@ -25,12 +25,12 @@ async function attempt(db: Db, sql: string, params: unknown[] = []): Promise<num
 const hiddenOf = async (u: User) => (await u.call('GET', '/auth/me')).body.user.preferences;
 
 describe('PATCH /auth/me { preferences }', () => {
-	it('starts with nothing hidden', async () => {
+	it('starts with no choice made (null), so the app hides its default sections', async () => {
 		const u = await signUp('PrefFresh');
-		expect(await hiddenOf(u)).toEqual({ hiddenTabs: [] });
+		expect(await hiddenOf(u)).toEqual({ hiddenTabs: null });
 	});
 
-	it('saves the hidden sections (once each), keeps them, and "Reset to default" clears them', async () => {
+	it('saves the hidden sections (once each), keeps them, [] shows all, and "Reset to default" (null) forgets the choice', async () => {
 		const u = await signUp('PrefSave');
 		const a = await u.call('PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops', 'transfers', 'crops'] } });
 		expect(a.status).toBe(200);
@@ -39,9 +39,14 @@ describe('PATCH /auth/me { preferences }', () => {
 		// Another field alone leaves them as they are.
 		const b = await u.call('PATCH', '/auth/me', { displayName: 'PrefRenamed' });
 		expect(b.body.user).toMatchObject({ displayName: 'PrefRenamed', preferences: { hiddenTabs: ['crops', 'transfers'] } });
+		// [] is a choice of its own (every section shown), kept apart from never having chosen.
 		const c = await u.call('PATCH', '/auth/me', { preferences: { hiddenTabs: [] } });
 		expect(c.body.user.preferences).toEqual({ hiddenTabs: [] });
 		expect(await hiddenOf(u)).toEqual({ hiddenTabs: [] });
+		const d = await u.call('PATCH', '/auth/me', { preferences: { hiddenTabs: null } });
+		expect(d.status).toBe(200);
+		expect(d.body.user.preferences).toEqual({ hiddenTabs: null });
+		expect(await hiddenOf(u)).toEqual({ hiddenTabs: null });
 	});
 
 	it('refuses a malformed document and leaves the saved one alone', async () => {
@@ -56,7 +61,6 @@ describe('PATCH /auth/me { preferences }', () => {
 			{ hiddenTabs: ['<script>'] },
 			{ hiddenTabs: ['x'.repeat(40)] },
 			{ hiddenTabs: tooMany },
-			{ hiddenTabs: null },
 			{ other: true },
 			[],
 			'crops',

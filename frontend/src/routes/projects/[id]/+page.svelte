@@ -71,6 +71,7 @@
 		ALL_TABS,
 		canOpenTab,
 		hasModelInputsToggle,
+		hiddenChoice,
 		navSections,
 		stripTabs,
 		TAB_LABELS,
@@ -120,12 +121,13 @@
 	// (SectionsMenu, their account's preferences).
 	const roleIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
 	const shownIds = $derived(
-		visibleTabs(project?.role, { showModelInputs, hidden: session.user?.preferences?.hiddenTabs }, TAB_IDS)
+		visibleTabs(project?.role, { showModelInputs, hidden: hiddenChoice(session.user?.preferences?.hiddenTabs) }, TAB_IDS)
 	);
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
-	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those who see History,
-	// fetched once a line asks for it, and again after a save or a restore.
-	const canSeeHistory = $derived(shownIds.includes('history'));
+	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those whose role sees
+	// History, whether or not they keep it in their sidebar (it is hidden by default, DEFAULT_HIDDEN_TABS, and
+	// the line's link still opens it); fetched once a line asks for it, and again after a save or a restore.
+	const canSeeHistory = $derived(roleIds.includes('history'));
 	const fieldHistory = $derived(canSeeHistory && projectId ? new FieldHistoryStore(projectId) : null);
 	setFieldHistory(() => fieldHistory);
 	const LABEL = TAB_LABELS;
@@ -1061,22 +1063,28 @@
 		gap: 0.15rem;
 	}
 	/* "Catchment", the role and the Choose sections icon on one line, with a
-	   wide system font too (DejaVu Sans, Linux's usual one, where "Viewer"
-	   and the icon need ~190 px): a wrapped icon costs the sidebar a row and
-	   the sections no longer fit 1440×960 (app-sidebar.spec.ts). So the gaps
-	   are tight, and on the right the icon's own 24 px box is the inset. */
+	   wide system font too (DejaVu Sans, Linux's usual one, where the bold
+	   "Catchment", "Viewer" and the icon take ~172 px of the line's 174): a
+	   wrapped icon costs the sidebar a row and the sections no longer fit
+	   1440×960 (app-sidebar.spec.ts). So the gaps are tight (0.4rem wrapped
+	   the icon once "Catchment" took Help's bold heading style), and on the
+	   right the icon's own 24 px box is the inset. */
 	.side-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.3rem;
 		padding: 0 0.25rem 0 0.75rem;
 	}
-	.side-kicker {
-		color: var(--text-muted);
-		font-size: 0.72rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
+	/* The group titles ("Catchment" and each section's label) read as Help's
+	   side panel's group headings do (help/HelpNav.svelte .group): the text
+	   colour, bold, uppercase, so each group reads as a block. */
+	.side-kicker,
+	.section-label {
+		color: var(--text);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
 		text-transform: uppercase;
 	}
 	/* A long name wraps to two lines at most; the full name is its tooltip,
@@ -1130,11 +1138,6 @@
 	}
 	.section-label {
 		padding: 0 0.75rem 0.25rem;
-		color: var(--text-muted);
-		font-size: 0.72rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
 	}
 	.tabs a {
 		display: flex;

@@ -5,7 +5,7 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { seedRunnableProject } from '../support/api.ts';
+import { seedRunnableProject, showAllSections } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -46,6 +46,8 @@ async function openAndMapToCitrus(page: Page, projectId: string) {
 test('map Orchard to the library citrus, see the diff and the demand change, apply, save with a reason, reload', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Crop library');
+	// History is hidden from the sidebar by default; this account shows it, to reach it from there below.
+	await showAllSections(page.request);
 	const d = await openAndMapToCitrus(page, project.id);
 
 	const diff = d.getByRole('region', { name: 'Orchard: changes' });

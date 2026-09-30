@@ -3,7 +3,7 @@
 // reserve 5rem (the workspace 4rem) below everything, so any page whose content came within 56–70 px of the
 // window's foot scrolled for nothing. Synthetic data only.
 import type { Page } from '@playwright/test';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { rulesCard } from '../support/transfers.ts';
 
@@ -54,7 +54,9 @@ test('every workspace tab and app page keeps only a gutter below its content, wi
 	test.setTimeout(180_000);
 	const project = await seedRunnableProject(page.request, 'Gutter only');
 	await createRun(page.request, project.id, 'Baseline');
-	// Every section an owner sees is checked: a new tab fails here until it joins TABS.
+	// Every section an owner sees is checked: a new tab fails here until it joins TABS. Shown all first, since
+	// History, Allocations and Applications start hidden (DEFAULT_HIDDEN_TABS) and still open from their links.
+	await showAllSections(page.request);
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await page.goto(`/projects/${project.id}`);
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link')).toHaveCount(TABS.length);

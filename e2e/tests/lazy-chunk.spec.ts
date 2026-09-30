@@ -9,7 +9,7 @@
 // banner (their own import() calls, not Lazy) say the same.
 import { readFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
-import { createProject, createRun, register, seedRunnableProject, signInUnconfirmed } from '../support/api.ts';
+import { createProject, createRun, register, seedRunnableProject, showAllSections, signInUnconfirmed } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 
@@ -32,11 +32,13 @@ const blockChunkWith = (marker: string) => async (route: Route) => {
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 // The History tab's own content (its heading is the page's section header, drawn before the chunk loads).
+// History is hidden from the sidebar by default, so the tests that open it from there show every section first.
 const historyFilters = (page: Page) => page.getByRole('group', { name: 'Filter the history' });
 
 test('a tab that fails to download offers a reload, and the reload recovers', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Chunk failure');
+	await showAllSections(page.request);
 	await page.goto(`/projects/${project.id}`);
 	await expect(page.getByRole('region', { name: 'Active alerts' })).toHaveAttribute('data-ready', 'true');
 
@@ -63,6 +65,7 @@ test('a tab that fails to download offers a reload, and the reload recovers', as
 test('with unsaved model edits the failure warns, and the reload asks before discarding them', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Chunk failure, unsaved');
+	await showAllSections(page.request);
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await page.getByRole('button', { name: 'Add crop', exact: true }).click();
 	// The new crop's sheet opens; Done leaves the edit for the save bar.

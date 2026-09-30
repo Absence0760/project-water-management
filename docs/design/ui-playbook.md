@@ -171,6 +171,15 @@ section it belongs to, with the example that taught it.
   it a heading with its links indented under a rule. A contents list that
   grew a nested list of the terms on screen (three levels, moving while you
   read) was replaced by one page per topic and search (issue #162).
+- **A sticky side menu fits the window by showing less, not by scrolling.**
+  Help's contents listed all four groups' 30 pages, ~1180 px, in a sticky
+  column capped at the window's height, so it scrolled inside itself at
+  1440×960 and 1280×800: a second scrollbar beside the page's, with the
+  lower groups out of sight. Show one group's pages at a time (the heading a
+  disclosure button, the current page's group open by itself, opening one
+  closes the rest) so the column's tallest state fits the smallest supported
+  window; keep `overflow-y: auto` only as the fallback for a window shorter
+  than that, never a scrollbar that hides links (`help.spec.ts`).
 - **Position the box that scrolls.** A list that scrolls inside its card
   must be `position: relative` (or otherwise positioned) when anything
   inside it is absolutely positioned. The Projects list fitted its card to
@@ -282,6 +291,16 @@ section it belongs to, with the example that taught it.
   conditional fields two to a row, the groups side by side by the card's
   width (`@container rule`). Size number fields for real values (0.0129,
   12.345) and check them with `scrollWidth <= clientWidth` in e2e.
+- **A card per row costs height; measure a long list against the table it
+  replaced.** The first Transfers cards were 225 px a rule against the
+  table's 120, so thirty rules scrolled twice as far: a head line across the
+  top, a title line per group and a summary line under the months, each
+  repeated thirty times, where the table said them once in its header.
+  Where the card is wide the head became a column on the card's left, level
+  with the rates, the summary moved onto the rates' title line, and the
+  Limits and Source titles went (dividers mark the groups and each field
+  names itself): 147 px at 1440. `transfers-page.spec.ts` caps the height
+  of a rule with thirty on the page.
 - **Put a panel's columns side by side by the panel's width, not the
   window's.** Runs & results' runoff panel set its table beside the stores
   chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
