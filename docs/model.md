@@ -5375,14 +5375,23 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
   fit scores lower for the same skill (calibration research CR-6): a guide,
   not a pass mark.
 - **Flagged data-quality years**: the water years whose catchment rain reads
-  far below CHIRPS (`lowvschirps`, §2.10a; up to the check's example cap),
+  far below CHIRPS (`lowvschirps`, §2.10a; every one: engine ≥ 1.31.1 lists
+  them all, where it stopped at the check's example cap of 5 before, issue
+  #70; a stored run from before 1.31.1 that hit the cap says its list may
+  be cut short, `flaggedYearsMayBeCut`, and the data-quality line names every
+  year),
   and the one-line text of every other data-quality check that fired.
 - **Runoff coefficient (audit W1)**: natural flow ÷ rain on the catchment,
   marked implausible above 1.
 - **Engine version, and the build's test results** (`EngineBuild`: version,
-  git SHA, invariant suite passed, soak cases). CI does not inject the build
-  record yet ([followups.md](./followups.md#liability-and-sign-off-wp-313)),
-  so the statement says the results were not recorded; a record is only
+  git SHA, invariant suite passed, soak cases). The web release makes it
+  (issue #70): `deploy-frontend.yml` runs `scripts/release/engine-build.mjs
+  --soak-cases 1600`, which runs the engine's unit suite (the invariant
+  tests and the random-network soak at `FUZZ_CASES` = 1600) and writes the
+  record to `ENGINE_BUILD`; a failing suite fails the release. The frontend
+  build injects it (`vite.config.ts` `__ENGINE_BUILD__`), read through
+  `parseEngineBuild`, which drops anything malformed. A build without one
+  (local dev, e2e) says the results were not recorded; a record is only
   ever shown for the version it was made for.
 - **Self-checks**: the run's own verification (`summary.verification`).
 - **Known limitations**, generated from [engine-audit.md](./engine-audit.md):

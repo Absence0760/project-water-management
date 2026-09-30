@@ -2160,6 +2160,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
 | POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
+| GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
   A change replaces the whole notice. `pct` is stored to two decimals and is
@@ -2189,6 +2190,17 @@ received. For a **forecast run** (WP-2.12) it is the day before
   and 30 days to `dataUntil`, for the [portfolio](#portfolio). A farmer's
   response leaves it out, since with few farms a count says which neighbour
   went short, and the share link's allowlist never copies it.
+- `RunPublication = { publication, previous }` (`publish/runPublication.ts`).
+  `publication` is the run's newest publication, `{ id, publishedAt,
+  publishedBy, supersededAt, restriction: { level, pct, notice } }`, or `null`
+  when it was never published (or its publication aged out of the kept 12).
+  `previous` is the publication to compare with: for a published run, the
+  newest earlier publication of another run; for a run never published, the
+  current one; `null` when there is none. It carries `{ id, runId,
+  runLabel, publishedAt, publishedBy, changes, attribution }`, where
+  `changes` and `attribution` are the input changes from that run to this
+  one and who made them, as `GET /compare/runs` gives them. A farmer gets
+  `403`, as for the run itself.
 - A project keeps its newest **12** publications; an older one is deleted
   with its farm projections, and its run becomes trimmable again.
 - Nothing here is audited yet beyond the `updatedAt` / `updatedBy` stamp:
@@ -2903,8 +2915,8 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   not people: it exchanges a single-use, 5-minute render token (issued by the
   worker as the requester) for a 10-minute session that may only `GET`
   `/auth/me`, `/projects/:id`, `/projects/:id/series`,
-  `/projects/:id/runs/:runId` and its `/series`, `/day` and `/signoffs` (the
-  report page's reads) of the one project and run, and for an impact report
+  `/projects/:id/runs/:runId` and its `/series`, `/day`, `/signoffs` and
+  `/publication` (the report page's reads) of the one project and run, and for an impact report
   `GET /compare/runs?a=<baseline>&b=<project>:<run>` with exactly that pair
   (never the baseline's own project or run); everything else, the
   run's CSV exports, reproduction and allocation comparison included,

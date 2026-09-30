@@ -534,6 +534,14 @@ describe('rainVsChirps (issue #2)', () => {
 			['rain_chirps_mm', 'negative']
 		]);
 	});
+	it('lists every flagged year, not the first few (engine 1.31.1, issue #70)', () => {
+		// Seven flagged years: the validation statement's table lists what the check's examples hold.
+		const years = Array.from({ length: 7 }, (_, k) => ({ waterYear: 2000 + k, days: 365, catchmentMm: 200, chirpsMm: 500, ratio: 0.4, flagged: true }));
+		const c = rainVsChirpsCheck({ usualRatio: 1, years, flaggedYears: years.map((y) => y.waterYear), ratioLimit: 0.5, baseline: 'record' })!;
+		expect(c.examples.map((e) => e.date)).toEqual(years.map((y) => `${y.waterYear}-10-01`));
+		expect(c.examples.at(-1)).toEqual({ date: '2006-10-01', endDate: '2007-09-30', value: 0.4, runDays: 365 });
+		expect(c.text).toMatch(/^Rainfall \(catchment\): 7 water years below 50 %/);
+	});
 });
 
 describe('data-quality limits as settings (engine 1.20.0, issue #66)', () => {

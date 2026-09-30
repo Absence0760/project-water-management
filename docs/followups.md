@@ -2266,10 +2266,13 @@ role and not before it.
         at a site with a table is the table's (rows say `ewrSource:
         'ruleTable'`), the same choice as the charge; the pragmatic EWR
         stays the default, pending the hydrologist.
-  - [ ] **Where else the metrics show**: the printable report
-        (`report/`), the farm view (a farmer's own reliability and stress
-        months) and the scenario compare view (Δ reliability per farm).
-        Trigger: WP-3.10's evidence pack, which needs them in the report.
+  - [x] **Where else the metrics show** (done, issue #70): the printable
+        report's **Assurance of supply** section, the farm view's share of
+        each month's need received with its stress class in plain words, and
+        the compare and scenario views' per-farm table with the change B − A
+        (`compare/AssuranceDeltaTable.svelte`). The farm view shows stress
+        months only, not the reliability measures, which are over the
+        modeller's report window rather than the farmer's season.
   - [x] **Bundle budget** (superseded by later ceiling moves; now 994 KB,
         19f02741 then the 2026-09-27 raise): the build was 829 KB against the 821 KB ceiling
         (both panels are lazy; the growth is the engine module in every
@@ -2386,25 +2389,23 @@ role and not before it.
         D9, when someone asks for emailed or scheduled reports. The job queue
         (WP-2.8) is in place; the route and `data-report-ready` are what it
         would open and wait on.
-  - [ ] **Sections waiting on other work**, added to `report/sections.ts`
-        when their data exists (no placeholders until then). WP-2.3 and
-        WP-2.4 have landed, so the published-by line, the restriction
-        notice, the changes since the previous publication and the Overview's
-        Report entry point are unblocked and not built; the evidence pack
-        still waits on Phase C: the cover's
-        published-by line and restriction notice (WP-2.3), changes since the
-        previous publication (WP-2.4), and the licensing evidence pack's sections and uncertainty
-        display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
+  - [x] **Publication sections** (done, issue #70): the cover's published-by
+        line and restriction notice (WP-2.3), **Changes since the previous
+        publication** (WP-2.4), both from `GET …/runs/:runId/publication`,
+        and the Overview published card's **Report** link.
+  - [ ] **The licensing evidence pack's sections and uncertainty display**
+        (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
         built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
-        run against the mock-up in that spec's §11). WP-2.3 also adds the Overview published card's Report
-        entry point.
+        run against the mock-up in that spec's §11).
   - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
         Chromium and Firefox; e2e runs Chromium only, so print the largest
-        example from Firefox by hand before calling Phase A accepted.
-  - [ ] **Farmer access test** (a farmer gets 403): the farmer role exists and
-        `reports.db.test.ts` covers the server-side report API, but the print
-        route's e2e (`report.spec.ts`) still tests a non-member, with a viewer
-        as the positive control. Add the farmer case there.
+        example from Firefox by hand before calling Phase A accepted. Firefox
+        has no CSS page-margin boxes, so its print has no running footer
+        (issue #70 moved the footer into the page's CSS); check the rest.
+        Owner: the operator, by hand.
+  - [x] **Farmer access test** (done, issue #70): `report.spec.ts` checks a
+        farmer gets 403 from the run and its publication and is sent to their
+        farm page.
 
 - **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
@@ -3588,13 +3589,12 @@ professional sign-off on a run, all on the report route
 [data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
 Left, each with its trigger:
 
-- [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an
-      `EngineBuild` (version, git SHA, invariants passed, soak cases) and the
-      report says *Not recorded for this build* without one. Durable fix: the
-      web release workflow runs the invariant suite and a soak, writes the
-      record, and the frontend build injects it (a Vite `define`) for the
-      report to pass in. Trigger: before the first evidence pack (WP-3.14),
-      which must state it.
+- [x] **`ENGINE_BUILD` from CI** (done, issue #70): `deploy-frontend.yml`
+      runs `scripts/release/engine-build.mjs --soak-cases 1600` (the engine
+      suite with the soak at 1 600 cases; a failure stops the release), and
+      the frontend build injects the record (`__ENGINE_BUILD__`), so a
+      released site's validation statement states it
+      ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
 - [x] **Methodology statement and engine errata** (issue #71, 2026-09-29):
       `docs/methodology/v1.md` (versioned, its SHA-256 pinned by
       `methodology.test.ts`) and `docs/engine-errata.md`, both generated into
@@ -3620,10 +3620,9 @@ Left, each with its trigger:
       signer's typed name and registration; the export and account deletion
       must list them (deletion keeps the row with `user_id` nulled, as the
       professional record, and the privacy notice must say so).
-- [ ] **Flagged years are capped** at the data-quality check's example limit
-      (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
-      years lists only the first ones. Trigger: a catchment that hits it;
-      the fix is a full list on the check or in the statement.
+- [x] **Flagged years are capped** (done, engine 1.31.1, issue #70): the
+      low-vs-CHIRPS check's examples list every flagged year, so the
+      statement does too.
 
 ## Evidence report (issue #71)
 
