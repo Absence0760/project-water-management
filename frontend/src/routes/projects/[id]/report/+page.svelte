@@ -65,6 +65,7 @@
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
 	import { hasHumanImpacts, loadHumanImpacts } from '$lib/components/runs/humanImpacts';
+	import { loadRestrictionTables } from '$lib/components/runs/restrictions';
 	import { runSentence } from '$lib/components/runs/runSentence';
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -168,7 +169,7 @@
 			// The land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			// If it fails to download, only a reload can fetch it (lazy.ts), so it gets its own message, not "Try again".
 			try {
-				await Promise.all([loadOnce(loadHumanImpacts), against ? loadOnce(loadImpact) : null]);
+				await Promise.all([loadOnce(loadHumanImpacts), loadOnce(loadRestrictionTables), against ? loadOnce(loadImpact) : null]);
 			} catch {
 				status = 'chunk-failed';
 				return;
@@ -482,6 +483,12 @@
 							{#snippet units()}
 								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
 								<!-- The land-cover, groundwater, demand-object and other-user tables: on Units & supply in the workspace (issue #137), here in their old place. -->
+								{#if summary.droughtRestriction}
+									<!-- The drought restriction rule's tables (engine ≥ 1.46.0, WP-3.8). -->
+									<Lazy load={loadRestrictionTables}>
+										{#snippet children(RestrictionTables)}<RestrictionTables {summary} headingId="report-restrictions-h" level={3} />{/snippet}
+									</Lazy>
+								{/if}
 								{#if hasHumanImpacts(summary)}
 									<Lazy load={loadHumanImpacts}>
 										{#snippet children(HumanImpactTables)}<HumanImpactTables {summary} />{/snippet}

@@ -1563,8 +1563,8 @@ export function* droughtRestrictionLines(r: NonNullable<RunSummary['droughtRestr
 	yield csvRow(['Water year', 'Days', ...levels.map((l) => `Days: ${l}`)]);
 	for (const y of r.years) yield csvRow([waterYearLabel(y.waterYear), y.days, ...y.daysByLevel]);
 	yield csvRow(['Whole run', r.daysByLevel.reduce((a, b) => a + b, 0), ...r.daysByLevel]);
-	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Cut (m³/day)', 'Mean supplied (m³/day)']);
-	for (const u of r.units) yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgSuppliedM3Day]);
+	yield csvRow(['Unit', 'Mean demand (m³/day)', 'Mean demand after the restriction (m³/day)', 'Mean cut (m³/day)', 'Mean cut on restricted days (m³/day)', 'Mean supplied (m³/day)']);
+	for (const u of r.units) yield csvRow([u.name, u.avgDemandM3Day, u.avgRestrictedDemandM3Day, u.avgDemandM3Day - u.avgRestrictedDemandM3Day, u.avgCutOnRestrictedDaysM3Day ?? null, u.avgSuppliedM3Day]);
 }
 
 /**

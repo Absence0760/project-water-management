@@ -2639,7 +2639,15 @@ export interface DroughtRestrictionSummary {
 	 * the restriction (what the unit asked its sources for) and the mean
 	 * supplied, m³/day over the run. The cut is the first less the second.
 	 */
-	units: { nodeId: string; name: string; avgDemandM3Day: number; avgRestrictedDemandM3Day: number; avgSuppliedM3Day: number }[];
+	units: {
+		nodeId: string;
+		name: string;
+		avgDemandM3Day: number;
+		avgRestrictedDemandM3Day: number;
+		avgSuppliedM3Day: number;
+		/** The mean cut (demand − restricted demand) over the days a level was in force only, m³/day; null when none was. */
+		avgCutOnRestrictedDaysM3Day: number | null;
+	}[];
 }
 
 export interface RunSummary {

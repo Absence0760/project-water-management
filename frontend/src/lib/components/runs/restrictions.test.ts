@@ -11,8 +11,8 @@ const summary: NonNullable<RunSummary['droughtRestriction']> = {
 	daysByLevel: [360, 85, 20],
 	reviews: 2,
 	units: [
-		{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75 },
-		{ nodeId: 'b', name: 'Farm B', avgDemandM3Day: 0, avgRestrictedDemandM3Day: 0, avgSuppliedM3Day: 0 }
+		{ nodeId: 'b', name: 'Farm B', avgDemandM3Day: 0, avgRestrictedDemandM3Day: 0, avgSuppliedM3Day: 0, avgCutOnRestrictedDaysM3Day: null },
+		{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 88.6 }
 	]
 };
 
@@ -30,7 +30,8 @@ describe('restrictionView (engine 1.46.0, WP-3.8)', () => {
 			{ label: '2004/05', days: 100, byLevel: [60, 20, 20], restricted: 40 }
 		]);
 		expect(v.total).toEqual({ days: 465, byLevel: [360, 85, 20], restricted: 105 });
-		expect(v.units[0]).toEqual({ nodeId: 'a', name: 'Farm A', demand: 100, restricted: 80, cut: 20, cutShare: 0.2, supplied: 75 });
+		// The most cut first; the cut on restricted days beside the run means.
+		expect(v.units[0]).toEqual({ nodeId: 'a', name: 'Farm A', demand: 100, restricted: 80, cut: 20, cutShare: 0.2, supplied: 75, cutOnRestrictedDays: 88.6 });
 		// No demand: no share of it cut.
 		expect(v.units[1]!.cutShare).toBeNull();
 	});

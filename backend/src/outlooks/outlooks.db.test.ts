@@ -418,6 +418,32 @@ describe('seasonal_outlook RLS', () => {
 	});
 });
 
+describe('the drought restriction rule (engine 1.46.0, WP-3.8)', () => {
+	it('the job runs the outlook and its triggers without the rule: the same result and table as with none', async () => {
+		const owner = await signUp('DroughtOutlook');
+		const c = await catchment(owner, 'Outlook with restrictions');
+		const done = async (runId: string) => {
+			const res = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(runId));
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			await tick();
+			expect(await job(res.body.jobId)).toMatchObject({ status: 'done' });
+			return (await owner.call('GET', `/projects/${c.projectId}/outlooks/${res.body.outlook.id}`)).body.outlook;
+		};
+		const plain = await done(c.runId);
+		// A rule that restricts this catchment (reviewed monthly, crops halved below 90 %), and a base run under it.
+		const rule = { reviewDates: Array.from({ length: 12 }, (_, m) => `${String(m + 1).padStart(2, '0')}-01`), levels: [{ belowPct: 0.9, cuts: { crops: 0.5 } }] };
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { droughtRestriction: rule } })).status).toBe(200);
+		const ruled = await owner.call('POST', `/projects/${c.projectId}/runs`, { label: 'restricted' });
+		expect(ruled.status).toBe(201);
+		const summary = (await owner.call('GET', `/projects/${c.projectId}/runs/${ruled.body.run.id}`)).body.run.summary;
+		expect(summary.droughtRestriction.daysByLevel[1]).toBeGreaterThan(0);
+		const withRule = await done(ruled.body.run.id);
+		// Had the job kept the rule, every level would be cut twice and the history would differ.
+		expect(withRule.result).toEqual(plain.result);
+		expect(withRule.triggers.table).toEqual(plain.triggers.table);
+	});
+});
+
 describe('review triggers (issue #53 R6)', () => {
 	it('an outlook carries its season’s review date and a trigger table drawn on the latest one the record holds', async () => {
 		const owner = await signUp('TriggerOwner');

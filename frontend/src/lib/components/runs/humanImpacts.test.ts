@@ -18,12 +18,6 @@ describe('hasHumanImpacts', () => {
 		expect(hasHumanImpacts({ farms: [], users: [user()] })).toBe(true);
 	});
 
-	it('is true for a run with the drought restriction rule (engine 1.46.0), and the link names it first', () => {
-		const droughtRestriction = { rule: { reviewDates: ['01-01'], levels: [] }, years: [], daysByLevel: [0], reviews: 0, units: [] } as RunSummary['droughtRestriction'];
-		expect(hasHumanImpacts({ farms: [farm()], droughtRestriction })).toBe(true);
-		expect(otherUsesLink({ farms: [farm({ avgGroundwaterM3Day: 1 })], droughtRestriction })!.what).toBe('Drought restrictions and groundwater');
-	});
-
 	it('leaves other users out when asked, but not a user’s borehole (issue #137)', () => {
 		expect(hasHumanImpacts({ farms: [], users: [user()] }, false)).toBe(false);
 		expect(hasHumanImpacts({ farms: [], users: [user({ avgGroundwaterM3Day: 10 })] }, false)).toBe(true);

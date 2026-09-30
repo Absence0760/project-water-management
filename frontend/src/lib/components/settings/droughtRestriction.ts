@@ -21,8 +21,6 @@ export const PART_LABEL: Record<DemandPart, string> = {
 	...(Object.fromEntries(Object.entries(DEMAND_OBJECT_CATEGORY_LABEL).map(([k, v]) => [k, `${v} demand objects`])) as Record<Exclude<DemandPart, 'crops'>, string>)
 };
 
-/** The parts a domestic or municipal basic-needs floor protects, for the editor's note. */
-export const FLOORED_PARTS: readonly DemandPart[] = ['domestic', 'municipal'];
 
 /**
  * The rule a project starts from when it switches restrictions on: reviewed

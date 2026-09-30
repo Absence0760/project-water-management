@@ -3949,9 +3949,10 @@ read it before.
   table that was in the run summary; the printable report still shows it
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
-  (`#res-assurance`) and, for a run that has any, **Other uses**
-  (`#res-other-uses`, issue #137): the drought restriction (engine ≥ 1.46.0,
-  [§ Drought restrictions](#drought-restrictions)), land-cover, groundwater,
+  (`#res-assurance`), for a run with the drought restriction rule **Drought
+  restrictions** (`#res-restrictions`, engine ≥ 1.46.0,
+  [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
+  (`#res-other-uses`, issue #137): the land-cover, groundwater,
   demand-object and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
@@ -4989,35 +4990,45 @@ see (WP-2.3); every place it shows says so.
   restrictions in runs** switches it on from a template (reviews on 1 October
   and 1 January, lifted 1 May, three levels below 60 / 40 / 25 % of
   capacity cutting crops and irrigation 20 / 40 / 60 % and domestic and
-  municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, the
-  hint says). **Review dates** and **Lift dates**: a month and a day each,
-  **Add a … date** / **Remove**. The levels table: one column per level
-  (mildest first), rows **Name**, **Starts below (% of capacity)** and one
-  **… cut (%)** row per part of demand (crops, then each demand-object
-  category; blank = not cut; domestic and municipal marked *floor kept*),
-  each input labelled "Level 2: cut on …, %"; it scrolls sideways on a
-  phone. **Add a deeper level** (the last level's cuts, half its
-  threshold) / **Remove the deepest level**; **Where the levels come from**;
-  the rule **In words**. A rule the engine refuses (a date twice, a
+  municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, and
+  a line under the rule says so until the first edit). The hint is one line:
+  what it does, that it is a model rule, and that off, runs are as before.
+  **The rule** in words heads it. **Review dates** and **Lift dates**: a
+  month and a day each, **Add a … date** / **Remove**. One card per level
+  (mildest first; side by side where there is room, one under the other on
+  a phone, no sideways scroll): **Name**, **Starts below (% of capacity)**
+  and one **… cut (%)** per part of demand (crops, then each demand-object
+  category; blank = *Not cut*; domestic and municipal marked *floor kept*),
+  each input labelled "Level 2: cut on …, %". **Add a deeper level** (the
+  last level's cuts, half its threshold) / **Remove the deepest level**;
+  **Where the levels come from**. A rule the engine refuses (a date twice, a
   shallower deeper level, a deeper level cutting less) shows its first
-  problem under the table and blocks Save (the save bar links here);
-  switching off saves null, and the rule switched off comes back until
-  saved. Field history under it. A viewer reads it, disabled.
-- **Units & supply → Other uses**, for a run with the rule
-  (`runs/HumanImpactTables.svelte`, view model `runs/restrictions.ts`):
-  **Drought restrictions**, the rule in words and how often it was
-  decided, then the days at each level per water year (with *Days
-  restricted*, and a *Whole run* row), then per hydrological unit its mean
-  demand, demand after the restriction, cut (m³/day and % of demand) and
-  supplied. The note says the cut shows as a shortfall.
+  problem under the cards (a status, not an alert) and blocks Save (the
+  save bar links here); switching off saves null, and the rule switched off
+  comes back until saved. Field history under it. A viewer reads it,
+  disabled, and *Drought restrictions: off.* when there is none.
+- **Units & supply → Drought restrictions** (`#res-restrictions`, its own
+  panel and menu entry, before Other uses, for a run with the rule;
+  `runs/RestrictionTables.svelte`, its own chunk, view model
+  `runs/restrictions.ts`; also in the printable report beside the other
+  tables): the rule in words and how often it was decided, then the days
+  at each level per water year (with *Days restricted*, and a bold *Whole
+  run* row), then per hydrological unit, the most cut first, its demand,
+  demand after the restriction, cut (m³/day and % of demand) and supplied
+  as run means, and the mean cut on the restricted days alone. Both lists
+  fold after ten (*Show all N water years* / *hydrological units*). The
+  note says the cut shows as a shortfall.
 - **River & reserve → Seasonal outlook → Review triggers**: under the
   trigger table, the table *As a drought restriction rule* in words
   (`outlook/triggers.ts` `triggerRuleView`, the engine's
-  `restrictionRuleFromTriggers`) and what it couldn't carry; an editor's
-  **Use as the drought restriction rule** (or **Replace the drought
-  restriction rule with this** when one is set) saves it to the settings
-  with the reason "Drought restrictions from the seasonal outlook's review
-  triggers", and says runs from now on follow it.
+  `restrictionRuleFromTriggers`; *Settings → Drought restrictions* a link
+  there) and what it couldn't carry; an editor's **Use as the drought
+  restriction rule** saves it to the settings with the reason "Drought
+  restrictions from the seasonal outlook's review triggers" and says runs
+  from now on follow it. When a different rule is set the button reads
+  **Replace the drought restriction rule with this** and asks first (both
+  rules in words); when the table's rule is the project's, the panel says
+  *This is the project's drought restriction rule* instead.
 - **Scenarios → Add a change → Change a setting → Drought restriction
   rule**: the same editor (with its on/off switch), starting from the rule
   the scenario meets; the op replaces the rule whole, or turns it off. The
@@ -5025,11 +5036,14 @@ see (WP-2.3); every place it shows says so.
   (below 70 %): crops 50 %*.
 
 Tests: `settings/droughtRestriction.test.ts`, `runs/restrictions.test.ts`,
-`runs/HumanImpactTables.test.ts` (the tables rendered),
-`runs/humanImpacts.test.ts`, `outlook/triggers.test.ts`
+`runs/RestrictionTables.test.ts` (the tables rendered, sorted and folded),
+`supply/supply.test.ts` (the menu), `outlook/triggers.test.ts`
 (`triggerRuleView`), `scenarios/ops.test.ts` and `fields.test.ts` (the
-op), and `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
-blocked save, edits saved whole, off saves null, axe on the section).
+op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
+blocked save, edits saved whole, a viewer, off saves null, axe and the
+cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
+(the scenario's "Change a setting", the outlook's triggers saved as the
+rule, a run's tables on Units & supply with axe and no sideways scroll).
 
 ## Compare runs (`?tab=compare`)
 

@@ -64,6 +64,27 @@ describe('restrictionRuleFromTriggers', () => {
 		expect(droughtRestrictionIssues(rule)).toEqual([]);
 	});
 
+	it('two bands with one lower edge make one level (the deeper cuts), so the rule can always be saved', () => {
+		const { rule, notes } = restrictionRuleFromTriggers(table([row(200_000, 300_000, 'l100'), row(200_000, 200_000, 'l85'), row(0, 200_000, 'l70')]), LEVELS);
+		expect(droughtRestrictionIssues(rule)).toEqual([]);
+		expect(rule!.levels.map((l) => [l.label, l.belowPct])).toEqual([['70 %', 2 / 3]]);
+		expect(rule!.levels[0]!.cuts.crops).toBeCloseTo(0.3, 12);
+		expect(notes.join('\n')).toMatch(/Two bands start at 66\.7 % of capacity/);
+		// A table over no capacity has no threshold at all: no rule, and the reason.
+		const none = restrictionRuleFromTriggers({ ...table([row(0, 0, 'l100'), row(0, 0, 'l70')]), capacityM3: 0 }, LEVELS);
+		expect(none.rule).toBeNull();
+	});
+
+	it('a top band of full dams only is no level: the band below it starts below 100 %', () => {
+		const { rule, notes } = restrictionRuleFromTriggers(table([row(300_000, 300_000, 'l85'), row(100_000, 300_000, 'l85'), row(0, 100_000, 'l70')]), LEVELS);
+		expect(droughtRestrictionIssues(rule)).toEqual([]);
+		expect(rule!.levels.map((l) => [l.label, l.belowPct])).toEqual([
+			['85 %', 1],
+			['70 %', 1 / 3]
+		]);
+		expect(notes.join('\n')).toMatch(/band of full dams only \(85 %\) is no level/);
+	});
+
 	it('no rule when no band cuts; a season ending 28 February lifts on 1 March', () => {
 		expect(restrictionRuleFromTriggers(table([row(0, 300_000, 'l100')]), LEVELS).rule).toBeNull();
 		const r = restrictionRuleFromTriggers({ ...table([row(150_000, 300_000, 'l100'), row(0, 150_000, 'l70')]), reviewDate: '2015-11-15', seasonEnd: '2016-02-28' }, LEVELS);
@@ -84,6 +105,13 @@ describe('the outlook and its triggers run without the drought restriction rule'
 		const a = runModelWithoutChecks(ruled).series.find((s) => s.nodeId === 'a' && s.key === 'supplied')!.values;
 		const b = runModelWithoutChecks(input).series.find((s) => s.nodeId === 'a' && s.key === 'supplied')!.values;
 		expect(a).not.toEqual(b);
+	});
+
+	it('refuses a base run made with the rule: its history is the restricted one', () => {
+		const restrictedRun = runModelWithoutChecks(ruled);
+		const opts = { decisionDate: '2012-10-01', seasonEnd: '2013-04-30', levels: LEVELS };
+		expect(() => runSeasonalOutlook(ruled, { ...opts, baseRun: restrictedRun })).toThrow(/made with the drought restriction rule/);
+		expect(() => runReviewTriggers(input, { reviewDate: '2013-01-01', seasonEnd: '2013-04-30', levels: LEVELS, baseRun: restrictedRun })).toThrow(/made with the drought restriction rule/);
 	});
 
 	it('the outlook and the trigger table are the ones without the rule, to the bit', () => {

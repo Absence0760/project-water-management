@@ -47,33 +47,3 @@ describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', (
 		expect(body).not.toContain('Per person');
 	});
 });
-
-describe('the drought restriction tables (engine 1.46.0, WP-3.8)', () => {
-	const restricted = {
-		...summary([]),
-		farms: [],
-		droughtRestriction: {
-			rule: { reviewDates: ['01-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3 } }] },
-			years: [{ waterYear: 2003, days: 365, daysByLevel: [300, 65] }],
-			daysByLevel: [300, 65],
-			reviews: 1,
-			units: [{ nodeId: 'a', name: 'Upper farm', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75 }]
-		}
-	} as unknown as RunSummary;
-
-	it('shows the rule in words, the days at each level per water year and over the run, and each unit’s cut', () => {
-		const body = text(render(HumanImpactTables, { props: { summary: restricted } }).body);
-		expect(body).toContain('Drought restrictions');
-		expect(body).toContain('reviewed 1 Jan; Level 1 (below 60 %): crops 30 %');
-		expect(body).toContain('decided 1 time in the run');
-		expect(body).toContain('Water year Days No restriction Level 1 (below 60 %) Days restricted');
-		expect(body).toContain('2003/04 365 300 65 65');
-		expect(body).toContain('Whole run 365 300 65 65');
-		expect(body).toContain('Upper farm 100 80 20 20.0% 75');
-		expect(body).toContain('not the restriction notice farmers see');
-	});
-
-	it('has no drought restriction tables without the rule', () => {
-		expect(text(render(HumanImpactTables, { props: { summary: summary([object()]) } }).body)).not.toContain('Drought restrictions');
-	});
-});

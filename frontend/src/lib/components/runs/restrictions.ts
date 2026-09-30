@@ -6,6 +6,9 @@
 // restriction notice farmers see.
 import { describeDroughtRestriction, waterYearLabel, type RunSummary } from '@water-management/engine';
 
+/** Its own chunk (RestrictionTables.svelte), drawn on Units & supply and in the printable report. */
+export const loadRestrictionTables = () => import('./RestrictionTables.svelte');
+
 type Summary = NonNullable<RunSummary['droughtRestriction']>;
 
 export interface RestrictionView {
@@ -17,7 +20,13 @@ export interface RestrictionView {
 	years: { label: string; days: number; byLevel: number[]; restricted: number }[];
 	total: { days: number; byLevel: number[]; restricted: number };
 	reviews: number;
-	units: { nodeId: string; name: string; demand: number; restricted: number; cut: number; cutShare: number | null; supplied: number }[];
+	/**
+	 * Per unit, the most cut first: its means over the run (demand, after the
+	 * restriction, the cut and its share of demand, supplied), and the mean cut
+	 * over the restricted days only (null when no day was), which the run
+	 * means dilute with every unrestricted day.
+	 */
+	units: { nodeId: string; name: string; demand: number; restricted: number; cut: number; cutShare: number | null; supplied: number; cutOnRestrictedDays: number | null }[];
 }
 
 const pct = (x: number) => `${Math.round(x * 1000) / 10} %`;
@@ -32,9 +41,20 @@ export function restrictionView(s: Summary | undefined): RestrictionView | null 
 		years: s.years.map((y) => ({ label: waterYearLabel(y.waterYear), days: y.days, byLevel: y.daysByLevel, restricted: restricted(y.daysByLevel) })),
 		total: { days: s.daysByLevel.reduce((a, b) => a + b, 0), byLevel: s.daysByLevel, restricted: restricted(s.daysByLevel) },
 		reviews: s.reviews,
-		units: s.units.map((u) => {
-			const cut = Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day);
-			return { nodeId: u.nodeId, name: u.name, demand: u.avgDemandM3Day, restricted: u.avgRestrictedDemandM3Day, cut, cutShare: u.avgDemandM3Day > 0 ? cut / u.avgDemandM3Day : null, supplied: u.avgSuppliedM3Day };
-		})
+		units: s.units
+			.map((u) => {
+				const cut = Math.max(0, u.avgDemandM3Day - u.avgRestrictedDemandM3Day);
+				return {
+					nodeId: u.nodeId,
+					name: u.name,
+					demand: u.avgDemandM3Day,
+					restricted: u.avgRestrictedDemandM3Day,
+					cut,
+					cutShare: u.avgDemandM3Day > 0 ? cut / u.avgDemandM3Day : null,
+					supplied: u.avgSuppliedM3Day,
+					cutOnRestrictedDays: u.avgCutOnRestrictedDaysM3Day ?? null
+				};
+			})
+			.sort((a, b) => b.cut - a.cut || a.name.localeCompare(b.name))
 	};
 }

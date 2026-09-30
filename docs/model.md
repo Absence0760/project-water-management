@@ -3201,9 +3201,9 @@ floor either (the unit's demand over the year is then its registered volume
 plus what the floor holds). A full allocation alone is not a restriction and
 rescales the object, floor included; whether it should hold the floor too is
 [audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
-too (§2.11). *Not modelled:* a drought restriction rule that cuts demand by
-dam level (WP-3.8) doesn't exist yet; when it is built it has to hold the
-same floor (`planObjects` applies it to the demand factor today). A municipality's own restriction
+too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.46.0, §2.7i) holds
+the same floor, with the object's floor and `dayFloor`: MIN(floor, the
+demand before the restriction). A municipality's own restriction
 stages are shown as the supplied l per person per day, never applied.
 
 **Outputs** (only on a unit with an enabled object): per object the series
@@ -3501,14 +3501,21 @@ each **pending the hydrologist**, listed in
 - *The floor.* A domestic or municipal object never goes below MIN(its
   basic-needs floor, its demand before the restriction) (#250, §2.7f): the
   rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
-  floor.
+  floor. Its demand before the restriction is the plan's, so on a
+  full-allocation run it is already scaled by the allocation factor KF and
+  the floor is MIN(floor, KF × d), where a `demand.scale` restriction keeps
+  MIN(floor, d): [engine-audit W1](./engine-audit.md), for the hydrologist,
+  decides both.
 - *The demand stays the demand.* Unlike `demand.scale` (a scenario's change
   in what is wanted), a restriction is a cut in what is supplied: the
   shortfall and the assurance of supply count it.
 - *The outlook, its triggers and firm yield run without the rule.* The
   triggers are what the rule is made from, and a demand level on top of the
   rule would cut twice; a firm yield is what the dam can give, not what a
-  policy asks of it (§2.13, §2.15). `withoutDroughtRestriction` strips it.
+  policy asks of it (§2.13, §2.15). `withoutDroughtRestriction` strips it,
+  and a base run made with the rule passed to the outlook or its triggers is
+  refused (`assertUnrestrictedBase`), since its history is the restricted
+  one.
 - *Only storage triggers.* The roadmap also named "when the downstream EWR
   site failed yesterday"; that trigger is a follow-up.
 
@@ -3517,7 +3524,8 @@ day, 0 = none) and `restriction_cut@<part>` (that day's cut, 0–1, for each
 part some level cuts); on every unit, `restricted_demand` (m³/day). The
 summary's `droughtRestriction`: the rule, the days at each level per water
 year and over the run, the reviews in the run, and per unit its mean demand,
-mean restricted demand and mean supply; also a block of the summary CSV.
+mean restricted demand and mean supply over the run and its mean cut over
+the restricted days alone; also a block of the summary CSV.
 A model-state snapshot carries the level held (`restrictionLevel`).
 
 **From the review triggers.** `restrictionRuleFromTriggers(table, levels)`
@@ -3530,7 +3538,10 @@ dropped silently: an op limited to some nodes or months or on the other
 water users, a factor above 1, a band where no level met the planning rule
 (it takes the band above's cuts, for the WUA to decide), a table that isn't
 monotone (each part keeps the largest cut above it), and a fullest band
-whose level cuts (the rule then applies it below 100 %).
+whose level cuts (the rule then applies it below 100 %). A top band of full
+dams only is no level (no share is below 100 % there), two bands with one
+lower edge make one level (the deeper cuts), and a table that still can't
+make a rule a save accepts gives none, with the reason.
 
 **Scenarios and comparison.** `settings.set` with the path
 `droughtRestriction` sets or replaces the rule, or clears it with null (a
@@ -3542,7 +3553,8 @@ removed, the source ([run-comparison.md](./run-comparison.md)).
 
 **Checks.** The self-check `droughtRestriction` (`checkDroughtRestriction`)
 recomputes the level every day from the stored storage, capacity and reset
-columns and the rule, each part's cut column, and each unit's restricted
+columns and the rule (the review and lift days worked out in the check
+itself, not by the engine's planner), each part's cut column, and each unit's restricted
 demand from its crop requirement, efficiency and object demands with the
 floor; it holds supplied ≤ restricted demand ≤ demand (a restriction never
 raises supply) and the summary's days and means to the columns; without

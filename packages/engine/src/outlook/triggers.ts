@@ -25,7 +25,7 @@
 import { damCapacityOn } from '../network/development';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { DEMAND_PARTS, type DemandPart, type DroughtRestrictionLevel, type DroughtRestrictionRule, type ModelInput } from '../project';
-import { RESTRICTION_LEVELS_MAX } from '../network/restriction';
+import { droughtRestrictionIssues, RESTRICTION_LEVELS_MAX } from '../network/restriction';
 import { runModelFrom, runModelWithoutChecks } from '../run';
 import { withDamStorage, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -41,6 +41,7 @@ import {
 	outlookSeasonInput,
 	summariseOutlook,
 	withoutDroughtRestriction,
+	assertUnrestrictedBase,
 	type OutlookBaseRun,
 	type OutlookLevel,
 	type OutlookMember,
@@ -442,7 +443,10 @@ function checkReview(input: ModelInput, options: ReviewTriggerBandOptions): void
  * (the backend's outlook job, issue #53 R6). Throws as runReviewTriggers
  * does for the dates and the dams.
  */
-export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
+export function reviewTriggerBands(raw: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
+	// Without the drought restriction rule, on a base run without it (engine ≥ 1.46.0), as the outlook.
+	const input = withoutDroughtRestriction(raw);
+	assertUnrestrictedBase(baseRun);
 	checkReview(input, options);
 	// The dams' capacity on the review date (engine ≥ 1.30.0: it can change over the run).
 	const reviewDay = toEpochDay(options.reviewDate);
@@ -618,7 +622,13 @@ export function restrictionRuleFromTriggers(
 	const steps: DroughtRestrictionLevel[] = [];
 	let prev: Partial<Record<DemandPart, number>> = {};
 	table.rows.forEach((row, i) => {
-		const below = i === 0 ? 1 : cap > 0 ? table.rows[i - 1]!.band.fromM3 / cap : 0;
+		// A top band of full dams only (storageBands allows an edge at capacity): no storage share is below 100 %
+		// there, so its level never applies; the band below it starts below 100 %.
+		if (cap > 0 && row.band.fromM3 >= cap) {
+			if (row.level && Object.keys(cutsOf(row.level.id)).length) notes.push(`The band of full dams only (${row.level.label}) is no level: a rule reads its levels below a share of capacity`);
+			return;
+		}
+		const below = i === 0 ? 1 : cap > 0 ? Math.min(1, table.rows[i - 1]!.band.fromM3 / cap) : 0;
 		let cuts: Partial<Record<DemandPart, number>>;
 		if (!row.level) {
 			cuts = { ...prev };
@@ -634,6 +644,14 @@ export function restrictionRuleFromTriggers(
 		const same = DEMAND_PARTS.every((p) => (cuts[p] ?? 0) === (prev[p] ?? 0));
 		prev = cuts;
 		if (same || !(below > 0)) return;
+		// Two bands with one lower edge (a zero-width band) give no storage between them: the deeper band's cuts
+		// replace the level above, whose threshold is the same.
+		const last = steps.at(-1);
+		if (last && !(below < last.belowPct)) {
+			notes.push(`Two bands start at ${pct(below)} of capacity: the deeper one's cuts are used from there`);
+			steps[steps.length - 1] = { ...(row.level ? { label: row.level.label.trim().slice(0, 60) } : {}), belowPct: last.belowPct, cuts };
+			return;
+		}
 		if (i === 0) notes.push(`The fullest band's level (${row.level?.label ?? 'none'}) cuts demand too: the rule applies it whenever the dams are below 100 %`);
 		steps.push({ ...(row.level ? { label: row.level.label.trim().slice(0, 60) } : {}), belowPct: Math.min(1, below), cuts });
 	});
@@ -643,8 +661,15 @@ export function restrictionRuleFromTriggers(
 	let lift = md(fromEpochDay(toEpochDay(table.seasonEnd) + 1));
 	if (lift === '02-29') lift = '03-01';
 	const review = md(table.reviewDate) === '02-29' ? '03-01' : md(table.reviewDate);
-	return {
-		rule: { reviewDates: [review], ...(lift !== review ? { liftDates: [lift] } : {}), levels: steps.slice(0, RESTRICTION_LEVELS_MAX), source: `Review triggers from the seasonal outlook, reviewed on ${review}, season to ${md(table.seasonEnd)}` },
-		notes: steps.length > RESTRICTION_LEVELS_MAX ? [...notes, `Only the first ${RESTRICTION_LEVELS_MAX} levels are kept`] : notes
+	const rule: DroughtRestrictionRule = {
+		reviewDates: [review],
+		...(lift !== review ? { liftDates: [lift] } : {}),
+		levels: steps.slice(0, RESTRICTION_LEVELS_MAX),
+		source: `Review triggers from the seasonal outlook, reviewed on ${review}, season to ${md(table.seasonEnd)}`
 	};
+	if (steps.length > RESTRICTION_LEVELS_MAX) notes.push(`Only the first ${RESTRICTION_LEVELS_MAX} levels are kept`);
+	// A rule a save would refuse is never offered: its first problem is said instead.
+	const bad = droughtRestrictionIssues(rule)[0];
+	if (bad) return { rule: null, notes: [...notes, `The table doesn't make a rule that can be saved: ${bad.field ? `${bad.field} ` : ''}${bad.message}`] };
+	return { rule, notes };
 }
