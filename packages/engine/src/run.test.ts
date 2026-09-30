@@ -730,6 +730,81 @@ describe('runModel — transfers', () => {
 		}
 	});
 
+	describe('rules of one priority from one dam keep each rule\'s own reserve (engine 1.36.0)', () => {
+		// S: 1000 m³ dam, full. Each moving rule's limit is 400 m³/day.
+		const rate = 400 / 86_400;
+		const dests = ['R', 'R2', 'R3'].map((id, i) => node(id, { areaKm2: 0, damCapacityM3: 10_000, sortOrder: i + 1, downstreamNodeId: 'G' }));
+		const withDests = () => [node('S', { areaKm2: 0, damCapacityM3: 1000, damInitialPct: 1, downstreamNodeId: 'G' }), ...dests, node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 9 })];
+		const fx = (transfers: Transfer[], order: 1 | -1 = 1) => ({ nodes: withDests(), transfers: [...transfers].sort(() => order), natural: [0], startDate: '2021-01-01' });
+		const go = (transfers: Transfer[], order: 1 | -1 = 1) => run(fx(transfers, order));
+
+		it('a rule that moves nothing this month (rate 0) does not lower its siblings\' reserve', () => {
+			const halves = [transfer({ id: 'a', maxRateM3s: rate, minStoragePct: 0.5 }), transfer({ id: 'b', toNodeId: 'R2', maxRateM3s: rate, minStoragePct: 0.5 })];
+			const idle = transfer({ id: 'c', toNodeId: 'R3', maxRateM3s: 0, minStoragePct: 0 });
+			for (const order of [1, -1] as const) {
+				const alone = go(halves, order);
+				const beside = go([...halves, idle], order);
+				for (const out of [alone, beside]) {
+					// 500 m³ above the 50 % reserve, shared evenly; 800 m³ moved before 1.36.0 with the idle rule beside them.
+					expect(get(out, 'R', 'transfer')).toEqual([250]);
+					expect(get(out, 'R2', 'transfer')).toEqual([250]);
+					expect(get(out, 'R3', 'transfer')).toEqual([0]);
+					expect(get(out, 'S', 'dam_storage')).toEqual([500]);
+				}
+				expect(beside.series.filter((s) => s.nodeId !== 'R3' && s.key !== 'transfer_rule@c')).toEqual(alone.series.filter((s) => s.nodeId !== 'R3'));
+			}
+		});
+
+		it('a lower-reserve rule does not let a higher-reserve rule draw below its own reserve', () => {
+			// a keeps 500, b keeps 0. The 500 m³ above 500 is shared pro rata to their limits (250 each);
+			// below it only b may draw, up to its 400 limit (150 more). Before 1.36.0 both moved 400
+			// and the dam ended at 200 m³, below a's reserve.
+			for (const order of [1, -1] as const) {
+				const out = go([transfer({ id: 'a', maxRateM3s: rate, minStoragePct: 0.5 }), transfer({ id: 'b', toNodeId: 'R2', maxRateM3s: rate, minStoragePct: 0 })], order);
+				expect(get(out, 'R', 'transfer')).toEqual([250]);
+				expect(get(out, 'R2', 'transfer')).toEqual([400]);
+				expect(get(out, 'S', 'dam_storage')).toEqual([350]);
+			}
+		});
+
+		it('the transfer self-check catches rules drawn below their own reserve (the pre-1.36.0 result)', () => {
+			const f = fx([transfer({ id: 'a', maxRateM3s: rate, minStoragePct: 0.5 }), transfer({ id: 'b', toNodeId: 'R2', maxRateM3s: rate, minStoragePct: 0.5 }), transfer({ id: 'c', toNodeId: 'R3', maxRateM3s: 0, minStoragePct: 0 })]);
+			const out = run(f);
+			expect(checkTransferLimits(input(f), out)).toBeNull();
+			// What engine 1.35.0 moved: 400 each, the dam left at 200, below both rules' 500. The farm
+			// totals pass the per-farm check (the idle rule's 0 % is the lowest reserve); the rules don't.
+			const old = structuredClone(out);
+			const set = (nodeId: string, key: string, v: number) => (old.series.find((x) => x.nodeId === nodeId && x.key === key)!.values[0] = v);
+			set('S', 'transfer', -800);
+			set('S', 'transfer_rule@a', 400);
+			set('S', 'transfer_rule@b', 400);
+			set('R', 'transfer', 400);
+			set('R2', 'transfer', 400);
+			expect(checkTransferLimits(input(f), old)).toMatch(/S day 0: rule a .* sent 800 > storage 1000 − 0 sent first − its reserve = 500/);
+		});
+
+		it('three reserves: each band is shared by the rules allowed to reach it, pro rata to what each still wants', () => {
+			// a keeps 800, b 500, c 0; limits 400, so a wants MIN(400, 1000 − 800) = 200, b and c 400.
+			// Band 1000–800 (200): a, b, c, pro rata 200:400:400 → 40, 80, 80.
+			// Band 800–500 (300): b and c, each still wanting 320 → 150 each.
+			// Band 500–0: c alone, its remaining 170. The dam ends at 330.
+			for (const order of [1, -1] as const) {
+				const out = go(
+					[
+						transfer({ id: 'a', maxRateM3s: rate, minStoragePct: 0.8 }),
+						transfer({ id: 'b', toNodeId: 'R2', maxRateM3s: rate, minStoragePct: 0.5 }),
+						transfer({ id: 'c', toNodeId: 'R3', maxRateM3s: rate, minStoragePct: 0 })
+					],
+					order
+				);
+				expect(get(out, 'R', 'transfer')[0]).toBeCloseTo(40, 9);
+				expect(get(out, 'R2', 'transfer')[0]).toBeCloseTo(230, 9);
+				expect(get(out, 'R3', 'transfer')[0]).toBeCloseTo(400, 9);
+				expect(get(out, 'S', 'dam_storage')[0]).toBeCloseTo(330, 9);
+			}
+		});
+	});
+
 	it('moves at most each month\'s own rate, and nothing in a month whose rate is 0 (monthly rates, engine 1.14.0)', () => {
 		// 30 Nov – 2 Dec: November's rate 0.001 m³/s (86.4 m³/day), December's 0.002 (172.8), January's 0 (off).
 		const rates = [0, 0.001, 0.002, 0, 0, 0, 0, 0, 0, 0, 0, 0];
