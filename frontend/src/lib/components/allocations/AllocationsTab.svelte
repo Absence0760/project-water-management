@@ -10,10 +10,12 @@
 	// volumes (`unit=`). The page flows in the window's one scroll: each long
 	// list shows its first few (the ones that matter most) with a "Show all"
 	// that opens the rest in place, and nothing scrolls inside a card. Below:
-	// every registered volume with its source file, the imported files, and
-	// every unit's water years (the WUA manager's cross-unit view), folded
-	// whole behind "Show all units' water years" since issue #175: it is the
-	// picked unit's table for every unit, so the page leads with the one.
+	// every registered volume with its source file and the imported files;
+	// then the over/under-use chart (UsePlot, shared with the evidence
+	// report; its first ten rows until "Show all"), and every unit's water
+	// years (the WUA manager's cross-unit view), that table folded whole
+	// behind "Show all units' water years" since issue #175: it is the picked
+	// unit's table for every unit, so the page leads with the one.
 	// Viewers see volumes but no holder names (decision D3; the API leaves them
 	// out, RLS enforces it). Farmers never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -29,7 +31,9 @@
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
 	import AllocationForm from './AllocationForm.svelte';
 	import AllocationImport from './AllocationImport.svelte';
+	import UsePlot from './UsePlot.svelte';
 	import YearTable from './YearTable.svelte';
+	import { comparisonUseRows } from './usePlot';
 	import {
 		allocationsContext,
 		AUTHORISATION_LABEL,
@@ -175,6 +179,12 @@
 	const rowFold = $derived(foldList(listRows, (r) => r.nodeId, null, rowsAll, ROW_CAP));
 	/** The picked unit's bars: modelled use against the registered volume, on one scale. */
 	const barScale = $derived(Math.max(1, ...yearFold.shown.map((r) => Math.max(r.year.modelledM3, r.year.registeredM3))));
+	// The over/under-use chart: every unit and source with a registered volume, in the list's order, the first
+	// CHART_CAP until "Show all"; the axis is the whole chart's, so opening it doesn't rescale the marks shown.
+	const CHART_CAP = 10;
+	let chartAll = $state(false);
+	const use = $derived(comparison ? comparisonUseRows(comparison, units) : null);
+	const chartFold = $derived(use ? foldList(use.rows, (r) => r.key, null, chartAll, CHART_CAP) : { shown: [], hidden: 0 });
 	const bothSources = $derived(new Set(pickedYears.map((r) => r.source)).size > 1);
 
 	let detailEl: HTMLElement | undefined = $state();
@@ -484,7 +494,27 @@
 			<div class="panel-head">
 				<h2 id="alloc-years-h">Every hydrological unit and water year</h2>
 			</div>
-			<p class="muted small">Every hydrological unit's water years in one table, in the list's order: the picked unit's table above, for all of them.</p>
+			{#if use?.rows.length}
+				<p class="small muted chart-lead">Modelled use ÷ the registered volume, each whole water year (October–September)</p>
+				<div id="alloc-use-plot" data-testid="allocation-use-plot">
+					<UsePlot
+						fit
+						rows={chartFold.shown}
+						allRows={use.rows}
+						axisMax={use.axisMax}
+						tolerance={comparison.tolerance}
+						application={false}
+						title="Modelled use as a share of the registered volume, per hydrological unit and water source, each whole water year (October–September)"
+						caption="Over and under use of the registered volumes, in the list’s order (the ones to look into first). Part years, years with nothing registered and units with nothing registered aren’t drawn; the table lists them."
+					/>
+				</div>
+				{#if chartAll || chartFold.hidden}
+					<button type="button" class="btn btn-sm more" aria-expanded={chartAll} aria-controls="alloc-use-plot" onclick={() => (chartAll = !chartAll)}>
+						{chartAll ? `Show the first ${CHART_CAP} in the chart` : `Show all ${fmtNum(use.rows.length)} in the chart`}
+					</button>
+				{/if}
+			{/if}
+			<p class="muted small">Every hydrological unit's water years in one table, in the list's order: the chart's numbers, and the picked unit's table above, for all of them.</p>
 			{#if rowsAll || rowFold.hidden}
 				<button type="button" class="btn btn-sm more" aria-expanded={rowsAll} aria-controls="alloc-all-years" onclick={() => (rowsAll = !rowsAll)}>
 					{rowsAll ? "Hide all units' water years" : `Show all units' water years (${fmtNum(listRows.length)} rows)`}
@@ -543,6 +573,9 @@
 		font-weight: 400;
 		font-size: 0.75rem;
 		color: var(--text-2);
+	}
+	.chart-lead {
+		margin: 0;
 	}
 	.sub-h {
 		margin: 0.75rem 0 0.4rem;

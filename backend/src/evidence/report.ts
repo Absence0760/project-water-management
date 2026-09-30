@@ -29,6 +29,7 @@ import {
 	type RunSummary
 } from '@water-management/engine';
 import { Hono } from 'hono';
+import { runAllocationComparison } from '../allocations/runUse.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { differingKinds, storedValues } from '../compare/routes.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -98,6 +99,17 @@ function runInput(r: RunRow): EvidenceRunInput {
 	};
 }
 
+/**
+ * § 5 (registered water use): the run's modelled use against the allocations
+ * it ran with, per unit and water year. Only what the run stored: its
+ * allocations carry no holder name (D3), so a viewer reads nothing here the
+ * Allocations tab wouldn't show them.
+ */
+async function withAllocations(db: Db, run: EvidenceRunInput): Promise<EvidenceRunInput> {
+	const forecastFrom = run.summary.forecast?.from ?? null;
+	return { ...run, allocations: await runAllocationComparison(db, { id: run.id, startDate: run.startDate, forecastFrom, inputs: run.inputs }) };
+}
+
 interface EnsembleRow {
 	id: string;
 	runId: string;
@@ -121,9 +133,19 @@ const ENSEMBLE_COLUMNS = `u.id, u.run_id AS "runId", u.baseline_id AS "baselineI
  * application whose baseline is one of them. A paired row's bands are
  * recomputed from both rows' stored members (summarisePaired), so a band
  * stored before a summary field existed (the Reserve's "worse in", ER4)
- * carries it too; the members themselves were verified when stored.
+ * carries it too; the members themselves were verified when stored. A
+ * measure the members don't carry (no-flow days, EWR days per site, supply
+ * per unit and the Reserve FDC on members stored before engine 1.33.0)
+ * comes out as a band of no pairs, which the report prints as "no band".
  */
-async function loadEnsembles(db: Db, projectId: string, baselineRunId: string, applicationRunId: string | null): Promise<EvidenceInput['ensembles']> {
+async function loadEnsembles(
+	db: Db,
+	projectId: string,
+	baselineRunId: string,
+	applicationRunId: string | null,
+	/** The application's own units: its paired band on the applicant's own supply (page 1, ER4). */
+	own: readonly string[] = []
+): Promise<EvidenceInput['ensembles']> {
 	const { rows: base } = await db.query<EnsembleRow>(
 		`SELECT ${ENSEMBLE_COLUMNS} FROM run_uncertainty u LEFT JOIN app_user au ON au.id = u.created_by
 		 WHERE u.project_id = $1 AND u.run_id = $2 AND u.baseline_id IS NULL ORDER BY u.created_at DESC, u.id`,
@@ -162,7 +184,7 @@ async function loadEnsembles(db: Db, projectId: string, baselineRunId: string, a
 	}
 	const paired = pairedRows.map((p) => {
 		const b = p.baselineId ? results.get(p.baselineId) : undefined;
-		const summary = p.status === 'complete' && p.result && b ? summarisePaired({ options: p.options, header: b.header, members: b.members }, p.result) : null;
+		const summary = p.status === 'complete' && p.result && b ? summarisePaired({ options: p.options, header: b.header, members: b.members }, p.result, { own }) : null;
 		return toInput(p, null, summary);
 	});
 	return { baseline, paired };
@@ -199,6 +221,59 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 	};
 }
 
+/**
+ * § 4's cumulative table: every other scenario on the baseline that is
+ * submitted, or decided with approval, with its newest run of its current
+ * ops (the ops' hash the run recorded equals the scenario's) on this
+ * baseline. Under the reader's RLS: the scenario and run policies decide
+ * which applications appear (a submitted application to the project's
+ * editors, a draft to its applicant only), so the report never names one the
+ * reader couldn't open. The newest 50, and whether there were more. Only the two measures the table reads leave the
+ * database, not the runs' summaries.
+ */
+async function loadOtherApplications(db: Db, projectId: string, baselineRunId: string, ownScenarioId: string | null): Promise<Pick<EvidenceInput, 'otherApplications' | 'otherApplicationsTruncated'>> {
+	const { rows } = await db.query<{
+		scenarioId: string;
+		scenarioName: string;
+		status: 'submitted' | 'decided';
+		outcome: string | null;
+		runId: string;
+		runCreatedAt: Date;
+		engineVersion: string;
+		runoffModel: string;
+		startDate: string;
+		endDate: string;
+		ewrDaysNotMet: number | null;
+		reserveOutlet: { months: number; met: number; rate: number | null } | null;
+	}>(
+		`SELECT * FROM (SELECT DISTINCT ON (s.id) s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome,
+			r.id AS "runId", r.created_at AS "runCreatedAt", r.engine_version AS "engineVersion",
+			COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
+			to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", to_char(r.end_date, 'YYYY-MM-DD') AS "endDate",
+			(r.summary->'catchment'->>'ewrDaysNotMet')::float8 AS "ewrDaysNotMet",
+			jsonb_path_query_first(r.summary, '$.ewrAssurance[*] ? (@.isOutlet == true).overall') AS "reserveOutlet"
+		 FROM scenario s
+		 JOIN model_run r ON r.scenario_id = s.id AND r.project_id = s.project_id
+		 WHERE s.project_id = $1
+			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+			AND r.inputs->'scenario'->>'baseRunId' = $2
+			AND r.inputs->'scenario'->>'opsSha256' = s.ops_sha256
+		 ORDER BY s.id, r.created_at DESC, r.id) newest
+		 ORDER BY "runCreatedAt" DESC, "scenarioId"
+		 LIMIT $4`,
+		[projectId, baselineRunId, ownScenarioId, APPLICATION_RUNS_MAX + 1]
+	);
+	// One more than the cap is read, so a cut list says so rather than summing part of it silently.
+	const truncated = rows.length > APPLICATION_RUNS_MAX;
+	const otherApplications = rows.slice(0, APPLICATION_RUNS_MAX).map((r) => ({
+		...r,
+		runCreatedAt: iso(r.runCreatedAt)!,
+		reserveOutlet: r.reserveOutlet ? { months: r.reserveOutlet.months, met: r.reserveOutlet.met, rate: r.reserveOutlet.rate } : null
+	}));
+	return { otherApplications, otherApplicationsTruncated: truncated };
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
@@ -207,7 +282,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	const baseRow = recorded ? await loadRun(db, projectId, recorded.baseRunId) : named;
 	if (!baseRow) throw new ApiError(404, 'the application’s base run is gone, or you can’t see it');
 	const { rows: project } = await db.query<{ id: string; name: string }>('SELECT id, name FROM project WHERE id = $1', [projectId]);
-	const baseline = runInput(baseRow);
+	const baseline = await withAllocations(db, runInput(baseRow));
 
 	let application: EvidenceInput['application'] = null;
 	let changes: EvidenceInput['changes'] = [];
@@ -221,7 +296,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		);
 		const meta = sc[0];
 		application = {
-			...runInput(named),
+			...(await withAllocations(db, runInput(named))),
 			scenario: {
 				id: recorded.id,
 				name: meta?.name ?? recorded.name,
@@ -252,6 +327,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		applicationRuns = rows.map((r) => ({ runId: r.runId, label: r.label ?? '', scenarioName: r.scenarioName, createdAt: iso(r.createdAt)!, createdBy: r.createdBy }));
 	}
 
+	const others = await loadOtherApplications(db, projectId, baseline.id, recorded?.id ?? null);
+
 	const nominations = (await listNominations(db, projectId)).map((n) => ({
 		withdrawn: n.withdrawn,
 		runId: n.runId,
@@ -268,9 +345,10 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		application,
 		nominations,
 		...(await loadPublications(db, projectId, baseRow)),
-		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null),
+		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null, application?.scenario.ownedNodeIds ?? []),
 		changes,
 		applicationRuns,
+		...others,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version }
 	};
 }

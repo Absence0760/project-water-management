@@ -220,6 +220,12 @@ export function helpArticlesChunk(id: string): string | undefined {
 
 export default defineConfig({
 	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, chunkModuleMap(), sveltekit()],
+	// The engine build record (WP-3.13): the web release workflow runs the
+	// engine suite and a soak and puts the record in ENGINE_BUILD
+	// (scripts/release/engine-build.mjs); the report's validation statement
+	// prints it (lib/components/liability/engineBuild.ts). Any other build
+	// (dev, e2e, CI) has none and says "Not recorded for this build".
+	define: { __ENGINE_BUILD__: JSON.stringify(process.env.ENGINE_BUILD ?? '') },
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rolldown
 	// builds that don't read build.rolldownOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never

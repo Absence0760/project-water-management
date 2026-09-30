@@ -7,7 +7,7 @@
 import { curveAreaAt, fixedReleaseFloor, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
-import { pumpsRiverToday, riverRoom, surfaceSplit, type PlanSupply } from './supply';
+import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
 import type { PlanOfftake } from './offtake';
 
@@ -40,6 +40,17 @@ export interface PlanNode {
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
 	divertCapacityM3Day: number;
+	/**
+	 * River to dam's capacity by calendar month (index 1–12, m³/day; engine ≥
+	 * 1.32.0, issue #204): when present it replaces divertCapacityM3Day.
+	 */
+	divertM3DayByMonth?: Float64Array;
+	/**
+	 * The farm's hands-off flow (engine ≥ 1.32.0, ./supply.ts operatingOf,
+	 * docs/model.md §2.7h): kept in the river before River to dam (O) and the
+	 * river pump take anything. Absent = none.
+	 */
+	handsOff?: PlanHandsOff;
 	/** Dam capacity (m³), as entered. */
 	damCapacityM3: number;
 	/**
@@ -858,7 +869,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let L = H - K;
 			let M = ror ? 0 : Math.min(I * node.pctRunoffToDam, I);
 			let N = I - M;
-			let O = ror ? 0 : Math.min(node.divertCapacityM3Day, L + N);
+			let O = ror ? 0 : Math.min(node.divertM3DayByMonth ? divertCapacityToday(node, month[t]!) : node.divertCapacityM3Day, L + N);
 			// Senior users below (WP-1.33): the farm passes their requirement Zs
 			// below the dam (S) before it fills the dam, as far as its inflow
 			// allows: it diverts less first, then takes less of the upstream
@@ -892,6 +903,46 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					}
 				}
 			}
+			// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date), and the
+			// storage the dam-level triggers read, at the entered capacity's scale.
+			const k = capacityK(node, t);
+			const cap = node.damCapacityM3 * k;
+			// The hands-off flow (engine ≥ 1.32.0, docs/model.md §2.7h): River to dam leaves MIN(L + N, keep)
+			// below the dam, keep = MAX(the month's hands-off amount, the EWR Z here when kept). With a dam it
+			// cuts only the diversion O, not what the dam's split sends into it (K, M): the on-channel dam is
+			// not a pump. Without one today (capacity 0), K, M and O are irrigated straight from the river
+			// (b023's stand-in for a river pump, ./supply.ts), so all three are abstraction: the farm leaves
+			// MIN(H + I, keep), cutting O first, then K and M pro rata, as the senior users' pass does.
+			const Y = ewrT * node.share;
+			const Z = Y + sumZ;
+			const ho = node.handsOff;
+			const hk = ho ? handsOffToday(ho, month[t]!, Z) : 0;
+			if (hk > 0) {
+				if (cap > 0) {
+					if (O > 0) O = Math.min(O, Math.max(0, L + N - hk));
+				} else {
+					let short = Math.min(hk, H + I) - (L + N - O);
+					if (short > 0) {
+						const dO = Math.min(short, O);
+						O -= dO;
+						short -= dO;
+						const into = K + M;
+						if (short > 0 && into > 0) {
+							if (short >= into) {
+								// Everything passes: exactly nothing is taken (see the senior users' pass above).
+								K = 0;
+								M = 0;
+							} else {
+								const dK = (short * K) / into;
+								K = Math.max(0, K - dK);
+								M = Math.max(0, M - (short - dK));
+							}
+							L = H - K;
+							N = I - M;
+						}
+					}
+				}
+			}
 			const qPrev = startStorage(i, t);
 			// Dam losses and gains before irrigation (audit N2). The surface area
 			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
@@ -899,10 +950,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Evaporation takes at most what is there (yesterday's storage, the
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
-			// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date), and the
-			// storage the dam-level triggers read, at the entered capacity's scale.
-			const k = capacityK(node, t);
-			const cap = node.damCapacityM3 * k;
 			const dead = k === 1 ? node.deadStorageM3 : node.deadStorageM3 * k;
 			const qLevel = k === 1 ? qPrev : k > 0 ? qPrev / k : 0;
 			const day = damDay(node, qPrev, t, lakeEvapMmDay, damRainMm);
@@ -931,8 +978,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let avail0 = qStart + M + O + K + J;
 			if (XtoDam > 0) avail0 += XtoDam;
 			const S = L + N - O;
-			const Y = ewrT * node.share;
-			const Z = Y + sumZ;
 			// Release below the dam before irrigation (WP-3.5): pass today's inflow
 			// up to what the river below still needs, or a fixed amount from the
 			// storage above dead storage, capped by the outlet. It comes before
@@ -952,7 +997,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// from the flow below the dam, S, above what must pass it (the senior
 			// users' requirement; a pass-inflow release's target, so the pump
 			// never takes what the release is there to keep flowing), up to its
-			// capacity. Under the trigger rule only while switched to the river.
+			// capacity. Under the trigger rule only while switched to the river. The hands-off flow
+			// (engine ≥ 1.32.0) is kept too: keep = MAX(Zs, the release's target, hands-off).
 			let room = 0;
 			if (sup) {
 				const river = pumpsRiverToday(sup, onRiver[i] === 1, qLevel);
@@ -960,7 +1006,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (river) {
 					const rel = node.release;
 					const target = rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month[t]!]! : Z) : 0;
-					room = riverRoom(sup, S, Math.max(Zs, target));
+					room = riverRoom(sup, S, ho ? Math.max(Zs, target, hk) : Math.max(Zs, target));
 				}
 			}
 			let Gs: number;

@@ -8,9 +8,22 @@
 	import type { Signoff } from '$lib/api';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
+	import LicenceImpactBoard from '../LicenceImpactBoard.svelte';
+	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
 
-	let { report, signoffs, verify }: { report: EvidenceReport; signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[]; verify: string | null } = $props();
+	let {
+		report,
+		board = null,
+		signoffs,
+		verify
+	}: {
+		report: EvidenceReport;
+		/** Licence impact by year class (issue #53 R7), after the change table (§4.1); null for baseline evidence. */
+		board?: BoardView | null;
+		signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[];
+		verify: string | null;
+	} = $props();
 
 	const id = $derived(report.identity);
 	const app = $derived(report.mode === 'application');
@@ -117,7 +130,7 @@
 						{#if r.note}<span class="sub">{r.note}</span>{/if}
 					</th>
 					{#if r.notAssessed}
-						<td class="num na" colspan={app ? 4 : 1}>{r.notAssessed}</td>
+						<td class="na wrap" colspan={app ? 4 : 1}>{r.notAssessed}</td>
 					{:else}
 						<td class="num">{valueText(r, r.baseline)}</td>
 						{#if app}
@@ -133,6 +146,13 @@
 </div>
 {#if rows.more}<p class="small muted">{rows.more} more users’ supply changed: § 4 lists every one.</p>{/if}
 <p class="small muted">{report.rules.footnote} “run:” is the nominated run’s own difference.</p>
+
+{#if board}
+	<div class="board-block" data-testid="evidence-impact-board">
+		<LicenceImpactBoard view={board} />
+		<p class="small muted">The two runs’ own numbers, no band: the ensemble doesn’t carry year classes.</p>
+	</div>
+{/if}
 
 <div class="two">
 	{#if app}
@@ -251,9 +271,17 @@
 		font-weight: 400;
 		color: var(--text-muted);
 	}
+	/* A sentence in the value's place wraps, left-aligned (a nowrap numeric cell widened the table past a phone). */
+	.wrap {
+		white-space: normal;
+		text-align: left;
+	}
 	.change th[scope='row'] {
 		font-weight: 400;
 		min-width: 14rem;
+	}
+	.board-block {
+		margin: 1rem 0 0.75rem;
 	}
 	.two {
 		display: grid;

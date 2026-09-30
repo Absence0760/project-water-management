@@ -30,13 +30,14 @@ import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
+import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './network/transferRates';
 import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
-import { supplyOf } from './network/supply';
+import { operatingOf, supplyOf } from './network/supply';
 import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
@@ -423,6 +424,21 @@ function runNetwork(
 	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR, or
 	// with settings.ewrChargeSource 'ruleTable' the site's rule-table requirement where it has one.
 	const chargeSites = ewrChargeSites(settings, siteNodes, topo.outflow, ewrAssurance, sim, simOutflow, ewr, ewrShort, days, nodes, warnings);
+	// Units served in full while an EWR site below them fails (engine ≥ 1.33.0, issue #71, ./reserve/riverMeasures.ts):
+	// per site, against the daily requirement its charge follows.
+	const servedWhileFails = servedWhileEwrFails({
+		days,
+		sites: chargeSites.map((c) => ({
+			nodeId: c.node === topo.outflow ? null : nodes[c.node]!.id,
+			name: nodes[c.node]!.name,
+			ruleTable: c.ruleTable,
+			shortfall: c.shortfall,
+			units: siteUnits(kinds, plan.upstream, ranked, c.node)
+		})),
+		nodes,
+		demand: sim.nodes.map((r) => r.demand),
+		supplied: sim.nodes.map((r) => r.supplied)
+	});
 	const attribution = attributeEwrShortfall({
 		days,
 		kind: plan.nodes.map((n) => n.kind),
@@ -908,13 +924,15 @@ function runNetwork(
 				runoffCoefficient,
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0,
-				ewrAgreement: ewrObserved
+				ewrAgreement: ewrObserved,
+				...(topo.outflow >= 0 ? { noFlow: noFlowDays(simOutflow, days) } : {})
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
+			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
@@ -1287,6 +1305,7 @@ export function buildNetworkPlan(
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings),
+				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),

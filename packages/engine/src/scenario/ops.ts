@@ -153,6 +153,12 @@ const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
  * (modelRules.ts), so applyScenario reports an op that breaks one.
  */
 const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'] as const;
+/**
+ * A farm's other operating rules (engine ≥ 1.32.0, WP-3.8, issue #204,
+ * docs/model.md §2.7h): the hands-off flow by month, whether the EWR is kept
+ * too, and River to dam by month. Farms only (a model rule).
+ */
+const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -162,7 +168,7 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
 	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -218,6 +224,9 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	pumpCapacityM3Day: nullable(nonNeg),
 	supplyTriggerPct: frac,
 	supplyStopPct: frac,
+	handsOffM3Day: nullable(monthlyOf(nonNeg)),
+	handsOffEwr: boolean,
+	divertMonthlyM3Day: nullable(monthlyOf(nonNeg)),
 	ewrSite: boolean
 };
 
@@ -493,6 +502,7 @@ const EWR_TABLE_FIELDS: Record<string, Check> = {
 	siteNodeId: nullable(id),
 	source: (v) => (typeof v === 'string' ? null : 'must be text'),
 	sourceKind: nullable(oneOf(EWR_RULE_SOURCE_KINDS)),
+	category: nullable((v) => (typeof v === 'string' ? null : 'must be text')),
 	component: oneOf(EWR_RULE_COMPONENTS),
 	unit: oneOf(EWR_RULE_UNITS),
 	points: (v) => (Array.isArray(v) ? null : 'must be a list of % points'),
@@ -504,8 +514,8 @@ const EWR_TABLE_FIELDS: Record<string, Check> = {
 	highFlows: (v) => (Array.isArray(v) ? null : 'must be a list'),
 	naturalMarMcm: nullable((v) => (isNum(v) ? null : 'must be a finite number'))
 };
-/** Left out = not stated (sourceKind, naturalMarMcm), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
-const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'lowFlow', 'highFlows', 'naturalMarMcm']);
+/** Left out = not stated (sourceKind, category, naturalMarMcm), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
+const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'category', 'lowFlow', 'highFlows', 'naturalMarMcm']);
 const HIGH_FLOW_KEYS = ['label', 'months', 'peakM3s', 'durationDays', 'perYear'] as const;
 
 /**
@@ -660,6 +670,7 @@ const NODE_OPTIONAL = new Set<string>([
 	'damAreaExponent',
 	'damSeepagePerDay',
 	...SUPPLY,
+	...OPERATING,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,

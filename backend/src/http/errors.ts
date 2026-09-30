@@ -62,6 +62,8 @@ export const ERROR_CODES = [
 	'note_farm_visibility',
 	'note_author_only',
 	'note_delete_denied',
+	'note_comment_closed',
+	'note_audience_denied',
 	'unsubscribe_link_gone',
 	'export_throttled',
 	'alerts_resume_throttled',

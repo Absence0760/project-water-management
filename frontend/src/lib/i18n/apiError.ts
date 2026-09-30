@@ -36,6 +36,8 @@ const CODES: Record<string, Msg> = {
 	note_farm_visibility: msg('Only a note on a hydrological unit can be shown to its farmers.'),
 	note_author_only: msg('Only the person who wrote a note can change it.'),
 	note_delete_denied: msg('Only the person who wrote a note, or the WUA, can delete it.'),
+	note_comment_closed: msg('This application isn’t open for comment right now.'),
+	note_audience_denied: msg('You can’t post a comment here.'),
 	unsubscribe_link_gone: msg('This link doesn’t work any more.'),
 	export_throttled: msg('You downloaded your data a moment ago. Try again in {wait}.'),
 	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'),

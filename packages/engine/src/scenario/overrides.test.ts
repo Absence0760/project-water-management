@@ -281,6 +281,25 @@ describe('applyScenario: each op', () => {
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 5000 }, ror)[0]).toMatch(/run of river has no dam/);
 	});
 
+	it('node.set sets a farm\'s hands-off flow and River to dam by month (engine 1.32.0, issue #204), and checks them', () => {
+		const winter = [0, 0, 0, 0, 0, 0, 5000, 5000, 5000, 5000, 5000, 5000];
+		const r = applyScenario(base(), [
+			{ op: 'node.set', nodeId: 'A', field: 'handsOffM3Day', value: new Array(12).fill(800) },
+			{ op: 'node.set', nodeId: 'A', field: 'handsOffEwr', value: true },
+			{ op: 'node.set', nodeId: 'A', field: 'divertMonthlyM3Day', value: winter }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')).toMatchObject({ handsOffM3Day: new Array(12).fill(800), handsOffEwr: true, divertMonthlyM3Day: winter });
+		// null clears them; the classification is the applicant's own proposal, like the supply rule.
+		expect(applyScenario(r.input, [{ op: 'node.set', nodeId: 'A', field: 'handsOffM3Day', value: null }]).problems).toEqual([]);
+		expect(classifyOp({ op: 'node.set', nodeId: 'A', field: 'handsOffM3Day', value: null }, ['A'])).toBe('proposal');
+		const err = (op: ScenarioOp) => one(op).problems;
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'handsOffM3Day', value: [1, 2, 3] })[0]).toMatch(/handsOffM3Day must be 12 monthly values/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'divertMonthlyM3Day', value: [...winter.slice(0, 11), -1] })[0]).toMatch(/divertMonthlyM3Day/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'handsOffEwr', value: 1 } as unknown as ScenarioOp)[0]).toMatch(/handsOffEwr must be true or false/);
+		expect(err({ op: 'node.set', nodeId: 'G', field: 'handsOffEwr', value: true } as unknown as ScenarioOp)[0]).toMatch(/"handsOffEwr" can't be set on a gauge/);
+	});
+
 	it('node.add adds a leaf with the engine defaults for fields it leaves out', () => {
 		const add = node('N', { name: 'New dam', downstreamNodeId: 'B', damCapacityM3: 30_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
 		const r = one({ op: 'node.add', node: add });
@@ -827,6 +846,24 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 		expect(bad.problems).toEqual([expect.stringMatching(/naturalMarMcm The natural MAR must be above 0/)]);
 		const text = applyScenario(withWeir(), [set(table('W', { naturalMarMcm: '14' as never }))]);
 		expect(text.problems).toEqual([expect.stringMatching(/naturalMarMcm must be a finite number/)]);
+	});
+
+	it('carries the REC (ER9) when set, drops a null one, and refuses a malformed one', () => {
+		const r = applyScenario(withWeir(), [set(table('W', { category: 'B/C' })), set(table(null, { category: null }))]);
+		expect(r.problems).toEqual([]);
+		const [outlet, weir] = r.input.settings.ewrRules!;
+		expect(weir!.category).toBe('B/C');
+		expect(outlet).not.toHaveProperty('category');
+		expect(applyScenario(withWeir(), [set(table('W', { category: 'b/c' }))]).problems).toEqual([expect.stringMatching(/category The REC is one category A to F/)]);
+		expect(applyScenario(withWeir(), [set(table('W', { category: 2 as never }))]).problems).toEqual([expect.stringMatching(/category must be text/)]);
+	});
+
+	it('changes no result: the REC is a label (ER9, no ENGINE_VERSION bump)', () => {
+		const plain = runModel(one(set(table(null)), withWeir()).input);
+		const rec = runModel(one(set(table(null, { category: 'D' })), withWeir()).input);
+		expect(plain.summary.ewrAssurance).toHaveLength(1);
+		expect(rec.summary).toEqual(plain.summary);
+		expect(rec.series).toEqual(plain.series);
 	});
 
 	it('is used by the run: the scenario’s table is the one assessed at the site', () => {

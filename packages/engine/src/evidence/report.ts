@@ -4,24 +4,40 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
+import type { AllocationNodeComparison, AllocationSourceComparison, AllocationWaterSource, AllocationYear } from '../allocations/compare';
+import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
 import type { EwrAssuranceSite } from '../reserve/assurance';
-import { ewrSourceConfidence } from '../reserve/rules';
+import { ewrSourceConfidence, isEwrCategory } from '../reserve/rules';
 import type { Band } from '../uncertainty/bands';
 import { calendarMonthOf, monthName } from '../uncertainty/ensemble';
+import type { PairedSummary } from '../uncertainty/paired';
+import { NO_FLOW_M3_DAY } from '../reserve/riverMeasures';
+import type { ScenarioOp } from '../scenario/ops';
+import type { NetworkNode, ProjectModel } from '../project';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
-import { ENGINE_VERSION } from '../version';
+import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import {
 	EVIDENCE_REPORT_VERSION,
+	type EvidenceAllocationCounts,
+	type EvidenceAllocations,
+	type EvidenceAllocationSource,
+	type EvidenceAllocationUnit,
+	type EvidenceAllocationYear,
+	type EvidenceChange,
 	type EvidenceCheck,
+	type EvidenceCumulative,
+	type EvidenceCumulativeApplication,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
 	type EvidenceFlag,
 	type EvidenceInput,
 	type EvidenceMonthChange,
+	type EvidenceOtherApplicationInput,
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
+	type EvidenceServedWhileFailing,
 	type EvidenceSite,
 	type EvidenceSiteMonth,
 	type EvidenceUser
@@ -44,8 +60,17 @@ export const NO_BAND = {
 	noPaired: 'no band: the application has no paired ensemble on the cited one',
 	gated: (k: number, n: number) => `no band: not enough accepted parameter sets (${k} of ${n})`,
 	notCarried: 'no band: the ensemble doesn’t carry this measure yet',
+	noPairs: 'no band: no parameter set has this measure in both runs',
+	noOwnInBaseline: 'no band: the baseline has no unit of the applicant’s with demand to compare with',
+	olderEnsemble: (version: string) => `no band: the ensemble was stored before engine ${version}, which added this measure; run a new one to band it`,
 	baseline: 'no band'
 } as const;
+
+/** A no-flow day, in words (NO_FLOW_M3_DAY). */
+export const BASIS_NO_FLOW = `Simulated outflow at the outlet below 1 L/s (${NO_FLOW_M3_DAY} m³/day, a gauge’s 0.000 m³/s), every day of the run`;
+
+/** Why a run has no figure for a measure added in engine 1.33.0. */
+const beforeMeasures = (what: string) => `Not assessed: ${what} made before engine ${ENSEMBLE_MEASURES_SINCE}, which added this measure; run the model again.`;
 
 /** Which of a project's declared rule the stored settings hold, or null when none is (or it is malformed). */
 export function declaredRuleOf(run: Pick<EvidenceRunInput, 'inputs'>): DeclaredUncertaintyRule | null {
@@ -269,7 +294,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			cited: e.id === cited?.id
 		}));
 
-	const rows = changeRows(input, cited, paired);
+	const allocations = allocationSection(b, a);
+	const change = changeCell(input, cited, paired);
+	const rows = changeRows(input, paired, allocations, change);
 	const byMonth = a && paired ? monthChanges(b, a, paired.ewrDaysNotMetByMonth) : null;
 	const ranked = (byMonth ?? []).filter((m): m is EvidenceMonthChange & { band: Band } => !!m.band && m.band.p50 !== null);
 	const worstMonths = ranked
@@ -282,15 +309,18 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		.sort((x, y) => x.band.p50! - y.band.p50! || x.month - y.month)
 		.map((m) => ({ month: m.month, median: m.band.p50!, band: m.band }));
 
-	const river = sites(b, a);
-	const users = userRows(b, a);
+	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired));
+	const users = userRows(b, a, paired, change);
+	const served = servedSection(b, a);
+	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
+	if (a) rows.push(cumulativeRow(cumulative));
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : [])
 	]);
 	const coverage = baseSum?.coverage[0]?.fraction ?? null;
 	const coverageWarning = !!baseSum?.coverageWarning;
-	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited });
+	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited, allocations, served });
 	const refused = checks.some((c) => c.refuses && !c.passed);
 
 	return {
@@ -354,6 +384,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		},
 		credibility: { nominations: input.nominations.map((n) => ({ ...n })) },
 		users,
+		servedWhileFailing: served,
+		cumulative,
+		allocations,
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
@@ -399,23 +432,37 @@ const marMm3 = (m3Day: number | null | undefined) => (typeof m3Day === 'number' 
 const diff = (x: number | null, y: number | null) => (x === null || y === null ? null : y - x);
 const worseOf = (share: number | null | undefined, n: number) => (share === null || share === undefined ? null : { k: Math.round(share * n), n });
 
-function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, paired: EvidenceReport['uncertainty']['paired']): EvidenceRow[] {
-	const b = input.baseline;
+/**
+ * The change cell for a measure the paired summary bands (D-U1…D-U6): `band`
+ * null or undefined = the summary doesn't carry the measure; `since` = the
+ * engine that added the measure to the members, whose band has no pairs when
+ * the baseline's members were stored before it.
+ */
+type ChangeCell = (run: number | null, band: Band | null | undefined, worse: { k: number; n: number } | null, scale?: number, since?: string) => EvidenceRow['change'];
+
+function changeCell(input: EvidenceInput, cited: EvidenceEnsembleInput | null, paired: PairedSummary | null): ChangeCell {
 	const a = input.application;
-	const rows: EvidenceRow[] = [];
-	const rule = declaredRuleOf(b);
+	const rule = declaredRuleOf(input.baseline);
 	const n = paired?.members ?? 0;
-	/** The change cell for a measure the paired summary bands; `band` null = it doesn't carry the measure. */
-	const change = (run: number | null, band: Band | null | undefined, worse: { k: number; n: number } | null, scale = 1): EvidenceRow['change'] => {
+	return (run, band, worse, scale = 1, since) => {
 		if (!a) return null;
 		if (band === undefined || band === null) {
 			const note = !rule ? NO_BAND.notDeclared : !cited ? NO_BAND.noEnsemble : !paired ? NO_BAND.noPaired : NO_BAND.notCarried;
 			return { run, band: null, bandNote: note, worse: null };
 		}
+		if (since && paired && !paired.gated && paired.carriesMeasures === false) return { run, band: null, bandNote: NO_BAND.olderEnsemble(since), worse: null };
+		if (band.n === 0 && paired && !paired.gated) return { run, band: null, bandNote: NO_BAND.noPairs, worse: null };
 		const scaled = scale === 1 ? band : scaleBand(band, scale);
 		if (paired?.gated || scaled.p50 === null) return { run, band: scaled, bandNote: NO_BAND.gated(n, cited?.members ? cited.members + 1 : n), worse: null };
 		return { run, band: scaled, bandNote: null, worse };
 	};
+}
+
+function changeRows(input: EvidenceInput, paired: PairedSummary | null, allocations: EvidenceAllocations, change: ChangeCell): EvidenceRow[] {
+	const b = input.baseline;
+	const a = input.application;
+	const rows: EvidenceRow[] = [];
+	const n = paired?.members ?? 0;
 
 	// C10: Reserve compliance per site with a rule table, outlet first.
 	const sitesA = b.summary.ewrAssurance ?? [];
@@ -489,6 +536,27 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 		note: null
 	});
 
+	// No-flow days at the outlet (the benchmark's zero-flow impact, persona E): a fixed row (G6).
+	const fa = b.summary.catchment.noFlow ?? null;
+	const fb = a ? (a.summary.catchment.noFlow ?? null) : null;
+	const noFlowMissing = !fa ? beforeMeasures('the baseline was') : a && !fb ? beforeMeasures('the application was') : null;
+	rows.push({
+		id: 'noFlowDays',
+		label: 'No-flow days at the outlet',
+		basis: BASIS_NO_FLOW,
+		subject: null,
+		unit: 'days',
+		higherIsWorse: true,
+		baseline: fa?.days ?? null,
+		application: a ? (fb?.days ?? null) : null,
+		change: change(fa && fb ? fb.days - fa.days : null, paired?.noFlowDays, worseOf(paired?.noFlowDaysWorse, n), 1, ENSEMBLE_MEASURES_SINCE),
+		notAssessed: noFlowMissing,
+		note: noFlowMissing ? null : `Longest spell ${fa!.longestRun} day${fa!.longestRun === 1 ? '' : 's'}${fb ? ` → ${fb.longestRun}` : ''}`
+	});
+
+	// EWR at the first site below each of the application's storage or abstraction works (persona E).
+	if (a) rows.push(...worksRows(a, b, paired, change));
+
 	// C12: outflow MAR, and as a share of the natural MAR.
 	const oa = marMm3(b.summary.catchment.meanSimulatedOutflowM3Day);
 	const ob = a ? marMm3(a.summary.catchment.meanSimulatedOutflowM3Day) : null;
@@ -511,7 +579,12 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 				: `${fixed(pctN(oa)!, 1)} % of the natural MAR${a && pctN(ob) !== null ? ` → ${fixed(pctN(ob)!, 1)} %` : ''}${a && oa && ob !== null ? `; ${signed(fixed((100 * (ob - oa)) / oa, 1))} %` : ''}`
 	});
 
-	if (!a) return rows;
+	// Registered water use (WP-3.10): one fixed row, after the applicant's own supply; last for baseline evidence.
+	const registered = registeredUseRow(allocations, !!a);
+	if (!a) {
+		rows.push(registered);
+		return rows;
+	}
 	// C15: the applicant's own supply, over the nodes the application owns.
 	const owned = new Set(a.scenario.ownedNodeIds);
 	const share = (run: EvidenceRunInput) => {
@@ -532,13 +605,19 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 		higherIsWorse: false,
 		baseline: ua,
 		application: ub,
-		change: change(diff(ua, ub), null, null),
+		// The applicant's units all new: nothing in the baseline to pair with, said as such rather than "no pairs".
+		change:
+			a && ua === null && paired && !paired.gated
+				? { run: null, band: null, bandNote: NO_BAND.noOwnInBaseline, worse: null }
+				: change(diff(ua, ub), paired?.ownSupply?.band, worseOf(paired?.ownSupply?.worse, n), 100, ENSEMBLE_MEASURES_SINCE),
 		notAssessed: ub === null ? 'Not assessed: the application has no unit of its own with demand.' : null,
 		note: null
 	});
 
+	rows.push(registered);
+
 	// C14: every other user whose supply changed, largest loss first.
-	const users = userRows(b, a).filter((u) => !u.own && u.onlyIn === null && u.suppliedA !== null && u.suppliedB !== null);
+	const users = userRows(b, a, paired, change).filter((u) => !u.own && u.onlyIn === null && u.suppliedA !== null && u.suppliedB !== null);
 	const moved = users
 		.map((u) => ({ u, d: (u.suppliedB! - u.suppliedA!) * 100 }))
 		.filter((x) => Math.abs(x.d) >= 0.1)
@@ -568,7 +647,7 @@ function changeRows(input: EvidenceInput, cited: EvidenceEnsembleInput | null, p
 			higherIsWorse: false,
 			baseline: u.suppliedA! * 100,
 			application: u.suppliedB! * 100,
-			change: change(d, null, null),
+			change: u.change ?? change(d, null, null),
 			notAssessed: null,
 			note: null
 		});
@@ -609,7 +688,25 @@ function monthChanges(b: EvidenceRunInput, a: EvidenceRunInput, bands: readonly 
 // § 1 The river
 // ---------------------------------------------------------------------------
 
-function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] {
+/**
+ * A Reserve site's REC (ER9): its rule table's `category` in the run's
+ * settings, matched by site as the run matches it (the outlet is a table
+ * with no site or the outflow node's id). A label the site's report doesn't
+ * carry; null when not given.
+ */
+function siteCategory(run: EvidenceRunInput, site: EwrAssuranceSite): string | null {
+	const tables = run.inputs?.settings?.ewrRules;
+	if (!Array.isArray(tables)) return null;
+	const outflow = run.inputs?.model?.nodes?.find((n) => n.downstreamNodeId === null)?.id;
+	const key = (id: unknown) => (id === null || id === undefined || id === outflow ? null : id);
+	const t = tables.find((x) => !!x && typeof x === 'object' && key(x.siteNodeId) === site.nodeId);
+	return t && isEwrCategory(t.category) ? t.category : null;
+}
+
+/** Months whose natural flow is drier than the rule table's driest point (G16): the requirement is scaled with the flow there (model.md §2.9c). */
+const belowTable = (site: EwrAssuranceSite | null) => (site ? site.months.filter((m) => m.beyond === 'drier').length : null);
+
+function sites(b: EvidenceRunInput, a: EvidenceRunInput | null, bands: (key: string) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote'>): EvidenceSite[] {
 	return (b.summary.ewrAssurance ?? []).map((site) => {
 		const other = a ? matchSite(a.summary.ewrAssurance ?? [], site) : null;
 		const otherMonths = new Map((other?.months ?? []).map((m) => [`${m.year}-${m.month}`, m]));
@@ -646,6 +743,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			let rate = Infinity;
 			for (const x of site.byMonth) if (x.rate !== null && x.rate < rate) ((rate = x.rate), (fdcMonth = x.month));
 		}
+		const fdcDriestMonth = driestMonth(site);
 		return {
 			key: site.nodeId ?? 'outlet',
 			name: site.name,
@@ -654,7 +752,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			sourceKind: ewrSourceConfidence(site.sourceKind) ?? 'kind of source not stated',
 			component: site.component === 'lowFlow' ? 'low flows' : 'total flow',
 			unit: site.unit,
-			category: null,
+			category: siteCategory(b, site),
 			ewrPctNmar: site.ewrPctNmar?.pct ?? null,
 			naturalMar: site.naturalMar ? { ...site.naturalMar } : null,
 			months,
@@ -666,17 +764,306 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			rateA: site.overall.rate,
 			rateB: other ? other.overall.rate : null,
 			monthsA: site.overall.months,
+			belowTableA: belowTable(site)!,
+			belowTableB: a ? belowTable(other) : null,
+			belowTableExpectedPct: site.naturalSource === 'run' && site.points.length ? 100 - site.points[site.points.length - 1]! : null,
 			byMonth,
-			fdcMonth
+			fdcMonth,
+			...bands(site.nodeId ?? 'outlet'),
+			fdcDriestMonth
 		};
 	});
+}
+
+/**
+ * The banded FDC check per site (ER5): the cited ensemble's band on the
+ * baseline's curve, and the paired ensemble's band on the application's own
+ * curve (the same parameter sets on its inputs), per calendar month and table
+ * point. No band, with the reason, when there is none to show.
+ */
+function fdcBandsOf(
+	input: EvidenceInput,
+	cited: EvidenceEnsembleInput | null,
+	baseSum: EvidenceReport['uncertainty']['baseline'],
+	paired: PairedSummary | null
+): (key: string) => Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote'> {
+	const rule = declaredRuleOf(input.baseline);
+	const app = !!input.application;
+	return (key) => {
+		const none = (note: string) => ({ fdcBands: null, fdcBandNote: note });
+		if (!rule) return none(NO_BAND.notDeclared);
+		if (!cited || !baseSum) return none(NO_BAND.noEnsemble);
+		if (baseSum.gated) return none(NO_BAND.gated(baseSum.accepted, baseSum.total));
+		const site = baseSum.bands.reserveFdc?.find((x) => x.key === key);
+		if (!site) return none(NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE));
+		const other = app && paired && !paired.gated ? (paired.reserveFdc?.find((x) => x.key === key) ?? null) : null;
+		const usable = (bd: Band | undefined) => (bd && bd.p5 !== null ? bd : null);
+		const fdcBands = site.months.map((points, i) => ({
+			month: calendarMonthOf(i),
+			a: points.map(usable),
+			b: other ? (other.months[i] ?? []).map(usable) : null
+		}));
+		const bOld = app && paired && !paired.gated && paired.carriesMeasures === false;
+		return {
+			fdcBands,
+			fdcBandNote: !app
+				? null
+				: !paired
+					? `The application’s curve: ${NO_BAND.noPaired}.`
+					: paired.gated
+						? `The application’s curve: ${NO_BAND.gated(paired.members, cited.members + 1)}.`
+						: bOld
+							? `The application’s curve: ${NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE)}.`
+							: null
+		};
+	};
+}
+
+// ---------------------------------------------------------------------------
+// EWR below the works (persona E)
+// ---------------------------------------------------------------------------
+
+/**
+ * The nodes an application's op changes storage or abstraction at: a farm's
+ * or user's dam, irrigation, supply, borehole or demand field (a smaller dam
+ * too: the row reports what the change does, whichever way), a new unit, a
+ * crop area, a borehole, a transfer's or off-take's source, demand raised on
+ * named nodes or, without names, on every node of its category. Empty for any
+ * other op (a renamed node, a gauge's fields, land cover, a removal, a setting,
+ * demand lowered).
+ */
+export function worksNodeIds(op: ScenarioOp, model: Pick<ProjectModel, 'transfers' | 'nodes'>): string[] {
+	const kindOf = (id: string) => (model.nodes ?? []).find((n) => n.id === id)?.kind;
+	switch (op.op) {
+		case 'node.set':
+			return op.field === 'name' || kindOf(op.nodeId) === 'gauge' ? [] : [op.nodeId];
+		case 'node.add':
+			return op.node.kind === 'gauge' ? [] : [op.node.id];
+		case 'cropArea.set':
+			return [op.nodeId];
+		case 'borehole.add':
+			return [op.borehole.nodeId];
+		case 'transfer.add':
+			return [op.transfer.fromNodeId];
+		case 'transfer.set': {
+			if (op.field === 'fromNodeId') return [op.value as string];
+			const tr = (model.transfers ?? []).find((t) => t.id === op.transferId);
+			return tr ? [tr.fromNodeId] : [];
+		}
+		case 'demand.scale': {
+			if (!(op.factor > 1)) return [];
+			const kind = op.category === 'user' ? 'user' : 'farm';
+			return op.nodeIds ? [...op.nodeIds] : (model.nodes ?? []).filter((n) => n.kind === kind).map((n) => n.id);
+		}
+		default:
+			return [];
+	}
+}
+
+/**
+ * The first EWR site downstream of `nodeId` that is not the outlet: a gauge
+ * marked as an EWR site (ewrSite not false). null when the river reaches the
+ * outlet without passing one.
+ */
+export function firstSiteBelow(nodes: readonly Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId' | 'ewrSite'>[], nodeId: string): string | null {
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	const seen = new Set<string>();
+	let cur = byId.get(nodeId)?.downstreamNodeId ?? null;
+	while (cur !== null && !seen.has(cur)) {
+		seen.add(cur);
+		const n = byId.get(cur);
+		if (!n || n.downstreamNodeId === null) return null;
+		if (n.kind === 'gauge' && n.ewrSite !== false) return n.id;
+		cur = n.downstreamNodeId;
+	}
+	return null;
+}
+
+const siteBasis = (basis: 'pragmatic' | 'ruleTable' | undefined) =>
+	basis === 'ruleTable'
+		? 'The site’s Reserve rule-table requirement, day by day (the EWR charge follows it), every day of the run'
+		: 'The site’s pragmatic EWR (its catchment’s share), every day of the run';
+
+/**
+ * One row per EWR site that is the first below one of the application's
+ * storage or abstraction works (proposals only): the days the site's EWR is
+ * not met. One "Not assessed" row names the works with no site between them
+ * and the outlet, whose effect only the outlet's rows show.
+ */
+function worksRows(a: NonNullable<EvidenceInput['application']>, b: EvidenceRunInput, paired: PairedSummary | null, change: ChangeCell): EvidenceRow[] {
+	const model = a.inputs?.model;
+	const nodes = model?.nodes ?? [];
+	const names = new Map(nodes.map((x) => [x.id, x.name]));
+	const bySite = new Map<string, string[]>();
+	const noSite: string[] = [];
+	a.scenario.ops.forEach((op, i) => {
+		if (a.scenario.classified[i] !== 'proposal') return;
+		for (const id of worksNodeIds(op, model ?? { transfers: [], nodes: [] })) {
+			if (!names.has(id)) continue;
+			const site = firstSiteBelow(nodes, id);
+			let list = noSite;
+			if (site !== null) {
+				if (!bySite.has(site)) bySite.set(site, []);
+				list = bySite.get(site)!;
+			}
+			if (!list.includes(id)) list.push(id);
+		}
+	});
+	const works = (ids: string[]) => ids.map((id) => names.get(id)!).join(', ');
+	const rows: EvidenceRow[] = [];
+	const n = paired?.members ?? 0;
+	const missing = !b.summary.servedWhileEwrFails ? beforeMeasures('the baseline was') : !a.summary.servedWhileEwrFails ? beforeMeasures('the application was') : null;
+	for (const [key, ids] of [...bySite.entries()].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))) {
+		const sa = b.summary.servedWhileEwrFails?.find((x) => x.nodeId === key) ?? null;
+		const sb = a.summary.servedWhileEwrFails?.find((x) => x.nodeId === key) ?? null;
+		const ra = (b.summary.ewrAssurance ?? []).find((x) => x.nodeId === key) ?? null;
+		const rb = (a.summary.ewrAssurance ?? []).find((x) => x.nodeId === key) ?? null;
+		const pr = paired?.ewrSites?.find((x) => x.key === key);
+		rows.push({
+			id: 'ewrBelowWorks',
+			label: 'Days below the EWR, first site below the works',
+			basis: siteBasis(sb?.basis ?? sa?.basis),
+			subject: `${names.get(key) ?? key}, below ${works(ids)}`,
+			unit: 'days',
+			higherIsWorse: true,
+			baseline: sa?.daysNotMet ?? null,
+			application: sb?.daysNotMet ?? null,
+			change: change(sa && sb ? sb.daysNotMet - sa.daysNotMet : null, pr?.band, worseOf(pr?.worse, n), 1, ENSEMBLE_MEASURES_SINCE),
+			notAssessed: missing,
+			note: ra
+				? `Reserve months met ${ra.overall.met} of ${ra.overall.months}${rb ? ` → ${rb.overall.met} of ${rb.overall.months}` : ''}`
+				: 'No Reserve rule table at this site: the Reserve itself is not assessed here'
+		});
+	}
+	if (noSite.length) {
+		rows.push({
+			id: 'ewrBelowWorks',
+			label: 'Days below the EWR, first site below the works',
+			basis: 'An EWR site (a gauge marked as one) between the works and the outlet',
+			subject: `below ${works(noSite)}`,
+			unit: 'days',
+			higherIsWorse: true,
+			baseline: null,
+			application: null,
+			change: null,
+			notAssessed: NOT_ASSESSED_NO_SITE_BELOW,
+			note: null
+		});
+	}
+	return rows;
+}
+
+/** The works row with no EWR site between the works and the outlet. */
+export const NOT_ASSESSED_NO_SITE_BELOW =
+	'Not assessed: no EWR site between the works and the outlet, so only the outlet’s rows assess the river below them. Expect the assessor to ask whether a site closer to the works should be assessed.';
+
+/**
+ * The calendar month with the lowest mean natural flow over its complete
+ * months in the baseline (table unit), ties to the first in water-year
+ * order. Natural flow, not the simulated flow or its ratio to the
+ * requirement: the driest month is a property of the river, so neither the
+ * requirement's shape nor the application can move which month it is.
+ */
+export function driestMonth(site: Pick<EwrAssuranceSite, 'months' | 'byMonth'>): number | null {
+	const sum = new Map<number, { total: number; n: number }>();
+	for (const m of site.months) {
+		if (!Number.isFinite(m.natural)) continue;
+		const x = sum.get(m.month) ?? { total: 0, n: 0 };
+		x.total += m.natural;
+		x.n += 1;
+		sum.set(m.month, x);
+	}
+	let best: number | null = null;
+	let low = Infinity;
+	// byMonth is in water-year order (Oct … Sep): the first of equal means wins.
+	for (const { month } of site.byMonth) {
+		const x = sum.get(month);
+		if (!x || !x.n) continue;
+		const mean = x.total / x.n;
+		if (mean < low) ((low = mean), (best = month));
+	}
+	return best;
 }
 
 // ---------------------------------------------------------------------------
 // § 4 Other users
 // ---------------------------------------------------------------------------
 
-function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceUser[] {
+/** What the cumulative row and table say they are (licensing authority: never read a sum as a combined run). */
+export const CUMULATIVE_BASIS = 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)';
+export const CUMULATIVE_NONE = 'None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.';
+/** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
+const CUMULATIVE_NAMED = 3;
+export const CUMULATIVE_TRUNCATED = (n: number) =>
+	`Not assessed: more than ${n} other applications have runs on this baseline; § 4 lists the newest ${n}, and a sum of part of them would understate it.`;
+export const CUMULATIVE_NO_BAND = 'no band: a sum of other runs’ own differences';
+
+/** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
+function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
+	const outlet = (b.summary.ewrAssurance ?? []).find((s) => s.isOutlet) ?? null;
+	const baseRate = outlet?.overall.rate ?? null;
+	const baseDays = b.summary.catchment.ewrDaysNotMet;
+	const pp = (rate: number | null | undefined) => (rate === null || rate === undefined || baseRate === null ? null : (rate - baseRate) * 100);
+	const applications: EvidenceCumulativeApplication[] = [...others]
+		.sort((x, y) => (x.runCreatedAt < y.runCreatedAt ? -1 : x.runCreatedAt > y.runCreatedAt ? 1 : x.scenarioId < y.scenarioId ? -1 : 1))
+		.map((o) => {
+			const reason =
+				o.engineVersion !== b.engineVersion
+					? `not counted: run by engine ${o.engineVersion}, the baseline by ${b.engineVersion}`
+					: o.startDate !== b.startDate || o.endDate !== b.endDate
+						? 'not counted: another period than the baseline’s'
+						: o.runoffModel !== b.runoffModel
+							? 'not counted: another runoff model than the baseline’s'
+							: null;
+			return {
+				scenarioId: o.scenarioId,
+				scenarioName: o.scenarioName,
+				status: o.status,
+				outcome: o.outcome,
+				runId: o.runId,
+				runCreatedAt: o.runCreatedAt,
+				comparable: reason === null,
+				reason,
+				ewrDays: diff(baseDays, o.ewrDaysNotMet),
+				reservePp: pp(o.reserveOutlet?.rate)
+			};
+		});
+	const counted = applications.filter((x) => x.comparable);
+	const sumOf = (vals: (number | null)[]) => (vals.some((v) => v !== null) ? vals.reduce<number>((t, v) => t + (v ?? 0), 0) : null);
+	const total = { ewrDays: sumOf(counted.map((x) => x.ewrDays)), reservePp: sumOf(counted.map((x) => x.reservePp)) };
+	let withThis: EvidenceCumulative['withThis'] = null;
+	if (a) {
+		const own = { ewrDays: diff(baseDays, a.summary.catchment.ewrDaysNotMet), reservePp: pp(outlet ? matchSite(a.summary.ewrAssurance ?? [], outlet)?.overall.rate : null) };
+		withThis = { ewrDays: sumOf([total.ewrDays, own.ewrDays]), reservePp: sumOf([total.reservePp, own.reservePp]) };
+	}
+	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null };
+	return { applications, counted: counted.length, truncated, total, withThis };
+}
+
+/** Page 1's row over the other applications (application reports only). */
+function cumulativeRow(c: EvidenceCumulative): EvidenceRow {
+	const all = c.applications.filter((x) => x.comparable).map((x) => `“${x.scenarioName}”`);
+	const names = all.length > CUMULATIVE_NAMED ? [...all.slice(0, CUMULATIVE_NAMED), `${all.length - CUMULATIVE_NAMED} more in § 4`] : all;
+	const left = c.applications.length - c.counted;
+	return {
+		id: 'otherApplications',
+		label: 'Other applications on this baseline, summed',
+		basis: CUMULATIVE_BASIS,
+		subject: null,
+		unit: 'days',
+		higherIsWorse: true,
+		baseline: null,
+		application: null,
+		change: c.counted && !c.truncated ? { run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null } : null,
+		notAssessed: c.truncated ? CUMULATIVE_TRUNCATED(c.applications.length) : !c.applications.length ? CUMULATIVE_NONE : !c.counted ? `Not assessed: none of the ${c.applications.length} other applications ran on this baseline’s engine, period and runoff model (§ 4).` : null,
+		note: c.counted && !c.truncated
+			? `${c.counted} application${c.counted === 1 ? '' : 's'}: ${names.join(', ')}${left ? `; ${left} more not counted (§ 4)` : ''}.${c.withThis?.ewrDays != null ? ` With this one: ${signed(fixed(c.withThis.ewrDays, 0))} days.` : ''}`
+			: null
+	};
+}
+
+function userRows(b: EvidenceRunInput, a: EvidenceInput['application'], paired: PairedSummary | null, change: ChangeCell): EvidenceUser[] {
+	const n = paired?.members ?? 0;
 	const owned = new Set(a?.scenario.ownedNodeIds ?? []);
 	type Node = { nodeId: string; name: string; kind: 'farm' | 'user'; fractionSupplied: number };
 	const nodes = (run: EvidenceRunInput): Node[] => [
@@ -684,6 +1071,12 @@ function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): Evidenc
 		...(run.summary.users ?? []).map((u) => ({ nodeId: u.nodeId, name: u.name, kind: 'user' as const, fractionSupplied: u.fractionSupplied }))
 	];
 	const rel = (run: EvidenceRunInput | null, id: string) => run?.summary.supplyAssurance?.reliability.find((r) => r.nodeId === id) ?? null;
+	/** A unit in both runs: its change in pp, with the paired band on its share supplied. */
+	const supplyChange = (nodeId: string, fa: number | null, fb: number | null): EvidenceChange | null => {
+		if (!a || fa === null || fb === null) return null;
+		const p = paired?.supply?.find((x) => x.nodeId === nodeId);
+		return change((fb - fa) * 100, p?.band, worseOf(p?.worse, n), 100, ENSEMBLE_MEASURES_SINCE);
+	};
 	const na = nodes(b);
 	const nb = a ? nodes(a) : [];
 	const inB = new Map(nb.map((x) => [x.nodeId, x]));
@@ -703,7 +1096,8 @@ function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): Evidenc
 			timeReliabilityB: rb?.timeReliability ?? null,
 			annualReliabilityA: ra?.annualReliability ?? null,
 			annualReliabilityB: rb?.annualReliability ?? null,
-			onlyIn: a && !y ? 'baseline' : null
+			onlyIn: a && !y ? 'baseline' : null,
+			change: supplyChange(x.nodeId, finite(x.fractionSupplied), y ? finite(y.fractionSupplied) : null)
 		};
 	});
 	for (const y of nb) {
@@ -720,10 +1114,235 @@ function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): Evidenc
 			timeReliabilityB: rb?.timeReliability ?? null,
 			annualReliabilityA: null,
 			annualReliabilityB: rb?.annualReliability ?? null,
-			onlyIn: 'application'
+			onlyIn: 'application',
+			change: null
 		});
 	}
 	return rows;
+}
+
+/**
+ * § 4: per EWR site (outlet first), the days each farm or water user upstream
+ * got its whole demand while the site's EWR was not met, both runs (the
+ * environmentalist's "the river fails while users are served in full").
+ * Sites and units matched by id; units never served in full on a failing day
+ * are listed with 0, so the table shows who was checked.
+ */
+function servedSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceServedWhileFailing {
+	const la = b.summary.servedWhileEwrFails;
+	const lb = a ? a.summary.servedWhileEwrFails : null;
+	if (!la) return { notAssessed: beforeMeasures(a ? 'the baseline was' : 'the run was'), sites: [] };
+	if (a && !lb) return { notAssessed: beforeMeasures('the application was'), sites: [] };
+	const owned = new Set(a?.scenario.ownedNodeIds ?? []);
+	return {
+		notAssessed: null,
+		sites: la.map((sa) => {
+			const sb = lb?.find((x) => x.nodeId === sa.nodeId) ?? null;
+			const inA = new Map(sa.units.map((u) => [u.nodeId, u]));
+			const inB = new Map((sb?.units ?? []).map((u) => [u.nodeId, u]));
+			const ids = [...sa.units.map((u) => u.nodeId), ...(sb?.units ?? []).map((u) => u.nodeId).filter((id) => !inA.has(id))];
+			const units = ids.map((id) => {
+				const ua = inA.get(id);
+				const ub = inB.get(id);
+				return { nodeId: id, name: (ub ?? ua)!.name, own: owned.has(id), daysA: ua ? ua.days : null, daysB: a ? (ub ? ub.days : null) : null };
+			});
+			const reported = (u: (typeof units)[number]) => (a ? (u.daysB ?? -1) : (u.daysA ?? -1));
+			units.sort((x, y) => reported(y) - reported(x) || (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+			return {
+				key: sa.nodeId ?? 'outlet',
+				name: sa.name,
+				isOutlet: sa.nodeId === null,
+				basis: sa.basis === 'ruleTable' ? 'the Reserve rule table’s daily requirement' : 'the pragmatic EWR',
+				daysNotMetA: sa.daysNotMet,
+				daysNotMetB: a ? (sb?.daysNotMet ?? null) : null,
+				units
+			};
+		})
+	};
+}
+
+/** The "read these first" count: units served in full on days a site below them failed, in the reported run; null when none was. */
+function servedFlag(sv: EvidenceServedWhileFailing, app: boolean): string | null {
+	const items = sv.sites.flatMap((site) =>
+		site.units.flatMap((u) => {
+			const days = app ? u.daysB : u.daysA;
+			if (!days) return [];
+			return [{ days, text: `${u.name}${u.own ? ' (the applicant’s)' : ''} ${days} day${days === 1 ? '' : 's'} at ${site.isOutlet ? 'the outlet' : site.name}${app && u.daysA !== null ? ` (baseline ${u.daysA})` : ''}` }];
+		})
+	);
+	if (!items.length) return null;
+	const SHOWN = 5;
+	const units = new Set(sv.sites.flatMap((s) => s.units.filter((u) => (app ? u.daysB : u.daysA)).map((u) => u.nodeId))).size;
+	items.sort((x, y) => y.days - x.days);
+	const more = items.length > SHOWN ? `; and ${items.length - SHOWN} more` : '';
+	return `${units} unit${units === 1 ? ' got its' : 's got their'} whole demand on days an EWR site below ${units === 1 ? 'it' : 'them'} was not met${app ? ' in the application' : ''}: ${items
+		.slice(0, SHOWN)
+		.map((x) => x.text)
+		.join('; ')}${more} (§ 4).`;
+}
+
+// ---------------------------------------------------------------------------
+// § 5 Registered water use (WP-3.10)
+// ---------------------------------------------------------------------------
+
+/** Why § 5 and its page-1 row have nothing to compare. */
+export const ALLOCATIONS_NOT_ASSESSED = {
+	none: 'Not assessed: the runs carry no registered volumes (WARMS registrations, licences), so modelled use can’t be compared with a registered volume. An editor adds them on the Allocations tab; the model then has to run again.',
+	notMatched: (n: number) =>
+		`Not assessed: none of the runs’ ${n} registered volume${n === 1 ? ' is' : 's are'} matched to a farm or water user in them. Match them on the Allocations tab and run the model again.`,
+	noWholeYear: 'Not assessed: the runs cover no whole water year, so no year’s use is judged.'
+} as const;
+
+const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
+const hasVolume = (n: AllocationNodeComparison) => n.surface.allocationIds.length > 0 || n.groundwater.allocationIds.length > 0;
+const allocationCount = (c: NonNullable<EvidenceRunInput['allocations']>) =>
+	c.nodes.reduce((k, n) => k + n.surface.allocationIds.length + n.groundwater.allocationIds.length, 0) + c.unmatchedAllocationIds.length + c.notInRunAllocationIds.length;
+
+function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
+	const whole = side.years.filter((y) => !y.partial);
+	const n = (f: (y: AllocationYear) => boolean) => whole.filter(f).length;
+	return {
+		wholeYears: whole.length,
+		over: n((y) => y.status === 'over'),
+		within: n((y) => y.status === 'within'),
+		under: n((y) => y.status === 'under'),
+		noVolume: n((y) => y.status === 'unregistered' || y.status === 'none')
+	};
+}
+
+/**
+ * § 5: per farm or water user with a registered volume in either run, per
+ * water source with one, every water year of both runs: the registered
+ * volume and the modelled use, and whole years counted over, within and
+ * under the band. Units are matched by node id (as § 4 matches them) and
+ * named by the unit, never the holder (D3).
+ */
+function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
+	const ca = b.allocations ?? null;
+	const cb = a ? (a.allocations ?? null) : null;
+	const owned = new Set(a?.scenario.ownedNodeIds ?? []);
+	const unitsA = (ca?.nodes ?? []).filter(hasVolume);
+	const unitsB = (cb?.nodes ?? []).filter(hasVolume);
+	const total = Math.max(ca ? allocationCount(ca) : 0, cb ? allocationCount(cb) : 0);
+	const inA = new Map((ca?.nodes ?? []).map((n) => [n.nodeId, n]));
+	const inB = new Map((cb?.nodes ?? []).map((n) => [n.nodeId, n]));
+	const ids = [...unitsA.map((n) => n.nodeId), ...unitsB.map((n) => n.nodeId).filter((id) => !unitsA.some((n) => n.nodeId === id))];
+
+	const units: EvidenceAllocationUnit[] = ids.map((nodeId) => {
+		const na = inA.get(nodeId) ?? null;
+		const nb = inB.get(nodeId) ?? null;
+		const sources: EvidenceAllocationSource[] = [];
+		for (const src of SOURCES) {
+			const sa = na ? na[src] : null;
+			const sb = nb ? nb[src] : null;
+			if (!sa?.allocationIds.length && !sb?.allocationIds.length) continue;
+			const byYearA = new Map((sa?.years ?? []).map((y) => [y.waterYear, y]));
+			const byYearB = new Map((sb?.years ?? []).map((y) => [y.waterYear, y]));
+			const years = [...new Set([...byYearA.keys(), ...byYearB.keys()])].sort((x, y) => x - y);
+			sources.push({
+				waterSource: src,
+				years: years.map((wy): EvidenceAllocationYear => {
+					const ya = byYearA.get(wy) ?? null;
+					const yb = byYearB.get(wy) ?? null;
+					const any = (ya ?? yb)!;
+					return {
+						waterYear: wy,
+						days: any.days,
+						yearDays: any.yearDays,
+						partialA: ya ? ya.partial : null,
+						partialB: yb ? yb.partial : null,
+						registeredA: ya ? ya.registeredM3 : null,
+						modelledA: ya ? ya.modelledM3 : null,
+						statusA: ya ? ya.status : null,
+						registeredB: yb ? yb.registeredM3 : null,
+						modelledB: yb ? yb.modelledM3 : null,
+						statusB: yb ? yb.status : null
+					};
+				}),
+				countsA: sa?.allocationIds.length ? countsOf(sa) : null,
+				countsB: sb?.allocationIds.length ? countsOf(sb) : null,
+				meanModelledA: sa ? sa.meanModelledM3PerYear : null,
+				meanRegisteredA: sa ? sa.meanRegisteredM3PerYear : null,
+				meanModelledB: sb ? sb.meanModelledM3PerYear : null,
+				meanRegisteredB: sb ? sb.meanRegisteredM3PerYear : null
+			});
+		}
+		const n = (nb ?? na)!;
+		return { nodeId, name: n.name, kind: n.kind, own: owned.has(nodeId), onlyIn: a && !nb ? 'baseline' : a && !na ? 'application' : null, sources };
+	});
+
+	return {
+		notAssessed: total === 0 ? ALLOCATIONS_NOT_ASSESSED.none : units.length === 0 ? ALLOCATIONS_NOT_ASSESSED.notMatched(total) : null,
+		modeA: b.summary.allocations?.mode ?? null,
+		modeB: a ? (a.summary.allocations?.mode ?? null) : null,
+		toleranceA: ca?.tolerance ?? null,
+		toleranceB: cb?.tolerance ?? null,
+		units,
+		notMatchedA: ca ? ca.unmatchedAllocationIds.length + ca.notInRunAllocationIds.length : 0,
+		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null
+	};
+}
+
+/** Σ over units and sources of a run's whole years over, and of those judged. */
+function allocationTotals(al: EvidenceAllocations, run: 'A' | 'B') {
+	let over = 0;
+	let judged = 0;
+	for (const u of al.units)
+		for (const s of u.sources) {
+			const c = run === 'A' ? s.countsA : s.countsB;
+			if (c) ((over += c.over), (judged += c.wholeYears));
+		}
+	return { over, judged };
+}
+
+const bandWords = (tol: number | null) => (tol === null ? 'the band' : `±${fixed(tol * 100, 0)} %`);
+/** The band, both runs' when they differ: "±10 %", or "±10 % (baseline), ±15 % (application)". */
+const bandsWords = (al: EvidenceAllocations, app: boolean) =>
+	app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB
+		? `${bandWords(al.toleranceA)} (baseline), ${bandWords(al.toleranceB)} (application)`
+		: bandWords(al.toleranceA ?? al.toleranceB);
+const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not recorded' : ALLOCATION_MODE_LABEL[m]);
+
+/** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
+function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
+	const A = allocationTotals(al, 'A');
+	const B = app ? allocationTotals(al, 'B') : null;
+	const judged = A.judged + (B?.judged ?? 0);
+	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
+	const mode =
+		!app || al.modeA === al.modeB ? `allocation mode: ${modeWords(al.modeA)}` : `allocation mode: baseline ${modeWords(al.modeA)}, application ${modeWords(al.modeB)}`;
+	const capped = al.modeA === 'cap' || al.modeB === 'cap' ? '; a capped run’s use can’t go far above its volume' : '';
+	return {
+		id: 'registeredUse',
+		label: 'Registered vs modelled use',
+		basis: `Whole water years in which a unit’s modelled use is more than ${bandsWords(al, app)} above its registered volume, summed over units and water sources (modelled, not metered)`,
+		subject: null,
+		unit: 'unit-years',
+		higherIsWorse: true,
+		baseline: notAssessed ? null : A.over,
+		application: notAssessed || !B ? null : B.over,
+		change: app ? { run: notAssessed || !B ? null : B.over - A.over, band: null, bandNote: NO_BAND.notCarried, worse: null } : null,
+		notAssessed,
+		note: notAssessed ? null : `${A.over} of ${A.judged} unit-years judged${B ? `; application ${B.over} of ${B.judged}` : ''}; ${mode}${capped} (§ 5)`
+	};
+}
+
+/** The "read these first" line when the reported run's use is above a registered volume; null when it never is. */
+function allocationsOverFlag(al: EvidenceAllocations, app: boolean): string | null {
+	const items = al.units.flatMap((u) =>
+		u.sources.flatMap((s) => {
+			const c = app ? s.countsB : s.countsA;
+			if (!c || c.over === 0) return [];
+			const was = app ? (s.countsA ? ` (baseline ${s.countsA.over} of ${s.countsA.wholeYears})` : ' (no volume in the baseline)') : '';
+			return [`${u.name}${u.own ? ' (the applicant’s)' : ''}, ${s.waterSource} water, ${c.over} of ${c.wholeYears} whole water years${was}`];
+		})
+	);
+	if (!items.length) return null;
+	const SHOWN = 5;
+	const more = items.length > SHOWN ? `; and ${items.length - SHOWN} more` : '';
+	const differ = app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB;
+	const tol = `${bandWords(app ? (al.toleranceB ?? al.toleranceA) : al.toleranceA)}${differ ? ` (the application’s band; the baseline’s is ${bandWords(al.toleranceA)})` : ''}`;
+	return `The ${app ? 'application' : 'baseline'}’s modelled use is more than ${tol} above the registered volume: ${items.slice(0, SHOWN).join('; ')}${more} (§ 5).`;
 }
 
 // ---------------------------------------------------------------------------
@@ -739,6 +1358,8 @@ function evidenceFlags(
 		assumptionsChanged: boolean;
 		rule: DeclaredUncertaintyRule | null;
 		cited: EvidenceEnsembleInput | null;
+		allocations: EvidenceAllocations;
+		served: EvidenceServedWhileFailing;
 	}
 ): EvidenceFlag[] {
 	const b = input.baseline;
@@ -782,6 +1403,19 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
+		if (below) {
+			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
+			add(
+				`belowTable-${s.key}`,
+				'caution',
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
+				}`,
+				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'
+			);
+		}
 		if (s.naturalMar && Math.abs(s.naturalMar.differencePct) > 10)
 			add(`nmar-${s.key}`, 'caution', `At ${s.name} the run’s natural MAR differs from the determination’s by ${signed(fixed(s.naturalMar.differencePct, 0))} %.`, 'The requirement read off the run’s natural flow shifts with it.');
 	}
@@ -795,6 +1429,10 @@ function evidenceFlags(
 	if (b.summary.chirpsCorrection && infill) add('chirps', 'count', `CHIRPS satellite rain fills gaps in the catchment rain (bias-corrected; factors fitted on ${infill} shared days).`);
 	const dq = b.summary.dataQuality?.seriesChecks?.length ?? 0;
 	if (dq) add('dataQuality', 'count', `${dq} data-quality check${dq === 1 ? '' : 's'} fired on the baseline’s inputs (§ 3).`);
+	const over = allocationsOverFlag(ctx.allocations, !!a);
+	if (over) add('allocationsOver', 'caution', over, 'Modelled, not metered: arithmetic against the registered volume, not a finding on whether a use is lawful.');
+	const served = servedFlag(ctx.served, !!a);
+	if (served) add('servedWhileFailing', 'count', served, 'On those days the river’s shortfall was not shared with those users.');
 	const wa = b.summary.warnings.length;
 	const wb = a?.summary.warnings.length ?? 0;
 	add('warnings', 'count', a ? `${wa} warning${wa === 1 ? '' : 's'} on the baseline and ${wb} on the application, verbatim in Appendix A.5.` : `${wa} run warning${wa === 1 ? '' : 's'}, verbatim in Appendix A.5.`);
@@ -806,7 +1444,9 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	const out: string[] = [];
 	for (const c of checks) if (!c.passed && c.fix) out.push(`${c.label}: ${c.fix}`);
 	for (const r of rows) if (r.notAssessed) out.push(`${r.label}${r.subject ? ` at ${r.subject}` : ''}: ${r.notAssessed}`);
-	if (river.length) out.push('The recommended ecological category (REC) of each EWR site is not given: expect the assessor to ask which Reserve determination applies (ER-D2).');
+	const noRec = river.filter((s) => s.category === null).map((s) => s.name);
+	if (noRec.length)
+		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table in Settings.`);
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');

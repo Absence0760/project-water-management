@@ -349,4 +349,47 @@ describe('dam storage (WP-3.5)', () => {
 		await expect(asOwner(`UPDATE node SET supply_rule = 'pumpFirst' WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
 		await expect(asOwner(`UPDATE node SET pump_capacity_m3_day = -1 WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
 	});
+
+	it('stores a farm’s hands-off flow and River to dam by month, runs them, and refuses invalid ones (issue #204)', async () => {
+		const u = await signUp('HandsOff');
+		const projectId = await project(u, 'Hands-off flow');
+		const outlet = node('Outlet', null);
+		// Winter-only filling (water-year order Oct–Sep: May–Sep off) and a hands-off flow that keeps the EWR too.
+		const winter = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
+		const farm = node('Upper', outlet.id, { divertCapacityM3Day: 500, supplyRule: 'riverFirst', pumpCapacityM3Day: 900, handsOffM3Day: monthly(150), handsOffEwr: true, divertMonthlyM3Day: winter });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 20_000 }], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === farm.id)).toMatchObject({ handsOffM3Day: monthly(150), handsOffEwr: true, divertMonthlyM3Day: winter, divertCapacityM3Day: 500 });
+		// Positive control for the defaults: a node saved without the fields reads back with them off.
+		expect(got.find((n) => n.id === outlet.id)).toMatchObject({ handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
+
+		// The run passes its self-checks, the new operating-rules check among them.
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'hands-off' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.verification.checks.map((c: { id: string }) => c.id)).toContain('operatingRules');
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, nodes: [{ ...outlet, handsOffM3Day: monthly(10) }, farm] }, /only a farm has a hands-off flow/);
+		await bad({ ...model, nodes: [{ ...outlet, handsOffEwr: true }, farm] }, /only a farm has a hands-off flow/);
+		await bad({ ...model, nodes: [outlet, { ...farm, handsOffM3Day: [1, 2, 3] }] }, /handsOffM3Day/);
+		await bad({ ...model, nodes: [outlet, { ...farm, divertMonthlyM3Day: [...winter.slice(1), -1] }] }, /divertMonthlyM3Day/);
+		await expect(asOwner(`UPDATE node SET hands_off_m3_day = '{1,2,3}' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
+		await expect(asOwner(`UPDATE node SET divert_monthly_m3_day = array_fill(-1::float8, ARRAY[12]) WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
+		await expect(asOwner(`UPDATE node SET hands_off_ewr = NULL WHERE id = $1`, [farm.id])).rejects.toThrow(/null/i);
+		for (const col of ['hands_off_m3_day', 'divert_monthly_m3_day']) {
+			await expect(asOwner(`UPDATE node SET ${col} = array_fill(1::float8, ARRAY[13]) WHERE id = $1`, [farm.id]), `${col}: 13 values`).rejects.toThrow(/check/i);
+			// A NULL element: 0 <= ALL alone lets it through (NULL, not false), so the check names it (migration 114).
+			await expect(asOwner(`UPDATE node SET ${col} = '{1,1,1,1,1,NULL,1,1,1,1,1,1}' WHERE id = $1`, [farm.id]), `${col}: a NULL month`).rejects.toThrow(/check/i);
+		}
+		// Positive control: 12 values ≥ 0 go in.
+		await asOwner(`UPDATE node SET hands_off_m3_day = array_fill(0::float8, ARRAY[12]) WHERE id = $1`, [farm.id]);
+	});
 });

@@ -67,6 +67,55 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Fixed, engine 1.22.0 (pending the hydrologist, issue #66)"
 	},
 	{
+		"id": "A1",
+		"source": "finding",
+		"severity": "Medium (Reserve rule-table sites whose natural flow falls below the table's driest point: (100 − P_last) % of months with the percentile from the run, 1 % at the DRM's 99 % point; more with the gazette's curve when the model runs drier)",
+		"title": "Below a rule table's driest point the requirement is scaled down with the flow, not held at the drought flow",
+		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+	},
+	{
+		"id": "A2",
+		"source": "finding",
+		"severity": "Low",
+		"title": "A rule table is interpolated linearly between its % points; Sawunyama & Hughes (2010) interpolate on a log scale",
+		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+	},
+	{
+		"id": "A3",
+		"source": "finding",
+		"severity": "Medium (sites whose modelled natural flow differs from the determination's)",
+		"title": "By default a month's natural percentile comes from the run's own natural flow, not the gazette's natural curve",
+		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; pending the hydrologist)"
+	},
+	{
+		"id": "A4",
+		"source": "finding",
+		"severity": "Medium (sites with a Reserve rule table)",
+		"title": "The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default, while the Reserve compliance report follows the rule table",
+		"status": "Built (engine 1.3.0, issue #64), off by default; pending the hydrologist and the assessor"
+	},
+	{
+		"id": "A5",
+		"source": "finding",
+		"severity": "Medium (sites with a low-flow requirement and floods in dry months)",
+		"title": "By default a low-flow requirement is judged on the month's total volume, so a flood month can pass its low flows while its base flow was short",
+		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; pending the hydrologist"
+	},
+	{
+		"id": "A6",
+		"source": "finding",
+		"severity": "Medium (rule tables with high-flow components)",
+		"title": "A high-flow event is found in daily flow by the engine's own rule: at least half the duration at or above half the peak",
+		"status": "Decided (engine 1.9.0, licensing-authority persona review of issue #46; pending the hydrologist)"
+	},
+	{
+		"id": "A7",
+		"source": "finding",
+		"severity": "Medium (rule tables with high-flow components)",
+		"title": "A year is asked for no more high-flow events than its natural flow had, counted per water year, and the DRM's high-flow volumes are not checked",
+		"status": "Decided (from the literature, engine 0.33.0; pending the hydrologist)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

@@ -36,6 +36,21 @@ async function raw(u: User, method: string, path: string, body?: unknown) {
 	return { status: r.status, text: await r.text() };
 }
 
+/**
+ * `fn` over `items`, at most `limit` at a time, in order. The route sweeps below make a request per route (and
+ * body) per user: one at a time they grew past the test timeout as the API grew, and each request is independent.
+ */
+async function eachLimited<T, R>(items: readonly T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+	const out = new Array<R>(items.length);
+	let next = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(limit, items.length) }, async () => {
+			for (let i = next++; i < items.length; i = next++) out[i] = await fn(items[i]!);
+		})
+	);
+	return out;
+}
+
 /** A runnable team catchment (outlet gauge + one farm, A-pan, rain, observed flow) with one run. */
 async function teamProject(admin: User, teamId: string, name = `Team catchment ${MARKER}`) {
 	const created = await admin.call('POST', '/projects', { name, teamId });
@@ -356,8 +371,7 @@ describe('losing the team revokes every team project, rows the user wrote includ
 		expect(gets.length).toBeGreaterThan(50);
 
 		// Positive control for the route sweep: as a member, reads succeed.
-		let ok = 0;
-		for (const t of gets) if ((await raw(s.member, 'GET', t.path)).status < 400) ok++;
+		const ok = (await eachLimited(gets, 8, (t) => raw(s.member, 'GET', t.path))).filter((r) => r.status < 400).length;
 		expect(ok).toBeGreaterThan(20);
 
 		await expectRevoked(s, async () => {
@@ -369,13 +383,15 @@ describe('losing the team revokes every team project, rows the user wrote includ
 		const before = await ownerCounts(s.projectId);
 		for (const u of [s.member, s.admin]) {
 			const own = { ...ids, userId: u.id };
-			for (const t of projectRoutes(own)) {
-				for (const body of t.method === 'GET' || t.method === 'DELETE' ? [undefined] : [{}, { name: MARKER, label: MARKER, body: MARKER, role: 'owner', userId: u.id }]) {
-					const r = await raw(u, t.method, t.path, body);
-					if (r.status < 400) leaks.push(`${u === s.member ? 'member' : 'admin'}: ${t.route} → ${r.status}`);
-					else if (r.text.includes(MARKER)) leaks.push(`${t.route} → ${r.status} with project data in the error`);
-				}
-			}
+			const calls = projectRoutes(own).flatMap((t) =>
+				(t.method === 'GET' || t.method === 'DELETE' ? [undefined] : [{}, { name: MARKER, label: MARKER, body: MARKER, role: 'owner', userId: u.id }]).map((body) => ({ t, body }))
+			);
+			const results = await eachLimited(calls, 8, ({ t, body }) => raw(u, t.method, t.path, body));
+			results.forEach((r, i) => {
+				const { t } = calls[i]!;
+				if (r.status < 400) leaks.push(`${u === s.member ? 'member' : 'admin'}: ${t.route} → ${r.status}`);
+				else if (r.text.includes(MARKER)) leaks.push(`${t.route} → ${r.status} with project data in the error`);
+			});
 		}
 		expect(leaks).toEqual([]);
 		expect(await ownerCounts(s.projectId)).toEqual(before);
@@ -383,7 +399,9 @@ describe('losing the team revokes every team project, rows the user wrote includ
 		expect((await s.member.call('POST', `/teams/${s.teamId}/members`, { email: s.member.email, role: 'admin' })).status).toBe(404);
 		// The creator (still in the team, and the direct owner) keeps everything.
 		expect((await s.creator.call('GET', `/projects/${s.projectId}`)).body.project.role).toBe('owner');
-	});
+		// Its own budget: a team project with two model runs, then every project route for two users, a sweep that grows
+		// with the API (~3 s here, past vitest's 5 s default on CI's runners), not a wait on anything slow.
+	}, 30_000);
 
 	it('leaving the team', async () => {
 		const s = await setup();

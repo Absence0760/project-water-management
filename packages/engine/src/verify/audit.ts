@@ -18,13 +18,14 @@
 // cumulative EWR Z. A farm with a feature whose rules the formulas don't
 // carry yet (boreholes, a release rule, a river pump, off-takes, demand
 // objects, senior users downstream, an allocation cap, a storage reset, a
-// survey curve, a daily A-pan series on a dam, a dam capacity that changes
-// over the run) gets `unsupported` instead, naming each, rather than a
+// survey curve, a hands-off flow, River to dam by month, a daily A-pan
+// series on a dam, a dam capacity that changes over the run) gets `unsupported` instead, naming each, rather than a
 // workbook whose numbers would disagree.
 import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
+import { operatingOf } from '../network/supply';
 import { upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
 
@@ -226,6 +227,10 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	const why = new Set<string>();
 	for (const [key, feature] of AUDIT_UNSUPPORTED_SERIES) if (run.farm.has(key)) why.add(feature);
 	if (demandObjectsByNode(model, []).get(n.id)) why.add('demand objects');
+	// Operating rules (engine ≥ 1.32.0): they change O by month and by the day's flow.
+	const ops = operatingOf(n, []);
+	if (ops.handsOff) why.add('a hands-off flow');
+	if (ops.divertM3DayByMonth) why.add('River to dam by month');
 	const cap = n.damCapacityM3 > 0 ? n.damCapacityM3 : 0;
 	if (cap > 0 && resolveDamCurve(n)) why.add('a dam survey curve');
 	if (cap > 0 && (run.apanDailyDays ?? 0) > 0) why.add("a daily A-pan series (the dam's evaporation)");

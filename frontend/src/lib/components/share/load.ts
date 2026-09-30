@@ -1,12 +1,13 @@
 // Loading the /share page (WP-2.3 phase 2): the view, then the two flow
 // series for the chart. Pure over an API, so the outcomes are unit-tested.
 import { ApiError } from '$lib/api/client';
-import type { ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import type { ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
 import { flowMonths, type FlowMonth } from './chart';
 
 export interface ShareApi {
 	view: (token: string) => Promise<ShareView>;
 	series: (token: string, key: ShareSeriesKey) => Promise<ShareSeries>;
+	scenario: (token: string) => Promise<ShareScenario>;
 }
 
 export type ShareLoad =
@@ -45,6 +46,23 @@ export async function loadShare(api: ShareApi, token: string | null): Promise<Sh
 		} catch {
 			return { state: 'ready', view, months: null, chartFailed: true };
 		}
+	} catch (e) {
+		if (is404(e)) return { state: 'dead' };
+		return { state: 'error', message: e instanceof Error ? e.message : String(e) };
+	}
+}
+
+/** A scenario link (WP-3.15): the same dead-link and error states as the catchment view's. */
+export type ScenarioShareLoad =
+	| { state: 'nolink' }
+	| { state: 'dead' }
+	| { state: 'error'; message: string }
+	| { state: 'ready'; view: ShareScenario };
+
+export async function loadScenarioShare(api: Pick<ShareApi, 'scenario'>, token: string | null): Promise<ScenarioShareLoad> {
+	if (!token) return { state: 'nolink' };
+	try {
+		return { state: 'ready', view: await api.scenario(token) };
 	} catch (e) {
 		if (is404(e)) return { state: 'dead' };
 		return { state: 'error', message: e instanceof Error ? e.message : String(e) };

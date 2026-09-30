@@ -134,6 +134,12 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		const days = r.rows.find((x) => x.id === 'ewrDays')!;
 		expect(days.change?.band?.p50).not.toBeNull();
 		expect(days.change?.worse?.n).toBe(r.uncertainty.paired?.members);
+		// The engine-1.33.0 measures, recomputed with the scenario's own units (the backend passes them: Upper has no
+		// crop, so no demand and no pairs for its own-supply band, which exists all the same).
+		expect(r.uncertainty.paired?.carriesMeasures).toBe(true);
+		expect(r.uncertainty.paired?.ownSupply?.band.n).toBe(0);
+		expect(r.rows.find((x) => x.id === 'noFlowDays')!.change?.worse?.n).toBe(r.uncertainty.paired?.members);
+		expect(r.servedWhileFailing.notAssessed).toBeNull();
 		expect(r.checks.filter((c) => !c.passed && c.blocksIssue).map((c) => c.id)).toEqual([]);
 		expect(r.issuable).toBe(true);
 		// The input diff and the ledger of application runs on this baseline.
@@ -188,5 +194,140 @@ describe('settings.evidenceUncertaintyRule', () => {
 		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.settings.evidenceUncertaintyRule).toBeNull();
 		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { evidenceUncertaintyRule: RULE } })).status).toBe(200);
 		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.settings.evidenceUncertaintyRule).toEqual(RULE);
+	});
+});
+
+describe('§ 5 registered water use (WP-3.10)', () => {
+	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares by unit, never with the holder or registration', async () => {
+		// The nominated baseline ran without allocations.
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).toMatch(/^Not assessed: the runs carry no registered volumes/);
+		const created = await owner.call('POST', `/projects/${projectId}/allocations`, {
+			nodeId: farmId,
+			registrationNo: 'REG-EVIDENCE-7',
+			authorisation: 'registration',
+			holder: 'Evidence Holder Person',
+			waterSource: 'surface',
+			volumeM3PerYear: 100_000
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		// A stored run reads as it ran: adding a volume now doesn't reach it.
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).not.toBeNull();
+
+		const withVolume = await newRun('With a registered volume');
+		const res = await report(viewer, withVolume);
+		expect(res.status).toBe(200);
+		const r = res.body.report as EvidenceReport;
+		expect(r.version).toBe('evidence-4');
+		expect(r.allocations.notAssessed).toBeNull();
+		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
+		const s = r.allocations.units[0]!.sources[0]!;
+		expect(s.waterSource).toBe('surface');
+		// Three years from 1 October 2018: two whole water years, and part of a third.
+		expect(s.countsA?.wholeYears).toBe(2);
+		expect(s.years.filter((y) => !y.partialA).every((y) => Math.abs(y.registeredA! - 100_000) < 1e-6)).toBe(true);
+		expect(r.rows.find((x) => x.id === 'registeredUse')?.notAssessed).toBeNull();
+		// Volumes, never the holder's name or registration number (D3), even though the viewer's project has them.
+		const text = JSON.stringify(res.body);
+		expect(text).not.toContain('Evidence Holder Person');
+		expect(text).not.toContain('REG-EVIDENCE-7');
+		// Positive control for that: the owner's allocation list carries the holder.
+		expect(JSON.stringify((await owner.call('GET', `/projects/${projectId}/allocations`)).body)).toContain('Evidence Holder Person');
+		// The same numbers as the Allocations tab for the run (G14).
+		const tab = (await viewer.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison;
+		const tabYears = tab.nodes.find((n: { nodeId: string }) => n.nodeId === farmId).surface.years as { modelledM3: number; registeredM3: number }[];
+		expect(s.years.map((y) => [y.modelledA, y.registeredA])).toEqual(tabYears.map((y) => [y.modelledM3, y.registeredM3]));
+		expect((await owner.call('DELETE', `/projects/${projectId}/allocations/${created.body.allocation.id}`)).status).toBe(204);
+	});
+});
+
+describe('§ 4 other applications on the baseline (the cumulative table, evidence-3)', () => {
+	const scenarioRunOf = async (u: User, name: string, value: number, own: boolean) => {
+		const created = await u.call('POST', `/projects/${projectId}/scenarios`, {
+			name,
+			baseRunId: baseRun,
+			ops: [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value }],
+			...(own ? { ownedNodeIds: [farmId] } : {})
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const sid = created.body.scenario.id as string;
+		const ran = await u.call('POST', `/projects/${projectId}/scenarios/${sid}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		return { sid, runId: ran.body.run.id as string };
+	};
+	const submit = async (u: User, sid: string) => expect((await u.call('POST', `/projects/${projectId}/scenarios/${sid}/submit`, {})).status).toBe(200);
+	let teamSubmitted: { sid: string; runId: string };
+	let teamDraft: { sid: string; runId: string };
+	let applicant: { sid: string; runId: string };
+	let approved: { sid: string; runId: string };
+	let refused: { sid: string; runId: string };
+	let teamSubmittedNewest: string;
+	let assessor: User;
+
+	beforeAll(async () => {
+		assessor = await signUp('EvAssessor');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+		// An application's base must be published; the contributor applies for the farm they are linked to.
+		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun })).status).toBe(201);
+		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${contributor.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		applicant = await scenarioRunOf(contributor, 'Applicant dam', 200_000, false);
+		await submit(contributor, applicant.sid);
+		teamSubmitted = await scenarioRunOf(owner, 'Second dam', 250_000, true);
+		await submit(owner, teamSubmitted.sid);
+		teamDraft = await scenarioRunOf(owner, 'Draft idea', 300_000, true);
+		// Decided: an approval is still proposed use on this baseline (listed), a refusal isn't (never listed).
+		approved = await scenarioRunOf(owner, 'Approved weir', 120_000, true);
+		await submit(owner, approved.sid);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${approved.sid}/decide`, { outcome: 'approved_with_conditions' })).status).toBe(200);
+		refused = await scenarioRunOf(owner, 'Refused weir', 130_000, true);
+		await submit(owner, refused.sid);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${refused.sid}/decide`, { outcome: 'refused' })).status).toBe(200);
+		// A second run of the submitted team scenario: its newest is the one read.
+		const again = await owner.call('POST', `/projects/${projectId}/scenarios/${teamSubmitted.sid}/runs`, {});
+		expect(again.status, JSON.stringify(again.body)).toBe(201);
+		teamSubmittedNewest = again.body.run.id as string;
+	}, 300_000);
+
+	const others = async (u: User) => {
+		const res = await report(u, appRun);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		return (res.body.report as EvidenceReport).cumulative;
+	};
+
+	it('lists each other submitted application with its own change, and sums them; never the report’s own scenario', async () => {
+		const c = await others(owner);
+		// Oldest run first: the applicant's, the approved weir's, then Second dam's newest run.
+		expect(c.applications.map((x) => x.scenarioName)).toEqual(['Applicant dam', 'Approved weir', 'Second dam']);
+		expect(c.applications.map((x) => [x.status, x.outcome])).toEqual([
+			['submitted', null],
+			['decided', 'approved_with_conditions'],
+			['submitted', null]
+		]);
+		expect(c.applications.every((x) => x.comparable)).toBe(true);
+		expect(c.truncated).toBe(false);
+		// A refused application is no longer proposed: never listed.
+		expect(JSON.stringify(c)).not.toContain('Refused weir');
+		const days = async (runId: string) => (await owner.call('GET', runPath(runId))).body.run.summary.catchment.ewrDaysNotMet as number;
+		const base = await days(baseRun);
+		// Of a scenario's runs, the newest of its ops is read.
+		const second = c.applications.find((x) => x.scenarioName === 'Second dam')!;
+		expect(second.runId).toBe(teamSubmittedNewest);
+		expect(c.applications.some((x) => x.runId === teamSubmitted.runId)).toBe(false);
+		expect(second.ewrDays).toBe((await days(teamSubmittedNewest)) - base);
+		expect(c.total.ewrDays).toBe(c.applications.reduce((t, x) => t + x.ewrDays!, 0));
+		expect(c.withThis?.ewrDays).toBe(c.total.ewrDays! + (await days(appRun)) - base);
+		const r = (await report(owner, appRun)).body.report as EvidenceReport;
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: null, change: { run: c.total.ewrDays, band: null } });
+	});
+
+	it('hides from a viewer the submitted application only editors may read, and lists no draft (RLS)', async () => {
+		const c = await others(viewer);
+		// Positive control: the team's submitted and decided scenarios, which a viewer reads.
+		expect(c.applications.map((x) => x.scenarioName)).toEqual(['Approved weir', 'Second dam']);
+		// The applicant's submitted application is the editors' to read, not a viewer's.
+		expect((await viewer.call('GET', runPath(applicant.runId))).status).toBe(404);
+		// A draft is visible to the viewer, but isn't an application yet: never listed.
+		expect((await viewer.call('GET', runPath(teamDraft.runId))).status).toBe(200);
+		expect(JSON.stringify(c)).not.toContain('Draft idea');
+		expect(JSON.stringify(await others(owner))).not.toContain('Draft idea');
 	});
 });

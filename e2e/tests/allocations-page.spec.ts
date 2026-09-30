@@ -290,3 +290,100 @@ test('a long run: the picked unit shows its latest six water years until "Show a
 		await expect(years).toHaveCount(12);
 	}
 });
+
+test('the over/under-use chart: every unit and source with a volume in the list’s order, ten until "Show all", described by the years above the band; px for px on a phone', async ({ page, owner }) => {
+	test.setTimeout(120_000);
+	void owner;
+	const project = await seedManyAllocations(page.request, 'Allocations chart');
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await openAllocations(page, project.id);
+	const plot = page.getByTestId('allocation-use-plot');
+	const svg = plot.getByRole('img', { name: /^Modelled use as a share of the registered volume, per hydrological unit and water source/ });
+	const labels = plot.locator('svg text.lbl');
+	const marks = plot.locator('svg .mark');
+
+	// Every unit here has a volume, so the chart follows the list: its first ten, in the list's order.
+	await expect(labels).toHaveCount(10);
+	await compareCard(page).getByRole('button', { name: 'Show all 36 hydrological units and sources' }).click();
+	const listed = await units(page).evaluateAll((els) =>
+		els.map((el) => `${el.querySelector('.name')!.textContent!.trim()}, ${el.querySelector('.src')!.textContent!.trim().toLowerCase()}`)
+	);
+	// What each label draws (its own text, not its tooltip's) and its tooltip, the full label.
+	const drawn = await labels.evaluateAll((ts) =>
+		ts.map((t) => ({ text: [...t.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''), full: t.querySelector('title')!.textContent }))
+	);
+	expect(drawn.map((d) => d.full)).toEqual(listed.slice(0, 10));
+	// A long name is cut with "…" to fit its column, keeping the source whole; the full name is in the table.
+	drawn.forEach((d, i) => {
+		const [head, tail] = d.text.split('…');
+		expect(listed[i]!.startsWith(head!)).toBe(true);
+		if (tail !== undefined) expect(listed[i]!.endsWith(tail)).toBe(true);
+		expect(d.text).toMatch(/, (surface water|groundwater)$/);
+	});
+	// Each mark's tooltip names its year and share.
+	await expect(marks.first().locator('title')).toHaveText(/^\d{4}\/\d{2}: .*% of the registered volume$/);
+	await expect(marks).toHaveCount(10 * 3);
+	// Folded, the description still counts every row, and says how many are drawn.
+	await expect(svg).toHaveAccessibleDescription(/ in \d+ of 36 units and water sources\. The chart draws the first 10 of 36 units and water sources\.$/);
+	await expect(plot).toContainText('Modelled, not metered.');
+	await expect(plot.locator('figcaption')).toContainText(/the shaded band ±\d+\s%/);
+
+	// Show all: every unit and source (30 surface + 6 groundwater), three whole years each; the small volumes (every
+	// seventh unit) are far past the axis, an arrowhead at its edge.
+	const all = page.getByRole('button', { name: 'Show all 36 in the chart' });
+	await expect(all).toHaveAttribute('aria-controls', 'alloc-use-plot');
+	await expect(all).toHaveAttribute('aria-expanded', 'false');
+	await all.click();
+	await expect(labels).toHaveCount(36);
+	await expect(marks).toHaveCount(36 * 3);
+	expect(await plot.locator('svg path.mark').count()).toBeGreaterThan(0);
+	await expect(page.getByRole('button', { name: 'Show the first 10 in the chart' })).toHaveAttribute('aria-expanded', 'true');
+
+	// The description counts the years above the band: the same count as the table's "Above registered" rows.
+	await page.getByRole('button', { name: "Show all units' water years (108 rows)" }).click();
+	// A part year can be above too, but isn't drawn or counted (this seed has none: every year is whole).
+	const aboveRows = page.getByTestId('allocation-compare-table').locator('tbody tr').filter({ hasText: 'Above registered' }).filter({ hasNotText: 'part (' });
+	const above = await aboveRows.count();
+	expect(above).toBeGreaterThan(0);
+	const unitsAbove = new Set(
+		await aboveRows.evaluateAll((trs) => trs.map((tr) => `${tr.children[0]!.textContent!.trim()}:${tr.children[1]!.textContent!.trim()}`))
+	).size;
+	await expect(svg).toHaveAccessibleDescription(
+		new RegExp(`^${above} of 108 whole water years are above the ±\\d+\\s% band \\(over \\d+\\s% of the registered volume\\), in ${unitsAbove} of 36 units and water sources\\.$`)
+	);
+	expect(await innerScrollers(page)).toEqual([]);
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await expectNoViolations(page);
+	await page.emulateMedia({ colorScheme: 'light' });
+
+	// Drawn px for px at its box's width, so its text stays 11 px: at 1440, and on a phone, where each label takes
+	// its own line above its marks.
+	for (const [label, viewport] of [
+		['desktop', { width: 1440, height: 960 }],
+		['phone', { width: 390, height: 844 }]
+	] as const) {
+		await page.setViewportSize(viewport);
+		const figure = plot.getByTestId('use-plot');
+		await expect
+			.poll(() => figure.evaluate((f) => Math.abs(Number(f.getAttribute('data-width')) - Math.round(f.clientWidth))), { message: label })
+			.toBeLessThanOrEqual(1);
+		const smallest = await plot.locator('svg text').evaluateAll((ts) => Math.min(...ts.map((t) => t.getBoundingClientRect().height)));
+		expect(smallest, label).toBeGreaterThanOrEqual(11);
+		const firstLabel = await labels.first().boundingBox();
+		const firstMark = await marks.first().boundingBox();
+		if (label === 'phone') expect(firstMark!.y).toBeGreaterThan(firstLabel!.y + firstLabel!.height - 1);
+		else expect(firstMark!.x).toBeGreaterThan(firstLabel!.x + firstLabel!.width);
+		// Nothing runs through a label: neither the 100 % line nor the band crosses one.
+		const crossings = await plot.locator('svg').evaluate((svg) => {
+			const boxes = (sel: string) => [...svg.querySelectorAll(sel)].map((e) => e.getBoundingClientRect());
+			const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+			const lbls = boxes('text.lbl');
+			return [...boxes('line.hundred'), ...boxes('rect.band')].filter((r) => lbls.some((l) => hit(r, l))).length;
+		});
+		expect(crossings, label).toBe(0);
+		await expectNoSidewaysScroll(page);
+	}
+	await expectNoViolations(page);
+});

@@ -9,7 +9,43 @@ export type NoteTarget =
 	| { kind: 'project' }
 	| { kind: 'node'; nodeId: string; name: string; isFarm: boolean }
 	| { kind: 'run'; runId: string; label: string }
-	| { kind: 'setting'; key: string; label: string };
+	| { kind: 'setting'; key: string; label: string }
+	/**
+	 * A scenario's comments (WP-3.15): `audiences` are the visibilities the
+	 * caller may post with (the server holds the rule, 115_scenario_share_notes),
+	 * the first being the default.
+	 */
+	| { kind: 'scenario'; scenarioId: string; name: string; audiences: NoteVisibility[] };
+
+/** Who reads a scenario note, in the drawer's words (docs/data-model.md § Notes has the matrix). */
+export const AUDIENCE_LABEL: Record<NoteVisibility, string> = {
+	team: 'The project team',
+	farm: 'The team and its farmers',
+	assessors: 'The assessors only',
+	parties: 'The assessors and the applicant’s party',
+	public_participation: 'Public participation: shown with your name on the shared link'
+};
+
+/** A note's audience as a short badge on the note. */
+export const AUDIENCE_BADGE: Record<NoteVisibility, string> = {
+	team: 'Team',
+	farm: 'Shown to its farmers',
+	assessors: 'Assessors',
+	parties: 'Parties',
+	public_participation: 'Public'
+};
+
+/**
+ * The audiences a caller may post with on a scenario, their natural one
+ * first (the server's scenarioVisibility default): an assessor writes to the
+ * assessors; one of the application's parties to the parties; anyone else
+ * takes part in public participation only.
+ */
+export function scenarioAudiences(who: { assessor: boolean; party: boolean }): NoteVisibility[] {
+	if (who.assessor) return ['assessors', 'parties', 'public_participation', 'team'];
+	if (who.party) return ['parties', 'assessors', 'public_participation'];
+	return ['public_participation'];
+}
 
 /**
  * The settings groups that take notes, keyed as the note's setting_key (a
@@ -41,6 +77,8 @@ export function targetQuery(t: NoteTarget): NotesQuery {
 			return { runId: t.runId };
 		case 'setting':
 			return { settingKey: t.key };
+		case 'scenario':
+			return { scenarioId: t.scenarioId };
 	}
 }
 
@@ -56,6 +94,8 @@ export function createBody(t: NoteTarget, body: string, visibility: NoteVisibili
 			return { body: text, runId: t.runId, visibility: 'team' };
 		case 'setting':
 			return { body: text, settingKey: t.key, visibility: 'team' };
+		case 'scenario':
+			return { body: text, scenarioId: t.scenarioId, visibility: t.audiences.includes(visibility) ? visibility : (t.audiences[0] ?? 'public_participation') };
 	}
 }
 
@@ -71,6 +111,8 @@ export function countFor(counts: NoteCounts | null, t: NoteTarget): number {
 			return counts.runs[t.runId] ?? 0;
 		case 'setting':
 			return Object.entries(counts.settings).reduce((n, [k, c]) => (k === t.key || k.startsWith(`${t.key}.`) ? n + c : n), 0);
+		case 'scenario':
+			return counts.scenarios?.[t.scenarioId] ?? 0;
 	}
 }
 
@@ -85,6 +127,8 @@ export function targetTitle(t: NoteTarget): string {
 			return `Notes on run ${t.label}`;
 		case 'setting':
 			return `Notes on ${t.label}`;
+		case 'scenario':
+			return `Comments on “${t.name}”`;
 	}
 }
 
@@ -93,6 +137,7 @@ export const notesButtonLabel = (count: number, about: string) => (count > 0 ? `
 
 /** A note's target in a mixed list (the Overview's recent notes). */
 export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): string {
+	if (n.target === 'scenario') return 'A scenario';
 	switch (n.target) {
 		case 'project':
 			return 'The project';
@@ -108,8 +153,10 @@ export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): 
 }
 
 /** Where a note's target is shown in the workspace (the Overview's recent notes link there). */
-export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingKey'>): string | null {
+export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingKey'> & { scenarioId?: string | null }): string | null {
 	switch (n.target) {
+		case 'scenario':
+			return n.scenarioId ? `?tab=scenarios&scenario=${encodeURIComponent(n.scenarioId)}` : '?tab=scenarios';
 		case 'project':
 			return null;
 		case 'node':

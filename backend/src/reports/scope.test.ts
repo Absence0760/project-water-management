@@ -18,6 +18,7 @@ describe('scopeAllows', () => {
 		`/projects/${P}/runs/${R}/series`,
 		`/projects/${P}/runs/${R}/day`,
 		`/projects/${P}/runs/${R}/signoffs`,
+		`/projects/${P}/runs/${R}/publication`,
 		`/projects/${P.toUpperCase()}/runs/${R.toUpperCase()}`
 	])('allows GET %s (the report page’s reads)', (path) => {
 		expect(scopeAllows(scope, 'GET', path)).toBe(true);
@@ -30,6 +31,9 @@ describe('scopeAllows', () => {
 		`/projects/${P}/runs/${OTHER}/series`,
 		`/projects/${P}/runs`,
 		`/projects/${P}/members`,
+		// The project's publication list (notes, the whole history): the report reads its run's own place instead.
+		`/projects/${P}/publication`,
+		`/projects/${P}/runs/${OTHER}/publication`,
 		`/projects/${P}/model`,
 		`/projects/${P}/series/${OTHER}`,
 		`/projects/${P}/export.json`,

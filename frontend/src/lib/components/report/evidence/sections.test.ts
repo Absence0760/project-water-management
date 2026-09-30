@@ -13,6 +13,7 @@ describe('evidenceSections', () => {
 			'uncertainty',
 			'credibility',
 			'users',
+			'allocations',
 			'appendixInputs',
 			'appendixVerify',
 			'applicantStatement'
@@ -20,7 +21,7 @@ describe('evidenceSections', () => {
 	});
 
 	it('leaves out only the applicant’s statement for baseline evidence', () => {
-		expect(evidenceSections({ mode: 'baseline' }).map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'appendixInputs', 'appendixVerify']);
+		expect(evidenceSections({ mode: 'baseline' }).map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'appendixInputs', 'appendixVerify']);
 	});
 
 	it('numbers the sections and letters the appendices', () => {
@@ -30,6 +31,7 @@ describe('evidenceSections', () => {
 			'2. Uncertainty',
 			'3. Model and data',
 			'4. Other users',
+			'5. Registered water use',
 			'Appendix A. Inputs and assumptions',
 			'Appendix B. Limitations, sign-off and verification',
 			'Appendix C. Applicant’s statement'

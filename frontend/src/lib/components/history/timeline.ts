@@ -282,9 +282,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'scenario.unshared':
 			return s.self ? 'Stopped reading a shared application' : 'Stopped sharing an application';
 		case 'share_link.created':
-			return 'Created a share link';
+			return s.targetKind === 'scenario' ? 'Created a share link to a scenario' : 'Created a share link';
 		case 'share_link.revoked':
-			return 'Revoked a share link';
+			return s.targetKind === 'scenario' ? 'Revoked a share link to a scenario' : 'Revoked a share link';
 		case 'api_key.created':
 			return `Created an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'api_key.revoked':

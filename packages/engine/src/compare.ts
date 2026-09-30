@@ -1050,6 +1050,8 @@ const RULE_FIELDS: Record<string, ScalarField> = {
 	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
 	// Engine ≥ 1.5.0: gazetted, desktop estimate or other; absent = not stated.
 	sourceKind: { label: 'kind of source', fmt: (v) => ewrSourceConfidence(v as EwrRuleSourceKind | null | undefined) ?? 'not stated' },
+	// ER9: the recommended ecological category, a label (no result depends on it); absent = not given.
+	category: { label: 'recommended ecological category (REC)', fmt: (v) => (v ? String(v) : 'not given') },
 	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
 	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },
@@ -1200,6 +1202,8 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
+	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
+	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
 	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')],
 	// GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for the groundwater tables.
@@ -1291,6 +1295,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
+		// Operating rules (engine ≥ 1.32.0).
+		const ho = optionalMonthlyChange(x.handsOffM3Day, y.handsOffM3Day, 'm³/day', 'none');
+		if (ho) parts.push(`hands-off flow ${ho}`);
+		const dv = optionalMonthlyChange(x.divertMonthlyM3Day, y.divertMonthlyM3Day, 'm³/day', 'the one diversion capacity');
+		if (dv) parts.push(`River to dam by month ${dv}`);
 		if (!same(x.damCurve ?? null, y.damCurve ?? null)) {
 			const rows = (c: typeof x.damCurve) => (c && c.length ? `${c.length} rows` : 'none (power law)');
 			parts.push(`dam survey curve ${rows(x.damCurve)} → ${rows(y.damCurve)}${x.damCurve?.length && y.damCurve?.length ? ' (values changed)' : ''}`);
@@ -1711,6 +1720,9 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
 		['dam release', 'damReleaseM3Day'],
+		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
+		['hands-off flow', 'handsOffM3Day'],
+		['River to dam by month', 'divertMonthlyM3Day'],
 		['dam survey curve', 'damCurve'],
 		['drains into', 'downstreamNodeId']
 	];

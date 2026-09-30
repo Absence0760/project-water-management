@@ -141,7 +141,13 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   to run of river is `supplyRule` → `runOfRiver` and `damCapacityM3` → 0;
   raised levels are `supplyStopPct` and `supplyTriggerPct`. "What if this
   farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
-  `riverFirst` and `pumpCapacityM3Day` → 1200.
+  `riverFirst` and `pumpCapacityM3Day` → 1200. The farm's other operating
+  rules (engine ≥ 1.32.0, [model.md §2.7h](./model.md)): `handsOffM3Day`
+  (12 values ≥ 0 m³/day, Oct–Sep, or null = none), `handsOffEwr` (true /
+  false) and `divertMonthlyM3Day` (River to dam by month, 12 values ≥ 0 or
+  null = the one `divertCapacityM3Day`); farms only (a save rule), each the
+  applicant's proposal on their own farm. "Pump only above 300 m³/day" is
+  `handsOffM3Day` → twelve 300s.
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md), pending
   the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
@@ -262,8 +268,8 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   use, so a table a scenario sets is one Settings would save; its errors are
   the Settings form's sentences (`ops[0].table.source: Say where the table
   comes from …`). Applied, the table is kept as the run reads it: the source
-  trimmed, no natural grid unless it is the natural source, `sourceKind`
-  and `naturalMarMcm` (engine ≥ 1.11.0, the determination's natural MAR)
+  trimmed, no natural grid unless it is the natural source, `sourceKind`,
+  `category` (the REC, ER9) and `naturalMarMcm` (engine ≥ 1.11.0, the determination's natural MAR)
   only when stated.
 - **Problems** (the op is skipped): a table that fails those checks; a site
   that isn't the outlet or a gauge (`an EWR site is the outlet or a gauge;
@@ -626,7 +632,8 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
-  headline, farm and daily-overlay components (issue #8), where a feature
+  headline, farm, assurance-of-supply (issue #70) and daily-overlay
+  components (issue #8), where a feature
   only one side has (a river pump, boreholes, a release rule, land cover)
   reads as 0 on the other ([run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has)); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
@@ -856,6 +863,37 @@ scenario is `'team'`, and behaves exactly as above).
   `application: true` and no name until the application is decided (every
   viewer reads the project's history).
 
+### Sharing and comments (WP-3.15)
+
+`115_scenario_share_notes.sql`; [api.md § Share](./api.md#share),
+[§ Notes](./api.md#notes); [security.md § Share
+links](./security.md#share-links).
+
+- **A read-only link to one application.** Once it is submitted or decided,
+  an assessor (an editor who reads it) or its applicant makes a share link
+  to it (`POST …/share-links` with `targetKind: 'scenario'`), from the
+  Application panel's Share dialog. Whoever holds the link reads, signed
+  out, a redacted projection (`app_share_scenario`): its name, description,
+  status and decision, its changes with the applicant's own units named and
+  every other anonymous, each change's class (only an application: a team
+  scenario's ops name every farm, so it is refused), the EWR at each site on the
+  baseline beside the application, and the catchment's totals only at five
+  or more farm holders. Results show only when both runs' stamps verify.
+  The link is dead while the application is withdrawn or back to draft.
+- **Comments.** A scenario's notes have three audiences beside `team`:
+  `assessors`, `parties` (the assessors and the applicant's party) and
+  `public_participation`, which any member contributor or above (an NGO
+  joins as a viewer) may post while the application is **open for
+  comment**: a live link, or decided after it was ever shared. Public comments show on
+  the link with their authors' names; editors moderate by soft delete. Every
+  edit of a scenario note keeps the text it replaced (`note_revision`,
+  `GET …/notes/:noteId/revisions`): a participation record must be complete,
+  and an application that drew public comments can't be deleted (`409`).
+  The full read/write matrix is in [data-model.md § Notes](./data-model.md#notes-037_notessql).
+- **Not yet:** evidence packs as a second target (`target_kind 'pack'`, a
+  `note.pack_id`) wait for `evidence_pack` (WP-3.14;
+  [followups.md § Applicants](./followups.md#applicants-wp-33)).
+
 Tests: `backend/src/scenarios/applications.db.test.ts` (RLS with positive
 controls: drafts hidden from the other applicant, the editors and viewers;
 the published run's row unreadable, its catchment series readable; submit,
@@ -867,6 +905,10 @@ each with its positive control; the party prune), `applicant.test.ts`
 (the projection and the mask), the engine's `overrides.test.ts` ("mask:
 names" and "mask: ids, counts and value rules"),
 `history/write-routes.db.test.ts` (each new route records its event),
+`share/scenario-share.db.test.ts` (WP-3.15: scenario links, their RLS and
+redaction, the note matrix and revisions), e2e
+`e2e/tests/scenario-share.spec.ts` (an NGO opens a link, signs in and
+comments; the assessor sees it; axe),
 the applicant's `ewrRule.set` in `applications.db.test.ts` (accepted,
 applied, classed baseline beside their own farm's proposal), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's

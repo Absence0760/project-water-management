@@ -1214,7 +1214,10 @@ sequenceDiagram
   request client (so the cookie lands in its jar), `page.goto`, a wait for
   `main[data-report-ready="true"]`, or the page's own "can't show this"
   message (no access, no run: failed at once, no retry), then
-  `page.pdf({ format: 'A4', printBackground: true })`. A hard timeout
+  `page.pdf({ format: 'A4', printBackground: true })` with the page's own
+  margins; the running footer is the page's CSS (`@page` margin boxes,
+  `report/printPage.ts`), so the PDF and the browser's print carry the same
+  one. A hard timeout
   (`REPORT_RENDER_TIMEOUT_MS`, 90 s locally, 100 s in the Lambda) covers the
   whole thing, and the browser is closed in `finally`. A timeout or a browser
   crash is retried (3 attempts); Playwright's own messages (URLs, call logs)
@@ -1298,14 +1301,17 @@ report in the browser from the ordinary API reads. With `&evidence` (issue
 licensing evidence report, and the data comes from one server call:
 `GET /projects/:id/runs/:runId/evidence-report`
 (`backend/src/evidence/report.ts`) reads the named run, its recorded base,
-the scenario, nominations, publications, history and ensembles in one
-read-only `withUser` transaction, recomputes the paired bands from the
+the scenario, nominations, publications, history, ensembles and the other
+applications on the same baseline in one read-only `withUser` transaction, recomputes the paired bands from the
 stored members, and hands it all to the engine's pure builder
 (`evidenceReport`, `packages/engine/src/evidence/`). The builder does no I/O
 and nothing time-dependent, so the same input always gives the same
 document: the refusal checks, the flags, page 1's rows and every section's
 figures are decided there, and the frontend
 (`lib/components/report/evidence/`, its own chunk) only draws them. One
+exception: page 1's licence impact by year class is the impact report's board,
+built in the browser from three daily series the page fetches; it moves into
+the builder with the pack. One
 builder is what lets an issued pack (WP-3.14) freeze the document as its
 manifest and rebuild it to check the hash. The evidence report prints from
 the browser only; `report_render` doesn't render it yet (that comes with

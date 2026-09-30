@@ -10,7 +10,7 @@ import { ENGINE_ERRATA } from './errata.generated';
 import { METHODOLOGY } from './methodology.generated';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
 import { packSignoffStatement, signoffStatement, signoffStatementText, type SignoffPack } from './signoff';
-import { moriasiNse, moriasiPbias, validationStatement } from './validation';
+import { moriasiNse, moriasiPbias, parseEngineBuild, validationStatement } from './validation';
 
 const bare = (over: Partial<RunSummary> = {}): RunSummary =>
 	({
@@ -103,6 +103,46 @@ describe('validationStatement', () => {
 		expect(v.legacy).toBe(true);
 		expect(v.calibration).toBeNull();
 		expect(v.selfChecks).toBeNull();
+	});
+
+	it('lists every flagged water year the check holds (issue #70)', () => {
+		const examples = Array.from({ length: 7 }, (_, k) => ({ date: `${2000 + k}-10-01`, endDate: `${2001 + k}-09-30`, value: 0.4 }));
+		const v = validationStatement({
+			summary: bare({ dataQuality: { observedAgreement: null, seriesChecks: [{ seriesKind: 'rain_catchment_mm', check: 'lowvschirps', days: 7 * 365, examples, text: '7 water years.' }], areaMismatches: [] } }),
+			engineVersion: '1.31.1',
+			legacy: false
+		});
+		expect(v.flaggedYears.map((y) => y.start)).toEqual(examples.map((e) => e.date));
+		expect(v.flaggedYearsMayBeCut).toBe(false);
+	});
+
+	it('says a run from before engine 1.31.1 that hit the old cap of 5 may list only some flagged years', () => {
+		const years = (n: number) => Array.from({ length: n }, (_, k) => ({ date: `${2000 + k}-10-01`, endDate: `${2001 + k}-09-30`, value: 0.4 }));
+		const cut = (engineVersion: string, n: number) =>
+			validationStatement({
+				summary: bare({ dataQuality: { observedAgreement: null, seriesChecks: [{ seriesKind: 'rain_catchment_mm', check: 'lowvschirps', days: n * 365, examples: years(n), text: `${n} water years.` }], areaMismatches: [] } }),
+				engineVersion,
+				legacy: false
+			}).flaggedYearsMayBeCut;
+		expect(cut('1.30.0', 5)).toBe(true);
+		expect(cut('0.31.2', 5)).toBe(true);
+		expect(cut('1.31.0', 5)).toBe(true);
+		// Under the cap, or on an engine that keeps them all: the list is whole.
+		expect(cut('1.30.0', 4)).toBe(false);
+		expect(cut('1.31.1', 5)).toBe(false);
+		expect(cut('1.32.0', 5)).toBe(false);
+		expect(cut('2.0.0', 5)).toBe(false);
+	});
+
+	it('reads the build record the site build injected, and nothing that isn’t one', () => {
+		const build = { version: '1.31.1', gitSha: '0123456789abcdef0123456789abcdef01234567', invariantsPassed: true, soakCases: 4000 };
+		expect(parseEngineBuild(JSON.stringify(build))).toEqual(build);
+		// Extra keys are dropped, not passed through.
+		expect(parseEngineBuild(JSON.stringify({ ...build, note: 'x' }))).toEqual(build);
+		for (const raw of [undefined, null, '', 'not json', 'null', '[]', '"1.31.1"']) expect(parseEngineBuild(raw)).toBeNull();
+		for (const bad of [{ version: 'v1' }, { gitSha: 'main' }, { invariantsPassed: 'yes' }, { soakCases: -1 }, { soakCases: 1.5 }]) {
+			expect(parseEngineBuild(JSON.stringify({ ...build, ...bad }))).toBeNull();
+		}
 	});
 
 	it('claims a build’s test results only for the version that build made', () => {

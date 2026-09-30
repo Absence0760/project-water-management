@@ -537,6 +537,22 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual([]);
 	});
 
+	it('lists a farm’s hands-off flow and River to dam by month changed, and not an older run’s absent fields (engine 1.32.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const winter = [0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500];
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, { handsOffM3Day: new Array(12).fill(300), handsOffEwr: true, divertMonthlyM3Day: winter });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: hands-off keeps the EWR no → yes',
+			'Rooikloof: hands-off flow none → 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 m³/day (Oct–Sep)',
+			'Rooikloof: River to dam by month the one diversion capacity → 0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500 m³/day (Oct–Sep)'
+		]);
+		// A run from before engine 1.32.0 has none of the fields: it reads as the defaults, so no change.
+		const c = copyWithFreshIds(a);
+		for (const n of c.model.nodes) Object.assign(n, { handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('lists individual boreholes added, changed and removed, matched across a copy by node and borehole name (WP-3.9)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
@@ -1427,6 +1443,20 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists a rule table’s REC changing (ER9); absent and null are both not given', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.category = 'B/C';
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) not given → B/C']);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.category = 'C';
+		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: recommended ecological category (REC) B/C → C']);
+		const d = structuredClone(a);
+		d.settings.ewrRules![0]!.category = null;
+		expect(texts(a, d)).toEqual([]);
+	});
+
 	it('lists the determination’s natural MAR changing (engine ≥ 1.11.0); absent and null are both not recorded', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];
@@ -1515,6 +1545,24 @@ describe('field history tables (settingsChangePaths, nodeChangeFields)', () => {
 		};
 		expect(diffInputs(a, b).map((c) => keyOf(c.text))).toEqual(['damCapacityM3', 'irrigationEfficiency']);
 		expect(new Set(labels.map(([l]) => l)).size).toBe(labels.length);
+	});
+
+	it('names the operating rules and supply fields (engine 1.32.0), the monthly rows included', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, {
+			supplyRule: 'riverFirst',
+			pumpCapacityM3Day: 1200,
+			handsOffM3Day: new Array(12).fill(300),
+			handsOffEwr: true,
+			divertMonthlyM3Day: new Array(12).fill(500)
+		});
+		const labels = nodeChangeFields();
+		const keyOf = (text: string) => {
+			const rest = text.slice('Rooikloof: '.length);
+			return labels.filter(([l]) => rest.startsWith(`${l} `)).sort((x, y) => y[0].length - x[0].length)[0]?.[1];
+		};
+		expect(diffInputs(a, b).map((c) => keyOf(c.text)).sort()).toEqual(['divertMonthlyM3Day', 'handsOffEwr', 'handsOffM3Day', 'pumpCapacityM3Day', 'supplyRule']);
 	});
 });
 

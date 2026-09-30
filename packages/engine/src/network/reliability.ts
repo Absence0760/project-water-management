@@ -339,8 +339,8 @@ type Calendar = ReturnType<typeof calendarOf>;
 /** Days in water year `wy` (1 Oct wy … 30 Sep wy + 1): 365 or 366. */
 const waterYearLength = (wy: number) => (Date.UTC(wy + 1, 9, 1) - Date.UTC(wy, 9, 1)) / 86_400_000;
 
-/** Is the day's demand fully met? */
-const isMet = (d: number, g: number) => d - g <= MET_NOISE * d;
+/** Is the day's demand fully met (the deficit within MET_NOISE of the demand)? Shared with ../reserve/riverMeasures.ts. */
+export const demandMet = (d: number, g: number) => d - g <= MET_NOISE * d;
 
 export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number, to: number, threshold: number): SupplyReliability {
 	const months = Array.from({ length: 12 }, () => ({ demandDays: 0, metDays: 0, demandM3: 0, suppliedM3: 0 }));
@@ -385,7 +385,7 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 		}
 		demandDays++;
 		m.demandDays++;
-		if (isMet(d, g)) {
+		if (demandMet(d, g)) {
 			metDays++;
 			m.metDays++;
 			endRun();
