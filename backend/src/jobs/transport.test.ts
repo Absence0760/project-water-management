@@ -113,3 +113,37 @@ describe('the report messages (render-requests / render-results)', () => {
 		expect(() => reportRenderer('lambda')).toThrow(/unknown REPORT_RENDERER/);
 	});
 });
+
+describe('the evidence pack messages (116_pack_render, the same two queues)', () => {
+	const ids = { packId: '00000000-0000-4000-8000-000000000006', projectId: '00000000-0000-4000-8000-000000000002' };
+	const request = { v: 1, type: 'render_pack', ...ids, token: 'A'.repeat(43) };
+	const SHA = 'ab'.repeat(32);
+
+	it('parses a pack render request: the pack, its project and the token, nothing more', () => {
+		expect(parseRenderRequest(JSON.stringify(request))).toEqual(request);
+		expect(parseRenderRequest(JSON.stringify({ ...request, token: 'short' }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, packId: '../x' }))).toBeNull();
+		// A pack request names no run, no key and no URL.
+		expect(parseRenderRequest(JSON.stringify({ ...request, runId: '00000000-0000-4000-8000-000000000003' }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, key: 'packs/x.pdf' }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, url: 'http://169.254.169.254/' }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, type: 'rendered_pack' }))).toBeNull();
+	});
+
+	it('the worker understands a pack render result with the PDF’s SHA-256, success or failure, and nothing more', () => {
+		const ok = { v: 1, type: 'rendered_pack', packId: ids.packId, result: { ok: true, pages: 12, bytes: 5000, ms: 3000, sha256: SHA } };
+		const failed = { v: 1, type: 'rendered_pack', packId: ids.packId, result: { ok: false, error: 'the render took longer than 90 s', retry: true } };
+		expect(parseWorkerMessage(JSON.stringify(ok))).toEqual(ok);
+		expect(parseWorkerMessage(JSON.stringify(failed))).toEqual(failed);
+		// A success carries its hash, lowercase hex, and no key: the key is derived from the ids and the hash.
+		const { sha256: _, ...noHash } = ok.result;
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: noHash }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: { ...ok.result, sha256: SHA.toUpperCase() } }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: { ...ok.result, sha256: SHA.slice(1) } }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: { ...ok.result, key: 'packs/x.pdf' } }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, projectId: ids.projectId }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: { ...ok.result, pages: 0 } }))).toBeNull();
+		// A report's result shape is not a pack's, nor the other way round.
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, type: 'rendered' }))).toBeNull();
+	});
+});

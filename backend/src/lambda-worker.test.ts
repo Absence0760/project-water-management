@@ -10,7 +10,8 @@ vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
 const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
 vi.mock('./feeds/schedule.js', () => ({ acceptIngestResult: (m: unknown) => acceptIngestResult(m) }));
 const acceptRenderResult = vi.fn(async (_m: unknown) => 'queued' as string);
-vi.mock('./reports/schedule.js', () => ({ acceptRenderResult: (m: unknown) => acceptRenderResult(m) }));
+const acceptPackRenderResult = vi.fn(async (_m: unknown) => 'queued' as string);
+vi.mock('./reports/schedule.js', () => ({ acceptRenderResult: (m: unknown) => acceptRenderResult(m), acceptPackRenderResult: (m: unknown) => acceptPackRenderResult(m) }));
 const acceptMailEvent = vi.fn(async (_b: string): Promise<unknown> => ({ reason: 'bounce', suppressed: 1 }));
 vi.mock('./mail/suppression.js', () => ({ acceptMailEvent: (b: string) => acceptMailEvent(b) }));
 
@@ -111,6 +112,26 @@ describe('handler', () => {
 		expect(runTick).toHaveBeenCalledTimes(1);
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'render_result_dropped', messageId: 'm2', reason: 'unknown_report' }));
 		acceptRenderResult.mockClear();
+	});
+
+	it('queues each evidence pack’s render-results message as a pack_render job before the tick, and logs one it drops (116_pack_render)', async () => {
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const msg = {
+			v: 1,
+			type: 'rendered_pack',
+			packId: '00000000-0000-4000-8000-000000000006',
+			result: { ok: true, pages: 12, bytes: 5000, ms: 3000, sha256: 'ab'.repeat(32) }
+		};
+		acceptPackRenderResult.mockResolvedValueOnce('queued').mockResolvedValueOnce('unknown_pack');
+		await handler({ Records: [{ messageId: 'm1', body: JSON.stringify(msg) }, { messageId: 'm2', body: JSON.stringify(msg) }] } as never);
+		expect(acceptPackRenderResult).toHaveBeenCalledTimes(2);
+		expect(acceptPackRenderResult).toHaveBeenCalledWith(msg);
+		// A pack's answer is never taken for a report's.
+		expect(acceptRenderResult).not.toHaveBeenCalled();
+		expect(runTick).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'pack_render_result_dropped', messageId: 'm2', reason: 'unknown_pack' }));
+		acceptPackRenderResult.mockClear();
 	});
 
 	it('fails the batch when an ingest result can’t be queued (database down), so SQS retries it', async () => {

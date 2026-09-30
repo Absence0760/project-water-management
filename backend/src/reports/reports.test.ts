@@ -1,8 +1,8 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal } from './render.js';
-import { reportFileName, reportKey, storageKind } from './storage.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal, targetPath } from './render.js';
+import { packFileName, packPdfKey, packsBucket, reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -27,6 +27,44 @@ describe('reportFileName', () => {
 		expect(reportFileName('a"; filename="evil.exe', '2026-09-25')).toBe('a-filenameevilexe-report-2026-09-25.pdf');
 		expect(reportFileName('???', '2026-09-25')).toBe('catchment-report-2026-09-25.pdf');
 		expect(reportFileName('x'.repeat(200), '2026-09-25').length).toBeLessThan(90);
+	});
+});
+
+describe('packPdfKey (116_pack_render)', () => {
+	const K = '33333333-3333-4333-8333-333333333333';
+	const SHA = '0123456789abcdef'.repeat(4);
+	it('is content-addressed under the ids, as app_record_pack_pdf derives it, and refuses anything else', () => {
+		expect(packPdfKey(P, K, SHA)).toBe(`packs/${P}/${K}/${SHA}.pdf`);
+		expect(packPdfKey(P.toUpperCase(), K.toUpperCase(), SHA)).toBe(`packs/${P}/${K}/${SHA}.pdf`);
+		expect(() => packPdfKey('../other', K, SHA)).toThrow('UUIDs');
+		expect(() => packPdfKey(P, `${K}/..`, SHA)).toThrow('UUIDs');
+		expect(() => packPdfKey(P, K, SHA.toUpperCase())).toThrow('SHA-256');
+		expect(() => packPdfKey(P, K, `${SHA.slice(2)}/x`)).toThrow('SHA-256');
+	});
+});
+
+describe('packFileName', () => {
+	it('is a safe slug of the project name, the version and the short code', () => {
+		expect(packFileName('Upper Kleinberg — 2026', 3, 'ab12-cd34-ef56')).toBe('upper-kleinberg-2026-evidence-pack-v3-ab12-cd34-ef56.pdf');
+		expect(packFileName('a"; filename="evil.exe', 1, 'ab12-cd34-ef56"; x')).toBe('a-filenameevilexe-evidence-pack-v1-ab12-cd34-ef56.pdf');
+		expect(packFileName('???', 1, 'ab12-cd34-ef56')).toBe('catchment-evidence-pack-v1-ab12-cd34-ef56.pdf');
+	});
+});
+
+describe('packsBucket', () => {
+	it('is its own bucket: water-packs locally, PACKS_BUCKET when set', () => {
+		expect(packsBucket()).toBe(process.env.PACKS_BUCKET?.trim() || 'water-packs');
+		vi.stubEnv('PACKS_BUCKET', ' water-management-packs-000000000000 ');
+		expect(packsBucket()).toBe('water-management-packs-000000000000');
+	});
+});
+
+describe('targetPath', () => {
+	it('prints a run’s report route, or an issued pack’s own page (and nothing else)', () => {
+		const K = '33333333-3333-4333-8333-333333333333';
+		expect(targetPath({ projectId: P, runId: R })).toBe(`/projects/${P}/report?run=${R}`);
+		expect(targetPath({ projectId: P, packId: K })).toBe(`/projects/${P}/packs/${K}`);
+		expect(targetPath({ projectId: P, packId: '../../admin' })).toBe(`/projects/${P}/packs/..%2F..%2Fadmin`);
 	});
 });
 
