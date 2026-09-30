@@ -3265,7 +3265,9 @@ which checks every catchment tab).
   table (a group headed "Rule table at …") has the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
   desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
-  line), what **the table covers** (total flow, or low flows
+  line), the optional **Recommended ecological category (REC)** (ER9: A to
+  F or a band like B/C, upper-cased as typed, blank = not given; a label for
+  the evidence report, no result depends on it), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -5617,7 +5619,7 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
   Then **Expect questions about:** what an assessor will ask for, with the
-  way out (failed checks, "Not assessed" rows, the missing REC, no stored
+  way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).
 - **Board 2, the refusal.** When a refusing check fails (not the current
   nominated run, a legacy runoff model, a forecast run, another base run,
@@ -5641,8 +5643,11 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
   - **1 The river**: per rule-table site, the site strip (source, component,
-    unit, REC *Not given*, EWR % nMAR, natural MAR against the
-    determination's), the two heat maps (`grid.ts`, month × water year,
+    unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
+    against the determination's, and, when there are any, the months whose
+    natural flow is drier than the table's driest point, where the
+    requirement is scaled with the flow: G16, also a caution flag on page 1),
+    the two heat maps (`grid.ts`, month × water year,
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),

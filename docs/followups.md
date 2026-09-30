@@ -3645,11 +3645,27 @@ Left, from the design and the persona review (§11), each with its trigger.
       stated threshold, baseline and application, with a paired band once
       the ensemble carries it (a `MemberMetrics` field, `ENGINE_VERSION`
       bump). Trigger: before the pilot.
-- [ ] **A flag for flows below the rule table's lowest point** (G16). A
-      natural flow below the table's lowest percentile reads the lowest
-      requirement, which can hide a failure. Durable fix: count those months
-      per site in `ewrAssurance` and flag them on page 1. Trigger: before the
-      pilot.
+- [x] **A flag for flows below the rule table's lowest point** (G16). A
+      natural flow drier than the table's driest point gets a requirement
+      scaled down with the flow (model.md §2.9c), below the table's driest
+      requirement, which makes those months easier to meet. Durable fix:
+      count those months per site and flag them on page 1. **Done:** the
+      evidence report counts each site's months with `beyond: 'drier'`
+      (baseline and application, `belowTableA/B`), prints them in § 1's site
+      strip and flags them as a caution on page 1 with their effect (the
+      requirement shrinks with the flow), with the share expected by
+      construction when the percentile is from the run. The scaling rule
+      itself stays pending the hydrologist (model.md §2.9c).
+- [ ] **The Reserve method's open choices are not in the known-limitations
+      list.** model.md §2.9c lists them as pending the hydrologist (the
+      requirement below the driest point scaled or held, linear or log
+      interpolation, the percentile from the run or the table, the charge
+      source), and the evidence report's G16 flag says so, but
+      `docs/engine-audit.md` has no row for them, so the generated Known
+      limitations (printed on every validation statement) omit them. Durable
+      fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
+      choices, then `pnpm gen:liability`. Trigger: the next change to the
+      engine-audit tables, or before the pilot, whichever is first.
 - [ ] **Days a user is served in full while the site fails** (environmentalist).
       Durable fix: per unit, days fully supplied on days the outlet is below
       the EWR, in § 4 and as a count flag. Trigger: before the pilot.
@@ -3680,10 +3696,15 @@ Left, from the design and the persona review (§11), each with its trigger.
       supplied fraction in `MemberMetrics`, banded in `summarisePaired` with
       its worse-share (`ENGINE_VERSION` bump; old ensembles print *no band*).
       Trigger: before the pilot.
-- [ ] **REC per rule table (ER9).** The site strip prints REC *Not given*.
+- [x] **REC per rule table (ER9).** The site strip prints REC *Not given*.
       Durable fix: `category` and `reference` on `EwrRuleTable` (a settings
-      field, a baseline assumption in the diff). Trigger: the client's
-      hydrologist answers ER-D2.
+      field, a baseline assumption in the diff). **Done:** an optional
+      `category` (A–F or a band like B/C) on the rule table: Settings, the
+      settings API, `ewrRule.set`, the run-comparison diff and the § 1 site
+      strip (*Not given* and the assessor question only when absent). A
+      label: no result changes, no `ENGINE_VERSION` bump. No separate
+      `reference`: the table's required `source` is the gazette notice.
+      The values themselves still wait on ER-D2.
 - [ ] **Banded FDC (ER5).** The FDC chart has no band: the ensemble's FDC
       bands are daily against the pragmatic EWR. Durable fix: a banded
       monthly FDC check against the rule table per member. Trigger: an
