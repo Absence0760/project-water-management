@@ -2093,8 +2093,33 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 - Editors pick a **Draft pattern** (constant, or this farm's irrigation
   demand by month) and an **Assurance** (firm, 98, 95, 90 or 80 %), then
   **Work out the yield** or **Storage–yield curve** (disabled, with a title
-  saying why, for a farm with no dam). Viewers see the results with no
-  controls.
+  saying why, for a farm with no dam). Viewers see the results, and the
+  pattern and assurance for the preview below, with no run buttons.
+- **Preview** (a dashed box, "Not stored"; issue #73, WP-3.6 through
+  WP-1.17's preview worker): the firm yield for the pattern and assurance
+  picked, worked out at once in the browser, off the main thread
+  (`lib/preview/engine.worker.ts`, [architecture.md § Code
+  splitting](./architecture.md#code-splitting-frontend)). It starts on open and again
+  on each change of run, dam, pattern or assurance; a change mid-search
+  stops the old one (latest wins). It shows the yield per day and year and
+  the failure days and years at it, or the engine's reason it can't
+  (`data-state` = `computing`, `done` or `error`, the e2e's signal). It is
+  never saved: the stored results above come only from the job, which
+  **Work out the yield** queues. Viewers preview too. It runs on the input
+  the job uses: the run's own stored input (`GET …/runs/:runId/model-input`,
+  the last one fetched kept for the next dam), or under a scenario its saved
+  ops applied to its base run's input, with the job's search (`prepareYield`,
+  `firmYield`, the job's default tolerance 0.001), so on the same engine the
+  number is the job's (e2e `yield.spec.ts` checks both). Where it can
+  differ: the browser runs the web build's engine and the job the backend's,
+  released separately (`web@` / `backend@`), so after a release of one and
+  not the other the two may disagree by that engine change (the stored
+  result names its engine version); and a run from before migration 021 has
+  no stored series, so the job refuses it (409) while the preview reads the
+  project's current series when they are unchanged. Not offered for an
+  application (an applicant's scenario): the job applies it under the
+  applicant mask, which only the server builds. Only the firm yield, not the
+  curve (eleven searches).
 - The status line (a polite live region) follows the job on
   `GET /jobs` every 1.5 s: Queued, Running with its % (and a progress bar),
   then the results; Failed with the server's reason (never database text);
@@ -2110,8 +2135,6 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   table (capacity, yield per day and year, failed water years; the dam's own
   capacity marked "this dam"). A curve whose yield falls somewhere as the dam
   grows carries a warning saying why that can be real.
-- Not yet: the instant in-browser preview through the preview worker
-  ([followups.md](./followups.md)).
 
 ## Crops & demand
 
