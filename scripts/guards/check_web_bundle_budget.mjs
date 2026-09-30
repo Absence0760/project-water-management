@@ -1496,8 +1496,9 @@
 // 2026-09-30  total 1246 → 1250 KB (issue #71: measured 1247 with main @
 //             5502d0a6 merged). #225's evidence-report follow-ups now in
 //             main. Headroom ~3 KB.
-// 2026-09-30  total 1267 → 1271 KB (issue #71: measured 1268 with main @
-//             fe673f07 merged, against main's 1264). The issued pack's page
+// 2026-09-30  total 1267 → 1273 KB (issue #71: measured 1268 with main @
+//             fe673f07 merged, against main's 1264; 1270 with main @
+//             ff62bc2d, #236's applicant results). The issued pack's page
 //             (routes/projects/[id]/packs/[packId], its own chunk; the PDF
 //             prints it) and the packs API client. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
@@ -1510,7 +1511,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1271,
+	totalCodeKb: 1273,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
