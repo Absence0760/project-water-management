@@ -463,6 +463,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
 			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
 			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId));
+			// Registered volumes (engine ≥ 1.35.0) stay, as the file keeps them: the run lists them as on no unit
+			// (notInRunAllocationIds). Said here so the change isn't silent; counted only where the caller sees them.
+			const orphaned = (m.allocations ?? []).filter((a) => a.nodeId === n.id && see.item(a.id)).length;
+			if (orphaned) notes.push(`its ${orphaned} registered volume(s) are no longer on a unit in the run`);
 			if (Array.isArray(d.settings.ewrRules)) {
 				// Settings are catchment-wide and the applicant sees them in full.
 				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there', () => true);

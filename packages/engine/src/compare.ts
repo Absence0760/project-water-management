@@ -40,6 +40,7 @@ import {
 	type DemandObject,
 	DEMAND_OBJECT_CATEGORY_LABEL,
 	type FarmSummary,
+	type LandCoverPatch,
 	type NetworkNode,
 	type ArealRain,
 	type PeInput,
@@ -49,7 +50,6 @@ import {
 	type Transfer
 } from './project';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
-import type { LandCoverPatch } from './project';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
 import { comparePlausibility, type PlausibilityComparison } from './plausibility/compare';
 

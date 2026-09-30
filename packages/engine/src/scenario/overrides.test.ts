@@ -579,15 +579,30 @@ describe('hostile op names and fields (a worker message or request body is untru
 			hostile({ op: 'crop.remove', cropId: name }),
 			hostile({ op: 'node.move', nodeId: name, downstreamNodeId: 'G' }),
 			hostile({ op: 'node.move', nodeId: 'A', downstreamNodeId: name }),
-			hostile({ op: 'allocation.remove', allocationId: name })
+			hostile({ op: 'allocation.remove', allocationId: name }),
+			hostile({ op: 'crop.set', cropId: name, field: 'name', value: 'X' }),
+			hostile({ op: 'landCover.set', patchId: name, field: 'densityPct', value: 0.1 }),
+			hostile({ op: 'ewrRule.remove', siteNodeId: name }),
+			hostile({ op: 'allocation.set', allocation: { id: 'al9', nodeId: name, waterSource: 'surface', volumeM3PerYear: 1 } }),
+			hostile({ op: 'allocation.set', allocation: { id: name, nodeId: name, waterSource: 'surface', volumeM3PerYear: 1 } }),
+			hostile({
+				op: 'node.insert',
+				upstreamNodeIds: [name],
+				node: node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })
+			})
 		]);
 		expect(r.applied).toEqual([]);
-		expect(r.problems).toHaveLength(6);
+		expect(r.problems).toHaveLength(12);
 		for (const p of r.problems) expect(typeof p).toBe('string');
 		expect(r.problems[0]).toMatch(/is not a crop field a scenario can set/);
 		expect(r.problems[1]).toMatch(/is not a land-cover field a scenario can set/);
 		expect(r.input).toEqual(b);
 		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+		// Positive control: the id is only ever compared, so a volume that names it on a real unit is stored as data.
+		const kept = applyScenario(b, [hostile({ op: 'allocation.set', allocation: { id: name, nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1 } })]);
+		expect(kept.problems).toEqual([]);
+		expect(kept.input.model.allocations).toEqual([{ id: name, nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1 }]);
+		expect(Object.getPrototypeOf(kept.input.model.allocations![0])).toBe(Object.prototype);
 
 		const v = validateScenarioOps([
 			{ op: 'crop.set', cropId: 'c1', field: name, value: 1 },
@@ -1276,6 +1291,20 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
 		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);
 		expect(one({ op: 'allocation.remove', allocationId: 'al9' }).problems).toEqual(['op 1 (allocation.remove): registered volume al9 not found']);
+	});
+
+	it('node.remove keeps the unit’s registered volumes and says they are no longer on a unit in the run, counting only those the caller sees', () => {
+		const b = deepFreeze(withAllocations());
+		const r = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }]);
+		expect(r.problems).toEqual([]);
+		expect(r.applied[0]!.notes).toContain('its 1 registered volume(s) are no longer on a unit in the run');
+		expect(r.input.model.allocations).toEqual(b.model.allocations);
+		// A unit with none says nothing of them.
+		expect(applyScenario(b, [{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes.join(' ')).not.toMatch(/registered volume/);
+		// A volume hidden from the applicant is not theirs to count.
+		const masked = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }], { mask: { allocations: ['al2'] } });
+		expect(masked.problems).toEqual([]);
+		expect(masked.applied[0]!.notes.join(' ')).not.toMatch(/registered volume/);
 	});
 
 	it('a volume on the own unit is the proposal; on another’s, or replacing another’s, baseline', () => {
