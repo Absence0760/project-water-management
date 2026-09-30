@@ -565,6 +565,12 @@ writes its canonical link, `og:url` and `og:image` as absolute URLs from it
 (`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
 `/welcome` from `welcome.html` (`spa_rewrite`).
 
+The same build bakes in `ENGINE_BUILD`, the engine's build record
+(`scripts/release/engine-build.mjs`, run just before it: version, git SHA,
+invariants passed, soak cases), which the report's validation statement
+prints ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
+A local or e2e build has none and says *Not recorded for this build*.
+
 ### State of the Terraform before the first deploy
 
 Written and tested (plan-only, mocked providers), **nothing applied**:
@@ -840,7 +846,7 @@ Each deployable has its own release line, named `<component>@<semver>`
 | Tag | Workflow | Deploys |
 | --- | --- | --- |
 | `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's image (pushed to ECR; the renderer moved to it once it exists), then the health check |
-| `web@X.Y.Z` | `deploy-frontend.yml` | the static build to S3, then a CloudFront invalidation |
+| `web@X.Y.Z` | `deploy-frontend.yml` | the engine suite and a 1 600-case soak (a failure stops the release; the result is the build record the report's validation statement prints, model.md §2.10f), then the static build to S3, then a CloudFront invalidation |
 
 **Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
 nothing. Step by step:

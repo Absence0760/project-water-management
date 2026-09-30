@@ -5292,11 +5292,17 @@ March") is kept against what it is about.
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
 WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
 anyone who can view the project. Without `?run=` it reports the latest run. It
-uses only existing API routes (the project, the run with its settings and model
-snapshot, the series list, four catchment series) and is its own lazy route
-chunk. A non-member gets the workspace's "This project doesn't exist or you
-don't have access to it"; a project with no runs, or a run that no longer
-exists, says so with a link to Runs & results.
+reads the project, the run with its settings and model snapshot, the series
+list, four catchment series, the run's sign-offs and its place in the
+project's publications (`GET …/runs/:runId/publication`, issue #70), and is
+its own lazy route chunk. A non-member gets the workspace's "This project
+doesn't exist or you don't have access to it"; a farmer (403 on the project)
+is sent to their farm page, as the workspace sends them; any other role
+below viewer (an applicant) reads "The catchment report isn’t part of your
+role in this project."; a project with no runs, or a run that no longer
+exists, says so with a link to Runs & results. The Overview's published
+baseline card links to the published run's report (**Report**, beside
+**Open in Runs**).
 
 - **Impact report** (`&against=<projectId>:<runId>`, Compare runs' **Export
   impact report**, issue #17 A4): the same report with the cover's eyebrow
@@ -5363,7 +5369,12 @@ exists, says so with a link to Runs & results.
   signed the run, "Signed off by <name> (<body> <number>)", or "Not signed
   off by a registered professional."; an unsigned run nominated as evidence,
   or any unsigned impact report, adds **Not signed off: not for use as
-  evidence in a licence application.** in bold; then the contents), then numbered
+  evidence in a licence application.** in bold; then the contents; for a
+  published run, or one that was, **Published** with the date, by whom, and
+  "; the run stakeholders see now" or "; replaced <date>", and the
+  publication's restriction notice as a note, "Restriction notice: Restricted
+  · 20 %…" (or "(on the publication since replaced)"), then the WUA's text in
+  each language it wrote, each marked with its `lang`), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -5385,20 +5396,31 @@ exists, says so with a link to Runs & results.
   chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
-  for the outlet and every farm), **Hydrological units, warnings and checks** (the run
+  for the outlet and every farm), **Assurance of supply** (when the run has
+  it, engine ≥ 0.32.0: the Runs tab's Assurance panel in print mode, every
+  stress grid printed, the system's then each unit's, each under its own
+  "Stress classes by month: <name>" heading, with no picker; issue #70),
+  **Hydrological units, warnings and checks** (the run
   summary: warnings, headline cards, the farm table; the self-checks and the
-  water balance by water year, without Trace a day) and **Notes** (the run's
-  notes, when it has any). A section appears only when the run has its data;
+  water balance by water year, without Trace a day), **Notes** (the run's
+  notes, when it has any) and **Changes since the previous publication**
+  (issue #70: against the publication before this run's own, or, for a run
+  never published, against the current publication, named with its label,
+  date and publisher; who made the saved changes, then the input changes,
+  `ChangesList`, as Compare runs lists them). A section appears only when the run has its data;
   nothing is printed as a placeholder. Every report then closes with three
   sections (WP-3.13, `components/liability/`):
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
-    engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the run's self-checks, the
+    engine version, the build's invariant and soak results (the web
+    release's build record, `ENGINE_BUILD`, injected at build time; *Not
+    recorded for this build* in a build without one, such as local dev), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years and checks, and the **known
+    caveat, the flagged data-quality years (every one, engine ≥ 1.30.1; an
+    older run that hit the old cap of 5 says its list may be cut short) and
+    checks, and the **known
     limitations** table (ID, limitation, where it stands) generated from
     engine-audit.md. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
@@ -5427,8 +5449,6 @@ exists, says so with a link to Runs & results.
     `draft`, a bold *Draft wording, pending the client's legal review
     (decision D10)* line stands above it.
 
-  Not yet: the published-by line and restriction notice (WP-2.3), changes
-  since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
   opened): full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
@@ -5475,7 +5495,14 @@ exists, says so with a link to Runs & results.
   the bar says "Preparing the report…" and **Download PDF** is disabled. The
   signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
-  PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
+  PDF**. Print CSS: A4 (`@page`, added while the page is open,
+  `report/printPage.ts`), a running footer on every page in the bottom
+  margin from CSS page-margin boxes (`@bottom-center`, Chromium 131+): the
+  page's `data-report-footer` (the engine's `REPORT_FOOTER`: project · run ·
+  "Model estimates; see the Disclaimer (section N, version …). The operator
+  of this software accepts no responsibility to anyone who relies on this
+  report.") and "Page X of Y." (a browser without margin boxes, Firefox,
+  prints the pages without it), a page break
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
@@ -5498,12 +5525,9 @@ exists, says so with a link to Runs & results.
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
   pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)),
-  plus a running footer on every page: the page's `data-report-footer`
-  (the engine's `REPORT_FOOTER`: project · run · "Model estimates; see the
-  Disclaimer (section N, version …). The operator of this software accepts
-  no responsibility to anyone who relies on this report.") and "Page X of
-  Y" (`reports/render.ts` `footerTemplate`). The browser's own print
-  (Download PDF) has no running footer.
+  the running footer included: it comes from the page's own CSS, so the
+  renderer adds none of its own (issue #70; it used `footerTemplate` until
+  then, which the browser's print didn't have).
   The bar then follows the job's status (`role="status"`: "PDF queued: waiting
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
@@ -5748,7 +5772,12 @@ published.
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
-  summary sentence and a full table behind "Show the numbers"); last
+  summary sentence and a full table behind "Show the numbers": each month's
+  needed and received, and the **Share received** with the engine's stress
+  class in plain words under it (all or nearly all ≥ 95 %, a little short
+  ≥ 85 %, short ≥ 70 %, very short ≥ 50 %, far too little; `chart.ts`
+  `supplyLevel`, `STRESS_THRESHOLDS`, issue #70), and a line under the table
+  saying what the words mean; last
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles

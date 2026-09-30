@@ -330,7 +330,18 @@ bottom:
    river pump at a farm reads as 0 there"), under the rule in
    [Series and metrics only one run has](#series-and-metrics-only-one-run-has)
    (`delta.ts` `farmFeatureMetrics`). These columns don't sort.
-7. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
+7. **Assurance of supply** (WP-3.4, issue #70; `compare/assurance.ts`
+   `compareAssurance`, `compare/AssuranceDeltaTable.svelte`, shown when
+   either run has `summary.supplyAssurance`, engine ≥ 0.32.0). One row per
+   farm and other water user, matched by name (namesakes pair off in
+   order), with run B's value and the change from A for the share of
+   demand days fully met, the volume supplied, the water years met (B's
+   "3 of 4" beside it, A's under the change) and the longest run of days
+   not fully met. Notes say when the runs used different annual thresholds
+   or reporting windows, and units in one run only are listed underneath.
+   A run from an older engine has none: a note says to rerun it. The
+   Scenarios tab's comparison shows the same table.
+8. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
    shared with the Scenarios tab). Pick a **node** and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
    **B − A** on a second chart underneath. It opens on the catchment's

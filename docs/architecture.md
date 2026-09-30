@@ -1133,7 +1133,10 @@ sequenceDiagram
   request client (so the cookie lands in its jar), `page.goto`, a wait for
   `main[data-report-ready="true"]`, or the page's own "can't show this"
   message (no access, no run: failed at once, no retry), then
-  `page.pdf({ format: 'A4', printBackground: true })`. A hard timeout
+  `page.pdf({ format: 'A4', printBackground: true })` with the page's own
+  margins; the running footer is the page's CSS (`@page` margin boxes,
+  `report/printPage.ts`), so the PDF and the browser's print carry the same
+  one. A hard timeout
   (`REPORT_RENDER_TIMEOUT_MS`, 90 s locally, 100 s in the Lambda) covers the
   whole thing, and the browser is closed in `finally`. A timeout or a browser
   crash is retried (3 attempts); Playwright's own messages (URLs, call logs)
