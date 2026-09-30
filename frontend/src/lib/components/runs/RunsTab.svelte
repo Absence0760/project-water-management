@@ -686,7 +686,7 @@
 					</div>
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">
-						<WaterBalanceTable {summary} />
+						<WaterBalanceTable {summary} accountHref={riverHref(shownRunId, 'res-water-account')} />
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">

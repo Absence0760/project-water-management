@@ -5,7 +5,10 @@
 	for one period (in vs out). Input: RunSummary.supplyAssurance.waterAccount;
 	absent on older runs. The EWR required vs met at each site, which closed
 	this panel until issue #175, is not part of the balance: River & reserve
-	shows it in the EWR by month panel (ewr/EwrRequiredMet.svelte).
+	shows it in the EWR by month panel (ewr/EwrRequiredMet.svelte). Runs &
+	results' Water balance is the same years summed over the hydrological units
+	(with rain, the runoff coefficient and storage); each links to the other
+	rather than copying it (balanceHref).
 -->
 <script lang="ts">
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
@@ -16,10 +19,13 @@
 
 	let {
 		assurance,
-		engineVersion = null
+		engineVersion = null,
+		balanceHref
 	}: {
 		assurance: SupplyAssurance | undefined | null;
 		engineVersion?: string | null;
+		/** Runs & results' Water balance for the same run. */
+		balanceHref?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -47,6 +53,12 @@
 			in storage leaves a residual that should be float noise; the largest here is {worstResidual === 0 ? 'exactly 0' : `${worstResidual.toExponential(1)} of the flows`}.
 			Dam releases are not modelled yet.
 		</p>
+		{#if balanceHref}
+			<p class="muted small" data-testid="account-balance-link">
+				Rain, the runoff coefficient and dam storage at the start and end of each year, summed over the hydrological units in Mm³:
+				<a href={balanceHref}>Water balance</a> on Runs &amp; results.
+			</p>
+		{/if}
 
 		{#if bars && shown}
 			<div class="head">
