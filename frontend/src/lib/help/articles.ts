@@ -61,7 +61,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Help (Calc. Model date window)'
 	},
 	'calibration-window': {
-		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record; a b023 workbook has its own calibration date range and flow choice. Choose which observed series to compare against (gauge or logger); left empty, the gauge record is used if there is one, else the logger. A fit is scored at the outlet unless you pick a gauge inside the network that has a record attached (Scored at): the fit then compares the simulated flow at that gauge with its record, and the run’s statistics and EWR test stay at the outlet. The fit statistics and the annual volume table only count days inside this window.',
+		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record; a b023 workbook has its own calibration date range and flow choice. Choose which observed series to compare against (gauge or logger); left empty, the gauge record is used if there is one, else the logger. A fit is scored at the outlet unless you pick a gauge inside the network that has a record attached (Scored at): the fit then compares the simulated flow at that gauge with its record, and so do the run’s calibration statistics; the outlet’s EWR test stays the outlet’s. The fit statistics and the annual volume table only count days inside this window.',
 		aliases: ['calibration period', 'observed flow record'],
 		related: ['calibration', 'nse'],
 		source: 'b023 [Flow Calibration Cfg] date range and flow choice; docs/model.md §2.10, §2.10k'

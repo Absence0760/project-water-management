@@ -704,6 +704,10 @@
 					{/if}
 					<div class="panel" id="res-ewr-agreement">
 						<EwrAgreementTable {summary} />
+						<!-- The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0). -->
+						{#each summary.catchment?.ewrAgreementSites ?? [] as site (site.nodeId)}
+							<EwrAgreementTable {summary} {site} title="EWR test at {site.name}: model against its observed flow" />
+						{/each}
 					</div>
 					{#if summary.plausibility}
 						<div class="panel" id="res-plausibility">

@@ -79,10 +79,16 @@
 				{#each sites as g (g.nodeId)}<option value={g.nodeId}>{g.name}</option>{/each}
 				{#if siteNodeId && !site}<option value={siteNodeId}>A gauge no longer in the model, or with no record</option>{/if}
 			</select>
+			{#if siteNodeId && !site}
+				<p class="warn" role="status" data-testid="calibration-site-gone">
+					The saved site's gauge is no longer in the model, or no flow record is attached to it any more. Runs score the outlet's record
+					and warn, and Fit automatically refuses the site: pick another gauge, or the outlet.
+				</p>
+			{/if}
 			<p class="hint muted" id="{uid}-site-hint">
 				At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
-				filling below are the outlet records', so they don't apply to it, and a run's calibration statistics and EWR test stay at the
-				outlet.
+				filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
+				outlet's EWR test stays the outlet's.
 			</p>
 		</div>
 	{/if}
@@ -119,6 +125,12 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 		margin: 0.4rem 0 0.75rem;
+	}
+	.warn {
+		color: var(--warning);
+		font-size: 0.85rem;
+		margin: 0.4rem 0 0;
+		max-width: 75ch;
 	}
 	.err {
 		color: var(--danger);

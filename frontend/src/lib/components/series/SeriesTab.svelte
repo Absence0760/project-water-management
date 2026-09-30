@@ -612,7 +612,7 @@
 									>
 								{/if}
 								{#if role}
-									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? (s.siteNodeId === calibrationSite ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results), and calibration scores the fit there (Settings → Calibration record → Scored at); a run’s calibration statistics and the EWR test use the outlet’s records.' : 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration scores it only if Settings → Calibration record → Scored at picks this gauge, and the EWR test uses the outlet’s records.') : role.help}>
+									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? (s.siteNodeId === calibrationSite ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results), and calibration and a run’s calibration statistics score it there (Settings → Calibration record → Scored at); the outlet’s EWR test uses the outlet’s records.' : 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration scores it only if Settings → Calibration record → Scored at picks this gauge, and the outlet’s EWR test uses the outlet’s records.') : role.help}>
 										{s.siteNodeId
 											? gaugeInUse.has(s.id)
 												? s.siteNodeId === calibrationSite

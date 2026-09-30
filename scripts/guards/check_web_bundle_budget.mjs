@@ -1535,6 +1535,10 @@
 //             the site's records deciding the fit's choices, the fit record
 //             naming its gauge, the Data page's calibration-site badge;
 //             measured 1302 with main @ 285c1c75). Headroom ~2 KB.
+// 2026-09-30  total 1304 → 1306 KB (engine 1.41.0 follow-ups: the run's
+//             calibration-site hydrograph and statistics line, the EWR test
+//             at each gauge EWR site with a record, the stale-site hint;
+//             measured 1304 with main @ 2f644d45). Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1545,7 +1549,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1304,
+	totalCodeKb: 1306,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
