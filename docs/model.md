@@ -4225,7 +4225,7 @@ rule table has no such dependence.
 *Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
 Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
-aside here; engine ≥ 1.50.0 uses it, and the Hughes form, for the
+aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
 validation signatures' BFI, §2.10d) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
@@ -5392,7 +5392,7 @@ question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
-Not in the workbook. Six checks (four before engine 1.19.0, five before 1.50.0) a reviewing hydrologist makes by hand
+Not in the workbook. Six checks (four before engine 1.19.0, five before 1.55.0) a reviewing hydrologist makes by hand
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
@@ -5650,7 +5650,7 @@ fits. The summary CSV has a *Recession diagnostics* block
 gauges inside the network. Per-segment fits, bootstrap bands and seasonal
 tags are CR-15.
 
-#### Validation signatures (engine ≥ 1.50.0, calibration-research.md CR-16)
+#### Validation signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
 
 A sixth check (`packages/engine/src/plausibility/signatures.ts`, kept in
 `RunSummary.plausibility.signatures`; absent on older runs, null without an
@@ -5706,7 +5706,7 @@ between Q70 and Q95 on log flow:
 
 ```
 slope = (ln Q70 − ln Q95) ÷ (0.95 − 0.70)          flows floored at 0.001 m³/s
-slope bias = 100 × (slope_sim − slope_obs) ÷ slope_obs    (null when slope_obs = 0)
+slope bias = 100 × (slope_sim − slope_obs) ÷ slope_obs    (null when slope_obs = 0, or either curve's Q95 ≤ 0.001 m³/s)
 ```
 
 The bias is Yilmaz, Gupta & Wagener's (2008) %BiasFMS form; their segment is
@@ -5715,7 +5715,12 @@ Reserve's low flows sit on. Beside it, their **%BiasFLV** (the bottom 30 %'s
 volume in log space) from `fdcSignatures` in `calibrate/objective.ts`, the
 definition the fit report and the ensemble's low-flow filter (§2.10e)
 already use. A positive slope bias is a model whose low flows fall away
-faster than the river's.
+faster than the river's. The slope bias needs both curves to flow at Q95:
+where either is at or below the 0.001 m³/s floor there (an intermittent
+river, or a model that dries out), the floored slope measures the floor,
+not the river (two curves that both stop flowing by Q95, with Q70 either
+side of the floor, read −100 % apart; the example Sandspruit catchment
+did), so it is null and %BiasFLV alone judges those low flows.
 
 **3. Skill on withheld recession segments.** The scored record's recession
 segments, found as the recession check finds them (TOSSH defaults and the
@@ -5749,7 +5754,7 @@ the model with; the model's parameters were fitted to every scored day
 not fitted to separately, not on unseen days. The fit's split-sample tests
 (§2.10b) are the out-of-sample check of the parameters.
 
-**Warnings** (indicative thresholds, engine constants, pending the
+**Warnings** (provisional thresholds, engine constants, pending the
 hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
 
 | Signature | Warns when | Reasoning |
@@ -5758,7 +5763,7 @@ hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
 | Low-flow FDC | \|slope bias\| or \|%BiasFLV\| > **50 %** (`FDC_LOW_WARN_PCT`) | the ensemble's default low-flow limit (§2.10e); low-flow gauging error runs to ±50–100 % (McMillan, Krueger & Freer 2012) |
 | Held-out recessions | simulated skill < **0** (`HOLDOUT_SKILL_WARN`) with **8** or more segments (`RECESSION_MIN_SEGMENTS`), or a simulated flow that reaches zero on every held-out segment | worse than assuming the river doesn't fall at all; below 8 segments not judged, as the recession check |
 
-Each warning starts "Validation signatures (indicative): …", names the
+Each warning starts "Validation signatures (provisional limits): …", names the
 record (and the gauge, at a site) and points at the GR4J parameters to look
 at. The Plausibility checks panel lists them under **Validation signatures**
 ([ui.md](./ui.md)), the summary CSV has a *Validation signatures* block
@@ -5766,6 +5771,21 @@ at. The Plausibility checks panel lists them under **Validation signatures**
 line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
 %BiasFMS, and the BFI and the held-out recessions are signatures of a run,
 not of the objective.
+
+*Tests* (`plausibility/signatures.test.ts`, `reserve/baseflow.test.ts`):
+each filter by hand on three-day series and on a step from 1 to 2 m³/s
+(Hughes' quick flow 0.9975·α^k after the step, Eckhardt's base flow
+2B − B·c1^(k+1) with c1 = (1 − B)·a ÷ (1 − a·B)); a steady river gives
+BFI 1 by Hughes and BFImax by Eckhardt; zero flow gives no BFI rather than a
+pass or a fail; gaps split the stretches and a stretch under 30 days drops
+out, 365 days in stretches being the least; the low-flow slope by hand
+(a doubled flow has no slope bias, Q^0.4 −60 %, Q² +100 %; none where either
+curve is at the floor at Q95, a model that dries out or an intermittent river); the held-out skill by hand (1, 0, −3), pooled over the held-out
+days rather than averaged per segment, with the log RMSE and the law's score;
+no segments, nothing judged. `run.invariants.test.ts` checks on random
+networks that both indices stay in [0, 1], Q70 ≥ Q95, the held-out count is
+a third of the segments, a skill never exceeds 1, and that removing the
+observed records leaves the simulated outflow bit-identical.
 
 *Sources:* Hughes, Hannart & Watkins 2003, *Water SA* 29(1):43–48 ·
 Eckhardt 2005, *Hydrological Processes* 19:507–515 · Eckhardt 2008,

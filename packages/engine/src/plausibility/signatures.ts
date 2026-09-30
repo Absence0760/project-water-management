@@ -1,4 +1,4 @@
-// Validation signatures (engine ≥ 1.50.0, docs/model.md §2.10d "Validation
+// Validation signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Validation
 // signatures"; calibration-research.md CR-16): three signatures of the scored
 // record (the calibration site's when settings.calibrationSiteNodeId picks a
 // gauge, else the outlet's) against the simulated outflow on the same days.
@@ -49,15 +49,15 @@ const SEC_PER_DAY = 86_400;
 export const SIGNATURE_MIN_DAYS = 365;
 /** A stretch of consecutive scored days shorter than this is left out of the BFI (the filter's start-up would dominate it). */
 export const BFI_MIN_RUN_DAYS = 30;
-/** Warn when the simulated BFI is more than this (absolute) from the observed, by either filter (indicative). */
+/** Warn when the simulated BFI is more than this (absolute) from the observed, by either filter (provisional, pending the hydrologist). */
 export const BFI_WARN_DIFF = 0.15;
 /** The low-flow FDC segment whose slope is compared: exceedance %, [upper flow, lower flow]. */
 export const FDC_LOW_SLOPE_RANGE: readonly [number, number] = [70, 95];
-/** Warn when the low-flow slope bias or %BiasFLV exceeds this, % (indicative; the ensemble's default low-flow limit, §2.10e). */
+/** Warn when the low-flow slope bias or %BiasFLV exceeds this, % (provisional, pending the hydrologist; the ensemble's default low-flow limit, §2.10e). */
 export const FDC_LOW_WARN_PCT = 50;
 /** Every this-many-th recession segment in date order (the 3rd, 6th, …) is held out: a third of them. */
 export const HOLDOUT_EVERY = 3;
-/** Warn when the simulated recessions' skill on the held-out segments is below this: no better than no recession at all (indicative). */
+/** Warn when the simulated recessions' skill on the held-out segments is below this: no better than no recession at all (provisional, pending the hydrologist). */
 export const HOLDOUT_SKILL_WARN = 0;
 /** A law-predicted flow is floored at this fraction of the segment's first flow (a b < 1 law reaches zero in finite time). */
 const LAW_FLOOR = 1e-6;
@@ -94,7 +94,7 @@ export interface LowFlowFdcSignature {
 	/** ln(Q70 ÷ Q95) ÷ 0.25, flows floored at LOW_FLOW_FLOOR_M3S. */
 	observedSlope: number;
 	simulatedSlope: number;
-	/** 100 × (simulated − observed) ÷ observed slope; null when the observed slope is 0. */
+	/** 100 × (simulated − observed) ÷ observed slope; null when the observed slope is 0 or either curve's Q95 is at or below LOW_FLOW_FLOOR_M3S. */
 	slopeBiasPct: number | null;
 	/** %BiasFLV (Yilmaz et al. 2008), the fit's definition; null when it can't be computed. */
 	lowVolumeBiasPct: number | null;
@@ -130,7 +130,7 @@ export interface RecessionHoldout {
 	agrees: boolean | null;
 }
 
-/** RunSummary.plausibility.signatures (engine ≥ 1.50.0). */
+/** RunSummary.plausibility.signatures (engine ≥ 1.55.0). */
 export interface ValidationSignatures {
 	/** The scored record. */
 	flowKind: CalibrationFlowKind;
@@ -246,7 +246,10 @@ export function lowFlowFdcSignature(obsM3s: ArrayLike<number | null>, simM3s: Ar
 	const sLo = exceedanceFlow(fs, lo);
 	const observedSlope = lowSlope(oHi, oLo);
 	const simulatedSlope = lowSlope(sHi, sLo);
-	const slopeBiasPct = observedSlope > 0 ? (100 * (simulatedSlope - observedSlope)) / observedSlope : null;
+	// The slope of log flow only exists where the curve flows: at or below the floor at Q95 (an intermittent
+	// river, or a model that dries out) the floored slope measures the floor, not the river, and two curves that
+	// both reach zero read as −100 % apart. %BiasFLV still judges those low flows.
+	const slopeBiasPct = observedSlope > 0 && oLo > LOW_FLOW_FLOOR_M3S && sLo > LOW_FLOW_FLOOR_M3S ? (100 * (simulatedSlope - observedSlope)) / observedSlope : null;
 	const flv = fdcSignatures(o, s).fdcLowPct;
 	const lowVolumeBiasPct = flv !== null && Number.isFinite(flv) ? flv : null;
 	return {
@@ -362,7 +365,7 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 			.map(([name, p]) => `${f2(p!.simulated)} simulated against ${f2(p!.observed)} observed by the ${name} filter`);
 		const high = [bf.hughes, bf.eckhardt].some((p) => p && p.difference > BFI_WARN_DIFF);
 		out.push(
-			`Validation signatures (indicative): on the ${bf.days} scored days of ${where}, the base-flow index is ${parts.join(', and ')}, more than ${BFI_WARN_DIFF} apart. ` +
+			`Validation signatures (provisional limits): on the ${bf.days} scored days of ${where}, the base-flow index is ${parts.join(', and ')}, more than ${BFI_WARN_DIFF} apart. ` +
 				(high ? 'The model gives too much of its flow as slow base flow' : 'The model gives too little of its flow as slow base flow') +
 				': check the routing store and groundwater exchange (GR4J X2, X3) and the split between quick and slow flow. The Plausibility checks panel lists the signatures.'
 		);
@@ -379,7 +382,7 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 			parts.push(`the low-flow volume bias (%BiasFLV) is ${pct(fdc.lowVolumeBiasPct)}`);
 		}
 		out.push(
-			`Validation signatures (indicative): on the ${fdc.days} scored days of ${where}, ${parts.join(', and ')}, beyond ±${FDC_LOW_WARN_PCT} %. ` +
+			`Validation signatures (provisional limits): on the ${fdc.days} scored days of ${where}, ${parts.join(', and ')}, beyond ±${FDC_LOW_WARN_PCT} %. ` +
 				'The model’s low flows fall away at a different pace from the river’s: check the base flow (GR4J X3), abstraction in dry spells and dam capture. The Plausibility checks panel lists the signatures.'
 		);
 	}
@@ -388,8 +391,8 @@ export function signatureWarnings(sig: ValidationSignatures | null | undefined):
 		const law = h.lawSkill === null ? '' : ` (the river’s own recession curve, fitted on the other segments, scores ${f2(h.lawSkill)})`;
 		out.push(
 			h.modelSkill === null
-				? `Validation signatures (indicative): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated outflow reaches zero on every one, so its recessions can’t be scored. The model dries the river out where it recedes: check the routing store (GR4J X3) and abstraction during dry spells.`
-				: `Validation signatures (indicative): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated recessions score ${f2(h.modelSkill)} against no recession at all${law}: the simulated flow doesn’t fall the way the river does after rain. Check the routing and groundwater parameters (GR4J X2, X3) and dry-spell abstraction. The Plausibility checks panel lists the signatures.`
+				? `Validation signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated outflow reaches zero on every one, so its recessions can’t be scored. The model dries the river out where it recedes: check the routing store (GR4J X3) and abstraction during dry spells.`
+				: `Validation signatures (provisional limits): on the ${h.heldOut.length} held-out recession segments of ${where}, the simulated recessions score ${f2(h.modelSkill)} against no recession at all${law}: the simulated flow doesn’t fall the way the river does after rain. Check the routing and groundwater parameters (GR4J X2, X3) and dry-spell abstraction. The Plausibility checks panel lists the signatures.`
 		);
 	}
 	return out;

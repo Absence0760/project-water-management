@@ -191,17 +191,24 @@ collected as a checklist in issue #46; tick it there as they answer.
       needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Validation signature thresholds and parameters to confirm**
-      (engine 1.50.0, CR-16, [model.md §2.10d](./model.md), *Validation
+      (engine 1.55.0, CR-16, [model.md §2.10d](./model.md), *Validation
       signatures*). Built on these engineering defaults; put each as
       "confirm or change": the Hughes et al. (2003) filter at α 0.995,
       β 0.5 and one forward pass (or three, as §2.9d's Lyne–Hollick); the
       Eckhardt (2005) filter's a 0.98 (or a from the record's recessions,
       Eckhardt 2008) and BFImax 0.25 (hard-rock perennial; 0.50 or 0.80
-      elsewhere); warning past a BFI difference of 0.15, a low-flow slope
-      bias or %BiasFLV of ±50 %, and a held-out recession skill below 0
-      (with 8+ segments); the Q70–Q95 slope segment; holding out every third
-      segment; and keeping the quality-flagged days in the BFI and FDC (the
-      recession segments leave them out).
+      elsewhere); the provisional warning limits: the simulated BFI more
+      than 0.15 from the observed by either filter, the low-flow FDC's slope
+      bias or %BiasFLV beyond ±50 % (the slope bias only where both curves
+      flow above 0.001 m³/s at Q95), and a held-out recession skill below 0
+      with 8 or more segments ("not judged" with fewer); the Q70–Q95 slope
+      segment; holding out every third segment; and keeping the quality-flagged days in the BFI and FDC (the
+      recession segments leave them out). The thresholds are the engine's
+      constants (`BFI_WARN_DIFF`, `FDC_LOW_WARN_PCT`, `HOLDOUT_SKILL_WARN`,
+      `RECESSION_MIN_SEGMENTS` in `plausibility/signatures.ts` and
+      `recession/check.ts`); the Runs panel reads them through
+      `PROVISIONAL_SIGNATURE_LIMITS`, so the answer changes one place, and
+      a change to a warning bumps `ENGINE_VERSION`.
 - [ ] **Flow gap filling defaults to confirm** (engine 1.23.0, issue #66,
       [model.md §2.10i](./model.md)). Built off by default on these
       engineering defaults; put each to the hydrologist as "confirm or
@@ -1208,8 +1215,9 @@ the suggested order (the IDs carry the detail):
       judged" below), in the Plausibility checks panel and the summary CSV
       (model.md §2.10d). CR-18's flags joined its day mask in engine 1.22.0.
 - [ ] **Run comparison: the recession diagnostics (engine 1.19.0) and the
-      validation signatures (engine 1.50.0, CR-16) aren't set side by side.**
-      `plausibility/compare.ts` compares checks 1–4 only
+      validation signatures (engine 1.55.0, CR-16) aren't set side by side.**
+      The Compare page shows neither: `packages/engine/src/plausibility/compare.ts`
+      compares checks 1–4 only
       ([run-comparison.md](./run-comparison.md#plausibility-checks)), so a
       before-and-after refit can't show a recession rate or a BFI moving.
       Durable fix: add rows to `RunComparison.plausibility` for the recession

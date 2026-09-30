@@ -1,4 +1,4 @@
-// Validation signatures (engine ≥ 1.50.0, docs/model.md §2.10d "Validation
+// Validation signatures (engine ≥ 1.55.0, docs/model.md §2.10d "Validation
 // signatures", calibration-research.md CR-16): BFI by two filters, the
 // low-flow FDC's slope and bias, and the skill on withheld recession segments.
 import { describe, expect, it } from 'vitest';
@@ -81,6 +81,58 @@ describe('baseflowSignature', () => {
 		expect(baseflowSignature(new Array(364).fill(1), new Array(364).fill(1), none(364))).toBeNull();
 	});
 
+	it('by hand on a step: flow 1 then 2 m³/s, against a steady 1.5 (BFI 1 by Hughes, BFImax by Eckhardt)', () => {
+		const n = 400;
+		const obs = Array.from({ length: n }, (_, t) => (t < 200 ? 1 : 2));
+		const b = baseflowSignature(obs, new Array(n).fill(1.5), none(n))!;
+		expect([b.days, b.runs]).toEqual([400, 1]);
+		// Hughes (α 0.995, β 0.5, one forward pass): quick flow is 0 on the steady days, jumps to
+		// β(1 + α)·1 = 0.9975 at the step and decays by α a day after it. The start's reflection is
+		// all 1s and the end's lies after the days scored, so neither moves it.
+		const quick = (0.9975 * (1 - 0.995 ** 200)) / (1 - 0.995);
+		const total = 200 * 1 + 200 * 2;
+		expect(b.hughes!.observed).toBeCloseTo(1 - quick / total, 12);
+		expect(b.hughes!.simulated).toBeCloseTo(1, 12);
+		expect(b.hughes!.difference).toBeCloseTo(quick / total, 12);
+		// Eckhardt (a 0.98, BFImax B 0.25): b_t = c1·b_{t−1} + c2·Q_t with c1 = (1 − B)a ÷ (1 − aB), steady state B·Q, so
+		// B·1 before the step and 2B − B·c1^(k+1) on the k-th day after it.
+		const B = 0.25;
+		const c1 = ((1 - B) * 0.98) / (1 - 0.98 * B);
+		let base = 200 * B;
+		for (let k = 0; k < 200; k++) base += 2 * B - B * c1 ** (k + 1);
+		expect(b.eckhardt!.observed).toBeCloseTo(base / total, 12);
+		expect(b.eckhardt!.simulated).toBeCloseTo(B, 12);
+		// Hughes' difference, 0.21, is beyond ±0.15: the pair is outside the limit even though Eckhardt's is inside.
+		expect(Math.abs(b.eckhardt!.difference)).toBeLessThan(0.15);
+		expect(b.hughes!.difference).toBeGreaterThan(0.15);
+		expect(b.withinLimit).toBe(false);
+	});
+
+	it('zero flow: no BFI (nothing to divide), not a pass or a fail', () => {
+		const b = baseflowSignature(new Array(400).fill(0), new Array(400).fill(1), none(400))!;
+		expect(b.days).toBe(400);
+		expect([b.hughes, b.eckhardt, b.withinLimit]).toEqual([null, null, null]);
+		// A dry model against a flowing river is the same: the simulated sum is zero.
+		expect(baseflowSignature(new Array(400).fill(1), new Array(400).fill(0), none(400))!.hughes).toBeNull();
+	});
+
+	it('gaps split the record into stretches; a stretch under 30 days is left out, the simulated flow with it', () => {
+		const n = 460;
+		const obs: (number | null)[] = Array.from({ length: n }, (_, t) => 1 + (t % 9));
+		obs[400] = null;
+		const a = baseflowSignature(obs, obs.map((v) => v ?? 99), none(n))!;
+		// [0, 399] and [401, 459]: 400 + 59 days.
+		expect([a.days, a.runs]).toEqual([459, 2]);
+		obs[430] = null;
+		// [401, 429] and [431, 459] are 29 days each: only [0, 399] counts, and the simulated 99 on the gap days never enters.
+		const b = baseflowSignature(obs, obs.map((v) => v ?? 99), none(n))!;
+		expect([b.days, b.runs]).toEqual([400, 1]);
+		expect(b.hughes!.difference).toBeCloseTo(0, 12);
+		expect(b.eckhardt!.difference).toBeCloseTo(0, 12);
+		// 365 days in stretches is enough; 364 isn't.
+		expect(baseflowSignature(new Array(365).fill(1), new Array(365).fill(1), none(365))).not.toBeNull();
+	});
+
 	it('invariants on random records: 0 ≤ BFI ≤ 1 by both filters', () => {
 		const rng = new Rng(1502);
 		for (let k = 0; k < 40; k++) {
@@ -127,6 +179,23 @@ describe('lowFlowFdcSignature', () => {
 		expect(s.slopeBiasPct).toBeNull();
 	});
 
+	it('no slope bias where either curve is at the 0.001 m³/s floor at Q95: the floored slope would measure the floor', () => {
+		// A model that dries out: its curve floors flat, which is not a flatter river; %BiasFLV judges it instead.
+		const dry = lowFlowFdcSignature(obs, new Array(399).fill(0), none(399))!;
+		expect([dry.simulatedQ70M3s, dry.simulatedQ95M3s, dry.simulatedSlope]).toEqual([0, 0, 0]);
+		expect(dry.slopeBiasPct).toBeNull();
+		// An intermittent river and a model that both stop at Q95, with Q70 either side of the floor
+		// (the example Sandspruit: 0.00104 against 0.00077 m³/s): the same curve, not −100 % apart.
+		const river = obs.map((_, i) => (i < 30 ? 0 : 0.00104 * (1 + i / 400)));
+		const model = obs.map((_, i) => (i < 30 ? 0 : 0.00077 * (1 + i / 400)));
+		const i = lowFlowFdcSignature(river, model, none(399))!;
+		expect([i.observedQ95M3s, i.simulatedQ95M3s]).toEqual([0, 0]);
+		expect(i.observedSlope).toBeGreaterThan(0);
+		expect(i.slopeBiasPct).toBeNull();
+		// Just above the floor on both curves it is computed: a steeper simulated curve, Q², doubles every log flow, so +100 %.
+		expect(lowFlowFdcSignature(obs, obs.map((q) => q * q), none(399))!.slopeBiasPct).toBeCloseTo(100, 9);
+	});
+
 	it('leaves excluded and missing days out, and needs a year of them', () => {
 		const withGap: (number | null)[] = [...obs, null, null];
 		const ex = none(401);
@@ -163,6 +232,57 @@ describe('recessionHoldout', () => {
 		// A zero day leaves the segment out of the model's score.
 		const h = recessionHoldout(obs, [...obs.slice(0, 6), 1, 0, 1], segs);
 		expect([h.modelSegments, h.modelSkill, h.days]).toEqual([0, null, 2]);
+	});
+
+	it('pools the held-out segments: Σ over all their days, not a mean of per-segment skills; log RMSE by hand', () => {
+		// Six 8-day segments (days 1–7 after each start scored), starting at different flows; the 3rd and 6th are held out.
+		const segs: RecessionSegment[] = Array.from({ length: 6 }, (_, i) => [i * 8, i * 8 + 7]);
+		const rate = [0.1, 0.1, 0.1, 0.1, 0.1, 0.2];
+		const obs = Array.from({ length: 48 }, (_, t) => (1 + Math.floor(t / 8)) * Math.exp(-rate[Math.floor(t / 8)]! * (t % 8)));
+		// Simulated: rate 0.2 on both held-out segments (and anything elsewhere).
+		const sim = Array.from({ length: 48 }, (_, t) => 3 * Math.exp(-0.2 * (t % 8)));
+		const h = recessionHoldout(obs, sim, segs);
+		expect(h.heldOut).toEqual([segs[2], segs[5]]);
+		expect([h.days, h.modelSegments, h.modelDays]).toEqual([14, 2, 14]);
+		// Errors: 0.1·τ on the first, 0 on the second; Σ τ² = 140. Σ err² = 0.01·140, Σ obs² = 0.01·140 + 0.04·140:
+		// a skill of 0.8, where the mean of the two segments' own skills (0 and 1) would be 0.5.
+		expect(h.modelSkill).toBeCloseTo(1 - 1.4 / 7, 12);
+		expect(h.modelLogRmse).toBeCloseTo(Math.sqrt(1.4 / 14), 12);
+		// Six segments: under RECESSION_MIN_SEGMENTS, so reported but not judged.
+		expect(h.agrees).toBeNull();
+		// The law is scored on the same days from the segment's first observed flow.
+		const law = h.law!;
+		let ssLaw = 0;
+		for (const [s] of h.heldOut) {
+			for (let tau = 1; tau <= 7; tau++) ssLaw += (Math.log(recessionLawFlow(law, obs[s]!, tau) / obs[s]!) - Math.log(obs[s + tau]! / obs[s]!)) ** 2;
+		}
+		expect(h.lawSkill).toBeCloseTo(1 - ssLaw / 7, 12);
+		expect(h.lawLogRmse).toBeCloseTo(Math.sqrt(ssLaw / 14), 12);
+		// Fitted on the 0.1-a-day segments alone, it follows the first held-out segment, not the second.
+		expect(law.b).toBeCloseTo(1, 1);
+		// A zero simulated day in one held-out segment drops that segment from the model's score only.
+		const dry = [...sim];
+		dry[20] = 0;
+		const d = recessionHoldout(obs, dry, segs);
+		expect([d.days, d.modelSegments, d.modelDays]).toEqual([14, 1, 7]);
+		expect(d.modelSkill).toBeCloseTo(1, 12);
+	});
+
+	it('no segments: nothing held out, nothing scored, not judged', () => {
+		expect(recessionHoldout([1, 2, 3], [1, 2, 3], [])).toEqual({
+			every: HOLDOUT_EVERY,
+			segments: 0,
+			heldOut: [],
+			law: null,
+			days: 0,
+			modelSegments: 0,
+			modelDays: 0,
+			modelSkill: null,
+			lawSkill: null,
+			modelLogRmse: null,
+			lawLogRmse: null,
+			agrees: null
+		});
 	});
 
 	it('the law −dQ/dt = a·Q^b, solved exactly', () => {
