@@ -115,7 +115,6 @@ pnpm test                   # unit tests everywhere (no DB, no wall-clock assert
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
-pnpm test:engine:build [--cases n] [--max-workers n]   # the release's engine test record: unit suite + an n-case soak (default 2000) → engine-build.json (deployment.md § Engine build record)
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
 pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
@@ -146,7 +145,7 @@ pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
-pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
+pnpm gen:liability          # regenerate the known limitations, the engine errata and the methodology hashes from engine-audit.md, engine-errata.md and docs/methodology/ (after changing any)
 pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
                              # packages/engine/src/languages.ts); check:i18n checks every language
 pnpm gen:i18n:stamp <lang> <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it
@@ -233,6 +232,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
+- `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/testing.md`: which test command when, and how long each takes
 - `docs/contributing.md`: the git workflow for sessions sharing a checkout, code organization, the root scripts format, and which files the templates repo owns; `.claude/README.md`: the Claude agents and commands

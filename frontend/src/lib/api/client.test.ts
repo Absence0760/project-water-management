@@ -150,6 +150,9 @@ describe('createApi', () => {
 		expect(purl).toBe('/projects/p1/publication/pub%2F1');
 		expect(pinit.method).toBe('PATCH');
 		expect(JSON.parse(pinit.body as string)).toEqual({ nextExpectedOn: null });
+		const ofRun = mockFetch(200, { publication: null, previous: null });
+		await expect(createApi('', ofRun).publication.ofRun('p/1', 'r/1')).resolves.toEqual({ publication: null, previous: null });
+		expect((ofRun.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/runs/r%2F1/publication');
 	});
 
 	it('lists notes with only the filters given, counts them, and adds, edits and deletes one', async () => {

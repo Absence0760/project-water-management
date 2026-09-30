@@ -242,10 +242,11 @@ export interface SeriesCheck {
 	/** Days affected (for a flat-line: days inside the flat stretches). */
 	days: number;
 	/**
-	 * Up to MAX_EXAMPLES cases: the day, its value, and for a flat-line or zero
-	 * run the stretch length. A zero run also has its last day. A low-vs-CHIRPS
-	 * year has the water year's first and last day, value = catchment / CHIRPS
-	 * and runDays = the days both series have a reading.
+	 * Up to MAX_EXAMPLES cases (except low-vs-CHIRPS, below): the day, its value,
+	 * and for a flat-line or zero run the stretch length. A zero run also has its
+	 * last day. A low-vs-CHIRPS check lists every flagged year (engine ≥ 1.31.1; the first MAX_EXAMPLES
+	 * before), with the water year's first and last day, value = catchment /
+	 * CHIRPS and runDays = the days both series have a reading.
 	 */
 	examples: { date: string; value: number; runDays?: number; endDate?: string }[];
 	/** One sentence for the run warnings and the Time series tab. */
@@ -992,7 +993,9 @@ export function rainVsChirpsCheck(r: RainVsChirps | null): SeriesCheck | null {
 		seriesKind: 'rain_catchment_mm',
 		check: 'lowvschirps',
 		days: flagged.reduce((a, y) => a + y.days, 0),
-		examples: flagged.slice(0, MAX_EXAMPLES).map((y) => ({
+		// Every flagged year, not the first few: the validation statement lists them (WP-3.13). One
+		// entry per water year, so even a long record's list stays short.
+		examples: flagged.map((y) => ({
 			date: `${y.waterYear}-10-01`,
 			endDate: `${y.waterYear + 1}-09-30`,
 			value: y.ratio!,

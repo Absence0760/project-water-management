@@ -635,10 +635,11 @@ export type ReproductionDifference =
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
  * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
- * signer's name. Evidence packs and assessments (WP-3.14) will add kinds.
+ * signer's name; for an evidence pack (WP-3.14, 112), `version N`.
+ * Assessments will add a kind.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
 	id: string;
 	name: string;
 }
@@ -1026,6 +1027,29 @@ export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 	updatedBy: string | null;
 }
 
+/**
+ * One run's place in its project's publications (GET …/runs/:runId/publication,
+ * issue #70): the printable report's published-by line and notice, and its
+ * changes since the previous publication.
+ */
+export interface RunPublication {
+	/** The run's newest publication (null: never published); the restriction as that publication has it. */
+	publication: { id: string; publishedAt: string; publishedBy: string | null; supersededAt: string | null; restriction: PublicationRestriction } | null;
+	/**
+	 * The publication before it (a published run's earlier one of another run, or for a run never
+	 * published the current one), with the net input changes from its run to this one and who made them.
+	 */
+	previous: {
+		id: string;
+		runId: string;
+		runLabel: string;
+		publishedAt: string;
+		publishedBy: string | null;
+		changes: InputChange[];
+		attribution: CompareAttribution | null;
+	} | null;
+}
+
 export interface PublishRequest {
 	runId: string;
 	note?: string;
@@ -1277,10 +1301,13 @@ export interface NoteCounts {
 	settings: Record<string, number>;
 }
 
-/** A professional sign-off on a run (036_signoff, docs/api.md § Sign-offs). Immutable. */
+/** A professional sign-off on a run or an evidence pack (036_signoff, 112_evidence_pack; docs/api.md § Sign-offs). Immutable. */
 export interface Signoff {
 	id: string;
-	runId: string;
+	/** The run signed; null for a sign-off of an evidence pack. */
+	runId: string | null;
+	/** The evidence pack signed; null for a sign-off of a run. */
+	packId: string | null;
 	fullName: string;
 	/** 'sacnasp' or 'ecsa' from signoff-3 (engine liability/registration.ts); the signer's free text on older rows. */
 	registrationBody: string;

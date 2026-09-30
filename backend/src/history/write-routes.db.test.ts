@@ -13,6 +13,7 @@
 //      `call` makes one real request and returns its response. Keep what a
 //      later entry needs in `ctx`. Or, for a route that changes nothing the
 //      history covers, `exempt: '<why>'`.
+import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, signUp, tokenIn } from '../__tests__/helpers.js';
@@ -449,6 +450,58 @@ const WRITE_ROUTES: Entry[] = [
 			return c.owner.call('DELETE', `${at(c)}/notes/${r.body.note.id}`);
 		}
 	},
+	// --- evidence packs (112_evidence_pack.sql), on their own project: a pack needs a nominated, calibrated baseline
+	// with its declared uncertainty rule and cited ensemble, which beforeAll builds (packProject) ------------------
+	{
+		route: `POST ${P}/packs`,
+		records: ['pack.drafted'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `/projects/${c.packProjectId}/packs`, { runId: c.packRunId });
+			c.packId = r.body.pack?.id;
+			return r;
+		},
+		projectOf: (c) => c.packProjectId as string
+	},
+	{
+		route: `POST ${P}/packs/:packId/signoffs`,
+		records: ['signoff.created'],
+		call: async (c) => {
+			const path = `/projects/${c.packProjectId}/packs/${c.packId}/signoffs`;
+			const { statement, statementSha256 } = (await c.owner.call('GET', path)).body;
+			return c.owner.call('POST', path, {
+				fullName: 'Guard Signer',
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationField: 'water_resources',
+				registrationNo: '1',
+				scope: 'guard',
+				confirmed: statement.confirmations.map((k: { id: string }) => k.id),
+				statementSha256
+			});
+		},
+		projectOf: (c) => c.packProjectId as string
+	},
+	{
+		route: `POST ${P}/packs/:packId/issue`,
+		records: ['pack.issued'],
+		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/issue`),
+		projectOf: (c) => c.packProjectId as string
+	},
+	{
+		route: `POST ${P}/packs/:packId/withdraw`,
+		records: ['pack.withdrawn'],
+		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/withdraw`, { reason: 'Guard withdrawal' }),
+		projectOf: (c) => c.packProjectId as string
+	},
+	{
+		route: `DELETE ${P}/packs/:packId`,
+		records: ['pack.deleted'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `/projects/${c.packProjectId}/packs`, { runId: c.packRunId });
+			return c.owner.call('DELETE', `/projects/${c.packProjectId}/packs/${r.body.pack.id}`);
+		},
+		projectOf: (c) => c.packProjectId as string
+	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
@@ -484,6 +537,35 @@ const writeRoutes = [
 	)
 ].sort();
 
+/**
+ * A project whose report an evidence pack can be drafted from (as evidence/packs.db.test.ts sets one up, baseline
+ * only): GR4J with a declared uncertainty rule, rain, observed flow, a nominated baseline and its cited ensemble.
+ */
+async function packProject(owner: User): Promise<{ projectId: string; runId: string }> {
+	const rule: DeclaredUncertaintyRule = { members: 30, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: -10, wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null } };
+	const projectId = (await owner.call('POST', '/projects', { name: 'Guard packs' })).body.project.id as string;
+	const at = `/projects/${projectId}`;
+	const outlet = node('Outlet', null);
+	const farm = node('Upper', outlet.id, { areaKm2: 30, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0 });
+	expect((await owner.call('PUT', `${at}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+	expect((await owner.call('PATCH', at, { settings: { apanMm: monthly(150), ewrPragmaticM3PerDay: monthly(5000), runoffModel: 'gr4j', evidenceUncertaintyRule: rule } })).status).toBe(200);
+	const rain = Array.from({ length: 3 * 365 }, (_, i) => (i % 4 === 0 ? (Math.floor(i / 30) % 12 < 6 ? 18 : 6) : 0));
+	expect((await owner.call('PUT', `${at}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2018-10-01', values: rain })).status).toBe(200);
+	const newRun = async (label: string) => (await owner.call('POST', `${at}/runs`, { label })).body.run.id as string;
+	const seed = await newRun('seed');
+	const flow = (await owner.call('GET', `${at}/runs/${seed}/series?key=simulated_outflow`)).body.values as number[];
+	const observed = flow.map((q, i) => (q / 86_400) * (1 + 0.1 * Math.sin(i / 17)));
+	expect((await owner.call('PUT', `${at}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2018-10-01', values: observed })).status).toBe(200);
+	const runId = await newRun('Baseline');
+	expect((await owner.call('POST', `${at}/evidence`, { runId, reason: 'Calibrated baseline' })).status).toBe(201);
+	const started = await owner.call('POST', `${at}/runs/${runId}/uncertainty`, { request: declaredRuleRequest(rule) });
+	expect(started.status, JSON.stringify(started.body)).toBe(201);
+	const input = (await owner.call('GET', `${at}/runs/${runId}/model-input`)).body.input;
+	const { members, coverage } = runEnsemble(input, started.body.ensemble.options);
+	expect((await owner.call('POST', `${at}/runs/${runId}/uncertainty/${started.body.ensemble.id}/result`, { members, coverage })).status).toBe(200);
+	return { projectId, runId };
+}
+
 describe('the write-route history inventory', () => {
 	it('lists every write route under /projects/:id, and nothing that no longer exists', () => {
 		const listed = WRITE_ROUTES.map((e) => e.route);
@@ -502,6 +584,7 @@ describe('every write route records its change', () => {
 		ctx.member = member!;
 		ctx.farmer = farmer!;
 		ctx.projectId = (await owner!.call('POST', '/projects', { name: 'Guard' })).body.project.id;
+		({ projectId: ctx.packProjectId, runId: ctx.packRunId } = await packProject(owner!));
 		const outlet = node('Weir', null);
 		const a = node('Farm A', outlet.id);
 		const b = node('Farm B', outlet.id);

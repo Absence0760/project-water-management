@@ -17,7 +17,6 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 | `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database | seconds |
-| `pnpm test:engine:build --max-workers 3` | the release's engine test record: engine unit with a 2 000-case soak → `engine-build.json` ([deployment.md § Engine build record](./deployment.md#engine-build-record)); not in CI, each release runs it | ~5 min (40 cases: ~1.5 min) |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
 ## Performance budgets
@@ -92,8 +91,10 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   `run.invariants.test.ts`. Soak with
   `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
   (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`).
-  Each release runs it at 2 000 cases for the engine build record
-  (`scripts/release/engine-build.mjs`). The
+  The web release runs it at 1 600 cases (`scripts/release/engine-build.mjs`,
+  `deploy-frontend.yml`), under the shards' time budget of about 0.2 s a
+  case (`fuzz/shard.ts`): raise that budget before raising the release's
+  count. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,

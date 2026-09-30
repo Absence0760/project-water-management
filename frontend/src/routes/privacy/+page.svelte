@@ -162,7 +162,8 @@
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
-			as the project exists, as its audit trail. Deleting a project deletes them. Model runs are pruned as a project goes on: its
+			as the project exists, as its audit trail. Deleting a project deletes them, except that a project that has put a run forward
+			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record. Model runs are pruned as a project goes on: its
 			newest 12 published results and 20 unpublished runs are kept.
 		</li>
 		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>

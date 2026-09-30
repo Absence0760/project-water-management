@@ -114,8 +114,13 @@ export interface PairedSummary {
 	annual: { waterYear: number; days: number; natural: Band; outflow: Band }[];
 	/** Farms in both runs. */
 	curtailment: { nodeId: string; name: string; band: Band }[];
-	/** Reserve sites in both runs. */
-	reserve: { key: string; name: string; band: Band }[];
+	/**
+	 * Reserve sites in both runs: the band on the change in the share of
+	 * months met, and (`worse`, issue #71; absent on summaries stored before it) the share of the
+	 * pairs in which the other run meets fewer months; null below minMembers
+	 * pairs or when no pair has a rate at the site.
+	 */
+	reserve: { key: string; name: string; band: Band; worse?: number | null }[];
 	/** Farms in only one of the runs (no difference to take). */
 	unpaired: string[];
 	decisionRule: string;
@@ -139,6 +144,15 @@ export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'head
 			min
 		);
 	const share = (f: (x: MemberMetrics) => number) => (pairs.length < min ? null : pairs.filter(({ a, b }) => f(b) > f(a)).length / pairs.length);
+	/** Share of the pairs with a rate on both sides in which the other run's rate is lower (fewer months met). */
+	const lowerShare = (f: (x: MemberMetrics) => number | null | undefined) => {
+		const both = pairs.flatMap(({ a, b }) => {
+			const x = f(a);
+			const y = f(b);
+			return typeof x === 'number' && typeof y === 'number' ? [y < x] : [];
+		});
+		return both.length < min ? null : both.filter(Boolean).length / both.length;
+	};
 	const baseFarms = new Map(baseline.header.farms.map((f) => [f.nodeId, f.name]));
 	const otherFarms = new Map(paired.header.farms.map((f) => [f.nodeId, f.name]));
 	const bothFarms = paired.header.farms.filter((f) => baseFarms.has(f.nodeId));
@@ -158,7 +172,9 @@ export function summarisePaired(baseline: Pick<EnsembleResult, 'options' | 'head
 		marOutflowMm3: d((x) => x.marOutflowMm3),
 		annual: years.map((y, i) => ({ ...y, natural: d((x) => x.annualNaturalMm3[i]), outflow: d((x) => x.annualOutflowMm3[i]) })),
 		curtailment: bothFarms.map((f) => ({ ...f, band: d((x) => x.curtailmentM3Day[f.nodeId]) })),
-		reserve: paired.header.reserveSites.filter((s) => baseSites.has(s.key)).map((s) => ({ ...s, band: d((x) => x.reserveRate[s.key]) })),
+		reserve: paired.header.reserveSites
+			.filter((s) => baseSites.has(s.key))
+			.map((s) => ({ ...s, band: d((x) => x.reserveRate[s.key]), worse: lowerShare((x) => x.reserveRate[s.key]) })),
 		unpaired,
 		decisionRule:
 			`Each of the baseline's ${pairs.length} kept parameter sets (kept by its rule: seed ${o.seed}, ${o.members} sampled) is run on both runs' inputs with the same forcing; ` +

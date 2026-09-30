@@ -4,7 +4,8 @@
 	// candidate and certificated categories shown but disabled, an unusual
 	// category or field warned of inline) come first (the first statement is about "the person named
 	// above"), then every statement is ticked on its own and the whole
-	// known-limitations list must be scrolled through before it can be
+	// known-limitations list (with the errata of the run's engine version)
+	// must be scrolled through before it can be
 	// submitted. The server gets back the hash of the
 	// statement shown here and refuses a sign-off if the statement has changed
 	// since (onstale reloads it).
@@ -163,13 +164,25 @@
 			{/each}
 		</fieldset>
 
-		<h3 id="{uid}-lim">Known limitations ({statement.limitations.length})</h3>
+		<p class="small">
+			Methods: methodology statement <strong>{statement.methodology.version}</strong> (docs/methodology in the app's source, SHA-256
+			<code>{statement.methodology.sha256.slice(0, 12)}…</code>).
+		</p>
+		<h3 id="{uid}-lim">Known limitations ({statement.limitations.length}) and errata of engine {statement.engineVersion} ({statement.errata.length})</h3>
 		<!-- Focusable so a keyboard can scroll it; reading to the end is what enables the sign-off. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div class="limits" bind:this={box} onscroll={checkRead} tabindex="0" role="region" aria-labelledby="{uid}-lim">
 			<ul>
 				{#each statement.limitations as l (l.id)}<li><strong>{l.id}</strong> {l.title}. <span class="muted">{l.status}.</span></li>{/each}
 			</ul>
+			<p class="small"><strong>Errata</strong> (known bugs recorded for engine {statement.engineVersion} or the engine of its fit, docs/engine-errata.md):</p>
+			{#if statement.errata.length}
+				<ul>
+					{#each statement.errata as e (e.id)}<li><strong>{e.id}</strong> {e.summary}. <span class="muted">Applies when: {e.appliesWhen}. {e.fixedIn ? `Fixed in engine ${e.fixedIn}.` : 'Not fixed yet.'}</span></li>{/each}
+				</ul>
+			{:else}
+				<p class="small muted">None recorded for this engine version in docs/engine-errata.md.</p>
+			{/if}
 		</div>
 		<p class="muted small" aria-live="polite">{readAll ? 'You have reached the end of the list.' : 'Scroll to the end of the list to continue.'}</p>
 

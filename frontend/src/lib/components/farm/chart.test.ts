@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barChart, CHART_BASE, damChart, damRows, damSummary, monthLabels, niceMax, rangeCaption, supplyRows, supplySummary } from './chart';
+import { barChart, CHART_BASE, damChart, damRows, damSummary, monthLabels, niceMax, rangeCaption, supplyLevel, supplyLevelKey, supplyRows, supplySummary } from './chart';
 import { vaalbankFixture } from './fixture';
 
 const sp = (s: string) => s.replace(/[\u00a0\u202f]/g, ' ');
@@ -58,6 +58,26 @@ describe('the needed/received bars', () => {
 		expect(rows.map((r) => [r.label, sp(r.need), sp(r.got)])[0]).toEqual(['Feb 2023', '104.4 ML', '83.1 ML']);
 		expect(rows.map((r) => [r.label, sp(r.need), sp(r.got)])[10]).toEqual(['Dec 2023', '110 ML', '96.3 ML']);
 		expect(rows[11]!.label).toBe('1–10 Jan 2024');
+	});
+
+	// Issue #70: the engine's stress class of each month, in a farmer's words.
+	it('gives each month the share of its need received and how short it was', () => {
+		const rows = supplyRows(farm.monthly, farm.dataUntil, 'ML');
+		// February: 83.1 of 104.4 ML, 80 %: "short" (70–85 %).
+		expect([sp(rows[0]!.share), rows[0]!.level]).toEqual(['80 %', 'short']);
+		// December: 96.3 of 110 ML, 88 %.
+		expect([sp(rows[10]!.share), rows[10]!.level]).toEqual(['88 %', 'a little short']);
+		const month = (demandM3: number, suppliedM3: number) => ({ month: '2023-05', demandM3, suppliedM3, damPctEnd: null });
+		expect(supplyLevel(month(100, 100)).level).toBe('all or nearly all');
+		expect(supplyLevel(month(100, 95)).level).toBe('all or nearly all');
+		expect(supplyLevel(month(100, 94)).level).toBe('a little short');
+		expect(supplyLevel(month(100, 60)).level).toBe('very short');
+		expect(supplyLevel(month(100, 49)).level).toBe('far too little');
+		// No need that month: nothing to be short of.
+		expect(supplyLevel(month(0, 0))).toEqual({ share: '–', level: '' });
+		expect(sp(supplyLevelKey())).toBe(
+			'All or nearly all is 95 % or more of what you needed; a little short, 85 % or more; short, 70 % or more; very short, 50 % or more; far too little, less than 50 %.'
+		);
 	});
 
 	// Issue #51: the table ignored the unit chosen on the supply card.

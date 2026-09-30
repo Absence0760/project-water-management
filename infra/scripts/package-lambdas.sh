@@ -73,11 +73,10 @@ compgen -G "$backend/migrations/*.sql" >/dev/null || { echo "error: no migration
 
 # The engine build's test record (WP-3.13; backend/src/release/engineBuild.ts),
 # baked into every bundle as the esbuild define __ENGINE_BUILD_JSON__: the
-# release sets ENGINE_BUILD_JSON from scripts/release/engine-build.mjs.
-# Unset, it is an empty string and engineBuild() is null. Set, it must be a
-# record for this ENGINE_VERSION, or packaging stops here.
-node "$repo_root/scripts/release/engine-build.mjs" --check
-engine_build_define="$(node -e 'process.stdout.write(JSON.stringify(process.env.ENGINE_BUILD_JSON || ""))')"
+# release's scripts/release/engine-build.mjs puts it in ENGINE_BUILD. Unset, it
+# is an empty string and engineBuild() is null; engineBuild() also refuses a
+# record made for another ENGINE_VERSION.
+engine_build_define="$(node -e 'process.stdout.write(JSON.stringify(process.env.ENGINE_BUILD || ""))')"
 
 # ESM bundles that still contain CommonJS deps (pg) need a real `require`.
 banner="import{createRequire}from'module';const require=createRequire(import.meta.url);"

@@ -13,6 +13,7 @@
 		"./languages": "./src/languages.ts",
 		"./legal": "./src/legal.ts",
 		"./limitations": "./src/liability/limitations.generated.ts",
+		"./methodology": "./src/liability/methodology-text.generated.ts",
 		"./provenance": "./src/seriesProvenance.ts",
 		"./testing": "./src/testing/index.ts",
 		"./version": "./src/version.ts"
@@ -22,7 +23,7 @@
 		"test": "vitest run --project unit",
 		"test:watch": "vitest",
 		"test:perf": "vitest run --project perf",
-		"gen:limitations": "tsx scripts/gen-limitations.ts"
+		"gen:liability": "tsx scripts/gen-liability.ts"
 	},
 	"devDependencies": {
 		"@types/node": "24.19.0",

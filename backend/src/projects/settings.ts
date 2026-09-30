@@ -66,6 +66,7 @@ import {
 	SELECTION_TESTS,
 	ON_NEW_DATA,
 	SIGNED_OFF_BY_MAX,
+	declaredRuleError,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -138,9 +139,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * one fit, and a PE input is one kind or the other (merging `{ kind: 'pan' }`
  * over a stored monthly row would keep a stale `mm` and `source`), and an
  * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
- * own source.
+ * own source. The declared uncertainty rule (issue #71) is one rule: a patch
+ * that changed one threshold must not keep another from an older one.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules', 'evidenceUncertaintyRule']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -348,6 +350,8 @@ const EwrRuleTable = z
 		source: z.string().trim().min(1).max(EWR_RULE_SOURCE_MAX),
 		// Engine ≥ 1.5.0 (WP-3.7), optional so a table saved before stays valid: gazetted, desktop or other.
 		sourceKind: z.enum(EWR_RULE_SOURCE_KINDS).nullable().optional(),
+		// ER9 (issue #71), optional: the recommended ecological category, "A" … "F" or a band like "B/C" (ewrRuleTableIssues checks the form).
+		category: z.string().max(3).nullable().optional(),
 		component: z.enum(EWR_RULE_COMPONENTS),
 		unit: z.enum(EWR_RULE_UNITS),
 		points: z.array(z.number().finite()).max(EWR_RULE_POINTS_MAX),
@@ -923,6 +927,12 @@ export const SettingsPatch = z
 		qualityFlags: QualityFlags.partial(),
 		// Automated calibration's rules (engine calibrate/rulesSettings.ts, issue #153): replaced whole; the server sets the revision.
 		calibrationRules: CalibrationRulesPatch,
+		// The uncertainty rule an evidence report's cited ensemble must follow (engine uncertainty/options.ts, issue #71 ER3):
+		// replaced whole, or null to withdraw it. Not a model input: the settings history records who declared it and when.
+		evidenceUncertaintyRule: z.unknown().superRefine((v, ctx) => {
+			const err = declaredRuleError(v);
+			if (err) ctx.addIssue({ code: 'custom', message: `evidence uncertainty rule: ${err}` });
+		}),
 		fitRecord: FitRecord.nullable(),
 		// Data-quality limits (engine resolveDataQuality): gauge vs logger, and
 		// (engine ≥ 1.20.0, issue #66) outliers, flat-lines, zero-rain runs and

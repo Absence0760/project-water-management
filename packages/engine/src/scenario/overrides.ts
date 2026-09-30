@@ -564,9 +564,9 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		case 'ewrRule.set': {
 			const { table, issues } = ewrRuleTableOpIssues(op.table);
 			if (!table) fail(`the rule table isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
-			// As the run reads it (resolveEwrRules): the source trimmed, no natural grid unless it is the source, a kind and a natural MAR only when stated.
-			const { sourceKind, naturalMarMcm, ...rest } = table!;
-			const t: EwrRuleTable = { ...rest, ...(sourceKind != null ? { sourceKind } : {}), ...(naturalMarMcm != null ? { naturalMarMcm } : {}), source: rest.source.trim(), natural: rest.naturalSource === 'table' ? rest.natural : null };
+			// As the run reads it (resolveEwrRules): the source trimmed, no natural grid unless it is the source, a kind, a REC and a natural MAR only when stated.
+			const { sourceKind, category, naturalMarMcm, ...rest } = table!;
+			const t: EwrRuleTable = { ...rest, ...(sourceKind != null ? { sourceKind } : {}), ...(category != null ? { category } : {}), ...(naturalMarMcm != null ? { naturalMarMcm } : {}), source: rest.source.trim(), natural: rest.naturalSource === 'table' ? rest.natural : null };
 			// The outlet is its own site whether a table names it null (as Settings does) or by its node's id (as the run reads both).
 			const outflowId = m.nodes.find((n) => n.downstreamNodeId === null)?.id;
 			const site = (id: string | null | undefined) => (id === undefined || id === null || id === outflowId ? null : id);

@@ -64,6 +64,12 @@ interface World {
 	outlookPublicationId: string;
 	ruleId: string;
 	ensembleId: string;
+	/** A run of the team scenario (for an application pack's scenario_run_id). */
+	scenarioRunId: string;
+	/** Evidence packs (112): a draft on runId; an issued v1; an issued v2 that supersedes it, v1 still issued. */
+	packId: string;
+	issuedPackId: string;
+	successorPackId: string;
 	series: { id: string; sha256: string; kind: string; startDate: string };
 }
 
@@ -170,6 +176,25 @@ async function world(name: string): Promise<World> {
 			)
 		};
 	});
+	// Evidence packs, planted past their guards (replica role): the states the cases need.
+	const packs = await arrange(async (q) => {
+		const one = async (sql: string, params: unknown[]) => (await q(`${sql} RETURNING id::text`, params))[0]!.id as string;
+		const pack = (status: string, version: number, supersedes: string | null) =>
+			one(
+				`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, supersedes_pack_id, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by)
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '{}', md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $6,
+					CASE WHEN $5 = 'draft' THEN NULL ELSE now() END, CASE WHEN $5 = 'draft' THEN NULL ELSE $6::uuid END)`,
+				[projectId, runId, version, supersedes, status, u]
+			);
+		const packId = await pack('draft', 1, null);
+		const issuedPackId = await pack('issued', 1, null);
+		const successorPackId = await pack('issued', 2, issuedPackId);
+		const scenarioRunId = await one(
+			`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, scenario_id) VALUES ($1, $2, 'x', '2020-01-01', '2020-01-02', '{}', $3)`,
+			[projectId, u, ids.scenarioId]
+		);
+		return { packId, issuedPackId, successorPackId, scenarioRunId };
+	});
 	const [pub] = await arrange((q) =>
 		q(
 			`INSERT INTO outlook_publication (project_id, outlook_id, level_id, level_label, decision_date, season_end, engine_version, published_by)
@@ -189,7 +214,8 @@ async function world(name: string): Promise<World> {
 		revisionId: rev!.id as string,
 		apiKeyId: key.body.key.id,
 		series: series as World['series'],
-		...ids
+		...ids,
+		...packs
 	};
 }
 
@@ -272,6 +298,9 @@ interface Case {
 }
 
 const u = () => dual.id;
+/** A draft evidence pack: id, project, baseline run, version, predecessor, scenario, scenario run, creator. */
+const packInsert = `INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, supersedes_pack_id, scenario_id, scenario_run_id, manifest, manifest_sha256, report_version, engine_version, created_by)
+	VALUES ($1::uuid, $2::uuid, $3, $4::int, $5, $6, $7, jsonb_build_object('pack', jsonb_build_object('id', $1::text, 'version', $4::int), 'project', jsonb_build_object('id', $2::text), 'engine', jsonb_build_object('version', 'x'), 'report', jsonb_build_object('version', 'evidence-1')), md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $8)`;
 const nonce = () => randomBytes(32);
 
 /** Keyed `table.column`: one per non-composite foreign key of the inventory. */
@@ -490,6 +519,36 @@ const CASES: Record<string, Case> = {
 		insert: (h, ref) => [
 			`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version)
 			 VALUES ($1, $2, $3, 'A Person', 'SACNASP', '1', 'x', 'signoff-1', repeat('a', 64), 'v1')`,
+			[h.projectId, ref, u()]
+		]
+	},
+	// Evidence packs (112): an editor drafts one on the project's own runs, scenario and issued predecessor.
+	'evidence_pack.baseline_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [packInsert, [randomUUID(), h.projectId, ref, 1, null, null, null, u()]]
+	},
+	'evidence_pack.scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: (h, ref) => [packInsert, [randomUUID(), h.projectId, h.runId, 1, null, ref, h.scenarioRunId, u()]]
+	},
+	'evidence_pack.scenario_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [packInsert, [randomUUID(), h.projectId, h.runId, 1, null, h.scenarioId, ref, u()]]
+	},
+	'evidence_pack.supersedes_pack_id': {
+		ref: (w) => w.issuedPackId,
+		insert: (h, ref) => [packInsert, [randomUUID(), h.projectId, h.runId, 2, ref, null, null, u()]]
+	},
+	// Set only by superseding an issued pack (evidence_pack_guard): the "insert" is that UPDATE, which the harness then repeats.
+	'evidence_pack.superseded_by_pack_id': {
+		ref: (w) => w.successorPackId,
+		insert: (h, ref) => [`UPDATE evidence_pack SET status = 'superseded', superseded_by_pack_id = $1 WHERE id = $2`, [ref, h.issuedPackId]]
+	},
+	'signoff.pack_id': {
+		ref: (w) => w.packId,
+		insert: (h, ref) => [
+			`INSERT INTO signoff (project_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope, statement_version, statement_sha256, disclaimer_version)
+			 VALUES ($1, $2, $3, 'A Person', 'sacnasp', 'pr_sci_nat', 'water_resources', '1', 'x', 'pack-signoff-1', repeat('a', 64), 'v1')`,
 			[h.projectId, ref, u()]
 		]
 	},
@@ -774,6 +833,9 @@ const FIELDS: Record<string, string[] | string> = {
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
 	'publish/publish.ts:runId': ['POST /projects/:id/publication runId'],
 	'reports/routes.ts:runId': ['POST /projects/:id/reports runId'],
+	'evidence/packs.ts:runId':
+		'the report is read within the project (loadEvidenceInput: WHERE project_id = …), so another project’s run is 404; a pack needs an issuable report, which the sweep’s worlds lack (evidence/packs.db.test.ts tries it)',
+	'evidence/packs.ts:supersedesId': 'looked up within the project (loadPack: WHERE project_id = …), so another project’s pack is 404 (evidence/packs.db.test.ts tries it)',
 	'runs/evidence.ts:runId': ['POST /projects/:id/evidence runId'],
 	'runs/routes.ts:nodeId': 'a read filter within the run',
 	'runs/uncertainty.ts:baselineId': 'checked by run_uncertainty_start (the SQL case); the route needs a completed ensemble, uncertainty.db.test.ts',

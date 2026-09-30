@@ -330,7 +330,18 @@ bottom:
    river pump at a farm reads as 0 there"), under the rule in
    [Series and metrics only one run has](#series-and-metrics-only-one-run-has)
    (`delta.ts` `farmFeatureMetrics`). These columns don't sort.
-7. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
+7. **Assurance of supply** (WP-3.4, issue #70; `compare/assurance.ts`
+   `compareAssurance`, `compare/AssuranceDeltaTable.svelte`, shown when
+   either run has `summary.supplyAssurance`, engine ≥ 0.32.0). One row per
+   farm and other water user, matched by name (namesakes pair off in
+   order), with run B's value and the change from A for the share of
+   demand days fully met, the volume supplied, the water years met (B's
+   "3 of 4" beside it, A's under the change) and the longest run of days
+   not fully met. Notes say when the runs used different annual thresholds
+   or reporting windows, and units in one run only are listed underneath.
+   A run from an older engine has none: a note says to rerun it. The
+   Scenarios tab's comparison shows the same table.
+8. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
    shared with the Scenarios tab). Pick a **node** and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
    **B − A** on a second chart underneath. It opens on the catchment's
@@ -567,7 +578,12 @@ whole: *"Parameters now from a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed
 7)"* when one run has none, *"Fit record: … → …"* for a different fit (time,
 model or seed), and *"Fit record: parameters edited since the fit (x1)"* when
 the same fit's parameters were edited by hand in between (or *"back to the
-fitted values"*). A parameter edit itself still has its own line. Settings keys the engine doesn't know yet still appear as
+fitted values"*). A parameter edit itself still has its own line. The
+project's declared uncertainty rule for evidence (issue #71,
+`settings.evidenceUncertaintyRule`) is one line, **Declared uncertainty rule
+(evidence)**, the whole rule in words either side (`declaredRuleText`, "not
+declared" when absent). It changes no result, so the line only says the two
+runs were made under different declared rules. Settings keys the engine doesn't know yet still appear as
 *Setting "x" changed*.
 
 ## Where the code lives

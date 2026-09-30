@@ -68,6 +68,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	termsHref: { why: 'TermsSummary: its `termsHref` prop, "/terms" by default; the register page passes `${base}/terms`', in: ['lib/components/legal/TermsSummary.svelte'] },
 	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
+	back: { why: 'EvidencePage: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id', in: ['lib/components/report/evidence/EvidencePage.svelte'] },
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	filterHref: { why: 'ApplicationsTab: withoutParam(page.url, "status") or withParam(page.url, "status", f)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },

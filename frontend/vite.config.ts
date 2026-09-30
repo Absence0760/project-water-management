@@ -2,7 +2,6 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import { parseEngineBuild } from '../packages/engine/src/liability/engineBuild';
 
 const AUTOCAL_WORKER = fileURLToPath(new URL('./src/lib/calibration/autocal.worker.ts', import.meta.url));
 const AUTOCAL_WORKER_URL = 'virtual:autocal-worker-url';
@@ -219,25 +218,14 @@ export function helpArticlesChunk(id: string): string | undefined {
 	return /\/src\/lib\/help\/articles-data\.ts$/.test(id) ? 'help-articles-data' : undefined;
 }
 
-/**
- * The engine build's test record (WP-3.13, model.md §2.10f) as the text the
- * `__ENGINE_BUILD_JSON__` define injects (src/lib/engineBuild.ts reads it).
- * The release workflow sets ENGINE_BUILD_JSON from
- * scripts/release/engine-build.mjs; unset (dev, the e2e build, a local build)
- * it is empty and the report says "Not recorded for this build". Set but not a
- * record for this ENGINE_VERSION, the build fails: a release must never ship a
- * record it can't show, nor one a stale file made for another engine.
- */
-export function engineBuildDefine(json: string | undefined): string {
-	if (!json) return JSON.stringify('');
-	const build = parseEngineBuild(json);
-	if (!build) throw new Error('ENGINE_BUILD_JSON is set but is not an engine build record for this ENGINE_VERSION (scripts/release/engine-build.mjs writes one).');
-	return JSON.stringify(JSON.stringify(build));
-}
-
 export default defineConfig({
-	define: { __ENGINE_BUILD_JSON__: engineBuildDefine(process.env.ENGINE_BUILD_JSON) },
 	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, chunkModuleMap(), sveltekit()],
+	// The engine build record (WP-3.13): the web release workflow runs the
+	// engine suite and a soak and puts the record in ENGINE_BUILD
+	// (scripts/release/engine-build.mjs); the report's validation statement
+	// prints it (lib/components/liability/engineBuild.ts). Any other build
+	// (dev, e2e, CI) has none and says "Not recorded for this build".
+	define: { __ENGINE_BUILD__: JSON.stringify(process.env.ENGINE_BUILD ?? '') },
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rolldown
 	// builds that don't read build.rolldownOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never

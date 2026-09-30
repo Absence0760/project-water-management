@@ -7,6 +7,10 @@
 	// every chart has drawn: e2e waits on it, and so does the server-side render
 	// (backend/src/reports/render.ts), which prints this same page.
 	//
+	// `&evidence` (issue #71) is the licensing evidence report of the run:
+	// EvidencePage, its own layout (report/evidence/), from one server-built
+	// document (GET …/runs/:runId/evidence-report).
+	//
 	// `&against=<projectId>:<runId>` (Compare runs' Export impact report, issue
 	// #17 A4) makes it an impact report: an "Impact against the baseline"
 	// section after the cover (report/ImpactSection.svelte, its own chunk),
@@ -15,15 +19,25 @@
 	// with the same `against`. The section opens with the licence-impact board
 	// by year class (issue #53 R7): its three daily series (report/impactSeries.ts)
 	// load here, before "ready"; the board itself is in the section's chunk.
+	//
+	// The run's place in the project's publications (GET …/runs/:runId/publication,
+	// issue #70) puts who published it and its restriction notice on the cover,
+	// and "Changes since the previous publication" after the notes. A farmer
+	// gets 403 on the project, as in the workspace, and like the workspace this
+	// sends them to their farm page; any other role below viewer (an applicant)
+	// is told the report isn't part of their role.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { loadImpactSeries, type ImpactSeries } from '$lib/components/report/impactSeries';
 	import { parseRef } from '$lib/components/compare/picker';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, runChirpsFactors } from '$lib/series/provenance';
-	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
+	import { api, ApiError, type Project, type Run, type RunCompareResponse, type RunPublication, type SignoffList } from '$lib/api';
+	import ChangesList from '$lib/components/compare/ChangesList.svelte';
+	import { attributionSummary, lineAuthors } from '$lib/components/compare/attribution';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -39,7 +53,10 @@
 	import { ranAgo } from '$lib/components/network/supplyColour';
 	import { supplyColouring } from '$lib/components/network/farmColour';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
+	import { reportPageRule } from '$lib/components/report/printPage';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
+	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
+	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
 	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
@@ -56,9 +73,13 @@
 	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
 	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
 	import ServerPdf from '$lib/components/report/ServerPdf.svelte';
+	// Evidence mode's shell is small; its report is a chunk of its own (EvidencePage loads it).
+	import EvidencePage from '$lib/components/report/evidence/EvidencePage.svelte';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
+	/** `&evidence`: the licensing evidence report of the run (issue #71, WP-2.15 Phase C), its own page and chunk. */
+	const evidenceMode = $derived(page.url.searchParams.has('evidence'));
 	/** The baseline of an impact report ("<projectId>:<runId>", as Compare runs' refs); null for the plain report. */
 	const againstParam = $derived(page.url.searchParams.get('against') || null);
 	// The impact section: its own chunk, loaded (before "ready") only for an impact report.
@@ -76,7 +97,9 @@
 	let sources = $state.raw<ObservedSources>({});
 	// The run's sign-offs and the statement a signer confirms (WP-3.13); part of what "ready" waits for.
 	let signoffs = $state.raw<SignoffList | null>(null);
-	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error' | 'chunk-failed'>('loading');
+	// The run's publication and the one before it (issue #70); part of what "ready" waits for.
+	let runPub = $state.raw<RunPublication | null>(null);
+	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'forbidden' | 'error' | 'chunk-failed'>('loading');
 	let error = $state('');
 	let hydroDrawn = $state(false);
 	let ewrDrawn = $state(false);
@@ -115,13 +138,14 @@
 			}
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
 			const againstRef = parseRef(against);
-			const [pairs, so, cmp, boardSeries] = await Promise.all([
+			const [pairs, so, pub, cmp, boardSeries] = await Promise.all([
 				Promise.all(
 					[...CATCHMENT_FLOW_KEYS, EWR_RULE_KEY].filter(([, k]) => have(k)).map(
 						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
 					)
 				),
 				api.signoffs.list(id, runId),
+				api.publication.ofRun(id, runId),
 				// The impact section: a baseline that can't be compared says why in its section; the report still loads.
 				against
 					? api.compare.runs(against, `${id}:${runId}`).catch((e: unknown) => {
@@ -138,6 +162,7 @@
 				againstRef ? loadImpactSeries((p, r, k) => api.runs.series(p, r, k, null), againstRef, { projectId: id, runId }) : null
 			]);
 			signoffs = so;
+			runPub = pub;
 			impact = cmp;
 			impactSeries = boardSeries;
 			// The land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
@@ -154,7 +179,12 @@
 			status = 'loaded';
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) status = 'not-found';
-			else {
+			// A member below viewer: a farmer's view of the project is their farm page (the workspace sends them there too).
+			else if (e instanceof ApiError && e.status === 403) {
+				const role = (await api.projects.list().catch(() => [])).find((p) => p.id === id)?.role;
+				if (role === 'farmer') await goto(`${base}/farm/${encodeURIComponent(id)}`, { replaceState: true });
+				else status = 'forbidden';
+			} else {
 				error = e instanceof Error ? e.message : String(e);
 				status = 'error';
 			}
@@ -164,6 +194,7 @@
 		const id = projectId;
 		const want = runParam;
 		const against = againstParam;
+		if (evidenceMode) return;
 		untrack(() => load(id, want, against));
 	});
 
@@ -181,7 +212,7 @@
 		}
 	}
 
-	const sections = $derived(run ? reportSections(run, { impact: !!againstParam }) : []);
+	const sections = $derived(run ? reportSections(run, { impact: !!againstParam, previousPublication: !!runPub?.previous }) : []);
 	const ready = $derived(isReportReady(status === 'loaded', reportCharts(sections), { hydrograph: hydroDrawn, ewr: ewrDrawn }));
 
 	const model = $derived((run?.model ?? {}) as Partial<ProjectModel>);
@@ -213,17 +244,27 @@
 	// The server PDF prints this on every page (backend reports/render.ts reads it).
 	const footer = $derived(project && run ? REPORT_FOOTER(project.name, runName, disclaimerSection(sections)) : undefined);
 
-	// Printing is A4, in the light theme, without the app's header (see the styles).
+	// Printing is A4, in the light theme, without the app's header (see the styles),
+	// with the running footer on every page once the footer is known (report/printPage.ts).
+	const pageRule = $derived(reportPageRule(footer));
+	let pageStyle: HTMLStyleElement | null = null;
 	$effect(() => {
-		const pageRule = document.createElement('style');
-		pageRule.textContent = '@page { size: A4; margin: 14mm 12mm 18mm; }';
-		document.head.append(pageRule);
+		// Read the rule first: behind `pageStyle &&` a first run (before the style exists) would
+		// never subscribe to it, and the footer, known only once the run loads, would never print.
+		const rule = pageRule;
+		if (pageStyle) pageStyle.textContent = rule;
+	});
+	$effect(() => {
+		pageStyle = document.createElement('style');
+		pageStyle.textContent = untrack(() => pageRule);
+		document.head.append(pageStyle);
 		const before = () => forceLightForPrint();
 		const after = () => restoreThemeAfterPrint();
 		addEventListener('beforeprint', before);
 		addEventListener('afterprint', after);
 		return () => {
-			pageRule.remove();
+			pageStyle?.remove();
+			pageStyle = null;
 			removeEventListener('beforeprint', before);
 			removeEventListener('afterprint', after);
 			restoreThemeAfterPrint();
@@ -231,7 +272,11 @@
 	});
 </script>
 
-<svelte:head><title>{project ? `Report · ${project.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head>{#if !evidenceMode}<title>{project ? `Report · ${project.name} · ` : ''}Water Management</title>{/if}</svelte:head>
+
+{#if evidenceMode}
+	<EvidencePage {projectId} runId={runParam} />
+{:else}
 
 <main class="page report" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={!ready && status === 'loading'}>
 	{#if status === 'not-found'}
@@ -242,6 +287,10 @@
 		<div class="alert alert-error" role="alert">
 			The report could not be loaded: {error}
 			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam, againstParam)}>Try again</button>
+		</div>
+	{:else if status === 'forbidden'}
+		<div class="alert alert-info" role="status">
+			The catchment report isn’t part of your role in this project. <a href="{base}/">Back to projects</a>
 		</div>
 	{:else if status === 'chunk-failed'}
 		<ChunkFailed what="The report" />
@@ -291,7 +340,27 @@
 						<div><dt>Run made</dt><dd>{fmtDate(run.createdAt, true)}{run.createdBy ? ` by ${run.createdBy}` : ''}</dd></div>
 						<div><dt>Engine version</dt><dd>{run.engineVersion}</dd></div>
 						<div><dt>Report prepared</dt><dd>{prepared}</dd></div>
+						{#if runPub?.publication}
+							{@const pub = runPub.publication}
+							<!-- Who published the run (WP-2.3): the run stakeholders see, or saw until a later publication. -->
+							<div data-testid="report-published">
+								<dt>Published</dt>
+								<dd>
+									{fmtDate(pub.publishedAt, true)}{pub.publishedBy ? ` by ${pub.publishedBy}` : ''}{pub.supersededAt
+										? `; replaced ${fmtDate(pub.supersededAt, true)}`
+										: '; the run stakeholders see now'}
+								</dd>
+							</div>
+						{/if}
 					</dl>
+					{#if runPub?.publication && (runPub.publication.restriction.level !== 'none' || noticeLanguages(runPub.publication.restriction.notice).length)}
+						{@const r = runPub.publication.restriction}
+						<!-- The WUA's restriction notice on that publication, in every language it was written in. -->
+						<div class="notice" role="note" aria-labelledby="rep-notice-h" data-testid="report-notice">
+							<p id="rep-notice-h" class="rf-title">Restriction notice{runPub.publication.supersededAt ? ' (on the publication since replaced)' : ''}: {restrictionSummary(r)}</p>
+							{#each noticeLanguages(r.notice) as n (n.code)}<p lang={n.code}><span class="muted">{n.name}:</span> {n.text}</p>{/each}
+						</div>
+					{/if}
 					{#if run.legacy}
 						<p class="alert alert-warning">
 							Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1).
@@ -406,6 +475,8 @@
 						{:else}
 							<p class="muted">This run was made before the monthly EWR compliance grid existed.</p>
 						{/if}
+					{:else if s.id === 'assurance'}
+						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={run.engineVersion} print />
 					{:else if s.id === 'farms'}
 						<RunSummaryView {summary} {days}>
 							{#snippet units()}
@@ -424,8 +495,17 @@
 					{:else if s.id === 'notes'}
 						<p class="notes">{run.notes}</p>
 						{#if run.notesUpdatedAt}<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>{/if}
+					{:else if s.id === 'changes' && runPub?.previous}
+						{@const prev = runPub.previous}
+						<p class="lede">
+							{runPub.publication ? 'Since the publication before this one' : 'This run is not published. Against the current publication'}: “{prev.runLabel ||
+								'Untitled run'}”, published {fmtDate(prev.publishedAt, true)}{prev.publishedBy ? ` by ${prev.publishedBy}` : ''}. What changed in the saved
+							model, settings and series from that run to this one:
+						</p>
+						{#if prev.attribution}<p class="muted small">{attributionSummary(prev.attribution)}</p>{/if}
+						<ChangesList changes={prev.changes} authors={lineAuthors(prev.changes, prev.attribution)} />
 					{:else if s.id === 'validation'}
-						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} />
+						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={run.settings?.fitRecord?.engineVersion ?? null} />
 					{:else if s.id === 'signoff' && signoffs}
 						<SignoffSection {projectId} runId={run.id} list={signoffs} onchange={signoffsChanged} />
 					{:else if s.id === 'disclaimer'}
@@ -436,6 +516,7 @@
 		{/each}
 	{/if}
 </main>
+{/if}
 
 <!-- A titled table of text rows: the first column heads each row; `nums` are the right-aligned (numeric) columns. -->
 {#snippet table(title: string, head: string[], nums: number[], rows: string[][])}
@@ -521,6 +602,23 @@
 		line-height: 1.5;
 		break-inside: avoid;
 	}
+	.notice {
+		max-width: 72ch;
+		margin: 0 0 1rem;
+		padding: 0.6rem 0.9rem;
+		border: 1px solid var(--border);
+		border-left: 4px solid var(--accent);
+		border-radius: 4px;
+		line-height: 1.5;
+		break-inside: avoid;
+	}
+	/* The WUA's words as written: their line breaks kept, a long word wrapped. */
+	.notice p {
+		margin: 0.3rem 0 0;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.notice .rf-title,
 	.read-first .rf-title {
 		margin: 0;
 		font-weight: 700;

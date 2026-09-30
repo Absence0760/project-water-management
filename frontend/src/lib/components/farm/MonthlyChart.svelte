@@ -5,10 +5,13 @@
 	// the 13 px labels stay 13 px. The chart is aria-hidden; a visually hidden
 	// sentence sums it up and "Show the numbers" is a real table of all 12
 	// months with their years, in the unit the reader chose on the supply
-	// card (the chart's axis stays in ML).
+	// card (the chart's axis stays in ML), and under each month's received the
+	// share of its need, with the engine's stress class in plain words (issue
+	// #70): a line in the Received cell, not a fourth column, which didn't fit
+	// a 320 px phone in Afrikaans (docs/design/ui-playbook.md: stack, don't scroll).
 	import type { FarmProjection } from '@water-management/engine';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyRows, supplySummary } from './chart';
+	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyLevelKey, supplyRows, supplySummary } from './chart';
 
 	import type { VolumeUnit } from './format';
 
@@ -48,10 +51,11 @@
 			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Needed')}</th><th scope="col">{t('Received')}</th></tr></thead>
 			<tbody>
 				{#each rows as r (r.label)}
-					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}</td></tr>
+					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}{#if r.level}<span class="level">{r.share} · {r.level}</span>{/if}</td></tr>
 				{/each}
 			</tbody>
 		</table>
+		<p class="fine">{supplyLevelKey()}</p>
 	</details>
 </section>
 
@@ -103,5 +107,10 @@
 	}
 	.got {
 		fill: var(--series-1);
+	}
+	.level {
+		display: block;
+		font-size: 13px;
+		color: var(--text-2);
 	}
 </style>

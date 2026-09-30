@@ -71,8 +71,15 @@ Stop at about five findings.
   bug (CLAUDE.md rule 10). The client catchment tests skip only when the
   gitignored `data/` fixtures are absent; never another reason.
 - **Known limitations.** A change to an audit item's decision needs
-  `pnpm gen:limitations` (`liability/limitations.test.ts` fails until it's run),
+  `pnpm gen:liability` (`liability/limitations.test.ts` fails until it's run),
   because the list prints on every report's validation statement.
+- **Errata.** A fix to a bug that changed results in a released engine adds a
+  row to `docs/engine-errata.md` (first affected, fixed in, the conditions)
+  and reruns `pnpm gen:liability`: runs made by the affected versions stay
+  stored and must say so.
+- **Methodology.** A change that alters what `docs/methodology/v<N>.md`
+  says about the method is a new version file, never an edit to a published
+  one (`methodology.test.ts` pins their hashes).
 - **Docs.** A formula, parameter or default that changed is changed in
   `docs/model.md` too, with its source (a reference in § 2, or
   `docs/calibration-research.md`).

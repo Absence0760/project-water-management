@@ -641,6 +641,10 @@
 						{/if}
 						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
 						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>
+						<!-- The licensing evidence report (issue #71, docs/ui.md § Evidence report): for the nominated run, or an application run on it. -->
+						{#if shownRun.evidence === 'current' || shownRun.scenarioId}
+							<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}&evidence" data-testid="evidence-report-link">Evidence report</a>
+						{/if}
 						<DownloadMenu items={downloadItems} />
 					</div>
 				</div>
@@ -729,7 +733,7 @@
 					</section>
 					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
 					<div class="panel" id="res-validation">
-						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} />
+						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} fitEngineVersion={shownRun.settings?.fitRecord?.engineVersion ?? null} />
 					</div>
 					<section class="panel" id="res-publication">
 						{#if publicationError}

@@ -891,10 +891,40 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
-| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
+- **A bounding box** (`config.bbox`, `{ south, west, north, east }` in
+  degrees; `feeds/config.ts` `bboxCells`) is expanded, before every fetch, into
+  the 0.05° cells it overlaps. CHIRPS cell edges fall on multiples of 0.05°
+  (the grid starts at 180° W and 60° N / S), so a box edge on a grid line adds
+  no sliver cell (a 1e-6-cell tolerance absorbs float error). Each cell is read
+  at its centre and weighted by the share of it inside the box × cos(its
+  latitude), so the mean is area weighted. At most 100 cells in 25 rows: a
+  fetch reads one strip per grid row per day, so the worst case costs what 25
+  listed cells in 25 rows do; a bigger box is a `400`. A sea cell inside the
+  box fails the fetch, as a listed one does, rather than shrink the area the
+  mean covers; its message says to shrink the box, list cells, or leave out
+  sea cells. **`skipNoData: true`** (a box only; listed cells stay strict)
+  is that opt-in for a coastal catchment: cells reading no data are left out
+  and the others' weights renormalised (`sources/chirps.ts` `NoDataPolicy`).
+  The fetch still fails when no cell has data, and when the set of cells with
+  data changes between two days of one fetch: the sea mask is static, so a
+  land cell going no-data is a corrupt or changed grid, not the sea. The
+  result's meta records `cellsUsed`, how many of the box's cells had data,
+  and the ingest carries it forward in `last_meta` (`feeds/ingest.ts`
+  `checkCellsUsed`, an integer from 1 to the box's cells): an answer with
+  another count than the previous fetch's is refused as a failed fetch that
+  writes nothing, naming both counts. A fetch checks only its own days, so
+  that is what catches a land cell lost between fetches. Saving the box
+  again (or a new one) is the way out: a config change clears `last_meta`
+  (`data_feed_stamp`), so counting starts afresh. The card shows "3 of 4
+  cells with data". A day with no data in any cell after another day of the
+  fetch had some is reported as a corrupt or changed file, not the sea.
+  `sat`'s final and preliminary products are assumed to share the sea mask:
+  a coverage difference between them would fail the fetch until the final
+  is out.
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;
@@ -1131,8 +1161,8 @@ rainfall feed", with a count when the feed wrote only some of its days):
 ([ui.md § Data](./ui.md#data)).
 
 The audit event per merge (`series.merged`) and the debounced re-run after new
-data (WP-2.11) are built (see Merging above); a bounding-box config for CHIRPS
-is #69's last open item.
+data (WP-2.11) are built (see Merging above), and so is CHIRPS over a bounding box
+(`config.bbox`, above).
 
 ## Server-side reports
 
@@ -1184,7 +1214,10 @@ sequenceDiagram
   request client (so the cookie lands in its jar), `page.goto`, a wait for
   `main[data-report-ready="true"]`, or the page's own "can't show this"
   message (no access, no run: failed at once, no retry), then
-  `page.pdf({ format: 'A4', printBackground: true })`. A hard timeout
+  `page.pdf({ format: 'A4', printBackground: true })` with the page's own
+  margins; the running footer is the page's CSS (`@page` margin boxes,
+  `report/printPage.ts`), so the PDF and the browser's print carry the same
+  one. A hard timeout
   (`REPORT_RENDER_TIMEOUT_MS`, 90 s locally, 100 s in the Lambda) covers the
   whole thing, and the browser is closed in `finally`. A timeout or a browser
   crash is retried (3 attempts); Playwright's own messages (URLs, call logs)
@@ -1259,6 +1292,30 @@ Where the render runs (`REPORT_RENDERER`, `jobs/transport.ts`):
   by design: [network.tf](../infra/network.tf)). The renderer mirrors the data
   feeds' fetcher: the one part that needs the internet sits outside the VPC
   and never touches the database.
+
+### The evidence report
+
+The report route has two modes. Plain (`?run=`), it assembles the catchment
+report in the browser from the ordinary API reads. With `&evidence` (issue
+#71, [ui.md § Evidence report](./ui.md#evidence-report)) it shows the
+licensing evidence report, and the data comes from one server call:
+`GET /projects/:id/runs/:runId/evidence-report`
+(`backend/src/evidence/report.ts`) reads the named run, its recorded base,
+the scenario, nominations, publications, history, ensembles and the other
+applications on the same baseline in one read-only `withUser` transaction, recomputes the paired bands from the
+stored members, and hands it all to the engine's pure builder
+(`evidenceReport`, `packages/engine/src/evidence/`). The builder does no I/O
+and nothing time-dependent, so the same input always gives the same
+document: the refusal checks, the flags, page 1's rows and every section's
+figures are decided there, and the frontend
+(`lib/components/report/evidence/`, its own chunk) only draws them. One
+exception: page 1's licence impact by year class is the impact report's board,
+built in the browser from three daily series the page fetches; it moves into
+the builder with the pack. One
+builder is what lets an issued pack (WP-3.14) freeze the document as its
+manifest and rebuild it to check the hash. The evidence report prints from
+the browser only; `report_render` doesn't render it yet (that comes with
+the pack, so no render session needs a second run).
 
 ## Key choices
 

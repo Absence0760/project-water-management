@@ -7,6 +7,12 @@
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
+	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
+	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
+	// API keys render for owners only, so the rest of the team never downloads them.
+	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
+	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
+	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -82,10 +88,8 @@
 	// reports save through their own APIs, never through Save settings (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import DataFeedsPanel from '$lib/components/feeds/DataFeedsPanel.svelte';
 	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
 	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
-	import ApiKeysPanel from '$lib/components/apiKeys/ApiKeysPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 
@@ -188,8 +192,9 @@
 	let qualityFlagsErr = $state<string | null>(null);
 	let rulesErr = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
+	let evidenceErr = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!evidenceErr || !!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -210,6 +215,7 @@
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
 			{ id: 'set-outlook', message: outlookErr },
+			{ id: 'set-evidence', message: evidenceErr },
 			{ id: 'set-auto', message: autoError }
 		])
 	);
@@ -250,6 +256,8 @@
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
 	// The rules as saved: the server runs automated calibration only on these (issue #153).
 	const savedRules = $derived((JSON.parse(saved) as ProjectSettings).calibrationRules);
+	// The declared uncertainty rule as saved (issue #71): switching it off withdraws this one.
+	const savedEvidenceRule = $derived((JSON.parse(saved) as ProjectSettings).evidenceUncertaintyRule);
 
 	/** The server saved an automated fit (issue #153): take the project's settings as they now are. */
 	async function reloadAfterApply() {
@@ -1126,6 +1134,19 @@
 		<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
 	</div>
 
+	<!-- Evidence (issue #71, evidence-report.md ER3): the uncertainty rule an evidence report's bands must follow; changes no result. -->
+	<section class="panel" id="set-evidence" aria-labelledby="evid-h">
+		<div class="panel-head">
+			<h2 id="evid-h">Evidence <HelpTip key="settings.evidenceUncertaintyRule" /></h2>
+			<span class="muted small">The uncertainty rule an evidence report’s bands must follow, declared before any band is seen</span>
+		</div>
+		<Lazy load={loadEvidenceRule}>
+			{#snippet children(EvidenceRuleFields)}
+				<EvidenceRuleFields bind:value={s.evidenceUncertaintyRule} bind:error={evidenceErr} saved={savedEvidenceRule} {readonly} />
+			{/snippet}
+		</Lazy>
+	</section>
+
 	<!-- Automatic runs (WP-2.11) ------------------------------------------------------------------>
 	<section class="panel" id="set-auto" aria-labelledby="auto-h">
 		<div class="panel-head">
@@ -1196,10 +1217,17 @@
 		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with Save settings.
 	</p>
 {/if}
-<DataFeedsPanel projectId={project.id} />
+<!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
+<div id="set-feeds">
+	<Lazy load={loadDataFeeds}>
+		{#snippet children(DataFeedsPanel)}<DataFeedsPanel projectId={project.id} />{/snippet}
+	</Lazy>
+</div>
 
 {#if project.role === 'owner'}
-	<ApiKeysPanel projectId={project.id} />
+	<Lazy load={loadApiKeys}>
+		{#snippet children(ApiKeysPanel)}<ApiKeysPanel projectId={project.id} />{/snippet}
+	</Lazy>
 {/if}
 
 <ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
