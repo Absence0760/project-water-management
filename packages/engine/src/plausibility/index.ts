@@ -8,7 +8,7 @@
 //      of ./season.ts;
 //   and, from engine 1.19.0, the recession diagnostics (../recession, CR-13):
 //   the calibration record's rain-free recessions against the simulated
-//   outflow's on the same days; and, from engine 1.50.0, the validation
+//   outflow's on the same days; and, from engine 1.55.0, the validation
 //   signatures (./signatures.ts, CR-16) of the scored record: base-flow index
 //   by two filters, the low-flow FDC's slope and bias, and the skill on
 //   withheld recession segments.
@@ -56,10 +56,10 @@ export interface PlausibilityChecks {
 	 */
 	recession?: RecessionCheck | null;
 	/**
-	 * Validation signatures of the scored record (engine ≥ 1.50.0,
+	 * Validation signatures of the scored record (engine ≥ 1.55.0,
 	 * ./signatures.ts, CR-16): the calibration site's record when the run
 	 * scores a gauge inside the network, else the outlet's. null without an
-	 * observed record; absent on runs made before 1.50.0.
+	 * observed record; absent on runs made before 1.55.0.
 	 */
 	signatures?: ValidationSignatures | null;
 	/**
@@ -132,7 +132,7 @@ export interface PlausibilityInput {
 	reserve: readonly EwrAssuranceSite[];
 	areaKm2: number;
 	/**
-	 * The record the run's calibration statistics score (engine ≥ 1.50.0): the
+	 * The record the run's calibration statistics score (engine ≥ 1.55.0): the
 	 * calibration site's (settings.calibrationSiteNodeId) or the outlet's, with
 	 * the simulated outflow where it is and the recession segments' day mask
 	 * (the exclusions and that record's flagged days). Absent or null without

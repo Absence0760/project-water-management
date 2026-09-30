@@ -59,7 +59,7 @@ describe('lyneHollickBaseflow', () => {
 	});
 });
 
-// The validation signatures' filters (engine ≥ 1.50.0, docs/model.md §2.10d, CR-16), on the same plumbing.
+// The validation signatures' filters (engine ≥ 1.55.0, docs/model.md §2.10d, CR-16), on the same plumbing.
 describe('filterBaseflow', () => {
 	it('Lyne–Hollick is the β = 0.5 case, bit for bit', () => {
 		const rng = new Rng(1500);

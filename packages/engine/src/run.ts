@@ -923,7 +923,7 @@ function runNetwork(
 		upstream: topo.upstream,
 		flowFill,
 		outletFlowFlags,
-		// The scored record (engine ≥ 1.50.0): the validation signatures follow the calibration site.
+		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
 				? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
@@ -1106,7 +1106,7 @@ function runPlausibility(r: {
 	/** The outlet record's flags when the run already computed them (the quality column at the outlet), else null. */
 	outletFlowFlags?: Uint8Array | null;
 	/**
-	 * The record the run's calibration statistics score (engine ≥ 1.50.0): the calibration site's or the
+	 * The record the run's calibration statistics score (engine ≥ 1.55.0): the calibration site's or the
 	 * outlet's, the simulated outflow there (m³/day) and its per-day classes (recordFlowFlags, the
 	 * `observed_flow_quality` column's); null without an observed record.
 	 */
@@ -1153,7 +1153,7 @@ function runPlausibility(r: {
 	const flowFlagged = kind
 		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
-	// The scored record's flagged days (engine ≥ 1.50.0), for the validation signatures' recession segments: the
+	// The scored record's flagged days (engine ≥ 1.55.0), for the validation signatures' recession segments: the
 	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
 	const sc = r.scored;
 	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;

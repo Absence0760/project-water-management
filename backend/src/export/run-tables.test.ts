@@ -1324,7 +1324,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
-	it('writes the validation signatures of the scored record (engine ≥ 1.50.0)', () => {
+	it('writes the validation signatures of the scored record (engine ≥ 1.55.0)', () => {
 		expect([...plausibilityLines(checks)]).toContain('Not computed: the run has no observed flow record');
 		const obs = Array.from({ length: days }, (_, t) => 0.05 + 0.04 * Math.sin(t / 20) ** 2);
 		const { checks: scored } = plausibilityChecks({
@@ -1358,6 +1358,45 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Held-out recessions: not computed (no catchment rain)');
 	});
 
+	it('writes the held-out recessions, and says why a signature is not computed', () => {
+		const heldOut: [number, number][] = [
+			[20, 27],
+			[50, 58]
+		];
+		const signatures = {
+			flowKind: 'flow_logger_m3s' as const,
+			baseflow: null,
+			lowFlowFdc: null,
+			recessionHoldout: {
+				every: 3,
+				segments: 7,
+				heldOut,
+				law: { a: 0.08, b: 1.1, points: 30, segments: 5, minQM3s: 0.01, maxQM3s: 2 },
+				days: 15,
+				modelSegments: 2,
+				modelDays: 15,
+				modelSkill: -0.25,
+				lawSkill: 0.9,
+				modelLogRmse: 0.4,
+				lawLogRmse: 0.1,
+				agrees: null
+			}
+		} as NonNullable<NonNullable<RunSummary['plausibility']>['signatures']>;
+		const lines = [...plausibilityLines({ ...checks, signatures })];
+		expect(lines).toContain('Record,logger,at,the outlet');
+		expect(lines).toContain('Base-flow index: not computed (fewer than 365 scored days in stretches of 30+)');
+		expect(lines).toContain('Low-flow FDC: not computed (fewer than 365 scored days)');
+		expect(lines).toContain(
+			'Held-out recessions,Segments,Held out (every nth),Held out,Days scored,Law a (other segments),Law b,"Skill, simulated","Skill, law","Log RMSE, simulated","Log RMSE, law",Simulated skill ≥ 0'
+		);
+		// Seven segments: under the eight the recession checks judge from, so not judged, whatever the skill.
+		expect(lines).toContain(',7,3,2,15,0.08,1.1,-0.25,0.9,0.4,0.1,not judged (fewer than 8 segments)');
+		const judged = [...plausibilityLines({ ...checks, signatures: { ...signatures, recessionHoldout: { ...signatures.recessionHoldout!, segments: 9, agrees: false, law: null } } })];
+		expect(judged).toContain(',9,3,2,15,,,-0.25,0.9,0.4,0.1,no');
+		// A run from engines 1.50.0–1.54.0 has no signatures key at all: the gate is its absence, not a version compare.
+		expect([...plausibilityLines({ ...checks, signatures: undefined })]).toContain('Run made before engine 1.55.0: no validation signatures');
+	});
+
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
 		const without = [...plausibilityLines(checks)];
 		expect(without.some((l) => l.startsWith('At gauge'))).toBe(false);
@@ -1380,7 +1419,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
 		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
-		expect(none).toContain('Run made before engine 1.50.0: no validation signatures');
+		expect(none).toContain('Run made before engine 1.55.0: no validation signatures');
 		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
 			'Not checked: needs an observed flow record and catchment rain'
 		);

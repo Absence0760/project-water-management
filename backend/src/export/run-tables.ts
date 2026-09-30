@@ -573,13 +573,13 @@ function* recessionLines(r: Plausibility['recession']): Generator<string> {
 }
 
 /**
- * The validation signatures (engine ≥ 1.50.0, model.md §2.10d, CR-16): the base-flow index by both filters,
+ * The validation signatures (engine ≥ 1.55.0, model.md §2.10d, CR-16): the base-flow index by both filters,
  * the low-flow FDC's slope and biases, and the skill on held-out recession segments, of the scored record.
  */
 function* signatureLines(s: Plausibility['signatures']): Generator<string> {
 	yield csvRow(['Validation signatures (the scored record against the simulated outflow on the same days)']);
 	if (s === undefined) {
-		yield csvRow(['Run made before engine 1.50.0: no validation signatures']);
+		yield csvRow(['Run made before engine 1.55.0: no validation signatures']);
 		return;
 	}
 	if (s === null) {

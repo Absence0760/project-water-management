@@ -25,7 +25,7 @@
 // reaches it, and a model-state snapshot that carries the window's days
 // resumes it exactly (../warmstart, docs/model.md §2.9d).
 //
-// The same plumbing (engine ≥ 1.50.0, filterBaseflow) runs the validation
+// The same plumbing (engine ≥ 1.55.0, filterBaseflow) runs the validation
 // signatures' two base-flow index filters (docs/model.md §2.10d, CR-16): the
 // Hughes, Hannart & Watkins (2003) form of this filter, with its β, and
 // Eckhardt's (2005) two-parameter filter. lyneHollickBaseflow is the β = 0.5
@@ -38,7 +38,7 @@ export const BASEFLOW_PASSES = 3;
 /** Days reflected at each end before filtering (Ladson et al. 2013). */
 export const BASEFLOW_REFLECT_DAYS = 30;
 /**
- * The base-flow index filters of the validation signatures (engine ≥ 1.50.0,
+ * The base-flow index filters of the validation signatures (engine ≥ 1.55.0,
  * docs/model.md §2.10d "Validation signatures", CR-16). Pending the
  * hydrologist (followups.md § Hydrologist).
  *
@@ -69,7 +69,7 @@ export const ECKHARDT_FILTER: Readonly<EckhardtFilter> = Object.freeze({ kind: '
 export const BASEFLOW_HISTORY_DAYS = 730;
 
 /**
- * The Lyne–Hollick family of filters (engine ≥ 1.50.0 names its parameters):
+ * The Lyne–Hollick family of filters (engine ≥ 1.55.0 names its parameters):
  * one pass is
  *   q_t = α·q_{t−1} + β·(1 + α)·(x_t − x_{t−1}),  then 0 ≤ q_t ≤ x_t
  *   b_t = x_t − q_t
