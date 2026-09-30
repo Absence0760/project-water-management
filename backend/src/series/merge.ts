@@ -157,12 +157,25 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // every day is blank: "data up to", where startDate + length counts blanks.
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
+/**
+ * Which data feed wrote days of a series, and how many (the Data tab's "from
+ * the CHIRPS feed" mark): the feed's source and the days in feed_days
+ * (031_feed_days.sql; a datemultirange of [) runs, so upper − lower counts
+ * each). Null when no feed wrote a day that is still its own (a user's writes
+ * release them), and for a reader below viewer, who can't see data_feed
+ * (018_feeds.sql data_feed_select): RLS hides the row, so the subquery is null.
+ */
+const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source, 'days', d.n)
+		FROM data_feed f, LATERAL (SELECT sum(upper(r) - lower(r))::int AS n FROM unnest(${t}.feed_days) r) d
+		WHERE f.project_id = ${t}.project_id AND f.id = ${t}.feed_id AND d.n > 0)`;
+
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
 	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
 	source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
-		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
+		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding,
+	${feedMarkSql('time_series')} AS feed`;
 
 export interface MergeOptions {
 	/** A null in the incoming days leaves the existing value (default: it overwrites). */
@@ -335,6 +348,13 @@ export interface SeriesMetaRow {
 	sourceUnit: string | null;
 	sourceUnitFactor: number | null;
 	rebuilding: boolean;
+	/** The data feed that wrote days of this series and how many are still its own (031_feed_days.sql); null: none, or not visible to the reader. */
+	feed: SeriesFeedMark | null;
+}
+
+export interface SeriesFeedMark {
+	source: string;
+	days: number;
 }
 
 /** Any day with a value. */

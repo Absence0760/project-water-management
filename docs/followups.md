@@ -2429,9 +2429,10 @@ role and not before it.
   - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
         published into `rain_chirps_mm`; the existing CHIRPS bias correction
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
-  - [ ] Marking a fed series on the Data tab ("from CHIRPS feed", from
-        `time_series.feed_id`). Merges are already audited (`series.merged`,
-        `feeds/ingest.ts`).
+  - [x] Marking a fed series on the Data tab ("from CHIRPS feed", from
+        `time_series.feed_id`): built, `SeriesMeta.feed` and the Data tab's
+        *Written by the … feed* (#69). Merges are already audited
+        (`series.merged`, `feeds/ingest.ts`).
   - [x] A debounced re-run after new data (WP-2.11, built).
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.

@@ -2517,7 +2517,15 @@ so, until it is moved. **Source and unit** (issue #66, 107,
 a row whose series records a source, or was converted at upload (uploaded in
 l/s, ML/day …), says so under its name ("DWS X1H001 · given in l/s (× 0.001
 to m³/s)"); a series uploaded in the stored unit with no source adds nothing,
-so the table stays one line a row. Under the chart, the charted series shows
+so the table stays one line a row. **Fed series**: a row a data feed wrote
+days of (`SeriesMeta.feed`, `time_series.feed_id`, 031) says so under its
+name, *Written by the CHIRPS daily rainfall feed* (the source's label), or
+how many days when the feed wrote only some of the days with a value (*312
+days written by the CHIRPS daily rainfall feed*: the rest were uploaded or
+imported, and the feed keeps them). Unlike the source, which records where a
+new series first came from, the mark is live: it goes once a user's upload
+has written over every day the feed wrote, or the feed is removed or
+re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). Under the chart, the charted series shows
 its source and the unit it was uploaded in; editors edit the source there
 (*Source*, saved on change, `PATCH …/series/:id { source }`), viewers read
 it. The **Add data** form has an optional **Source** field (up to 200
