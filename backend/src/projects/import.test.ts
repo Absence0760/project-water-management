@@ -43,6 +43,24 @@ describe('freshIds', () => {
 		expect(model.landCover![0]).toMatchObject({ id: ids.get(lc), nodeId: nb });
 	});
 
+	it('moves the unit an off-take’s seepage rejoins below with the nodes (engine 1.42.0), and leaves none as none', () => {
+		const [a, b, t, t2] = [u(), u(), u(), u()];
+		const { model, ids } = freshIds({
+			nodes: [
+				{ id: a, downstreamNodeId: null },
+				{ id: b, downstreamNodeId: a }
+			] as never,
+			crops: [],
+			cropAreas: [],
+			transfers: [
+				{ id: t, fromNodeId: b, toNodeId: a, lossReturnPct: 0.5, lossReturnNodeId: a },
+				{ id: t2, fromNodeId: b, toNodeId: a, lossReturnPct: 0, lossReturnNodeId: null }
+			] as never
+		});
+		expect(model.transfers[0]).toMatchObject({ lossReturnNodeId: ids.get(a) });
+		expect(model.transfers[1]!.lossReturnNodeId).toBeNull();
+	});
+
 	it('keeps the ids’ order, which the engine sums and breaks ties in', () => {
 		// Python importer ids and a UI-made id, deliberately not in list order.
 		const olds = ['c3f1', '0aa2', 'ffff-last', '7b00', '00-first', 'b2', 'x-crop', 'a-transfer'];

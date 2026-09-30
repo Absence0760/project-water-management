@@ -881,7 +881,13 @@ Interaction details that bit:
   component say what it was laid out for (the schematic's `data-fit`) and wait
   until that matches the box now (`waitForMapFit`), after every resize and
   every change that re-lays it out, never a sleep. A new layout sized from its
-  box gets the same kind of signal.
+  box gets the same kind of signal. Plain CSS is caught too: the browser
+  re-evaluates media queries in its next rendering update, so a box read once
+  straight after the resize can still come from the old width's layout (the
+  help picture's markers at 390 measured inside the 900 px sidebar grid, 143 px
+  wide). A check that reads boxes once, not a retrying `expect`, resizes with
+  `resizeTo` (`e2e/support/reflow.ts`), which waits two animation frames for
+  that update.
 - **A scroll box with nothing focusable inside fails axe**
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,

@@ -147,11 +147,11 @@ describe('cropAreaRows', () => {
 
 describe('transferRows', () => {
 	it('names both ends and the months, and says when a transfer was off', () => {
-		expect(transferRows(model)).toEqual([['Lower farm', 'Upper farm', 'Oct–Dec', '0.05', 'none', 'off']]);
+		expect(transferRows(model)).toEqual([['Lower farm', 'Upper farm', 'Oct–Dec', '0.05', 'none', '–', '–', 'off']]);
 	});
 	it('lists each month\'s own rate when a rule has monthly rates that differ (engine 1.14.0)', () => {
 		const t = { ...model.transfers![0]!, ...withMonthlyRates([0.05, 0.02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) };
-		expect(transferRows({ ...model, transfers: [t] })[0]).toEqual(['Lower farm', 'Upper farm', 'Oct, Nov', 'Oct 0.05, Nov 0.02', 'none', 'off']);
+		expect(transferRows({ ...model, transfers: [t] })[0]).toEqual(['Lower farm', 'Upper farm', 'Oct, Nov', 'Oct 0.05, Nov 0.02', 'none', '–', '–', 'off']);
 		// One rate in every month it runs: the rate, as before.
 		const same = { ...t, ...withMonthlyRates([0.05, 0.05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) };
 		expect(transferRows({ ...model, transfers: [same] })[0]![3]).toBe('0.05');
@@ -159,6 +159,17 @@ describe('transferRows', () => {
 	it('says when a transfer is a river off-take (engine 1.14.0)', () => {
 		const t = { ...model.transfers![0]!, source: 'river' as const };
 		expect(transferRows({ ...model, transfers: [t] })[0]![0]).toBe('Lower farm (river off-take)');
+	});
+	it('gives a river off-take\'s conveyance losses and the share seeping back, with the unit it rejoins below (engine 1.42.0)', () => {
+		const t = { ...model.transfers![0]!, fromNodeId: 'a', toNodeId: 'b', source: 'river' as const, lossPct: 0.2 };
+		const row = (over: object) => transferRows({ ...model, transfers: [{ ...t, ...over }] })[0]!.slice(5, 7);
+		// None back: all the losses leave the catchment (the default).
+		expect(row({})).toEqual(['20.0%', 'none']);
+		// Below the source (no unit named), and below a unit downstream of it.
+		expect(row({ lossReturnPct: 0.4, lossReturnNodeId: null })).toEqual(['20.0%', '40.0% of them, below Upper farm']);
+		expect(row({ lossReturnPct: 0.4, lossReturnNodeId: 'b' })).toEqual(['20.0%', '40.0% of them, below Lower farm']);
+		// A share with no losses to return is none.
+		expect(row({ lossPct: 0, lossReturnPct: 0.4 })).toEqual(['0.0%', 'none']);
 	});
 });
 

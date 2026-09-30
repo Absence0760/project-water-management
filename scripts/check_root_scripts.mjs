@@ -18,7 +18,7 @@ for (const [name, cmd] of Object.entries(scripts)) {
 	}
 	if (!inGroup) errors.push(`${name}: not under a "//-- <group> --" divider`);
 
-	for (const m of cmd.matchAll(/(?:^|\s)((?:bin|scripts)\/[\w./-]+)/g)) {
+	for (const m of cmd.matchAll(/(?:^|\s)((?:bin|scripts|verify)\/[\w./-]+)/g)) {
 		if (!existsSync(join(root, m[1]))) errors.push(`${name}: missing file ${m[1]}`);
 	}
 	for (const m of cmd.matchAll(/pnpm -C (\S+) ([\w:-]+)/g)) {

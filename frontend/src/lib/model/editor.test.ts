@@ -91,6 +91,21 @@ describe('ModelEditor', () => {
 		expect(ed.issues).toEqual([]);
 	});
 
+	it('an off-take whose seepage rejoined below a removed node returns none (engine 1.42.0)', () => {
+		const ed = new ModelEditor();
+		const g = ed.addNode();
+		const low = ed.addNode();
+		const up = ed.addNode();
+		const canal = ed.addNode();
+		low.downstreamNodeId = g.id;
+		up.downstreamNodeId = low.id;
+		canal.downstreamNodeId = g.id;
+		const t = ed.addTransfer();
+		Object.assign(t, { fromNodeId: up.id, toNodeId: canal.id, source: 'river', lossPct: 0.2, lossReturnPct: 0.5, lossReturnNodeId: low.id });
+		ed.removeNode(low.id);
+		expect(ed.model.transfers.find((x) => x.id === t.id)).toMatchObject({ lossReturnPct: 0, lossReturnNodeId: null });
+	});
+
 	it('keeps crop areas sparse', () => {
 		const ed = new ModelEditor();
 		const g = ed.addNode();

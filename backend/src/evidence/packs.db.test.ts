@@ -201,7 +201,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-5');
+		expect(manifest.report.version).toBe('evidence-6');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		expect(manifest.report.licenceImpact).toEqual((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.licenceImpact);

@@ -2,7 +2,7 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
+import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
@@ -108,7 +108,11 @@ export function cropAreaRows(model: Partial<ProjectModel>): string[][] {
 		.map((a) => [farm.get(a.nodeId) ?? '(removed)', crop.get(a.cropId) ?? '(removed)', fmtNum(a.areaM2 / 10_000, 2)]);
 }
 
-/** Each transfer: from (a river off-take says so), to, months, maximum rate, daily cap, and whether it was on. */
+/**
+ * Each transfer: from (a river off-take says so), to, months, maximum rate, daily cap, a river off-take's
+ * conveyance losses and the share of them seeping back to the river with the unit it rejoins below (engine
+ * ≥ 1.42.0; '–' on a dam transfer, which has neither), and whether it was on.
+ */
 export function transferRows(model: Partial<ProjectModel>): string[][] {
 	const name = new Map((model.nodes ?? []).map((n) => [n.id, n.name || '(unnamed)']));
 	return [...(model.transfers ?? [])]
@@ -124,8 +128,18 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 						.join(', ')
 				: fmtNum(t.maxRateM3s, 3, true),
 			t.dailyCapM3 == null ? 'none' : fmtNum(t.dailyCapM3),
+			isRiverOfftake(t) ? fmtPct(t.lossPct ?? 0) : '–',
+			isRiverOfftake(t) ? seepingBack(t, name) : '–',
 			t.enabled ? 'on' : 'off'
 		]);
+}
+
+/** A river off-take's canal seepage back to the river (engine ≥ 1.42.0): its share of the losses and where it rejoins (null = below the source). */
+function seepingBack(t: Transfer, name: ReadonlyMap<string, string>): string {
+	const r = t.lossReturnPct ?? 0;
+	if (!(r > 0) || !((t.lossPct ?? 0) > 0)) return 'none';
+	const at = t.lossReturnNodeId ?? t.fromNodeId;
+	return `${fmtPct(r)} of them, below ${name.get(at) ?? '(removed)'}`;
 }
 
 /**

@@ -1157,12 +1157,18 @@ may be a river off-take (engine ≥ 1.14.0, migration 091, [model.md
 `handsOffM3Day` (≥ 0 or `null`, the default: none), `handsOffEwr` (default
 false), `lossPct` (0 ≤ l < 1, default 0), `sizing` (`"demand"`, the default,
 or `"capacity"`) and `topUpDam` (default false); a body without them is a dam
-transfer. `PUT` refuses a river off-take that isn't unit to unit or whose
-destination drains into its source (along the river or through other
-off-takes). A run with off-takes stores `offtake_out` on each source,
+transfer. Canal seepage back to the river (engine ≥ 1.42.0, migration 126):
+`lossReturnPct` (0–1, default 0: the losses all leave the catchment) and
+`lossReturnNodeId` (a uuid or `null`, the default: the source), the unit whose
+outflow the returned seepage joins. `PUT` refuses a river off-take that isn't
+unit to unit or whose destination drains into its source (along the river or
+through other off-takes), and a return unit that isn't the source or a farm
+downstream of it along the river. A run with off-takes stores `offtake_out` on each source,
 `offtake_in`, `offtake_used` and `offtake_to_dam` on each destination, and
-each rule's `transfer_rule@<id>` (what it took, before losses);
-`summary.waterBalance` and the water account gain `conveyanceLossM3`;
+each rule's `transfer_rule@<id>` (what it took, before losses), and
+`offtake_loss_return` on each unit seepage rejoins below (engine ≥ 1.42.0);
+`summary.waterBalance` and the water account gain `conveyanceLossM3` (what
+was lost, net of the seepage returned);
 nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
 (nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
@@ -2009,7 +2015,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-5`: page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-6`: § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other

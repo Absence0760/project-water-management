@@ -745,6 +745,13 @@ setting, so run comparison reads it as legacy.
   which a new project (A-pan defaults to 0) met on its first run once GR4J
   became the default. Settings shows the same check (`hasPotentialEvaporation`)
   beside the model picker, and a fit is refused the same way.
+- **No catchment area, no run.** GR4J's flow is millimetres over the
+  catchment, turned into m³ with the catchment area
+  (`calibration.catchmentAreaKm2`, else the sum of the farms' areas). When
+  that is 0 (every farm without an area and no override) there is nothing to
+  turn it into, so `runModel` refuses the run with *catchment area is 0 —
+  give the farms an area (km²) or set calibration.catchmentAreaKm2*. (Found
+  by the verify/ cross-check, probe `zero-catchment-area`.)
 - **No Pitman fallback.** Flow is whatever the model produces.
 
 **One day** (P, E in mm):
@@ -798,7 +805,8 @@ warm-up's end state.
 - `rain_used` and `pet`;
 - `aet`;
 - the end-of-day stores `production_store`, `routing_store` and `uh_store`
-  (water in transit);
+  (water in transit: what is still in the two unit hydrographs' queues after
+  the day's outputs Q9 and Q1 have left);
 - `exchange`, only when X2 ≠ 0.
 
 `summary.runoff` holds the parameters used, the area and the whole-run totals
@@ -1075,7 +1083,11 @@ since fit".
 **Where it applies.** Only to CHIRPS that is actually used: a day with no
 catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`, or,
 with the quantile map on, its mapped value.
-Catchment rain is never changed. A day where the catchment reads 0 keeps its
+Catchment rain is never changed. A **negative** catchment reading (a data
+error the series checks warn about, §2.10a) is still a reading: it blocks the
+fallback, shows as recorded in `rain_final`, and runs as 0 mm in GR4J,
+demand's effective rain and the rain on the dams (verify/ probe
+`negative-reading`). A day where the catchment reads 0 keeps its
 0 (a zero is a reading and blocks the fallback, §2.10a), unless §2.4c sets
 it aside as missing first: then it is a blank day like any other. **Forecast rain is
 not corrected**: there is no overlap to fit a forecast factor from, and a
@@ -1321,7 +1333,7 @@ catchment reading is an accumulation when:
 | The reading is large | ≥ 20 mm (`ACC_MIN_MM`) | Spreading a few millimetres changes little, and small readings are where a storm CHIRPS missed is most likely |
 | It follows days of 0 or blank | ≥ 3 days (`ACC_MIN_RUN_DAYS`) | A weekend is the shortest common gap. Blank days count like zeros: the total covers a tagged-missing day just as well |
 | CHIRPS saw little rain on the reading day | bias-corrected CHIRPS on the day before, the day and the day after < 25 % of the reading (`ACC_READING_DAY_SHARE`) | If CHIRPS rained then, the reading is most likely that day's storm. The ±1 day is timing slop: a gauge read at 08:00 books the previous day's rain, and CHIRPS's day boundary differs |
-| CHIRPS saw rain over the days before | bias-corrected CHIRPS over the run, leaving out the day just before the reading, ≥ 50 % of the reading (`ACC_RUN_SHARE`) | This separates an accumulation from a convective storm CHIRPS missed after a real dry spell: then CHIRPS is dry over the run too. The day before is left out so a storm CHIRPS booked a day early is not mistaken for rain in the run |
+| CHIRPS saw rain over the days before | bias-corrected CHIRPS over the window's run days (the run's last 92 days at most, next row), leaving out the day just before the reading, ≥ 50 % of the reading (`ACC_RUN_SHARE`); rain CHIRPS saw earlier in a longer run doesn't count (verify/ probe `accumulation-window-run`) | This separates an accumulation from a convective storm CHIRPS missed after a real dry spell: then CHIRPS is dry over the run too. The day before is left out so a storm CHIRPS booked a day early is not mistaken for rain in the run |
 | Window length | the run, at most its last 92 days (`ACC_MAX_RUN_DAYS`), plus the reading day | About a season: a gauge left longer would have overflowed or lost its catch to evaporation |
 
 CHIRPS is judged × the §2.4b monthly factors fitted before any accumulation
@@ -2016,6 +2028,21 @@ The workbook has two blocks of columns:
   rules' own volumes (`transfer_rule@`): the rules of one priority keeping
   at least a rule's reserve take together at most `MAX(0, storage[src][t−1]
   − taken by lower priorities − that reserve)` (§6 Verification).
+  **The order of the two sharings within one priority** (verify/ probe
+  `band-and-room`): first each receiver's room is shared among the rules
+  into it, pro rata to their limits `MIN(maxDaily, srcFree)`, which cuts
+  each rule to what the receiver can take; then each source's bands are
+  shared among its rules, pro rata to what each still wants after that cut.
+  Nothing is redistributed afterwards: a rule the band cuts leaves its share
+  of the receiver's room unused that day. Example: a full 1 000 m³ dam, rule
+  a keeps 50 % and may send 400 m³ into a receiver with 100 m³ of room, rule
+  b keeps 0 % and may send 800 m³ into an empty dam. The room cuts a to 100;
+  the band 1 000–500 m³ is shared 100 : 800 (a 55.6, b 444.4) and the band
+  below goes to b (355.6 more), so a moves 55.6 and b 800 (sharing the bands
+  first and the room after would give a 100). The room is counted from the
+  receiver's **yesterday's** storage, as the formula says, even when the
+  receiver sends water at a lower priority the same day: what it sends first
+  makes no room for what it receives (probe `room-while-sending`).
   Transfers are still settled first from yesterday's storage, before any farm
   irrigates: the source does **not** irrigate first (a deliberate choice, no
   per-rule option). Migration 006 set each rule's priority to its old
@@ -2088,6 +2115,8 @@ the destination is simulated after its source.
 | `lossPct` | conveyance losses, 0 ≤ l < 1 of what is taken, lost from the catchment on the way (seepage and evaporation from the canal); default 0 |
 | `sizing` | `demand` (default): take only what the destination needs today, its abstraction demand (crops and demand objects) plus, with `topUpDam`, its dam's room, grossed up for the losses. `capacity`: up to capacity whatever the destination needs, like a weir-fed canal that runs full |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
+| `lossReturnPct` | engine ≥ 1.42.0, migration 126: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to the river the same day, like a dam's seepage return (§2.7b, WP-3.5); default 0: all the losses leave the catchment |
+| `lossReturnNodeId` | engine ≥ 1.42.0: the unit whose outflow the returned seepage joins; null (the default) = the source itself, just below the off-take; otherwise a farm downstream of the source along the river (the API refuses any other; a run given one returns none, with a warning) |
 | `minStoragePct` | inert (there is no source dam to keep) |
 
 **Each day.** At the source unit, after its own use (dam, river pump,
@@ -2105,7 +2134,14 @@ need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (s
 v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), scaled down pro rata when Σ v > MAX free
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
 arrives = Σ v_k × (1 − l_k) at each destination
+back    = Σ v_k × l_k × r_k at each return unit             engine ≥ 1.42.0: canal seepage back to the river
+lost    = Σ v_k × l_k × (1 − r_k)                           leaves the catchment
 ```
+
+The seepage back joins the return unit's outflow after that unit's own
+off-takes (`U += back`), so an off-take never takes back its own losses, and
+a return unit below the source is simulated after it, so the day's losses
+are known when they arrive there (same day, no lag, as the canal itself).
 
 At the destination: `used = MIN(arrives, D)` meets the demand first (before
 its own dam, pump and boreholes, which supply the rest `D − used`, so a unit
@@ -2139,19 +2175,33 @@ question 20):
   into its source, along the river or through other off-takes, would need
   tomorrow's water today, so the run skips it with a warning and the API
   refuses it on save (`modelRuleIssues`).
-- *Losses leave the catchment.* A canal's seepage may reach the river lower
-  down; how much is not known, so none is returned (the conservative side for
-  the EWR). The water account and the balance carry them as
-  `conveyanceLossM3`.
+- *Losses leave the catchment unless a share is set to return.* A canal's
+  seepage may reach the river lower down; how much is rarely known, so by
+  default none is returned (the conservative side for the EWR). Engine ≥
+  1.42.0 lets a model return a share `lossReturnPct` of the losses, below the
+  source or a farm downstream of it along the river (`lossReturnNodeId`), as
+  a dam's seepage return does (WP-3.5): a hydrologist with a measured loss
+  split credits the part that comes back. Only the source's own river
+  qualifies: the canal runs beside it, and a unit below the source is
+  simulated after it. The water account and the balance carry what is lost
+  (taken − delivered − returned) as `conveyanceLossM3`.
 - *Who is charged.* The EWR attribution (§2.7b) counts an off-take like a
   transfer, with what it took at both ends: inside a site's catchment it moves
   impact from the source to the destination, which carries the losses; one
-  leaving the catchment is charged to its source.
+  leaving the catchment is charged to its source. The seepage back (engine ≥
+  1.42.0) counts, at a site with its return unit upstream, as a transfer
+  into that unit from the destination (which the losses were charged to)
+  when the destination is upstream of the site too, and from the source
+  otherwise (its export is then net of what came back); at a site above
+  which it doesn't return, nothing changes (the losses left that site's
+  catchment). The return unit is never charged for water it merely carries.
 
 **Outputs.** On the source `offtake_out` and, per rule, `transfer_rule@<id>`
 (what it took, before losses); on the destination `offtake_in` (what arrived),
-`offtake_used` and `offtake_to_dam` (the workings). `WaterBalanceRow` and the
-water account gain `conveyanceLossM3`.
+`offtake_used` and `offtake_to_dam` (the workings); on each unit seepage
+rejoins below, `offtake_loss_return` (engine ≥ 1.42.0, part of its outflow).
+`WaterBalanceRow` and the water account gain `conveyanceLossM3`, net of the
+seepage returned.
 
 **Checks.** `checkBalance` closes every unit with its off-take water in and
 out and the catchment with the losses; `checkWorkings` replays the
@@ -2161,10 +2211,16 @@ off-takes taken out; `checkTransferLimits` holds each rule to its capacity,
 to the flow above what it must leave at its source (never more than the
 river there), Σ v to `offtake_out`, `offtake_in` to Σ v × (1 − l), and a
 source whose rules are all sized to capacity to taking MIN(Σ capacity, the
-flow above the largest keep). The fuzz generator adds off-takes to a quarter
+flow above the largest keep), and (engine ≥ 1.42.0) `offtake_loss_return` at
+each return unit to Σ v × l × r, the source's flow before its off-takes being
+its outflow less the seepage rejoining there; the balance and the outflow
+replay carry `offtake_loss_return` in, and the attribution check rebuilds
+the return legs as above. The fuzz generator adds off-takes to a quarter
 of the random networks (both sizings, hands-off flows, the EWR kept or not,
-losses, top-ups, monthly rates, gauge ends and loops the run skips). Hand
-examples: `run.offtake.test.ts`, `network/offtake.test.ts`.
+losses, top-ups, monthly rates, gauge ends and loops the run skips), and
+seepage returns to half of the lossy ones (below the source, a unit below
+it, or now and then a unit that doesn't qualify). Hand examples:
+`run.offtake.test.ts`, `network/offtake.test.ts`, `network/attribution.test.ts`.
 
 **Not changed by default:** no stored rule is a river off-take. The b023
 importers turn a workbook transfer into one only where the workbook fakes it:
@@ -4935,7 +4991,7 @@ primary catchment series only.
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
 | Flat-lines | rain: the same non-zero value on 5+ consecutive days (A-pan 7). Flow (engine ≥ 1.12.0): the same value, zero included, on max(14, ⌈3·r / (0.01·Q)⌉) consecutive days, capped at 90, where r is the record's resolution and Q the value (below). Rain's zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
-| Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
+| Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years: with an even number of them, the mean of the two middle ones; verify/ probe `low-vs-chirps-median`). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
 | Double mass vs CHIRPS (CR-20, engine ≥ 0.18.0) | cumulative catchment rain against cumulative CHIRPS over water years with **300+ shared days and 100+ mm of CHIRPS** (10+ such years, else no result); a **break** where the slope (Σ catchment / Σ CHIRPS) changes by **20 %+** and a Pettitt test or the BIC gain confirms it (see below) | a station change, a moved gauge or a new way of building the catchment average; the CHIRPS factors then blend eras |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
 
@@ -7734,6 +7790,22 @@ text:
 | `checkWaterAccount` | Engine ≥ 0.32.0 (§2.11b): the account closes to 10⁻¹⁰ of Σ\|terms\| in every water year and over the run, the years add up to the run, each year opens with the last year's closing storage, and 0 ≤ EWR met ≤ required. |
 | `checkSupplyAssurance` | Engine ≥ 1.34.0 (§2.11a, issue #192), per saved run: `summary.supplyAssurance` lists every farm and water user once, with its kind; each one's Σ demand, Σ supplied, demand days, met days and ratios over the reporting window, overall and per water-year month, are those of its own `demand` and `supplied` columns; and every cell of each node's stress grid, and of the system's (every node together), is Σ supplied ÷ Σ demand of those columns; and the water account's EWR rows (each site's required, met and days not met, per water year and over the run) follow from the site's own requirement (`ewr` at the outlet, `ewr_cumulative` at a gauge, a rule-table site's `ewr_rule` where it has one) and shortfall (`ewr_shortfall`, or `ewr_charge_shortfall` for a rule-table site). Read from the output's series, not from the code that built the summary; to 10⁻⁹ of Σ\|x\| (a sound run agrees to the bit). It is the guard for [engine-audit.md V1](./engine-audit.md#findings), a V8 miscompile that gave a node another node's sums under its own id. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
+
+**An independent cross-check (`verify/`, [verify/README.md](../verify/README.md)).**
+A second implementation of the core daily chain in Python (rain used, GR4J,
+crop demand, dams, routing, transfers and the EWR attribution), written only
+from this document, the audit and the input shape, never from the engine's
+code, runs beside `runModel` on the three example catchments, hand-built
+probes and random networks from its own generator, and compares every daily
+series to float noise (`pnpm test:verify`, the CI job `verify`). A mutation
+self-test breaks the Python one documented rule at a time and requires each
+break to show. Where this document was too thin to write a step, the engine's
+output settled it and the text above now says so (the probes named in
+§2.4a, §2.4b, §2.4d, §2.6 and §2.10a). On engine 1.36.0 it found no
+departure from this document; what it doesn't cover yet (boreholes,
+allocations, demand objects, off-takes, rule tables, forecast mode,
+calibration, land cover, time-varying development and the other optional
+inputs) is its phase 2 ([followups.md](./followups.md) § Verification).
 
 **Recomputed outside the engine (issue #68).** The checks show the model
 agrees with itself; the **Excel audit workbook** shows it agrees with its
