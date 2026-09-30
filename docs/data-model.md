@@ -558,8 +558,8 @@ turning it off undoes it; the run's own columns carry the filled days.
 (`settings.droughtRestriction`, engine ≥ 1.54.0, WP-3.8; no table, column or
 migration): review and lift dates and up to six levels, each a storage
 threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
-One rule per project, not per node, so no node id to keep in step and no
-same-project trigger or RLS policy of its own: it is read and written with
+One rule per project (the dams and units it reads are listed in it, not a
+column on the node), so no same-project trigger or RLS policy of its own: it is read and written with
 the project's settings, under the project's policies. A patch replaces it
 whole; `null` or absent is off. A model input: runs snapshot it with their
 settings, and the run comparison and the settings history show changes.

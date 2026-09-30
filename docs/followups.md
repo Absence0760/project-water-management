@@ -216,9 +216,9 @@ collected as a checklist in issue #46; tick it there as they answer.
 - [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.54.0,
       [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
       #46). Built off by default on these choices; confirm or change each:
-      one rule per project on the **total farm dam storage** (every farm dam,
-      Σ storage ÷ Σ capacity, the review triggers' basis) rather than one
-      dam or per node; the level **decided on review dates and held** until
+      one rule per project on the **total farm dam storage** by default (every
+      farm dam, Σ storage ÷ Σ capacity, the review triggers' basis; some dams
+      or each unit's own dam are options); the level **decided on review dates and held** until
       the next review or lift date (no daily re-evaluation or hysteresis);
       the storage read at the **start of the review day**; a fresh run's
       **first day decided** from its starting storage when the latest date
