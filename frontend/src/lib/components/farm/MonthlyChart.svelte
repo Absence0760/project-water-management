@@ -5,10 +5,11 @@
 	// the 13 px labels stay 13 px. The chart is aria-hidden; a visually hidden
 	// sentence sums it up and "Show the numbers" is a real table of all 12
 	// months with their years, in the unit the reader chose on the supply
-	// card (the chart's axis stays in ML).
+	// card (the chart's axis stays in ML), and the share of each month's need
+	// received, with the engine's stress class in plain words (issue #70).
 	import type { FarmProjection } from '@water-management/engine';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyRows, supplySummary } from './chart';
+	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyLevelKey, supplyRows, supplySummary } from './chart';
 
 	import type { VolumeUnit } from './format';
 
@@ -45,13 +46,14 @@
 		<summary>{t('Show the numbers')}</summary>
 		<table class="numbers">
 			<caption class="visually-hidden">{t('Water you needed and received each month')}</caption>
-			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Needed')}</th><th scope="col">{t('Received')}</th></tr></thead>
+			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Needed')}</th><th scope="col">{t('Received')}</th><th scope="col">{t('Share received')}</th></tr></thead>
 			<tbody>
 				{#each rows as r (r.label)}
-					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}</td></tr>
+					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}</td><td>{r.share}{#if r.level}<span class="level">{r.level}</span>{/if}</td></tr>
 				{/each}
 			</tbody>
 		</table>
+		<p class="fine">{supplyLevelKey()}</p>
 	</details>
 </section>
 
@@ -103,5 +105,10 @@
 	}
 	.got {
 		fill: var(--series-1);
+	}
+	.level {
+		display: block;
+		font-size: 13px;
+		color: var(--text-2);
 	}
 </style>
