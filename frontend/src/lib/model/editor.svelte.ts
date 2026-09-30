@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -43,6 +43,8 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		...DEVELOPMENT_DEFAULTS,
 		// The dam only, no river pump (WP-3.8).
 		...SUPPLY_DEFAULTS,
+		// No hands-off flow, River to dam all year at the one capacity (engine 1.31.0).
+		...OPERATING_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};

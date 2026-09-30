@@ -184,6 +184,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['element-farm', 'borehole'],
 		source: 'docs/model.md §2.7e; roadmap WP-3.8; issue #54 item 2c'
 	},
+	'hands-off-flow': {
+		long: 'A licence condition that stops abstraction when the river runs low. The hydrological unit keeps the larger of the month’s hands-off amount and, when asked, the EWR required at it (its own and upstream shares) flowing in the river: River to dam diverts only what is above it, and the river pump pumps only what is above it (and above the senior users’ demand). When less than that flows, neither takes anything. It doesn’t change what the dam’s own split sends into an on-channel dam. Off by default, pending the hydrologist.',
+		aliases: ['hands off flow', 'bypass flow', 'abstraction threshold', 'minimum flow condition'],
+		related: ['supply-rule', 'diversion', 'ewr'],
+		source: 'docs/model.md §2.7h; roadmap WP-3.8; issue #204'
+	},
 	'stream-depletion': {
 		long: 'Pumping near a river lowers the dry-season base flow the EWR depends on. The model takes a share d of each day’s pumping from the flow leaving the node, delayed through a single linear store with time constant k days, so the river keeps losing water for a while after the pumps stop and, over a long run, loses d × the pumped volume in all.\n\nThe river never goes below 0: depletion due on a day with nothing left to take is owed (the depletion deficit) and comes off the first flow that returns, and the run warns about any still owed at its end. Runs before engine 1.10.0 dropped it instead (reported as unmet). A first estimate of k is the stream depletion factor, distance² × storativity ÷ transmissivity (Jenkins 1968).\n\nA gauge or logger record measured while the boreholes pumped already carries their depletion: keep them in the model when calibrating, so the fitted natural flow isn’t reduced twice.',
 		aliases: ['base flow reduction', 'baseflow depletion', 'Glover', 'Jenkins', 'SDF'],
@@ -306,7 +312,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.7g; issue #67'
 	},
 	'diversion': {
-		long: 'Each day up to this volume is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. b023 enters it in m³/s; the app stores m³/day.',
+		long: 'Each day up to this volume is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. b023 enters it in m³/s; the app stores m³/day. It can also be set per month (River to dam by month, which then replaces the one value): 0 in the summer months fills the dam in winter only. A hands-off flow leaves water in the river before it diverts.',
 		aliases: ['downstream diversion', 'divert capacity', 'pump back'],
 		related: ['upstream-to-dam', 'runoff-to-dam'],
 		source: 'b023 Farm spec'

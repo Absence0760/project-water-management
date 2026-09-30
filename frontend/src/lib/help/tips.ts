@@ -239,6 +239,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
 	},
 	{
+		id: 'hands-off-flow',
+		term: 'Hands-off flow',
+		short: 'Flow a hydrological unit leaves in the river before its river pump or River to dam takes anything: an amount by month, and/or the EWR.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.handsOffM3Day', 'node.handsOffEwr']
+	},
+	{
 		id: 'stream-depletion',
 		term: 'Stream depletion',
 		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
@@ -403,7 +411,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'Daily capacity to pump or channel water from the river below the dam back into it, in m³/day.',
 		units: 'm³/day',
 		category: 'farm',
-		fields: ['node.divertCapacityM3Day']
+		fields: ['node.divertCapacityM3Day', 'node.divertMonthlyM3Day']
 	},
 	{
 		id: 'irrigation-efficiency',
