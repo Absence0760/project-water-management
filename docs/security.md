@@ -1917,6 +1917,11 @@ database:
   an applicant's projection of a published base keeps only the allocations on
   their own units (`scenarios/applicant.ts`), and a contributor never reads a
   run's summary, whose comparison names every unit.
+- The **evidence report's § 5** (issue #71) compares each run's *stored*
+  allocations, so it carries volumes by unit and never a holder's name or
+  registration number, for every reader (viewers and up) and in an issued
+  pack an applicant later holds (`evidence/report.db.test.ts` fails if either
+  appears).
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to

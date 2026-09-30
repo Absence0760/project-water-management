@@ -192,6 +192,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C22 | Known limitations, disclaimers, what the report does not cover (dam safety DW793, groundwater, water quality, s27 socio-economic factors) | Liability (evidence: roadmap WP-3.13; [DamSafety]) | WP-3.13 | Page 1 "does not decide"; Appendix B.1, B.3 |
 | C23 | Sign-off by a registered natural scientist, bound to a statement hash | Professional responsibility (evidence: roadmap WP-3.13, [SACNASP]) | WP-3.13 | Appendix B.2 |
 | C24 | Reproducibility: input series hashes, ops hash, manifest hash and short code, verify link, reproduction bundle, page count | Verify an unaltered, reproducible report (evidence: roadmap WP-3.1, WP-3.14) | partial: series hashes (Appendix A.3) and stored values built; manifest WP-3.14 | Every footer; Appendix A.3, B.4 |
+| C25 | Registered water use: each unit's registered volumes (WARMS registrations, licences) against its modelled use per water year, baseline and application; units by name, never the holder (D3) | s27 "existing lawful water uses"; the licence applicant persona asked for a registered-vs-modelled row (judgement) | built (WP-3.10 comparison per run, each run's own volumes; no band) | Page 1 row "Registered vs modelled use" and flag; § 5 |
 
 ## 4. Information architecture
 
@@ -222,7 +223,7 @@ Fixed content, in this order (mock-up sheet 1):
    condition, grey for a count. Judgement: flags go *above* the numbers so
    they are read before them.
 4. **What changes, application minus baseline**: one table, fixed rows
-   (C10, C11, C11 shortfall, C12, C15, C14), columns *Baseline*,
+   (C10, C11, C11 shortfall, C12, C15, C25, C14), columns *Baseline*,
    *Application*, *Change (paired median, 5–95 %)* with the nominated run's
    own difference beneath, and *Worse in* (k of n sets). One row per EWR
    site when there are several; the outlet first.
@@ -252,6 +253,14 @@ full-allocation background run (WP-3.10).
 | 2 | Uncertainty | The coverage warning if any; the cited ensemble; the ledger of every start on the baseline; the baseline's bands against the nominated run; the paired bands against zero; R1 and R2 | C18 |
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
 | 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply | C14, C15 |
+| 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
+
+§ 5 was added in report version `evidence-2`. Its page-1 row fits the
+fixed-rows rule (G6) because it is always printed: the unit-years above a
+registered volume, summed, or *Not assessed* with the reason (no volumes in
+the runs, none on a unit of theirs, no whole water year). One sum rather
+than a row per unit keeps page 1 fixed in length whatever the catchment's
+register holds; § 5 and the flag name the units.
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
@@ -554,6 +563,11 @@ layout from the frozen manifest.
   sections 1–4, Appendices A–C, the heat maps, the paired by-month plot, the
   FDC chart, the draft stamp); ER7 through `FitProvenance`; the links from
   the Runs tab and the scenario comparison.
+- § 5 Registered water use (C25, report version `evidence-2`): each run's
+  own allocations compared per unit and water year
+  (`backend/src/allocations/runUse.ts`), the over/under-use chart
+  (`UsePlot`), the page-1 row *Registered vs modelled use* and its flag
+  ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
 
 Not built, or changed:
 - **ER1 avoided.** One run-scoped endpoint returns the whole document, the

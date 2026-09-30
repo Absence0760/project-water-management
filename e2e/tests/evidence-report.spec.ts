@@ -81,22 +81,25 @@ test('an application on the nominated run gives the full evidence report, draft 
 	const report = page.getByTestId('evidence-report');
 	await expect(report).toHaveAttribute('data-evidence-mode', 'application');
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper dam 300 000 m³' })).toBeVisible();
-	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
+	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
 	// G12: the draft stamp on every section.
-	await expect(page.getByTestId('evidence-stamp')).toHaveCount(8);
+	await expect(page.getByTestId('evidence-stamp')).toHaveCount(9);
 	for (const s of await page.getByTestId('evidence-stamp').all()) await expect(s).toHaveText('Draft · not issued');
 
 	// Page 1: the banner, the flags, and the fixed rows with paired bands and "worse in".
 	await expect(page.getByTestId('evidence-banner')).toContainText('No baseline assumption changed.');
 	await expect(page.getByTestId('evidence-published')).toContainText('Nothing is published for this project');
 	const table = page.getByTestId('evidence-change-table');
-	for (const label of ['Reserve months met', 'Days below the EWR', 'Volume short of the EWR, whole run', 'Mean annual outflow at the outlet', 'The applicant’s own supply'])
+	for (const label of ['Reserve months met', 'Days below the EWR', 'Volume short of the EWR, whole run', 'Mean annual outflow at the outlet', 'The applicant’s own supply', 'Registered vs modelled use'])
 		await expect(table.getByRole('rowheader', { name: new RegExp(`^${label}`) })).toBeVisible();
 	const days = table.getByRole('row', { name: /^Days below the EWR/ });
 	await expect(days.getByRole('cell').nth(3)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
 	await expect(table.getByRole('row', { name: /^The applicant’s own supply/ })).toContainText('no band: the ensemble doesn’t carry this measure yet');
 	await expect(page.getByTestId('evidence-rules')).toContainText('R2 · Paired rule');
+	// § 5 and its row: the project has no registered volumes, so both say so (G6); evidence-allocations.spec.ts has the assessed case.
+	await expect(table.getByRole('row', { name: /^Registered vs modelled use/ })).toContainText('Not assessed: the runs carry no registered volumes');
+	await expect(page.getByTestId('evidence-allocations-na')).toContainText('Not assessed: the runs carry no registered volumes');
 
 	// Board 1: nothing stops the report being issued.
 	await expect(page.getByTestId('evidence-checks')).toContainText('Every check that stops a pack being issued passes.');

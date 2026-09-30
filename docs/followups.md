@@ -2983,8 +2983,14 @@ from the WP:
       allocations matched to it with the holder name (what RLS already lets
       the farmer read). Never matched by name to an account: names aren't
       unique ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
-- [ ] **Evidence pack and chart**: the over/under-use chart and the
-      comparison in the licence evidence pack (WP-3.14).
+- [x] **Evidence pack and chart** (2026-09-29, issue #71): the evidence
+      report's § 5 *Registered water use* (the over/under-use chart, the
+      per-unit and per-year comparison, each run's own volumes and mode),
+      the fixed page-1 row *Registered vs modelled use* and its flag
+      ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
+      The issued pack (WP-3.14) freezes the document, so it carries § 5 once
+      the pack lands. An over/under-use chart on the Allocations tab itself
+      is not built.
 
 ## Crop factors (issue #54 item 1)
 

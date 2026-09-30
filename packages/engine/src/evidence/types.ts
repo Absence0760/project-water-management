@@ -4,6 +4,8 @@
 // returns, which the report route renders and an issued evidence pack freezes
 // as its manifest. Pure data: no I/O, and nothing time-dependent is computed
 // here, so the same input always gives the same document.
+import type { AllocationComparison, AllocationStatus, AllocationWaterSource } from '../allocations/compare';
+import type { AllocationMode } from '../allocations/mode';
 import type { InputChange, RunInputsSnapshot } from '../compare';
 import type { Erratum } from '../liability/errata';
 import type { Limitation } from '../liability/limitations';
@@ -16,8 +18,12 @@ import type { EnsembleSummary } from '../uncertainty/ensemble';
 import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } from '../uncertainty/options';
 import type { PairedSummary } from '../uncertainty/paired';
 
-/** Bumped whenever the document's shape or a rule that builds it changes; a pack records it. */
-export const EVIDENCE_REPORT_VERSION = 'evidence-1';
+/**
+ * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
+ * evidence-2: registered water use (`allocations`, § 5) and the page-1 row "Registered vs
+ * modelled use" (`registeredUse`), with its flag, were added (issue #71, WP-3.10).
+ */
+export const EVIDENCE_REPORT_VERSION = 'evidence-2';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -45,6 +51,15 @@ export interface EvidenceRunInput {
 	notes: string;
 	notesUpdatedAt: string | null;
 	notesUpdatedBy: string | null;
+	/**
+	 * The run's modelled use against its registered volumes, per unit, water
+	 * source and water year (compareAllocations over the run's own stored
+	 * series, its own stored allocations and its own tolerance, record days
+	 * only). Null or absent when the run's inputs carry no allocations (a
+	 * project without any, or a run from before engine 1.18.0). Carries no
+	 * holder names: a run's allocations never do (docs/allocations.md § Who sees what).
+	 */
+	allocations?: AllocationComparison | null;
 }
 
 /** The scenario an application run came from, as the run recorded it (inputs.scenario), with the scenario's current metadata. */
@@ -202,7 +217,7 @@ export interface EvidenceChange {
 }
 
 export interface EvidenceRow {
-	id: 'reserve' | 'ewrDays' | 'shortfall' | 'outflowMar' | 'applicantSupply' | 'userSupply';
+	id: 'reserve' | 'ewrDays' | 'shortfall' | 'outflowMar' | 'registeredUse' | 'applicantSupply' | 'userSupply';
 	/** The measure, in words. */
 	label: string;
 	/** What it is measured against, so two EWRs are never confused (persona E: "label each measure's basis"). */
@@ -311,6 +326,78 @@ export interface EvidenceUser {
 	onlyIn: 'baseline' | 'application' | null;
 }
 
+/** One water year of a unit's use from one water source, both runs (§ 5). */
+export interface EvidenceAllocationYear {
+	/** Water year (Oct–Sep), labelled by the year it starts in. */
+	waterYear: number;
+	/** Days of the water year inside the baseline (else the application), and in the whole year. */
+	days: number;
+	yearDays: number;
+	/** A run covers only part of it: listed, the registered volume prorated, but not counted for that run; null where the run lacks the year. */
+	partialA: boolean | null;
+	partialB: boolean | null;
+	/** Registered volume in force over those days (m³), modelled use (m³) and how they compare, per run; null where the run lacks the unit or the year. */
+	registeredA: number | null;
+	modelledA: number | null;
+	statusA: AllocationStatus | null;
+	/** Baseline evidence: null. */
+	registeredB: number | null;
+	modelledB: number | null;
+	statusB: AllocationStatus | null;
+}
+
+/** Whole water years by how modelled use compared with the registered volume. */
+export interface EvidenceAllocationCounts {
+	wholeYears: number;
+	over: number;
+	within: number;
+	under: number;
+	/** No registered volume in force that year (outside its validity dates). */
+	noVolume: number;
+}
+
+export interface EvidenceAllocationSource {
+	waterSource: AllocationWaterSource;
+	years: EvidenceAllocationYear[];
+	countsA: EvidenceAllocationCounts | null;
+	/** Baseline evidence, or the application lacks the unit or has no volume on this source: null. */
+	countsB: EvidenceAllocationCounts | null;
+	/** Mean modelled use and registered volume per whole water year (m³), per run. */
+	meanModelledA: number | null;
+	meanRegisteredA: number | null;
+	meanModelledB: number | null;
+	meanRegisteredB: number | null;
+}
+
+/** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */
+export interface EvidenceAllocationUnit {
+	nodeId: string;
+	name: string;
+	kind: 'farm' | 'user';
+	/** One of the applicant's own units. */
+	own: boolean;
+	/** Only in one of the runs (a unit the application added or removed). */
+	onlyIn: 'baseline' | 'application' | null;
+	/** Per water source with a registered volume in either run, surface first. */
+	sources: EvidenceAllocationSource[];
+}
+
+/** § 5 Registered water use: modelled use against the registered volumes (WARMS registrations, licences), both runs. */
+export interface EvidenceAllocations {
+	/** Set when there is nothing to compare: printed in the section's place, in words (rule 3, G6). */
+	notAssessed: string | null;
+	/** The allocation mode each run ran with (RunSummary.allocations); null when the run carries none. */
+	modeA: AllocationMode | null;
+	modeB: AllocationMode | null;
+	/** The band around a registered volume counted as within it, per run (settings.allocationTolerance). */
+	toleranceA: number | null;
+	toleranceB: number | null;
+	units: EvidenceAllocationUnit[];
+	/** Registered volumes matched to no unit of the run, or to one the run lacks: counted, not compared. */
+	notMatchedA: number;
+	notMatchedB: number | null;
+}
+
 export interface EvidenceReport {
 	version: typeof EVIDENCE_REPORT_VERSION;
 	mode: EvidenceMode;
@@ -393,6 +480,8 @@ export interface EvidenceReport {
 		nominations: EvidenceNomination[];
 	};
 	users: EvidenceUser[];
+	/** § 5: registered water use against modelled use (WP-3.10). */
+	allocations: EvidenceAllocations;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;

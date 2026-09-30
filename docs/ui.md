@@ -5636,7 +5636,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     numbers), the change table (fixed rows, each with its basis: Reserve
     months met per rule-table site, days below the pragmatic EWR, shortfall
     volume, outflow MAR with % of natural MAR, the applicant's own supply,
-    other users' supply), with the paired band and "worse in k of n", *Where
+    *Registered vs modelled use* (unit-years above a registered volume,
+    summed, no band; *Not assessed* without volumes), other users' supply),
+    with the paired band and "worse in k of n", *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -5657,6 +5659,18 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
     days and years fully met, baseline and application.
+  - **5 Registered water use** (WP-3.10,
+    [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
+    the allocation mode each run ran with, the band, volumes on no unit; the
+    over/under-use chart (`UsePlot`, `registeredUse.ts`: a row per unit and
+    water source, a mark per whole water year at modelled ÷ registered,
+    hollow for the baseline, filled for the application, the 100 % line and
+    the band shaded, one neutral hue, a year past 300 % an arrowhead at the
+    edge); the whole years above, within and below per unit and source with
+    the mean volumes; and every water year's registered volume and modelled
+    use, part years listed but not counted. Units by their unit name, never
+    the holder's. *Not assessed* when the runs carry no volumes, or none on a
+    unit of theirs.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every
@@ -5670,7 +5684,8 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
-- Tested by `e2e/tests/evidence-report.spec.ts`.
+- Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
+  `e2e/tests/evidence-allocations.spec.ts`.
 
 ## Help (`/help`)
 

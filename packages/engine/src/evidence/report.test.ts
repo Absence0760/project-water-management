@@ -4,6 +4,7 @@
 // parity with the compare page's numbers (G14). Real engine runs of a
 // synthetic catchment: two farms and a gauge, an invented Reserve table.
 import { describe, expect, it } from 'vitest';
+import { compareAllocations, type AllocationEntry } from '../allocations/compare';
 import { toEpochDay } from '../calendar';
 import { compareRuns } from '../compare';
 import { ENGINE_ERRATA } from '../liability/errata.generated';
@@ -17,7 +18,7 @@ import { runModel } from '../run';
 import { resolveEnsembleOptions, runEnsemble, summariseEnsemble } from '../uncertainty/ensemble';
 import type { DeclaredUncertaintyRule } from '../uncertainty/options';
 import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
-import { BASIS_PRAGMATIC, citedEnsemble, evidenceChecks, evidenceReport, NO_BAND } from './report';
+import { ALLOCATIONS_NOT_ASSESSED, BASIS_PRAGMATIC, citedEnsemble, evidenceChecks, evidenceReport, NO_BAND } from './report';
 import type { EvidenceEnsembleInput, EvidenceInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -219,7 +220,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('has the fixed page-1 rows, in order, each measure labelled with its basis', () => {
-		expect(ids(r).slice(0, 5)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar', 'applicantSupply']);
+		expect(ids(r).slice(0, 6)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar', 'applicantSupply', 'registeredUse']);
 		expect(r.rows.find((x) => x.id === 'ewrDays')!.basis).toBe(BASIS_PRAGMATIC);
 		expect(r.rows[0]!.basis).toMatch(/^Reserve rule table \(Invented test table\)/);
 		for (const row of r.rows) expect(row.notAssessed === null || row.notAssessed.length > 10, row.id).toBe(true);
@@ -415,7 +416,7 @@ describe('baseline evidence (the nominated run alone)', () => {
 
 	it('has the river, credibility and appendices without change columns', () => {
 		expect(r.mode).toBe('baseline');
-		expect(ids(r)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar']);
+		expect(ids(r)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar', 'registeredUse']);
 		for (const row of r.rows) {
 			expect(row.application).toBeNull();
 			expect(row.change).toBeNull();
@@ -434,5 +435,168 @@ describe('errata', () => {
 		expect(ids16).toContain('ER-3');
 		expect(new Set(ids16).size).toBe(ids16.length);
 		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run')).toEqual([]);
+	});
+});
+
+describe('§ 5 registered water use (WP-3.10)', () => {
+	/** What the backend hands the report: compareAllocations over a run's own series, allocations and tolerance. */
+	const comparisonOf = (inp: ModelInput, out: ModelOutput, allocations: AllocationEntry[], tolerance = 0.1) => {
+		const get = (id: string, key: string) => out.series.find((s) => s.nodeId === id && s.key === key)?.values ?? null;
+		return compareAllocations({
+			startDate: START,
+			tolerance,
+			allocations,
+			nodes: inp.model.nodes
+				.filter((n) => n.kind === 'farm' || n.kind === 'user')
+				.map((n) => ({ nodeId: n.id, name: n.name, kind: n.kind as 'farm' | 'user', supplied: get(n.id, 'supplied')!, groundwater: get(n.id, 'groundwater_used'), riverAbstraction: get(n.id, 'river_abstraction') }))
+		});
+	};
+	const meanUse = (out: ModelOutput, id: string) => {
+		const c = comparisonOf(base, out, [{ id: 'probe', nodeId: id, waterSource: 'surface', volumeM3PerYear: 1 }]);
+		return c.nodes.find((n) => n.nodeId === id)!.surface.meanModelledM3PerYear!;
+	};
+	// The baseline's farms have no dam and take nothing; the application's dam on Farm two (the applicant's) supplies it.
+	// Farm one is registered for a volume it never uses; Farm two for half what the application takes.
+	const allocations: AllocationEntry[] = [
+		{ id: 'a1', nodeId: 'F1', waterSource: 'surface', volumeM3PerYear: 100_000 },
+		{ id: 'a2', nodeId: 'F2', waterSource: 'surface', volumeM3PerYear: meanUse(appOut, 'F2') / 2 }
+	];
+	const withAllocations = (list = allocations, over: { a?: Partial<EvidenceRunInput>; b?: Partial<EvidenceRunInput> } = {}) => {
+		const i = input();
+		return input({
+			baseline: { ...i.baseline, allocations: comparisonOf(base, baseOut, list), ...over.a },
+			application: { ...i.application!, allocations: comparisonOf(app, appOut, list), ...over.b }
+		});
+	};
+	const r = evidenceReport(withAllocations());
+
+	it('without registered volumes: § 5 and its page-1 row say "Not assessed", and an assessor’s question names it', () => {
+		const none = evidenceReport(input());
+		expect(none.allocations.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.none);
+		expect(none.allocations.units).toEqual([]);
+		const row = none.rows.find((x) => x.id === 'registeredUse')!;
+		expect(row.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.none);
+		expect(row.baseline).toBeNull();
+		expect(none.questions.some((q) => q.startsWith('Registered vs modelled use: Not assessed'))).toBe(true);
+		expect(none.flags.map((f) => f.id)).not.toContain('allocationsOver');
+		// Positive control: with volumes the section is assessed.
+		expect(r.allocations.notAssessed).toBeNull();
+	});
+
+	it('lists each unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14)', () => {
+		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([
+			['Farm one', false, null],
+			['Farm two', true, null]
+		]);
+		const cb = comparisonOf(app, appOut, allocations);
+		const ca = comparisonOf(base, baseOut, allocations);
+		for (const u of r.allocations.units) {
+			expect(u.sources.map((s) => s.waterSource)).toEqual(['surface']);
+			const s = u.sources[0]!;
+			const ya = ca.nodes.find((n) => n.nodeId === u.nodeId)!.surface.years;
+			const yb = cb.nodes.find((n) => n.nodeId === u.nodeId)!.surface.years;
+			expect(s.years.map((y) => y.waterYear)).toEqual(ya.map((y) => y.waterYear));
+			expect(s.years.map((y) => [y.registeredA, y.modelledA, y.statusA])).toEqual(ya.map((y) => [y.registeredM3, y.modelledM3, y.status]));
+			expect(s.years.map((y) => [y.registeredB, y.modelledB, y.statusB])).toEqual(yb.map((y) => [y.registeredM3, y.modelledM3, y.status]));
+			for (const c of [s.countsA!, s.countsB!]) expect(c.over + c.within + c.under + c.noVolume).toBe(c.wholeYears);
+			expect(s.countsA!.wholeYears).toBe(5);
+		}
+		expect(meanUse(appOut, 'F2')).toBeGreaterThan(0);
+		// Farm one takes nothing: below its volume every year. Farm two: below it in the baseline, above it in the application.
+		const [f1, f2] = r.allocations.units.map((u) => u.sources[0]!);
+		expect([f1!.countsA!.under, f1!.countsB!.under]).toEqual([5, 5]);
+		expect([f2!.countsA!.under, f2!.countsA!.over, f2!.countsB!.over]).toEqual([5, 0, 5]);
+		expect(r.allocations.toleranceA).toBe(0.1);
+		expect(r.allocations.notMatchedA).toBe(0);
+	});
+
+	it('the page-1 row sums the unit-years above the volume, both runs, with no band', () => {
+		const row = r.rows.find((x) => x.id === 'registeredUse')!;
+		const sum = (k: 'countsA' | 'countsB') => r.allocations.units.reduce((t, u) => t + u.sources.reduce((v, s) => v + (s[k]?.over ?? 0), 0), 0);
+		expect(row.notAssessed).toBeNull();
+		expect(row.baseline).toBe(sum('countsA'));
+		expect(row.application).toBe(sum('countsB'));
+		expect(row.change).toEqual({ run: sum('countsB') - sum('countsA'), band: null, bandNote: NO_BAND.notCarried, worse: null });
+		expect(row.basis).toMatch(/more than ±10 % above its registered volume/);
+		expect(row.note).toMatch(/allocation mode: not recorded/);
+	});
+
+	it('flags the application’s use above a registered volume, naming the unit, never a holder; none when every year is within', () => {
+		const flag = r.flags.find((f) => f.id === 'allocationsOver')!;
+		expect(flag.level).toBe('caution');
+		expect(flag.text).toBe(
+			'The application’s modelled use is more than ±10 % above the registered volume: Farm two (the applicant’s), surface water, 5 of 5 whole water years (baseline 0 of 5) (§ 5).'
+		);
+		// Control: volumes far above any use raise no flag.
+		const roomy = allocations.map((x) => ({ ...x, volumeM3PerYear: x.volumeM3PerYear * 1000 }));
+		expect(evidenceReport(withAllocations(roomy)).flags.map((f) => f.id)).not.toContain('allocationsOver');
+	});
+
+	it('reads the allocation mode each run ran with from its summary', () => {
+		const withMode = (inp: ModelInput): ModelInput => ({ ...inp, settings: { ...inp.settings, allocationMode: 'none' }, model: { ...inp.model, allocations } });
+		const outA = runModel(withMode(base));
+		const outB = runModel(withMode(app));
+		const got = evidenceReport(withAllocations(allocations, { a: { summary: outA.summary }, b: { summary: outB.summary } }));
+		expect([got.allocations.modeA, got.allocations.modeB]).toEqual(['none', 'none']);
+		expect(got.rows.find((x) => x.id === 'registeredUse')!.note).toMatch(/allocation mode: Compare only/);
+	});
+
+	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
+		const i = withAllocations();
+		const cb = i.application!.allocations!;
+		const onlyBase = evidenceReport({ ...i, application: { ...i.application!, allocations: { ...cb, nodes: cb.nodes.filter((n) => n.nodeId !== 'F1') } } });
+		const f1 = onlyBase.allocations.units.find((u) => u.nodeId === 'F1')!;
+		expect(f1.onlyIn).toBe('baseline');
+		expect(f1.sources[0]!.countsB).toBeNull();
+		expect(f1.sources[0]!.years.every((y) => y.modelledB === null && y.modelledA !== null)).toBe(true);
+		// Control: in both runs, it isn't marked.
+		expect(r.allocations.units.find((u) => u.nodeId === 'F1')!.onlyIn).toBeNull();
+
+		const loose = evidenceReport(withAllocations([{ id: 'a9', nodeId: null, waterSource: 'surface', volumeM3PerYear: 1e5 }]));
+		expect(loose.allocations.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
+		expect(loose.allocations.notMatchedA).toBe(1);
+		expect(loose.rows.find((x) => x.id === 'registeredUse')!.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
+	});
+
+	it('baseline evidence: one run’s counts, and the flag names the baseline', () => {
+		const i = withAllocations();
+		const b = evidenceReport({ ...i, application: null, changes: [] });
+		expect(b.allocations.units.every((u) => u.sources.every((s) => s.countsB === null && s.years.every((y) => y.statusB === null)))).toBe(true);
+		expect(b.allocations.modeB).toBeNull();
+		expect(b.rows.at(-1)!.id).toBe('registeredUse');
+		expect(b.rows.at(-1)!.application).toBeNull();
+		// The baseline never takes more than a volume: no flag. Control: the application's run read as a baseline flags as the baseline.
+		expect(b.flags.map((f) => f.id)).not.toContain('allocationsOver');
+		const appAsBase = evidenceReport({ ...i, baseline: { ...i.application!, id: 'base' }, application: null, changes: [] });
+		expect(appAsBase.flags.find((f) => f.id === 'allocationsOver')!.text).toMatch(/^The baseline’s modelled use is more than ±10 % above the registered volume: Farm two, surface water, 5 of 5/);
+	});
+
+	it('names both bands when the runs used different ones', () => {
+		const i = withAllocations();
+		const got = evidenceReport({ ...i, application: { ...i.application!, allocations: comparisonOf(app, appOut, allocations, 0.15) } });
+		expect([got.allocations.toleranceA, got.allocations.toleranceB]).toEqual([0.1, 0.15]);
+		expect(got.rows.find((x) => x.id === 'registeredUse')!.basis).toMatch(/more than ±10 % \(baseline\), ±15 % \(application\) above/);
+		expect(got.flags.find((f) => f.id === 'allocationsOver')!.text).toMatch(/^The application’s modelled use is more than ±15 % \(the application’s band; the baseline’s is ±10 %\) above/);
+		// Control: one band, said once.
+		expect(r.rows.find((x) => x.id === 'registeredUse')!.basis).toMatch(/more than ±10 % above/);
+	});
+
+	it('marks a part year per run when the runs differ in length, and counts it only where it is whole', () => {
+		const i = withAllocations();
+		const short = comparisonOf(app, { ...appOut, series: appOut.series.map((x) => ({ ...x, values: x.values.slice(0, 1600) })) }, allocations);
+		const got = evidenceReport({ ...i, application: { ...i.application!, allocations: short } });
+		const last = got.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		expect([last.partialA, last.partialB]).toEqual([false, true]);
+		const s = got.allocations.units[1]!.sources[0]!;
+		expect([s.countsA!.wholeYears, s.countsB!.wholeYears]).toEqual([5, 4]);
+		// Control: the full-length runs have it whole in both.
+		const full = r.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		expect([full.partialA, full.partialB]).toEqual([false, false]);
+	});
+
+	it('is deterministic, and a changed volume changes the document', () => {
+		expect(canonicalJson(evidenceReport(withAllocations()))).toBe(canonicalJson(r));
+		const other = allocations.map((x, k) => (k === 1 ? { ...x, volumeM3PerYear: x.volumeM3PerYear * 3 } : x));
+		expect(canonicalJson(evidenceReport(withAllocations(other)))).not.toBe(canonicalJson(r));
 	});
 });

@@ -6,7 +6,7 @@
 // depends on the mode: a baseline-evidence report has no applicant.
 import type { EvidenceReport } from '@water-management/engine';
 
-export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
+export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
 
 export interface EvidenceSection {
 	id: EvidenceSectionId;
@@ -25,6 +25,8 @@ export function evidenceSections(r: Pick<EvidenceReport, 'mode'>): EvidenceSecti
 		{ id: 'uncertainty', number: '2', kind: 'Section', title: 'Uncertainty' },
 		{ id: 'credibility', number: '3', kind: 'Section', title: 'Model and data' },
 		{ id: 'users', number: '4', kind: 'Section', title: app ? 'Other users' : 'Every user’s supply' },
+		// WP-3.10: modelled use against the registered volumes (WARMS registrations, licences); "Not assessed" when the runs carry none.
+		{ id: 'allocations', number: '5', kind: 'Section', title: 'Registered water use' },
 		{ id: 'appendixInputs', number: 'A', kind: 'Appendix', title: 'Inputs and assumptions' },
 		{ id: 'appendixVerify', number: 'B', kind: 'Appendix', title: 'Limitations, sign-off and verification' }
 	];

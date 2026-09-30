@@ -9,7 +9,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { ALLOCATION_MODES, beforeForecast, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type AllocationUseNode } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode } from '@water-management/engine';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -39,6 +39,7 @@ import {
 	type MatchNode,
 	type ParsedRow
 } from './parse.js';
+import { runUseNodes } from './runUse.js';
 
 /** Most allocations per project (a catchment's WARMS extract is hundreds of rows, not thousands). */
 export const ALLOCATIONS_PER_PROJECT_MAX = 5000;
@@ -556,28 +557,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			if (!r) throw new ApiError(404, 'not found');
 			// The band: a one-off ?tolerance=, else the project's setting now (issue #72), so every run reads against the same one.
 			const tolerance = q.tolerance ?? mergeSettings(r.settings).allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
-			const users = (r.nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
-			const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
-				`SELECT node_id AS "nodeId", key, "values" FROM run_series
-				 WHERE run_id = $1 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction') AND node_id = ANY($2::uuid[])`,
-				[runId, users.map((n) => n.id)]
-			);
-			const get = (nodeId: string, key: string) => {
-				const values = series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
-				return values && Array.from(beforeForecast(values, r.startDate, r.forecastFrom));
-			};
-			const nodes: AllocationUseNode[] = users
-				.filter((n) => get(n.id, 'supplied'))
-				.map((n) => ({
-					nodeId: n.id,
-					name: n.name,
-					kind: n.kind as 'farm' | 'user',
-					supplied: get(n.id, 'supplied')!,
-					groundwater: get(n.id, 'groundwater_used') ?? null,
-					groundwaterToDam: get(n.id, 'groundwater_to_dam') ?? null,
-					riverAbstraction: get(n.id, 'river_abstraction') ?? null,
-					damCapacityM3: n.damCapacityM3 ?? null
-				}));
+			const nodes = await runUseNodes(db, runId, r.startDate, r.forecastFrom, r.nodes);
 			const allocations = await loadAllocations(db, id);
 			const comparison = compareAllocations({
 				startDate: r.startDate,
