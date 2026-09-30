@@ -17,7 +17,7 @@
 // EWR to a group with no demand and printed a negative final demand; the
 // engine bounds the volume left and shows that charge as store less / pass
 // inflow, plan.md Q13). Pure, so it is unit-tested without Svelte.
-import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
+import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
 import { fmtDemandLeft, fmtVol } from './curtailment';
 
 /** One stage for one row: volume (m³/day) and the share of demand it is. */
@@ -72,6 +72,13 @@ export interface Board {
 	userTotals: StageTotals | null;
 }
 
+/**
+ * What a unit's basic-needs floor keeps of the cut (engine ≥ 1.38.0, issue
+ * #123), in one wording for the board's note and the curtailment table's badge.
+ */
+export const basicNeedsNote = (held: string, floor: string): string =>
+	`basic needs keep ${held} m³/day of the cut (floor ${floor} m³/day, ${DEMAND_NORMS.basicLitresPerPersonDay} litres a person a day)`;
+
 /** Below this a volume rounds to 0 at one decimal and isn't worth a note. */
 const NOTE_FLOOR_M3_DAY = 0.05;
 
@@ -93,7 +100,7 @@ function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 	if (beyond >= NOTE_FLOOR_M3_DAY) notes.push(`EWR cut exceeds its equitable share by ${fmtVol(beyond)} m³/day`);
 	// The basic-needs floor (engine ≥ 1.38.0, issue #123): the EWR stage never goes below it.
 	const held = f.basicNeedsHeldM3Day ?? 0;
-	if (held >= NOTE_FLOOR_M3_DAY) notes.push(`basic needs keep ${fmtVol(held)} m³/day (25 l a person a day, floor ${fmtVol(f.basicNeedsM3Day ?? 0)} m³/day)`);
+	if (held >= NOTE_FLOOR_M3_DAY) notes.push(basicNeedsNote(fmtVol(held), fmtVol(f.basicNeedsM3Day ?? 0)));
 	return {
 		nodeId: f.nodeId,
 		name: names[f.nodeId] ?? f.name,

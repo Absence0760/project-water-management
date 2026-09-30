@@ -11,7 +11,6 @@
 	// entered here. The objects are the editor's own, so edits land in the model directly.
 	import {
 		BASIC_NEEDS_CATEGORIES,
-		basicNeedsM3Day,
 		DEMAND_NORMS,
 		DEMAND_OBJECT_CATEGORIES,
 		DEMAND_OBJECT_CATEGORY_LABEL,
@@ -28,6 +27,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
 	import { monthsOf } from './monthFields';
+	import { floorLine, peopleHint } from './demandObjectFloor';
 
 	let {
 		node,
@@ -144,10 +144,12 @@
 									grouped
 									nullable
 									disabled={readonly}
-									placeholder={o.sizing === 'perUnit' ? 'the number of people' : 'none'}
+									placeholder={o.sizing === 'perUnit' ? fmtNum(o.count ?? 0, 0) : 'none'}
 									value={o.population ?? null}
+									aria-describedby="do-pop-hint-{o.id}"
 									onchange={(v) => (o.population = v)}
 								/>
+								<span class="muted small" id="do-pop-hint-{o.id}">{peopleHint(o)}</span>
 							</div>
 						{/if}
 						<div class="field check">
@@ -182,13 +184,8 @@
 					<p class="muted small" data-testid="demand-object-mean-{o.id}">
 						{fmtNum(meanOf(o), 0)} m³/day on average{o.enabled ? '' : ' (not modelled)'}.
 					</p>
-					{#if BASIC_NEEDS_CATEGORIES.includes(o.category)}
-						{@const floor = basicNeedsM3Day(o)}
-						<p class="muted small" data-testid="demand-object-floor-{o.id}">
-							{floor === null
-								? 'No basic-needs floor: enter the people it serves to keep a restriction from cutting it below 25 litres a person a day.'
-								: `Basic-needs floor ${fmtNum(floor, 1, true)} m³/day (25 litres a person a day): a restriction never cuts it below that.`}
-						</p>
+					{#if floorLine(o)}
+						<p class="muted small" data-testid="demand-object-floor-{o.id}">{floorLine(o)}</p>
 					{/if}
 					{#if !readonly}
 						<div class="row-actions">

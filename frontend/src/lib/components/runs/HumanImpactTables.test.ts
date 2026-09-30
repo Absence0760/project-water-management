@@ -34,15 +34,16 @@ describe('the demand-objects table and the basic-needs floor (engine 1.38.0)', (
 		const floored = object({ basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 2, avgBelowBasicNeedsM3Day: 4.5, avgSuppliedLitresPerPersonDay: 20 });
 		const body = text(render(HumanImpactTables, { props: { summary: summary([floored, object({ id: 'm', name: 'Mill', category: 'industrial' })]) } }).body);
 		expect(body).toContain('Basic-needs floor m³/day');
-		expect(body).toContain('Days below the floor');
-		expect(body).toContain('Supplied l/person/day');
-		expect(body).toContain('Village Domestic first 25 20 80.0% 3 25 2 4.5 20 0');
-		expect(body).toContain('Mill Industrial first 25 20 80.0% 3 – – – – 0');
+		expect(body).toContain('Below the floor days · m³/day');
+		expect(body).toContain('Per person l/day');
+		expect(body).toContain('Village Domestic first 25 20 80.0% 20 3 25 2 days 4.5 m³/day 0');
+		expect(body).toContain('Mill Industrial first 25 20 80.0% – 3 – – 0');
+		expect(body).toContain('– = no floor');
 	});
 
 	it('has no floor columns when no object has a floor (a run before engine 1.38.0 included)', () => {
 		const body = text(render(HumanImpactTables, { props: { summary: summary([object()]) } }).body);
 		expect(body).not.toContain('Basic-needs floor');
-		expect(body).not.toContain('l/person/day');
+		expect(body).not.toContain('Per person');
 	});
 });

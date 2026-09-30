@@ -176,8 +176,10 @@ describe('CurtailmentTable with the board', () => {
 	it('badges a unit whose basic-needs floor keeps part of the cut (engine 1.38.0)', () => {
 		const held = { ...c, farms: [farm({ nodeId: 'h', name: 'Village farm', targetM3Day: 20, volumeLeftM3Day: 25, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 25 })] };
 		const body = render(CurtailmentTable, { props: { summary: { curtailment: held } as never } }).body;
-		expect(text(body)).toContain('basic needs keep 25 m³/day of the cut (floor 25 m³/day)');
+		expect(text(body)).toContain('basic needs keep 25 m³/day of the cut (floor 25 m³/day, 25 litres a person a day)');
 		expect(render(CurtailmentTable, { props: { summary } }).body).not.toContain('basic-needs-held');
+		// The board says stage 2 never goes below a unit's floor, as well as below 0 %.
+		expect(text(render(ShareThePainBoard, { props: { curtailment: held } }).body)).toContain("never goes below 0 % of demand, or below a hydrological unit's basic-needs floor (25 litres a person a day");
 	});
 	it('shows no board for a run with no farms', () => {
 		const body = render(CurtailmentTable, { props: { summary: { curtailment: { ...c, farms: [] } } as never, board: true } }).body;

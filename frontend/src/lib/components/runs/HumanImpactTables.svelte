@@ -4,7 +4,7 @@
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
 	// for a run that has any of them (humanImpacts.ts), on Units & supply
 	// (issue #137) and in the printable report.
-	import { DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
+	import { DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
@@ -43,7 +43,8 @@
 		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops (daily averages over the run).
 		Their demand is part of the hydrological unit’s.
 		{#if anyFloor}
-			A domestic or municipal object’s basic-needs floor is 25 litres a person a day; days and volume below it are counted apart from the days short.
+			A domestic or municipal object’s basic-needs floor is {DEMAND_NORMS.basicLitresPerPersonDay} litres a person a day for the people it
+			serves; the days and volume supplied below it are counted apart from the days short. – = no floor (another category, or no people entered).
 		{/if}
 	</p>
 	<div class="table-wrap">
@@ -56,13 +57,12 @@
 					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Supplied<br /><span class="u">%</span></th>
+					{#if anyFloor}<th scope="col" class="num">Per person<br /><span class="u">l/day</span></th>{/if}
 					<th scope="col" class="num">Days short</th>
 					{#if anyOff}<th scope="col" class="num">Days off</th>{/if}
 					{#if anyFloor}
 						<th scope="col" class="num">Basic-needs floor<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Days below the floor</th>
-						<th scope="col" class="num">Below the floor<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Supplied<br /><span class="u">l/person/day</span></th>
+						<th scope="col" class="num">Below the floor<br /><span class="u">days · m³/day</span></th>
 					{/if}
 					<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
 				</tr>
@@ -76,16 +76,18 @@
 						<td class="num">{fmtNum(o.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(o.avgSuppliedM3Day)}</td>
 						<td class="num">{fmtPct(o.fractionSupplied)}</td>
+						{#if anyFloor}<td class="num">{o.avgSuppliedLitresPerPersonDay === undefined ? '–' : fmtNum(o.avgSuppliedLitresPerPersonDay, 0)}</td>{/if}
 						<td class="num">{fmtNum(o.daysShort, 0)}</td>
 						{#if anyOff}<td class="num">{o.daysOff === undefined ? '–' : fmtNum(o.daysOff, 0)}</td>{/if}
 						{#if anyFloor}
 							{#if o.basicNeedsM3Day === undefined}
-								<td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td>
+								<td class="num">–</td><td class="num">–</td>
 							{:else}
 								<td class="num">{fmtNum(o.basicNeedsM3Day, 1, true)}</td>
-								<td class="num" class:below={(o.daysBelowBasicNeeds ?? 0) > 0}>{fmtNum(o.daysBelowBasicNeeds ?? 0, 0)}</td>
-								<td class="num">{fmtNum(o.avgBelowBasicNeedsM3Day ?? 0, 1, true)}</td>
-								<td class="num">{fmtNum(o.avgSuppliedLitresPerPersonDay ?? 0, 0)}</td>
+								<!-- Days, with the mean volume below on a second line (stacked, so the table fits). -->
+								<td class="num" class:below={(o.daysBelowBasicNeeds ?? 0) > 0}>
+									{fmtNum(o.daysBelowBasicNeeds ?? 0, 0)} days<br /><span class="muted small">{fmtNum(o.avgBelowBasicNeedsM3Day ?? 0, 1, true)} m³/day</span>
+								</td>
 							{/if}
 						{/if}
 						<td class="num">{o.destination === 'external' ? 'piped out' : fmtNum(o.avgReturnedM3Day)}</td>
