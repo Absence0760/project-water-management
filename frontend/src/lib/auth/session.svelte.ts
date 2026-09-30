@@ -1,5 +1,6 @@
 // The signed-in user, resolved once by the root layout via GET /auth/me.
 import type { User } from '$lib/api/types';
+import { DEFAULT_LOCALE } from '@water-management/engine/languages';
 
 export const session = $state<{ user: User | null; checked: boolean }>({ user: null, checked: false });
 
@@ -25,12 +26,26 @@ export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alert
 export const LANDING_PATH = '/welcome';
 
 /**
+ * The landing page in one language (issue #137): `/welcome` in English (the
+ * default), `/welcome/<code>` in every other language of the table, each
+ * prerendered with its own `<html lang>` (routes/welcome/[[lang=locale]],
+ * the `locale` param matcher, hooks.server.ts).
+ */
+export const landingPath = (locale: string): string => (locale === DEFAULT_LOCALE ? LANDING_PATH : `${LANDING_PATH}/${locale}`);
+
+/** The landing page's route id: one route, the language an optional parameter. */
+export const LANDING_ROUTE = '/welcome/[[lang=locale]]';
+
+/**
  * The prerendered static pages: the landing page, the legal pages
  * (/privacy, /terms) and the methods page (/methods, the engine audit's
  * public summary). Reachable either way, rendered at once (their HTML is
  * written at build time), and served from their .html by CloudFront.
  */
 export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods'];
+
+/** The same pages by route id (the root layout matches by route: while prerendering, `base` is relative). */
+export const STATIC_ROUTES = [LANDING_ROUTE, '/privacy', '/terms', '/methods'];
 
 /** Routes reachable without signing in. */
 export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS, ...STATIC_PATHS];

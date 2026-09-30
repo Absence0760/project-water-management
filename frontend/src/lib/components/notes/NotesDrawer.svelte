@@ -33,6 +33,8 @@
 					? 'this run'
 					: target.kind === 'scenario'
 						? `“${target.name}”`
+						: target.kind === 'pack'
+							? target.name
 						: target.label
 	);
 

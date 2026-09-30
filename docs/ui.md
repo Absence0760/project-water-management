@@ -132,10 +132,15 @@ other signed-out route still goes to `/login?next=`.
 - **Routing.** `routeAccess` shows a signed-out `/` (`isLandingRoot`); the root
   layout renders `Landing.svelte` there in place of the projects page, loaded
   as its own chunk beside `/auth/me`. `/welcome` (`LANDING_PATH`, public) is
-  the same component, **prerendered** at build time (`routes/welcome/+page.ts`)
-  so crawlers and link previews get the page and its tags without running the
-  app; it renders at once, before the session is known, and even with the API
-  down. The canonical link and `og:url` point at `/welcome`.
+  the same component, **prerendered** at build time, once per language
+  (`routes/welcome/[[lang=locale]]`, issue #137): `/welcome` in English and
+  `/welcome/<code>` in every other language of the table (`/welcome/af`;
+  `landingPath`, the `locale` param matcher), so crawlers, link previews and
+  a visitor before any script get the page and its tags in the address's
+  language without running the app; it renders at once, before the session is
+  known, and even with the API down. The canonical link and `og:url` point at
+  the page's own address, `hreflang` alternates name every language's (and
+  `x-default` → `/welcome`), and `og:locale` is the language's (`af_ZA`).
 - **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
   mark and name, the language switch, **Sign in**), the page, a footer. A
   reading page with a 1200 px column; on a phone the header keeps the mark only.
@@ -147,9 +152,22 @@ other signed-out route still goes to `/login?next=`.
   to action; the footer. Sign-up is open, so **Create an account** links
   `/register` (issue #57's decision); Help stays behind sign-in.
 - **Language.** Translated (English and Afrikaans, § Language): the
-  `landing.*` sections of the translation sheet. `/welcome`'s prerendered HTML
-  is English and switches once the chosen language's words arrive, the one page
-  allowed to, so it never waits on the API.
+  `landing.*` sections of the translation sheet. On `/welcome` and
+  `/welcome/af` the language is the **address's**: each page's HTML is in
+  its language with its own `<html lang>` (`hooks.server.ts`), the route's
+  load hands the page its catalogue so the hydration matches, and the switch
+  is a pair of **links** between the two addresses (`LanguageSwitch`
+  `addressOf`, links however many languages there are: works without
+  script, `aria-current` on the current one, never
+  preloaded on hover; a click also keeps the choice on the device and the
+  account). `/welcome` is also the address for a visitor whose language
+  isn't known yet: once the app runs, a visitor whose choice (the
+  account's, this device's, else the browser's) is another language goes on
+  to that language's address (`replaceState`). `/welcome/af` stays
+  Afrikaans whatever the browser says, and reading it becomes the device's
+  choice when it has none, so the sign-in pages it leads to carry on in
+  Afrikaans. A signed-out `/` switches in place, as the sign-in pages do.
+  `e2e/tests/landing-language.spec.ts`.
 - **Tags.** Title, description, canonical, Open Graph (`og.jpg`, 1200 × 630,
   rendered) and a large Twitter card, with absolute URLs from the build's
   `SITE_ORIGIN` ([deployment.md](./deployment.md)).
@@ -784,7 +802,8 @@ same way on every screen:
   `form` attribute). With a file read but not uploaded, **Cancel**, the close
   button and Esc ask "Discard the file?" first (the confirmation dialog)
   (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
-  question). Closing gives focus back to what opened it
+  question, on the window, so an Esc pressed after the focus fell to the
+  page's body asks too). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
   decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
@@ -1255,14 +1274,25 @@ it scrolls, and isn't fitted to the window.
   deleted but not yet saved reads "a removed farm".
 - **Share links** (WP-2.3 phase 2, `project/ShareLinksPanel.svelte`, rules
   in `project/shareLinks.ts`), owners only, under Farmers: read-only links
-  to the published baseline for people outside the project. *Make link*
+  to the published baseline for people outside the project, and the owner's
+  inventory of **every** public link in the project (`?scope=all`): the
+  baseline links made here, each application's links, made by its
+  assessors or applicant from the application's Share dialog, and each
+  evidence pack's, made by an editor from the pack's page (128). Under each
+  label the row says what the link opens ("The published baseline",
+  "Application “name”", "Evidence pack “name”, version n", or "An
+  application you can't open" for one reopened as a draft or deleted) and,
+  for a live link whose application is withdrawn or unreadable, that it
+  opens nothing just now; for a pack withdrawn or replaced, that the link
+  shows only that, not its figures. The owner can
+  withdraw any live link from here; the confirm names the target. *Make link*
   takes who it's for (up to 100 characters) and how long it works (1 week,
   30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
   field with **Copy** (it falls back to selecting the field when the
   clipboard is refused), because the token isn't kept. The list shows each
   link's label and state (Live, Expired, Withdrawn), who made it and when,
   when it ends or who withdrew it, and when it was last opened (to the
-  hour), live links first. **Withdraw** asks first, then the link shows the
+  hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
 - On the **Network** tab, a farm with linked farmers says how many in its
@@ -1294,25 +1324,52 @@ on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
-**Figures.** Each row carries the [portfolio](#portfolio-teamsidportfolio)'s
+**Figures.** Each row carries the team portfolio's
 figures for its project, from `GET /projects/outcomes` ([api.md §
 Projects](./api.md#projects)), which covers personal and shared projects as
 well as team ones and loads beside the list (the rows show first, with
 "Loading…" in the figure cells; a failed request says "Figures unavailable"
 and the list still works). The wording comes from the portfolio's helpers
-(`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same on
-both pages. Columns: **Catchment** (the name, then owner/team for *Shared
+(`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same here,
+on the teams list and on the team page. Columns: **Catchment** (the name, then owner/team for *Shared
 with me*, your role and "edited <date>", when the project itself last
 changed, and the description on one line), **EWR, last 30 days** (the pill
 in words and colour, and *Published* or *Latest run* with the figures' age,
 "to 31 Dec 2024 (20 months ago)"; the header names the date instead once the
 figures are stale), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
-*Not published* until a run is published), **Lowest dam**, **Data** (the
-rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in the figures*, the feeds' health)
-and **Last run** (its age, then the date or when it was published). A
+*Not published* until a run is published; under it the count over 30 days,
+"1 in the last 30 days"), **Lowest dam** (with the published restriction
+under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
+without a publication, where the dam already says *Not published*), **Data**
+(the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
+the figures*, the feeds' health), **Last run** (its age, then the date or
+when it was published) and **Alerts** (the alerts firing now, "None" or a
+"2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
+
+The header's line adds what the portfolio's tiles counted, when there is
+any: "… · 1 alert firing · 2 with stale figures" (figures over 7 days old;
+`portfolioTotals`). The portfolio's stacked bar went: the line already says
+the counts in words.
+
+**A team's portfolio** (issue #176) is the team's chip (`?owner=team:<id>`):
+a note under the chips states the rule the statuses were judged by ("EWR
+status is the outlet over the 30 days to the figures' last day (the
+published run, or the latest when none is): green when it was not met on
+under 5 % of them, amber under 20 %, red otherwise") and whose it is (the
+team's `portfolioThresholds` from `GET /teams`: *These are the team's own
+thresholds* or *the default thresholds, still to be confirmed by the
+hydrologist*), then *Change them on the team page* (admins, the settings
+sheet) or "A team owner can change them on the team page". The rows'
+statuses are judged by each project's own team's thresholds
+(`GET /projects/outcomes`), so the note and the rows agree. *New project*
+preselects the team, the empty state offers *New project in <team>* to
+members, the tab title names the team, and a team that isn't yours (a
+stale link) says "This team doesn't exist or you're not a member" with links
+to your teams and all projects. The Teams list, the team page and the
+settings sheet link here as **Project list** (`?owner=team:<id>&sort=status`).
 
 **Needs attention** (`projects/NeedsAttention.svelte`, rules in
 `projects/outcomes.ts` `attention`): the catchments in view to look at
@@ -1330,14 +1387,18 @@ that hasn't run is not flagged.
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *EWR status* (worst
-first), *Hydrological units short*, *Lowest dam*, *Last run* (newest first), *Name*,
-from the Sort select or a column heading (`aria-sort`); an outcome sort puts
-rows without figures last. Old links (`?owner=`, `?sort=name`, `?new=1`)
-still work. With *All projects* the list is grouped (Personal, each team
-with its **Portfolio** and **Team members & settings** links, Shared with
-me), one table per group with the same fixed columns.
+first), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
+first; the Data heading), *Last run* (newest first), *Name*, from the Sort
+select or a column heading (`aria-sort`). A second click on the sorted
+heading turns it round (`?dir=desc`: best or oldest first, Z–A), as the
+portfolio's did; the Sort select starts a key its own way round. An outcome
+sort puts unknown values and rows without figures last either way. Old links
+(`?owner=`, `?sort=name`, `?new=1`, `/teams/:id/portfolio`) still work. With
+*All projects* the list is grouped (Personal, each team with its **Only this
+team** and **Team members & settings** links, Shared with me), one table per
+group with the same fixed columns; the headings wrap inside their columns.
 
-**Fits the window** from 900 × 620 up, like the portfolio: the list's card
+**Fits the window** from 900 × 620 up: the list's card
 takes at most the height left below the strip (its top and what sits below
 it, measured by a `ResizeObserver` on `body` and the page's `<main>`; below
 is measured to the end of `<main>`, not the document's height, which counts
@@ -1350,10 +1411,14 @@ scrolled the whole page, ui-playbook § 2). On a phone the page scrolls.
 
 **Layout answers to the space it has, not the window** (container queries).
 Each table (`ProjectTable.svelte`, container on its wrapper) folds Lowest
-dam and Last run into a line under the name at 1100 px or narrower (a
+dam (with the restriction), Last run and Alerts (a "2 alerts firing" badge,
+only when some are) into lines under the name at 1100 px or narrower (a
 1280 px window beside the app sidebar), and at 730 px every figure: the
-pill, units short, the freshness badge, the last run and the lowest dam
-stack under the name, with Add data and ⋯ stacked on the right. The rain
+pill, units short, the freshness badge, the last run, the lowest dam and the
+alerts stack under the name, with Add data and ⋯ stacked on the right.
+`portfolio.spec.ts` pins the team filter with thirty catchments at 1440×960
+(every column, the name column at least 200 px, no heading past its
+column) and 1280×800 (the folded lines). The rain
 badge wraps inside its cell at any width (until 2026-09-29 it stayed on one
 line and ran under Last run; `projects.spec.ts` checks it at 1440, 1024 and
 320 px).
@@ -1523,8 +1588,9 @@ panel says team members keep their team role on the project. Below,
 **`/teams`** shows each team as a card: its name (opens the team) and your
 role, then **Projects** and **Members**, a stacked **EWR, last 30 days**
 bar with the counts in words ("1 red, 4 green"), and the projects worst first with their status
-pills (five, ten when it's your only team; the rest are "N more projects on
-the portfolio"). *Open team* and *Portfolio* sit at the card's foot. The
+pills (five, ten when it's your only team; the rest are "N more projects in
+the project list"). *Open team* and *Project list* (the list filtered to the
+team, worst first) sit at the card's foot. The
 numbers come from each team's portfolio (`GET /teams/:id/portfolio`, one
 request per team after the list loads; no new endpoint), so a card shows
 its project and member counts at once and fills in the rest; if a
@@ -1535,12 +1601,12 @@ roles. *New team* stays in the header, and the empty state explains teams.
 
 **`/teams/:id`** leads with outcomes. The header has the team's name and
 your role, a summary line ("5 projects (1 red, 4 green) · 4 members ·
-created 26 Sep 2026") and the actions: **Portfolio**, **Team settings**,
+created 26 Sep 2026") and the actions: **Project list**, **Team settings**,
 **Add member** (admins; focuses the add form) and **New project** (members
 and admins; opens the New project dialog with the team preselected). The
 main column is **Projects**: two tiles (EWR bar, alerts firing), then each project worst first with its source
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
-(linking to the run's curtailment, as on the portfolio), lowest dam and
+(linking to the run's curtailment, as on the project list), lowest dam and
 alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): name
 with the email under it, role, Remove; the add-by-email form, pending
@@ -1555,15 +1621,16 @@ personal copy (the Copy dialog says so).
 
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
-reading path: **Team name** (admins; *Rename*), **Portfolio traffic lights**
+reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
 (below), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
-and asks in a confirmation dialog). The URL opens it (the portfolio's
-"Change them on the team page" links there), and closing it drops the
+and asks in a confirmation dialog). The URL opens it (the project list's
+team note, "Change them on the team page", links there), and closing it drops the
 parameter in place, so Back closes it.
 
-**Portfolio traffic lights** (in the settings sheet, decision D11):
-every member reads the rule the portfolio judges by, "green when it was not
+**EWR traffic lights** (in the settings sheet, decision D11; "Portfolio
+traffic lights" until issue #176): every member reads the rule the team's
+statuses are judged by (linking to the project list), "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
 *These are the team's own thresholds* or *These are the default thresholds,
 still to be confirmed by the hydrologist*. Admins get two number inputs,
@@ -1576,67 +1643,17 @@ can change them." A change shows in each team project's History tab
 
 ### Portfolio (`/teams/:id/portfolio`)
 
-The WUA's one screen for all of a team's catchments (roadmap WP-2.14,
-`routes/teams/[id]/portfolio/`, wording and sorting in
-`lib/components/portfolio/portfolio.ts`). Linked from the team page and
-from each team group's heading on the project list. One row per catchment
-the user can see, from `GET /teams/:id/portfolio` ([api.md §
-Portfolio](./api.md#portfolio)):
-
-- **Catchment**: the name (opens the project's Summary) and where the
-  figures come from: *Published run*, *Published run (a newer run is not
-  published)*, *Latest run, not published* or *Not run yet*, with a hint
-  for editors to run or publish.
-- **EWR, last 30 days**: the status as words **and** colour, never colour
-  alone: "Red: EWR not met 9 of 30 days", "Green: EWR met all 30 days", or
-  "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
-  run it again" (dashed outline). Under it, how old the figures are
-  ("Figures to 29 Dec 2023 (2 years ago)", `dateAge`) and a *Stale* flag past 7 days.
-  The column's and the total's label is "EWR, last 30 days" only while the
-  figures are current ([Data age and stale wording](#data-age-and-stale-wording)).
-- **Hydrological units short**: "2 of 8 hydrological units short this week", or
-  "… in the week to 31 Dec 2024" once the figures are stale (a link to the
-  Curtailment panel of that run on [Hydrological units](#hydrological-units), over the
-  last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
-  scrolls there once the run's results render and moves focus to the table's
-  heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
-  until a run is published" without a publication.
-- **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
-  recorded rain to … with its age ("Rain to 31 Dec 2024 (20 months ago)"), a *Newer data not in the figures* flag, and the feeds'
-  health.
-- **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
-  from `alertsFiring` ([§ Alerts](#alerts)).
-
-Wide screens get a sortable table (column-heading buttons with `aria-sort`);
-under 760 px the same rows become stacked cards with a *Sort by* select.
-Sorts: EWR status worst first (red, amber, unknown, green; more days not met
-first within a colour; the default), name, figures age, farms short, lowest
-dam; unknown values sort last either way. The sort lives in the URL
-(`?sort=`, `?dir=desc`). States: loading, error with retry, an empty team
-("No catchments in this team yet", with *New project in this team* for
-members and admins), and not-found for a team you aren't in. A farmer who
-opens the address is sent to their farm view (`/farm`), as the project list
-does. The intro states the thresholds the statuses were judged by (the API's
-`thresholds`, the team's or the defaults) and whose they are; an admin gets
-a link to change them in the team page's settings sheet (§ Teams,
-`?settings=1`), anyone else is told a team owner can.
-
-A dashboard (issue #17). The header carries *Team page* and, for members
-and admins, *New project in this team*; under it three tiles: **EWR, last 30
-days** (the "5 catchments: 1 red, 4 green" line, a live status, over the
-stacked bar), **Alerts firing** and **Stale figures** ("4 of 5") (the totals come from
-`portfolioTotals` in `portfolio.ts`; the pill and bar are
-`portfolio/StatusPill.svelte` and `StatusBar.svelte`, shared with the teams
-list and the team page). On a wide screen the page fits the window like the
-Network map: the table's box is the height left below the tiles, measured
-(its top and what sits below it on the page, re-measured by a
-`ResizeObserver` on `body`), never a fixed viewport height; the table
-scrolls inside it with its header row stuck, and the page keeps a 1 rem
-bottom margin and doesn't scroll. On a phone it's the cards, and the page
-scrolls. (The cards used to show under the table on a wide screen too: a
-plain `.cards { display: grid }` beat `.phone-only { display: none }`; the
-wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
-1440×960 and 1280×800.
+The team portfolio (roadmap WP-2.14) is the [project list](#project-list)
+filtered to the team since issue #176: the list's rows already carried the
+same figures from the same helpers, so the page only added its Restriction and
+Alerts columns and its tiles, which the list now has (§ Project list, *A
+team's portfolio*). The old address still works: `/teams/:id/portfolio`
+(`routes/teams/[id]/portfolio/+page.svelte`) replaces itself with
+`/?owner=team:<id>&sort=status`, keeping `?sort=` and `?dir=desc` (the
+portfolio's keys, `status`, `name`, `age`, `farms` and `dam`, are all list
+sorts; `projects/grouping.ts` `portfolioListHref`). `GET /teams/:id/portfolio`
+stays: the teams list and the team page read their tiles and traffic lights
+from it.
 
 ## Network
 
@@ -2306,7 +2323,10 @@ name focused. The sheet shows the factors four to a row (labelled "Orchard
 crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
 much. **Remove crop** asks first when the crop is planted anywhere, removes
-it with its areas, and closes the sheet. It edits the shared `ModelEditor`
+it with its areas, and closes the sheet. The Edit button that opened it went
+with its row, so the focus moves to the Edit button now in that place in the
+list (the next crop's, or the last one's), or to **Add crop** once the list is
+empty (`CropSheet` `onremove`, `CropsTab`'s `removed`). It edits the shared `ModelEditor`
 and, being modal, carries the save row (`ModelSaveRow`); a viewer gets the
 values read-only and Close. `Dialog` `side`, full width on a phone.
 
@@ -2561,7 +2581,7 @@ counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
 Hydrological units and Data show their names. Settings & calibration, Runs
 & results and River & reserve don't, and space their links evenly: with the
-names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
+names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
 Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
@@ -2574,7 +2594,8 @@ to its own redesign.
   next onto a row of its own, and Runs & results took three rows at 1280 px
   with Summary alone on the first. What still doesn't fit goes, in page
   order, into **More** at the end of the bar (`navFitCount`, from a hidden
-  copy of every link measured in its widest, marked state, refitted when the
+  copy of every link measured both plain and marked, the wider of the two,
+  with More's own trailing gap counted like every link's, refitted when the
   bar's width, the labels or the fonts change). At 1440 and 1280 px every
   page's links fit without More; at 1024 px Settings and Runs use it.
 - **More** is a disclosure button ("More sections", `aria-expanded`) with a
@@ -2735,7 +2756,15 @@ record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
 fill are shaded like the rain a run treats as missing, the filled values are
 drawn as points (*Filled in a run*), and the caption says how many days were
 interpolated and how many came from the donor record × its ratio, why a donor
-was refused, and how many gaps stay open (`series/flowFill.ts`). The alternative catchment gauge and the reanalysis (engine ≥
+was refused, and how many gaps stay open (`series/flowFill.ts`). **Quality
+flags**: on a flow record a run reads (the outlet's gauge or logger record,
+or the calibration site's record when calibration scores a gauge inside the
+network), the days Fit automatically would flag (above
+or below the record's gauged range, suspect, infilled; model.md §2.10h) are
+strips along the foot of the chart with a key in words, as on the Runs
+hydrograph, computed from the stored record under the current settings
+(`recordFlowFlags`, so a gauge's record has no gauged range and no fill) and
+naming what Fit automatically does with each class now. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -2958,15 +2987,25 @@ section header, which it fills (`fillHeader`) like the other sections.
   at the top.
 - **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
-  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-evidence`, `#set-auto`, then after the
-  form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
-  listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
-  named for screen readers only, its links evenly spaced (the names on the
-  bar would push links into More at 1280 px, issue #162): **Model inputs**
-  (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
-  results, issue #173), **How results are read** (Outcome matrix, Seasonal
-  outlook, Evidence: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`,
+  `#set-restrict`, `#set-period`, `#set-quality`, `#set-outcomes`,
+  `#set-outlook`, `#set-evidence`, then one **Automation & access** link to
+  `#set-auto`; listed by `settings/sections.ts`, `settingsNavGroups`), in
+  three groups named for screen readers only, its links evenly spaced (the
+  names on the bar would push links into More at 1280 px, issue #162):
+  **Model inputs** (Demand … Data quality: its zero-rain and low-vs-CHIRPS
+  limits change results, issue #173), **How results are read** (Outcome
+  matrix, Seasonal outlook, Evidence: they change no result) and
+  **Automation & access**. That last link stands for the four panels that
+  run or connect by themselves: Automatic runs (`#set-auto`, last in the
+  form), then after the form Data feeds (`#set-feeds`), API keys
+  (`#set-api-keys`, owners only) and Scheduled reports
+  (`#set-report-schedules`). They keep their own headings and ids, so a link
+  to any of them still lands, and the group's link is marked while any of
+  them is read; a Save blocker on any of them puts its dot on that link. One
+  link for four keeps the bar's sixteen links in two rows at 1280 px in CI's
+  fonts, which the drought restrictions link's nineteenth did not (2026-09-30,
+  `section-nav.spec.ts`). It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links
@@ -3014,6 +3053,22 @@ which checks every catchment tab).
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
+  below it the **Dam evaporation preset** picker (engine ≥ 1.49.0, "Fill
+  from a preset…": flat 0.75, or the WR90 monthly lake factors converted to
+  A-pan at this project's monthly A-pan by WR90's or Taljaard's 2023 pan
+  equation; model.md §2.7a item 4). Picking one ticks **Vary it by month**,
+  fills the monthly row and the **Dam evaporation factor source** note
+  (`settings.lakeEvapFactorSource`, up to 600 characters, with a
+  field-history line), then goes back to "Fill from a preset…"; all stay
+  editable and nothing is saved until Save. A WR90 preset with any month's
+  A-pan at 0 fills nothing and says "enter the monthly A-pan first"; one
+  with a month below the conversion's floor (55.4 mm WR90, 38.5 mm
+  Taljaard) fills nothing and names the months. When
+  the note names a preset whose values at the current A-pan no longer
+  match the row (the A-pan or a factor changed since), an amber note says
+  so ("fill it again, or update the note"). The Pan-coefficient preset
+  picker goes back to "Choose a preset…" after a pick the same way (it used
+  to keep showing the preset),
   and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
   workbook parity and rarely changed), days in February. The closed
   disclosure's summary names the value ("Advanced: days in February,
@@ -3124,7 +3179,19 @@ which checks every catchment tab).
   range against the station history, since a detected break can be a year
   or two off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
   Fit provenance shows the fit period and the factors per range, with the
-  years each was fitted on, that the fit ran under. Below it, **Zero-rain runs in the catchment rain**
+  years each was fitted on, that the fit ran under. Between the picker and
+  the fit period, **CHIRPS quantile map** (`settings.chirpsQuantileMap`,
+  engine ≥ 1.53.0, CR-23, off by default): a checkbox, "Quantile-map the
+  CHIRPS that fills gaps onto the catchment rain (each month’s total
+  kept)", and when on the **Wet day from (mm)** threshold (0.1–10, 1 by
+  default; the one it was turned off with comes back until Save;
+  `withChirpsQuantileMap` in `settings/rain.ts`). Disabled under raw CHIRPS,
+  where the hint says the map needs bias correction and a run would ignore
+  a saved one. A run with the map lists what it did in the CHIRPS warning,
+  warns for the gap days in months it can't map, and outputs
+  `rain_chirps_mapped`; Fit provenance shows whether the fit ran with it
+  ([model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23)).
+  Below it, **Zero-rain runs in the catchment rain**
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
   **Flagged zero runs** picker ("Treat as missing (default)" or "Run as
@@ -3509,6 +3576,9 @@ which checks every catchment tab).
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
+- **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
+  model's restriction rule, off by default; see
+  [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality** (`DataQualitySection.svelte`): three groups.
   *Gauge vs logger*: the lowest and highest ratio in %, shown to one
@@ -3970,7 +4040,9 @@ read it before.
   table that was in the run summary; the printable report still shows it
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
-  (`#res-assurance`) and, for a run that has any, **Other uses**
+  (`#res-assurance`), for a run with the drought restriction rule **Drought
+  restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
+  [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
   demand-object and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
@@ -4094,7 +4166,9 @@ read it before.
      where the parameters came from), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
-     described under [Self-checks](#self-checks)), runoff model, WR2012
+     described under [Self-checks](#self-checks); a line under its equation
+     links to River & reserve's **Water account** for the same run, the
+     catchment's own), runoff model, WR2012
      check, EWR vs observed, plausibility checks.
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
@@ -4306,8 +4380,16 @@ read it before.
   made the run and ran its checks, and the largest daily balance error of any
   unit (column V). Second, the **water balance by water year**
   (`runs/WaterBalanceTable.svelte`): on Runs & results its own Model quality
-  section (`#res-water-balance`, issue #137), which the self-checks link to;
-  in the printable report here, under the checks. Rain,
+  section (`#res-water-balance`, issue #137), and the self-checks keep only
+  its closure check: one line, ✓ or ✗ in text, saying the balance closes in
+  every water year and over the whole run, or naming the years whose
+  residual isn't float noise with their residuals (the first five, then "and
+  N more"; `balanceClosure`), and a link to the table
+  (`checks-balance-link`). In the printable report the table is here, under
+  the checks. The table says, under its equation, where the catchment's own
+  account is (River & reserve's **Water account**, from natural flow, in m³;
+  `balance-account-link`), and the account links back: the two cover the
+  same water years (Water account, below). Rain,
   runoff coefficient, start storage, unit runoff, transfers, rain on dams,
   consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
   outflow and end storage in Mm³, and the residual in m³. A network's
@@ -4484,7 +4566,20 @@ read it before.
   its calibration statistics applied), never the project's current ones, so
   an old run shows what it was fitted and scored with. Each is clipped to the
   hydrograph's days; one that runs past them says "(partly outside the run)",
-  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). **The
+  observed flow's quality flags** (engine ≥ 1.48.0, model.md §2.10h: the
+  run's `observed_flow_quality` column, stored only when a day is flagged)
+  are thin strips along the foot of the plot, behind the lines, one strip
+  per flagged class (above the highest gauging, below the lowest, suspect,
+  infilled; top to bottom in that order, each in its own `--series-*`
+  colour), so a class reads by its place as well as its colour. A key under
+  the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
+  with its days and what Fit automatically does with them under the run's
+  own settings snapshot: "Above the highest gauging: 14 days; Fit
+  automatically: censored at the highest gauging" (`calibration/flowFlags.ts`). They
+  follow the scored record: on a run scored at a gauge inside the network
+  they are on the calibration site's hydrograph, not the outlet's. The figure
+  carries `data-lanes`. A plain
   drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
@@ -4734,9 +4829,11 @@ read it before.
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
-  and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
-  puts in adjacent columns after rain used. The summary CSV lists the 12
-  monthly factors.
+  and the day's CHIRPS factor (`chirps_factor`), and with the CHIRPS
+  quantile map on (engine ≥ 1.53.0) CHIRPS after the map
+  (`rain_chirps_mapped`), which the catchment daily CSV puts in adjacent
+  columns after rain used. The summary CSV lists the 12 monthly factors,
+  and the map's month table when it was on.
 - **Assurance of supply** (`#res-assurance`, on Hydrological units after the
   curtailment table, under *Units & users* on the Runs tab until issue #17;
   `reliability/AssurancePanel.svelte`, helpers in
@@ -4771,7 +4868,14 @@ read it before.
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
   residual (to two significant figures, float noise). Runs before engine
-  0.32.0 show *Not computed by engine x.y* in both panels. The **EWR required
+  0.32.0 show *Not computed by engine x.y* in both panels. A line under the
+  introduction links to Runs & results' **Water balance** for the same run
+  (`?tab=runs&run=<id>#res-water-balance`, `account-balance-link`): the same
+  water years summed over the hydrological units, with rain, the runoff
+  coefficient and start and end storage, in Mm³. The two tables share about
+  ten terms; which one is the client's, with the other becoming a link, is
+  the operator's call (followups.md § UI), so for now each links to the
+  other instead of repeating the other's words. The **EWR required
   vs met** table (each site's share of the required volume that passed it,
   the volume and the days short, per water year and the whole run) closed
   this panel until 2026-09-29; it is not part of the balance, so issue #175
@@ -5002,6 +5106,93 @@ season, the trigger table against the stored one, publishing 85 %, a
 linked farmer's *This season* card against the stored per-farm figures,
 axe on both, and withdrawing it).
 
+### Drought restrictions
+
+WP-3.8, engine ≥ 1.54.0 ([model.md §2.7i](./model.md)): the model's
+drought restriction rule, `settings.droughtRestriction`. English, like the
+workspace; nothing of it reaches the farm view or the share page (a shared
+scenario's change reads *A catchment setting changed: droughtRestriction*,
+as every setting does). A model rule, not the restriction notice farmers
+see (WP-2.3); every place it shows says so.
+
+- **Settings → Drought restrictions** (`#set-restrict`, in the model inputs,
+  after Reserve rules; `settings/DroughtRestrictionFields.svelte`, its own
+  chunk, helpers `settings/droughtRestriction.ts`). **Apply drought
+  restrictions in runs** switches it on from a template (reviews on 1 October
+  and 1 January, lifted 1 May, three levels below 60 / 40 / 25 % of
+  capacity cutting crops and irrigation 20 / 40 / 60 % and domestic and
+  municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, and
+  a line under the rule says so until the first edit). The hint is one line:
+  what it does, that it is a model rule, and that off, runs are as before.
+  **The rule** in words heads it. **Review dates** and **Lift dates**: a
+  month and a day each, **Add a … date** / **Remove**. One card per level
+  (mildest first; side by side where there is room, one under the other on
+  a phone, no sideways scroll): **Name**, **Starts below (% of capacity)**
+  and one **… cut (%)** per part of demand (crops, then each demand-object
+  category; blank = *Not cut*; domestic and municipal marked *floor kept*),
+  each input labelled "Level 2: cut on …, %". **Add a deeper level** (the
+  last level's cuts, half its threshold) / **Remove the deepest level**;
+  **Where the levels come from**. A rule the engine refuses (a date twice, a
+  shallower deeper level, a deeper level cutting less) shows its first
+  problem under the cards (a status, not an alert) and blocks Save (the
+  save bar links here); switching off saves null, and the rule switched off
+  comes back until saved. Field history under it. A viewer reads it,
+  disabled, and *Drought restrictions: off.* when there is none.
+  From engine 1.54.0: **Start from the published notice** (editors) reads
+  the project's current publication and, after asking when a rule is set,
+  fills the rule from its notice (one level below 100 % at the notice's %,
+  from the day it was published to the next expected one), or says why it
+  can't (nothing published, no % cut); **Storage the level reads** (*Every
+  farm dam (their total)*, the default; *Some dams (their total)* with a
+  checkbox per farm dam; *Each unit's own dam*, with a note that a unit
+  without one isn't restricted by storage); **Units it cuts** (*Every
+  hydrological unit*, or a checkbox per unit); and the **EWR trigger**
+  (*Also restrict when the EWR wasn't met the day before a review*, the
+  site: the outlet or a gauge, and the level: at least which). An id the
+  model hasn't got blocks Save with its name.
+- **Units & supply → Drought restrictions** (`#res-restrictions`, its own
+  panel and menu entry, before Other uses, for a run with the rule;
+  `runs/RestrictionTables.svelte`, its own chunk, view model
+  `runs/restrictions.ts`; also in the printable report beside the other
+  tables): the rule in words and how often it was decided, then the days
+  at each level per water year (with *Days restricted*, and a bold *Whole
+  run* row), then per hydrological unit, the most cut first, its demand,
+  demand after the restriction, cut (m³/day and % of demand) and supplied
+  as run means, the mean cut on the restricted days alone and its days
+  restricted (its own under *Each unit's own dam*); the rule line counts
+  the reviews after a day the EWR trigger's site failed. Both lists
+  fold after ten (*Show all N water years* / *hydrological units*). The
+  note says the cut shows as a shortfall.
+- **River & reserve → Seasonal outlook → Review triggers**: under the
+  trigger table, the table *As a drought restriction rule* in words
+  (`outlook/triggers.ts` `triggerRuleView`, the engine's
+  `restrictionRuleFromTriggers`; *Settings → Drought restrictions* a link
+  there) and what it couldn't carry; an editor's **Use as the drought
+  restriction rule** saves it to the settings with the reason "Drought
+  restrictions from the seasonal outlook's review triggers" and says runs
+  from now on follow it. When a different rule is set the button reads
+  **Replace the drought restriction rule with this** and asks first (both
+  rules in words); when the table's rule is the project's, the panel says
+  *This is the project's drought restriction rule* instead.
+- **Scenarios → Add a change → Change a setting → Drought restriction
+  rule**: the same editor (with its on/off switch), starting from the rule
+  the scenario meets; the op replaces the rule whole, or turns it off. The
+  op's line reads *Drought restriction rule: off → reviewed 5 Oct; Level 1
+  (below 70 %): crops 50 %*.
+
+Tests: `settings/droughtRestriction.test.ts`, `settings/DroughtRestrictionFields.test.ts`
+(the storage, units and trigger choices rendered), `runs/restrictions.test.ts`,
+`runs/RestrictionTables.test.ts` (the tables rendered, sorted and folded),
+`supply/supply.test.ts` (the menu), `outlook/triggers.test.ts`
+(`triggerRuleView`), `scenarios/ops.test.ts` and `fields.test.ts` (the
+op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
+blocked save, edits saved whole, a viewer, off saves null, axe and the
+cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
+(the scenario's "Change a setting", a rule from the published notice on
+each unit's own dam with an EWR trigger, the outlook's triggers replacing
+it after the question, a run's tables on Units & supply with axe and no
+sideways scroll).
+
 ## Compare runs (`?tab=compare`)
 
 Board A4 of issue #17: a baseline and up to two what-ifs on one page
@@ -5198,6 +5389,19 @@ them scenarios).
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+- **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
+  application's too): the evidence report's fixed Appendix C prompts
+  (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
+  need**, **Mitigation** and **Monitoring**, with "n of 3 answered" beside the
+  heading. Read, each prompt's answer as written or *Not given*. Whoever may
+  change the scenario (an editor on a team scenario, only its applicant on
+  an application) gets **Answer the prompts** (**Edit statement** once one
+  is answered): a box per prompt, labelled with its heading and described by
+  its question, 4 000 characters each; **Save statement** sends only the
+  answers that changed, trimmed. Not frozen by a submission, as the
+  description isn't; a half-typed statement asks before the scenario is
+  left (the leave guard). Tests: `scenarios/statement.test.ts`,
+  `e2e/tests/evidence-statement.spec.ts`.
 - **Actions** (editors), in the scenario's head row beside its name, status
   and Rename, so they're on the first screen however long the changes and
   the node list get; a run's error shows under the base banner: **Run
@@ -5384,7 +5588,13 @@ name", "chosen by you"); type and source share a column. **Import N rows**
 preview and goes back to the file picker, keeping the kind and reference) stores the valid ones, closes the
 sheet and says how many were imported, left out and still unmatched. Errors
 (a refused file, a file already imported) show in an alert in the sheet;
-closing the sheet drops a preview.
+closing the sheet drops a preview. While the file is read or the import runs
+the sheet can't be closed: Close is disabled, and Escape and the ✕ do nothing
+(`beforeclose`); while importing, a status line says "Importing… the sheet
+closes when it's done." A read or import that answers after the sheet was
+closed some other way (Back takes `import=1` away) leaves the sheet as it now
+is: a reopened sheet isn't filled or shut by the older request, and a
+finished import is still reported on the page.
 
 **Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
@@ -6069,7 +6279,15 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     ranks first (the largest drop in months met, else the one met least
     often) and, beside it, of the river's driest month (the lowest mean
     natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
-    both, when they are the same month; `grid.ts` `fdcMonths`), and the
+    both, when they are the same month; `grid.ts` `fdcMonths`). From
+    `evidence-7` an application report has a small table under each plot
+    (`evidence-fdc-change`): the paired change in the curve at each table
+    point, as the median, the 5 to 95 % range and the runs' own difference,
+    and "the application's flow lower in k of n sets" (`grid.ts` `fdcChangeRows`). The caption
+    (`fdcCaption`) then reads the shading as each run's own spread; where the
+    application's band is drawn with no table (a pack issued before
+    `evidence-7`, or runs read at different table points or units) it keeps the
+    warning that overlapping ranges don't mean no change. Then the
     compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
@@ -6117,8 +6335,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     history since the previous publication; A.5 warnings verbatim; A.6 every
     application run on the baseline), **Appendix B** (B.1 methodology,
     limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
-    issued* for a draft), **Appendix C** (application only): the scenario's
-    description and the run's notes, verbatim, the only free text.
+    issued* for a draft), **Appendix C** (application only): the fixed prompts
+    first (`evidence-8`), each prompt's heading and question, then the
+    scenario's answer verbatim or *Not given.*; then the scenario's
+    description and the run's notes, verbatim. The only free text. A pack
+    drafted before `evidence-8` froze no prompts, so its Appendix C says they
+    aren't part of the pack rather than printing *Not given*.
 - **Evidence packs of this report** (screen only, under the checks): the
   packs of this run's report (an application pack by its scenario run, a
   baseline pack by the nominated run), each with its status badge, version,
@@ -6178,8 +6400,21 @@ pack.
   verify page), **Download reproduction bundle** once issued (the API's
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
-  **Verify page** once issued, and the version, code, manifest hash, PDF hash
+  **Verify page** once issued, **Share link…** (an editor, once it was
+  issued) and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash.
+- **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
+  `ShareLinksPanel` as an application's Share dialog, for this pack: what a
+  link shows (verify's fields, and while it stands the river's figures, never
+  a unit), then make a link (who it's for, how long), copy it once, and the
+  pack's links with **Withdraw**. A withdrawn or superseded pack's dialog
+  says only an issued pack can be shared and still lists its links, each
+  saying it now shows only that the pack no longer stands.
+- **Notes** (`NotesDrawer`, target `pack`): the team's notes on the pack and
+  its public comments, with an audience picker (*The project team*, and
+  *Public participation* while it is issued; the server refuses the second
+  while no link is live), each note's audience badge and its edit history.
+  Not in a render session.
 - **Where it stands** (`packs/PackActions.svelte`): a draft's checklist from
   the API (the frozen report may be issued, both runs still carry the
   server's stamp, signed under the current pack statement), each ticked or
@@ -6201,7 +6436,8 @@ pack.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
-  panel, and version 2 superseding version 1) and `packs/pack.test.ts`.
+  panel, and version 2 superseding version 1), `e2e/tests/pack-share.spec.ts`
+  (share link, notes) and `packs/pack.test.ts`.
 
 ## Help (`/help`)
 
@@ -6299,9 +6535,16 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   drawing is never drawn so small that its smallest text is under 9.5 px
   (`Diagram` sizes its `min-width` from the SVG's viewBox and smallest font
   once it is on the page); narrower than that it scrolls sideways (a
-  `data-scroll-region`): on a phone, or in a column too narrow for the
-  widest drawings (the model pipeline, 920 units wide, shrank its notes to
-  7 px in the old 42rem guide column). It is also never drawn wider than 1.3
+  `data-scroll-region`), which only a phone should need. Every drawing is
+  at most 660 units wide, so it fits the guide's column whole from 1280 px
+  (582 px there; 660 × 9.5 / 11 = 570): the model pipeline (920, which
+  shrank its notes to 7 px in the old 42rem column) now runs top to bottom,
+  the workflow's seven steps sit in two rows, and the calibration loop, the
+  validation tests and the rain sources (720) were drawn tighter
+  (2026-09-30; at 720 and wider they scrolled up to 213 px sideways at
+  1280). `help/diagrams/width.test.ts` holds the 660 and forbids a text size
+  of a diagram's own; `diagram-labels.spec.ts` checks none scrolls at 1440
+  or 1280. It is also never drawn wider than 1.3
   times its viewBox, centred in its frame, now that a guide's figures span
   the Help column. A label
   on the figure's ground beside a wire (not in a box) is `.lbl`: a halo in
@@ -6566,7 +6809,9 @@ methods and verify pages (their readers are assessors).
   its own language with its own `lang` (`LanguageSwitch.test.ts`,
   `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
-  also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
+  also sets the farm view's volume unit (m³ or ML; saved as chosen, one save
+after another in order, and a save that fails puts the radios back on the
+saved unit with the error above them). There it is `segmented`:
   the two buttons joined into one control sized like the form fields
   (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
@@ -6671,9 +6916,12 @@ methods and verify pages (their readers are assessors).
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
-  The prerendered `/welcome` ships `lang="en"` (`app.html`) because its
-  prerendered words are English; `lang` follows the words once the page
-  hydrates (a per-language prerender is in followups.md § Landing page).
+  The landing page is prerendered once per language (issue #137): `/welcome`
+  ships `lang="en"` (`app.html`) and `/welcome/af` `lang="af"`, set at build
+  time by `hooks.server.ts` from the language its words came out in
+  (`wordsLang()`, so still `en` if the catalogue were incomplete); the root
+  layout leaves it alone until the i18n module is loaded, then keeps it in
+  step as elsewhere ([§ Landing page](#landing-page)).
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
 - **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer
@@ -6889,7 +7137,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   card's footnote (also each starred row's description) says "Not switched
   on for this catchment yet: you get nothing until the WUA turns it on." A
   catchment muted by a digest's unsubscribe says so, with *Turn alert emails
-  back on*. An owner's four catchments fit 1440 × 960 unscrolled; thirty
+  back on*; once it is, the note and its button go and the focus moves to
+  the card's title. A save that fails shows the error in the card and puts
+  the switch back where the server has it (each radio is set from the
+  server's answer, not left as picked). An owner's four catchments fit 1440 × 960 unscrolled; thirty
   farms read as two columns of rows (`alerts.spec.ts` pins both, and the
   phone).
 - **Paused alert emails** (translated; on `/account/alerts` and in the
@@ -6900,8 +7151,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   marked as spam, so we stopped sending."), "Once <address> can receive
   email again, turn alert emails back on. Your choices are kept.", and
   **Turn alert emails back on** (`POST /me/alerts/resume`; "Alert emails are
-  back on." in a status line). Turned back on and refused again within a
-  day, it says to check the address and try tomorrow.
+  back on." in a status line). The banner and its button go, so the focus
+  moves to a title that stays: the page's title on `/account/alerts`, the
+  **Alert emails** panel's title on the account page. Turned back on and
+  refused again within a day, it says to check the address and try tomorrow.
 - **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
   signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
   token from the fragment (`#t=…`) once, strips it from the address bar,
@@ -7011,6 +7264,28 @@ signed in or out, for someone outside the project, on a phone first.
   it isn't open for comment. Same two-column layout from 860 px, one
   column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
   sign in, comment, the assessor's view) with axe.
+- **An evidence pack link** (WP-3.15, 128, `/share#t=…&k=pack`,
+  `share/PackView.svelte`, words in `share/pack.ts`, the `share.pack`
+  section): the same shell, states and comment flow as a scenario link,
+  reading `POST /share/pack`. The pack's title, "Licensing evidence pack,
+  version *n*, shared read-only", its standing ("Issued on *date*", or
+  withdrawn or replaced, with the issue date), the caveat. A withdrawn or
+  replaced pack then shows a card saying so and that its figures aren't
+  shown, the reason given (withdrawn) or the replacing version's code with
+  a link to its verify page (replaced), and no figure. While it stands, the
+  left column has **The river's ecological reserve** per EWR site (the
+  outlet unnamed; baseline beside the application, and the change in
+  words), **The river in figures** (page 1's river rows, worded here by
+  their id: Reserve months met per site, days below the EWR, no-flow days,
+  and the two volume rows only at five or more units; baseline, with the
+  application and the change, and the likely range from the model sets),
+  and **Days below the EWR by month** (an application). Both states have
+  **Check this pack** (the code, the verify page link, the hashes, the
+  signers) and, on the right, **Public comments** (a signed-in member posts
+  while it stands; closed once it doesn't, the comments kept) and **About
+  this page**. `pack-share.spec.ts` pins it (link from the pack page, phone,
+  sign in, comment, withdraw: the same link then shows the reason and no
+  figure) with axe.
 
 ## Viewers
 

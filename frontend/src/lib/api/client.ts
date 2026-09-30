@@ -106,6 +106,7 @@ import type {
 	ShareSeriesKey,
 	ShareView,
 	ShareScenario,
+	SharePack,
 	NoteRevision,
 	Team,
 	TeamMember,
@@ -623,6 +624,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		shareLinks: {
 			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
 			list: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links`).then((r) => r.links),
+			/** Every link in the project, the baseline's and each application's, with its target (owner: the Project page's inventory). */
+			listAll: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links?scope=all`).then((r) => r.links),
 			/** Make a link (owner). `url` carries the token: this is the only time it is shown. */
 			create: (id: string, label: string, expiresInDays: number) =>
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
@@ -634,7 +637,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays, targetKind: 'scenario', targetId: scenarioId }).then(
 					(r) => r.link
 				),
-			/** Withdraw a link (the owner; an assessor or the applicant for a scenario link): it stops working at once. */
+			/** The links to one evidence pack (128): every one, to its project's editors. */
+			listForPack: (id: string, packId: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links?packId=${enc(packId)}`).then((r) => r.links),
+			/** Link an issued evidence pack (an editor). */
+			createForPack: (id: string, packId: string, label: string, expiresInDays: number) =>
+				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays, targetKind: 'pack', targetId: packId }).then((r) => r.link),
+			/** Withdraw a link (the owner; an assessor or the applicant for a scenario link; an editor for a pack link): it stops working at once. */
 			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
 		},
 		/** Notes and comments (WP-2.7): farmers and above; RLS scopes what each caller sees. */
@@ -697,7 +705,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One catchment series of the published run; 404 when there is none to show (including a small catchment). */
 			series: (token: string, key: ShareSeriesKey) => request<ShareSeries>('POST', '/share/series', { token, key }),
 			/** A scenario link (WP-3.15), signed out; 404 for any dead link. */
-			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token })
+			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token }),
+			/** An evidence pack link (128): its figures while issued, else its standing; 404 for any dead link. */
+			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token })
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */
@@ -727,7 +737,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			update: (
 				id: string,
 				sid: string,
-				body: { name?: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[]; status?: ScenarioStatus }
+				body: {
+					name?: string;
+					description?: string;
+					/** Appendix C's fixed prompts (engine APPLICANT_PROMPTS): changed on the description's terms, not frozen by a submission. */
+					purposeAndNeed?: string;
+					mitigation?: string;
+					monitoring?: string;
+					ops?: ScenarioOp[];
+					ownedNodeIds?: string[];
+					status?: ScenarioStatus;
+				}
 			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
 			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
 			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */

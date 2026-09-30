@@ -195,6 +195,9 @@ describe('createApi', () => {
 		const list = mockFetch(200, { links: [link] });
 		await expect(createApi('', list).shareLinks.list('p/1')).resolves.toEqual([link]);
 		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/share-links');
+		const every = mockFetch(200, { links: [link] });
+		await expect(createApi('', every).shareLinks.listAll('p1')).resolves.toEqual([link]);
+		expect((every.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/share-links?scope=all');
 		const post = mockFetch(201, { link });
 		await expect(createApi('', post).shareLinks.create('p1', 'Forum', 30)).resolves.toEqual(link);
 		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];

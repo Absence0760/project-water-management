@@ -7,7 +7,7 @@ describe('chirpsFitNote', () => {
 			chirpsFitNote({ pooledFactor: { a: 2, b: 1.9, delta: -0.1 }, excludedWaterYearsA: [1999, 2003], excludedWaterYearsB: [2003], changed: true })
 		).toBe(
 			'The CHIRPS bias factors differ between the runs (pooled factor 2.00 → 1.90; water years left out of the fit: 1999/00, 2003/04 → 2003/04), ' +
-				'so rain differs on the days CHIRPS fills in for blank catchment rain. Keep-dry or missing periods, the rain records, the CHIRPS settings (bias correction, fit period) or the engine version can each move them.'
+				'so rain differs on the days CHIRPS fills in for blank catchment rain. Keep-dry or missing periods, the rain records, the CHIRPS settings (bias correction, fit period, quantile map) or the engine version can each move them.'
 		);
 	});
 
@@ -34,5 +34,13 @@ describe('chirpsFitNote', () => {
 		).toMatch(/fitted on: whole record: 1990\/91–2009\/10 → whole record: 1990\/91–2011\/12\)/);
 		// Runs from before 0.29.0 carry none of these: nothing added.
 		expect(chirpsFitNote(base)).toMatch(/^The CHIRPS bias factors differ between the runs \(pooled factor 2\.00 → 2\.00\), so/);
+	});
+
+	it('names the CHIRPS gap map turned on, off or changed (engine ≥ 1.53.0)', () => {
+		const base = { pooledFactor: { a: 2, b: 2, delta: 0 }, excludedWaterYearsA: [], excludedWaterYearsB: [], changed: true };
+		expect(chirpsFitNote({ ...base, quantileMapA: null, quantileMapB: 'wet days (≥ 1 mm) mapped' })).toMatch(/\(pooled factor 2\.00 → 2\.00; quantile map: off → wet days \(≥ 1 mm\) mapped\)/);
+		expect(chirpsFitNote({ ...base, quantileMapA: 'x', quantileMapB: null })).toMatch(/quantile map: x → off\)/);
+		// Positive control: the same map on both sides adds nothing.
+		expect(chirpsFitNote({ ...base, quantileMapA: 'x', quantileMapB: 'x' })).toMatch(/^The CHIRPS bias factors differ between the runs \(pooled factor 2\.00 → 2\.00\), so/);
 	});
 });

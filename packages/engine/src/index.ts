@@ -41,6 +41,7 @@ export * from './rainSourcePeriods';
 export * from './rainThreshold';
 export * from './evaporation/fao56Table5';
 export * from './evaporation/apanDaily';
+export * from './evaporation/lakeFactorPresets';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
@@ -58,6 +59,29 @@ export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRa
 export { isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt } from './network/offtake';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppliedKey, parseDemandObjectKey } from './network/demandObjects';
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';
+export {
+	DEMAND_PART_WORDS,
+	describeDroughtRestriction,
+	describeRestrictionLevel,
+	droughtRestrictionChanges,
+	droughtRestrictionIssues,
+	droughtRestrictionNodeIssues,
+	levelCut,
+	monthDayText,
+	parseMonthDay,
+	resolveDroughtRestriction,
+	restrictedObjectDemand,
+	restrictionCutKey,
+	restrictionLevelFor,
+	restrictionRuleFromNotice,
+	RESTRICTION_DATES_MAX,
+	RESTRICTION_NODES_MAX,
+	RESTRICTION_LABEL_MAX,
+	RESTRICTION_LEVELS_MAX,
+	RESTRICTION_SERIES,
+	RESTRICTION_SOURCE_MAX,
+	type RestrictionIssue
+} from './network/restriction';
 export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
 export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
 export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';

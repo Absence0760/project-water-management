@@ -18,6 +18,7 @@ import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
+import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
@@ -99,6 +100,16 @@ export interface RainSourceQuantileMap {
 	fromWaterYear: number;
 	toWaterYear: number;
 	/** Wet-day threshold, mm: a day below it is dry and keeps its scaled value. */
+	wetDayMm: number;
+}
+
+/**
+ * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23): the CHIRPS gap fill's
+ * quantile map. Fitted on the §2.4b fit period's shared days, so it has no era
+ * of its own; only the wet-day threshold is set.
+ */
+export interface ChirpsQuantileMap {
+	/** Wet-day threshold, mm (QM_WET_DAY_MM_MIN … QM_WET_DAY_MM_MAX): a day below it is dry and keeps its factor-corrected value. */
 	wetDayMm: number;
 }
 
@@ -289,6 +300,16 @@ export interface ProjectSettings {
 	 */
 	lakeEvapFactorMonthly?: Monthly | null;
 	/**
+	 * Where the dam evaporation factors came from (engine ≥ 1.49.0): free text,
+	 * e.g. the lake-factor preset the Settings form filled them from
+	 * (`LAKE_FACTOR_PRESETS`, ./evaporation/lakeFactorPresets.ts) with its
+	 * citation and pan conversion. Provenance only: the model never reads it.
+	 * Recorded with each run (the settings snapshot), so run comparison and the
+	 * report show it. '' = none; optional so settings stored before it still
+	 * type.
+	 */
+	lakeEvapFactorSource?: string;
+	/**
 	 * What the project's registered volumes (ProjectModel.allocations) do to a
 	 * run (engine ≥ 1.18.0, issue #72, ./allocations/mode.ts, docs/model.md
 	 * §2.12a): 'none' (the default) compares only; 'cap' keeps each unit's
@@ -368,6 +389,15 @@ export interface ProjectSettings {
 	 */
 	chirpsFitPeriod: ChirpsFitPeriod;
 	/**
+	 * Opt-in quantile mapping of the CHIRPS gap fill (engine ≥ 1.53.0, CR-23,
+	 * ./rain.ts, docs/model.md §2.4b *Quantile map*): after the monthly
+	 * factor, map CHIRPS' wet days onto the catchment rain's over the fit
+	 * period, month by month, keeping every calendar month's corrected total.
+	 * Only with `chirpsBiasCorrection: 'monthly'`. Absent or null = the
+	 * monthly factor alone, as every run before 1.53.0.
+	 */
+	chirpsQuantileMap?: ChirpsQuantileMap | null;
+	/**
 	 * Periods whose catchment rain comes from another series × monthly factors
 	 * (engine ≥ 0.30.0, ./rain.ts, issue #40 (b)). Default none.
 	 */
@@ -429,6 +459,17 @@ export interface ProjectSettings {
 	 * setting: no form or save carries it.
 	 */
 	damStorageReset?: { date: string; storageM3: Record<string, number> } | null;
+	/**
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md
+	 * §2.7i): on each review date the level is chosen from the total farm dam
+	 * storage at the start of the day (as a share of the total capacity, the
+	 * review triggers' basis) and cuts each part of every unit's demand by its
+	 * level's share until the next review or lift date. A domestic or
+	 * municipal object is never cut below its basic-needs floor (§2.7f). A
+	 * model rule, distinct from the published restriction notice (WP-2.3).
+	 * null / absent = off, every run as before it.
+	 */
+	droughtRestriction?: DroughtRestrictionRule | null;
 	/**
 	 * Reporting window (ISO dates, inclusive) for the curtailment report, the
 	 * b023 [Shortfalls] "Set reporting period" cells. null = the run's start /
@@ -712,6 +753,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		allocationMode: 'none',
 		allocationTolerance: 0.1,
 		lakeEvapFactorMonthly: null,
+		lakeEvapFactorSource: '',
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.5, lo: 0.5 },
@@ -723,6 +765,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		arealRain: null,
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
+		chirpsQuantileMap: null,
 		rainSource: [],
 		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
@@ -875,6 +918,27 @@ export function resolveArealRain(raw: unknown, warnings: string[]): ArealRain | 
 	}
 	const r = raw as ArealRain;
 	return { factors: [...r.factors] as unknown as Monthly, method: r.method, source: r.source.trim() };
+}
+
+/** Why a stored settings.chirpsQuantileMap can't be used, or null (absent and null are fine: off). The API applies the same rules. */
+export function chirpsQuantileMapError(raw: unknown): string | null {
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw !== 'object' || Array.isArray(raw)) return 'is not { wetDayMm }';
+	const extra = Object.keys(raw).filter((k) => k !== 'wetDayMm');
+	if (extra.length) return `has unknown field${extra.length === 1 ? '' : 's'} ${extra.join(', ')}`;
+	const w = (raw as { wetDayMm?: unknown }).wetDayMm;
+	if (typeof w !== 'number' || !Number.isFinite(w) || w < QM_WET_DAY_MM_MIN || w > QM_WET_DAY_MM_MAX) return `wet-day threshold must be ${QM_WET_DAY_MM_MIN}–${QM_WET_DAY_MM_MAX} mm`;
+	return null;
+}
+
+/** settings.chirpsQuantileMap as the engine runs it: absent, null or unusable (with a warning) = off. */
+export function resolveChirpsQuantileMap(raw: unknown, warnings: string[]): ChirpsQuantileMap | null {
+	const err = chirpsQuantileMapError(raw);
+	if (err) {
+		warnings.push(`CHIRPS quantile map ignored (${err}): CHIRPS gap days take the monthly factor alone`);
+		return null;
+	}
+	return raw ? { wetDayMm: (raw as ChirpsQuantileMap).wetDayMm } : null;
 }
 
 /** The run's areal rain column (engine ≥ 1.13.0): rain_final × the month's areal factor, output only with a correction. */
@@ -1629,6 +1693,62 @@ export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
  */
 export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
 export type DemandPart = (typeof DEMAND_PARTS)[number];
+
+/**
+ * One level of the drought restriction rule (engine ≥ 1.54.0, WP-3.8,
+ * docs/model.md §2.7i): chosen on a review date when the total farm dam
+ * storage is below `belowPct` of the total capacity (and above the next,
+ * deeper level's), it cuts each part of a unit's demand by `cuts[part]`
+ * (0–1; 0.3 = 30 % less). An absent part is not cut.
+ */
+export interface DroughtRestrictionLevel {
+	/** Its name in the results ("Level 1", "Severe"); optional. */
+	label?: string;
+	/** Storage share (0 < x ≤ 1) below which the level applies. Deeper levels have lower shares. */
+	belowPct: number;
+	/** Cut per part of demand, a fraction 0–1; a deeper level cuts each part at least as much. */
+	cuts: Partial<Record<DemandPart, number>>;
+}
+
+/**
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md
+ * §2.7i; settings.droughtRestriction): its review and lift dates as a
+ * month and day ("MM-DD", never 29 February) and its levels, mildest
+ * first. On a review date the level is decided from the storage at the
+ * start of the day and holds until the next review or lift date; on a
+ * lift date any restriction ends.
+ */
+export interface DroughtRestrictionRule {
+	reviewDates: string[];
+	/** Dates a restriction ends (e.g. the day after the season end); absent = only the reviews change the level. */
+	liftDates?: string[];
+	levels: DroughtRestrictionLevel[];
+	/** Where the levels come from (a WUA decision, the review triggers of an outlook); optional. */
+	source?: string;
+	/**
+	 * Which storage the level reads (engine ≥ 1.54.0): 'total' (the default,
+	 * absent) every farm dam's, Σ storage ÷ Σ capacity, one level for every
+	 * unit; 'dams' the farm dams in `damNodeIds` only, one level for every
+	 * unit; 'own' each unit its own dam's, a level per unit (a unit without a
+	 * dam isn't restricted by storage).
+	 */
+	basis?: DroughtRestrictionBasis;
+	/** The farm dams 'dams' reads (node ids); only with that basis. */
+	damNodeIds?: string[];
+	/** The units the rule cuts (farm node ids); absent = every unit. */
+	nodeIds?: string[];
+	/**
+	 * A second trigger (engine ≥ 1.54.0): on a review day, when the EWR at
+	 * `siteNodeId` (null = the outlet; else a gauge) wasn't met the day before
+	 * (known at the start of the review day), the level is at least `level`
+	 * (1 = the first level).
+	 */
+	ewrTrigger?: { siteNodeId: string | null; level: number };
+}
+
+/** The storage a drought restriction rule reads (engine ≥ 1.54.0; DroughtRestrictionRule.basis). */
+export const DROUGHT_RESTRICTION_BASES = ['total', 'dams', 'own'] as const;
+export type DroughtRestrictionBasis = (typeof DROUGHT_RESTRICTION_BASES)[number];
 
 /** Each category in plain words (the node form, run results). */
 export const DEMAND_OBJECT_CATEGORY_LABEL: Record<DemandObjectCategory, string> = {
@@ -2641,6 +2761,49 @@ export interface GroundwaterAnnualUse {
 	boreholes: { id: string | null; name: string; abstractionM3: number; annualCapM3: number | null; capReached: boolean }[];
 }
 
+/** RunSummary.droughtRestriction (engine ≥ 1.54.0, WP-3.8, docs/model.md §2.7i). */
+export interface DroughtRestrictionSummary {
+	/** The rule as the run applied it. */
+	rule: DroughtRestrictionRule;
+	/**
+	 * Per water year the run touches (ascending): its days in the run and the
+	 * days at each level, index 0 = no restriction, then level 1 … n (the
+	 * rule's levels in order). The days add up to `days`. Under the 'own'
+	 * basis a day counts at the deepest level any unit was at.
+	 */
+	years: { waterYear: number; days: number; daysByLevel: number[] }[];
+	/** The days at each level over the whole run (index 0 = none). */
+	daysByLevel: number[];
+	/** Days the level was decided (review dates in the run, and its first day when it starts inside a review period). */
+	reviews: number;
+	/** With an EWR trigger (engine ≥ 1.54.0): the reviews on which the site's EWR wasn't met the day before. */
+	ewrReviews?: number;
+	/**
+	 * A run resumed from a model-state snapshot (engine ≥ 1.54.0): the state
+	 * its first day starts from, so the self-check can redo it: the level each
+	 * unit held the day before (null when resumed at the capture run's first
+	 * day, which is decided as a fresh run's is), whether the EWR trigger's
+	 * site failed the day before, and each farm dam's storage the day before.
+	 */
+	start?: { levelsBefore: Record<string, number> | null; ewrFailedBefore: boolean; damStorageBeforeM3: Record<string, number> };
+	/**
+	 * Per unit (farm, in id order): its mean abstraction demand, the mean after
+	 * the restriction (what the unit asked its sources for) and the mean
+	 * supplied, m³/day over the run. The cut is the first less the second.
+	 */
+	units: {
+		nodeId: string;
+		name: string;
+		avgDemandM3Day: number;
+		avgRestrictedDemandM3Day: number;
+		avgSuppliedM3Day: number;
+		/** The mean cut (demand − restricted demand) over the days a level was in force only, m³/day; null when none was. */
+		avgCutOnRestrictedDaysM3Day: number | null;
+		/** The unit's days at each level over the run (index 0 = none; engine ≥ 1.54.0): the catchment's under a shared basis, its own under 'own'. */
+		daysByLevel: number[];
+	}[];
+}
+
 export interface RunSummary {
 	/**
 	 * The run's historical days, those before its forecast tail, when it has
@@ -2665,6 +2828,13 @@ export interface RunSummary {
 	 * without boreholes, and on older runs.
 	 */
 	groundwaterAnnualUse?: GroundwaterAnnualUse[];
+	/**
+	 * The drought restriction rule's effect (engine ≥ 1.54.0, WP-3.8,
+	 * docs/model.md §2.7i): its levels, the days each level was in force per
+	 * water year and over the run, and per unit its mean demand before and
+	 * after the restriction. Absent when the rule is off.
+	 */
+	droughtRestriction?: DroughtRestrictionSummary;
 	/**
 	 * Registered volumes against the run's use (engine ≥ 1.18.0, issue #72,
 	 * ./allocations, docs/model.md §2.12a): the allocation mode the run ran
@@ -2831,7 +3001,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'assurance';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'droughtRestriction' | 'assurance';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

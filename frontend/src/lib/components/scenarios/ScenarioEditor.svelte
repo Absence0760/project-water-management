@@ -27,6 +27,7 @@
 	import OpList from './OpList.svelte';
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import ApplicantResults from './ApplicantResults.svelte';
+	import ScenarioStatement from './ScenarioStatement.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -442,7 +443,7 @@
 					<button type="button" class="btn" onclick={() => (overriding = true)}>Edit in the model tables</button>
 					<span class="hint">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
 				</div>
-				<OpForm input={effective} onadd={add} disabled={saving} />
+				<OpForm input={effective} onadd={add} disabled={saving} {projectId} />
 			{/if}
 		{/if}
 		<p class="visually-hidden" role="status">{note}</p>
@@ -461,6 +462,11 @@
 			</div>
 		</fieldset>
 	{/if}
+
+	<!-- Appendix C's fixed prompts (129_scenario_statement): changed on the description's terms, so not frozen by a submission. -->
+	{#key s.id}
+		<ScenarioStatement scenarioName={s.name} answers={s} {canChange} {saving} onsave={(p) => patch(p)} />
+	{/key}
 
 	{#if isApplication}
 		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />

@@ -247,6 +247,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
 	},
 	{
+		id: 'drought-restriction',
+		term: 'Drought restrictions',
+		short: 'A model rule: on each review date a level is chosen from the farm dams’ storage; it cuts each part of demand until the next review.',
+		units: '% of capacity; % cut',
+		category: 'network',
+		fields: ['settings.droughtRestriction', 'run.restriction_level', 'run.restricted_demand']
+	},
+	{
 		id: 'hands-off-flow',
 		term: 'Hands-off flow',
 		short: 'Flow a hydrological unit leaves in the river before its river pump or River to dam takes anything: an amount by month, and/or the EWR.',
@@ -355,7 +363,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'A dam loses open-water evaporation from its surface and catches the rain falling on it, every day before irrigation, in m³/day.',
 		units: 'm³/day; area m²; factor × A-pan',
 		category: 'farm',
-		fields: ['settings.lakeEvapFactor', 'settings.lakeEvapFactorMonthly', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam']
+		fields: ['settings.lakeEvapFactor', 'settings.lakeEvapFactorMonthly', 'settings.lakeEvapFactorSource', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam']
 	},
 	{
 		id: 'dam-seepage',
@@ -748,7 +756,7 @@ export const TIPS: HelpTipText[] = [
 		term: 'Quality flags (per-day)',
 		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
 		category: 'fit',
-		fields: ['settings.qualityFlags']
+		fields: ['settings.qualityFlags', 'run.observed_flow_quality']
 	},
 	{
 		id: 'calibration-rules',
@@ -1018,6 +1026,13 @@ export const TIPS: HelpTipText[] = [
 		short: 'Which years the CHIRPS factors are fitted on: the whole record, or water-year ranges you list, each with a reason.',
 		category: 'data',
 		fields: ['settings.chirpsFitPeriod']
+	},
+	{
+		id: 'chirps-quantile-map',
+		term: 'CHIRPS quantile map',
+		short: 'Opt-in: gives the CHIRPS that fills gaps the catchment rain’s wet-day frequency and intensity, keeping each month’s total.',
+		category: 'data',
+		fields: ['settings.chirpsQuantileMap', 'run.rain_chirps_mapped']
 	},
 	{
 		id: 'double-mass',

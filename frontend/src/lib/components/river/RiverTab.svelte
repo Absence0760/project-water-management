@@ -332,11 +332,11 @@
 			</div>
 			<div class="panel" id="res-outlook">
 				{#key shownRun.id}
-					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} />
+					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} {onProjectChange} />
 				{/key}
 			</div>
 			<div class="panel" id="res-water-account">
-				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" />
 			</div>
 		</div>
 	{/if}

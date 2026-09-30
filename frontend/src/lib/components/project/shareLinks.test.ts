@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ShareLink } from '$lib/api/types';
-import { EXPIRY_CHOICES, linkRow, linkState, revokeQuestion, sortLinks } from './shareLinks';
+import { EXPIRY_CHOICES, linkRow, linkState, linkTarget, revokeQuestion, sortLinks } from './shareLinks';
 
 const NOW = Date.parse('2026-09-25T12:00:00Z');
 const link = (over: Partial<ShareLink> = {}): ShareLink => ({
@@ -12,6 +12,7 @@ const link = (over: Partial<ShareLink> = {}): ShareLink => ({
 	revokedAt: null,
 	targetKind: null,
 	targetId: null,
+	target: null,
 	mine: true,
 	revokedBy: null,
 	lastUsedAt: null,
@@ -42,6 +43,8 @@ describe('linkRow', () => {
 			created: '2026-09-25 by Jo Owner',
 			ends: '2026-10-25',
 			lastUsed: '2026-09-25 07:42',
+			opens: 'The published baseline',
+			opensNothing: null,
 			canRevoke: true
 		});
 		process.env.TZ = 'Pacific/Pago_Pago';
@@ -65,5 +68,31 @@ describe('the list', () => {
 	it('offers lifetimes the API accepts, and asks before a revoke', () => {
 		for (const c of EXPIRY_CHOICES) expect(c.days >= 1 && c.days <= 365).toBe(true);
 		expect(revokeQuestion('Forum')).toContain('“Forum”');
+		expect(revokeQuestion('Forum', 'Application “Raise”')).toContain('“Forum” (application “Raise”)?');
+	});
+});
+
+describe('what a link opens', () => {
+	const app = (target: ShareLink['target']) => link({ targetKind: 'scenario', targetId: 's1', target });
+
+	it('names the baseline or the application, and opens while the application is submitted or decided', () => {
+		expect(linkTarget(link())).toEqual({ opens: 'The published baseline', opensNothing: null });
+		expect(linkTarget(app({ name: 'Raise my dam', status: 'submitted' }))).toEqual({ opens: 'Application “Raise my dam”', opensNothing: null });
+		expect(linkTarget(app({ name: 'Raise my dam', status: 'decided' })).opensNothing).toBeNull();
+	});
+
+	it('says why a live link opens nothing: its application withdrawn, or one the owner can no longer read', () => {
+		expect(linkTarget(app({ name: 'Raise my dam', status: 'withdrawn' }))).toMatchObject({ opens: 'Application “Raise my dam”', opensNothing: expect.stringMatching(/withdrawn/) });
+		expect(linkTarget(app(null))).toMatchObject({ opens: 'An application you can’t open', opensNothing: expect.stringMatching(/opens nothing/) });
+		// The row carries both.
+		expect(linkRow(app({ name: 'X', status: 'withdrawn' }), NOW)).toMatchObject({ state: 'live', opens: 'Application “X”', canRevoke: true });
+	});
+
+	it('names an evidence pack with its version, and says when it shows only the pack’s standing (128)', () => {
+		const pack = (target: ShareLink['target']) => link({ targetKind: 'pack', targetId: 'p1', target });
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'issued', version: 2 }))).toEqual({ opens: 'Evidence pack “Raise my dam”, version 2', opensNothing: null });
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'withdrawn', version: 2 })).opensNothing).toMatch(/withdrawn: the link shows that and why, not its figures/);
+		expect(linkTarget(pack({ name: 'Raise my dam', status: 'superseded', version: 1 })).opensNothing).toMatch(/newer version/);
+		expect(linkTarget(pack(null))).toEqual({ opens: 'An evidence pack you can’t open', opensNothing: null });
 	});
 });

@@ -186,6 +186,28 @@ describe('run daily export', () => {
 		expect((await owner.call('DELETE', `/projects/${projectId}/runs/${made.body.run.id}`)).status).toBeLessThan(300);
 	});
 
+	it('carries the observed flow quality flags beside the record, when a day is flagged (engine ≥ 1.48.0)', async () => {
+		// Positive control: the baseline run's record has no gauged range, so no day is flagged and no column is stored.
+		expect(table((await download(viewer, `/projects/${projectId}/runs/${runId}/export/daily.csv`)).text)[0]).not.toContain('quality flag');
+		const rating = { ratings: { flow_observed_m3s: { gaugedMaxM3s: 0.02, gaugedMinM3s: null, source: 'Synthetic rating table' } } };
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { qualityFlags: rating } })).status).toBe(200);
+		try {
+			const made = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Rated' });
+			expect(made.status).toBe(201);
+			const rows = table((await download(viewer, `/projects/${projectId}/runs/${made.body.run.id}/export/daily.csv`)).text);
+			const header = cells(rows[0]!);
+			const q = header.findIndex((h) => h.startsWith('"Observed flow quality flag (0 = in the gauged range'));
+			expect(q).toBe(header.indexOf('Observed flow (m³/day)') + 1);
+			expect(header[q]).toContain('3 = above the highest gauging');
+			// The rain days read 0.035 m³/s, above the 0.02 m³/s gauging; the blank day is missing; the rest are in range.
+			const codes = rows.slice(1).map((r) => Number(cells(r)[q]));
+			expect(codes).toEqual(rain.map((r) => (r === null ? 6 : r > 0 ? 3 : 0)));
+			expect((await owner.call('DELETE', `/projects/${projectId}/runs/${made.body.run.id}`)).status).toBeLessThan(300);
+		} finally {
+			await owner.call('PATCH', `/projects/${projectId}`, { settings: { qualityFlags: { ratings: {} } } });
+		}
+	});
+
 	it('honours a from/to window and rejects bad ones', async () => {
 		const base = `/projects/${projectId}/runs/${runId}/export/daily.csv`;
 		const res = await download(owner, `${base}?from=2024-02-28&to=2024-03-01`);
@@ -275,8 +297,8 @@ describe('run summary export', () => {
 		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
-		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0) and the assurance of supply (1.34.0)
-		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(12);
+		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0), the assurance of supply (1.34.0) and the drought restriction rule (1.54.0)
+		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(13);
 		// The curtailment table names its EWR attribution rule, and the EWR sites follow it (Q17).
 		expect(rows).toContain('Curtailment targets');
 		expect(rows.some((r) => r.startsWith('EWR attribution,"net impact pro rata (Q17)'))).toBe(true);

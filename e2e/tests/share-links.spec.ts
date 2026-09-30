@@ -119,7 +119,7 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 
 	// Withdraw it: the confirm, then the link is dead for whoever holds it.
 	await row.getByRole('button', { name: 'Withdraw Catchment forum' }).click();
-	await answerConfirm(page, true, 'Withdraw the link “Catchment forum”?');
+	await answerConfirm(page, true, 'Withdraw the link “Catchment forum” (the published baseline)?');
 	await expect(row).toContainText('Withdrawn');
 	await expect(row.getByRole('button', { name: /^Withdraw/ })).toHaveCount(0);
 

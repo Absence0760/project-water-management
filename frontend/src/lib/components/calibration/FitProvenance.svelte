@@ -143,6 +143,11 @@
 					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
 					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
+				<!-- Engine ≥ 1.53.0 (CR-23): recorded only when on; absent = off, as every fit before it. -->
+				<div>
+					<dt>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></dt>
+					<dd>{record.forcing.chirpsQuantileMap ? `on (wet days ≥ ${record.forcing.chirpsQuantileMap.wetDayMm} mm)` : 'off'}</dd>
+				</div>
 				<!-- Issue #66: the fitted record's source and given unit, and its gap filling (engine ≥ 1.23.0). -->
 				{#if record.observedOrigin !== undefined}
 					<div data-testid="fit-observed-source">

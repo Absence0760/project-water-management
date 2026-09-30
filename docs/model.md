@@ -454,7 +454,8 @@ keeps that record.
 
 - **Rain used** (column R): the first non-blank of catchment rain, CHIRPS
   (bias-corrected per calendar month since engine 0.7.0, §2.4b, audit B1;
-  the workbook used it raw) or forecast rain. GR4J reads it without a
+  the workbook used it raw; from engine 1.53.0 optionally quantile-mapped
+  too, §2.4b *Quantile map*) or forecast rain. GR4J reads it without a
   threshold (§2.4a). Irrigation demand reads it thresholded: rain at or
   below `settings.calibration.rainThresholdMm` counts as 0 (§2.3).
 - **`settings.calibration`** keeps only `rainThresholdMm` and
@@ -820,8 +821,10 @@ them) falls back to its default with a warning.
 
 Engine ≥ 0.7.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
 Setting: `settings.chirpsBiasCorrection`, `'monthly'` (default) or `'none'`;
-and from engine 0.29.0 `settings.chirpsFitPeriod`, which years the factors are
-fitted on ([below](#fit-period-and-per-range-factors-engine--0290-issue-40)).
+from engine 0.29.0 `settings.chirpsFitPeriod`, which years the factors are
+fitted on ([below](#fit-period-and-per-range-factors-engine--0290-issue-40));
+and from engine 1.53.0 the opt-in `settings.chirpsQuantileMap`, which also
+reshapes the gap fill's wet days ([below](#quantile-map-engine--1530-cr-23)).
 
 **Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
 the catchment rain is blank. CHIRPS is a 0.05° satellite-and-gauge product.
@@ -906,7 +909,8 @@ review of issue #4 phase 6.
   window, so a shorter simulation period doesn't change them. A monthly
   factor is *linear scaling* (Teutschbein & Seibert 2012, *J. Hydrol.*
   456–457): it corrects the monthly volume, not the number of wet days or the
-  intensity distribution.
+  intensity distribution. The opt-in quantile map (engine ≥ 1.53.0,
+  [below](#quantile-map-engine--1530-cr-23)) corrects those too.
 
 #### Fit period and per-range factors (engine ≥ 0.29.0, issue #40)
 
@@ -991,8 +995,109 @@ reference windows (`chirpsFactors`, calendar months), and a change of fit
 period flags "Forcing changed since fit". A run saved before 0.29.0 compares
 as `'all'`, with no reference windows to compare.
 
+#### Quantile map (engine ≥ 1.53.0, CR-23)
+
+`settings.chirpsQuantileMap`: `null` (the default, and every run before
+1.53.0) or `{ wetDayMm }` (0.1–10 mm, 1 mm when turned on;
+`QM_WET_DAY_MM_MIN/MAX/DEFAULT`). Only with `chirpsBiasCorrection:
+'monthly'`: under `'none'` a run ignores it and warns. Off, the gap days
+are exactly CHIRPS × the factor, as before; a test pins that absent and
+`null` run bit for bit the same.
+
+**Why.** A monthly factor puts CHIRPS at the catchment's level but keeps its
+shape. A 0.05° cell averages rain over about 30 km², so it is wet on more
+days than the catchment's gauges, with more drizzle and fewer heavy falls,
+and GR4J turns heavy days into flow far more than light ones. A gap year
+filled at the right volume but with CHIRPS' shape can still run too little
+flow in its storms (calibration-research.md CR-23; Teutschbein & Seibert
+2012 compare the corrections).
+
+**The fit.** It uses the same days as the factors: the shared days of the
+fit period (every listed range together, with the same suspect days and
+years left out), each CHIRPS value × the factor a gap that day would take
+(its range's, with listed ranges). Per calendar month
+(`fitChirpsQuantileMap` in `rain.ts`, through `fitMonthlyTables` in
+`quantileMap.ts`, the mapper rain-source periods use, §2.4e):
+
+1. **Wet-day frequency.** A catchment wet day is one at or above `wetDayMm`.
+   Where CHIRPS × factor is wet more often on the same days, its own
+   threshold (`chirpsWetMm`) is raised to its *k*-th largest value, *k* = the
+   catchment's wet-day count scaled to CHIRPS' sample, so both are wet at
+   the same rate. This is local intensity scaling's wet-day step (Schmidli
+   et al. 2006). A CHIRPS series drier than the catchment keeps
+   `wetDayMm`: the map can't make a dry day wet without inventing rain.
+2. **Intensity.** CHIRPS' wet days (at or above `chirpsWetMm`) and the
+   catchment's (at or above `wetDayMm`) are each summarised as a 101-point
+   quantile table, as in §2.4e.
+3. **Minimum sample, stated.** A month needs **30 wet days on each side**
+   (`QM_MIN_WET_DAYS`, the rain-source periods' rule). Short of that it uses
+   its **3-month season** (DJF, MAM, JJA, SON) pooled, with the threshold of
+   step 1 worked out on the season. A season short too is **not mapped**:
+   its gap days take the monthly factor alone, and the run warns, naming the
+   months and the gap days.
+
+**Applying it.** Each calendar month of the stored CHIRPS record is mapped
+as one block (`chirpsQuantileMapper`, `mapBlockDryBelow`): its values ×
+the factor; a day below `chirpsWetMm` goes **dry (0 mm)**; a day at or above
+it takes the catchment's value at its own non-exceedance probability; then
+the block is **rescaled to its factor-corrected total**. So over every
+calendar month the map moves rain between days, never in or out of the
+month: a month that is a gap throughout keeps exactly the rain the factor
+gives it, and in a month that is only partly a gap, the gap days carry
+their share of the mapped month. A month with rain but no day at its
+threshold keeps its factor values. A gap day reads its month's mapped value,
+and because the block is the whole stored month, not the run's days, a
+shorter run window gives the day the same rain. A model-state snapshot
+taken mid-month carries that month's CHIRPS before its day
+(`quantileMap.lead`, `withChirpsGapMapLead`), so a run resumed from it, even
+with the history left out of its input, maps the month from the same days.
+**A month is mapped only once the stored CHIRPS covers it from its 1st to
+its last day**, counted from its first to its last reading, so nulls stored
+past either end don't count (a snapshot's lead counts, and starts no
+earlier than the capture run's CHIRPS did). Until then, typically the
+record's latest month while the feed is still adding days, its gap days take
+the monthly factor alone and the run says how many
+(`partialMonthDays`). Otherwise every day the feed appended would move the
+rain on the month's earlier gap days. The cost: when the month completes,
+its gap days change once, from factor alone to mapped, and a run made after
+that differs from one made before it on those days.
+
+**Properties** (`rain.quantileMap.test.ts`, and on every run with the map
+`checkChirpsGapMap` in the invariant checks): each whole calendar month of
+the mapped series totals the corrected series, and the rain a run used on
+each CHIRPS-filled day is the mapped series' value; the wet days keep their
+order within a month; unmapped months are the factor values exactly; the
+wet-day rate of the gap days moves to the catchment's, and their share of
+rain on heavy days (≥ 20 mm) moves most of the way to the catchment's.
+
+**What it can't do.** It reshapes CHIRPS' distribution month by month; it
+doesn't place storms on the right days (CHIRPS' timing stays), and it can't
+add wet days to a CHIRPS series drier than the catchment. The 1 mm wet day
+and the 30-day minimum are documented starting points awaiting the
+hydrologist (followups.md § Hydrologist, as §2.4e's).
+
+**Output and record.** `summary.chirpsCorrection.quantileMap` holds the
+threshold, the minimum, per calendar month the basis (`'month'`,
+`'season'` or null), the catchment and CHIRPS wet days behind it and
+`chirpsWetMm`, and the run counts: gap days the map changed
+(`mappedDays`), gap days left to the factor alone in a month the fit doesn't map
+(`unmappedDays`) or one CHIRPS doesn't yet cover whole
+(`partialMonthDays`), and the gap rain on the corrected days by the factor
+alone and after the map (`factorOnlyMm`, `mappedMm`). `mappedDays` counts
+wet days mapped and drizzle days dried alike. The tables stay with the fit: a warm-start snapshot pins
+them with the factors (`PreparedFits.chirpsCorrection`), and the run summary
+leaves them out, as a rain-source period's. The correction warning adds a
+sentence on the map; the daily series `rain_chirps_mapped` is CHIRPS after
+the map on every day; the summary CSV adds a *CHIRPS quantile map* block;
+run comparison lists `chirpsQuantileMap` among the settings and
+`chirpsFit.quantileMapA/B` when either run had one; a fit record's
+`forcing.chirpsQuantileMap` holds it when it was on (absent = off), so
+turning it on or off, or changing the threshold, flags "Forcing changed
+since fit".
+
 **Where it applies.** Only to CHIRPS that is actually used: a day with no
-catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`.
+catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`, or,
+with the quantile map on, its mapped value.
 Catchment rain is never changed. A **negative** catchment reading (a data
 error the series checks warn about, §2.10a) is still a reading: it blocks the
 fallback, shows as recorded in `rain_final`, and runs as 0 mm in GR4J,
@@ -1030,6 +1135,7 @@ and the series explorer:
 | `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so a stored legacy run's `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. With listed fit ranges (engine ≥ 0.29.0), the day's own range's factor. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
+| `rain_chirps_mapped` (engine ≥ 1.53.0) | CHIRPS after the quantile map ([above](#quantile-map-engine--1530-cr-23)) on **every** day it has a value: what a gap day reads. A month the map doesn't map keeps `rain_chirps_corrected`. Only output when the map is on and fitted some month | NaN where `rain_chirps_corrected` is |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
@@ -1042,7 +1148,8 @@ pooled, or none), the unclamped own factor, whether it was clamped, the shared
 days and the catchment and CHIRPS rain on them, and the days CHIRPS filled in;
 then the pooled factor and the water years left out of the fit, with (engine
 ≥ 0.18.0) which were far below CHIRPS, each doubted keep-dry, and the day
-counts left out or kept in; then (engine ≥ 0.29.0) the fit period, the
+counts left out or kept in; (engine ≥ 1.53.0) the quantile map's month
+table and counts when it was on; then (engine ≥ 0.29.0) the fit period, the
 reference windows and each listed range's factors (`chirpsFactorLines` in
 `backend/src/export/run-tables.ts`). Run comparison notes when the two runs'
 factors or left-out years differ (`RunComparison.chirpsFit`,
@@ -1458,8 +1565,8 @@ wet-day distribution, and GR4J turns heavier days into more flow
   period without a map is unchanged: the series × factor, exactly as
   before 1.21.0.
 - **The map, opt-in per period** (`quantileMap`,
-  `packages/engine/src/quantileMap.ts`, a pure mapper written to serve
-  CHIRPS later, CR-23). Per calendar month, the scaled series' wet days
+  `packages/engine/src/quantileMap.ts`, a pure mapper that from engine
+  1.53.0 serves the CHIRPS gap fill too, §2.4b *Quantile map*). Per calendar month, the scaled series' wet days
   over the period and the primary record's trusted wet days over the era
   are each summarised as a 101-point quantile table (every percentile, by
   linear interpolation between order statistics). A wet day (scaled value
@@ -1492,8 +1599,10 @@ at 30 wet days) is a documented starting point awaiting the hydrologist's
 confirmation (docs/followups.md).
 
 **Not done here.** A replacement from a gridded product alone (no gauge)
-is still a `missing` period (§2.4c) filled from CHIRPS. CHIRPS itself is
-still scaled by month only (§2.4b; its quantile map is CR-23).
+is still a `missing` period (§2.4c) filled from CHIRPS. CHIRPS itself can
+be quantile-mapped as well (opt-in, engine ≥ 1.53.0, §2.4b *Quantile map*),
+with its wet-day frequency matched too, which a replacement gauge's map
+deliberately doesn't do.
 
 ### 2.4f Forecast mode (engine ≥ 0.37.0, roadmap WP-2.12)
 
@@ -2281,7 +2390,8 @@ binds, the transfer brings enough that neither MIN bites.
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
-  not be applied to A-pan directly. 0 turns dam evaporation off.
+  not be applied to A-pan directly; the WR90 presets (item 4 below, engine
+  ≥ 1.49.0) convert them. 0 turns dam evaporation off.
 - `Apan` is `settings.apanMm[month] ÷ days in month`, or on a day the daily
   A-pan series covers (engine ≥ 0.38.0, §2.3a) that day's value. GR4J's own
   PE input (`settings.pe`, §2.4a, engine ≥ 0.31.0) never reaches the dams, so
@@ -2389,8 +2499,95 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
 month: `E = k_lake[month] × Apan[month] / daysInMonth / 1000 × A`. Open water
 lags the pan through the seasons (a deep dam stores heat in autumn and
 evaporates more relative to the pan in winter), which one factor can't show.
-Values are the modeller's; no preset is offered, pending the hydrologist.
-Twelve equal values give exactly the single-factor run.
+Values are the modeller's. Twelve equal values give exactly the
+single-factor run.
+
+*Presets* (engine ≥ 1.49.0, `LAKE_FACTOR_PRESETS`,
+`packages/engine/src/evaporation/lakeFactorPresets.ts`). Settings →
+Demand → **Dam evaporation preset** writes the 12 factors and a source note
+(`settings.lakeEvapFactorSource`, free text up to 600 characters, both
+still editable). Nothing is filled unless the user picks one, so no default
+changes: a project without the note, or with any note, runs bit-identically
+(`lakeFactorPresets.test.ts`).
+
+| Preset | Factors (× A-pan) | Source |
+| --- | --- | --- |
+| Flat 0.75 × A-pan (the default) | 0.75 every month | open water ≈ 0.7–0.8 × Class-A pan (Linsley, Kohler & Paulhus 1982) |
+| WR90 lake factors, WR90 pan conversion | `f_lake[m] × (0.8793 A[m] − 16.2354) ÷ A[m]` | lake factors: WR90 (Midgley, Pitman & Middleton 1994, WRC 298/1/94); pan equation: WR90's general monthly S-pan ← A-pan regression; both as reproduced in Taljaard (2023) Table 2-3 and Table 5-9 / Eq. 16 |
+| WR90 lake factors, Taljaard (2023) pan conversion | `f_lake[m] × (0.8706 A[m] − 11.1745) ÷ A[m]` | the same lake factors; Taljaard's new general monthly equation fitted to ten SA stations' paired pans (Table 5-10 / Eq. 33), which he recommends for monthly values |
+
+`f_lake` is WR90's lake evaporation ÷ **S-pan**, Oct–Sep: 0.81, 0.82,
+0.83, 0.84, 0.88, 0.88, 0.88, 0.87, 0.85, 0.83, 0.81, 0.81 (national
+monthly values, not per evaporation zone). `A[m]` is the project's monthly
+A-pan, `settings.apanMm` (mm/month). The conversion is affine, not a ratio,
+so the A-pan factor depends on the month's A-pan: with the negative
+intercept it falls in the low-evaporation months, which is where issue #46's
+~0.67 × A-pan a year and 0.5–0.6 in winter come from. The
+factors are rounded to 3 decimals. With the dam test's Western Cape-like
+A-pan (180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130 mm) the WR90
+preset gives 0.639, 0.663, 0.680, 0.691, 0.715, 0.706, 0.672, 0.608,
+0.517, 0.523, 0.566, 0.611 (0.659 A-pan weighted over the year) and the
+Taljaard one 0.655, 0.674, 0.688, 0.698, 0.726, 0.719, 0.696, 0.649,
+0.582, 0.580, 0.605, 0.636 (0.678).
+
+**The seasonal shape is the pan conversion's, not the lake lag.** WR90's
+`f_lake` varies only 0.81–0.88 through the year; the S-pan ÷ A-pan ratio
+the regression implies varies far more (0.61 in June to 0.82 in January
+above), so the WR90 presets are *lowest* in winter. That is the opposite of
+the deep-water lag this item's opening paragraph describes (open water
+evaporating more relative to the pan in winter): read the presets as WR90's
+lake factors on an A-pan basis, not as a model of that lag.
+
+**Floor.** A conversion is used only where its intercept is at most a third
+of slope × A (S-pan ÷ A-pan at least ⅔ of the slope): a monthly A-pan of at
+least 3|c| ÷ a, **55.4 mm** for WR90's equation and **38.5 mm** for
+Taljaard's (`panConversionFloorMm`). Below it the factor heads to 0 (0.057
+× A-pan at 20 mm under WR90), a national regression pushed past the pan
+depths it describes rather than open water ceasing to evaporate, so the fill
+is refused, naming the months; the flat preset, or factors typed by hand,
+still work there. The floor is an engineering bound (neither source gives a
+fitted range), pending the hydrologist.
+
+Sources and caveats:
+
+- The WR90 volume itself isn't online. Both tables are quoted from
+  Taljaard, C.M.L. (2023), *A revision of evaporation and pan factors in use
+  in South Africa*, MEng thesis, Stellenbosch University
+  (http://hdl.handle.net/10019.1/127336), which reproduces them
+  ("redrawn from Midgley et al., 1994") and tests them. His dam-balance
+  check at three reservoirs found the lake factors "still accurate enough"
+  (§5.3.5); the WR90 pan equation "can only be used as written and cannot
+  be inverted" (§2.6.1.4), which is how it is used here (A-pan → S-pan).
+  Checked against the thesis PDF on 2026-09-30 (printed page numbers):
+  the 12 lake factors (Table 2-3, p. 45), WR90's equation (Eq. 16, p. 44;
+  Table 5-9, p. 152) and Taljaard's (Eq. 33, p. 158; Table 5-10, p. 152) all
+  match. Each equation is one general monthly equation (not per month),
+  A-pan → S-pan, on monthly totals in mm.
+  WR2012's own lake factors were not found: the thesis doesn't mention
+  WR2012, and the WR2012 resource centre (waterresourceswr2012.co.za) is
+  behind a login, so the manuals (WRC TT 689/690-16) couldn't be read.
+  WR2012 evaporation data are S-pan climatologies with 12 monthly values;
+  whether its lake factors differ from WR90's is unknown.
+- The "0.7–0.8 × Class-A pan" range cites Linsley, Kohler & Paulhus (1982),
+  whose text couldn't be read (borrow-only). USGS SIR 2012-5202, citing
+  Kohler et al. (1959), gives annual US pan coefficients of 0.60–0.80.
+- The lake factors are for large reservoirs; a shallow farm dam heats and
+  cools faster and lags the pan less. The pan equations are national
+  regressions; station-specific ones differ (Taljaard Table 5-8).
+- The factors are computed at the monthly A-pan means. A daily A-pan series
+  (§2.3a) multiplies each day's value by them, so a month whose daily
+  total differs from the mean gets a proportionally scaled loss, not the
+  regression's. After changing the A-pan, fill the preset again: Settings
+  warns when the note names a preset whose values at the current A-pan no
+  longer match (`lakeFactorPresetStale`). A WR90 preset refuses a project
+  with any month's A-pan at 0 (not entered yet) or below its floor (above).
+- Which preset the client's catchment takes is the hydrologist's
+  ([followups.md § Hydrologist](./followups.md#hydrologist)).
+
+The source note is recorded with each run (its settings snapshot), so run
+comparison lists a change of it as its own line ("Dam evaporation factor
+source", [run-comparison.md](./run-comparison.md)) and the report's inputs
+name it beside the dam evaporation factor. The model never reads it.
 
 **5. Seepage destination** (`node.damSeepageReturnPct`, default 1). Seepage
 Sp is split: `Sp × return` joins U the same day, `Sp × (1 − return)` is
@@ -3257,9 +3454,9 @@ floor either (the unit's demand over the year is then its registered volume
 plus what the floor holds). A full allocation alone is not a restriction and
 rescales the object, floor included; whether it should hold the floor too is
 [audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
-too (§2.11). *Not modelled:* a drought restriction rule that cuts demand by
-dam level (WP-3.8) doesn't exist yet; when it is built it has to hold the
-same floor (`planObjects` applies it to the demand factor today). A municipality's own restriction
+too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.54.0, §2.7i) holds
+the same floor, with the object's floor and `dayFloor`: MIN(floor, the
+demand before the restriction). A municipality's own restriction
 stages are shown as the supplied l per person per day, never applied.
 
 **Outputs** (only on a unit with an enabled object): per object the series
@@ -3465,6 +3662,207 @@ Hand examples: `network/handsOff.test.ts`.
 
 **Outputs.** No new series: the columns O, S and `river_abstraction` carry
 it, and the summary's farm figures follow.
+
+### 2.7i Drought restrictions (engine ≥ 1.54.0, roadmap WP-3.8)
+
+**Why.** The last of WP-3.8's operating rules: "cut demand by x % when
+storage falls below y %". A WUA restricts its members in a drought by
+levels, each a % cut per category of use, decided from how full the dams
+are on set review dates, as DWS restriction schedules are. The seasonal
+outlook's review triggers (§2.15a) compute such a table from the analogue
+years; this rule lets a run, or a scenario, follow one. **Off by default**:
+`settings.droughtRestriction` absent or null runs to the bit as before (a
+test compares every series and summary figure of random networks with the
+rule absent, null, and on with levels that cut nothing); the examples and
+the client catchment regression suite are unchanged. A model rule, distinct
+from the restriction notice the WUA publishes to farmers (WP-2.3): the
+notice says what the WUA asked for; the rule is what the model assumes.
+
+**The rule** (`settings.droughtRestriction`, engine `DroughtRestrictionRule`,
+`network/restriction.ts`), one per project:
+
+| Field | Meaning |
+| --- | --- |
+| `reviewDates` | 1–12 month-days (`"MM-DD"`, never 29 February) on which the level is decided |
+| `liftDates` | 0–12 month-days on which any restriction ends until the next review (e.g. the day after the season); none of them a review date |
+| `levels` | 1–6 levels, mildest first: `belowPct` (a share of capacity, 0 < x ≤ 1, strictly falling level by level) and `cuts` (per part of demand, a share 0–1). A deeper level cuts each part at least as much as the one above, and every part a milder level cuts |
+| `source` | where the levels come from (≤ 500 characters), optional |
+| `basis` | engine ≥ 1.54.0: which storage the level reads. `total` (the default, absent): every farm dam's, one level for every unit; `dams`: the farm dams in `damNodeIds` only, one level for every unit; `own`: each unit its own dam, a level per unit |
+| `damNodeIds` | the farm dams `dams` reads (with that basis only) |
+| `nodeIds` | the units the rule cuts (farm ids); absent = every unit |
+| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge) wasn't met the day before, the level is at least `level` |
+
+The parts are the ones `demand.scale` cuts on their own (#252): `crops` (a
+unit's crop water requirement F) and each demand-object category
+(`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`,
+`external`, `other`). A part a level doesn't list isn't cut.
+
+**Each day** t (before the transfers, so their room reads it):
+
+```
+review day (or a fresh run's first day when the latest date before it is a review):
+  share = Σ Q_start(d) ÷ Σ capacity(d, t)      over the dams read (every farm dam, the listed ones, or the
+                                               unit's own) with capacity > 0 today, in node-id order
+          Q_start = the storage at the start of the day (the day before's, after any storage reset that day)
+  storage level = the deepest level with share < belowPct; 0 when none (or no dam)
+  failed = the EWR trigger's site had ewr_shortfall < 0 the day before (false on a fresh run's first day)
+  level(unit) = MAX(storage level, failed ? trigger level : 0)    units the rule cuts; 0 for the rest
+lift day:   every level = 0
+other days: each level = the day before's
+per unit, with c_p = its level's cut on part p:
+  F′ = F × (1 − c_crops)
+  d′_k = MAX(d_k × (1 − c_cat(k)), MIN(floor_k, d_k))   floored objects (§2.7f)
+  d′_k = d_k × (1 − c_cat(k))                            the rest
+  D′ = F′ ÷ e + Σ d′_k                                   restricted_demand
+```
+
+The unit's sources (off-take water, the river pump, the dam, the boreholes)
+supply `D′` instead of `D` (§2.7, §2.7d, §2.7e), a transfer's room reads the
+destination's `D′` (§2.6), and a river off-take sized to its destination's
+need sizes to `D′` (§2.6a); the supply is split between crops and objects on
+their cut demands (§2.7f). `demand` and `deficit` stay the unrestricted
+demand's, so a cut shows as a shortfall and in the assurance of supply
+(§2.11a): the unit still wants the water. The water not taken stays in the
+dam or the river.
+
+**Decisions** (the most defensible option where the design leaves a choice;
+each **pending the hydrologist**, listed in
+[followups.md § Hydrologist](./followups.md#hydrologist)):
+
+- *One rule per project, on the total farm dam storage by default.* The
+  review triggers read the total storage of the farm dams, shared pro rata
+  to capacity (§2.15a), and the rule takes their steps, so by default it
+  reads the same total: `Σ storage ÷ Σ capacity`, every farm dam in the
+  project, the day's capacity where it changes (§2.7g). From engine 1.54.0
+  a WUA whose members hang off one scheme dam reads it alone (`dams`), and
+  one where each member's own dam decides reads each (`own`, the per-node
+  rule WP-3.8's design sketched as `NetworkNode.restriction`), and a rule
+  may cut some units only (`nodeIds`). Under `own` a unit without a dam
+  isn't restricted by storage (there is none to read; the run warns), only
+  by the EWR trigger. Ids that don't fit the network (a "dam" without one,
+  a unit that isn't a farm, a site that isn't a gauge) are left out with a
+  warning; a rule left with no unit isn't applied.
+- *Decided on review dates, held between them.* The triggers are read on a
+  review date and applied to the season's end (§2.15a), and DWS
+  restrictions are reviewed at set points, not daily, so the level is a
+  decision that holds until the next review or lift date: the hold period
+  the design asks for. There is no separate hysteresis: a WUA that reviews
+  monthly lists twelve dates. Daily evaluation with hysteresis would let a
+  level flicker with a day's inflow.
+- *The start of the day.* The level reads the storage the day starts with
+  (the day before's, and a storage reset's, §2.15a), never later, so the
+  rule is causal: a forecast tail changes no historical day (the prefix
+  stability test holds with the rule on) and a shorter run has the same
+  levels on its days.
+- *A run's first day.* A fresh run that starts between a review and the
+  next lift decides its first day from its starting storage (a restriction
+  in force when the record starts); one that starts after a lift starts
+  unrestricted. A run resumed from a snapshot (§2.16) keeps each unit's
+  level held on the day before it and whether the trigger's site failed
+  that day, so it is the uninterrupted run to the bit (`checkResume` on
+  random networks), and records that state in its summary (`start`) so the
+  self-check redoes it.
+- *Every farm's demand; not the other water users.* A user node's demand
+  has no category and no population, so a cut on it could take a town's
+  water below basic needs with no floor to stop it. Users keep taking their
+  demand; whether to cut them, and how, is a policy question for the
+  hydrologist ([followups.md § Hydrologist](./followups.md#hydrologist)).
+- *The floor.* A domestic or municipal object never goes below MIN(its
+  basic-needs floor, its demand before the restriction) (#250, §2.7f): the
+  rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
+  floor. Its demand before the restriction is the plan's, so on a
+  full-allocation run it is already scaled by the allocation factor KF and
+  the floor is MIN(floor, KF × d), where a `demand.scale` restriction keeps
+  MIN(floor, d): [engine-audit W1](./engine-audit.md), for the hydrologist,
+  decides both.
+- *The demand stays the demand.* Unlike `demand.scale` (a scenario's change
+  in what is wanted), a restriction is a cut in what is supplied: the
+  shortfall and the assurance of supply count it.
+- *The outlook, its triggers and firm yield run without the rule.* The
+  triggers are what the rule is made from, and a demand level on top of the
+  rule would cut twice; a firm yield is what the dam can give, not what a
+  policy asks of it (§2.13, §2.15). `withoutDroughtRestriction` strips it,
+  and a base run made with the rule passed to the outlook or its triggers is
+  refused (`assertUnrestrictedBase`), since its history is the restricted
+  one.
+- *The EWR trigger* (engine ≥ 1.54.0; the roadmap's "when the downstream EWR
+  site failed yesterday"). It raises the level only on a review day, as
+  the storage does, from the site's pragmatic EWR shortfall (`ewr_shortfall`
+  of the outlet or the gauge, §2.7) on the day before, known at the start of
+  the review day, so it stays causal and holds with the rest until the next
+  review or lift. A fresh run's first day has no day before and isn't
+  raised. Only the day before is read, not a count of recent days, and not
+  the Reserve rule tables' monthly compliance.
+
+**Outputs.** On the catchment, `restriction_level` (the level in force each
+day, 0 = none; under `own` the deepest any unit is at) and, under a shared
+basis, `restriction_cut@<part>` (that day's cut, 0–1, for each part some
+level cuts); on every unit the rule cuts, `restricted_demand` (m³/day) and,
+under `own`, its own `restriction_level`. The summary's
+`droughtRestriction`: the rule, the days at each level per water year and
+over the run, the reviews in the run (with a trigger, `ewrReviews`: those
+after a day its site failed), and per unit its mean demand, mean restricted
+demand and mean supply over the run, its mean cut over the restricted days
+alone and its days at each level; on a resumed run, `start`. Also a block
+of the summary CSV. A model-state snapshot carries each unit's level held
+(`restrictionLevels`) and the trigger's state (`restrictionEwrFailed`).
+
+**From the published notice** (engine ≥ 1.54.0). `restrictionRuleFromNotice`
+turns the WUA's published restriction notice (WP-2.3) into a starting rule,
+never the reverse: one level in force whenever the dams aren't full (below
+100 %), cutting every part by the notice's %, reviewed on the day it was
+published and lifted on the day the WUA expects to publish next (29
+February read as 1 March). A notice with no restriction, or none with a %,
+gives no rule, with the reason. Settings and the scenario form offer it.
+
+**From the review triggers.** `restrictionRuleFromTriggers(table, levels)`
+(`outlook/triggers.ts`, §2.15a) makes a rule from a trigger table: the
+review date's month and day is the review date and the day after the season
+end the lift date; each band below the fullest is a level from the band
+above's lower edge (÷ the total capacity) down, cutting each part by 1 − its
+level's `demand.scale` factor. What the rule can't carry is said, never
+dropped silently: an op limited to some nodes or months or on the other
+water users, a factor above 1, a band where no level met the planning rule
+(it takes the band above's cuts, for the WUA to decide), a table that isn't
+monotone (each part keeps the largest cut above it), and a fullest band
+whose level cuts (the rule then applies it below 100 %). A top band of full
+dams only is no level (no share is below 100 % there), two bands with one
+lower edge make one level (the deeper cuts), and a table that still can't
+make a rule a save accepts gives none, with the reason.
+
+**Scenarios and comparison.** `settings.set` with the path
+`droughtRestriction` sets or replaces the rule, or clears it with null (a
+null over no rule changes nothing), checked by the same rules as a save,
+always a baseline assumption ([scenarios.md](./scenarios.md)); so a WUA can
+compare restriction policies. The run comparison lists what changed: on or
+off, the dates, each level's threshold, name and cuts, levels added or
+removed, the source ([run-comparison.md](./run-comparison.md)).
+
+**Checks.** The self-check `droughtRestriction` (`checkDroughtRestriction`)
+recomputes each unit's level every day from the stored storage, capacity,
+reset and EWR-shortfall columns and the rule (the review and lift days, the
+dams read, the units cut and the trigger's site worked out in the check
+itself, not by the engine's planner; a resumed run from the state its
+summary records), each part's cut column, and each unit's restricted
+demand from its crop requirement, efficiency and object demands with the
+floor; it holds supplied ≤ restricted demand ≤ demand (a restriction never
+raises supply) and the summary's days and means to the columns; without
+the rule there is no restriction column. `checkWorkings` replays the supply
+against the restricted demand, and the objects' shares against their cut
+demands. Tests (`run.droughtRestriction.test.ts`, `outlook/restriction.test.ts`):
+hand examples (a dam emptying at 100 m³/day reviewed on 5 October, a lift
+date, a run starting after a lift, the start of the day read rather than the
+end, two levels with the floor held), bit identity off, the self-check
+catching a tampered level, cut, restricted demand and supply, the rule's
+checks, the scenario op and the comparison, resume from a snapshot, the
+triggers mapping; and on random networks every invariant (balance,
+self-checks, order invariance, determinism), forecast prefix stability and
+a run cut short. The fuzz generator gives a quarter of networks a random
+rule (1–12 review dates, lift dates, 1–4 levels up to cuts of 100 %), the
+warm-start and scenario fuzz carry it, and the doubled-crop-areas property
+runs without it (more demand restricts every unit sooner, and a unit
+upstream that takes less leaves more below, as the trigger rule does). The
+Excel audit workbook refuses a farm under a rule, by name.
 
 ### 2.8 Outputs
 
@@ -5488,8 +5886,9 @@ it never changes a run's results.
     covering ≥ 99 % of the run: half the members use the rain as a run does
     (station rain, bias-corrected CHIRPS where it is blank, §2.4b), half use
     **CHIRPS alone**, every day bias-corrected by the run's own monthly
-    factors (the station series dropped, correction then off, the run
-    window pinned). The spread between them is the rain-data uncertainty
+    factors, and with the CHIRPS quantile map on (engine ≥ 1.53.0, §2.4b)
+    mapped as the run maps its gap days (the station series dropped,
+    correction and map then off, the run window pinned). The spread between them is the rain-data uncertainty
     the record can't settle.
   - **Observed record**, when both a gauge and a logger record have at least
     30 scored days: half the members are judged against each. A record that
@@ -5572,7 +5971,20 @@ it never changes a run's results.
   evidence report passes) the change in their group's Σ supplied ÷ Σ demand;
   and the application's own Reserve FDC check curve under the same parameter
   sets (a band on the curve, not a difference, so the chart can draw it
-  beside the baseline's).
+  beside the baseline's). Because both runs' curve bands come from the same
+  sets, they overlap even when every pair shifts the curve the same way, so
+  the summary also bands the **paired change in that curve**
+  (`reserveFdcChange`, evidence report format `evidence-7`): per site in both
+  runs, per water-year month and table point, other − baseline of the
+  impacted flow, with `worse`, the share of the pairs with a flow on both
+  sides in which the other run's is lower (`null` below the 30-member gate).
+  It pairs the curves point by point, so it means something only where both
+  runs' rule tables read the site at the same points, unit and component; the
+  summary can't see the tables, and the evidence report, its one reader,
+  checks them and tables nothing otherwise.
+  Identical runs give a zero band; a curve moved the same amount in every set
+  gives a zero-width band at that amount, however far the sets spread each curve.
+  The evidence report tables it under § 1's FDC plot (`EvidenceSite.fdcChange`).
 - **The declared rule and the cited ensemble** (issue #71,
   `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
   G4): a project may declare one rule for its evidence,
@@ -5895,7 +6307,49 @@ With the record-representativeness statement (§2.10b, CR-34), which the
 panel quotes, this is how wet the calibration period is against the
 long-term record. The 20 % and 25 % note thresholds are judgement.
 
-Tested by `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
+**Stored with the run (engine ≥ 1.48.0).** A run stores the flags of the
+record its calibration statistics score as the column
+`observed_flow_quality`: each day's class code, in `FLOW_DAY_FLAGS` order
+(0 in range, 1 human use, 2 below the lowest gauging, 3 above the highest
+gauging, 4 suspect, 5 infilled, 6 missing), spelled out in the column's
+label so the daily CSV reads without this page. It sits beside the scored
+`observed_flow`: the catchment's when the run scores the outlet, the
+calibration site's node when it scores a gauge inside the network
+(`settings.calibrationSiteNodeId`, §2.10k), where no gauged range and no gap
+fill apply (the ratings and the fill are the outlet records'). Like
+`rain_catchment_missing` it is only output when some day is flagged (a class
+other than in range or missing); a record with no gauged range, no suspect
+and no filled day has none. Fit automatically and the column read the same
+function (`recordFlowFlags`), so what the charts show is what the fit read
+under the run's settings. The column records the classes, not the
+treatment: which classes the fit left out, censored or scored is the run's
+`settings.qualityFlags`, which the hydrograph's key reads from the run's own
+settings snapshot. A run resumed from a snapshot (§2.16) whose capture run
+stored the column stores it too, computed for its own days, so the two keep
+the same columns (and an input without the flow record, an outlook member's,
+stores none, never a column of zeros). Its codes equal the uninterrupted
+run's to the bit when the resumed input carries the record's history. The
+suspect class reads the whole stored record (its outlier limit and flat
+stretches), so the engine enforces the rest: the snapshot records whether
+the scored record had readings before its day (`flowRecordHistory`), and a
+resumed input that carries the record without them leaves the suspect class
+out (`recordFlowFlags`' `suspect: false`: those days take their rating class)
+and warns "Resumed from … without the observed flow record's history: its
+quality flags leave out the suspect class …". The gauged-range and missing
+classes need no history and still match. A record that starts after the
+snapshot's day has no history to miss. The infilled class follows the gap
+fill, which is guarded the same way (§2.10i): resumed without the history it
+read, the fill is left out with a warning, so no day is infilled, never
+filled differently from the uninterrupted run. The run's self-checks hold it to its record
+(`checkFlowQuality`, part of `checkBalance`, §6 Verification). The same
+change fixed the self-check failing every run with a gap-filled record: the
+filled values (`observed_flow_filled`, NaN on the days not filled) were
+missing from the check's list of series that may be blank.
+
+Tested by `run.flowQuality.test.ts` (the column at the outlet and at a
+calibration site, equal to the fit's flags, absent with no flagged day,
+infilled days from the fill, a resumed run, the self-check with tampered
+columns), `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
 the settings resolver and rating rules, censoring, the rain classes, the
 summary's counts and notes, run-comparison lines), `calibrate.test.ts`
 (suspect days left out and scored on all days, censoring invariance with a
@@ -5942,12 +6396,25 @@ lead-in and tail are never filled; nothing bounds them. Per record:
 
 Interpolation runs first, on the gaps short enough for it; the donor then
 fills only the longer ones. Everything is fitted and counted over the whole
-stored record, so the Data tab shows exactly what a run would fill. (A run
-resumed from a model-state snapshot, §2.16, fills from the records it is
-given: without the history before the snapshot's day, a gap across that day
-has no reading before it and stays open. The model's state never depends on
-an observed record, so only the fill columns and, with infilled days scored,
-the scores can differ.)
+stored record, so the Data tab shows exactly what a run would fill.
+
+**A resumed run (§2.16, engine ≥ 1.48.0).** The fill reads the whole record:
+a gap's bounding readings, the highest reading it clamps to and the donor's
+ratio over the whole overlap. A run resumed from a model-state snapshot with
+the history before the snapshot's day in its input fills exactly as the
+uninterrupted run, every column to the bit. Without that history it could
+only fill differently (a gap across the snapshot's day would stay open, the
+ratio and the clamp would come from part of the record), so the engine
+never does: the snapshot lists the filled records whose fill read readings,
+the record's or its donor's, before its day (`flowFillHistory`), and a
+resumed input that carries such a record with neither its nor its donor's
+readings before the run's start leaves that record's fill out altogether
+(no fill columns, no infilled day, the stored record scored as it is) and
+warns "Resumed from … without the … record's history: its gap fill is left
+out …". A fill that read nothing before the snapshot's day (the record and
+its donor start after it) is kept. The model's state never depends on an
+observed record, so only the fill columns, the infilled flags and, with
+infilled days scored, the scores are affected.
 
 **What reads a filled day: one control, the quality flags' infilled
 treatment** (`settings.qualityFlags.infilled`, §2.10h). Every filled day is
@@ -6198,6 +6665,9 @@ gauge is in sample and a project whose only record is at the gauge gets
 statistics. The run keeps that record as the gauge node's `observed_flow`
 (and `observed_flow_other` for its other record), beside the node's own
 `outflow`, which the Results tab charts as the calibration site's hydrograph.
+From engine 1.48.0 the record's per-day quality flags follow it: the column
+`observed_flow_quality` (§2.10h) is stored at the gauge node, not the
+catchment, and strips them along the foot of that hydrograph.
 The outlet's own record, when it has one, is still the catchment series
 `observed_flow`: the outlet hydrograph, the recession diagnostics, the
 plausibility checks and the gauge-vs-logger agreement read it as before.
@@ -6752,7 +7222,10 @@ with *F*(*t*) = *x* × *p*(*t*) × *e*, so its abstraction demand D = F / e is
 the draft, and runs `simulateNetwork` on it. Other nodes keep their own
 demand. The dam's **boreholes are removed** for the search, those that pump
 into the dam (WP-3.9) included, pending the hydrologist: the yield is
-the dam's, not the dam's plus groundwater. When no transfer touches the dam
+the dam's, not the dam's plus groundwater. The drought restriction rule
+(engine ≥ 1.54.0, §2.7i) is dropped too, on every node: the yield is what
+the dam can give, not what a restriction policy asks of it (pending the
+hydrologist). When no transfer touches the dam
 or anything upstream of it, a probe simulates only the dam and the nodes
 upstream of it: nothing below the dam changes what reaches it, and nothing
 above it depends on its draft (senior users' claims are fixed per node
@@ -7048,6 +7521,14 @@ planning share are project settings (`settings.outlook`). The WUA
 publishes one level to farmers, and each farm page shows that farm's own
 figures at it, *This season* (`views/farmOutlook.ts`, migration 106, issues
 #53 R5 and #122; [ui.md § Farmer view](./ui.md#farmer-view-farm)).
+
+**Without the drought restriction rule** (engine ≥ 1.54.0, §2.7i). The
+outlook and its review triggers (§2.15a) run the project without
+`settings.droughtRestriction` (`withoutDroughtRestriction`, in the engine's
+entry points and the backend job): the triggers are what that rule is made
+from, and a member's demand level on top of the rule would cut demand
+twice. The history the season starts from is the unrestricted one too
+(pending the hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.
@@ -7380,17 +7861,20 @@ median, 2026-09-26; `outlook.perf.test.ts` holds it under 250 ms and at
 least 8× the older path). The history is shared by every band, level and
 year, since a band changes only the dams' storage on the review date.
 
-**WP-3.8's drought restriction rule.** The roadmap's rule ("cut demand by
-x % when storage < y %", `NetworkNode.restriction`) isn't in the engine
-yet, so no function turns a table into its parameters. The typed shape
-`DroughtRestrictionTriggerParameters` records the intended mapping: the
-review date's month and day; the basis (total farm dam storage, as the
-bands); and one step per row, fullest first, with the band's lower edge
-(`atOrAboveM3`, and ÷ Σ capacity as `atOrAboveShare`) and the row's level
-(its id and `demand.scale` ops, applied from the review date to the season
-end), or null where no level met the rule (the WUA decides). When the rule
-is built it takes these steps; a scenario can then simulate following the
-table.
+**WP-3.8's drought restriction rule** (engine ≥ 1.54.0, §2.7i).
+`restrictionRuleFromTriggers(table, levels)` turns a table into the rule's
+parameters: the review date's month and day as the review date, the day
+after the season end as the lift date (the table's level applies from the
+review date to the season end), the basis the bands' own (total farm dam
+storage, ÷ Σ capacity), and one level per band below the fullest, from the
+band above's lower edge down, cutting each part by 1 − the row level's
+`demand.scale` factor; a row where no level met the rule takes the band
+above's cuts, for the WUA to decide. Its notes say what it couldn't carry
+(§2.7i). The outlook panel offers it as the project's rule
+([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)), and a scenario can
+then simulate following the table. The outlook and the triggers themselves
+run without the rule (`withoutDroughtRestriction`), so a table never reads a
+restriction built from an earlier one.
 
 **Tests** (`outlook/triggers.test.ts`, `triggers.invariants.test.ts`,
 `run.damStorageReset.test.ts`, synthetic): the default review date and a
@@ -7455,6 +7939,12 @@ can store one per base run. The state holds:
   use so far this water year (`allocationUsedM3`) and a full allocation's
   demand factor for the water year in progress (`allocationFactor`), each
   left out without one;
+- from engine 1.54.0 (§2.7i), the drought restriction level each node held
+  the day before (`restrictionLevels`, model order) and whether the rule's
+  EWR trigger site failed that day (`restrictionEwrFailed`), left out
+  without the rule; a run resumed part-way keeps the levels until its next
+  review or lift date, one resumed on the capture run's first day decides
+  that day as the capture run did;
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
   split by the snapshot is still assessed whole (§2.9c); with low flows on
@@ -7637,6 +8127,10 @@ table is already general enough to hold such nodes.
   `riverFirst`, `trigger` and `runOfRiver`; the river-abstraction fraction is
   not (the pump takes the flow below the dam that need not pass, up to its
   capacity).
+- **Drought restrictions** (curtail demand when storage falls low, WP-3.8):
+  **ported** (engine ≥ 1.54.0, §2.7i) as one rule per project on the total
+  farm dam storage, decided on review dates, with a % cut per part of
+  demand per level and the basic-needs floor kept.
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
@@ -7735,7 +8229,7 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
@@ -7745,6 +8239,7 @@ text:
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
+| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the farm dams' storage at the start of that day (0 from a lift date, else held); each part's cut column is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's days per level and unit means add up to the columns. Without the rule, no restriction column or summary. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
@@ -7824,8 +8319,8 @@ through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
 `checkBalance`, `checkWorkings`, `checkSoilWater`, `checkRunoffBalance`, `checkTransferLimits`,
 `checkReportTotals`, (engine ≥ 0.17.0) `checkEwrAttribution`, `checkGroundwater`, `checkLandCover`,
-`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
-ids `balance` … `allocations`, `operatingRules` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
+`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules`, (engine ≥ 1.54.0) `checkDroughtRestriction` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
+ids `balance` … `allocations`, `operatingRules`, `droughtRestriction` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
 another, and a check that throws counts as failed with the reason. The result
 is `RunSummary.verification`: pass/fail per check, the first broken property
 with node ids and day numbers turned into farm names and dates, and the largest

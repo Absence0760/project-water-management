@@ -6,6 +6,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { layoutSettled } from '../support/reflow.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
@@ -19,20 +20,21 @@ const SETTINGS_LINKS = [
 	'Flow share',
 	'EWR',
 	'Reserve rules',
+	'Drought restrictions',
 	'Simulation period',
 	'Data quality',
 	'Outcome matrix',
 	'Seasonal outlook',
 	'Evidence',
-	'Automatic runs',
-	'Data feeds',
-	'API keys',
-	'Scheduled reports'
+	// Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
+	'Automation & access'
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
 
 /** How many rows the bar's links (and More) take: their distinct tops. */
 async function barRows(menu: Locator): Promise<number> {
+	// Read once: wait for the final fonts and the fit that follows them.
+	await layoutSettled(menu.page());
 	const boxes = await Promise.all([...(await menu.getByRole('link').all()), ...(await moreButton(menu).all())].map((l) => l.boundingBox()));
 	return new Set(boxes.map((b) => Math.round(b!.y))).size;
 }
@@ -132,7 +134,7 @@ test('a narrower window moves the last links into More, which works from the key
 	await page.keyboard.press('Enter');
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
-	await expect(menu.getByRole('list', { name: 'Runs, feeds and reports' }).last().getByRole('link').last()).toHaveText('Scheduled reports');
+	await expect(menu.getByRole('list', { name: 'Automation & access' }).last().getByRole('link').last()).toHaveText('Automation & access');
 	await page.keyboard.press('Tab');
 	await expect(menu.getByRole('link', { name: SETTINGS_LINKS[onBar.length], exact: true })).toBeFocused();
 	await page.keyboard.press('Escape');
@@ -142,11 +144,13 @@ test('a narrower window moves the last links into More, which works from the key
 
 	// Following a link in More jumps to its section below the menu, closes it, and More then says it holds the section read.
 	await more.click();
-	await menu.getByRole('link', { name: 'Scheduled reports' }).click();
-	await expect(page).toHaveURL(/#set-report-schedules$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Scheduled reports' })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Automation & access' }).click();
+	await expect(page).toHaveURL(/#set-auto$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
-	// Past the form too: the menu used to sit inside it and scrolled away at Data feeds.
+	// Past the form too (the menu used to sit inside it and scrolled away at Data feeds): the group's panels below it
+	// still count as the group's link being read.
+	await page.getByRole('heading', { level: 2, name: 'Scheduled reports' }).scrollIntoViewIfNeeded();
 	await expect(menu).toBeInViewport();
 	await expect(more).toHaveAccessibleName('More sections, including the one being read');
 

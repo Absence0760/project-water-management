@@ -69,7 +69,7 @@ const STATS: Record<keyof CalibrationStats, true> = {
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'observed_flow_other', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
-	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
+	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// A dam's capacity on the day, when sediment or an in-service date changes it (engine 1.30.0, issue #67)
 	'dam_capacity',
@@ -96,10 +96,14 @@ const RUN_KEYS = [
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)
 	'river_abstraction',
+	// The drought restriction rule (engine 1.54.0, WP-3.8)
+	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',
 	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
 	'observed_flow_fill', 'observed_flow_filled', 'observed_flow_other_fill', 'observed_flow_other_filled',
+	// The scored record's per-day quality flags (engine 1.48.0, CR-18)
+	'observed_flow_quality',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];
@@ -114,7 +118,7 @@ const PREVIEW_KEYS = [
 
 const settings = defaultProjectSettings();
 // Settings with no default (absent until someone sets them): typed, so each is a real field.
-const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule'];
+const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction'];
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
 	crop: new Set(Object.keys(CROP)),

@@ -19,11 +19,11 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
-import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
-import { FLOW_FILL_COLUMNS } from './flowGapFill';
+import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
+import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { flaggedDayMask, flowDayFlags, observedInfillMask, ratingOf } from './calibrate/dayFlags';
+import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -38,6 +38,7 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOffta
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
+import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
@@ -64,6 +65,7 @@ import {
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
+	DEMAND_PARTS,
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
@@ -72,6 +74,8 @@ import {
 	type CalibrationFlowKind,
 	type DailySeries,
 	type DemandObjectSummary,
+	type DroughtRestrictionRule,
+	type DroughtRestrictionSummary,
 	type FarmSummary,
 	type ForecastRainDays,
 	type LandCoverClass,
@@ -161,7 +165,7 @@ export function runModelCapturing(input: ModelInput, at: string): { output: Mode
 	const state = sink.state!;
 	// Columns a run carries only when a day of it needs them: a resumed run keeps them, as zeros when none of its days do.
 	output.series.forEach((x, i) => {
-		if (!HISTORY_COLUMNS.has(x.key)) return;
+		if (!HISTORY_COLUMNS.has(x.key) && !KEPT_COLUMNS.has(x.key)) return;
 		const prev = output.series[i - 1];
 		state.columns.push({ nodeId: x.nodeId, key: x.key, label: x.label, unit: x.unit, after: prev ? { nodeId: prev.nodeId, key: prev.key } : null });
 	});
@@ -207,6 +211,9 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 	for (const c of state.columns) {
 		const has = (nodeId: string | null, key: string) => output.series.findIndex((x) => x.nodeId === nodeId && x.key === key);
 		if (has(c.nodeId, c.key) >= 0) continue;
+		// A kept column (the quality flags) the resumed run didn't compute has no record behind it (an input
+		// without the flow record, such as an outlook member's): zeros would claim every day in the gauged range.
+		if (KEPT_COLUMNS.has(c.key)) continue;
 		const at = c.after ? has(c.after.nodeId, c.after.key) : -1;
 		output.series.splice(at + 1, 0, { nodeId: c.nodeId, key: c.key, label: c.label, unit: c.unit, values: new Array<number>(output.days).fill(0) });
 	}
@@ -215,6 +222,8 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 
 /** Columns a run adds only when one of its days needs them, which a resumed run keeps from its capture run (all 0 on its days then). */
 const HISTORY_COLUMNS = new Set([ZERO_RAIN_COLUMN.key, ACCUMULATION_COLUMN.key, 'dam_storage_set', 'senior_requirement', 'passed_for_senior']);
+/** Columns a resumed run keeps from its capture run by computing them for its own days (never zeros: a code 0 is a class). */
+const KEPT_COLUMNS = new Set<string>([FLOW_QUALITY_COLUMN.key]);
 
 /**
  * runModel, then the engine's checks on its own output (./verify): what a
@@ -266,7 +275,10 @@ function runNetwork(
 ): ModelOutput {
 	const capturing = warm.captureDay !== undefined;
 	const resume = warm.resume;
-	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
+	const prepared = prepareRun(input, {
+		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
+		...(capturing ? { captureFits: true } : {})
+	});
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
@@ -327,6 +339,12 @@ function runNetwork(
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
+		// The drought restriction level held the day before (engine ≥ 1.54.0): only part-way through the capture run;
+		// a snapshot of its first day holds none, so the resumed run decides that day as the capture run did.
+		if (plan.restriction && warm.continued) {
+			plan.restriction.initialLevels = Uint8Array.from(nodes, (_, i) => resume.restrictionLevels?.[i] ?? 0);
+			plan.restriction.initialEwrFailed = resume.restrictionEwrFailed === true;
+		}
 	}
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
@@ -411,7 +429,51 @@ function runNetwork(
 		const other = kinds.find((k) => k !== calKind);
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
+	// The scored record's per-day quality flags (engine ≥ 1.48.0, CR-18, ./calibrate/dayFlags.ts): the classes the fit
+	// reads, beside the scored `observed_flow` (the outlet's or the calibration site's), only when a day is flagged.
+	// A run resumed from a snapshot whose capture run stored them stores them too, so the two have the same columns.
+	// A resumed run whose input leaves out the record's history (the capture's record had readings before the
+	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
+	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
+	let outletFlowFlags: Uint8Array | null = null;
+	let flowRecordHistory = false;
+	if (calKind) {
+		const siteId = calSite?.nodeId ?? null;
+		const record = series[calibrationSeriesKey(calKind, siteId)];
+		if (captureAt !== undefined) flowRecordHistory = hasReadingBefore(record, start + captureAt);
+		const noHistory = !!resume?.flowRecordHistory && !hasReadingBefore(record, start);
+		if (noHistory) {
+			warnings.push(
+				`Resumed from ${startDate} without the ${OBSERVED_SERIES_LABEL[calKind].toLowerCase()} record's history: its quality flags leave out the suspect class (outliers and flat stretches are judged over the whole record). Include the history in the input, or run from the start, for the full flags.`
+			);
+		}
+		const flags = recordFlowFlags({
+			kind: calKind,
+			series: record,
+			start,
+			days,
+			settings,
+			siteNodeId: siteId,
+			flowFill,
+			...(noHistory ? { suspect: false } : {})
+		});
+		const kept = resume?.columns.some((c) => c.key === FLOW_QUALITY_COLUMN.key && c.nodeId === siteId) ?? false;
+		if (kept || hasFlaggedDay(flags)) push(siteId, FLOW_QUALITY_COLUMN.key, FLOW_QUALITY_COLUMN.label, FLOW_QUALITY_COLUMN.unit, flags);
+		// At the outlet these are the outlet record's flags, which the plausibility checks read too.
+		if (siteId === null) outletFlowFlags = flags;
+	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
+	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
+	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
+	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
+	if (plan.restriction && sim.restrictionLevel) {
+		push(null, RESTRICTION_SERIES.level.key, plan.restriction.shared ? RESTRICTION_SERIES.level.label : RESTRICTION_SERIES.deepestLabel, RESTRICTION_SERIES.level.unit, sim.restrictionLevel);
+		// The day's cut per part: one level for every unit (a shared basis) only; under 'own' each unit's level says it.
+		if (plan.restriction.shared) DEMAND_PARTS.forEach((part, p) => {
+			if (!plan.restriction!.cut.some((c) => c[p]! > 0)) return;
+			push(null, restrictionCutKey(part), RESTRICTION_SERIES.cutLabel(part), RESTRICTION_SERIES.cutUnit, Float64Array.from(sim.restrictionLevel!, (l) => plan.restriction!.cut[l]![p]!));
+		});
+	}
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
 
 	// Who is charged for a shortfall (engine ≥ 0.17.0, audit Q17): the EWR is
@@ -518,7 +580,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -594,6 +656,11 @@ function runNetwork(
 		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
+		// The unit's demand after the drought restriction (engine ≥ 1.54.0): on every unit while the rule is on.
+		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
+		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
+		const ul = sim.restrictionUnitLevel?.[i];
+		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
@@ -877,7 +944,8 @@ function runNetwork(
 		reserve: ewrAssurance.map((a) => a.report),
 		outflow: topo.outflow,
 		upstream: topo.upstream,
-		flowFill
+		flowFill,
+		outletFlowFlags
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -939,6 +1007,17 @@ function runNetwork(
 		})
 	});
 
+	// The filled records whose fill read readings (the record's or its donor's) before the snapshot's day: a resumed
+	// input without that history leaves their fill out (prepare.ts flowFillsFor), never fills them differently.
+	const fillHistory: GapFillKind[] =
+		capturing && flowFill
+			? GAP_FILL_KINDS.filter((k) => {
+					if (!flowFill[k]) return false;
+					const donor = settings.flowGapFill[k]?.donor;
+					const day = start + captureAt!;
+					return hasReadingBefore(series[k], day) || (!!donor && hasReadingBefore(series[donor], day));
+				})
+			: [];
 	if (capturing && warm.sink) {
 		const net = sim.captured!;
 		warm.sink.state = {
@@ -957,10 +1036,14 @@ function runNetwork(
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
-				fits: prepared.fits!
+				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
+				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
-			columns: []
+			columns: [],
+			...(plan.restriction ? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}) } : {}),
+			...(flowRecordHistory ? { flowRecordHistory: true as const } : {}),
+			...(fillHistory.length ? { flowFillHistory: fillHistory } : {})
 		};
 	}
 
@@ -976,6 +1059,7 @@ function runNetwork(
 			...(users.length ? { users } : {}),
 			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, historyDays) } : {}),
 			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
+			...(restrictionRule && sim.restrictionLevel ? { droughtRestriction: restrictionSummary(restrictionRule, plan, sim, nodes, start, days, !!resume) } : {}),
 			...(allocations ? { allocations } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
@@ -996,7 +1080,7 @@ function runNetwork(
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
-			chirpsCorrection,
+			chirpsCorrection: summaryCorrection(chirpsCorrection),
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),
@@ -1039,6 +1123,8 @@ function runPlausibility(r: {
 	upstream: readonly ArrayLike<number>[];
 	/** The gap-filled observed records (PreparedRun.flowFill, engine ≥ 1.23.0): their days are flagged infilled. */
 	flowFill?: PreparedRun['flowFill'];
+	/** The outlet record's flags when the run already computed them (the quality column at the outlet), else null. */
+	outletFlowFlags?: Uint8Array | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -1073,9 +1159,7 @@ function runPlausibility(r: {
 	// The calibration record's quality flags (CR-18): the recession segments leave flagged days out.
 	const kind = r.observedKind;
 	const flowFlagged = kind
-		? flaggedDayMask(
-				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(r.flowFill?.[kind]), dataQuality: settings.dataQuality })
-			)
+		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
@@ -1330,6 +1414,12 @@ export function buildNetworkPlan(
 		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
+	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
+	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
+	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
+	const restriction = restrictionRule
+		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0 })), start!, days, warnings, topo.outflow)
+		: null;
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
@@ -1367,6 +1457,7 @@ export function buildNetworkPlan(
 		naturalFlow: natural,
 		ewr,
 		...(reset ? { storageResetDay: reset.day } : {}),
+		...(restriction ? { restriction } : {}),
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
@@ -1403,6 +1494,80 @@ export function buildNetworkPlan(
 	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings);
 	if (warm.captureAt === undefined) return { plan, topo, allocation };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
+}
+
+/**
+ * RunSummary.droughtRestriction (engine ≥ 1.54.0, docs/model.md §2.7i): the
+ * days at each level per water year and over the run, the days the level was
+ * decided, and per unit (node-id order) its mean demand before and after the
+ * cut and its mean supply.
+ */
+function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number, resumed: boolean): DroughtRestrictionSummary {
+	const lv = sim.restrictionLevel!;
+	const n = rule.levels.length + 1;
+	const byYear = new Map<number, { waterYear: number; days: number; daysByLevel: number[] }>();
+	const total = new Array<number>(n).fill(0);
+	for (let t = 0; t < days; t++) {
+		const wy = waterYearOf(start + t);
+		let y = byYear.get(wy);
+		if (!y) byYear.set(wy, (y = { waterYear: wy, days: 0, daysByLevel: new Array<number>(n).fill(0) }));
+		y.days++;
+		y.daysByLevel[lv[t]!]!++;
+		total[lv[t]!]!++;
+	}
+	const rp = plan.restriction!;
+	let reviews = 0;
+	for (let t = 0; t < days; t++) if (rp.event[t] === 1 || (t === 0 && rp.event[0] === 0 && rp.initialLevels === undefined && rp.startDecides)) reviews++;
+	const ewrReviews = sim.restrictionEwrFailed ? sim.restrictionEwrFailed.reduce((a, v) => a + v, 0) : undefined;
+	const mean = (a: ArrayLike<number>) => {
+		let s = 0;
+		for (let t = 0; t < a.length; t++) s += a[t]!;
+		return a.length ? s / a.length : 0;
+	};
+	const units = nodes
+		.map((node, i) => ({ node, r: sim.nodes[i]!, ul: sim.restrictionUnitLevel?.[i] ?? lv }))
+		.filter((x) => x.r.restrictedDemand)
+		.sort((a, b) => cmpStr(a.node.id, b.node.id))
+		.map(({ node, r, ul }) => {
+			// The cut on the days a level was in force only: the run means dilute it with every unrestricted day.
+			let cut = 0;
+			let k = 0;
+			const byLevel = new Array<number>(n).fill(0);
+			for (let t = 0; t < days; t++) {
+				byLevel[ul[t]!]!++;
+				if (ul[t] === 0) continue;
+				cut += r.demand[t]! - r.restrictedDemand![t]!;
+				k++;
+			}
+			return {
+				nodeId: node.id,
+				name: node.name,
+				avgDemandM3Day: mean(r.demand),
+				avgRestrictedDemandM3Day: mean(r.restrictedDemand!),
+				avgSuppliedM3Day: mean(r.supplied),
+				avgCutOnRestrictedDaysM3Day: k ? cut / k : null,
+				daysByLevel: byLevel
+			};
+		});
+	// A resumed run (engine ≥ 1.54.0): the state its first day starts from, for the self-check.
+	const startState = resumed
+		? {
+				start: {
+					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
+					ewrFailedBefore: rp.initialEwrFailed === true,
+					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
+				}
+			}
+		: {};
+	return {
+		rule,
+		years: [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear),
+		daysByLevel: total,
+		reviews,
+		...(ewrReviews !== undefined ? { ewrReviews } : {}),
+		units,
+		...startState
+	};
 }
 
 /**
@@ -2301,8 +2466,21 @@ export function chirpsColumns(
 		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
 		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
 		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
+		// The gap map (engine ≥ 1.53.0, CR-23): what a gap day reads, on every day, as rain_chirps_corrected is.
+		const mapper = chirpsQuantileMapper(corr, chirps);
+		if (mapper) {
+			const mapped = corrected.map((v, t) => mapper(start + t) ?? v);
+			out.push({ key: 'rain_chirps_mapped', label: 'CHIRPS rain bias-corrected and quantile-mapped (wet days, month totals kept)', unit: 'mm', values: mapped });
+		}
 	}
 	return out;
+}
+
+/** The correction as a run summary keeps it: without the gap map's tables and a snapshot's lead (they stay with the pinned fit, as a rain-source period's tables do). */
+function summaryCorrection(c: ChirpsCorrection | null): ChirpsCorrection | null {
+	if (!c?.quantileMap?.tables && !c?.quantileMap?.lead) return c;
+	const { tables: _tables, lead: _lead, ...qm } = c.quantileMap;
+	return { ...c, quantileMap: qm };
 }
 
 /** Daily net irrigation demand per node (zeros for gauges and crop-less farms). */

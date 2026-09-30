@@ -14,12 +14,20 @@
 	import NeedsAttention from '$lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '$lib/components/projects/outcomes';
-	import { ewrWindowLabel, statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
+	import {
+		ewrWindowLabel,
+		portfolioTotals,
+		statusSummary,
+		thresholdsRule,
+		thresholdsSource,
+		type SortDir
+	} from '$lib/components/portfolio/portfolio';
 	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
 	import {
 		filterProjects,
 		groupProjects,
 		ownerOptions,
+		parseDir,
 		parseOwner,
 		parseSort,
 		SORT_LABELS,
@@ -30,6 +38,7 @@
 
 	let projects = $state<ProjectSummary[]>([]);
 	let teams = $state<Team[]>([]);
+	let teamsFailed = $state(false);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
@@ -91,6 +100,8 @@
 	// Filter state lives in the URL so Back/Forward and shared links keep it.
 	const owner = $derived(parseOwner(page.url.searchParams.get('owner')));
 	const sort = $derived(parseSort(page.url.searchParams.get('sort')));
+	// A second click on the sorted column's heading turns it round (?dir=desc), as the team portfolio did.
+	const dir = $derived(parseDir(page.url.searchParams.get('dir')));
 	let query = $state(page.url.searchParams.get('q') ?? '');
 	// Back/Forward changes ?q= under us: follow it unless it's what we typed.
 	$effect(() => {
@@ -98,11 +109,12 @@
 		if (untrack(() => query.trim()) !== q) query = q;
 	});
 
-	function setParams(next: { owner?: OwnerFilter; sort?: SortKey; q?: string }) {
+	function setParams(next: { owner?: OwnerFilter; sort?: SortKey; dir?: SortDir; q?: string }) {
 		const u = new URL(page.url);
 		const set = (k: string, v: string, dflt: string) => (v === dflt ? u.searchParams.delete(k) : u.searchParams.set(k, v));
 		if (next.owner !== undefined) set('owner', next.owner, 'all');
 		if (next.sort !== undefined) set('sort', next.sort, 'updated');
+		if (next.dir !== undefined) set('dir', next.dir, 'asc');
 		if (next.q !== undefined) set('q', next.q.trim(), '');
 		goto(u.pathname + u.search, { replaceState: next.q !== undefined, keepFocus: true, noScroll: true });
 	}
@@ -141,6 +153,7 @@
 			projects = p.value;
 			// The list still works without teams (filters just show fewer choices).
 			teams = t.status === 'fulfilled' ? t.value : [];
+			teamsFailed = t.status === 'rejected';
 		} catch (e) {
 			loadError = msg(e);
 		} finally {
@@ -160,17 +173,35 @@
 
 	const options = $derived(ownerOptions(projects, teams));
 	const filtered = $derived(filterProjects(projects, { owner, query }));
-	const visible = $derived(sortProjects(filtered, sort, outcomes ?? undefined));
+	const visible = $derived(sortProjects(filtered, sort, outcomes ?? undefined, dir));
 	const flagged = $derived(outcomes ? needsAttention(filtered, outcomes, base) : []);
-	// The header's one line: how the catchments in view are doing.
+	// The header's one line: how the catchments in view are doing, with what the
+	// team portfolio's tiles counted (alerts firing, stale figures) when there are any.
 	const inView = $derived(outcomes ? filtered.map((p) => outcomes!.get(p.id)).filter((o): o is PortfolioProject => !!o) : []);
-	const summaryLine = $derived(statusSummary(statusCounts(inView)));
-	/** A filter link that keeps the sort and the search. */
+	const totals = $derived(portfolioTotals(inView));
+	const summaryLine = $derived(statusSummary(totals.counts));
+	const contextLine = $derived(
+		[
+			`${filtered.length} catchment${filtered.length === 1 ? '' : 's'}`,
+			summaryLine && `${ewrWindowLabel(inView)}: ${summaryLine}`,
+			totals.alertsFiring && `${totals.alertsFiring} alert${totals.alertsFiring === 1 ? '' : 's'} firing`,
+			totals.stale && `${totals.stale} with stale figures`
+		]
+			.filter(Boolean)
+			.join(' · ')
+	);
+	/** A filter link that keeps the sort (and its direction, unless the sort changes) and the search. */
 	const hrefWith = (next: { owner?: OwnerFilter; sort?: SortKey }) => {
 		const o = next.owner ?? owner;
 		const so = next.sort ?? sort;
+		const d = next.sort === undefined || next.sort === sort ? dir : 'asc';
 		const q = query.trim();
-		const qs = new URLSearchParams({ ...(o === 'all' ? {} : { owner: o }), ...(so === 'updated' ? {} : { sort: so }), ...(q ? { q } : {}) }).toString();
+		const qs = new URLSearchParams({
+			...(o === 'all' ? {} : { owner: o }),
+			...(so === 'updated' ? {} : { sort: so }),
+			...(d === 'desc' ? { dir: d } : {}),
+			...(q ? { q } : {})
+		}).toString();
 		return qs ? `?${qs}` : `${base}/`;
 	};
 
@@ -202,6 +233,10 @@
 	const groups = $derived(owner === 'all' ? groupProjects(visible, teams) : []);
 	const ownerLabel = $derived(options.find((o) => o.value === owner)?.label ?? 'All projects');
 	const selectedTeam = $derived(owner.startsWith('team:') ? teams.find((t) => `team:${t.id}` === owner) : undefined);
+	// A team filter for a team that isn't yours (a mistyped link, or an old portfolio link after leaving the
+	// team): say so, as the portfolio did, rather than "Nothing here". Not while a project of yours is in it
+	// (the teams list failing to load leaves the filter working).
+	const unknownTeam = $derived(owner.startsWith('team:') && !teamsFailed && !selectedTeam && filtered.length === 0 && !query.trim());
 	// Teams you may add projects to: a team viewer only reads its projects.
 	const addableTeams = $derived(teams.filter((t) => hasTeamRole(t.role, 'member')));
 	const canAddTo = (teamId: string | undefined) => !!teamId && addableTeams.some((t) => t.id === teamId);
@@ -279,7 +314,7 @@
 	}
 </script>
 
-<svelte:head><title>Projects · Water Management</title></svelte:head>
+<svelte:head><title>{selectedTeam ? `${selectedTeam.name} · ` : ''}Projects · Water Management</title></svelte:head>
 
 <main class="page projects-page" data-outcomes-ready={outcomes !== null || outcomesFailed ? 'true' : 'false'}>
 	<div class="page-head">
@@ -287,7 +322,7 @@
 			<h1>Projects</h1>
 			<p class="muted sub" data-testid="projects-context">
 				{#if !loading && projects.length}
-					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· {ewrWindowLabel(inView)}: {summaryLine}{/if}
+					{contextLine}
 				{:else}
 					Each project models one catchment: its river network, hydrological units, dams and data.
 				{/if}
@@ -344,6 +379,17 @@
 				<a class="manage" href="{base}/teams">Manage teams</a>
 			</nav>
 
+			{#if selectedTeam}
+				<!-- The team filter is the team's portfolio (issue #176): the rule its statuses are judged by, and whose. -->
+				<p class="team-note muted" data-testid="team-thresholds">
+					EWR status is the outlet over the 30 days to the figures' last day (the published run, or the latest when none
+					is): {thresholdsRule(selectedTeam.portfolioThresholds)}.
+					{thresholdsSource(selectedTeam.portfolioThresholds)}
+					{#if hasTeamRole(selectedTeam.role, 'admin')}<a href="{base}/teams/{selectedTeam.id}?settings=1">Change them on the team page</a
+						>.{:else}A team owner can change them on the <a href="{base}/teams/{selectedTeam.id}">team page</a>.{/if}
+				</p>
+			{/if}
+			
 			<NeedsAttention
 				{flagged}
 				loading={outcomes === null && !outcomesFailed}
@@ -373,7 +419,7 @@
 					</div>
 					<div class="sort">
 						<label for="pj-sort">Sort</label>
-						<select id="pj-sort" value={sort} onchange={(e) => setParams({ sort: e.currentTarget.value as SortKey })}>
+						<select id="pj-sort" value={sort} onchange={(e) => setParams({ sort: e.currentTarget.value as SortKey, dir: 'asc' })}>
 							{#each Object.entries(SORT_LABELS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
 						</select>
 					</div>
@@ -384,7 +430,10 @@
 				<div class="groups">
 					{#if visible.length === 0}
 						<div class="none">
-							{#if query.trim()}
+							{#if unknownTeam}
+								<p role="alert">This team doesn't exist or you're not a member.</p>
+								<p><a href="{base}/teams">Your teams</a> · <a href="{base}/">All projects</a></p>
+							{:else if query.trim()}
 								<p>No projects in <strong>{ownerLabel}</strong> match “{query.trim()}”.</p>
 								<button type="button" class="btn" onclick={clearFilters}>Clear search and filter</button>
 							{:else if selectedTeam}
@@ -410,7 +459,7 @@
 									<h2 id="grp-{g.key}">{g.label}</h2>
 									<span class="count">{g.projects.length}<span class="visually-hidden"> projects</span></span>
 									{#if g.teamId}
-										<a class="team-link" href="{base}/teams/{g.teamId}/portfolio">Portfolio</a>
+										<a class="team-link" href={hrefWith({ owner: `team:${g.teamId}` })}>Only this team</a>
 										<a class="team-link" href="{base}/teams/{g.teamId}">Team members & settings</a>
 									{/if}
 								</div>
@@ -434,7 +483,8 @@
 		{outcomes}
 		{outcomesFailed}
 		{sort}
-		onsort={(key) => setParams({ sort: key })}
+		{dir}
+		onsort={(key) => setParams({ sort: key, dir: key === sort && dir === 'asc' ? 'desc' : 'asc' })}
 		oncopy={openCopy}
 		ondelete={remove}
 	/>
@@ -623,6 +673,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.manage {
+		font-size: 0.85rem;
+	}
+	.team-note {
+		margin: -0.25rem 0 0.75rem;
+		max-width: 110ch;
 		font-size: 0.85rem;
 	}
 	.list-card {

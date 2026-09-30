@@ -46,6 +46,8 @@ import {
 	wr2012PenaltyIssues,
 	wr2012ReferenceIssues,
 	rainSourceError,
+	QM_WET_DAY_MM_MAX,
+	QM_WET_DAY_MM_MIN,
 	ZERO_RAIN_MODES,
 	GAP_FILL_DONORS,
 	GAP_FILL_LIMITS,
@@ -67,6 +69,7 @@ import {
 	ON_NEW_DATA,
 	SIGNED_OFF_BY_MAX,
 	declaredRuleError,
+	droughtRestrictionIssues,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -132,6 +135,15 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	if (isObj(s.outcomes) && typeof s.outcomes.siteNodeId === 'string' && ids.has(s.outcomes.siteNodeId)) {
 		s.outcomes = { ...s.outcomes, siteNodeId: ids.get(s.outcomes.siteNodeId) };
 	}
+	// The drought restriction rule's dams, units and EWR site (engine ≥ 1.54.0) follow their nodes too.
+	if (isObj(s.droughtRestriction)) {
+		const r = { ...s.droughtRestriction };
+		const map = (list: unknown) => (Array.isArray(list) ? list.map((id) => (typeof id === 'string' && ids.has(id) ? ids.get(id) : id)) : list);
+		if (r.damNodeIds !== undefined) r.damNodeIds = map(r.damNodeIds);
+		if (r.nodeIds !== undefined) r.nodeIds = map(r.nodeIds);
+		if (isObj(r.ewrTrigger) && typeof r.ewrTrigger.siteNodeId === 'string' && ids.has(r.ewrTrigger.siteNodeId)) r.ewrTrigger = { ...r.ewrTrigger, siteNodeId: ids.get(r.ewrTrigger.siteNodeId) };
+		s.droughtRestriction = r;
+	}
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
 		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };
@@ -145,9 +157,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * over a stored monthly row would keep a stale `mm` and `source`), and an
  * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
  * own source. The declared uncertainty rule (issue #71) is one rule: a patch
- * that changed one threshold must not keep another from an older one.
+ * that changed one threshold must not keep another from an older one. So is
+ * the drought restriction rule (engine ≥ 1.54.0): a level left out is gone.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules', 'evidenceUncertaintyRule']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -497,6 +510,16 @@ const ArealRain = z
 	})
 	.strict();
 
+/**
+ * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b
+ * *Quantile map*): the CHIRPS gap fill's wet-day threshold; null = off.
+ * Replaced whole on a patch. The engine's chirpsQuantileMapError applies the
+ * same rules to a stored value (a table test holds the two together).
+ */
+export const ChirpsQuantileMap = z
+	.object({ wetDayMm: z.number().finite().min(QM_WET_DAY_MM_MIN).max(QM_WET_DAY_MM_MAX) })
+	.strict();
+
 const scoreValue = z.number().finite().nullable();
 const scoreSet = z.record(z.string().max(40), scoreValue).refine((o) => Object.keys(o).length <= 30, 'too many scores');
 const scoreInterval = z.object({ lo: z.number().finite(), hi: z.number().finite() }).strict().nullable();
@@ -783,6 +806,8 @@ export const FitRecord = z
 				pe: PeInput.optional(),
 				// Engine ≥ 1.13.0: the areal rainfall correction (null = none). Optional, as above; absent = ran with none.
 				arealRain: ArealRain.nullable().optional(),
+				// Engine ≥ 1.53.0 (CR-23): the CHIRPS gap map, recorded only when on. Optional, as above; absent = off.
+				chirpsQuantileMap: ChirpsQuantileMap.nullable().optional(),
 				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
 				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
@@ -865,6 +890,8 @@ export const SettingsPatch = z
 		allocationTolerance: z.number().finite().min(0).lt(1),
 		// Monthly lake factors (WP-3.5), water-year months; null = lakeEvapFactor every month.
 		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
+		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
+		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
@@ -892,6 +919,8 @@ export const SettingsPatch = z
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
 		// Which part of the record the CHIRPS factors are fitted on (engine rain.ts, issue #40); replaced whole.
 		chirpsFitPeriod: ChirpsFitPeriod,
+		// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); replaced whole, null = off.
+		chirpsQuantileMap: ChirpsQuantileMap.nullable(),
 		// Periods whose catchment rain comes from another series (engine rainSourcePeriods.ts, issue #40 (b)); replaced whole.
 		rainSource: RainSource,
 		// Flagged zero-rain runs (engine rain.ts, CR-20): any subset may be
@@ -920,6 +949,14 @@ export const SettingsPatch = z
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.
 		ewrChargeSource: z.enum(EWR_CHARGE_SOURCES),
 		lowFlowMeasure: z.enum(LOW_FLOW_MEASURES),
+		// The drought restriction rule (engine ≥ 1.54.0, WP-3.8, network/restriction.ts): replaced whole, null = off.
+		// The engine's own checks (droughtRestrictionIssues), so the form, the save and the run agree.
+		droughtRestriction: z
+			.unknown()
+			.superRefine((v, ctx) => {
+				if (v === null) return;
+				for (const i of droughtRestrictionIssues(v)) ctx.addIssue({ code: 'custom', message: `drought restriction rule: ${i.field ? `${i.field} ` : ''}${i.message}` });
+			}),
 		simulationStart: isoDate.nullable(),
 		simulationEnd: isoDate.nullable(),
 		reportStart: isoDate.nullable(),

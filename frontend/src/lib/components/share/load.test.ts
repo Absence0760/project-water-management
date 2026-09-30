@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import type { ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
-import { loadScenarioShare, loadShare, type ShareApi } from './load';
+import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import { loadPackShare, loadScenarioShare, loadShare, type ShareApi } from './load';
 
 const TOKEN = 'x'.repeat(43);
 const VIEW = { project: { name: 'Sandspruit' } } as ShareView;
@@ -22,6 +22,10 @@ function fakeApi(over: Partial<ShareApi> = {}): ShareApi & { calls: string[] } {
 		scenario: async (t) => {
 			calls.push(`scenario ${t}`);
 			return { project: { id: 'p', name: 'Sandspruit' } } as ShareScenario;
+		},
+		pack: async (t) => {
+			calls.push(`pack ${t}`);
+			return { project: { id: 'p' }, pack: { title: 'Sandspruit' } } as SharePack;
 		},
 		...over
 	};
@@ -68,5 +72,20 @@ describe('loadScenarioShare (WP-3.15)', () => {
 		expect(await loadScenarioShare(dead, TOKEN)).toEqual({ state: 'dead' });
 		const down = fakeApi({ scenario: async () => Promise.reject(new Error('offline')) });
 		expect(await loadScenarioShare(down, TOKEN)).toEqual({ state: 'error', message: 'offline' });
+	});
+});
+
+describe('loadPackShare (128)', () => {
+	it('asks nothing without a token, and reads the pack with one', async () => {
+		const api = fakeApi();
+		expect(await loadPackShare(api, null)).toEqual({ state: 'nolink' });
+		expect(api.calls).toEqual([]);
+		expect(await loadPackShare(api, TOKEN)).toMatchObject({ state: 'ready', view: { pack: { title: 'Sandspruit' } } });
+		expect(api.calls).toEqual([`pack ${TOKEN}`]);
+	});
+
+	it('turns a 404 into the dead-link state and anything else into an error', async () => {
+		expect(await loadPackShare(fakeApi({ pack: async () => Promise.reject(new ApiError(404, 'not found')) }), TOKEN)).toEqual({ state: 'dead' });
+		expect(await loadPackShare(fakeApi({ pack: async () => Promise.reject(new Error('offline')) }), TOKEN)).toEqual({ state: 'error', message: 'offline' });
 	});
 });

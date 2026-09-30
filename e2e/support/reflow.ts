@@ -41,7 +41,22 @@ export async function sidewaysOverflow(page: Page) {
  */
 export async function resizeTo(page: Page, size: { width: number; height: number }) {
 	await page.setViewportSize(size);
-	await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+	await layoutSettled(page);
+}
+
+/**
+ * Wait until the page's text is in its final fonts and every layout that
+ * follows them has run: the web fonts loaded (document.fonts.ready), then two
+ * animation frames, so the browser's rendering update and the ResizeObservers
+ * it fires (a fit re-measuring its links, SectionNav) have run and their state
+ * has reached the DOM. A check that reads boxes once waits for this first:
+ * before Inter lands the text is in a fallback of other widths.
+ */
+export async function layoutSettled(page: Page) {
+	await page.evaluate(async () => {
+		await document.fonts.ready;
+		await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+	});
 }
 
 export async function expectNoSidewaysScroll(page: Page) {

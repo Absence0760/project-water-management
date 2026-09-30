@@ -1,6 +1,6 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
 // engine ≥ 0.7.0; docs/model.md §2.4b).
-import { resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ZeroRainMode, type ZeroRainSettings } from '@water-management/engine';
+import { QM_WET_DAY_MM_DEFAULT, resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ChirpsQuantileMap, type ZeroRainMode, type ZeroRainSettings } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [
 	{
@@ -14,6 +14,13 @@ export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: 
 		help: 'CHIRPS is used as stored. Only for a CHIRPS series that is already corrected to the catchment; raw CHIRPS can read well below catchment rain.'
 	}
 ];
+
+// The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23;
+// docs/model.md §2.4b *Quantile map*): off (null) by default. Turning it on
+// starts from the threshold it was turned off with, else the default.
+export function withChirpsQuantileMap(on: boolean, last: ChirpsQuantileMap | null): ChirpsQuantileMap | null {
+	return on ? { wetDayMm: last?.wetDayMm ?? QM_WET_DAY_MM_DEFAULT } : null;
+}
 
 // Which part of the record the CHIRPS factors are fitted on
 // (settings.chirpsFitPeriod, engine ≥ 0.29.0, issue #40; docs/model.md §2.4b).

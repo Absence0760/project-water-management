@@ -5,7 +5,7 @@
 // Pure, so it is unit-tested apart from the page.
 import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
-import { ageText, comparePortfolio, curtailmentHref, ewrText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+import { ageText, comparePortfolio, type SortDir, curtailmentHref, ewrText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
 
 export type Outcomes = ReadonlyMap<string, PortfolioProject>;
 
@@ -64,25 +64,33 @@ export function needsAttention(projects: readonly ProjectSummary[], outcomes: Ou
 		.sort((a, b) => b.attention.score - a.attention.score || collator.compare(a.project.name, b.project.name));
 }
 
-/** A key the portfolio also sorts by, and how the list names it. */
-export type OutcomeSortKey = 'attention' | 'status' | 'farms' | 'dam' | 'run';
+/** A key the list sorts by from the figures (the old team portfolio's keys among them). */
+export type OutcomeSortKey = 'attention' | 'status' | 'farms' | 'dam' | 'age' | 'run';
 
 /**
  * Sort by an outcome. Rows without figures (still loading, or none for the
- * role) go last, by name. Every order is worst or newest first.
+ * role) go last, by name, and so do unknown values, in either direction.
+ * `asc` (the default) is worst or newest first; `desc` turns it round.
  */
-export function sortByOutcome(projects: readonly ProjectSummary[], key: OutcomeSortKey, outcomes: Outcomes): ProjectSummary[] {
+export function sortByOutcome(projects: readonly ProjectSummary[], key: OutcomeSortKey, outcomes: Outcomes, dir: SortDir = 'asc'): ProjectSummary[] {
 	const byName = (a: ProjectSummary, b: ProjectSummary) => collator.compare(a.name, b.name);
+	const sign = dir === 'asc' ? 1 : -1;
 	const out = [...projects];
 	if (key === 'run') {
-		const t = (p: ProjectSummary) => (p.lastRunAt ? Date.parse(p.lastRunAt) : -Infinity);
-		return out.sort((a, b) => t(b) - t(a) || byName(a, b));
+		const t = (p: ProjectSummary) => (p.lastRunAt ? Date.parse(p.lastRunAt) : null);
+		return out.sort((a, b) => {
+			const ta = t(a);
+			const tb = t(b);
+			if (ta === null || tb === null) return ta === tb ? byName(a, b) : ta === null ? 1 : -1;
+			return sign * (tb - ta) || byName(a, b);
+		});
 	}
 	if (key === 'attention') {
 		const s = (p: ProjectSummary) => attention(outcomes.get(p.id)).score;
-		return out.sort((a, b) => s(b) - s(a) || byName(a, b));
+		const has = (p: ProjectSummary) => (outcomes.has(p.id) ? 0 : 1);
+		return out.sort((a, b) => has(a) - has(b) || sign * (s(b) - s(a)) || byName(a, b));
 	}
-	const cmp = comparePortfolio({ key, dir: 'asc' });
+	const cmp = comparePortfolio({ key, dir });
 	return out.sort((a, b) => {
 		const oa = outcomes.get(a.id);
 		const ob = outcomes.get(b.id);

@@ -30,6 +30,7 @@ import {
 	blankMasked,
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
+	chirpsQuantileMapFallbackWarning,
 	finishZeroRainInfill,
 	keepDryDoubtWarnings,
 	resolveChirpsFitPeriod,
@@ -55,6 +56,7 @@ import {
 	panCoefficientOutOfRange,
 	resolvePe,
 	resolveArealRain,
+	resolveChirpsQuantileMap,
 	AREAL_RAIN_FITTED_WARNING,
 	PE_SOURCE_MAX,
 	PAN_COEFFICIENT_TYPICAL_MAX,
@@ -70,6 +72,8 @@ import {
 	fillSummaryInWindow,
 	flowFillWarning,
 	GAP_FILL_KINDS,
+	gapFillRecordLabel,
+	hasReadingBefore,
 	resolveFlowGapFill,
 	specFills,
 	type FlowFillSummary,
@@ -97,6 +101,12 @@ export interface PrepareOptions {
 	pinned?: PreparedFits;
 	/** Return the fits the run used as PreparedRun.fits. */
 	captureFits?: boolean;
+	/**
+	 * A resumed run (../run.ts runModelFrom): the records whose gap fill read readings before the snapshot's day
+	 * (ModelState.flowFillHistory). One whose input has neither the record's nor its donor's readings before the
+	 * run's start can't be filled as the uninterrupted run filled it, so it is left unfilled, with a warning.
+	 */
+	resumedFill?: { kinds: readonly GapFillKind[] };
 }
 
 /**
@@ -315,7 +325,11 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsCorrection =
 		pinned?.chirpsCorrection && series.rain_chirps_mm
 			? clonePlain(pinned.chirpsCorrection)
-			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), fitOpts);
+			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), {
+					...fitOpts,
+					// The gap map (engine ≥ 1.53.0, CR-23): fitted with the factors, on the same days.
+					...(settings.chirpsQuantileMap ? { quantileMap: settings.chirpsQuantileMap } : {})
+				});
 	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
@@ -332,9 +346,9 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
-	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
+	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start, series.rain_chirps_mm) : null;
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
-	const flowFill = flowFillsFor(settings, series, start, days, warnings);
+	const flowFill = flowFillsFor(settings, series, start, days, warnings, options.resumedFill);
 	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
 	const readFilled = settings.qualityFlags.infilled === 'include';
 	const aligned = (kind: SeriesKind) =>
@@ -349,6 +363,8 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 						: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
+	const qmNote = chirpsQuantileMapFallbackWarning(chirpsCorrection);
+	if (qmNote) warnings.push(qmNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
 	// A double-mass break: does CHIRPS fill days in an era whose ratio differs from the fit's?
 	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), start);
@@ -399,13 +415,28 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 }
 
 /** Each record settings.flowGapFill fills, aligned to the run, with its warning; null when none is. */
-function flowFillsFor(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, warnings: string[]): Partial<Record<GapFillKind, WindowFill>> | null {
+function flowFillsFor(
+	settings: ProjectSettings,
+	series: ModelInput['series'],
+	start: number,
+	days: number,
+	warnings: string[],
+	resumed?: PrepareOptions['resumedFill']
+): Partial<Record<GapFillKind, WindowFill>> | null {
 	let out: Partial<Record<GapFillKind, WindowFill>> | null = null;
 	for (const kind of GAP_FILL_KINDS) {
 		const spec = settings.flowGapFill[kind];
 		const record = series[kind];
 		if (!specFills(spec) || !record) continue;
 		const donor = spec.donor ? (series[spec.donor] ?? null) : null;
+		// The fill reads the whole record (a gap's bounds, the highest reading it clamps to) and the donor's overlap
+		// with it (the ratio). Resumed without the history it read, it would fill other values: leave it out, and say so.
+		if (resumed?.kinds.includes(kind) && !hasReadingBefore(record, start) && !hasReadingBefore(donor, start)) {
+			warnings.push(
+				`Resumed from ${fromEpochDay(start)} without the ${gapFillRecordLabel(kind)} record's history: its gap fill is left out (the fill reads the whole record: the gaps' bounds, the highest reading and the donor ratio). Include the history in the input, or run from the start, to fill it.`
+			);
+			continue;
+		}
 		const f = fillFlowGaps(kind, record, spec, donor);
 		const summary = fillSummaryInWindow(f, start, days);
 		const code = new Uint8Array(days);
@@ -570,6 +601,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
+	// Engine ≥ 1.49.0: where the dam evaporation factors came from (a lake-factor preset's note), provenance only.
+	s.lakeEvapFactorSource = typeof raw?.lakeEvapFactorSource === 'string' ? raw.lakeEvapFactorSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
 	if (s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);
@@ -585,6 +618,12 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
+	}
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
+	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
+	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
+		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → CHIRPS bias correction)');
+		s.chirpsQuantileMap = null;
 	}
 	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {
 		warnings.push(`annual assurance threshold "${String(s.assuranceAnnualThreshold)}" is not a fraction in (0, 1]; using ${DEFAULT_ANNUAL_THRESHOLD}`);

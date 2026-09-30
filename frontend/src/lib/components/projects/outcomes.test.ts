@@ -136,11 +136,30 @@ describe('sorting by an outcome', () => {
 		expect(names(sortByOutcome(projects, 'attention', outcomes))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
 	});
 
+	it('by figures age, oldest first, the old team portfolio’s Data sort; unknown ages last', () => {
+		const aged = new Map([
+			['a', outcome('a', { figuresAgeDays: 3 })],
+			['b', outcome('b', { figuresAgeDays: 40 })],
+			['d', outcome('d', { figuresAgeDays: null, figuresUntil: null })]
+		]);
+		expect(names(sortByOutcome(projects, 'age', aged))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
+		expect(names(sortByOutcome(projects, 'age', aged, 'desc'))).toEqual(['Alpha', 'Bravo', 'Delta', 'Charlie']);
+	});
+
+	it('turned round (desc): best or oldest first, but unknowns and rows without figures stay last', () => {
+		expect(names(sortByOutcome(projects, 'status', outcomes, 'desc'))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
+		expect(names(sortByOutcome(projects, 'dam', outcomes, 'desc'))).toEqual(['Alpha', 'Bravo', 'Delta', 'Charlie']);
+		// Oldest run first; the never-run project still last.
+		expect(names(sortByOutcome(projects, 'run', outcomes, 'desc'))).toEqual(['Alpha', 'Delta', 'Bravo', 'Charlie']);
+		expect(names(sortByOutcome(projects, 'attention', outcomes, 'desc'))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
+	});
+
 	it('goes through sortProjects, and the URL keeps every key', () => {
 		expect(names(sortProjects(projects, 'status', outcomes))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
+		expect(names(sortProjects(projects, 'status', outcomes, 'desc'))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
 		// Without outcomes yet, an outcome sort falls back to names.
 		expect(names(sortProjects(projects, 'status'))).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta']);
-		for (const k of ['updated', 'name', 'attention', 'status', 'farms', 'dam', 'run']) expect(parseSort(k)).toBe(k);
+		for (const k of ['updated', 'name', 'attention', 'status', 'farms', 'dam', 'age', 'run']) expect(parseSort(k)).toBe(k);
 		expect(parseSort('toString')).toBe('updated');
 	});
 });
