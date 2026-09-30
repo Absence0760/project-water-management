@@ -749,7 +749,7 @@ CREATE FUNCTION app_scenario_has_public_comments(p_project uuid, p_scenario uuid
 	$$;
 
 -- ---------------------------------------------------------------------------
--- 4. app_subject_export, from 092_signoff_registration.sql: a note carries
+-- 4. app_subject_export, from 112_evidence_pack.sql: a note carries
 -- its scenario and its earlier texts (same signature, SECURITY DEFINER and
 -- search_path; 054's REVOKE / GRANT stand, CREATE OR REPLACE keeps them).
 -- ---------------------------------------------------------------------------
@@ -860,6 +860,7 @@ CREATE OR REPLACE FUNCTION app_subject_export() RETURNS jsonb
 					'projectId', s.project_id,
 					'projectName', p.name,
 					'runId', s.run_id,
+					'packId', s.pack_id,
 					'fullName', s.full_name,
 					'registrationBody', s.registration_body,
 					'registrationCategory', s.registration_category,
