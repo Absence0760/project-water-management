@@ -2467,10 +2467,12 @@ role and not before it.
         line and restriction notice (WP-2.3), **Changes since the previous
         publication** (WP-2.4), both from `GET …/runs/:runId/publication`,
         and the Overview published card's **Report** link.
-  - [ ] **The licensing evidence pack's sections and uncertainty display**
-        (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
-        built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
-        run against the mock-up in that spec's §11).
+  - [x] **The licensing evidence pack's sections and uncertainty display**
+        (#15: designed in [design/evidence-report.md](./design/evidence-report.md)).
+        Built (issue #71): WP-2.15 Phase C, the report route's evidence mode
+        ([ui.md § Report](./ui.md#report)), and the issued pack on top of it
+        ([§ Evidence report](#evidence-report-issue-71)). What's left of it
+        is listed there.
   - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
         Chromium and Firefox; e2e runs Chromium only, so print the largest
         example from Firefox by hand before calling Phase A accepted. Firefox
@@ -3532,10 +3534,12 @@ Applicant view and the Applications tab. Left:
       widened to it, `note_write_revision` for pack notes), the notes helpers
       taking a pack, `POST /share/pack` on the public allowlist,
       `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
-      `evidence_pack` lands** (WP-3.14, migration 112, being built beside
-      this).
-- [ ] **Packs from the Applications list** (WP-3.14) link from the list and
-      the Application panel. Trigger: that WP.
+      met** (`evidence_pack` landed in migration 112, 2026-09-29); the next
+      piece of WP-3.15, tracked in issue #71.
+- [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
+      (issue #71). The Applications tab and the Application panel list each
+      application's packs and link to the pack view
+      ([ui.md § Evidence pack](./ui.md#evidence-pack)).
 - [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
       as a `viewer` to comment, and the e2e does so; but a viewer reads every
       farm's figures, every team note and every decided application, far
@@ -3949,9 +3953,8 @@ Left, from the design and the persona review (§11), each with its trigger.
       { runId, evidence: true }`, a render scope over the baseline, ER1) is
       only worth it if someone asks for a draft PDF by email. Trigger: before
       a pack goes to a real authority (the board is part of page 1).
-- [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
-      tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
-      Trigger: before the first evidence pack (WP-3.14).
+- [x] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
+      done (issue #70), [§ Liability and sign-off](#liability-and-sign-off-wp-313).
 
 **Evidence packs** (WP-3.14; built 2026-09-29: the table, the manifest and
 its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
