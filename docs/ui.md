@@ -5904,13 +5904,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     one combined run, WP-3.11; *None* when there are none the reader can
     see)), with the paired band and "worse in k of n"; then **Impact by year
     class** (the impact report's `LicenceImpactBoard`, the baseline as the
-    background, the application beside it, from the three daily series
-    `loadImpactSeries` fetches before ready; the year-class method and the
-    Reserve site are the project's `settings.outcomes`, as the impact report
-    reads them; *Not enough years* per class on a short record, and the
-    note when only one run is at full allocation; an [evidence
-    pack](#evidence-pack) leaves it out and says so, since its manifest
-    doesn't freeze those inputs); *Where
+    background, the application beside it, worded by `evidenceBoard` from
+    the report's `licenceImpact`, which the engine builds on the server from
+    the runs' stored series and the project's `settings.outcomes` (the
+    year-class method and the Reserve site, as the impact report reads
+    them), so an [evidence pack](#evidence-pack) prints the same board from
+    its manifest; *Not enough years* per class on a short record, and the
+    note when only one run is at full allocation); *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -6023,12 +6023,10 @@ pack.
   with **Try again**, and `data-report-ready` stays set. Only the latest
   load is applied, so following **Open the newer version** while a load is
   in flight can't show the older pack.
-- **What isn't frozen is left out.** Page 1's licence impact by year class
-  reads the runs' daily series and the project's year-class settings, which
-  a `pack-1` manifest doesn't carry, so a pack prints a line saying it is not
-  part of the pack instead of the board (tracked in
-  [followups.md § Evidence report](./followups.md#evidence-report-issue-71):
-  the manifest will carry it).
+- **What isn't frozen is left out.** A pack drafted before report format
+  `evidence-5` has no licence impact board in its manifest, so it prints a
+  line saying the board is not part of the pack (a new version carries it)
+  instead of building one from live data.
 - **The bar** (screen only): Back (to the application in Scenarios, or the
   baseline run in Runs), the status badge, **Download PDF** (the browser's
   print), **Download manifest** (the canonical RFC 8785 bytes the hash is

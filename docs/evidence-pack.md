@@ -43,13 +43,14 @@ as `jsonb` stores it: a `NaN` becomes `null` and an undefined member is
 dropped. So the hash taken when the draft is made is the hash of what is
 stored, and the server checks that on the draft and again on issue.
 
-The report's page 1 also shows the licence impact by year class, which the
-browser builds from the two runs' daily series and the project's
-year-class settings (`settings.outcomes`). A `pack-1` manifest carries
-neither, so the pack's page leaves the board out and says so, rather than
-show something its hash doesn't cover. Moving the board into the engine's
-report, and so into the manifest, is tracked in
-[followups.md § Evidence report](./followups.md#evidence-report-issue-71).
+The report's page 1 also shows the licence impact by year class. Since
+report format `evidence-5` the engine builds its numbers into the report
+(`licenceImpact`, `packages/engine/src/evidence/impact.ts`) from the two
+runs' stored daily series and the project's year-class settings
+(`settings.outcomes`) as they are when the draft is made, so the manifest
+freezes the board and its hash covers it. A pack drafted before
+`evidence-5` has no board in its manifest: its page says so rather than
+show something its hash doesn't cover, and a new version carries it.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, and room for the PDF and bundle
@@ -196,9 +197,9 @@ CloudFront signed URL on the site's `/packs/*` in production, as a report's.
 The bytes downloaded are the ones hashed: `sha256sum` of the file equals
 `pdfSha256` (the e2e checks exactly that).
 
-**Not in the PDF yet:** page 1's licence impact board, which the browser
-builds from run series and the manifest doesn't carry
-([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+Page 1's licence impact board prints from the manifest like the rest of
+the page (a pack from before `evidence-5` prints the line saying it isn't
+part of the pack).
 
 ## Verification
 
