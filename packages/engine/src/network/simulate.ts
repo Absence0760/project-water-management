@@ -652,7 +652,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const levels = [...new Set(transfers.map((tr) => tr.priority))].sort((a, b) => a - b).map((p) => transfers.flatMap((tr, k) => (tr.priority === p ? [k] : [])));
 	const want = new Float64Array(transfers.length);
 	const sumBy = new Float64Array(nodes.length);
-	const freeBy = new Float64Array(nodes.length);
+	// Each level's rules grouped by source, highest reserve first (ties in rule order), for step 3 below.
+	// A dam's rules share one capacity factor, so the reserves keep this order every day.
+	const levelSources = levels.map((level) =>
+		[...new Set(level.map((k) => transfers[k]!.from))].map((from) => {
+			const rules = level.filter((k) => transfers[k]!.from === from).sort((a, b) => transfers[b]!.reserveM3 - transfers[a]!.reserveM3 || a - b);
+			return { from, rules: Int32Array.from(rules) };
+		})
+	);
+	const left = new Float64Array(transfers.length);
+	const given = new Float64Array(transfers.length);
+	const act = new Int32Array(transfers.length);
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
 	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
@@ -691,16 +701,19 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// 921, "doubling crop areas raised the supply fraction"). Rules run by priority,
 		// lowest first (Q18); within a priority, rules into one destination share
 		// its room and rules from one source share its free water, each pro rata
-		// to its own limit, so the result never depends on the list order.
+		// to its own limit and each only above its own reserve (engine 1.36.0,
+		// audit N6, step 3 below), so the result never depends on the list order.
 		jToday.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
 		const prevQ = (n: number) => startStorage(n, t);
-		for (const level of levels) {
-			// 1. Each active rule's own limit: its daily cap and its source's free water.
+		for (let li = 0; li < levels.length; li++) {
+			const level = levels[li]!;
+			// 1. Each active rule's own limit: its daily cap and its source's free water above its own
+			// reserve. A rule with no rate this month is not active (engine 1.36.0).
 			for (const k of level) {
 				const tr = transfers[k]!;
-				if (!tr.activeMonth[month[t]!]) {
+				if (!tr.activeMonth[month[t]!] || !(tr.maxDailyM3[month[t]!]! > 0)) {
 					want[k] = 0;
 					continue;
 				}
@@ -731,19 +744,54 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
-			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
-			sumBy.fill(0);
-			freeBy.fill(0);
-			for (const k of level) {
-				const tr = transfers[k]!;
-				sumBy[tr.from]! += want[k]!;
-				if (tr.activeMonth[month[t]!]) freeBy[tr.from] = Math.max(freeBy[tr.from]!, prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3 * capacityK(nodes[tr.from]!, t));
-			}
-			for (const k of level) {
-				const tr = transfers[k]!;
-				const total = sumBy[tr.from]!;
-				const free = freeBy[tr.from]!;
-				if (total > free) want[k] = (want[k]! * free) / total;
+			// 3. Rules from one source share its free water, each only above its own reserve (engine
+			// 1.36.0). The water between two successive reserves (highest first; the top band starts
+			// at the storage left to this priority) is shared, pro rata to what each still wants, by
+			// the rules whose reserve is at or below that band, so no rule draws below its own
+			// reserve and a rule that moves nothing never lowers another's. Where every rule keeps the
+			// same reserve this is one band, the free water shared pro rata to the rules' limits, as
+			// before; an order-invariant split, since the groups follow the rules' id order.
+			for (const { from, rules } of levelSources[li]!) {
+				// Only the rules that want water set the bands: one that wants none can't lower anyone's.
+				let n = 0;
+				for (let j = 0; j < rules.length; j++) {
+					const k = rules[j]!;
+					if (want[k]! > 0) {
+						act[n++] = k;
+						left[k] = want[k]!;
+						given[k] = 0;
+					}
+				}
+				if (n === 0) continue;
+				const K = capacityK(nodes[from]!, t);
+				let top = prevQ(from) - drawnToday[from]!;
+				for (let j = 0; j < n; ) {
+					const r = transfers[act[j]!]!.reserveM3;
+					const floor = r * K;
+					const band = Math.max(0, top - floor);
+					// The rules allowed into this band: this reserve and every lower one (j onward).
+					let total = 0;
+					for (let i = j; i < n; i++) total += left[act[i]!]!;
+					if (total > band) {
+						for (let i = j; i < n; i++) {
+							const k = act[i]!;
+							const got = (left[k]! * band) / total;
+							given[k] = given[k]! + got;
+							left[k] = left[k]! - got;
+						}
+					} else {
+						// Every rule allowed here gets all it still wants: no lower band is needed.
+						for (let i = j; i < n; i++) {
+							const k = act[i]!;
+							given[k] = given[k]! + left[k]!;
+						}
+						break;
+					}
+					if (top > floor) top = floor;
+					while (j < n && transfers[act[j]!]!.reserveM3 === r) j++;
+				}
+				// A rule moves what the bands it may reach gave it.
+				for (let j = 0; j < n; j++) want[act[j]!] = given[act[j]!]!;
 			}
 			// 4. Move the water.
 			for (const k of level) {

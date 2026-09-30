@@ -39,6 +39,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
 	},
 	{
+		"id": "N6",
+		"source": "finding",
+		"severity": "Medium (a dam with two or more transfer rules of one priority at different reserves, counting a rule active that month at rate 0); none on the client catchment (one rule) or the examples (bit-identical)",
+		"title": "A transfer rule that moves nothing relaxed its siblings' reserve",
+		"status": "Fixed, engine 1.36.0 (ER-11); how a band is shared decided pending the hydrologist (with N4)"
+	},
+	{
 		"id": "B2",
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
