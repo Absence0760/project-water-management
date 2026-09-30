@@ -11,6 +11,7 @@
 		"build:site": "node support/build-site.ts",
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "node --test support/*.test.ts",
+		"gen:timings": "node support/shard-timings.ts fetch",
 		"install:browsers": "playwright install chromium"
 	},
 	"devDependencies": {
