@@ -210,7 +210,7 @@
 							</tbody>
 						</table>
 					</div>
-					<p class="muted small">Numbered by the pack, the same in every version of it; a number says nothing about a unit’s name or where it is.</p>
+					<p class="muted small">Numbered within this pack only: a number says nothing about a unit’s name or where it is, and “Farm 1” here need not be “Farm 1” in another version.</p>
 				{/if}
 			{/if}
 		</section>

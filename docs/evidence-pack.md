@@ -443,7 +443,7 @@ row; they read a projection the database builds (D2's recommended default,
 | the standing, version, issue date, code, hashes, methodology, errata, signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
 | their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: numbered per kind by a hash of the node's id, so the number says nothing of its name or place and is the same in every version of the pack |
+| every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: ranked per kind in the order of a hash of the node's id, so the number says nothing of its name or place; a rank within this pack, not a label, so "Farm 3" in one version need not be "Farm 3" in the next |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the

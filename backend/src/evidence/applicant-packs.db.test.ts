@@ -318,10 +318,17 @@ describe('reading a pack as its applicant', () => {
 		expect(text).not.toMatch(/@example\.com/);
 	});
 
-	it('numbers the anonymous units the same in every version', async () => {
+	it('numbers the anonymous units by a hash of their ids, not by the report’s order (the same set, reordered, numbers alike)', async () => {
+		// v1 and v2 hold the same units; the ranks come from md5(node id), so they agree. And the report's order doesn't matter (below).
 		const a = (await read(applicantA, appA, v1)).body.units.others;
 		const b = (await read(applicantA, appA, v2)).body.units.others;
 		expect(a).toEqual(b);
+		const users = (n: string[]) => n.map((id, i) => ({ nodeId: id, name: `U${i}`, kind: 'farm', onlyIn: null, change: { run: i } }));
+		const ids = [berg.id, doorn.id, klip.id];
+		const [fwd] = await asOwner('SELECT app_applicant_pack_units($1::jsonb, $2) AS u', [JSON.stringify({ users: users(ids) }), []]);
+		const [rev] = await asOwner('SELECT app_applicant_pack_units($1::jsonb, $2) AS u', [JSON.stringify({ users: users([...ids].reverse()).map((u, i) => ({ ...u, change: { run: 2 - i } })) }), []]);
+		expect(fwd.u.others).toEqual(rev.u.others);
+		expect(JSON.stringify(fwd.u)).not.toMatch(/U\d/);
 	});
 
 	it('shows the consultant the same, without the share right', async () => {

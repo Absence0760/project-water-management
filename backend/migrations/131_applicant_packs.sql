@@ -43,9 +43,10 @@
 --     nodes the owner still links, app_application_own_nodes, 071; and the
 --     nodes its proposals add) by name with their supply and reliability,
 --     baseline beside application; every other farm or water user present in
---     both runs only as "Farm n" / "Water user n" (numbered by a hash of its
---     id, so the number says nothing about its name or place and stays the
---     same across versions) with its change in share of demand supplied, in
+--     both runs only as "Farm n" / "Water user n" (ranked per kind in the
+--     order of a hash of its id, so the number says nothing about its name
+--     or place; a rank within this pack, not a label: it can shift between
+--     versions when the set of units changes) with its change in share of demand supplied, in
 --     whole percentage points. NULL when the report changed a baseline
 --     assumption (app_run_all_proposals' rule, 118: such a change could read
 --     another unit's values out through every figure that moves with it).

@@ -2183,8 +2183,8 @@ They read no pack row, so the routes above answer them `403`.
   kind: 'farm' | 'user', n, changePts }[] }`, or `null` when the report
   changed a baseline assumption. `own`: the application's owned nodes its
   owner still links and the nodes it adds; `others`: every other unit in
-  both runs as its kind and a number (per kind, by a hash of its id; the
-  same in every version), `changePts` its change in share of demand
+  both runs as its kind and a number (per kind, ranked by a hash of its id;
+  a rank within the pack, which can shift between versions), `changePts` its change in share of demand
   supplied in whole percentage points. Never another unit's name or id.
 - No PDF, manifest or bundle: each carries the whole report.
 
