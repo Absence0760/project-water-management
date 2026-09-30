@@ -67,6 +67,9 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'audit_event.actor_user_id': { section: 'auditEvents' },
 	'data_feed.acting_user_id': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
 	'data_feed.created_by': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
+	// An evidence pack (112_evidence_pack): who drafted and issued it is in the audit events (pack.drafted, pack.issued), exported with them.
+	'evidence_pack.created_by': { excluded: 'the project’s evidence pack; its maker only, and the drafting is an exported audit event' },
+	'evidence_pack.issued_by': { excluded: 'the project’s evidence pack; its issuer only, and the issue is an exported audit event' },
 	'email_token.user_id': { excluded: 'secrets (verify / reset token hashes), a week at most' },
 	'farm_link.added_by': { excluded: 'links the person made for others; farmer.linked is in auditEvents' },
 	'invite.invited_by': { excluded: 'invites the person sent (another person’s address); invite.sent is in auditEvents' },

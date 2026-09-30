@@ -3602,11 +3602,12 @@ Left, each with its trigger:
       sign-off statement (`signoff-4`) cite the methodology by version and
       hash and list the errata of the run's engine version. The pack records
       the same (WP-3.14).
-- [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
-      'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
-      `pack_id` column with a check that exactly one target is set. A
-      scenario is signed through its run (`model_run.scenario_id`), and the
-      works statement words itself for a scenario.
+- [x] **Pack sign-off** (issue #71, 2026-09-29, 112_evidence_pack):
+      `signoff.pack_id` beside a now-nullable `run_id`, exactly one set; the
+      pack statement `pack-signoff-1` (the run statement's confirmations plus
+      one binding the pack's manifest hash), on a draft pack only
+      ([evidence-pack.md](./evidence-pack.md)). A scenario is still signed
+      through its run, and the works statement words itself for a scenario.
 - [x] **Validation statement panel on the run and the scenario** (WP-3.13
       UI; done 2026-09-27, issue #17): the report's `ValidationStatement`,
       folded shut, in the run's Record group (`#res-validation`) and under
@@ -3649,7 +3650,7 @@ Left, from the design and the persona review (§11), each with its trigger.
       abstraction only"), each a page-1 column with its paired change.
       Trigger: before the pilot, or the first applicant asks.
 - [x] **EWR rows below each storage or abstraction op** (environmentalist).
-      Built (engine 1.32.0, report `evidence-3`): for each proposal op that
+      Built (engine 1.32.0, report `evidence-4`): for each proposal op that
       builds or raises storage or abstraction at a node, a page-1 row at the
       first EWR site downstream that isn't the outlet (days its daily EWR is
       not met, the paired band, the Reserve's months met when it has a
@@ -3693,28 +3694,43 @@ Left, from the design and the persona review (§11), each with its trigger.
       fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
       choices, then `pnpm gen:liability`. Trigger: the next change to the
       engine-audit tables, or before the pilot, whichever is first.
-- [ ] **The driest month's FDC beside the largest-change month.** § 1 plots
-      one month (`fdcMonth`: the largest drop in months met, else the
-      driest). Durable fix: plot both when they differ. Trigger: the next
-      change to § 1.
-- [ ] **A cumulative row over other applications on the baseline**
-      (licensing authority, s27 "other water users"). A.6 lists the other
-      application runs but nothing sums them. Durable fix: a scenario that
-      applies every submitted application's ops, run on the baseline, as a
-      page-1 "all applications" row. Trigger: a second application on one
-      baseline.
-- [ ] **Cancelled ensembles' interim results.** The ledger lists a start
-      that never completed, but not what it had shown. Durable fix: store a
-      started ensemble's partial summary when it is abandoned and print it in
-      the ledger. Trigger: before issue (WP-3.14).
+- [x] **The driest month's FDC beside the largest-change month.** Built
+      (evidence-3): `EvidenceSite.fdcDriestMonth`, the calendar month with
+      the lowest mean natural flow over its complete months in the baseline
+      (a property of the river, so neither the requirement nor the
+      application moves it); § 1 plots its FDC beside `fdcMonth`'s, one plot
+      captioned as both when they coincide (`grid.ts` `fdcMonths`).
+- [x] **A cumulative row over other applications on the baseline**
+      (licensing authority, s27 "other water users"). Built (evidence-3) as
+      a sum, not a combined run: every other application submitted or
+      decided with approval, with its newest run of its current ops on the
+      baseline (read under the reader's RLS, so a viewer's report lists no
+      submitted application and nobody's a draft), each one's own change in
+      days below the pragmatic EWR and Reserve months met at the outlet, and
+      their sum over those on the baseline's engine, period and runoff model:
+      § 4's table and page 1's *Other applications on this baseline, summed*,
+      whose basis says it is a sum of separate runs. The durable fix, a
+      combined run of every application's ops, is WP-3.11
+      (`combineScenarios`, with its conflict rules); the row then reads that
+      run instead. Trigger: WP-3.11.
+- [x] **Cancelled ensembles' interim results.** Finding: there are none to
+      print. The browser runs an ensemble and stores it only when every set
+      has run; a `started` row of `run_uncertainty` holds no summary or result
+      (014's check requires both null until complete), so nothing interim
+      exists. The ledger now says so for each start not completed (*started,
+      not completed: no result stored*, with the note that the app keeps who,
+      when and its rule), rather than implying a result was hidden. Storing
+      partial results would mean the browser writing them mid-run, which the
+      report doesn't need: the cited ensemble is the first *complete* one on
+      the declared rule (G4), so an abandoned start can't be cited either way.
 - [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
       description and run notes as written. Durable fix: fixed prompts
       (purpose and need, mitigation, monitoring), each answered or *Not
       given*. Trigger: before the pilot.
-- [ ] **A diagonal draft stamp.** "Draft · not issued" is in each section
-      head and the footer; a cropped page can lose both. Durable fix: a
-      diagonal print watermark on every page until issued. Trigger: before
-      the pilot.
+- [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
+      issued* watermark (`position: fixed` in `@media print`, repeated on
+      every printed page by Chromium), `aria-hidden` beside the section heads'
+      text stamps, until a pack issues the report.
 - [x] **Paired bands on each unit's supply (ER4 rest).** Built (engine
       1.32.0): each unit's mean demand and supply in `MemberMetrics`; the
       paired summary bands each unit's share supplied and, with the
@@ -3748,18 +3764,67 @@ Left, from the design and the persona review (§11), each with its trigger.
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue
       #90).
-- [ ] **Licence impact by year class on page 1 (issue #53 R7).** The impact
-      report opens with `LicenceImpactBoard`; the evidence report doesn't
-      show it. Durable fix: build the board's view model in the engine
-      builder from the two runs' series and print it on page 1. Trigger:
-      before the pilot.
+- [x] **Licence impact by year class on page 1 (issue #53 R7).** Built: page
+      1 prints the impact report's `LicenceImpactBoard` after the change
+      table, the application named as such, from the three daily series the
+      page fetches before ready (`loadImpactSeries`), with the full-allocation
+      note as the impact report has it. Left: the board's view model is
+      computed in the browser, not in the engine's document, so an issued
+      pack can't freeze it yet; it moves into `evidenceReport` with the pack's
+      manifest. Tracked under *The server-rendered evidence PDF* below
+      (WP-3.14).
 - [ ] **The server-rendered evidence PDF.** Browser print only: no running
       footer, no "page x of y". Durable fix: `POST …/reports { runId,
       evidence: true }` and a render scope that reads the baseline (ER1),
-      with the pack. Trigger: WP-3.14.
+      with the pack; the pack's manifest also carries page 1's licence
+      impact board, built in the engine from the two runs' series (today the
+      browser builds it). Trigger: WP-3.14.
 - [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
       Trigger: before the first evidence pack (WP-3.14).
+
+**Evidence packs** (WP-3.14; built 2026-09-29: the table, the manifest and
+its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
+verify lookup, [evidence-pack.md](./evidence-pack.md)). Left:
+
+- [ ] **The pack view and the verify page** (`routes/projects/[id]/packs/[packId]`,
+      rendering the evidence components from the frozen manifest; `/verify/[code]`
+      with the in-browser PDF and manifest check; the Draft, Sign, Issue,
+      Supersede and Withdraw actions; axe on both). The pack sign-off dialog
+      must say the signer's name and registration are printed on the pack
+      and shown by the public verify lookup. Trigger: next (the second
+      PR of issue #71).
+- [ ] **The server-rendered pack PDF and its hash** (`pdf_key`,
+      `pdf_sha256`, `pdf_pages` exist, unset): render the pack route with
+      WP-2.15 Phase B's renderer (a render scope over the pack's two runs,
+      ER1), store it under a `packs/` prefix with no expiry, versioning and
+      object lock (D12, deployment.md), and record its hash before issue so
+      verify returns it, through a `SECURITY DEFINER` setter the renderer
+      calls (`water_app` has no grant on the PDF and bundle columns). Trigger: before a pack goes to a real authority.
+- [ ] **The reproduction bundle and `pnpm reproduce:pack`** (`bundle_key`,
+      `bundle_sha256` exist, unset): `manifest.json`, the project's
+      `export.json`, the scenario, the series CSVs and a README; a script
+      that recomputes the results digest at the engine tag. With it, issue
+      should check that both runs reproduce (today it checks their server
+      stamps only; a full re-run is too slow for a request, so it belongs
+      in a `pack_build` job). Trigger: with the PDF.
+- [ ] **Errata found after issue on verify.** Verify lists the errata the
+      manifest recorded when the pack was drafted; one found later, for the
+      same engine version, isn't shown. Durable fix: the verify route adds
+      `errataFor` over the current list for the runs' engine versions (and
+      the fit's), marked "found since issue". Trigger: the first erratum
+      added while an issued pack exists, or the verify page, whichever is
+      first.
+- [ ] **Applicants' access to their own application's packs** (WP-3.15).
+      Contributors read no pack today (operator decision, 2026-09-29:
+      issuing stays with editors). Durable fix: a read policy for the
+      scenario's owner and members on packs of their application once
+      issued, with the D2 anonymising applied to the manifest they see.
+      Trigger: WP-3.15, or the first applicant who needs the pack itself
+      rather than its verify link.
+- [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
+      project's editors and the scenario's owner. Trigger: with the pack
+      view.
 
 ## Alerts (WP-2.13)
 

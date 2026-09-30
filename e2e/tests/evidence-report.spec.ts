@@ -28,6 +28,7 @@ const TABLE = {
 	scale: 1
 };
 const ready = (page: Page) => expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 async function seed(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
@@ -38,9 +39,9 @@ async function seed(page: Page, name: string) {
 	return { project, baseline, upper };
 }
 
-async function scenarioRun(page: Page, projectId: string, baseRunId: string, upper: string, name: string, own: boolean) {
+async function scenarioRun(page: Page, projectId: string, baseRunId: string, upper: string, name: string, own: boolean, damM3 = 300_000) {
 	const res = await page.request.post(`${API_URL}/projects/${projectId}/scenarios`, {
-		data: { name, baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 300_000 }], ownedNodeIds: own ? [upper] : [] }
+		data: { name, baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: damM3 }], ownedNodeIds: own ? [upper] : [] }
 	});
 	expect(res.status()).toBe(201);
 	const { scenario } = (await res.json()) as { scenario: { id: string } };
@@ -62,6 +63,14 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await panel.getByRole('checkbox', { name: 'Check the low-flow bias' }).uncheck();
 	await panel.getByRole('button', { name: 'Run ensemble' }).click();
 	await expect(panel.getByTestId('kept')).toHaveText(/^\d+ of 31$/);
+
+	// A start never completed: the ledger lists it, with nothing stored but who, when and its rule.
+	const started = await page.request.post(`${API_URL}/projects/${project.id}/runs/${baseline}/uncertainty`, { data: { request: RULE } });
+	expect(started.status()).toBe(201);
+
+	// Another application on the same baseline, submitted: § 4 and page 1 sum it.
+	const second = await scenarioRun(page, project.id, baseline, upper, 'Second dam 150 000 m³', true, 150_000);
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${second.scenarioId}/submit`, { data: {} })).status()).toBe(200);
 
 	// The application, and its paired band on Compare.
 	const { scenarioId, runId: app } = await scenarioRun(page, project.id, baseline, upper, 'Upper dam 300 000 m³', true);
@@ -121,17 +130,61 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await expect(page.getByTestId('evidence-users').getByRole('row', { name: /^Lower farm/ })).toContainText(/\d+ of \d+ sets/);
 	await expect(page.getByTestId('evidence-served').first().getByRole('rowheader', { name: /^Upper farm \(the applicant’s\)/ })).toBeVisible();
 
+	// The other application, summed on page 1 and listed in § 4 (a sum of runs, not one combined run).
+	const others = table.getByRole('row', { name: /^Other applications on this baseline, summed/ });
+	await expect(others).toContainText('1 application: “Second dam 150 000 m³”.');
+	await expect(others).toContainText('not one combined run (WP-3.11)');
+	await expect(others).toContainText('no band: a sum of other runs’ own differences');
+	const cumulative = page.getByTestId('evidence-cumulative');
+	await expect(cumulative.getByRole('rowheader', { name: /^“Second dam 150 000 m³”/ })).toBeVisible();
+	await expect(cumulative.getByRole('row', { name: /^“Second dam/ })).toContainText('submitted');
+	await expect(cumulative.getByRole('rowheader', { name: 'With this application' })).toBeVisible();
+
+	// Licence impact by year class on page 1 (issue #53 R7), the application beside the baseline.
+	const board = page.getByTestId('evidence-impact-board');
+	await expect(board.getByRole('heading', { name: 'Impact by year class' })).toBeVisible();
+	await expect(board.getByText(/beside the application over the same years/)).toBeVisible();
+	// 120 days: no complete water year, so every class says so (impact-board.spec.ts has the classed case).
+	for (const cls of ['dry', 'normal', 'wet']) await expect(board.getByTestId(`board-verdict-${cls}`)).toHaveAttribute('data-verdict', 'notEnoughYears');
+
+	// § 1: the driest month's FDC beside the largest-change month's (one plot when they are the same month).
+	const doc = (await (await page.request.get(`${API_URL}/projects/${project.id}/runs/${app}/evidence-report`)).json()) as { report: { river: { fdcMonth: number | null; fdcDriestMonth: number | null }[] } };
+	const site = doc.report.river[0]!;
+	expect(site.fdcDriestMonth).not.toBeNull();
+	const driest = page.getByTestId(site.fdcDriestMonth === site.fdcMonth ? 'evidence-fdc-both' : 'evidence-fdc-driest');
+	await expect(driest.getByRole('img', { name: new RegExp(`^${MONTHS[site.fdcDriestMonth! - 1]} flow-duration curve at .+ against the EWR curve$`) })).toBeVisible();
+	await expect(driest.locator('figcaption')).toContainText('the river’s driest month (the lowest mean natural flow in the baseline)');
+
 	// Board 1: nothing stops the report being issued.
 	await expect(page.getByTestId('evidence-checks')).toContainText('Every check that stops a pack being issued passes.');
 	// The ledger, the ops with their class, the series hashes, the applicant's words only in Appendix C.
-	await expect(page.getByTestId('evidence-ledger').getByRole('row')).toHaveCount(2);
+	const ledger = page.getByTestId('evidence-ledger');
+	await expect(ledger.getByRole('row')).toHaveCount(3);
+	await expect(ledger.getByRole('row', { name: /started, not completed: no result stored/ })).toHaveCount(1);
+	await expect(page.getByTestId('evidence-ledger-started')).toContainText('what a cancelled start had shown can’t be printed');
 	await expect(page.getByTestId('evidence-ops')).toContainText('Proposal Upper farm: Dam capacity');
 	await expect(page.getByTestId('evidence-series').getByRole('cell', { name: /^[0-9a-f]{64}$/ }).first()).toBeVisible();
 	await expect(page.getByTestId('evidence-application-runs')).toContainText('(this report)');
 
 	await expectNoViolations(page);
-	// It prints (WP-2.15's test pattern).
+	// On a phone the report stacks: nothing widens the page past the window (a sentence in a value cell once did).
+	const desktop = page.viewportSize()!;
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+	await expectNoViolations(page);
+	await page.setViewportSize(desktop);
+	// G12: the diagonal stamp is print only, hidden from assistive tech (the text stamps above stay).
+	const watermark = page.getByTestId('evidence-watermark');
+	await expect(watermark).toBeHidden();
+	await expect(watermark).toHaveAttribute('aria-hidden', 'true');
+	// It prints (WP-2.15's test pattern), the stamp on the page.
 	await page.emulateMedia({ media: 'print' });
+	await expect(watermark).toBeVisible();
+	await expect(watermark).toHaveText('Draft · not issued');
+	await expect(watermark).toHaveCSS('position', 'fixed');
+	// Table heads print in place, not stuck mid-page (app.css makes them sticky on screen).
+	await expect(table.locator('thead')).toHaveCSS('position', 'static');
+	await expect(board.locator('thead')).toHaveCSS('position', 'static');
 	const pdf = await page.pdf({ format: 'A4' });
 	expect(pdf.byteLength).toBeGreaterThan(10_000);
 });

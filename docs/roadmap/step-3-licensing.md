@@ -1618,6 +1618,13 @@ must build WP-2.15 Phase B.
 > `GET …/runs/:runId/evidence-report`. What this WP still adds: issue and
 > status, the frozen manifest and its hash, the server-rendered PDF, the
 > pack route and `/verify`.
+>
+> **Packs built (issue #71, 2026-09-29):** `evidence_pack` (112), the
+> manifest and its hash (`packages/engine/src/evidence/pack.ts`), the pack
+> sign-off, draft, issue, supersede, withdraw and the public
+> `GET /verify/:code` ([evidence-pack.md](../evidence-pack.md)). Still to
+> come: the pack route and verify page, the server-rendered PDF, the
+> reproduction bundle ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 - **Goal.** A versioned, reproducible, **immutable once issued** report to
   attach to a WULA, with a verification hash and link.

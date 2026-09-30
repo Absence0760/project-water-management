@@ -70,6 +70,8 @@ export type BoardView =
 			belowLabel: string;
 			/** The baseline run's name, in quotes. */
 			background: string;
+			/** The compared run as the board names it: "this run", "the application". */
+			application: string;
 			/** Complete water years classed. */
 			nYears: number;
 			method: LicenceImpact['method'];
@@ -83,37 +85,46 @@ export type BoardView =
 const m3 = (v: number) => `${fmtNum(v)} m³`;
 const signed = (n: number) => (n > 0 ? `+${fmtNum(n)}` : n < 0 ? `−${fmtNum(-n)}` : '0');
 
-function waterfallOf(c: LicenceImpactClass, background: string, authorised: boolean): WaterfallStep[] | null {
+function waterfallOf(c: LicenceImpactClass, background: string, authorised: boolean, application: string): WaterfallStep[] | null {
 	const w = c.waterfall;
 	if (!w) return null;
 	const step = (id: WaterfallStep['id'], label: string, v: number): WaterfallStep => ({ id, label, m3: v, text: id === 'natural' || id === 'left' || Math.round(v) === 0 ? m3(Math.abs(v) < 0.5 ? 0 : v) : v < 0 ? `+${m3(-v)}` : `−${m3(v)}` });
 	return [
 		step('natural', 'Natural flow', w.naturalM3),
 		step('existing', `${authorised ? 'Existing authorised use' : 'Existing use'} in ${background}`, w.existingUseM3),
-		step('proposed', 'Proposed use (this run − baseline)', w.proposedM3),
+		step('proposed', `Proposed use (${application} − baseline)`, w.proposedM3),
 		step('other', 'Other: dams, storage, groundwater, land cover', w.otherM3),
 		step('left', 'Flow left at the outlet', w.leftM3)
 	];
 }
 
+/** What the board reads of each run: the impact report passes its compare response, the evidence report its two runs. */
+export interface BoardRun {
+	run: Pick<RunCompareResponse['a']['run'], 'label' | 'startDate' | 'summary'>;
+}
+
 export interface BoardInput {
-	data: Pick<RunCompareResponse, 'a' | 'b'>;
+	data: { a: BoardRun; b: BoardRun };
 	series: ImpactSeries;
 	method: YearClassMethod;
 	/** The Reserve site (outcomes/matrix.ts chooseSite); the outlet by default. */
 	site?: MatrixSite;
+	/** What the compared run is called in the board's words: "this run" in the impact report, "the application" in the evidence report. */
+	applicationName?: string;
 }
 
 /** The board for an impact report: its baseline as the background, this run as the application. */
 export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 	const { a, b } = input.data;
 	const background = `“${a.run.label || 'Untitled run'}”`;
+	const application = input.applicationName ?? 'this run';
+	const capitalised = application.charAt(0).toUpperCase() + application.slice(1);
 	if (!input.series.background.natural) return { status: 'unavailable', reason: 'The baseline has no natural flow series, so its water years cannot be classed.' };
 	const notes: string[] = [];
 	// A gauge needs its rule table in both runs; otherwise the outlet, said so (never the outlet's numbers in the gauge's name).
 	let site = input.site ?? OUTLET_SITE;
 	if (site.id !== null && ![a, b].every((s) => s.run.summary.ewrAssurance?.some((x) => x.nodeId === site.id))) {
-		notes.push(`The baseline or this run has no Reserve results at ${site.where}, so the board reads the outlet.`);
+		notes.push(`The baseline or ${application} has no Reserve results at ${site.where}, so the board reads the outlet.`);
 		site = OUTLET_SITE;
 	}
 	let impact: LicenceImpact;
@@ -139,18 +150,18 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 	const mode = (r: typeof a) => r.run.summary.allocations?.mode ?? 'none';
 	const authorised = mode(a) === 'fullAllocation';
 	if (authorised && mode(b) !== 'fullAllocation')
-		notes.push('The baseline runs every holder at their full registered volume, but this run doesn’t, so the proposed step also counts the other holders going back to their modelled use. Run the application with the allocation mode at full allocation too.');
+		notes.push(`The baseline runs every holder at their full registered volume, but ${application} doesn’t, so the proposed step also counts the other holders going back to their modelled use. Run the application with the allocation mode at full allocation too.`);
 	else if (!authorised && mode(b) === 'fullAllocation')
-		notes.push('This run holds every holder at their full registered volume, but the baseline doesn’t, so the proposed step also counts the other holders going up to their registered volumes. Compare it with a full-allocation baseline.');
+		notes.push(`${capitalised} holds every holder at their full registered volume, but the baseline doesn’t, so the proposed step also counts the other holders going up to their registered volumes. Compare it with a full-allocation baseline.`);
 	const unit = impact.metric === 'reserveMonthsMet' ? 'months' : 'days';
-	const names = { background: `the baseline ${background}`, application: 'this run' };
+	const names = { background: `the baseline ${background}`, application };
 	const columns: BoardColumn[] = impact.classes.map((c) => ({
 		id: c.classId,
 		label: c.label,
 		bounds: boundsText(c),
 		nYears: c.nYears,
 		enoughYears: c.enoughYears,
-		waterfall: waterfallOf(c, `the baseline ${background}`, authorised),
+		waterfall: waterfallOf(c, `the baseline ${background}`, authorised, application),
 		below: c.below ? { background: c.below.background, application: c.below.application, change: signed(c.below.change), units: c.below.units } : null,
 		verdict: c.verdict,
 		verdictLabel: VERDICT_LABEL[impact.metric][c.verdict],
@@ -164,6 +175,7 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 		metric: impact.metric,
 		belowLabel: impact.metric === 'reserveMonthsMet' ? `Months below the Reserve (the rule table at ${site.where})` : 'Days below the pragmatic EWR at the outlet',
 		background,
+		application,
 		nYears: classed,
 		method: impact.method,
 		columns,
