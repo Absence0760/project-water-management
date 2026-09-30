@@ -9,7 +9,7 @@ An applicant attaches it to a water-use licence application, and anyone
 holding it can check it against the app with its short code.
 
 This page covers what a pack holds, what its hash covers, the short code, the
-lifecycle, verification and the reproduction bundle. The routes are in
+lifecycle, the PDF, verification and the reproduction bundle. The routes are in
 [api.md § Evidence packs](./api.md#evidence-packs), the table in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
@@ -18,12 +18,12 @@ and the trust boundaries in [security.md § Evidence packs](./security.md#eviden
 sign-off, drafting, issue, supersede, withdraw, delete of drafts, the public
 verify lookup, their screens (the pack's own page, its actions and
 sign-off, the pack lists on the evidence report and the Applications tab and
-panel, and the public verify page with its in-browser file check:
-[ui.md § Evidence pack](./ui.md#evidence-pack),
-[§ Verify page](./ui.md#verify-page)), and the reproduction bundle with
-`pnpm reproduce:pack` ([§ Reproduction](#reproduction)). **Not built yet:**
-the server-rendered PDF (tracked in
-[followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+panel, and the public verify page with its in-browser file check
+([ui.md § Evidence pack](./ui.md#evidence-pack),
+[§ Verify page](./ui.md#verify-page)); the server-rendered PDF
+([§ The PDF](#the-pdf)); and the reproduction bundle with
+`pnpm reproduce:pack` ([§ Reproduction](#reproduction)). What is left is
+tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
 
@@ -154,6 +154,54 @@ Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
 naming the pack.
 
+## The PDF
+
+Issuing a pack prints it (119_pack_render; the machinery is a report's,
+[architecture.md § An evidence pack's PDF](./architecture.md#an-evidence-packs-pdf)):
+
+1. **Queued with the issue.** `POST …/issue` queues a `pack_render` job in
+   the issue's transaction, as the editor who issued, one pending per pack.
+   The issue answers `pdf: { status: 'rendering' }`.
+2. **Printed from the pack's own page.** The job issues a render token for
+   that pack (only for a pack that was issued, which the issuer reads) and
+   headless Chromium opens `/projects/:id/packs/:packId`, which draws the
+   evidence report from the **frozen manifest** with the pack's stamp
+   (*Issued · evidence pack version N · short code*), its verify line and its
+   sign-offs. The render session reads that pack and its sign-offs and
+   nothing else. The PDF shows the pack as it was when printed: a later
+   supersede or withdrawal is verify's to say, not the PDF's.
+3. **Stored for good, under its own hash.** The PDF's SHA-256 is its key,
+   `packs/<project>/<pack>/<sha256>.pdf`, in the packs bucket, uploaded with
+   that checksum so the store refuses other bytes. In production the bucket
+   is versioned under an Object Lock default retention (GOVERNANCE, 10 years
+   by default, no lifecycle; [deployment.md § Evidence packs](./deployment.md#evidence-packs)),
+   so the object can't be deleted or overwritten by the app; locally it is
+   MinIO's `water-packs`.
+4. **Checked, then recorded once.** In production the renderer's answer names
+   the hash; the worker first checks that the packs bucket holds an object
+   under that hash's key whose stored checksum is that hash, and refuses the
+   answer otherwise. `app_record_pack_pdf` sets `pdf_key`, `pdf_sha256` and
+   `pdf_pages` from the render job only; the first PDF recorded stands (a
+   redelivered answer or a second render changes nothing, and a second print
+   is refused: `POST …/pdf` answers `409` once one is recorded). From then on
+   `GET /verify/:code` returns `pdfSha256`.
+
+**Its state** is on `GET …/packs/:packId` as `pdf`: `rendering` (queued,
+running, retrying, or waiting for the production renderer's answer), `ready`,
+`failed` (the render gave up, with why) or `none` (never issued). A timeout,
+a WAF block or a crash is retried after 2, then 4 minutes, up to 3 renders;
+after that an editor asks again with `POST …/packs/:packId/pdf`.
+
+**The download** (`GET …/packs/:packId/pdf`, viewers of the pack) is a
+`302` to a 60-second signed URL: a pre-signed MinIO GET locally, a
+CloudFront signed URL on the site's `/packs/*` in production, as a report's.
+The bytes downloaded are the ones hashed: `sha256sum` of the file equals
+`pdfSha256` (the e2e checks exactly that).
+
+**Not in the PDF yet:** page 1's licence impact board, which the browser
+builds from run series and the manifest doesn't carry
+([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+
 ## Verification
 
 `GET /verify/:code` is public: no session. For the short code or full hash of
@@ -163,8 +211,9 @@ the pack prints:
 - `status`, `version`, `issuedAt`;
 - `catchment` (the project's name in the manifest);
 - `engineVersion`, `reportVersion`;
-- `manifestSha256`, `shortCode`, `pdfSha256` (null until the PDF is built),
-  `bundleSha256` (the reproduction bundle's);
+- `manifestSha256`, `shortCode`, `pdfSha256` (null until the PDF is
+  recorded, [§ The PDF](#the-pdf)), `bundleSha256` (the reproduction
+  bundle's, [§ Reproduction](#reproduction));
 - `successorSha256` (the hash of the version that superseded it, or null);
 - `withdrawnReason` (for a withdrawn pack, else null);
 - `methodology` `{ version, sha256 }`;
@@ -182,12 +231,12 @@ builds exactly that object; the route adds only `shortCode`.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
-content, hash its manifest, its bundle (or, once built, its PDF) and compare
+content, hash its manifest, its PDF (`sha256sum pack.pdf`) or its bundle and compare
 with the hashes verify returns. The verify page does that in the browser
 ([ui.md § Verify page](./ui.md#verify-page)): the file is hashed with
 WebCrypto and never uploaded, and a JSON file is compared in its canonical
 form too, so a manifest saved pretty-printed still matches. The pack's page
-downloads the manifest as those canonical bytes. Whether the results follow
+downloads the manifest as those canonical bytes, and its PDF once recorded. Whether the results follow
 from the inputs is the bundle's job ([§ Reproduction](#reproduction)).
 
 ## Reproduction
@@ -292,16 +341,20 @@ both a baseline and an application pack; the setter's refusals).
   scenario, the version and its predecessor frozen from the insert, for every
   role, the schema owner included; the status moves only forward; the issue
   stamp is the database's; the reason, the successor, the PDF and the bundle
-  are each set once (the PDF and bundle only through their `SECURITY
-  DEFINER` setters: `water_app` has no grant on them); the manifest must name the
+  are each set once (the PDF only through `app_record_pack_pdf`, the bundle
+  only through `app_record_pack_bundle`: `water_app` has no grant on them); the manifest must name the
   row's own id, version, project and versions; who drafted and issued it clears only when that account
   is deleted.
 - `water_app` may `UPDATE` only the lifecycle columns (column grants), and
   RLS lets it delete only a draft.
 - `project_pack_guard` refuses deleting a project with a pack past draft.
 - `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft.
+- `app_record_pack_pdf` records a PDF only from its pack's running render
+  job, under the key it derives, once ([§ The PDF](#the-pdf)).
 - Tests: `backend/src/evidence/packs.db.test.ts` (each refusal with its
-  positive control, the bundle's setter among them), `packages/engine/src/evidence/pack.test.ts` (the
+  positive control, the PDF's lifecycle and the bundle's setter), `jobs/handlers/pack-render.test.ts`,
+  `e2e/tests/evidence-pack-pdf.spec.ts` (the downloaded bytes hash to the
+  recorded SHA-256), `packages/engine/src/evidence/pack.test.ts` (the
   manifest is deterministic, key order doesn't matter, a changed setting
   changes the hash, the lifecycle is outside it), the catalogue, role-ladder,
   mass-assignment and cross-project sweeps.

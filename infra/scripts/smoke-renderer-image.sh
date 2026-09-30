@@ -105,7 +105,7 @@ EVENT='{"Records":[{"messageId":"smoke-1","body":"not a render request"}]}'
 
 # --- 2. The handler answers ----------------------------------------------------------------
 echo "2/3 The handler answers under the Lambda runtime emulator"
-rie=$(start_rie -e REPORTS_BUCKET=renderer-smoke)
+rie=$(start_rie -e REPORTS_BUCKET=renderer-smoke -e PACKS_BUCKET=renderer-smoke-packs)
 answer=$(invoke "$rie" "$EVENT")
 logs=$(docker logs "$rie" 2>&1)
 if [ "$answer" != '{"batchItemFailures":[]}' ]; then

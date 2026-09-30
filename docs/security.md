@@ -441,7 +441,13 @@ buys a **render session** that can read one report and nothing else.
   themselves, for a project they can view and a run of that project (RLS
   and the trigger); a farmer can't. An impact report's token (082) also names
   its baseline run (`against_run_id`), which may be in another project but
-  must be one the issuer can read (the trigger, under their RLS). It is issued by the `report_render` job,
+  must be one the issuer can read (the trigger, under their RLS). A pack's
+  token (purpose `pack`, 119_pack_render) names one evidence pack
+  (`pack_id`) and no run: the trigger checks that the issuer reads that pack
+  (RLS, as themselves) and that it was issued (`issued_at`: never a draft,
+  nor a draft withdrawn before its issue), and a CHECK keeps exactly one
+  target per purpose. It is issued by the `report_render` job (or the
+  `pack_render` job, as the editor who issued the pack or asked again),
   which runs as the requester under RLS, and never leaves the server side:
   it goes to the local Chromium in memory, or in production over the
   SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
@@ -449,10 +455,12 @@ buys a **render session** that can read one report and nothing else.
 - **The exchange** (`POST /auth/render-session`, public: the token is the
   credential) consumes the token, re-checks that the requester can still see
   the project and that the run is still one of its runs, and an impact
-  report's baseline too (`403` otherwise),
+  report's baseline too (`403` otherwise); for a pack's token, that the
+  requester still reads the pack and it was issued,
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
-  lives **10 minutes**. A used, expired, unknown or malformed token gets one
+  lives **10 minutes** (a pack's carries `scope: { p, k }`, the project and
+  the pack). A used, expired, unknown or malformed token gets one
   answer, `400`. Both refusals carry the machine-only code
   `render_token_refused`: the renderer fails a report for good only on that
   code, so a WAF or CloudFront `403` in front of the API (no code) is
@@ -481,6 +489,13 @@ buys a **render session** that can read one report and nothing else.
   full one. RLS still applies underneath: the session is the requester's, so
   it sees at most what they see. It is also revoked with every other session
   of the account (the `sessions_revoked_at` watermark).
+  A **pack's session** reads less still: only `/auth/me`,
+  `/projects/<p>/packs/<k>` and its `/signoffs`, with no query string (the
+  frozen manifest holds the whole evidence report, so the pack's page reads
+  no run, no series and not even the project). The pack list, the pack's
+  PDF, every write and every other route answer `403`; a claim mixing a
+  pack with a run or a baseline, or naming anything but one UUID pair, is
+  invalid (`render-session.security.db.test.ts`, `scope.test.ts`).
   `/auth/me` answers `renderSession: true` for it, and the app skips the
   terms re-acceptance step for it (`termsGateApplies`): the step is a
   person's, and a session that can accept nothing would otherwise render
@@ -508,15 +523,19 @@ buys a **render session** that can read one report and nothing else.
   one session; `reports/scope.test.ts` pins the path rules; and
   `reports/render.db.test.ts` has a real Chromium check that the session is
   refused the project list mid-render, and that an impact report's session
-  makes its comparison. `db/cross-project-refs.security.db.test.ts`
+  makes its comparison. `evidence/packs.db.test.ts` checks a pack's token
+  end to end: the render_pack request's token opens a session that reads
+  its pack and sign-offs and gets `403` everywhere else, once; the trigger
+  refuses a token for a draft. `db/cross-project-refs.security.db.test.ts`
   classifies the two baseline references as cross-project by design, fixed
   at insert.
 - **What the renderer can reach.** Locally, the dev site and API. In
   production the renderer Lambda is outside the VPC with no database access
   and no secrets; it opens the public site through CloudFront and the WAF
   like any browser. Its role can receive `render-requests`, send
-  `render-results` and put objects under `reports/` in the reports bucket:
-  it can't read, list or delete a PDF. It opens only its configured
+  `render-results`, put objects under `reports/` in the reports bucket and
+  under `packs/` in the packs bucket (infra/packs.tf): it can't read, list
+  or delete a PDF, nor change or bypass a pack's retention. It opens only its configured
   `RENDER_SITE_URL`: a render request carries ids and the token, never a URL.
   Its browser is confined to that site and `RENDER_API_URL` whatever the
   page asks for (`reports/render.ts` `confineToOrigins`): any request to
@@ -2517,10 +2536,10 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf) | All are SSE-S3 encrypted. `frontend` is the public static site. `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
 
-Revisit AWS-0132 for `reports` if a client contract asks for customer-held
-keys or key-level audit of report reads.
+Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
+customer-held keys or key-level audit of report or pack reads.
 
 ## Liability
 
@@ -2603,13 +2622,19 @@ nothing else.
   The manifest must name the row's own id, version, project and versions, and
   a new version must be of the same application as its predecessor.
   `water_app` has no grant on the PDF and bundle columns at all: those hashes
-  are printed by verify, so only `SECURITY DEFINER` setters write them. The
-  bundle's is `app_record_pack_bundle` (120): the caller must be an editor
-  of the project and the pack issued by the caller *in the same
-  transaction* (`issued_at = now()`), so only the issue route records it,
-  never a later call; the key is derived in SQL from the ids and the hash
-  (`packs/<project>/<pack>/<sha256>.zip`), never named by the caller, and
-  the route checks it stored the object under that very key.
+  are printed by verify, so only a `SECURITY DEFINER` setter may write them.
+  The PDF's is `app_record_pack_pdf` (119_pack_render): it records only for
+  a pack that was issued, only from a *running* `pack_render` job of that
+  pack whose acting user is the caller (so from the job handler's
+  transaction, never a route's), under the key it derives itself
+  (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
+  only once: a second recording changes nothing and returns false.
+  The bundle's is `app_record_pack_bundle` (120_pack_bundle): the caller
+  must be an editor of the project and the pack issued by the caller *in
+  the same transaction* (`issued_at = now()`), so only the issue route
+  records it, never a later call; the key is derived in SQL from the ids and
+  the hash (`packs/<project>/<pack>/<sha256>.zip`), never named by the
+  caller, and the route checks it stored the object under that very key.
   `water_app` can't even name a frozen column in an `UPDATE` (column grants;
   catalogue `COLUMN_ONLY_UPDATE`).
 - **Never deleted once issued.** RLS lets an editor delete a draft only, and
@@ -2682,6 +2707,38 @@ nothing else.
   `Cache-Control: no-store`, so a withdrawal shows at once. It is
   rate-limited only by the WAF's rule on the whole API; enumerating 12-hex
   codes (2⁴⁸) through it is not practical.
+- **The PDF is kept for good, and is the bytes hashed.** The renderer
+  hashes the PDF it printed, stores it under that hash in the packs bucket,
+  and the upload carries the SHA-256 (`x-amz-checksum-sha256`), so S3
+  refuses bytes that aren't the ones hashed. The bucket (infra/packs.tf) is
+  private, versioned and under an Object Lock default retention
+  (GOVERNANCE, `pack_retention_days`, 10 years by default; operator
+  decision, 2026-09-30) with no lifecycle, and the renderer's role may only
+  put under `packs/`: so the object a verify hash names can't be deleted or
+  overwritten by anything in the app, and a second render is a second key,
+  never a replacement. Governance, not compliance: the account's
+  administrator can still remove an object with
+  `s3:BypassGovernanceRetention` (which no role here holds), for a court
+  order or a data-subject request the retention can't override. Downloads
+  are as a report's (§ Render tokens, the PDFs): `GET …/packs/:packId/pdf`
+  checks the reader (viewers of the pack; contributors and farmers `403`,
+  strangers `404`) and `302`s to a 60-second CloudFront signed URL on
+  `/packs/*`, which only that behaviour, its own OAC and the report key
+  group serve (`check_reports_path.mjs` keeps the SPA off `/packs`). The
+  renderer's answer (`render-results`) carries the hash and pages only; the
+  key is derived, never taken from a message (`transport.ts`,
+  `PackRenderResultMessage`). **The answer's hash is checked against the
+  stored object before it is recorded**: the worker HEADs the hash's key in
+  the packs bucket with checksum mode on (`reports/storage.ts`
+  `headPackPdf`) and records only when the object exists and S3's stored
+  SHA-256 checksum (verified by S3 at upload) is that hash; a missing object
+  or another checksum refuses the answer for good and records nothing
+  (`evidence/packs.db.test.ts` forges both). So a buggy or compromised
+  renderer, which could otherwise fix any hash on a pack forever (the
+  recording is write-once and verify publishes it), can only fail a render.
+  The worker's role may `s3:GetObject` under `packs/` (HEAD needs it; the
+  code never reads the bytes), through an S3 interface endpoint whose policy
+  allows nothing else.
 - **Personal data.** The signers' typed names and registrations are public
   on verify, as they are printed on the pack (a professional signature is
   made to be read by others; the pack sign-off dialog, with the pack view,
@@ -2689,7 +2746,13 @@ nothing else.
   pack is the project's record; an account deletion clears it (the guard
   allows only that change, only once the account is gone). The signer's
   data export lists their pack sign-offs (`packId`); the drafting and issue
-  are exported as their audit events.
+  are exported as their audit events. The pack's PDF prints the sign-offs as
+  the pack page shows them (the signers' names and registrations, as on
+  verify) and is kept under Object Lock for `pack_retention_days`: an account
+  deletion clears the database's record of who drafted and issued it, not the
+  printed PDF, which stays as the copy filed with the application did. A
+  request that must reach the PDF is the operator's, through the governance
+  bypass ([deployment.md § Evidence packs](./deployment.md#evidence-packs)).
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 

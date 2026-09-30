@@ -174,6 +174,9 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(page.getByTestId('evidence-verify-line').first()).toHaveText(line);
 	await expect(page.getByTestId('evidence-verify')).toContainText(issued.manifestSha256);
 	await expect(page.getByTestId('pack-code')).toHaveText(code);
+	// Issuing queued its server PDF (evidence-pack-pdf.spec.ts prints it): the bar says so, and offers the browser's print meanwhile.
+	await expect(page.getByTestId('pack-pdf-state')).toHaveAttribute('data-state', 'rendering');
+	await expect(page.getByTestId('pack-pdf-download')).toHaveCount(0);
 	// The footer a server render prints on every page carries the stamp and the verify line.
 	await expect(page.locator('main[data-report-ready="true"]')).toHaveAttribute('data-report-footer', new RegExp(`^${stamp} · Manifest SHA-256 ${issued.manifestSha256} · verify code ${code} at `));
 	await expectNoViolations(page);

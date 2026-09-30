@@ -61,7 +61,7 @@ export const REPORT_RETENTION_DAYS = 7;
 export const reportsBucket = () => process.env.REPORTS_BUCKET?.trim() || 'water-reports';
 
 /**
- * Issued evidence packs' PDFs (116_pack_render; docs/evidence-pack.md § The
+ * Issued evidence packs' PDFs (119_pack_render; docs/evidence-pack.md § The
  * PDF): their own bucket, because a pack's PDF is kept for good. Production's
  * is versioned with an Object Lock default retention and no lifecycle
  * (infra/packs.tf), so an object can't be deleted or overwritten while the
@@ -182,6 +182,34 @@ export async function putPackPdf(key: string, body: Uint8Array, sha256: string):
 			ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64')
 		})
 	);
+}
+
+/**
+ * Whether the packs bucket holds a pack PDF under `key` whose stored SHA-256
+ * checksum is `sha256` (hex): the worker's check of the renderer's answer
+ * before the hash is recorded for good (jobs/handlers/pack-render.ts). A HEAD
+ * with checksum mode on, so S3 returns the checksum it verified at upload;
+ * the object's bytes aren't read. `missing` when there is no such object,
+ * `mismatch` (with what is stored) when its checksum is another hash or none.
+ */
+export async function headPackPdf(
+	key: string,
+	sha256: string
+): Promise<{ ok: true } | { ok: false; reason: 'missing' } | { ok: false; reason: 'mismatch'; stored: string | null }> {
+	if (!SHA256.test(sha256)) throw new Error('headPackPdf: the hash must be a lowercase hex SHA-256');
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	let head: { ChecksumSHA256?: string };
+	try {
+		head = await c.send(new sdk.HeadObjectCommand({ Bucket: packsBucket(), Key: key, ChecksumMode: 'ENABLED' }));
+	} catch (err) {
+		const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+		if (e.name === 'NotFound' || e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return { ok: false, reason: 'missing' };
+		throw err;
+	}
+	const stored = head.ChecksumSHA256 ?? null;
+	const expected = Buffer.from(sha256, 'hex').toString('base64');
+	return stored === expected ? { ok: true } : { ok: false, reason: 'mismatch', stored };
 }
 
 /**

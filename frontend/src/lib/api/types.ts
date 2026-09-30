@@ -1527,7 +1527,7 @@ export interface Pack {
 	verifyPath: string;
 	reportVersion: string;
 	engineVersion: string;
-	/** Null until the server-rendered PDF exists. */
+	/** The server-rendered PDF's SHA-256, once recorded (119_pack_render); null until then. */
 	pdfSha256: string | null;
 	pdfPages: number | null;
 	bundleSha256: string | null;
@@ -1555,7 +1555,16 @@ export interface PackDetail {
 	/** The stored manifest still hashes to its recorded SHA-256. */
 	manifestMatches: boolean;
 	signoffs: Signoff[];
+	/** Where its server-rendered PDF is (119_pack_render). */
+	pdf: PackPdfState;
 	issue: PackIssueChecks | null;
+}
+
+/** Where an issued pack's PDF is (backend/src/evidence/packPdf.ts; docs/evidence-pack.md § The PDF). */
+export interface PackPdfState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	/** Why the last render gave up (`failed`). */
+	error: string | null;
 }
 
 /** GET /verify/:code (public): only what the pack prints (app_verify_pack). */

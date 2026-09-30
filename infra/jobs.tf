@@ -183,6 +183,7 @@ resource "aws_lambda_function" "worker" {
       RENDER_REQUESTS_QUEUE_URL = aws_sqs_queue.render_requests.url
       STORAGE                   = "s3"
       REPORTS_BUCKET            = aws_s3_bucket.reports.bucket
+      PACKS_BUCKET              = aws_s3_bucket.packs.bucket
       MAIL_TRANSPORT            = "ses"
       MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
       SITE_URL                  = local.site_origin
@@ -285,7 +286,7 @@ resource "aws_lambda_permission" "worker_tick" {
 
 resource "aws_security_group" "worker_lambda" {
   name        = "${local.project}-worker-lambda"
-  description = "Worker Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+  description = "Worker Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-worker-lambda" }
 }

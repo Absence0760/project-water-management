@@ -1011,7 +1011,8 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `manifest` (`jsonb` object: engine `buildPackManifest`, `pack-1`),
   `manifest_sha256` (unique hex; its first 12 digits, the short code, are
   unique too: `evidence_pack_short_code_idx`), `report_version`,
-  `engine_version`, `pdf_key`/`pdf_sha256`/`pdf_pages` and
+  `engine_version`, `pdf_key`/`pdf_sha256`/`pdf_pages` (NULL until the
+  PDF is recorded, 119 below) and
   `bundle_key`/`bundle_sha256` (NULL until built, each set as a set; the
   bundle is built when the pack is issued, 120),
   `created_by` and `issued_by` (→ `app_user`, `SET NULL`), `created_at`,
@@ -1042,8 +1043,9 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Grants and RLS**: `water_app` has `SELECT, INSERT, DELETE` and
   `UPDATE` on the lifecycle columns only (`status`, `status_reason`,
   `superseded_by_pack_id`; catalogue `COLUMN_ONLY_UPDATE`). The PDF and
-  bundle columns aren't granted: their hashes are verified publicly, so
-  `SECURITY DEFINER` setters write them (the bundle's below). `SELECT`: editors, and viewers for a baseline pack
+  bundle columns aren't granted: their hashes are verified publicly, so only
+  `SECURITY DEFINER` setters write them (the PDF's:
+  `app_record_pack_pdf`, 119 below; the bundle's, 120 below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
   `DELETE` editor, drafts only.
@@ -1070,6 +1072,32 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   with `packId`.
 - Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
   role-ladder, mass-assignment and cross-project sweeps.
+
+**The PDF (119_pack_render.sql;** [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)**).**
+
+- `job.kind` accepts `pack_render`: issuing a pack (and an editor's
+  `POST …/pdf`) queues one as the editor, deduplicated per pack
+  (`pack_render:<pack>`); the production retry is `pack_retry:<pack>:<n>`
+  and the renderer's answer `pack_result:<pack>`.
+- `render_token.pack_id` (§ Reports below): a pack's render token.
+- **`app_record_pack_pdf(pack, sha256, pages)`** (`SECURITY DEFINER`,
+  `water_app` only): the one writer of `pdf_key`, `pdf_sha256` and
+  `pdf_pages`. It needs a signed-in caller with a *running* `pack_render`
+  job of that pack as its acting user (`42501` otherwise: no route's
+  transaction has one), a pack that was issued (`issued_at`), a lowercase
+  hex SHA-256 and at least one page; it sets the key itself,
+  `packs/<project>/<pack>/<sha256>.pdf` (`reports/storage.ts` `packPdfKey`
+  derives the same), and only once: with a PDF recorded it returns false
+  and changes nothing (`evidence_pack_guard` refuses a second write anyway).
+- **`app_pack_render_target(pack)`** (`SECURITY DEFINER`, `STABLE`): for
+  the production worker's `render-results` answer, the project and the
+  acting user of the pack's latest render request, while the pack was
+  issued and has no PDF; nothing otherwise (the answer is dropped).
+- Guards: `evidence/packs.db.test.ts` (the render issuing queues, its
+  session, the retry, failure and recording, the second recording refused,
+  downloads), `jobs/trust.security.db.test.ts` (a `pack_render` job naming
+  another project's pack touches nothing of it),
+  `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -2551,14 +2579,15 @@ refuses one.
 
 | Table | Holds |
 | --- | --- |
-| `render_token` | The headless renderer's way in: `purpose` (`report`), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project), `against_run_id` (082: an impact report's baseline, any run the issuer can read; `ON DELETE CASCADE`), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
+| `render_token` | The headless renderer's way in: `purpose` (`report`, or `pack` since 119), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project; NULL for a pack's token), `against_run_id` (082: an impact report's baseline, any run the issuer can read; `ON DELETE CASCADE`), `pack_id` (119: an issued evidence pack of that project the issuer reads; `ON DELETE CASCADE`; the purpose follows it, and `render_token_target` keeps exactly one target per purpose), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
 | `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `impact` + `against_run_id` (082: an impact report of the run against a baseline, which may be another project's run the requester can read; `ON DELETE SET NULL` with `impact` kept, so a report whose baseline went fails rather than printing the plain report; fixed at insert), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
 | `report_schedule` | `frequency` (`weekly` with `weekday` 1–7, or `monthly` with `month_day` 1–28), `hour` 0–23 in `timezone` (IANA), `enabled`, `acting_user_id` (the editor who last saved it; `SET NULL` when that account goes, then skipped), `created_by`, `created_at`, `updated_at`, `anchor_at` (fires only for times after this; reset when the timing or `enabled` changes), `last_fired_for` (the scheduled time last queued), `last_error` (fixed text: why a due time queued nothing) |
 | `report_schedule_recipient` | `(schedule_id, user_id)`: who a schedule's PDF goes to |
 
 - **RLS**:
   - `render_token`: INSERT as yourself for a project you can view (and a
-    baseline you can read: `render_token_issue`, latest definition 082);
+    baseline you can read, or a pack you read that was issued:
+    `render_token_issue`, latest definition 119);
     SELECT your own. **Append-only** for `water_app` (the catalogue test lists it):
     consumed only by `app_consume_render_token`.
   - `report`: SELECT for viewers; INSERT for viewers as themselves (the
@@ -2584,7 +2613,7 @@ refuses one.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
   - `app_consume_render_token(hash)`: deletes the token (single use) and
     returns its user, project and run (and, 082, the baseline run and its
-    project), or nothing when unknown, used or
+    project; 119, the pack), or nothing when unknown, used or
     expired; drops tokens expired over a day ago. Pre-auth, like
     `app_consume_email_token`.
   - `app_report_schedules_to_check()`: the enabled schedules with an acting
@@ -2599,7 +2628,7 @@ refuses one.
   - `app_purge_reports(age)`: deletes reports older than `age` (≥ 1 day; the
     tick passes 8), returning their ids so a local run can delete the PDFs.
 - Indexes cover every foreign key (`render_token` user / project / run /
-  baseline, `report` project / run / baseline / schedule / requester, `job_id` by its unique
+  baseline / pack, `report` project / run / baseline / schedule / requester, `job_id` by its unique
   constraint, `report_schedule` project / acting user / creator, the
   recipient's user), plus `render_token.expires_at` and `report.created_at`
   for the purges.

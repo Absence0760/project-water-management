@@ -37,7 +37,7 @@ import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
 import { runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
 import { acceptMailEvent } from './mail/suppression.js';
-import { acceptRenderResult } from './reports/schedule.js';
+import { acceptPackRenderResult, acceptRenderResult } from './reports/schedule.js';
 import { parseWorkerMessage } from './jobs/transport.js';
 import { emitMetricLine, logEvent } from './logging/logEvent.js';
 
@@ -106,6 +106,11 @@ async function acceptRecord(record: SQSRecord): Promise<void> {
 	else if (message.type === 'rendered') {
 		const outcome = await acceptRenderResult(message);
 		if (outcome !== 'queued') logEvent('warn', { event: 'render_result_dropped', messageId: record.messageId, reason: outcome });
+	}
+	// An evidence pack's render outcome (render-results queue): becomes a pack_render job.
+	else if (message.type === 'rendered_pack') {
+		const outcome = await acceptPackRenderResult(message);
+		if (outcome !== 'queued') logEvent('warn', { event: 'pack_render_result_dropped', messageId: record.messageId, reason: outcome });
 	}
 	// A wake message needs nothing of its own: the tick below runs the job.
 }
