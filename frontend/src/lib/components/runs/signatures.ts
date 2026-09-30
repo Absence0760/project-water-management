@@ -51,6 +51,8 @@ export interface SignatureRow {
 	ok: boolean | null;
 }
 
+/** A value with a true minus sign, "−0.20" (fmtNum writes a hyphen), as the Compare page prints it. */
+const minus = (v: number, digits: number) => (v < 0 && Number(Math.abs(v).toFixed(digits)) !== 0 ? '−' : '') + fmtNum(Math.abs(v), digits);
 const signed = (v: number, digits: number, unit = '') => `${v < 0 && Number(Math.abs(v).toFixed(digits)) !== 0 ? '−' : '+'}${fmtNum(Math.abs(v), digits)}${unit}`;
 const inLimit = (v: number | null, limit: number) => (v === null ? null : Math.abs(v) <= limit);
 
@@ -89,8 +91,8 @@ export function signatureRows(s: ValidationSignatures): SignatureRow[] {
 	const h = s.recessionHoldout;
 	rows.push({
 		label: 'Skill on held-out recessions',
-		observed: h && h.lawSkill !== null ? fmtNum(h.lawSkill, 2) : '–',
-		simulated: h && h.modelSkill !== null ? fmtNum(h.modelSkill, 2) : '–',
+		observed: h && h.lawSkill !== null ? minus(h.lawSkill, 2) : '–',
+		simulated: h && h.modelSkill !== null ? minus(h.modelSkill, 2) : '–',
 		difference: '–',
 		limit: `simulated ≥ ${fmtNum(L.holdoutSkill, 0)}`,
 		ok: h ? h.agrees : null

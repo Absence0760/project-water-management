@@ -49,6 +49,15 @@ describe('validation signatures display', () => {
 		expect(signaturesOk(sig)).toBe(false);
 	});
 
+	it('a negative skill carries a true minus sign, as on the Compare page', () => {
+		const h = sig.recessionHoldout!;
+		const neg = { ...sig, recessionHoldout: { ...h, lawSkill: -0.2, modelSkill: -1.456 } };
+		const row = signatureRows(neg)[4]!;
+		expect(row.observed).toBe('−0.20');
+		expect(row.simulated).toBe('−1.46');
+		expect(signatureRows({ ...sig, recessionHoldout: { ...h, modelSkill: -0.001 } })[4]!.simulated).toBe('0.00');
+	});
+
 	it('not judged when nothing is computed', () => {
 		expect(signaturesOk(null)).toBeNull();
 		expect(signaturesOk(base)).toBeNull();
