@@ -67,7 +67,21 @@ type Check = (v: unknown) => string | null;
  * `toString` with Object.prototype's own members. A Map knows only the names
  * it was built with.
  */
-const checksOf = (table: Record<string, Check>): ReadonlyMap<string, Check> => new Map(Object.entries(table));
+interface Checks {
+	names: readonly string[];
+	byName: ReadonlyMap<string, Check>;
+}
+const checksOf = (table: Record<string, Check>): Checks => ({ names: Object.keys(table), byName: new Map(Object.entries(table)) });
+
+/**
+ * The check for `name`, found by the allowlisted name equal to it (taken from
+ * the table's own keys, never the caller's text), so the call dispatches only
+ * to a check the table was built with.
+ */
+function checkFor(table: Checks, name: string): Check | undefined {
+	const known = allowed(table.names, name);
+	return known === undefined ? undefined : table.byName.get(known);
+}
 
 /** The allowlisted name equal to `v`, taken from the allowlist itself (never `v`), or undefined. */
 export function allowed<T extends string>(names: readonly T[], v: unknown): T | undefined {
@@ -250,7 +264,7 @@ export type NodeSetValue<F extends NodeSetField> = Exclude<NetworkNode[F], undef
 const NODE_FIELD_CHECK = checksOf(NODE_FIELD_CHECKS);
 
 export function nodeFieldError(field: string, value: unknown): string | null {
-	const c = NODE_FIELD_CHECK.get(field);
+	const c = checkFor(NODE_FIELD_CHECK, field);
 	return c ? c(value) : `"${field}" is not a field a scenario can set`;
 }
 
@@ -303,7 +317,7 @@ export const TRANSFER_OPTIONAL = new Set<string>(['monthlyRateM3s', 'source', 'h
 const TRANSFER_FIELD_CHECK = checksOf(TRANSFER_FIELD_CHECKS);
 
 export function transferFieldError(field: string, value: unknown): string | null {
-	const c = TRANSFER_FIELD_CHECK.get(field);
+	const c = checkFor(TRANSFER_FIELD_CHECK, field);
 	return c ? c(value) : `"${field}" is not a transfer field a scenario can set`;
 }
 
@@ -439,7 +453,7 @@ const RETIRED_PATH_REASON = 'belonged to the legacy runoff model, removed in eng
 const SETTINGS_CHECK = checksOf(SETTINGS_CHECKS);
 
 export function settingsValueError(path: string, value: unknown): string | null {
-	const c = SETTINGS_CHECK.get(path);
+	const c = checkFor(SETTINGS_CHECK, path);
 	if (c) return c(value);
 	return RETIRED_SETTINGS_PATHS.includes(path) ? RETIRED_PATH_REASON : `"${path}" is not a setting a scenario can change`;
 }
@@ -681,7 +695,7 @@ const NODE_FIELDS: Record<string, Check> = {
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 const NODE_FIELD_ADD_CHECK = checksOf(NODE_FIELDS);
 export function nodeAddFieldError(field: string, value: unknown): string | null {
-	const c = NODE_FIELD_ADD_CHECK.get(field);
+	const c = checkFor(NODE_FIELD_ADD_CHECK, field);
 	return c ? c(value) : `"${field}" is not a node field`;
 }
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
@@ -757,8 +771,8 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 	switch (raw.op) {
 		case 'node.set': {
 			const nodeId = need('nodeId', id);
-			const field = need('field', (v) => (typeof v === 'string' && NODE_FIELD_CHECK.has(v) ? null : 'is not a node field a scenario can set'));
-			if (typeof field === 'string' && NODE_FIELD_CHECK.has(field)) need('value', (v) => nodeFieldError(field, v));
+			const field = need('field', (v) => (typeof v === 'string' && NODE_FIELD_CHECK.byName.has(v) ? null : 'is not a node field a scenario can set'));
+			if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
 			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
@@ -779,8 +793,8 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'transfer.set': {
 			const transferId = need('transferId', id);
-			const field = need('field', (v) => (typeof v === 'string' && TRANSFER_FIELD_CHECK.has(v) ? null : 'is not a transfer field a scenario can set'));
-			if (typeof field === 'string' && TRANSFER_FIELD_CHECK.has(field)) need('value', (v) => transferFieldError(field, v));
+			const field = need('field', (v) => (typeof v === 'string' && TRANSFER_FIELD_CHECK.byName.has(v) ? null : 'is not a transfer field a scenario can set'));
+			if (typeof field === 'string' && TRANSFER_FIELD_CHECK.byName.has(field)) need('value', (v) => transferFieldError(field, v));
 			op = { op: 'transfer.set', transferId, field, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
@@ -801,9 +815,9 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'settings.set': {
 			const path = need('path', (v) =>
-				typeof v === 'string' && SETTINGS_CHECK.has(v) ? null : typeof v === 'string' && RETIRED_SETTINGS_PATHS.includes(v) ? RETIRED_PATH_REASON : 'is not a setting a scenario can change'
+				typeof v === 'string' && SETTINGS_CHECK.byName.has(v) ? null : typeof v === 'string' && RETIRED_SETTINGS_PATHS.includes(v) ? RETIRED_PATH_REASON : 'is not a setting a scenario can change'
 			);
-			if (typeof path === 'string' && SETTINGS_CHECK.has(path)) need('value', (v) => settingsValueError(path, v));
+			if (typeof path === 'string' && SETTINGS_CHECK.byName.has(path)) need('value', (v) => settingsValueError(path, v));
 			op = { op: 'settings.set', path, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
