@@ -3758,12 +3758,13 @@ Applicant view and the Applications tab. Left:
       Scenario links](./security.md#scenario-links-wp-315-115_scenario_share_notessql)).
       Pack links join the same list once packs are a share-link target (the
       item under § Evidence report).
-- [ ] **Afrikaans for the shared application page** (WP-3.15): the
-      `share.scenario` strings are on the translation sheet
-      (docs/i18n/af-translation-sheet.md). If they are not translated in the
-      same change, the Afrikaans catalogue is incomplete and `/share` falls
-      back to English words. Trigger: this PR's translation round (see its
-      description).
+- [x] **Afrikaans for the shared application page** (WP-3.15): done. The
+      `share.scenario` strings are in the Afrikaans catalogue, and
+      `pnpm check:i18n` reports no untranslated site, email or glossary
+      string (checked 2026-09-30); the pack view's `share.pack` strings went
+      through the same round in its own change. The native speaker's review
+      is the Afrikaans item above
+      ([#90](https://github.com/Absence0760/project-water-management/issues/90)).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
