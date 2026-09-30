@@ -28,7 +28,9 @@
 	const UNIT_CAP = 10;
 	let yearsAll = $state(false);
 	let unitsAll = $state(false);
-	const v = $derived(restrictionView(summary.droughtRestriction));
+	// Node ids in the rule's words (its dams, units, EWR site) by name, from the run's own units.
+	const names = $derived(new Map((summary.farms ?? []).map((f) => [f.nodeId, f.name])));
+	const v = $derived(restrictionView(summary.droughtRestriction, (id) => names.get(id) ?? id));
 	const yearFold = $derived(v ? foldList(v.years, (y) => y.label, null, yearsAll, YEAR_CAP) : { shown: [], hidden: 0 });
 	const unitFold = $derived(v ? foldList(v.units, (u) => u.nodeId, null, unitsAll, UNIT_CAP) : { shown: [], hidden: 0 });
 </script>
@@ -37,8 +39,9 @@
 	<svelte:element this={`h${level}`} id={headingId}>Drought restrictions</svelte:element>
 	<p class="muted small" data-testid="restriction-rule">
 		The model’s restriction rule ({v.rule}{v.source ? `; from ${v.source}` : ''}), decided {v.reviews}
-		{v.reviews === 1 ? 'time' : 'times'} in the run from the farm dams’ storage at the start of the review day. A model rule, not the
-		restriction notice farmers see.
+		{v.reviews === 1 ? 'time' : 'times'} in the run from the farm dams’ storage at the start of the review day{v.ewrReviews !== null
+			? `, ${v.ewrReviews} of them after a day the EWR trigger’s site wasn’t met`
+			: ''}. A model rule, not the restriction notice farmers see.
 	</p>
 	<div class="table-wrap">
 		<table class="data restriction-days" id="{uid}-years" data-testid="restriction-days-table">
@@ -91,6 +94,7 @@
 					<th scope="col" class="num">Cut<br /><span class="u">% of demand</span></th>
 					<th scope="col" class="num">Cut on restricted days<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Supplied<br /><span class="u">m³/day, run mean</span></th>
+					<th scope="col" class="num">Days restricted</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -103,6 +107,7 @@
 						<td class="num">{fmtPct(u.cutShare)}</td>
 						<td class="num">{u.cutOnRestrictedDays === null ? '–' : fmtNum(u.cutOnRestrictedDays)}</td>
 						<td class="num">{fmtNum(u.supplied)}</td>
+						<td class="num">{u.daysRestricted ?? '–'}</td>
 					</tr>
 				{/each}
 			</tbody>

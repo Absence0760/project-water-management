@@ -19,10 +19,13 @@
 	let {
 		input,
 		onadd,
-		disabled = false
+		disabled = false,
+		projectId = null
 	}: {
 		/** The input a new op meets: the base run with the listed ops applied. */
 		input: ModelInput;
+		/** The project, so the drought restriction rule can start from its published notice (engine ≥ 1.52.0). */
+		projectId?: string | null;
 		onadd: (op: ScenarioOp) => Promise<boolean>;
 		disabled?: boolean;
 	} = $props();
@@ -162,7 +165,7 @@
 			<legend>{label}</legend>
 			<Lazy load={loadRestrictionEditor}>
 				{#snippet children(DroughtRestrictionFields)}
-					<DroughtRestrictionFields bind:value={d.restriction} />
+					<DroughtRestrictionFields bind:value={d.restriction} nodes={input.model.nodes} {projectId} />
 				{/snippet}
 			</Lazy>
 			<!-- Unset is off, as the engine runs it, so there is always a "now". -->

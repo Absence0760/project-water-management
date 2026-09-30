@@ -10,9 +10,10 @@ const summary: NonNullable<RunSummary['droughtRestriction']> = {
 	],
 	daysByLevel: [360, 85, 20],
 	reviews: 2,
+	ewrReviews: 1,
 	units: [
-		{ nodeId: 'b', name: 'Farm B', avgDemandM3Day: 0, avgRestrictedDemandM3Day: 0, avgSuppliedM3Day: 0, avgCutOnRestrictedDaysM3Day: null },
-		{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 88.6 }
+		{ nodeId: 'b', name: 'Farm B', avgDemandM3Day: 0, avgRestrictedDemandM3Day: 0, avgSuppliedM3Day: 0, avgCutOnRestrictedDaysM3Day: null, daysByLevel: [465, 0, 0] },
+		{ nodeId: 'a', name: 'Farm A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 80, avgSuppliedM3Day: 75, avgCutOnRestrictedDaysM3Day: 88.6, daysByLevel: [360, 85, 20] }
 	]
 };
 
@@ -24,6 +25,7 @@ describe('restrictionView (engine 1.52.0, WP-3.8)', () => {
 		const v = restrictionView(summary)!;
 		expect(v.rule).toBe('reviewed 1 Jan, lifted 1 May; Level 1 (below 60 %): crops 30 %; Level 2 (below 30 %): crops 60 %');
 		expect(v.source).toBe('WUA decision');
+		expect(v.ewrReviews).toBe(1);
 		expect(v.levels).toEqual(['No restriction', 'Level 1 (below 60 %)', 'Level 2 (below 30 %)']);
 		expect(v.years).toEqual([
 			{ label: '2003/04', days: 365, byLevel: [300, 65, 0], restricted: 65 },
@@ -31,7 +33,7 @@ describe('restrictionView (engine 1.52.0, WP-3.8)', () => {
 		]);
 		expect(v.total).toEqual({ days: 465, byLevel: [360, 85, 20], restricted: 105 });
 		// The most cut first; the cut on restricted days beside the run means.
-		expect(v.units[0]).toEqual({ nodeId: 'a', name: 'Farm A', demand: 100, restricted: 80, cut: 20, cutShare: 0.2, supplied: 75, cutOnRestrictedDays: 88.6 });
+		expect(v.units[0]).toEqual({ nodeId: 'a', name: 'Farm A', demand: 100, restricted: 80, cut: 20, cutShare: 0.2, supplied: 75, cutOnRestrictedDays: 88.6, daysRestricted: 105 });
 		// No demand: no share of it cut.
 		expect(v.units[1]!.cutShare).toBeNull();
 	});

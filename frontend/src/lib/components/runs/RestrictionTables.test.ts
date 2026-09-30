@@ -6,7 +6,7 @@ import type { RunSummary } from '@water-management/engine';
 import RestrictionTables from './RestrictionTables.svelte';
 
 const text = (html: string) => html.replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-const unit = (i: number, cut: number) => ({ nodeId: `n${i}`, name: `Farm ${String(i).padStart(2, '0')}`, avgDemandM3Day: 100, avgRestrictedDemandM3Day: 100 - cut, avgSuppliedM3Day: 90 - cut, avgCutOnRestrictedDaysM3Day: cut ? cut * 4 : null });
+const unit = (i: number, cut: number) => ({ nodeId: `n${i}`, name: `Farm ${String(i).padStart(2, '0')}`, avgDemandM3Day: 100, avgRestrictedDemandM3Day: 100 - cut, avgSuppliedM3Day: 90 - cut, avgCutOnRestrictedDaysM3Day: cut ? cut * 4 : null, daysByLevel: cut ? [300, 65] : [365, 0] });
 const summary = (units = [unit(1, 20)], years = 1) =>
 	({
 		farms: [],
@@ -30,7 +30,7 @@ describe('the drought restriction tables (engine 1.52.0, WP-3.8)', () => {
 		expect(body).toContain('Water year Days No restriction Level 1 (below 60 %) Days restricted');
 		expect(body).toContain('2003/04 365 300 65 65');
 		expect(body).toContain('Whole run 365 300 65 65');
-		expect(body).toContain('Farm 01 100 80 20 20.0% 80 70');
+		expect(body).toContain('Farm 01 100 80 20 20.0% 80 70 65');
 		expect(body).toContain('not the restriction notice farmers see');
 	});
 

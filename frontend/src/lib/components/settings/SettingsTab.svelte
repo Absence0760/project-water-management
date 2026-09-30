@@ -1113,7 +1113,7 @@
 		</div>
 		<Lazy load={loadDroughtRestriction}>
 			{#snippet children(DroughtRestrictionFields)}
-				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={restrictErr} {readonly} />
+				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={restrictErr} {readonly} nodes={editor?.model.nodes ?? []} projectId={project.id} />
 			{/snippet}
 		</Lazy>
 		<FieldHistoryLine field="settings:droughtRestriction" />
