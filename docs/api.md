@@ -962,8 +962,10 @@ email show them by the project role they give, viewer / editor / owner
 ### Portfolio
 
 `GET /teams/:id/portfolio` (roadmap WP-2.14, `backend/src/portfolio/`): every
-catchment of the team you can see, with its latest figures, for the WUA's
-dashboard. Any team member; a team you aren't in is `404`, and so is every
+catchment of the team you can see, with its latest figures, for the teams
+list's cards and the team page (the portfolio page that first read it became
+the project list's team filter, issue #176, which reads the same figures from
+`GET /projects/outcomes`). Any team member; a team you aren't in is `404`, and so is every
 farmer (a farmer has no team membership). The rows come from **one query**
 run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is

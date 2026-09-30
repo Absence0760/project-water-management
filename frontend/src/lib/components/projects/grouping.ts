@@ -2,6 +2,7 @@
 // shared with you), text search, sorting and grouping. Pure functions so the
 // list page stays thin and this stays unit-tested.
 import type { ProjectSummary, Team } from '$lib/api/types';
+import type { SortDir } from '$lib/components/portfolio/portfolio';
 import { sortByOutcome, type OutcomeSortKey, type Outcomes } from './outcomes';
 
 /** `personal`, `shared`, or `team:<id>`. */
@@ -16,6 +17,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
 	status: 'EWR status (worst first)',
 	farms: 'Hydrological units short (most first)',
 	dam: 'Lowest dam (lowest first)',
+	age: 'Figures age (oldest first)',
 	run: 'Last run (newest first)',
 	name: 'Name (A–Z)'
 };
@@ -56,14 +58,19 @@ export function matchesQuery(p: ProjectSummary, query: string): boolean {
 
 const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 
-/** Sort the list; an outcome sort needs the outcomes (rows without them go last). */
-export function sortProjects(projects: ProjectSummary[], sort: SortKey, outcomes: Outcomes = new Map()): ProjectSummary[] {
-	if (sort !== 'updated' && sort !== 'name') return sortByOutcome(projects, sort, outcomes);
+/**
+ * Sort the list; an outcome sort needs the outcomes (rows without them go
+ * last). `dir` turns the key's own order round (`desc`: best or oldest first,
+ * Z–A), the way a second click on a column heading does.
+ */
+export function sortProjects(projects: ProjectSummary[], sort: SortKey, outcomes: Outcomes = new Map(), dir: SortDir = 'asc'): ProjectSummary[] {
+	if (sort !== 'updated' && sort !== 'name') return sortByOutcome(projects, sort, outcomes, dir);
+	const sign = dir === 'asc' ? 1 : -1;
 	const out = [...projects];
-	if (sort === 'name') out.sort((a, b) => collator.compare(a.name, b.name));
+	if (sort === 'name') out.sort((a, b) => sign * collator.compare(a.name, b.name));
 	else
 		out.sort(
-			(a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || collator.compare(a.name, b.name)
+			(a, b) => sign * (Date.parse(b.updatedAt) - Date.parse(a.updatedAt)) || collator.compare(a.name, b.name)
 		);
 	return out;
 }
@@ -136,4 +143,20 @@ export function parseOwner(v: string | null): OwnerFilter {
 }
 export function parseSort(v: string | null): SortKey {
 	return v && Object.hasOwn(SORT_LABELS, v) ? (v as SortKey) : 'updated';
+}
+/** `?dir=desc` turns the sort round; anything else is the key's own order. */
+export function parseDir(v: string | null): SortDir {
+	return v === 'desc' ? 'desc' : 'asc';
+}
+
+/**
+ * The old team portfolio's address (`/teams/:id/portfolio?sort=…&dir=…`) as
+ * the project list filtered to that team (issue #176). Its default order,
+ * worst EWR first, comes along; its sort keys are the list's.
+ */
+export function portfolioListHref(teamId: string, sort: string | null = null, dir: string | null = null): string {
+	const key = sort && Object.hasOwn(SORT_LABELS, sort) && sort !== 'updated' ? sort : 'status';
+	const q = new URLSearchParams({ owner: `team:${teamId}`, sort: key });
+	if (dir === 'desc') q.set('dir', 'desc');
+	return `?${q.toString()}`;
 }

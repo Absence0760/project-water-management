@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A team's page (docs/ui.md § Teams): outcomes first. A header (the name, a
-	// one-line summary, and the actions: Portfolio, Team settings, Add member,
+	// one-line summary, and the actions: Project list, Team settings, Add member,
 	// New project), then the team's projects with their EWR traffic lights as
 	// the main column (from the portfolio, GET /teams/:id/portfolio) and the
 	// members beside them. The name, the thresholds and leave/delete sit in the
@@ -302,7 +302,7 @@
 					</p>
 				</div>
 				<div class="head-actions">
-					<a class="btn" href="{base}/teams/{team.id}/portfolio">Portfolio</a>
+					<a class="btn" href="{base}/?owner=team:{team.id}&sort=status">Project list</a>
 					<a class="btn" href={settingsHref} data-sveltekit-noscroll>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
 					{#if canAddProjects}<a class="btn btn-primary" href="{base}/?owner=team:{team.id}&new=1">New project</a>{/if}

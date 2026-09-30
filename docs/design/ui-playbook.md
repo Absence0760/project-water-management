@@ -80,7 +80,7 @@ section it belongs to, with the example that taught it.
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
-  Crops, the portfolio) is
+  Crops, the Projects list) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -301,6 +301,24 @@ section it belongs to, with the example that taught it.
   Limits and Source titles went (dividers mark the groups and each field
   names itself): 147 px at 1440. `transfers-page.spec.ts` caps the height
   of a rule with thirty on the page.
+- **Two pages showing the same rows are one page with a filter.** The team
+  portfolio listed a team's catchments with the same figures, from the same
+  helpers, as the project list's rows; it added two columns and three tiles.
+  It became the list's team chip (issue #176): the two columns joined the
+  list, the tiles' counts its header line (the stacked bar only repeated
+  them), the page's one note (the thresholds) a line under the chips while a
+  team is picked, and the old address a redirect that keeps its sort. Before
+  adding a column, work out the name column's width at 1440 with the sidebar:
+  seven fixed columns left it 227 px only after every other column gave
+  10 px, and the restriction went under the dam rather than into a column of
+  its own (it is a published-run fact beside the dam, and "Not published" in
+  both said the same thing twice).
+- **Table headings wrap in a fixed-width column.** `app.css` keeps
+  `table.data thead th` on one line, so in a `table-layout: fixed` table a
+  long heading runs into the next ("Hydrological units short" over Lowest
+  dam on the project list). Let such a table's headings wrap
+  (`white-space: normal`, bottom-aligned), and check in e2e that each
+  heading's content ends inside its cell (`portfolio.spec.ts`).
 - **Put a panel's columns side by side by the panel's width, not the
   window's.** Runs & results' runoff panel set its table beside the stores
   chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
@@ -587,8 +605,7 @@ fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
 picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Tables menu, node sheet),
-`routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
-with a sticky header), `series/SeriesTab.svelte` (a table over a chart in
+`series/SeriesTab.svelte` (a table over a chart in
 the window's one scroll, the long table folded under "Show all N series"
 with the picked row kept, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into

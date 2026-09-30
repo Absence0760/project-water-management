@@ -3404,6 +3404,21 @@ from the WP:
 
 ## Portfolio dashboard (WP-2.14)
 
+- [x] **Fold the portfolio into the project list as a team filter** (done
+      2026-09-30, issue #176). The list's rows already carried the
+      portfolio's figures from the same helpers; it gained the Restriction
+      (under Lowest dam) and Alerts columns, the 30-day units-short count,
+      the Figures age sort (the Data heading) and `?dir=desc`, and the tiles'
+      counts in its header line; with a team's chip picked it states that
+      team's thresholds and who can change them. `/teams/:id/portfolio`
+      redirects to `/?owner=team:<id>&sort=status`, keeping its sort. The
+      team thresholds still judge the rows (`GET /projects/outcomes`). Tests:
+      `portfolio.spec.ts` (rewritten for the team filter: figures, thresholds
+      and a viewer, old links and Back, sorting both ways, a farmer, a team
+      that isn't yours, thirty catchments at 1440 and 1280, axe),
+      `projects.spec.ts`, `teams.spec.ts`, `grouping.test.ts`,
+      `outcomes.test.ts`.
+
 - [x] **The project list's data age counted to the viewer's day, not the
       project's** (WUA-manager persona, #51; done 2026-09-29, issue #137).
       `GET /projects` rows carry the project's `today` (its time zone) and

@@ -2,15 +2,28 @@
 	// One group of projects as a compact table (issue #17, docs/ui.md § Project
 	// list): each row says how the catchment is doing, from the portfolio's
 	// figures (GET /projects/outcomes): the EWR status, units short in the figures' last week,
-	// the lowest dam, data freshness and the last run. A click anywhere on a
-	// row opens the project (the name link stretches over the row, .name::after).
-	// Add data is the one row button; Copy and Delete sit in a ⋯ menu. The
-	// table answers to its own width: Lowest dam and Last run fold into the
-	// line under the name at 1100 px, every outcome column at 730 px.
+	// the lowest dam and the published restriction, data freshness, the last run
+	// and the alerts firing (the team portfolio's columns, folded in by issue #176).
+	// A click anywhere on a row opens the project (the name link stretches over
+	// the row, .name::after). Add data is the one row button; Copy and Delete
+	// sit in a ⋯ menu. The table answers to its own width: Lowest dam, Last run
+	// and Alerts fold into the line under the name at 1100 px, every outcome
+	// column at 730 px.
 	import { base } from '$app/paths';
 	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '$lib/api';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
-	import { ageText, curtailmentHref, damText, ewrWindowLabel, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+	import {
+		ageText,
+		alertsText,
+		curtailmentHref,
+		damText,
+		ewrWindowLabel,
+		farmsShortText,
+		feedsText,
+		last30Text,
+		restrictionText,
+		type SortDir
+	} from '$lib/components/portfolio/portfolio';
 	import { agoText } from '$lib/format/age';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { dataFreshness, daysSince } from './freshness';
@@ -24,6 +37,7 @@
 		outcomes,
 		outcomesFailed = false,
 		sort,
+		dir = 'asc',
 		onsort,
 		oncopy,
 		ondelete
@@ -36,6 +50,8 @@
 		outcomes: Outcomes | null;
 		outcomesFailed?: boolean;
 		sort: SortKey;
+		/** `desc` when the sort is turned round (a second click on its heading). */
+		dir?: SortDir;
 		onsort: (key: SortKey) => void;
 		oncopy: (p: ProjectSummary) => void;
 		ondelete: (p: ProjectSummary) => void;
@@ -123,8 +139,17 @@
 	const SORTABLE = $derived<{ key: SortKey; label: string; cls: string; col: string }[]>([
 		{ key: 'status', label: ewrLabel, cls: 'wide', col: 'c-ewr' },
 		{ key: 'farms', label: 'Hydrological units short', cls: 'wide', col: 'c-units' },
-		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' }
+		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' },
+		// The Data column sorts by how old the figures are, as the portfolio's did.
+		{ key: 'age', label: 'Data', cls: 'wide', col: 'c-data' }
 	]);
+	// Each key's own order is worst (or newest) first; Last run's is newest first, so it reads "descending".
+	const ariaSort = (key: SortKey) => {
+		if (sort !== key) return undefined;
+		const natural = key === 'run' || key === 'updated' ? 'descending' : 'ascending';
+		return dir === 'asc' ? natural : natural === 'ascending' ? 'descending' : 'ascending';
+	};
+	const arrow = (key: SortKey) => (ariaSort(key) === 'ascending' ? ' ↑' : ' ↓');
 </script>
 
 {#snippet freshBadge(p: ProjectSummary)}
@@ -148,6 +173,7 @@
 	{@const t = farmsShortText(o)}
 	{#if t}
 		{#if o.farmsShort7 && o.sourceRunId}<a class="lift short" href={curtailmentHref(o, base)}>{t}</a>{:else}{t}{/if}
+		{#if o.farmsShort30 != null && o.farmCount}<span class="sub">{o.farmsShort30} {last30Text(o)}</span>{/if}
 	{:else}
 		<span class="muted">{o.source === 'published' ? 'Unknown' : 'Not published'}</span>
 	{/if}
@@ -157,23 +183,32 @@
 	{#if o.damsKnown}{damText(o)}{:else}<span class="muted">Not published</span>{/if}
 {/snippet}
 
+<!-- The published restriction (the team portfolio's column): only with a publication, where the dam's "Not published" already says why there's none. -->
+{#snippet restriction(o: PortfolioProject)}
+	{#if o.restriction}{' '}<span class="sub restriction">Restriction: {restrictionText(o)}</span>{/if}
+{/snippet}
+
+{#snippet alerts(o: PortfolioProject)}
+	{#if o.alertsFiring > 0}<span class="badge badge-warn alerts-badge">{alertsText(o)}</span>{:else}<span class="muted">{alertsText(o)}</span>{/if}
+{/snippet}
+
 <div class="pt">
 	<table class="data projects">
 		<caption class="visually-hidden">{caption}</caption>
 		<thead>
 			<tr>
-				<th scope="col" aria-sort={sort === 'name' ? 'ascending' : undefined}>
-					<button type="button" class="sort" onclick={() => onsort('name')}>Catchment{#if sort === 'name'}<span aria-hidden="true"> ↑</span>{/if}</button>
+				<th scope="col" aria-sort={ariaSort('name')}>
+					<button type="button" class="sort" onclick={() => onsort('name')}>Catchment{#if sort === 'name'}<span aria-hidden="true">{arrow('name')}</span>{/if}</button>
 				</th>
 				{#each SORTABLE as c (c.key)}
-					<th scope="col" class="{c.cls} {c.col}" aria-sort={sort === c.key ? 'ascending' : undefined}>
-						<button type="button" class="sort" onclick={() => onsort(c.key)}>{c.label}{#if sort === c.key}<span aria-hidden="true"> ↑</span>{/if}</button>
+					<th scope="col" class="{c.cls} {c.col}" aria-sort={ariaSort(c.key)}>
+						<button type="button" class="sort" onclick={() => onsort(c.key)}>{c.label}{#if sort === c.key}<span aria-hidden="true">{arrow(c.key)}</span>{/if}</button>
 					</th>
 				{/each}
-				<th scope="col" class="wide c-data"><span class="sort">Data</span></th>
-				<th scope="col" class="wide xwide c-run" aria-sort={sort === 'run' ? 'descending' : undefined}>
-					<button type="button" class="sort" onclick={() => onsort('run')}>Last run{#if sort === 'run'}<span aria-hidden="true"> ↓</span>{/if}</button>
+				<th scope="col" class="wide xwide c-run" aria-sort={ariaSort('run')}>
+					<button type="button" class="sort" onclick={() => onsort('run')}>Last run{#if sort === 'run'}<span aria-hidden="true">{arrow('run')}</span>{/if}</button>
 				</th>
+				<th scope="col" class="wide xwide c-alerts"><span class="sort">Alerts</span></th>
 				<th scope="col" class="c-act"><span class="visually-hidden">Actions</span></th>
 			</tr>
 		</thead>
@@ -206,7 +241,8 @@
 						</span>
 						<span class="meta meta-mid">
 							{@render lastRun(p)}
-							{#if o}<span class="line">Lowest dam: {@render dam(o)}</span>{/if}
+							{#if o}<span class="line">Lowest dam: {@render dam(o)}{#if o.restriction}{' '}· Restriction: {restrictionText(o)}{/if}</span>{/if}
+							{#if o && o.alertsFiring > 0}<span class="badge badge-warn alerts-badge">{o.alertsFiring} alert{o.alertsFiring === 1 ? '' : 's'} firing</span>{/if}
 						</span>
 					</th>
 					<td class="wide c-ewr">
@@ -216,7 +252,7 @@
 						{:else}<span class="muted">{noFigures(p)}</span>{/if}
 					</td>
 					<td class="wide c-units">{#if o}{@render units(o)}{:else}<span class="muted">–</span>{/if}</td>
-					<td class="wide xwide c-dam">{#if o}{@render dam(o)}{:else}<span class="muted">–</span>{/if}</td>
+					<td class="wide xwide c-dam">{#if o}{@render dam(o)}{@render restriction(o)}{:else}<span class="muted">–</span>{/if}</td>
 					<td class="wide c-data">
 						{@render freshBadge(p)}
 						{#if o?.behindData}<span class="badge badge-warn flag">Newer rain not in the figures</span>{/if}
@@ -229,7 +265,8 @@
 								<span class="sub lift" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {ago(p.publishedAt)}</span>
 							{:else}<span class="sub">{fmtDay(fmtDate(p.lastRunAt))}</span>{/if}
 						{:else if hasRole(p.role, 'viewer')}<span class="muted">Not run yet</span>{/if}
-					</td>
+</td>
+<td class="wide xwide c-alerts">{#if o}{@render alerts(o)}{:else}<span class="muted">–</span>{/if}</td>
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<td class="actions" onkeydown={onMenuKeydown} onfocusout={onMenuFocusOut}>
 						<div class="act">
@@ -282,19 +319,22 @@
 		table-layout: fixed;
 	}
 	.c-ewr {
-		width: 215px;
+		width: 205px;
 	}
 	.c-units {
-		width: 150px;
-	}
-	.c-dam {
 		width: 140px;
 	}
+	.c-dam {
+		width: 130px;
+	}
 	.c-data {
-		width: 165px;
+		width: 155px;
 	}
 	.c-run {
-		width: 120px;
+		width: 110px;
+	}
+	.c-alerts {
+		width: 82px;
 	}
 	.c-act {
 		width: 128px;
@@ -302,6 +342,12 @@
 	.projects td,
 	.projects th {
 		vertical-align: top;
+	}
+	/* Headings wrap inside their fixed column (app.css keeps table headings on one line):
+	   "Hydrological units short" ran into Lowest dam's heading at 140 px. */
+	.projects thead th {
+		white-space: normal;
+		vertical-align: bottom;
 	}
 	.projects tbody th,
 	.projects td {
@@ -322,7 +368,6 @@
 		cursor: pointer;
 		text-align: inherit;
 		min-height: 24px;
-		white-space: nowrap;
 	}
 	button.sort:hover {
 		color: var(--accent);
@@ -419,6 +464,10 @@
 	.short {
 		font-weight: 600;
 		color: var(--danger);
+	}
+	.alerts-badge {
+		text-transform: none;
+		white-space: nowrap;
 	}
 	.actions {
 		text-align: right;
