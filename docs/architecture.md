@@ -1313,11 +1313,42 @@ exception: page 1's licence impact by year class is the impact report's board,
 built in the browser from three daily series the page fetches; it moves into
 the builder with the pack. One
 builder is what lets an issued pack (WP-3.14) freeze the document as its
-manifest and rebuild it to check the hash. The evidence report prints from
-the browser only; `report_render` doesn't render it yet (that comes with
-the pack, so no render session needs a second run).
+manifest and rebuild it to check the hash. The evidence report itself
+prints from the browser only; `report_render` doesn't render it. The server
+prints an issued pack instead (below), from its frozen manifest, so no
+render session needs a second run.
 
-## Key choices
+### An evidence pack's PDF
+
+Issuing a pack (116_pack_render; [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf))
+queues a `pack_render` job (`jobs/handlers/pack-render.ts`, as the issuer,
+deduplicated per pack) that prints the pack's own page,
+`/projects/:id/packs/:packId`, with the same machinery as `report_render`:
+a render token for that pack (purpose `pack`, `render_token.pack_id`), a
+render session that may read only the pack and its sign-offs
+(`reports/scope.ts`: the frozen manifest holds the whole report, so the page
+reads no run and not even the project), `main[data-report-ready]`, then
+`page.pdf`. `inline` locally, `sqs` in production (a `render_pack` request,
+a `rendered_pack` answer on the same two queues, `acceptPackRenderResult`
+turning it into a follow-up job as the request's acting user).
+
+What differs from a report:
+
+- **Kept, not expired.** The PDF goes to its own bucket (`PACKS_BUCKET`,
+  MinIO `water-packs` locally; production's is versioned under Object Lock
+  with no lifecycle, infra/packs.tf) under a **content-addressed** key,
+  `packs/<project>/<pack>/<sha256>.pdf`, uploaded with that SHA-256 as its
+  checksum. A second render is a second object, never an overwrite.
+- **Recorded once.** Only `app_record_pack_pdf` writes the pack's
+  `pdf_key`, `pdf_sha256` and `pdf_pages`: from a running `pack_render` job
+  of that pack, as its acting user, deriving the key from the ids and the
+  hash; the first recorded stands. `GET /verify/:code` then answers the
+  PDF's hash, so anyone holding the PDF can check it.
+- **Its state** is the pack's (`pdf` on `GET …/packs/:packId`: ready,
+  rendering, failed or none), read from its latest `pack_render` job
+  (`evidence/packPdf.ts`); an editor asks again after a failure with
+  `POST …/packs/:packId/pdf`. The download is a report's: a 60-second
+  signed URL on `/packs/*` (`GET …/packs/:packId/pdf`).
 
 ## Key choices
 

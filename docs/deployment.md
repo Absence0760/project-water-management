@@ -1366,6 +1366,51 @@ plan-only until the first deploy):
   ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
   endpoint.
 
+## Evidence packs
+
+An issued evidence pack's PDF ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf),
+116_pack_render) is printed by the same renderer as a report, on the same two
+queues, and kept in a bucket of its own (infra/packs.tf, plan-only until the
+first deploy):
+
+- **The flow.** Issuing a pack queues a `pack_render` job (as the issuer).
+  The worker (`REPORT_RENDERER=sqs`) issues a render token for that pack and
+  sends a `render_pack` request; the renderer prints
+  `https://<domain>/projects/:id/packs/:packId`, hashes the PDF, puts it at
+  `packs/<project>/<pack>/<sha256>.pdf` with that checksum and answers
+  `rendered_pack` with the hash and page count; the worker's follow-up job
+  records them on the pack once (`app_record_pack_pdf`). Retries are a
+  report's: a retryable failure asks again after 2, then 4 minutes, up to 3
+  renders; then the pack's PDF shows as failed and an editor asks again
+  (`POST …/packs/:packId/pdf`). Failed answers count in `report-render-failed`
+  (the log line carries `packId` instead of `reportId`; a store failure logs
+  `pack_store_failed`). The renderer needs `PACKS_BUCKET` (Terraform sets
+  it; it refuses to start without it).
+- **The bucket**: `water-management-packs-<account>`, private (public access
+  blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
+  Lock**: every object is retained from its upload for `pack_retention_days`
+  (default **3650, 10 years**) in **GOVERNANCE** mode, and nothing expires
+  it (no lifecycle). Operator decision, 2026-09-30: governance, so the
+  account's administrator can still remove an object in an emergency (a
+  court order, a data-subject request the retention can't override) with
+  `s3:BypassGovernanceRetention`, which no role here holds; 10 years because
+  a licence decision can be reviewed or appealed long after it is made.
+  Raising `pack_retention_days` applies to new objects only. Switching to
+  COMPLIANCE mode (no one, the root user included, can remove an object
+  before its date) is a change to `infra/packs.tf` and can't be undone for
+  the objects written under it.
+- **Downloads**: the `/packs/*` behaviour serves the bucket through its own
+  OAC to CloudFront signed URLs from the report-download key group only,
+  exactly as `/reports/*` (§ Reports); `GET …/packs/:packId/pdf` redirects
+  to one (60 s). The API needs no new setting and no S3 grant.
+- **Removing a pack's PDF** (the governance bypass; the operator's, never
+  the app's): with the administrator's credentials,
+  `aws s3api delete-object --bucket water-management-packs-<account> --key packs/<project>/<pack>/<sha256>.pdf --version-id <version> --bypass-governance-retention --profile water-management`.
+  The pack keeps its recorded `pdfSha256`, and verify keeps answering it:
+  say on the pack why its PDF is gone (withdraw it with that reason).
+- **Cost:** a PDF is ~1 MB kept for 10 years, ≈ $0.0003/month each at S3
+  Standard; nothing idle.
+
 ## Runbooks
 
 Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-cost-and-operations)).
