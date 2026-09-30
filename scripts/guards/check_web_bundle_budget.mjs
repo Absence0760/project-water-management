@@ -1316,6 +1316,12 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #71: measured 1202 with main @
+//             e8cd5bc9 merged, against main's 1200). The errata section of
+//             the validation statement (liability/ValidationStatement: the
+//             errata table, keyed on the run's engine and its fit's) and the
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
 // 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
 //             1200, the branch 1204). The report's publication cover,
 //             "Changes since the previous publication" (ChangesList and the
@@ -1326,6 +1332,9 @@
 //             view's share-received column and its Afrikaans. All in lazy
 //             route or tab chunks; the largest tab chunk stays within 60 KB.
 //             No new dependency. Headroom ~2 KB.
+// 2026-09-30  total 1206 → 1210 KB (issue #70: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the report changed. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1336,7 +1345,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1206,
+	totalCodeKb: 1210,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

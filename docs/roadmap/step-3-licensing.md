@@ -1515,7 +1515,7 @@ must build WP-2.15 Phase B.
   (`/projects/:id/report`): the disclaimer (draft then; agreed by the
   operator on 2026-09-28 after a pre-counsel review, version `2026-09-28`),
   `validationStatement` with the
-  limitations generated from engine-audit.md (`pnpm gen:limitations`, a
+  limitations generated from engine-audit.md (`pnpm gen:liability`, a
   doc-parsing test), and the immutable sign-off on a **run**
   (`036_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound
   to the statement's SHA-256, `signoff.created` in the audit log, the run

@@ -250,7 +250,7 @@ generated `KNOWN_LIMITATIONS` (the list every report prints), and a
 departure's *Pending a hydrologist's confirmation* mark is read from it too.
 The departures' own words are `lib/methods/departures.ts`; its test checks
 that every id is a row of the audit. After changing an audit decision, run
-`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+`pnpm gen:liability` as usual and the page follows; when the audit adds or
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 
@@ -862,6 +862,14 @@ put the results first; its first screen follows board A1 of the redesign
    inside the window at any width. Until 2026-09-29 the complete checklist
    was a one-line `<details>` at the foot of the page that grew it by 125 px
    when opened.
+
+- **Ready.** The Summary's body (`data-testid="summary-body"`, in `overview/OverviewTab.svelte`)
+  sets `data-ready="true"` once every section that loads its own data has settled, loaded or
+  failed: the latest run's record and the previous run's, the dams' levels, the Supply by farm
+  chunk, the alerts (`AlertsPanel`'s `ready`) and the published baseline (`PublishedBaseline`'s
+  `ready`). The Latest run card is on the page while its record loads and the rest fill in after
+  it, so the page grows until then: an e2e spec that measures layout (page height, box positions)
+  waits on it first (`summaryReady` in `e2e/tests/overview.spec.ts`), never on a sleep.
 
 - **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
   `overview/reserveStrip.ts`), once the latest run's record is in: the days
@@ -5442,15 +5450,21 @@ baseline card links to the published run's report (**Report**, beside
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
     engine version, the build's invariant and soak results (the web
     release's build record, `ENGINE_BUILD`, injected at build time; *Not
-    recorded for this build* in a build without one, such as local dev), the run's self-checks, the
+    recorded for this build* in a build without one, such as local dev), the
+    methodology statement it cites (version and a 12-digit hash prefix,
+    `docs/methodology/`), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
     caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
     older run that hit the old cap of 5 says its list may be cut short) and
-    checks, and the **known
-    limitations** table (ID, limitation, where it stands) generated from
-    engine-audit.md. The same component is on screen, folded shut, in a
+    checks, the **errata** of
+    the run's engine version or its fit's (ID, what goes wrong, when it
+    applies, fixed in; "None recorded for this engine version in
+    docs/engine-errata.md" without one), and the **known limitations** table
+    (ID, limitation, where it stands) generated from engine-audit.md. The
+    sign-off dialog shows the same methodology line, and lists the errata
+    after the limitations in the box that must be scrolled to its end. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, date, the self-declared registration as "Pr.Sci.Nat.
@@ -5461,7 +5475,7 @@ baseline card links to the published run's report (**Report**, beside
     "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the ten
-    statements a signer of the current version confirms (`signoff-3`). When
+    statements a signer of the current version confirms (`signoff-4`). When
     a listed sign-off was made under an earlier version, a line says it
     confirmed that version's wording, recorded by its hash, not the
     statements below. An editor or owner gets **Sign off this

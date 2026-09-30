@@ -22,12 +22,15 @@
 	let {
 		projectId,
 		runs,
-		canEdit
+		canEdit,
+		ready = $bindable(false)
 	}: {
 		projectId: string;
 		/** The page's runs list, for the published run's label and period (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		canEdit: boolean;
+		/** True once the publication has loaded or failed (the card has its final height); for the Summary's data-ready. */
+		ready?: boolean;
 	} = $props();
 
 	let current = $state<Publication | null>(null);
@@ -46,6 +49,9 @@
 		}
 	}
 	onMount(load);
+	$effect(() => {
+		ready = !loading;
+	});
 
 	const run = $derived(current ? (runs?.find((r) => r.id === current!.runId) ?? null) : null);
 	// The Runs tab on the published run, at its Publication panel.

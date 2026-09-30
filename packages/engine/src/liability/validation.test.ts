@@ -5,9 +5,32 @@ import { ENGINE_VERSION } from '../version';
 import { randomInput } from '../testing/fuzz';
 import type { RunSummary } from '../project';
 import { DISCLAIMER } from './disclaimer';
+import { errataFor, type Erratum } from './errata';
+import { ENGINE_ERRATA } from './errata.generated';
+import { METHODOLOGY } from './methodology.generated';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
 import { signoffStatement, signoffStatementText } from './signoff';
 import { moriasiNse, moriasiPbias, parseEngineBuild, validationStatement } from './validation';
+
+const bare = (over: Partial<RunSummary> = {}): RunSummary =>
+	({
+		farms: [],
+		catchment: { meanNaturalFlowM3Day: 1, meanSimulatedOutflowM3Day: 1, ewrDaysNotMet: 0, ewrFractionDaysNotMet: 0 },
+		calibration: null,
+		warnings: [],
+		...over
+	}) as RunSummary;
+
+const ERRATUM: Erratum = {
+	id: 'ER-99',
+	keyedOn: 'run',
+	firstAffected: '0.30.0',
+	fixedIn: '0.32.0',
+	severity: 'High',
+	appliesWhen: 'always',
+	summary: 'a test erratum',
+	source: 'model.md §0'
+};
 
 describe('Moriasi et al. (2007) ratings', () => {
 	it.each([
@@ -58,15 +81,6 @@ describe('validationStatement', () => {
 			expect(() => canonicalJson(v)).not.toThrow();
 		}
 	});
-
-	const bare = (over: Partial<RunSummary> = {}): RunSummary =>
-		({
-			farms: [],
-			catchment: { meanNaturalFlowM3Day: 1, meanSimulatedOutflowM3Day: 1, ewrDaysNotMet: 0, ewrFractionDaysNotMet: 0 },
-			calibration: null,
-			warnings: [],
-			...over
-		}) as RunSummary;
 
 	it('flags an impossible runoff coefficient (audit W1) and the low-vs-CHIRPS water years', () => {
 		const v = validationStatement({
@@ -143,7 +157,7 @@ describe('signoffStatement', () => {
 
 	it('asks for the ten confirmations, and words the works one for a baseline or a scenario', () => {
 		const base = signoffStatement(run);
-		expect(base.version).toBe('signoff-3');
+		expect(base.version).toBe('signoff-4');
 		// signoff-3: the identity confirmation covers the category and field recorded (registration.ts).
 		expect(base.confirmations[0]!.text).toMatch(/in the category and field, and under the registration number shown\.$/);
 		expect(base.confirmations.map((c) => c.id)).toEqual([
@@ -180,5 +194,32 @@ describe('signoffStatement', () => {
 		expect(signoffStatementText(signoffStatement({ ...run, id: '00000000-0000-4000-8000-000000000002' }))).not.toBe(text);
 		expect(signoffStatementText(signoffStatement({ ...run, engineVersion: '0.31.3' }))).not.toBe(text);
 		expect(signoffStatementText(signoffStatement(run, KNOWN_LIMITATIONS.slice(1)))).not.toBe(text);
+		expect(signoffStatementText(signoffStatement(run, KNOWN_LIMITATIONS, [ERRATUM]))).not.toBe(text);
+	});
+
+	it('cites the current methodology statement and lists the errata of the run\'s engine version only (signoff-4)', () => {
+		expect(signoffStatement(run).methodology).toEqual({ version: METHODOLOGY.version, sha256: METHODOLOGY.sha256 });
+		expect(signoffStatement(run, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([ERRATUM]);
+		expect(signoffStatement({ ...run, engineVersion: '0.40.0' }, KNOWN_LIMITATIONS, [ERRATUM]).errata).toEqual([]);
+		expect(signoffStatement(run).confirmations.at(-1)!.text).toMatch(/methodology statement cited below, and the known limitations and the errata/);
+	});
+});
+
+describe('validationStatement: errata and methodology', () => {
+	it('lists the errata whose range holds the run\'s engine, and cites the methodology', () => {
+		const v = (engineVersion: string) => validationStatement({ summary: bare(), engineVersion, legacy: false }, null, KNOWN_LIMITATIONS, [ERRATUM]);
+		expect(v('0.31.2').errata).toEqual([ERRATUM]);
+		expect(v('0.30.0').errata).toEqual([ERRATUM]);
+		// Positive control above; outside the range, nothing.
+		expect(v('0.29.9').errata).toEqual([]);
+		expect(v('0.40.0').errata).toEqual([]);
+		expect(v('0.31.2').methodology).toEqual({ version: METHODOLOGY.version, sha256: METHODOLOGY.sha256 });
+	});
+
+	it('takes the committed errata by default', () => {
+		const old = validationStatement({ summary: bare(), engineVersion: '0.16.0', legacy: false });
+		expect(old.errata.map((e) => e.id)).toEqual(errataFor('0.16.0', ENGINE_ERRATA).map((e) => e.id));
+		expect(old.errata.map((e) => e.id)).toContain('ER-3');
+		expect(validationStatement({ summary: bare(), engineVersion: ENGINE_VERSION, legacy: false }).errata.filter((e) => e.fixedIn !== null)).toEqual([]);
 	});
 });

@@ -32,7 +32,7 @@ A change can hit several rows. Only report the rows that match.
 | New or changed API route, request or response shape | `docs/api.md`; `docs/architecture.md` if the request lifecycle changes |
 | Migration, table, column, policy, role or grant | `docs/data-model.md` (the table's section, § Access control, § Row-level security, § Migrations); `docs/security.md` § Authorization if access changes |
 | Auth, tokens, throttles, share links, API keys, personal data, input handling | `docs/security.md` (the matching section); `docs/legal-status.md` or `docs/legal/*` if POPIA handling changes |
-| Model behaviour in `packages/engine` | `docs/model.md`; `docs/engine-audit.md` if it departs from the b023 workbook (then `pnpm gen:limitations`); `docs/calibration-research.md` only if a CR recommendation is now done |
+| Model behaviour in `packages/engine` | `docs/model.md`; `docs/engine-audit.md` if it departs from the b023 workbook (then `pnpm gen:liability`); `docs/calibration-research.md` only if a CR recommendation is now done |
 | Workspace screens, tabs, charts, results | `docs/ui.md`; `docs/design/ui-playbook.md` if a new reusable pattern or testing trap appears |
 | Farmer-facing strings | `docs/ui.md` § Language; the translation sheet (`pnpm gen:i18n:sheet`) |
 | Scenarios, run comparison, allocations | `docs/scenarios.md`, `docs/run-comparison.md`, `docs/allocations.md` |

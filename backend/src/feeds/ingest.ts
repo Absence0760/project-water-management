@@ -18,6 +18,14 @@
 // fetch's. A successful answer records the window's end as last_meta.through,
 // how far the feed has read, so fetchWindow moves past empty days (#29).
 //
+// A CHIRPS answer may say how far its leading days are final
+// (meta.finalThrough, fetchChirps). A final value is never revised, so the
+// feed keeps that as last_meta.finalThrough and fetchWindow doesn't re-read
+// those days (issue #69). The fetcher's claim is checked first
+// (finalThroughAfter): it must be a day of this answer, from the window's
+// first day, with a value on every day up to it. Only our own value is
+// stored, never the fetcher's key.
+//
 // A CHIRPS-GEFS result is one whole issue, keyed by its issue date: its days
 // start on that date and number at most GEFS_DAYS. The newest issue merged
 // wins: an older one (the ingest-results queue does not keep order, and a
@@ -113,6 +121,51 @@ async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutco
 
 type OkResult = Extract<FetchResult, { ok: true }>;
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The feed's final marker after this answer (CHIRPS only, else null): the last
+ * day through which its series holds final values, every day from before the
+ * window on. The answer's claim (meta.finalThrough) stands only when it is a
+ * real day of the answer, which starts on the window's first day and has a
+ * value on every day up to it; anything else is ignored, as if the answer
+ * made no claim. The feed's previous marker carries on when it reaches the
+ * day before the window (the window started after it, fetchWindow): the
+ * later of the two. A marker that stops short of the window says nothing
+ * about the days between, so only the answer's claim counts then.
+ *
+ * The ingest can't tell a final value from a preliminary one: the answer's
+ * days are only numbers, and in production they come from the fetcher
+ * Lambda, the one side that read the files. So a wrong claim is believed.
+ * That is bounded: the claim can only cover days of this answer with a
+ * value, the fetcher is our own code and the only role granted sending to
+ * `ingest-results` (infra/feeds.tf), and a wrong one costs only that those
+ * days aren't re-read until the feed's place, product or series changes
+ * (which clears the marker); no value is written that the answer didn't
+ * carry.
+ */
+export function finalThroughAfter(feed: FeedRow, result: OkResult, window: FetchWindow): string | null {
+	if (feed.source !== 'chirps') return null;
+	const claim = result.meta.finalThrough;
+	let reported: string | null = null;
+	if (typeof claim === 'string' && ISO_DAY.test(claim) && fromEpochDay(toEpochDay(claim)) === claim && result.startDate === window.start) {
+		const idx = toEpochDay(claim) - toEpochDay(window.start);
+		if (idx >= 0 && idx < result.values.length && result.values.slice(0, idx + 1).every((v) => v !== null)) reported = claim;
+	}
+	const prev = feed.finalThrough;
+	if (prev !== null && prev >= fromEpochDay(toEpochDay(window.start) - 1)) return reported !== null && reported > prev ? reported : prev;
+	return reported;
+}
+
+/** The fetcher's meta without the keys only we write (a fetcher's `finalThrough` is a claim, checked above, never stored as is). */
+function fetcherMeta(result: OkResult): Record<string, string | number> {
+	const { finalThrough: _claim, ...rest } = result.meta;
+	return rest;
+}
+
+/** Our keys added to the meta: `finalThrough` only when there is one. */
+const withFinal = (meta: Record<string, string | number>, finalThrough: string | null) => (finalThrough ? { ...meta, finalThrough } : meta);
+
 /**
  * A confirmed replacement's fetch (see the header): merge the days into the
  * feed's stage, and swap the stage in once the backfill is caught up. The
@@ -183,10 +236,11 @@ async function stageReplacement(
 		// The whole new record went in: the new-data hook (series/newData.ts).
 		const m = replaced.meta;
 		await onSeriesDaysChanged(db, feed.projectId, { seriesId: m.id, kind: m.kind, name: m.name, daysChanged: replaced.daysChanged, via: 'feed' });
-		meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
+		meta = { ...fetcherMeta(result), merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
 	} else {
-		meta = { ...result.meta, merged, staged: stage?.values.length ?? 0, through: window.end };
+		meta = { ...fetcherMeta(result), merged, staged: stage?.values.length ?? 0, through: window.end };
 	}
+	meta = withFinal(meta, finalThroughAfter(feed, result, window));
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	await continueBackfill(db, feed, window);
 	return { merged, lastDate };
@@ -292,7 +346,11 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 	}
 	// Ours last, so a key of the same name in the fetcher's meta never stands.
 	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
-	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged, kept } : { ...result.meta, merged, kept, through: window.end };
+	// finalThrough: how far the series is final (CHIRPS; finalThroughAfter).
+	const meta =
+		feed.source === 'chirps_gefs'
+			? { ...fetcherMeta(result), merged, kept }
+			: withFinal({ ...fetcherMeta(result), merged, kept, through: window.end }, finalThroughAfter(feed, result, window));
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	await continueBackfill(db, feed, window);
 	return { merged, lastDate };

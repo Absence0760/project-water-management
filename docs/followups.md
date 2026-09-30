@@ -2443,11 +2443,16 @@ role and not before it.
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
-  - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
-        last 50 days daily (~200 range requests). Trigger: more than ~20
-        CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
-        once per tick and share it between feeds, or keep a per-day
-        preliminary/final marker so final days aren't re-read.
+  - [x] ~~**Request volume grows with feeds.** Each CHIRPS feed re-reads its
+        last 50 days daily (~200 range requests).~~ **Only what can change
+        is read (#69):** the ingest keeps a checked final marker
+        (`last_meta.finalThrough`) and the next window starts after it; a
+        `sat` fetch stops probing finals after the first batch without one,
+        and doesn't re-read the preliminary days the series already holds
+        (`heldThrough`). architecture.md § Data feeds, the window. On the
+        fixtures a caught-up feed's daily fetch goes from 194 range requests
+        to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days
+        moves on 120 days a window instead of 70.
   - [x] ~~**Ingest doesn't check a result's dates against the window asked
         for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
         records its window on the feed before sending, and the ingest
@@ -3576,10 +3581,13 @@ Left, each with its trigger:
       the frontend build injects the record (`__ENGINE_BUILD__`), so a
       released site's validation statement states it
       ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
-- [ ] **Methodology statement and engine errata** (`docs/methodology/`,
-      versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
-      per engine version). Only the limitations list is generated so far.
-      Trigger: WP-3.14, the pack that records their version and hash.
+- [x] **Methodology statement and engine errata** (issue #71, 2026-09-29):
+      `docs/methodology/v1.md` (versioned, its SHA-256 pinned by
+      `methodology.test.ts`) and `docs/engine-errata.md`, both generated into
+      the engine by `pnpm gen:liability`. The validation statement and the
+      sign-off statement (`signoff-4`) cite the methodology by version and
+      hash and list the errata of the run's engine version. The pack records
+      the same (WP-3.14).
 - [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
       'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
       `pack_id` column with a check that exactly one target is set. A

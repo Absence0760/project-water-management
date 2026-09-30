@@ -7,8 +7,12 @@
 // pass marks.
 import type { CalibrationFlowKind, RunSummary } from '../project';
 import type { SeriesKind } from '../project';
+import { errataFor, type Erratum } from './errata';
+import { ENGINE_ERRATA } from './errata.generated';
 import type { Limitation } from './limitations';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
+import type { MethodologyVersion } from './methodology';
+import { METHODOLOGY } from './methodology.generated';
 
 export type MoriasiRating = 'very good' | 'good' | 'satisfactory' | 'unsatisfactory';
 
@@ -118,12 +122,18 @@ export interface ValidationStatement {
 	selfChecks: { passed: boolean; failed: string[] } | null;
 	/** Open engine-audit.md items (generated). */
 	limitations: readonly Limitation[];
+	/** Known bugs of the run's engine version (docs/engine-errata.md, generated). */
+	errata: Erratum[];
+	/** The methodology statement current in this build (docs/methodology), by version and hash. */
+	methodology: Pick<MethodologyVersion, 'version' | 'sha256'>;
 }
 
 export interface ValidationInput {
 	summary: RunSummary;
 	engineVersion: string;
 	legacy: boolean;
+	/** The engine of the automatic fit the run's parameters came from (settings.fitRecord.engineVersion); null for entered parameters. */
+	fitEngineVersion?: string | null;
 }
 
 /** Up to engine 1.31.0 the low-vs-CHIRPS check kept this many flagged years as examples (quality.ts MAX_EXAMPLES). */
@@ -139,7 +149,12 @@ function versionBefore(a: string, b: string): boolean {
 }
 
 /** The validation statement of one saved run. */
-export function validationStatement(run: ValidationInput, build: EngineBuild | null = null, limitations: readonly Limitation[] = KNOWN_LIMITATIONS): ValidationStatement {
+export function validationStatement(
+	run: ValidationInput,
+	build: EngineBuild | null = null,
+	limitations: readonly Limitation[] = KNOWN_LIMITATIONS,
+	errata: readonly Erratum[] = ENGINE_ERRATA
+): ValidationStatement {
 	const s = run.summary;
 	const c = s.calibration;
 	const checks = s.dataQuality?.seriesChecks ?? [];
@@ -172,6 +187,8 @@ export function validationStatement(run: ValidationInput, build: EngineBuild | n
 		flaggedYearsMayBeCut: versionBefore(run.engineVersion, '1.31.1') && checks.some((x) => x.check === 'lowvschirps' && x.examples.length >= OLD_EXAMPLE_CAP),
 		dataQuality: [...checks.map((x) => x.text), ...(s.dataQuality?.areaMismatches?.length ? [`${s.dataQuality.areaMismatches.length} farm area(s) differ from high + low MAP area by more than 1 %.`] : [])],
 		selfChecks: s.verification ? { passed: s.verification.passed, failed: s.verification.checks.filter((k) => !k.passed).map((k) => k.label) } : null,
-		limitations
+		limitations,
+		errata: errataFor(run.engineVersion, errata, run.fitEngineVersion ?? null),
+		methodology: { version: METHODOLOGY.version, sha256: METHODOLOGY.sha256 }
 	};
 }

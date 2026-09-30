@@ -18,7 +18,7 @@ mode. Every run records `engineVersion`, so results from 0.3.x stay explainable.
 - **Known limitations** (WP-3.13): every item below whose decision is still
   open (*pending*, *Needs hydrologist*, *Warned*, *Built*) is printed on
   every report's validation statement and sign-off. The list is generated
-  from the two tables; after changing a decision run `pnpm gen:limitations`
+  from the two tables; after changing a decision run `pnpm gen:liability`
   (`packages/engine/src/liability/limitations.test.ts` fails until you do).
 - **Policy** (CLAUDE.md rule 10, [STACK.md](./STACK.md)): engine correctness is
   judged by documented hydrology and the invariant tests. The client catchment

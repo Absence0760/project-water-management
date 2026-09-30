@@ -111,7 +111,7 @@
 					</Lazy>
 				</section>
 				<div class="validation">
-					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} />
+					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} fitEngineVersion={data.b.run.settings?.fitRecord?.engineVersion ?? null} />
 				</div>
 			{/if}
 		</LoadState>
