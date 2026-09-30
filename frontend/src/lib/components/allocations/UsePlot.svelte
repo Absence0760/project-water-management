@@ -23,6 +23,7 @@
 		rows,
 		axisMax,
 		tolerance,
+		toleranceApplication = tolerance,
 		title,
 		caption,
 		application,
@@ -33,6 +34,8 @@
 		axisMax: number;
 		/** The band around 100 % counted as within, 0–1; null when not recorded. */
 		tolerance: number | null;
+		/** The application run's band when it differs (an application report); the shaded band is the baseline's. */
+		toleranceApplication?: number | null;
 		title: string;
 		caption: string;
 		/** An application report: two marks a year. */
@@ -83,7 +86,7 @@
 	const summary = $derived.by(() => {
 		const all = allRows ?? rows;
 		const drawn = all.length > rows.length ? ` The chart draws the first ${fmtNum(rows.length)} of ${fmtNum(all.length)} units and water sources.` : '';
-		return useSummary(all, tolerance, application) + drawn;
+		return useSummary(all, tolerance, application, toleranceApplication) + drawn;
 	});
 </script>
 

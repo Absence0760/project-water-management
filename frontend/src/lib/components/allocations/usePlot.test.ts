@@ -90,6 +90,15 @@ describe('useSummary', () => {
 		expect(useSummary([row('A', [[1.2, 'baseline']])], 0.1, false)).toBe('1 of 1 whole water year is above the ±10 % band (over 110 % of the registered volume), in 1 of 1 unit and water source.');
 	});
 
+	it('names each run’s own band when the application ran with another one', () => {
+		const rows = [row('A', [[1.2, 'baseline', true], [1.2, 'application', false]])];
+		expect(useSummary(rows, 0.1, true, 0.25)).toBe(
+			'Baseline: 1 of 1 whole water year above the ±10 % band (over 110 % of the registered volume), in 1 of 1 unit and water source; application: 0 of 1 whole water year above the ±25 % band (over 125 % of the registered volume).'
+		);
+		// Control: the same band on both runs keeps the one heading.
+		expect(useSummary(rows, 0.1, true, 0.1)).toMatch(/^Years above the ±10 % band/);
+	});
+
 	it('says "above the registered volume" when no band is recorded', () => {
 		expect(useSummary([row('A', [[1.05, 'baseline', true], [0.9, 'baseline', false]])], null, false)).toBe('1 of 2 whole water years is above the registered volume, in 1 of 1 unit and water source.');
 	});

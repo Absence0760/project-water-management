@@ -81,11 +81,13 @@ export function comparisonUseRows(c: Pick<AllocationComparison, 'nodes'>, units:
  * years are above the band (the engine's "above registered", each mark's
  * `over`, so it agrees with the table to the last bit), per run in an
  * application, and in how many of the rows with a mark. Without a recorded
- * band, the words say above the registered volume.
+ * band, the words say above the registered volume. When the application ran
+ * with another band (`toleranceApplication`), each run's count names its own.
  */
-export function useSummary(allRows: readonly UseRow[], tolerance: number | null, application: boolean): string {
+export function useSummary(allRows: readonly UseRow[], tolerance: number | null, application: boolean, toleranceApplication: number | null = tolerance): string {
 	const rows = allRows.filter((r) => r.marks.length);
-	const where = tolerance === null ? 'above the registered volume' : `above the ±${fmtNum(tolerance * 100, 0)} % band (over ${fmtNum((1 + tolerance) * 100, 0)} % of the registered volume)`;
+	const whereOf = (t: number | null) => (t === null ? 'above the registered volume' : `above the ±${fmtNum(t * 100, 0)} % band (over ${fmtNum((1 + t) * 100, 0)} % of the registered volume)`);
+	const where = whereOf(tolerance);
 	const count = (run: UseMark['run']) => {
 		const marks = rows.flatMap((r) => r.marks.filter((m) => m.run === run));
 		const above = marks.filter((m) => m.over).length;
@@ -98,5 +100,8 @@ export function useSummary(allRows: readonly UseRow[], tolerance: number | null,
 	const b = count('baseline');
 	if (!application) return `${fmtNum(b.above)} of ${years(b.of)} ${b.above === 1 || b.of === 1 ? 'is' : 'are'} ${where}${inRows(b)}.`;
 	const a = count('application');
+	// Two runs with different bands: each count is against its own run's band, so each says which.
+	if (toleranceApplication !== tolerance)
+		return `Baseline: ${fmtNum(b.above)} of ${years(b.of)} ${where}${inRows(b)}; application: ${fmtNum(a.above)} of ${years(a.of)} ${whereOf(toleranceApplication)}${inRows(a)}.`;
 	return `Years ${where}: baseline ${fmtNum(b.above)} of ${years(b.of)}${inRows(b)}; application ${fmtNum(a.above)} of ${years(a.of)}${inRows(a)}.`;
 }

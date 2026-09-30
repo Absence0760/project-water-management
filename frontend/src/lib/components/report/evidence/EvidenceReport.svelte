@@ -353,6 +353,7 @@
 							rows={use.rows}
 							axisMax={use.axisMax}
 							tolerance={al.toleranceA ?? al.toleranceB}
+							toleranceApplication={al.toleranceB ?? al.toleranceA}
 							application={app}
 							title="Modelled use as a share of the registered volume, per unit and water source, each whole water year{app ? ', baseline and application' : ''}"
 							caption="Over and under use of the registered volumes."
