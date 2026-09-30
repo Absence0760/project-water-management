@@ -2230,7 +2230,7 @@ functions and changes no table, policy or grant:
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
@@ -2239,7 +2239,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
-| `enabled`, `schedule` | `daily` or `hourly` |
+| `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
@@ -2266,11 +2266,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
     from the enqueues.
   - Due (`app_feed_is_due`, 027, a plain function only the two above call):
-    never scheduled; or not scheduled within a day (or an hour, for hourly),
-    with a minute's slack; or, for a **daily `chirps_gefs`** feed, scheduled
-    before the latest 08:45 UTC (after CHC publishes the day's issue, #33);
-    or, while failing, after 15 min × 2^(failures − 1), capped at the
-    interval. UTC whatever the session time zone.
+    never scheduled; or not scheduled within a day, with a minute's slack;
+    or, for a **`chirps_gefs`** feed, scheduled before the latest 08:45 UTC
+    (after CHC publishes the day's issue, #33); or, while failing, after
+    15 min × 2^(failures − 1), capped at the day. UTC whatever the session
+    time zone. 111 dropped the hourly interval; the `schedule` argument
+    stays so the callers are unchanged.
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.
@@ -2297,6 +2298,16 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     pending but waiting (a backfill's next window, a retry): makes that job
     due now, as an editor, and says whether it moved one (`water_app` can't
     UPDATE `job`).
+  - `app_feed_take_run_now(feed, capacity, refill_seconds)` (111): takes one
+    "Run now" press from the feed's token bucket, as an editor of its
+    project; returns 0, or the seconds until a press is back (taking
+    nothing). The route passes `RUN_NOW_RATE` (6, one back every 600 s) and
+    calls it only for a press that queued or pulled a fetch, in the press's
+    transaction, so a refusal rolls the enqueue back. The bucket is
+    **`data_feed_run_now (feed_id PK → data_feed CASCADE, tokens,
+    refilled_at)`**, the `api_key_throttle` pattern: RLS on with a policy
+    that matches no row, so `water_app` neither reads nor refills it; only
+    this function does. No personal information.
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.

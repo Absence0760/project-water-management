@@ -534,7 +534,7 @@ describe('rainVsChirps (issue #2)', () => {
 			['rain_chirps_mm', 'negative']
 		]);
 	});
-	it('lists every flagged year, not the first few (engine 1.30.1, issue #70)', () => {
+	it('lists every flagged year, not the first few (engine 1.31.1, issue #70)', () => {
 		// Seven flagged years: the validation statement's table lists what the check's examples hold.
 		const years = Array.from({ length: 7 }, (_, k) => ({ waterYear: 2000 + k, days: 365, catchmentMm: 200, chirpsMm: 500, ratio: 0.4, flagged: true }));
 		const c = rainVsChirpsCheck({ usualRatio: 1, years, flaggedYears: years.map((y) => y.waterYear), ratioLimit: 0.5, baseline: 'record' })!;

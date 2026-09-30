@@ -244,7 +244,7 @@ export interface SeriesCheck {
 	/**
 	 * Up to MAX_EXAMPLES cases (except low-vs-CHIRPS, below): the day, its value,
 	 * and for a flat-line or zero run the stretch length. A zero run also has its
-	 * last day. A low-vs-CHIRPS check lists every flagged year (engine ≥ 1.30.1; the first MAX_EXAMPLES
+	 * last day. A low-vs-CHIRPS check lists every flagged year (engine ≥ 1.31.1; the first MAX_EXAMPLES
 	 * before), with the water year's first and last day, value = catchment /
 	 * CHIRPS and runDays = the days both series have a reading.
 	 */

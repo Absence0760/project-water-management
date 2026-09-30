@@ -106,7 +106,7 @@ export interface ValidationStatement {
 	/** Water years whose catchment rain reads far below CHIRPS (quality.ts 'lowvschirps'). */
 	flaggedYears: FlaggedYear[];
 	/**
-	 * True when a run from before engine 1.30.1 kept only the first
+	 * True when a run from before engine 1.31.1 kept only the first
 	 * OLD_EXAMPLE_CAP flagged years and hit that cap, so `flaggedYears` may
 	 * be short; the data-quality line still names every year. Re-running on
 	 * the current engine lists them all.
@@ -126,7 +126,7 @@ export interface ValidationInput {
 	legacy: boolean;
 }
 
-/** Up to engine 1.30.0 the low-vs-CHIRPS check kept this many flagged years as examples (quality.ts MAX_EXAMPLES). */
+/** Up to engine 1.31.0 the low-vs-CHIRPS check kept this many flagged years as examples (quality.ts MAX_EXAMPLES). */
 const OLD_EXAMPLE_CAP = 5;
 
 /** a < b for two X.Y.Z versions (an unparsable one counts as old). */
@@ -169,7 +169,7 @@ export function validationStatement(run: ValidationInput, build: EngineBuild | n
 		flaggedYears: checks
 			.filter((x) => x.check === 'lowvschirps')
 			.flatMap((x) => x.examples.map((e) => ({ seriesKind: x.seriesKind, start: e.date, end: e.endDate ?? null, ratio: e.value }))),
-		flaggedYearsMayBeCut: versionBefore(run.engineVersion, '1.30.1') && checks.some((x) => x.check === 'lowvschirps' && x.examples.length >= OLD_EXAMPLE_CAP),
+		flaggedYearsMayBeCut: versionBefore(run.engineVersion, '1.31.1') && checks.some((x) => x.check === 'lowvschirps' && x.examples.length >= OLD_EXAMPLE_CAP),
 		dataQuality: [...checks.map((x) => x.text), ...(s.dataQuality?.areaMismatches?.length ? [`${s.dataQuality.areaMismatches.length} farm area(s) differ from high + low MAP area by more than 1 %.`] : [])],
 		selfChecks: s.verification ? { passed: s.verification.passed, failed: s.verification.checks.filter((k) => !k.passed).map((k) => k.label) } : null,
 		limitations

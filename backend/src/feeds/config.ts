@@ -11,7 +11,13 @@ import { SeriesStartDate } from '../series/limits.js';
 export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws'] as const;
 export type FeedSource = (typeof FEED_SOURCES)[number];
 
-export const FEED_SCHEDULES = ['daily', 'hourly'] as const;
+/**
+ * Daily only (111_feed_daily_only): no source publishes more often (CHIRPS
+ * daily at most, CHIRPS-GEFS one issue a day, verified DWS flow months
+ * behind), so an hourly feed only re-read the same days. The field stays in
+ * the API for compatibility; anything but 'daily' is a 400.
+ */
+export const FEED_SCHEDULES = ['daily'] as const;
 export type FeedSchedule = (typeof FEED_SCHEDULES)[number];
 
 export interface SourceSpec {

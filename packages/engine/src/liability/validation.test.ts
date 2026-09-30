@@ -95,14 +95,14 @@ describe('validationStatement', () => {
 		const examples = Array.from({ length: 7 }, (_, k) => ({ date: `${2000 + k}-10-01`, endDate: `${2001 + k}-09-30`, value: 0.4 }));
 		const v = validationStatement({
 			summary: bare({ dataQuality: { observedAgreement: null, seriesChecks: [{ seriesKind: 'rain_catchment_mm', check: 'lowvschirps', days: 7 * 365, examples, text: '7 water years.' }], areaMismatches: [] } }),
-			engineVersion: '1.30.1',
+			engineVersion: '1.31.1',
 			legacy: false
 		});
 		expect(v.flaggedYears.map((y) => y.start)).toEqual(examples.map((e) => e.date));
 		expect(v.flaggedYearsMayBeCut).toBe(false);
 	});
 
-	it('says a run from before engine 1.30.1 that hit the old cap of 5 may list only some flagged years', () => {
+	it('says a run from before engine 1.31.1 that hit the old cap of 5 may list only some flagged years', () => {
 		const years = (n: number) => Array.from({ length: n }, (_, k) => ({ date: `${2000 + k}-10-01`, endDate: `${2001 + k}-09-30`, value: 0.4 }));
 		const cut = (engineVersion: string, n: number) =>
 			validationStatement({
@@ -112,19 +112,20 @@ describe('validationStatement', () => {
 			}).flaggedYearsMayBeCut;
 		expect(cut('1.30.0', 5)).toBe(true);
 		expect(cut('0.31.2', 5)).toBe(true);
+		expect(cut('1.31.0', 5)).toBe(true);
 		// Under the cap, or on an engine that keeps them all: the list is whole.
 		expect(cut('1.30.0', 4)).toBe(false);
-		expect(cut('1.30.1', 5)).toBe(false);
-		expect(cut('1.31.0', 5)).toBe(false);
+		expect(cut('1.31.1', 5)).toBe(false);
+		expect(cut('1.32.0', 5)).toBe(false);
 		expect(cut('2.0.0', 5)).toBe(false);
 	});
 
 	it('reads the build record the site build injected, and nothing that isn’t one', () => {
-		const build = { version: '1.30.1', gitSha: '0123456789abcdef0123456789abcdef01234567', invariantsPassed: true, soakCases: 4000 };
+		const build = { version: '1.31.1', gitSha: '0123456789abcdef0123456789abcdef01234567', invariantsPassed: true, soakCases: 4000 };
 		expect(parseEngineBuild(JSON.stringify(build))).toEqual(build);
 		// Extra keys are dropped, not passed through.
 		expect(parseEngineBuild(JSON.stringify({ ...build, note: 'x' }))).toEqual(build);
-		for (const raw of [undefined, null, '', 'not json', 'null', '[]', '"1.30.1"']) expect(parseEngineBuild(raw)).toBeNull();
+		for (const raw of [undefined, null, '', 'not json', 'null', '[]', '"1.31.1"']) expect(parseEngineBuild(raw)).toBeNull();
 		for (const bad of [{ version: 'v1' }, { gitSha: 'main' }, { invariantsPassed: 'yes' }, { soakCases: -1 }, { soakCases: 1.5 }]) {
 			expect(parseEngineBuild(JSON.stringify({ ...build, ...bad }))).toBeNull();
 		}

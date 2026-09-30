@@ -3408,12 +3408,15 @@ part of the Settings tab's chunk; WP-2.10,
   ("1 feed needs attention: …", `role="alert"`).
 - **Run now** (editors) queues a fetch at once and says so; the status
   updates once the background worker has run it (**Refresh status**).
+  Pressed too often (6 fetches, then one every 10 minutes per feed), the
+  section's error line shows the server's words, with the wait in whole
+  minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
-  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either **Grid cells**
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either **Grid cells**
   (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
   their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
@@ -5443,7 +5446,7 @@ baseline card links to the published run's report (**Report**, beside
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years (every one, engine ≥ 1.30.1; an
+    caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
     older run that hit the old cap of 5 says its list may be cut short) and
     checks, and the **known
     limitations** table (ID, limitation, where it stands) generated from
