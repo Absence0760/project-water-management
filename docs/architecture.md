@@ -1026,9 +1026,19 @@ merges into:
   window at a time rather than a window a day. Each CHIRPS window re-reads
   the last 50 days, so it moves on 70. "Run now" while that fetch waits makes
   it due now (`app_feed_fetch_now`, 032).
-- **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
-  `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
-  A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
+- **"Run now" is rate-limited per feed** (111, `app_feed_take_run_now`): a
+  token bucket of 6 presses, one back every 10 minutes (`RUN_NOW_RATE`,
+  feeds/routes.ts). Only a press that queues a fetch or pulls a waiting one
+  forward takes one; a press onto a fetch already due changes nothing and
+  takes none. Past it the route answers `429` with `Retry-After` and rolls
+  the press back, so a stuck button or a script can't queue a fetch (and its
+  upstream requests) every few seconds.
+- **Schedule.** Every feed runs daily (111_feed_daily_only): no source
+  publishes more often (CHIRPS daily at most, CHIRPS-GEFS one issue a day,
+  verified DWS flow months behind), so the old hourly schedule only re-read
+  the same days 24 times. Every tick lists the due feeds (`app_due_feeds`,
+  `SECURITY DEFINER`): enabled ones not scheduled within a day.
+  A CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
   passed since it was last scheduled, since CHC publishes each issue around
   08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
   tick opens one transaction **as the feed's acting user** (the owner who
@@ -1037,7 +1047,7 @@ merges into:
   together: a failure between them rolls the claim back and the next tick
   tries again, and one feed's failure doesn't hold up the rest (#32). A
   failing feed retries sooner: 15 minutes after one failure, doubling up to
-  its interval. If the acting user is no longer an editor, the enqueue is
+  the day. If the acting user is no longer an editor, the enqueue is
   refused, the feed records it (`app_feed_schedule_failed`, keeping the
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,

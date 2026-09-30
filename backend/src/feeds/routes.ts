@@ -31,6 +31,21 @@ import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, seriesAccepts, 
 /** At most this many feeds per project. */
 export const MAX_FEEDS = 20;
 
+/**
+ * "Run now" per feed (111_feed_daily_only, app_feed_take_run_now): a bucket of
+ * `capacity` presses, one back every `refillSeconds`. Only a press that queues
+ * a fetch or pulls a waiting one forward takes one, so a few quick retries of
+ * a failing feed or a backfill's windows pass, and a stuck button can't queue
+ * a fetch (and its upstream requests) every few seconds.
+ */
+export const RUN_NOW_RATE = { capacity: 6, refillSeconds: 600 } as const;
+
+/** A wait in words for the 429: whole minutes, rounded up (at most the refill period). */
+export const runNowWait = (seconds: number) => {
+	const min = Math.max(1, Math.ceil(seconds / 60));
+	return `${min} minute${min === 1 ? '' : 's'}`;
+};
+
 const feedId = (id: string) => {
 	if (!UUID.test(id)) throw new ApiError(404, 'not found');
 	return id;
@@ -186,7 +201,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 		return c.body(null, 204);
 	})
 	// Fetch now. One pending fetch per feed: a second press while one waits
-	// returns that one (200) instead of queueing another.
+	// returns that one (200) instead of queueing another. Rate-limited per
+	// feed (RUN_NOW_RATE): 429 with Retry-After once the bucket is empty.
 	.post('/:id/feeds/:feedId/run-now', async (c) => {
 		const id = c.req.param('id');
 		const fid = feedId(c.req.param('feedId'));
@@ -198,6 +214,25 @@ export const feedRoutes = new Hono<AuthEnv>()
 			const r = await enqueueJob(db, { projectId: id, kind: 'feed_fetch', payload: { feedId: fid }, dedupeKey: feedFetchDedupeKey(fid) });
 			// A fetch already pending may be waiting (a backfill's next window, a retry): now means now.
 			const pulled = !r.created && (await db.query<{ moved: boolean }>('SELECT app_feed_fetch_now($1) AS moved', [fid])).rows[0]!.moved;
+			// A press that queued or pulled a fetch takes one from the feed's bucket;
+			// one that found a fetch already due takes nothing. Refused: the throw
+			// rolls this transaction back, enqueue and pull with it.
+			if (r.created || pulled) {
+				const { rows } = await db.query<{ wait: number }>('SELECT app_feed_take_run_now($1, $2, $3) AS wait', [
+					fid,
+					RUN_NOW_RATE.capacity,
+					RUN_NOW_RATE.refillSeconds
+				]);
+				const wait = rows[0]!.wait;
+				if (wait > 0) {
+					c.header('Retry-After', String(wait));
+					throw new ApiError(
+						429,
+						`“Run now” was used too often for this feed (${RUN_NOW_RATE.capacity} fetches, then one every ${RUN_NOW_RATE.refillSeconds / 60} minutes): try again in ${runNowWait(wait)}, or let it run on its daily schedule`,
+						{ retryAfter: wait }
+					);
+				}
+			}
 			return { ...r, pulled };
 		});
 		const { pulled, ...body } = result;
