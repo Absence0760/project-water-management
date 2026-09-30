@@ -459,6 +459,18 @@ export const af: Catalogue = {
 	'6d1bd261': 'Jy het elke maand alles ontvang wat jy nodig gehad het.',
 	// Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below.
 	'f66cc4c1': 'Water wat jy elke maand nodig gehad en ontvang het, {from} tot {to}. {short} Die syfers is in die tabel hieronder.',
+	// all or nearly all
+	'55267b39': 'alles of amper alles',
+	// a little short
+	'61117c8a': 'effens te min',
+	// short
+	'ba226bd5': 'te min',
+	// very short
+	'5c11f183': 'baie te min',
+	// far too little
+	'aab3cf6c': 'veels te min',
+	// All or nearly all is {low} or more of what you needed; a little short, {moderate} or more; short, {high} or more; very short, {severe} or more; far too little, less than {severe}.
+	'52371b9f': 'Alles of amper alles is {low} of meer van wat jy nodig gehad het; effens te min, {moderate} of meer; te min, {high} of meer; baie te min, {severe} of meer; veels te min, minder as {severe}.',
 	// No dam levels yet.
 	'531d4239': 'Nog geen damvlakke nie.',
 	// Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.
