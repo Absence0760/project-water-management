@@ -5,7 +5,17 @@
 	// there is one layout. Everything comes from one EvidenceReport document
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
-	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, ENSEMBLE_MEASURES_SINCE, type Band, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
+	import {
+		ALLOCATION_MODE_LABEL,
+		APPLICANT_PROMPTS,
+		declaredRuleText,
+		describeFitRecord,
+		ENSEMBLE_MEASURES_SINCE,
+		type Band,
+		type EvidenceReport,
+		type EwrAssuranceSite,
+		type ModelInput
+	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
 	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
@@ -728,6 +738,24 @@
 			{:else if s.id === 'applicantStatement' && report.applicantStatement}
 				{@const st = report.applicantStatement}
 				<p class="small muted">The applicant’s own words, verbatim: the only free text in this report (G13). Not checked by the app.</p>
+				<!-- evidence-8: the fixed prompts, each answered or "Not given"; a pack drafted before it froze none, and says so. -->
+				{#if st.prompts}
+					{@const prompts = st.prompts}
+					<div class="prompts" data-testid="evidence-prompts">
+						{#each APPLICANT_PROMPTS as p (p.id)}
+							<div data-testid="evidence-prompt-{p.id}">
+								<h3>{p.heading}</h3>
+								<p class="small muted q">{p.question}</p>
+								{#if prompts[p.id].trim()}<p class="verbatim">{prompts[p.id]}</p>{:else}<p class="na">Not given.</p>{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="na" data-testid="evidence-prompts-absent">
+						The fixed prompts (purpose and need, mitigation, monitoring) are not part of this pack: it was drafted before the evidence report asked
+						them (report format evidence-8). A new version of the pack carries them.
+					</p>
+				{/if}
 				<h3>Description of “{st.scenarioName}”{st.ownerName ? `, by ${st.ownerName}` : ''}</h3>
 				{#if st.description.trim()}<p class="verbatim">{st.description}</p>{:else}<p class="na">None given.</p>{/if}
 				<h3>Notes on the application run</h3>
@@ -886,6 +914,10 @@
 	.hash {
 		font-size: 0.72rem;
 		word-break: break-all;
+	}
+	.prompts .q {
+		max-width: 80ch;
+		margin: 0.15rem 0 0.35rem;
 	}
 	.verbatim {
 		white-space: pre-wrap;

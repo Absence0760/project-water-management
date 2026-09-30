@@ -408,6 +408,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		applicantStatement: a
 			? {
 					scenarioName: a.scenario.name,
+					prompts: { purposeAndNeed: a.scenario.prompts.purposeAndNeed, mitigation: a.scenario.prompts.mitigation, monitoring: a.scenario.prompts.monitoring },
 					description: a.scenario.description,
 					ownerName: a.scenario.ownerName,
 					notes: a.notes,

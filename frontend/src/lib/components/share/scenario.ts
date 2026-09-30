@@ -16,9 +16,10 @@ import { t } from '$lib/i18n/locale.svelte';
 
 // i18n-section: share.scenario
 
-/** The link's kind from the URL's fragment (`k=scenario`); null: the catchment view. */
-export function readShareKind(hash: string): 'scenario' | null {
-	return new URLSearchParams(hash.replace(/^#/, '')).get('k') === 'scenario' ? 'scenario' : null;
+/** The link's kind from the URL's fragment (`k=scenario`, `k=pack`); null: the catchment view. */
+export function readShareKind(hash: string): 'scenario' | 'pack' | null {
+	const k = new URLSearchParams(hash.replace(/^#/, '')).get('k');
+	return k === 'scenario' || k === 'pack' ? k : null;
 }
 
 export type EwrTrend = 'same' | 'better' | 'worse';
@@ -199,7 +200,7 @@ export function resultsNote(r: ShareScenario['results']): string | null {
 	return null;
 }
 
-/** sessionStorage key: a scenario link's token, kept for this tab while its reader signs in to comment. */
+/** sessionStorage key: a scenario or pack link's token and kind, kept for this tab while its reader signs in to comment. */
 export const SHARE_RETURN_KEY = 'wm:share-return';
 /** How long a kept link waits for its reader to sign in; after that a bare /share in the tab doesn't reopen it. */
 export const SHARE_RETURN_MS = 15 * 60_000;

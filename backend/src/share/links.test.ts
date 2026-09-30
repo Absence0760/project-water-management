@@ -6,7 +6,7 @@
 // whatever sneaks into the row, no `user_display`, e-mail, member or other
 // farm's name comes out. The database side is share/scenario-share.db.test.ts.
 import { describe, expect, it } from 'vitest';
-import { ListQuery, shareUrl, toLink, toShareScenario, type ShareLinkRow, type ShareScenarioRow } from './links.js';
+import { ListQuery, shareUrl, toLink, toSharePack, toShareScenario, type ShareLinkRow, type SharePackRow, type ShareScenarioRow } from './links.js';
 
 const OWN = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -116,6 +116,7 @@ describe('shareUrl', () => {
 	it('keeps the baseline link as it was, and names a targeted link’s kind in the fragment', () => {
 		expect(shareUrl('tok')).toMatch(/\/share#t=tok$/);
 		expect(shareUrl('tok', 'scenario')).toMatch(/\/share#t=tok&k=scenario$/);
+		expect(shareUrl('tok', 'pack')).toMatch(/\/share#t=tok&k=pack$/);
 	});
 });
 
@@ -133,6 +134,7 @@ describe('the link list', () => {
 		target_id: null,
 		target_name: null,
 		target_status: null,
+		target_version: null,
 		mine: true,
 		...over
 	});
@@ -141,7 +143,9 @@ describe('the link list', () => {
 		expect(ListQuery.parse({ scope: 'all' })).toEqual({ scope: 'all' });
 		expect(ListQuery.parse({})).toEqual({});
 		expect(() => ListQuery.parse({ scope: 'every' })).toThrow();
-		expect(() => ListQuery.parse({ scope: 'all', scenarioId: OTHER })).toThrow(/not both/);
+		expect(() => ListQuery.parse({ scope: 'all', scenarioId: OTHER })).toThrow(/one of/);
+		expect(ListQuery.parse({ packId: OTHER })).toEqual({ packId: OTHER });
+		expect(() => ListQuery.parse({ packId: OTHER, scenarioId: OWN })).toThrow(/one of/);
 	});
 
 	it('names a target only when the caller read it', () => {
@@ -153,5 +157,102 @@ describe('the link list', () => {
 		});
 		// A target the caller can't read (RLS): kind and id stay, the name doesn't.
 		expect(toLink(linkRow({ target_kind: 'scenario', target_id: OTHER })).target).toBeNull();
+		// A pack (128): its title, status and version; a scenario never carries a version.
+		expect(toLink(linkRow({ target_kind: 'pack', target_id: OTHER, target_name: 'Raise', target_status: 'withdrawn', target_version: 2 })).target).toEqual({
+			name: 'Raise',
+			status: 'withdrawn',
+			version: 2
+		});
+		expect(toLink(linkRow({ target_kind: 'scenario', target_id: OTHER, target_name: 'Raise', target_status: 'submitted', target_version: 3 })).target).toEqual({
+			name: 'Raise',
+			status: 'submitted'
+		});
+	});
+});
+
+// The pack link's answer (128_pack_share_notes.sql app_share_pack): the
+// database's allowlist again, field by field, and the figures only while the
+// pack is issued whatever the row carries.
+describe('toSharePack', () => {
+	const SHA = 'ab'.repeat(32);
+	const figures = (extra: Record<string, unknown> = {}) => ({
+		identity: {
+			title: 'Raise Rooikloof',
+			mode: 'application',
+			baseline: { startDate: '2000-10-01', endDate: '2020-09-30', engineVersion: '1.50.0', runoffModel: 'gr4j', createdBy: 'Jane Holder' },
+			application: { engineVersion: '1.50.0', proposals: 1, assumptions: 0, ownerName: 'Jane Holder' }
+		},
+		volumes: false,
+		rows: [
+			{ id: 'reserve', label: 'Reserve months met', basis: 'b', subject: 'Gauge X', unit: '%', higherIsWorse: false, baseline: 90, application: 80, change: { run: -10, band: { n: 30, p5: -12, p50: -10, p95: -8, min: -20, names: ['Neighbour Farm'] }, bandNote: null, worse: { k: 28, n: 30 } }, notAssessed: null, note: '10 of 12 months' },
+			{ id: 'ewrDays', label: 'Days below the EWR', basis: 'b', subject: 'Neighbour Farm', unit: 'days', higherIsWorse: true, baseline: 10, application: 12, change: null, notAssessed: null, note: 'Neighbour Farm' },
+			// A volume row the database let through although volumes is false, and rows it never sends.
+			{ id: 'shortfall', label: 'Volume', basis: 'b', subject: null, unit: 'Mm³', higherIsWorse: true, baseline: 1, application: 2, change: null, notAssessed: null, note: null },
+			{ id: 'userSupply', label: 'Supply', basis: 'b', subject: 'Neighbour Farm', unit: '%', higherIsWorse: false, baseline: 100, application: 50, change: null, notAssessed: null, note: null },
+			{ id: 'otherApplications', label: 'Other', basis: 'b', subject: null, unit: 'days', higherIsWorse: true, baseline: null, application: null, change: null, notAssessed: null, note: 'Neighbour Farm application' }
+		],
+		river: [
+			{ name: 'Neighbour Farm', isOutlet: true, category: 'C', monthsA: 12, rateA: 0.9, rateB: 0.8, longestA: 1, longestB: 2, lost: 1, gained: 0, key: OTHER, months: [{ deliveredA: 1 }] },
+			{ name: 'Gauge X', isOutlet: false, category: null, monthsA: 12, rateA: 1, rateB: 1, longestA: 0, longestB: 0, lost: 0, gained: 0 }
+		],
+		byMonth: [{ month: 10, run: 1, band: null, nodeId: OTHER }],
+		disclaimerVersion: 'v1',
+		users: [{ name: 'Neighbour Farm' }],
+		...extra
+	});
+	const verify = (status = 'issued', extra: Record<string, unknown> = {}) => ({
+		status,
+		version: 2,
+		issuedAt: '2026-09-29T10:00:00Z',
+		catchment: 'Catchment',
+		engineVersion: '1.50.0',
+		reportVersion: 'evidence-5',
+		manifestSha256: SHA,
+		pdfSha256: null,
+		bundleSha256: SHA,
+		successorSha256: null,
+		withdrawnReason: status === 'withdrawn' ? 'Wrong baseline' : null,
+		methodology: { version: 'm1', sha256: SHA },
+		errata: [],
+		signers: [{ fullName: 'Signer', registrationBody: 'sacnasp', registrationCategory: null, registrationField: null, registrationNo: '1', signedAt: '2026-09-29T09:00:00Z', email: 'holder@example.com' }],
+		projectId: OTHER,
+		...extra
+	});
+	const row = (over: Partial<SharePackRow> = {}): SharePackRow => ({
+		pack: { id: OWN, projectId: OWN, title: 'Raise Rooikloof', mode: 'application', version: 2, createdBy: 'Jane Holder' },
+		verify: verify(),
+		figures: figures(),
+		comments: [{ body: 'An objection', author: 'Ngo', createdAt: '2026-09-30T10:00:00Z', editedAt: null, authorId: OTHER }],
+		...over
+	});
+
+	it('keeps only the allowlisted fields, whatever the row carries', () => {
+		const out = toSharePack(row());
+		const text = JSON.stringify(out);
+		for (const leak of LEAKS) expect(text, leak).not.toContain(leak);
+		expect(out.pack).toEqual({ id: OWN, title: 'Raise Rooikloof', mode: 'application', version: 2, shortCode: 'abab-abab-abab' });
+		expect(out.verify.shortCode).toBe('abab-abab-abab');
+		expect(out.figures?.rows.map((r) => r.id)).toEqual(['reserve', 'ewrDays']);
+		// A gauge names its reserve row; nothing else keeps a subject, and the outlet is unnamed.
+		expect(out.figures?.rows[0]).toMatchObject({ subject: 'Gauge X', change: { band: { n: 30, p5: -12, p50: -10, p95: -8 }, worse: { k: 28, n: 30 } } });
+		expect(out.figures?.rows[1]).toMatchObject({ subject: null, note: null });
+		// No label or basis: the page words each row, and a basis quotes free text.
+		expect(Object.keys(out.figures!.rows[0]!)).not.toContain('basis');
+		expect(Object.keys(out.figures!.rows[0]!)).not.toContain('label');
+		expect(out.figures?.river.map((s) => s.name)).toEqual([null, 'Gauge X']);
+		expect(out.comments).toEqual([{ body: 'An objection', author: 'Ngo', createdAt: '2026-09-30T10:00:00Z', editedAt: null }]);
+	});
+
+	it('shows the volume rows only when the database says volumes', () => {
+		expect(toSharePack(row({ figures: figures({ volumes: true }) })).figures?.rows.map((r) => r.id)).toEqual(['reserve', 'ewrDays', 'shortfall']);
+	});
+
+	it('drops the figures once the pack is superseded or withdrawn, even if the row carried them', () => {
+		const withdrawn = toSharePack(row({ verify: verify('withdrawn') }));
+		expect(withdrawn.figures).toBeNull();
+		expect(withdrawn.verify).toMatchObject({ status: 'withdrawn', withdrawnReason: 'Wrong baseline' });
+		const superseded = toSharePack(row({ verify: verify('superseded', { successorSha256: 'cd'.repeat(32), withdrawnReason: 'not shown' }) }));
+		expect(superseded.figures).toBeNull();
+		expect(superseded.verify).toMatchObject({ status: 'superseded', successorSha256: 'cd'.repeat(32), withdrawnReason: null });
 	});
 });

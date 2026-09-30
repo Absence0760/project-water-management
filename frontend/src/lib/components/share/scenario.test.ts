@@ -46,10 +46,11 @@ const scenario = (over: Partial<ShareScenario['scenario']> = {}): ShareScenario[
 });
 
 describe('readShareKind', () => {
-	it('reads a scenario link from the fragment; anything else is the catchment view', () => {
+	it('reads a scenario or pack link from the fragment; anything else is the catchment view', () => {
 		expect(readShareKind('#t=abc&k=scenario')).toBe('scenario');
+		expect(readShareKind('#t=abc&k=pack')).toBe('pack');
 		expect(readShareKind('#t=abc')).toBeNull();
-		expect(readShareKind('#t=abc&k=pack')).toBeNull();
+		expect(readShareKind('#t=abc&k=run')).toBeNull();
 	});
 });
 

@@ -3719,19 +3719,23 @@ Applicant view and the Applications tab. Left:
       [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
       edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
       link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
-- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
-      Add `'pack'` to `share_link.target_kind` (its CHECK and
-      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
-      and PDF key, redacted as `app_share_scenario` is, answering only an
-      issued pack), `app_share_link_creatable` / `_visible` for packs (an
-      editor for any issued pack, the applicant for their own), a nullable
-      `note.pack_id` (same-project trigger through `assert_same_project`,
-      covering index, `note_one_target` and `note_participation_on_scenario`
-      widened to it, `note_write_revision` for pack notes), the notes helpers
-      taking a pack, `POST /share/pack` on the public allowlist,
-      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
-      met** (`evidence_pack` landed in migration 112, 2026-09-29); the next
-      piece of WP-3.15, tracked in issue #71.
+- [x] **Pack targets for share links and notes** (WP-3.15, the pack half):
+      done in `128_pack_share_notes` (2026-09-30, issue #71). An editor
+      links an **issued** pack from its page (`targetKind: 'pack'`,
+      `app_share_link_creatable` / `_visible`); `POST /share/pack`
+      (`app_share_pack`, public) answers exactly what verify does plus,
+      while the pack stands, a redacted projection of its own frozen report
+      (the river's rows and sites, the `k` rule on volumes); a superseded or
+      withdrawn pack's link says so, and why, with no figure. `note.pack_id`
+      (`team` or `public_participation`, open while a pack link is live, every
+      edit kept), `GET|POST …/notes?packId=`, the pack page's Notes, and a
+      pack view on `/share` ([evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)).
+      Two decisions against the first sketch here: no PDF key through the
+      link (the PDF carries every unit's figures and the applicant's
+      statement, which the projection withholds), and no applicant-made
+      link, since applicants read no pack yet ("Applicants' access to their
+      own application's packs", § Evidence report, holds both for when they
+      do).
 - [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
@@ -3754,12 +3758,13 @@ Applicant view and the Applications tab. Left:
       Scenario links](./security.md#scenario-links-wp-315-115_scenario_share_notessql)).
       Pack links join the same list once packs are a share-link target (the
       item under § Evidence report).
-- [ ] **Afrikaans for the shared application page** (WP-3.15): the
-      `share.scenario` strings are on the translation sheet
-      (docs/i18n/af-translation-sheet.md). If they are not translated in the
-      same change, the Afrikaans catalogue is incomplete and `/share` falls
-      back to English words. Trigger: this PR's translation round (see its
-      description).
+- [x] **Afrikaans for the shared application page** (WP-3.15): done. The
+      `share.scenario` strings are in the Afrikaans catalogue, and
+      `pnpm check:i18n` reports no untranslated site, email or glossary
+      string (checked 2026-09-30); the pack view's `share.pack` strings went
+      through the same round in its own change. The native speaker's review
+      is the Afrikaans item above
+      ([#90](https://github.com/Absence0760/project-water-management/issues/90)).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
@@ -4095,10 +4100,30 @@ Left, from the design and the persona review (§11), each with its trigger.
       partial results would mean the browser writing them mid-run, which the
       report doesn't need: the cited ensemble is the first *complete* one on
       the declared rule (G4), so an abandoned start can't be cited either way.
-- [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
-      description and run notes as written. Durable fix: fixed prompts
-      (purpose and need, mitigation, monitoring), each answered or *Not
-      given*. Trigger: before the pilot.
+- [x] **Appendix C's fixed prompts.** Built (report version `evidence-8`):
+      three fixed prompts, purpose and need, mitigation and monitoring
+      (engine `evidence/prompts.ts`), answered on the scenario where it is
+      edited (**Applicant's statement**, `ScenarioStatement.svelte`) and
+      stored on it (`129_scenario_statement`, following the scenario's RLS:
+      an editor on a team scenario, only the applicant on an application;
+      a decision can't change them). Appendix C prints each with its question,
+      the answer verbatim or *Not given*, before the description and run
+      notes; a pack freezes them in its manifest, and one drafted before
+      `evidence-8` says they aren't part of it
+      ([design/evidence-report.md § 4.2](./design/evidence-report.md)).
+- [ ] **Appendix C's answers on the shared application page.** The scenario
+      share link (`app_share_scenario`, 115) shows the description to the
+      public but not the three fixed prompts' answers (purpose and need,
+      mitigation, monitoring). Showing them helps the public comment on an
+      application; it also publishes the applicant's own words beyond the
+      assessor. **Recommendation:** show them, since the description is
+      already public and the answers are the applicant's case. Durable fix:
+      redefine `app_share_scenario` from its latest body to add the three
+      fields, a `share.scenario` i18n round for their headings, and a
+      pack-share-style DB test. **Who:** operator, asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      **Trigger:** the answer, or the first application shared for public
+      comment.
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
       issued* watermark (`position: fixed` in `@media print`, repeated on
       every printed page by Chromium), `aria-hidden` beside the section heads'
@@ -4232,9 +4257,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       Contributors read no pack today (operator decision, 2026-09-29:
       issuing stays with editors). Durable fix: a read policy for the
       scenario's owner and members on packs of their application once
-      issued, with the D2 anonymising applied to the manifest they see.
-      Trigger: WP-3.15, or the first applicant who needs the pack itself
-      rather than its verify link.
+      issued, with the D2 anonymising applied to the manifest they see; then
+      `app_share_link_creatable` / `_visible` (128) let the applicant link
+      their own issued pack and list and revoke the links they made, as for
+      a scenario link. Trigger: the first applicant who needs the pack itself
+      rather than its verify link (WP-3.15's share links to packs landed in
+      128 without it).
 - [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner. Trigger: with the pack
       view.

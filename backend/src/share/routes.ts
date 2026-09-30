@@ -6,11 +6,16 @@
 // 115_scenario_share_notes.sql) is made by an editor on a scenario they read,
 // or by an applicant on their own, once it is submitted or decided; the
 // assessors list and revoke every link to it, an applicant the ones they
-// made. The public reads, POST /share/view, /share/series and
-// /share/scenario, have no session: the token is the credential, read only
+// made. A link to one evidence pack (128_pack_share_notes.sql) is made by an
+// editor while the pack is issued; its editors list and revoke every link to
+// it. The public reads, POST /share/view, /share/series, /share/scenario and
+// /share/pack, have no session: the token is the credential, read only
 // through the SECURITY DEFINER app_share_view / app_share_series /
-// app_share_scenario, and every dead link (unknown, malformed, revoked,
-// expired, nothing published, a scenario no longer submitted) is the same 404.
+// app_share_scenario / app_share_pack, and every dead link (unknown,
+// malformed, revoked, expired, nothing published, a scenario no longer
+// submitted, a pack never issued) is the same 404. A pack link outlives the
+// pack's standing: once it is superseded or withdrawn it answers that, not
+// the figures.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { newToken, parseToken } from '../auth/tokens.js';
@@ -23,7 +28,9 @@ import { stampMatches } from '../runs/stamp.js';
 import {
 	CreateBody,
 	ListQuery,
+	toSharePack,
 	toShareScenario,
+	type SharePackRow,
 	type ShareScenarioRow,
 	SELECT_LINKS,
 	SeriesBody,
@@ -60,12 +67,37 @@ async function shareableScenario(db: Db, projectId: string, scenarioId: string, 
 		throw new ApiError(409, 'only a submitted or decided scenario can be shared: a draft is still changing');
 }
 
+/**
+ * The evidence pack a targeted link names, as the caller reads it (RLS; an
+ * editor reads every pack of the project): 404 when it isn't there, 409
+ * unless it is issued. The policies (app_share_link_creatable) hold the same
+ * rule; the caller is already an editor.
+ */
+async function shareablePack(db: Db, projectId: string, packId: string): Promise<void> {
+	const { rows } = await db.query<{ status: string }>('SELECT status FROM evidence_pack WHERE id = $1 AND project_id = $2', [packId, projectId]);
+	const p = rows[0];
+	if (!p) throw new ApiError(404, 'not found');
+	if (p.status !== 'issued')
+		throw new ApiError(409, 'only an issued pack can be shared: a draft is still changing, and a superseded or withdrawn pack no longer stands');
+}
+
 /** GET/POST /projects/:id/share-links, DELETE /projects/:id/share-links/:linkId. */
 export const shareLinkRoutes = new Hono<AuthEnv>()
 	.get('/:id/share-links', async (c) => {
 		const q = ListQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
+			if (q.packId) {
+				// A pack's links: its project's editors (they read every pack) list every one.
+				await requireRole(db, id, 'editor');
+				const { rows: found } = await db.query('SELECT 1 FROM evidence_pack WHERE id = $1 AND project_id = $2', [q.packId, id]);
+				if (!found[0]) throw new ApiError(404, 'not found');
+				const { rows } = await db.query<ShareLinkRow>(
+					`${SELECT_LINKS} WHERE s.project_id = $1 AND s.target_kind = 'pack' AND s.target_id = $2 ORDER BY s.created_at DESC, s.id`,
+					[id, q.packId]
+				);
+				return c.json({ links: rows.map(toLink) });
+			}
 			if (!q.scenarioId) {
 				// The published baseline's links, or (scope=all) the owner's inventory of every link in the project:
 				// the owner reads every share_link row (app_share_link_visible), so RLS alone would give the same list.
@@ -91,7 +123,10 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		const userId = c.get('userId');
 		return withUser(userId, async (db) => {
 			if (body.targetKind === undefined) await requireRole(db, id, 'owner');
-			else await shareableScenario(db, id, body.targetId!, await requireRole(db, id, 'contributor'), userId);
+			else if (body.targetKind === 'pack') {
+				await requireRole(db, id, 'editor');
+				await shareablePack(db, id, body.targetId!);
+			} else await shareableScenario(db, id, body.targetId!, await requireRole(db, id, 'contributor'), userId);
 			const kind = body.targetKind ?? null;
 			const { token, hash } = newToken();
 			const { rows } = await db.query<{ id: string }>(
@@ -134,7 +169,7 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		})
 	);
 
-/** POST /share/view, /share/series and /share/scenario: public, the token is the credential. */
+/** POST /share/view, /share/series, /share/scenario and /share/pack: public, the token is the credential. */
 export const sharePublicRoutes = new Hono<AuthEnv>()
 	.post('/view', async (c) => {
 		const body = ViewBody.parse(await readJson(c));
@@ -165,4 +200,14 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		if (!row) throw deadLink();
 		c.header('Cache-Control', 'no-store');
 		return c.json(toShareScenario(row, stampMatches));
+	})
+	.post('/pack', async (c) => {
+		const body = ViewBody.parse(await readJson(c));
+		const hash = parseToken(body.token);
+		if (!hash) throw deadLink();
+		const row = await withoutUser(async (db) => (await db.query<SharePackRow>('SELECT * FROM app_share_pack($1)', [hash])).rows[0]);
+		// Unknown, revoked, expired, another kind of link, or a pack that was never issued.
+		if (!row) throw deadLink();
+		c.header('Cache-Control', 'no-store');
+		return c.json(toSharePack(row));
 	});

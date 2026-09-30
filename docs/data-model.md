@@ -74,7 +74,7 @@ erDiagram
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
-| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
+| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `scenario_sweep` | A scenario sweep (062, issue #53 R2): a base run × named op sets, run as one `sweep` job; `base_run_id`, `job_id`, `name`, `status` (`pending` / `complete`), `engine_version`; see [Scenario sweeps](#scenario-sweeps-062_scenario_sweepssql) | none (the workbook is copied by hand for each what-if) |
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
@@ -889,7 +889,17 @@ run's stored input (above), never the live model.
   reads by name; display only, not in `ops_sha256`; 047 backfilled it from
   each scenario's base). An application (`origin = 'applicant'`) keeps only
   its own nodes' names, since its applicant sees every other node
-  anonymised. Indexes cover `base_run_id` and `owner_user_id`.
+  anonymised. Indexes cover `base_run_id` and `owner_user_id`. Since
+  `129_scenario_statement`, `purpose_need`, `mitigation` and `monitoring`
+  (text, `''` until answered, ≤ 4 000 each, `CHECK`): the answers to the
+  evidence report's fixed Appendix C prompts (engine `APPLICANT_PROMPTS`,
+  [design/evidence-report.md § 4.3](./design/evidence-report.md)). Three
+  columns rather than a jsonb (no existing column fits: `ops` is hashed and
+  snapshotted, `op_names` is display names), each with its own limit. No
+  new policy or grant: 045's scenario policies and 024's table-level grant
+  cover them, so who reads and writes them is who reads and writes the
+  scenario. Like `description`, a submission doesn't freeze them; a
+  decision can't change them (`scenario_guard`, below).
 - **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
   end of the statement, so deleting a whole project (which cascades to both
   `model_run` and `scenario`) still works, as for `run_nomination`. Any other
@@ -907,7 +917,10 @@ run's stored input (above), never the live model.
   owner and creation time never change; a scenario that isn't a `draft` is
   **frozen** (its `ops`, `ops_sha256`, `base_run_id` and `owned_node_ids`
   can't change) and a `submitted` or `decided` one can't be deleted; status
-  moves only `draft → submitted → withdrawn | decided`, `withdrawn → draft`.
+  moves only `draft → submitted → withdrawn | decided`, `withdrawn → draft`;
+  an assessor's decision changes nothing else in an application (its name,
+  description and, since 129, its three prompt answers). Latest body:
+  `129_scenario_statement`.
   `model_run_scenario_same_project` (BEFORE INSERT): a run's scenario is one
   of its own project's. The API answers each of these with a `409` first.
 - **RLS**: `SELECT` viewer, `INSERT` / `UPDATE` / `DELETE` editor. **Farmers
@@ -1587,13 +1600,14 @@ Read-only links to the current publication for people outside the project
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
-- **Targets (115_scenario_share_notes, WP-3.15).** `target_kind` (`NULL` or
-  `'scenario'`; evidence packs will add `'pack'`) and `target_id` (uuid),
+- **Targets (115_scenario_share_notes, WP-3.15; 128_pack_share_notes).** `target_kind` (`NULL`,
+  `'scenario'` or `'pack'`) and `target_id` (uuid),
   both or neither (`share_link_target_both`). `NULL` is the baseline link
   above, unchanged. A scenario link's `target_id` is a scenario of the same
   project (the `share_link_target_check` trigger, on insert only: the target
   is fixed, water_app has no UPDATE on it, and a revoke must still work once
-  the scenario is deleted, which leaves a dead link). Indexed on
+  the scenario is deleted, which leaves a dead link); a pack link's is an
+  evidence pack of the same project (the same trigger, 128). Indexed on
   `(target_id, created_at DESC)` where set.
   - **RLS** (`app_share_link_visible` / `app_share_link_creatable`,
     `SECURITY DEFINER`): the owner reads, makes and revokes every link, as
@@ -1603,7 +1617,9 @@ Read-only links to the current publication for people outside the project
     a team scenario's ops name the real farms with their values) while it is
     `submitted` or `decided`; it is
     listed and revoked by the editors who read the scenario and by whoever
-    made it.
+    made it. A pack link (128) is made by an editor or the owner, only while
+    the pack is `issued`, and listed and revoked by the project's editors
+    (they read every pack) and the owner.
   - `app_share_view` and `app_share_series` answer an untargeted link only.
   - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
     scenario link whose application is `submitted` or `decided`, one row of
@@ -1619,6 +1635,18 @@ Read-only links to the current publication for people outside the project
     verifies. `comments` are the undeleted `public_participation` notes on
     it, the newest 500, with their authors' display names. Bumps
     `last_used_at` at most once an hour.
+  - `app_share_pack(p_hash)` (128, `SECURITY DEFINER`, `VOLATILE`): for a
+    live pack link whose pack was issued (issued, superseded or withdrawn;
+    never a draft), one row of `pack (id, project id, title, mode,
+    version), verify (app_verify_pack's object for it, unchanged), figures,
+    comments`. `figures` only while the pack is `issued`:
+    `app_share_pack_projection(manifest.report, volumes)`, an allowlist of
+    the frozen report (identity dates and versions, page 1's river rows,
+    each EWR site's compliance with the outlet unnamed, the paired change by
+    month; the volume rows only at 5 or more farm holders and no changed
+    baseline assumption). `app_share_pack_projection` and
+    `app_share_pack_band` are callable only by the schema owner. Bumps
+    `last_used_at` at most once an hour.
   - `app_run_digest` (077) is split: `app_run_digest_body(p_run)` is the
     digest, unchanged, callable only by the schema owner (and so by definer
     functions); `app_run_digest` keeps its read check and calls it.
@@ -1631,13 +1659,15 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
   created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
   text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
-  setting_key text, scenario_id → scenario CASCADE (115), visibility 'team'
-  | 'farm' | 'assessors' | 'parties' | 'public_participation')`.
+  setting_key text, scenario_id → scenario CASCADE (115), pack_id →
+  evidence_pack CASCADE (128), visibility 'team' | 'farm' | 'assessors' |
+  'parties' | 'public_participation')`.
   - **The target** is a nullable typed foreign key, not a polymorphic id, so
     the foreign keys and the same-project trigger (`assert_same_project
-    ('node_id', 'run_id', 'scenario_id')`; 115 taught it `%scenario_id`)
-    work. `note_one_target` allows at most one of `node_id`, `run_id`,
-    `setting_key`, `scenario_id`; none is a project-level note.
+    ('node_id', 'run_id', 'scenario_id', 'pack_id')`; 115 taught it
+    `%scenario_id`, 112 `%pack_id`) work. `note_one_target` allows at most
+    one of `node_id`, `run_id`, `setting_key`, `scenario_id`, `pack_id`;
+    none is a project-level note.
     `setting_key` is a settings group (`flow`, `ewr`, …) or path
     (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
   - **A note goes with its target**: a deleted node or run, or a trimmed
@@ -1648,7 +1678,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     `farm`; the API also requires the node to be a farm. A scenario note
     (115, WP-3.15) may also be `assessors`, `parties` or
     `public_participation` (`note_participation_on_scenario` requires a
-    scenario for those three). Who reads (`note_select` for `team`,
+    scenario for the first two, and a scenario or a pack for the third). Who reads (`note_select` for `team`,
     `note_select_scenario` through `app_scenario_note_visible`) and writes
     (`note_insert` through `app_scenario_note_writable`) each, on a scenario:
 
@@ -1670,6 +1700,18 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     author and to editors, as for every note. In practice: an NGO joins as a
     viewer and posts `public_participation`; the applicant and their
     consultant talk to the assessors in `parties` or `assessors`.
+  - **A pack note** (128, WP-3.15) is `team` or `public_participation`
+    only (`note_pack_audience`):
+
+    | visibility | reads | writes |
+    | --- | --- | --- |
+    | `team` | viewers and above who read the pack (`note_select`, through evidence_pack's own policy) | the same (`note_insert`) |
+    | `public_participation` | editors and above; its author; any member contributor or above while the pack is **open for comment**, or once it was ever shared and is superseded or withdrawn (`note_select_pack`, `app_pack_note_visible`) | any member contributor or above while it is open for comment (`app_pack_note_writable`) |
+
+    Open for comment (`app_pack_commentable`, members only): the pack is
+    `issued` and has a live pack link. A pack past draft is never deleted
+    (112), so its comments stay; a draft's team notes go with it (cascade).
+    Every edit of a scenario or pack note is kept (`note_write_revision`).
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
 - **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
   for the audit trail. `water_app` has no `DELETE` (the catalogue test's

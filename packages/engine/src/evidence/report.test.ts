@@ -21,6 +21,7 @@ import type { DeclaredUncertaintyRule } from '../uncertainty/options';
 import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
 import { band as bandOf } from '../uncertainty/bands';
 import { licenceImpactByYearClass } from '../views/licenceImpact';
+import { APPLICANT_PROMPTS } from './prompts';
 import {
 	ALLOCATIONS_NOT_ASSESSED,
 	BASIS_NO_FLOW,
@@ -202,6 +203,7 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 				id: 'scn',
 				name: 'Farm two dam',
 				description: 'A 1.5 million m³ dam on Farm two.',
+				prompts: { purposeAndNeed: 'Winter storage for 60 ha of citrus.', mitigation: '', monitoring: 'A V-notch weir below the dam, read weekly.' },
 				status: 'submitted',
 				ownerName: 'Applicant',
 				baseRunId: 'base',
@@ -313,6 +315,19 @@ describe('evidenceReport: an application on the nominated run', () => {
 		expect(r.applicantStatement?.description).toBe('A 1.5 million m³ dam on Farm two.');
 		const page1 = JSON.stringify({ identity: r.identity, flags: r.flags, rows: r.rows, questions: r.questions });
 		expect(page1).not.toContain('A 1.5 million m³ dam on Farm two.');
+		expect(page1).not.toContain('Winter storage');
+		expect(page1).not.toContain('V-notch');
+	});
+
+	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
+		expect(r.version).toBe('evidence-8');
+		expect(r.applicantStatement?.prompts).toEqual({
+			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
+			mitigation: '',
+			monitoring: 'A V-notch weir below the dam, read weekly.'
+		});
+		// One answer per prompt, in the prompts' order, and nothing else.
+		expect(Object.keys(r.applicantStatement!.prompts!)).toEqual(APPLICANT_PROMPTS.map((p) => p.id));
 	});
 
 	it('lists every input series with its hash, and every warning verbatim', () => {
@@ -659,7 +674,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-7');
+		expect(got.version).toBe('evidence-8');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1090,7 +1105,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-7');
+		expect(r.version).toBe('evidence-8');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});

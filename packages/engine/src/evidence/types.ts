@@ -19,6 +19,7 @@ import type { LicenceImpact } from '../views/licenceImpact';
 import type { YearClassMethod } from '../views/yearClasses';
 import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } from '../uncertainty/options';
 import type { PairedSummary } from '../uncertainty/paired';
+import type { ApplicantPrompts } from './prompts';
 
 /**
  * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
@@ -42,8 +43,11 @@ import type { PairedSummary } from '../uncertainty/paired';
  * engine review of ER5): per month and table point, the band on application − baseline of
  * the impacted flow with "worse in k of n", from `PairedSummary.reserveFdcChange`, printed
  * as a table under the chart instead of reading the change off two overlapping bands.
+ * evidence-8: Appendix C's fixed prompts (`applicantStatement.prompts`: purpose and need,
+ * mitigation, monitoring, each answered or empty for "Not given"; prompts.ts). A pack
+ * drafted before it has no `prompts`: its Appendix C says the prompts aren't part of it.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-7';
+export const EVIDENCE_REPORT_VERSION = 'evidence-8';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -88,6 +92,8 @@ export interface EvidenceScenarioInput {
 	name: string;
 	/** The applicant's own words (scenario.description); '' = none. Printed only in Appendix C (G13). */
 	description: string;
+	/** The answers to Appendix C's fixed prompts (129_scenario_statement); '' = not given. Appendix C only (G13). */
+	prompts: ApplicantPrompts;
 	/** draft | submitted | withdrawn | decided; null once the scenario is deleted. */
 	status: string | null;
 	/** Display name of the scenario's owner; null when unknown. */
@@ -734,6 +740,11 @@ export interface EvidenceReport {
 	/** The applicant's own words, only here (Appendix C, G13); null for baseline evidence. */
 	applicantStatement: {
 		scenarioName: string;
+		/**
+		 * The fixed prompts' answers, verbatim; '' = not given (evidence-8). Absent in a
+		 * pack drafted before evidence-8, whose manifest froze no prompts.
+		 */
+		prompts?: ApplicantPrompts;
 		description: string;
 		ownerName: string | null;
 		notes: string;

@@ -1276,12 +1276,15 @@ it scrolls, and isn't fitted to the window.
   in `project/shareLinks.ts`), owners only, under Farmers: read-only links
   to the published baseline for people outside the project, and the owner's
   inventory of **every** public link in the project (`?scope=all`): the
-  baseline links made here and each application's links, made by its
-  assessors or applicant from the application's Share dialog. Under each
+  baseline links made here, each application's links, made by its
+  assessors or applicant from the application's Share dialog, and each
+  evidence pack's, made by an editor from the pack's page (128). Under each
   label the row says what the link opens ("The published baseline",
-  "Application “name”", or "An application you can't open" for one reopened
-  as a draft or deleted) and, for a live link whose application is
-  withdrawn or unreadable, that it opens nothing just now. The owner can
+  "Application “name”", "Evidence pack “name”, version n", or "An
+  application you can't open" for one reopened as a draft or deleted) and,
+  for a live link whose application is withdrawn or unreadable, that it
+  opens nothing just now; for a pack withdrawn or replaced, that the link
+  shows only that, not its figures. The owner can
   withdraw any live link from here; the confirm names the target. *Make link*
   takes who it's for (up to 100 characters) and how long it works (1 week,
   30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
@@ -5284,6 +5287,19 @@ them scenarios).
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+- **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
+  application's too): the evidence report's fixed Appendix C prompts
+  (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
+  need**, **Mitigation** and **Monitoring**, with "n of 3 answered" beside the
+  heading. Read, each prompt's answer as written or *Not given*. Whoever may
+  change the scenario (an editor on a team scenario, only its applicant on
+  an application) gets **Answer the prompts** (**Edit statement** once one
+  is answered): a box per prompt, labelled with its heading and described by
+  its question, 4 000 characters each; **Save statement** sends only the
+  answers that changed, trimmed. Not frozen by a submission, as the
+  description isn't; a half-typed statement asks before the scenario is
+  left (the leave guard). Tests: `scenarios/statement.test.ts`,
+  `e2e/tests/evidence-statement.spec.ts`.
 - **Actions** (editors), in the scenario's head row beside its name, status
   and Rename, so they're on the first screen however long the changes and
   the node list get; a run's error shows under the base banner: **Run
@@ -6217,8 +6233,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     history since the previous publication; A.5 warnings verbatim; A.6 every
     application run on the baseline), **Appendix B** (B.1 methodology,
     limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
-    issued* for a draft), **Appendix C** (application only): the scenario's
-    description and the run's notes, verbatim, the only free text.
+    issued* for a draft), **Appendix C** (application only): the fixed prompts
+    first (`evidence-8`), each prompt's heading and question, then the
+    scenario's answer verbatim or *Not given.*; then the scenario's
+    description and the run's notes, verbatim. The only free text. A pack
+    drafted before `evidence-8` froze no prompts, so its Appendix C says they
+    aren't part of the pack rather than printing *Not given*.
 - **Evidence packs of this report** (screen only, under the checks): the
   packs of this run's report (an application pack by its scenario run, a
   baseline pack by the nominated run), each with its status badge, version,
@@ -6278,8 +6298,21 @@ pack.
   verify page), **Download reproduction bundle** once issued (the API's
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
-  **Verify page** once issued, and the version, code, manifest hash, PDF hash
+  **Verify page** once issued, **Share link…** (an editor, once it was
+  issued) and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash.
+- **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
+  `ShareLinksPanel` as an application's Share dialog, for this pack: what a
+  link shows (verify's fields, and while it stands the river's figures, never
+  a unit), then make a link (who it's for, how long), copy it once, and the
+  pack's links with **Withdraw**. A withdrawn or superseded pack's dialog
+  says only an issued pack can be shared and still lists its links, each
+  saying it now shows only that the pack no longer stands.
+- **Notes** (`NotesDrawer`, target `pack`): the team's notes on the pack and
+  its public comments, with an audience picker (*The project team*, and
+  *Public participation* while it is issued; the server refuses the second
+  while no link is live), each note's audience badge and its edit history.
+  Not in a render session.
 - **Where it stands** (`packs/PackActions.svelte`): a draft's checklist from
   the API (the frozen report may be issued, both runs still carry the
   server's stamp, signed under the current pack statement), each ticked or
@@ -6301,7 +6334,8 @@ pack.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
-  panel, and version 2 superseding version 1) and `packs/pack.test.ts`.
+  panel, and version 2 superseding version 1), `e2e/tests/pack-share.spec.ts`
+  (share link, notes) and `packs/pack.test.ts`.
 
 ## Help (`/help`)
 
@@ -7128,6 +7162,28 @@ signed in or out, for someone outside the project, on a phone first.
   it isn't open for comment. Same two-column layout from 860 px, one
   column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
   sign in, comment, the assessor's view) with axe.
+- **An evidence pack link** (WP-3.15, 128, `/share#t=…&k=pack`,
+  `share/PackView.svelte`, words in `share/pack.ts`, the `share.pack`
+  section): the same shell, states and comment flow as a scenario link,
+  reading `POST /share/pack`. The pack's title, "Licensing evidence pack,
+  version *n*, shared read-only", its standing ("Issued on *date*", or
+  withdrawn or replaced, with the issue date), the caveat. A withdrawn or
+  replaced pack then shows a card saying so and that its figures aren't
+  shown, the reason given (withdrawn) or the replacing version's code with
+  a link to its verify page (replaced), and no figure. While it stands, the
+  left column has **The river's ecological reserve** per EWR site (the
+  outlet unnamed; baseline beside the application, and the change in
+  words), **The river in figures** (page 1's river rows, worded here by
+  their id: Reserve months met per site, days below the EWR, no-flow days,
+  and the two volume rows only at five or more units; baseline, with the
+  application and the change, and the likely range from the model sets),
+  and **Days below the EWR by month** (an application). Both states have
+  **Check this pack** (the code, the verify page link, the hashes, the
+  signers) and, on the right, **Public comments** (a signed-in member posts
+  while it stands; closed once it doesn't, the comments kept) and **About
+  this page**. `pack-share.spec.ts` pins it (link from the pack page, phone,
+  sign in, comment, withdraw: the same link then shows the reason and no
+  figure) with axe.
 
 ## Viewers
 

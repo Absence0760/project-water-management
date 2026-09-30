@@ -170,7 +170,14 @@ beforeAll(async () => {
 	expect((await owner.call('POST', `${at()}/evidence`, { runId: baseRun, reason: 'Calibrated baseline' })).status).toBe(201);
 	const cited = await ensemble(baseRun, { request: declaredRuleRequest(RULE) });
 	const dam = { op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 500_000 };
-	const created = await owner.call('POST', `${at()}/scenarios`, { name: 'Upper dam', description: 'A dam on Upper.', baseRunId: baseRun, ops: [dam], ownedNodeIds: [farmId] });
+	const created = await owner.call('POST', `${at()}/scenarios`, {
+		name: 'Upper dam',
+		description: 'A dam on Upper.',
+		purposeAndNeed: 'Winter storage.',
+		baseRunId: baseRun,
+		ops: [dam],
+		ownedNodeIds: [farmId]
+	});
 	expect(created.status, JSON.stringify(created.body)).toBe(201);
 	const ran = await owner.call('POST', `${at()}/scenarios/${created.body.scenario.id}/runs`, {});
 	expect(ran.status, JSON.stringify(ran.body)).toBe(201);
@@ -201,7 +208,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-7');
+		expect(manifest.report.version).toBe('evidence-8');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -209,6 +216,29 @@ describe('drafting a pack', () => {
 		// § 1's paired FDC change (evidence-7) freezes with it, whatever it holds for this run.
 		expect(manifest.report.river.map((s) => s.fdcChange)).toEqual(live.river.map((s: { fdcChange?: unknown }) => s.fdcChange));
 		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+	});
+
+	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-8)', async () => {
+		const p = await draft(editor, appRun);
+		const sid = (await editor.call('GET', packPath(p.id))).body.pack.scenarioId as string;
+		const frozen = { purposeAndNeed: 'Winter storage.', mitigation: '', monitoring: '' };
+		expect(((await viewer.call('GET', packPath(p.id))).body.manifest as PackManifest).report.applicantStatement?.prompts).toEqual(frozen);
+		const changed = await owner.call('PATCH', `${at()}/scenarios/${sid}`, { mitigation: 'Release 10 % of inflow in the dry months.' });
+		expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+		try {
+			// The live report reads the new answer (positive control) …
+			expect((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.applicantStatement.prompts.mitigation).toBe(
+				'Release 10 % of inflow in the dry months.'
+			);
+			// … and the pack still holds what it froze, under the same hash.
+			const read = (await viewer.call('GET', packPath(p.id))).body;
+			expect((read.manifest as PackManifest).report.applicantStatement?.prompts).toEqual(frozen);
+			expect(read.manifestMatches).toBe(true);
+			expect(read.pack.manifestSha256).toBe(p.manifestSha256);
+		} finally {
+			expect((await owner.call('PATCH', `${at()}/scenarios/${sid}`, { mitigation: '' })).status).toBe(200);
+			expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		}
 	});
 
 	it('drafts an application pack on the scenario run, naming its scenario', async () => {
