@@ -280,6 +280,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const cd = new Rng(seed ^ 0x85ebca6b);
 	if (cd.bool(0.2)) settings.effectiveRainFractionMonthly = monthly(() => (cd.bool(0.1) ? 0 : cd.bool(0.05) ? 1 : cd.float(0, 1)));
 	for (const c of crops) if (cd.bool(1 / 3)) c.irrigationEfficiency = cd.bool(0.1) ? 1 : cd.bool(0.05) ? cd.float(0.01, 0.1) : cd.float(0.5, 1);
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23) in 30 % of seeds with CHIRPS, from its own stream so a seed still builds the same network.
+	const qm = new Rng(seed ^ 0x1b873593);
+	if (series.rain_chirps_mm && qm.bool(0.3)) settings.chirpsQuantileMap = { wetDayMm: qm.pick([1, 1, qm.float(0.1, 10)]) };
 	// Calibration exclusions: date ranges and water years, in or around the run,
 	// overlapping or not. Their own stream too.
 	const cx = new Rng(seed ^ 0xbb67ae85);
@@ -376,7 +379,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
 	// Canal seepage back to the river (engine ≥ 1.42.0), from its own stream, last of all.
 	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
-	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8), from its own stream, last of all.
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8), from its own stream, last of all.
 	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
 	return {
 		settings,
@@ -395,7 +398,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md §2.7i)
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md §2.7i)
  * in 25 % of seeds: one to twelve review dates (now and then every month's
  * first), lift dates half the time, one to four levels from 100 % down (a
  * level at 100 % is in force whenever a dam isn't full), each cutting a
@@ -431,7 +434,7 @@ export function randomDroughtRestriction(g: Rng, nodes?: readonly NetworkNode[])
 	});
 	const rule: DroughtRestrictionRule = { reviewDates: reviews, ...(lifts.length ? { liftDates: lifts } : {}), levels };
 	if (!nodes) return rule;
-	// Engine ≥ 1.52.0, drawn after the rest so a rule's dates and levels are what they were: the storage read
+	// Engine ≥ 1.54.0, drawn after the rest so a rule's dates and levels are what they were: the storage read
 	// (every dam, some dams, or each unit's own), the units cut, and an EWR trigger; now and then an id the
 	// network hasn't got (the run leaves it out with a warning).
 	const farms = nodes.filter((n) => n.kind === 'farm');

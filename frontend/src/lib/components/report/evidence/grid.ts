@@ -4,8 +4,9 @@
 // environmentalist's ask) and outlined where the application changes the
 // verdict. A failed month is the heavier mark, so it survives a photocopy;
 // the numbers are in the cells too, never only a shade (§8).
-import type { EvidenceSite } from '@water-management/engine';
+import type { EvidenceChange, EvidenceSite } from '@water-management/engine';
 import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
+import { signed, worseText } from './format';
 
 export interface GridCell {
 	/** Share of the requirement delivered, 0–1+; null when nothing was required. */
@@ -76,4 +77,75 @@ export function fdcMonths(site: Pick<EvidenceSite, 'fdcMonth' | 'fdcDriestMonth'
 		out.push(site.fdcMonth === site.fdcDriestMonth ? { month: site.fdcMonth, kind: 'both', why: `${chosen}, and ${driest}.` } : { month: site.fdcMonth, kind: 'change', why: `${chosen}.` });
 	if (site.fdcDriestMonth !== null && site.fdcDriestMonth !== site.fdcMonth) out.push({ month: site.fdcDriestMonth, kind: 'driest', why: `${driest}.` });
 	return out;
+}
+
+/**
+ * The caption of one FDC check plot. With the paired change tabled under it
+ * (evidence-7) the shading is each run's own spread and the table carries
+ * the change. Where the application's band is drawn but no change is tabled
+ * (a pack issued before evidence-7, or runs read at different table points)
+ * the caption keeps the warning that overlapping ranges don't mean no change.
+ */
+export function fdcCaption(
+	site: Pick<EvidenceSite, 'fdcBands' | 'fdcBandNote' | 'fdcChange'>,
+	f: { month: number; why: string },
+	application: boolean
+): string {
+	const head = `${monthName(f.month)}: ${f.why} The simulated curve should lie on or above the EWR curve.`;
+	if (!site.fdcBands) return `${head} Curve band: ${site.fdcBandNote ?? 'no band'}.`;
+	const note = site.fdcBandNote ? ` ${site.fdcBandNote}` : '';
+	const hatched = application && (site.fdcBands.find((m) => m.month === f.month)?.b?.some((x) => x !== null) ?? false);
+	if (!hatched) return `${head} Shaded: the range of the kept parameter sets on the baseline’s curve (R1).${note}`;
+	const tabled = site.fdcChange?.some((m) => m.month === f.month && m.points.length) ?? false;
+	if (!tabled)
+		return `${head} Shaded: the range of the kept parameter sets (R1; the application’s under R2, not a difference). Overlapping ranges don’t mean no change: the paired change is in the rows above and in § 2.${note}`;
+	return `${head} Shaded: how far the kept parameter sets spread each run’s own curve (R1; the application’s hatched, R2). The table below pairs them: each set on both runs, the change at each point.${note}`;
+}
+
+export interface FdcChangeRow {
+	/** The table point: % of the time the flow is equalled or exceeded. */
+	point: number;
+	/** The paired median, or the runs' own difference without a band. */
+	main: string;
+	/** The 5–95 % range and the runs' own difference, or why there is no band. */
+	sub: string | null;
+	/** "k of n sets (p %)": the sets in which the application's flow is lower. */
+	worse: string;
+}
+
+/** Decimal places for a month's changes: enough for its largest to show three significant figures, 0–4. */
+function flowDigits(values: number[]): number {
+	const big = Math.max(0, ...values.map(Math.abs));
+	if (big >= 100) return 0;
+	if (big >= 10) return 1;
+	if (big >= 1) return 2;
+	if (big >= 0.1) return 3;
+	return 4;
+}
+
+/**
+ * The paired change in one month's FDC check curve (evidence-7), one row per
+ * table point: `points` are the table's points (% exceedance), `site.fdcChange`
+ * the document's cells. Empty when the document has none for the month.
+ */
+export function fdcChangeRows(site: Pick<EvidenceSite, 'fdcChange'>, month: number, points: readonly number[]): FdcChangeRow[] {
+	const cells = site.fdcChange?.find((m) => m.month === month)?.points ?? [];
+	if (!cells.length) return [];
+	const digits = flowDigits(cells.flatMap((c) => [c.run, c.band?.p5, c.band?.p50, c.band?.p95].filter((v): v is number => typeof v === 'number' && Number.isFinite(v))));
+	// A cell past the plotted points has no point to name: left out rather than printed as "NaN %".
+	return cells.flatMap((c: EvidenceChange, j) => {
+		const point = points[j];
+		if (point === undefined) return [];
+		const run = c.run === null ? null : signed(c.run, digits);
+		const b = c.band;
+		const banded = !c.bandNote && b && b.p5 !== null && b.p50 !== null && b.p95 !== null;
+		return [
+			{
+				point,
+				main: banded ? signed(b.p50!, digits) : run ? `run: ${run}` : '–',
+				sub: banded ? `${signed(b.p5!, digits)} to ${signed(b.p95!, digits)}${run ? ` · run: ${run}` : ''}` : (c.bandNote ?? 'no band'),
+				worse: worseText(c)
+			}
+		];
+	});
 }

@@ -13,8 +13,6 @@ import {
 	portfolioTotals,
 	feedsText,
 	last30Text,
-	nextSort,
-	parseSort,
 	restrictionText,
 	sortPortfolio,
 	sourceText,
@@ -139,13 +137,6 @@ describe('sorting', () => {
 		const copy = [...all];
 		sortPortfolio(all, DEFAULT_SORT);
 		expect(all).toEqual(copy);
-	});
-	it('a heading click flips the same key and starts a new one worst first; the URL falls back to the default', () => {
-		expect(nextSort(DEFAULT_SORT, 'status')).toEqual({ key: 'status', dir: 'desc' });
-		expect(nextSort({ key: 'status', dir: 'desc' }, 'name')).toEqual({ key: 'name', dir: 'asc' });
-		expect(parseSort(null, null)).toEqual(DEFAULT_SORT);
-		expect(parseSort('farms', 'desc')).toEqual({ key: 'farms', dir: 'desc' });
-		expect(parseSort('toString', 'sideways')).toEqual(DEFAULT_SORT);
 	});
 	it('counts statuses for the summary line', () => {
 		expect(statusCounts(all)).toEqual({ red: 2, amber: 1, green: 1, unknown: 1 });

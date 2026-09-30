@@ -1,13 +1,14 @@
 // Loading the /share page (WP-2.3 phase 2): the view, then the two flow
 // series for the chart. Pure over an API, so the outcomes are unit-tested.
 import { ApiError } from '$lib/api/client';
-import type { ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
+import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
 import { flowMonths, type FlowMonth } from './chart';
 
 export interface ShareApi {
 	view: (token: string) => Promise<ShareView>;
 	series: (token: string, key: ShareSeriesKey) => Promise<ShareSeries>;
 	scenario: (token: string) => Promise<ShareScenario>;
+	pack: (token: string) => Promise<SharePack>;
 }
 
 export type ShareLoad =
@@ -63,6 +64,23 @@ export async function loadScenarioShare(api: Pick<ShareApi, 'scenario'>, token: 
 	if (!token) return { state: 'nolink' };
 	try {
 		return { state: 'ready', view: await api.scenario(token) };
+	} catch (e) {
+		if (is404(e)) return { state: 'dead' };
+		return { state: 'error', message: e instanceof Error ? e.message : String(e) };
+	}
+}
+
+/** A pack link (128): the same dead-link and error states. A withdrawn or superseded pack is `ready`: the page says it no longer stands. */
+export type PackShareLoad =
+	| { state: 'nolink' }
+	| { state: 'dead' }
+	| { state: 'error'; message: string }
+	| { state: 'ready'; view: SharePack };
+
+export async function loadPackShare(api: Pick<ShareApi, 'pack'>, token: string | null): Promise<PackShareLoad> {
+	if (!token) return { state: 'nolink' };
+	try {
+		return { state: 'ready', view: await api.pack(token) };
 	} catch (e) {
 		if (is404(e)) return { state: 'dead' };
 		return { state: 'error', message: e instanceof Error ? e.message : String(e) };

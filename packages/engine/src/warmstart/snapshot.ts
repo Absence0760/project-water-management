@@ -106,7 +106,7 @@ export interface ModelState {
 	columns: { nodeId: string | null; key: string; label: string; unit: string; after: { nodeId: string | null; key: string } | null }[];
 	/**
 	 * The drought restriction level each node held the day before (engine ≥
-	 * 1.52.0, settings.droughtRestriction; model order, 0 = none), so a
+	 * 1.54.0, settings.droughtRestriction; model order, 0 = none), so a
 	 * resumed run keeps the levels decided at the last review, and whether the
 	 * rule's EWR trigger site failed the day before (absent = no). Absent
 	 * without the rule.

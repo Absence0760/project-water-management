@@ -57,7 +57,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
 // observed_flow_filled / observed_flow_other_filled (engine ≥ 1.23.0) are NaN on every day the gap fill didn't fill.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+// rain_chirps_mapped (engine ≥ 1.53.0, the CHIRPS gap map) is NaN where rain_chirps_corrected is (checkChirpsGapMap).
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -131,6 +132,62 @@ export function checkRainSource(out: ModelOutput): string | null {
 }
 
 /**
+ * The CHIRPS gap map's column (engine ≥ 1.53.0, CR-23) against
+ * `rain_chirps_corrected`: blank on exactly the same days, never below 0
+ * where CHIRPS isn't, and over every calendar month the run holds whole,
+ * the same total: the map moves rain between a month's days, never in or
+ * out of the month (docs/model.md §2.4b *Quantile map*). And the rain the
+ * run used on a day CHIRPS filled (`rain_source` 2, `rain_final`) is the
+ * column's value: the fill and the column come from separate calls.
+ */
+export function checkChirpsGapMap(out: ModelOutput): string | null {
+	const mapped = out.series.find((s) => s.nodeId === null && s.key === 'rain_chirps_mapped')?.values;
+	const corrected = out.series.find((s) => s.nodeId === null && s.key === 'rain_chirps_corrected')?.values;
+	if (!mapped) return null;
+	if (!corrected || corrected.length !== mapped.length) return 'rain_chirps_mapped without a rain_chirps_corrected of the same length';
+	const d0 = toEpochDay(out.startDate);
+	let month = -1;
+	let from = 0;
+	let a = 0;
+	let b = 0;
+	const close = (t: number): string | null => {
+		// A month is whole when it starts on the 1st inside the run and its last day (t − 1) is the month's last.
+		const whole = (from > 0 || monthOfEpochDay(d0 - 1) !== month) && monthOfEpochDay(d0 + t) !== month;
+		if (whole && Math.abs(a - b) > 1e-9 * Math.max(1, Math.abs(b))) return `rain_chirps_mapped totals ${a} over days ${from}–${t - 1}, the corrected CHIRPS ${b}`;
+		return null;
+	};
+	const final = out.series.find((s) => s.nodeId === null && s.key === 'rain_final')?.values;
+	const source = out.series.find((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key)?.values;
+	if (final && source) {
+		for (let t = 0; t < mapped.length; t++) {
+			if (source[t] === RAIN_SOURCE_CODE.chirps && final[t] !== mapped[t]) return `rain_final[${t}] is ${final[t]} on a CHIRPS day, rain_chirps_mapped ${mapped[t]}`;
+		}
+	}
+	for (let t = 0; t < mapped.length; t++) {
+		const x = mapped[t]!;
+		const y = corrected[t]!;
+		if (Number.isNaN(x) !== Number.isNaN(y)) return `rain_chirps_mapped[${t}] is ${x} where rain_chirps_corrected is ${y}`;
+		if (x < 0 && !(y < 0)) return `rain_chirps_mapped[${t}] is ${x}`;
+		const m = monthOfEpochDay(d0 + t);
+		if (m !== month) {
+			if (month !== -1) {
+				const bad = close(t);
+				if (bad) return bad;
+			}
+			month = m;
+			from = t;
+			a = 0;
+			b = 0;
+		}
+		if (!Number.isNaN(x)) {
+			a += x;
+			b += y;
+		}
+	}
+	return month === -1 ? null : close(mapped.length);
+}
+
+/**
  * The `observed_flow_quality` column (engine ≥ 1.48.0, ../calibrate/dayFlags.ts
  * recordFlowFlags) against the record it flags: stored once, beside the
  * scored `observed_flow` (the calibration site's node, else the catchment's),
@@ -195,6 +252,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	}
 	const rainSourceProblem = checkRainSource(out);
 	if (rainSourceProblem) return rainSourceProblem;
+	const gapMapProblem = checkChirpsGapMap(out);
+	if (gapMapProblem) return gapMapProblem;
 	const flowQualityProblem = checkFlowQuality(input, out);
 	if (flowQualityProblem) return flowQualityProblem;
 	const nodes = input.model.nodes;
@@ -504,7 +563,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
-	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.52.0).
+	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.54.0).
 	const farmD = farms.map((f) => get.get(`${f.id}|${RESTRICTION_SERIES.restricted.key}`) ?? get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
 	const farmRelease = farms.map((f) => resolveRelease(f, []));
@@ -1161,11 +1220,11 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (!!XIN !== !!XUSED || !!XIN !== !!XDAM) return `${n.id}: river off-take working columns (offtake_used, offtake_to_dam) ${XIN ? 'missing' : 'without an off-take in'}`;
 		const topUps = XIN ? offtakeInto(input, n.id, get) : null;
 		if (typeof topUps === 'string') return topUps;
-		// The drought restriction (engine ≥ 1.52.0): the unit's sources supply its demand after the day's cut, and
+		// The drought restriction (engine ≥ 1.54.0): the unit's sources supply its demand after the day's cut, and
 		// its objects and crops share by their cut demands (checkDroughtRestriction checks the cut itself).
 		const DR = g(RESTRICTION_SERIES.restricted.key);
 		const rule = DR ? resolveDroughtRestriction(input.settings.droughtRestriction, []) : null;
-		// The unit's own level under the 'own' basis (engine ≥ 1.52.0), else the catchment's.
+		// The unit's own level under the 'own' basis (engine ≥ 1.54.0), else the catchment's.
 		const LV = g(RESTRICTION_SERIES.level.key) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
 		if (DR && (!rule || !LV)) return `${n.id}: a restricted_demand column without a drought restriction rule and its level column`;
 		for (let t = 0; t < out.days; t++) {
@@ -1383,7 +1442,7 @@ function checkObjectsDay(
 	alloc = 1,
 	abstracts = true,
 	factors: { df: Float64Array; sc: Float64Array }[] | null = null,
-	/** The drought restriction's cut today (engine ≥ 1.52.0): each object shares by its cut demand, the crops by theirs. */
+	/** The drought restriction's cut today (engine ≥ 1.54.0): each object shares by its cut demand, the crops by theirs. */
 	restriction: { cut: (c: DemandObject['category']) => number; crop: number } | null = null
 ): string | null {
 	const n = objs.demand.length;
@@ -1396,7 +1455,7 @@ function checkObjectsDay(
 	const want = [0, crop, 0];
 	const gotBy = [0, 0, 0];
 	for (let k = 0; k < n; k++) {
-		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.52.0).
+		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.54.0).
 		const d = restriction ? restrictedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
@@ -1993,7 +2052,7 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, ../network/restriction.ts,
+ * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, ../network/restriction.ts,
  * docs/model.md §2.7i), from the run's own columns and the input's rule:
  * - without the rule (or with one it can't use) no restriction column and no
  *   summary block;

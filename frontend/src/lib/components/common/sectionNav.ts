@@ -93,13 +93,16 @@ function rowCount(boxes: number[], avail: number, lead: number): number {
  * blocks, a long group pushed the next one onto a row of its own: three rows
  * at 1280 px). Every link has `gap` after it and a group's first link the
  * extra `groupGap - gap` before it, as SectionNav lays them out; the More
- * button is set apart like a group. `items.length` when everything fits.
+ * button is set apart like a group, and has its own `gap` after it like every
+ * item (a line's trailing margin counts in inline layout: without it the fit
+ * put More 4.9 px past the edge, where it wrapped to a third row).
+ * `items.length` when everything fits.
  */
 export function navFitCount(items: NavBox[], fit: NavFit): number {
 	const extra = Math.max(0, fit.groupGap - fit.gap);
 	const boxes = items.map((it, i) => it.width + fit.gap + (it.groupStart && i > 0 ? extra : 0));
 	if (rowCount(boxes, fit.avail, fit.lead) <= fit.rows) return items.length;
-	const more = fit.more + extra;
+	const more = fit.more + fit.gap + extra;
 	for (let k = items.length - 1; k > 0; k--) {
 		if (rowCount([...boxes.slice(0, k), more], fit.avail, fit.lead) <= fit.rows) return k;
 	}

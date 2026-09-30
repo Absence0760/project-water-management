@@ -1,4 +1,4 @@
-// The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md
+// The drought restriction rule (engine ≥ 1.54.0, WP-3.8, docs/model.md
 // §2.7i): "cut demand by x % when storage falls below y %". On each review
 // date the level is chosen from the total farm dam storage at the start of
 // the day, as a share of the total capacity (the review triggers' basis,
@@ -30,7 +30,7 @@ export const RESTRICTION_NODES_MAX = 500;
  */
 export const RESTRICTION_SERIES = {
 	level: { key: 'restriction_level', label: 'Drought restriction level in force (the model rule; 0 = none)', unit: '' },
-	/** The catchment column under the 'own' basis, and each unit's (engine ≥ 1.52.0). */
+	/** The catchment column under the 'own' basis, and each unit's (engine ≥ 1.54.0). */
 	deepestLabel: 'Deepest drought restriction level any unit is at (the model rule, each unit by its own dam; 0 = none)',
 	unitLabel: 'Drought restriction level of this unit (the model rule, by its own dam; 0 = none)',
 	cutPrefix: 'restriction_cut@',
@@ -106,7 +106,7 @@ export function droughtRestrictionIssues(raw: unknown): RestrictionIssue[] {
 	}
 	if (raw.source !== undefined && (typeof raw.source !== 'string' || raw.source.length > RESTRICTION_SOURCE_MAX))
 		out.push({ field: 'source', message: `must be a text of at most ${RESTRICTION_SOURCE_MAX} characters` });
-	// Which storage, which units, and the EWR trigger (engine ≥ 1.52.0); the ids are checked against the model by
+	// Which storage, which units, and the EWR trigger (engine ≥ 1.54.0); the ids are checked against the model by
 	// droughtRestrictionNodeIssues (the run and the form), since the rule alone doesn't know the network.
 	if (raw.basis !== undefined && !(DROUGHT_RESTRICTION_BASES as readonly unknown[]).includes(raw.basis))
 		out.push({ field: 'basis', message: `must be one of ${DROUGHT_RESTRICTION_BASES.join(', ')}` });
@@ -201,7 +201,7 @@ export function levelCut(rule: Pick<DroughtRestrictionRule, 'levels'>, level: nu
 }
 
 /**
- * Why a rule's node ids don't fit the network (engine ≥ 1.52.0), one issue
+ * Why a rule's node ids don't fit the network (engine ≥ 1.54.0), one issue
  * per problem: a dam in `damNodeIds` that isn't a farm with a dam, a unit in
  * `nodeIds` that isn't a farm, an EWR site that isn't a gauge. The run warns
  * and leaves each out; the Settings form blocks Save.
@@ -228,7 +228,7 @@ export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes
 }
 
 /**
- * A rule from the WUA's published restriction notice (engine ≥ 1.52.0, WP-2.3,
+ * A rule from the WUA's published restriction notice (engine ≥ 1.54.0, WP-2.3,
  * a starting point: "a scenario may copy the current notice into the rule,
  * never the reverse"). A notice is one cut for the season, not a table by
  * storage, so the rule has one level in force whenever the dams aren't full
@@ -287,7 +287,7 @@ export interface PlanRestriction {
 	/** The EWR trigger's site (a node index) and its level; -1 = none. */
 	ewrSite: number;
 	ewrLevel: number;
-	/** The level each unit held on the day before the first day (a resumed run, engine ≥ 1.52.0); absent = a fresh start. */
+	/** The level each unit held on the day before the first day (a resumed run, engine ≥ 1.54.0); absent = a fresh start. */
 	initialLevels?: Uint8Array;
 	/** Whether the EWR trigger's site failed on the day before the first day (a resumed run); absent = no. */
 	initialEwrFailed?: boolean;

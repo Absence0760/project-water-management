@@ -1,5 +1,5 @@
 // The drought restriction editor's choices of storage, units and EWR trigger
-// (engine 1.52.0), rendered with Svelte's server renderer. The browser flow is
+// (engine 1.54.0), rendered with Svelte's server renderer. The browser flow is
 // pinned by e2e/tests/settings-drought-restriction.spec.ts and
 // drought-restrictions-run.spec.ts.
 import { render } from 'svelte/server';
@@ -26,7 +26,7 @@ const rule: DroughtRestrictionRule = {
 	ewrTrigger: { siteNodeId: 'm', level: 1 }
 };
 
-describe('the drought restriction editor’s storage, units and EWR trigger (engine 1.52.0)', () => {
+describe('the drought restriction editor’s storage, units and EWR trigger (engine 1.54.0)', () => {
 	it('offers the dams, units and EWR sites of the model, and says the rule in words by name', () => {
 		const html = render(DroughtRestrictionFields, { props: { value: rule, nodes } }).body;
 		const body = text(html);

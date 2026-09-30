@@ -200,7 +200,7 @@ export interface PlanObjects {
 	 * no object has a floor.
 	 */
 	restricted: Uint8Array | null;
-	/** Each object's category (engine ≥ 1.52.0): the part of demand a drought restriction level cuts it as (./restriction.ts). */
+	/** Each object's category (engine ≥ 1.54.0): the part of demand a drought restriction level cuts it as (./restriction.ts). */
 	category: DemandObject['category'][];
 }
 

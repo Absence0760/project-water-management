@@ -213,7 +213,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
-- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.52.0,
+- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.54.0,
       [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
       #46). Built off by default on these choices; confirm or change each:
       one rule per project on the **total farm dam storage** (every farm dam,
@@ -228,7 +228,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       and firm yield run without the rule**; the Settings template's
       levels (60 / 40 / 25 % of capacity; irrigation 20 / 40 / 60 %,
       domestic and municipal 10 / 20 / 30 %) as a starting point only.
-      From engine 1.52.0 also: under the **own-dam basis** a unit without a
+      From engine 1.54.0 also: under the **own-dam basis** a unit without a
       dam isn't restricted by storage (only by the EWR trigger); the **EWR
       trigger** reads the site's pragmatic EWR shortfall on the **day
       before** a review only (not a count of recent days, not the Reserve
@@ -236,7 +236,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       own; a rule **from the published notice** is one level in force below
       100 % from the publication date to the next expected one.
 - [ ] **Drought restrictions on the other water users: decide whether and
-      how** (engine 1.52.0, [model.md §2.7i](./model.md)). The rule cuts
+      how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
       only hydrological units: an other water user's demand has no category
       and no population, so a cut on it could take a town below basic needs
       with nothing to stop it. Options, for the hydrologist and the client:
@@ -683,16 +683,31 @@ collected as a checklist in issue #46; tick it there as they answer.
       days), keeping every year-month's total. The default (no map) runs
       exactly as before ([model.md §2.4e *Daily
       intensity*](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+- [x] **CR-23: quantile-map the CHIRPS gap fill (done, engine 1.53.0).**
+      Opt-in `settings.chirpsQuantileMap`: fitted with the monthly factors
+      on the §2.4b fit period's shared days, CHIRPS' wet-day rate matched to
+      the catchment's and its wet days mapped onto the catchment's, per
+      calendar month (else season, else the factor alone, with a warning),
+      each calendar month's corrected total kept. Pinned with the factors,
+      recorded in a fit's forcing, compared in "What changed". Off by
+      default: a run without it is unchanged ([model.md §2.4b *Quantile
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [ ] **Confirm the daily-intensity defaults with the hydrologist (issue
-      #66).** Built on documented defaults: a heavy day is ≥ 20 mm; the
-      check warns beyond 5 share points; a wet day is ≥ 1 mm; the map works
-      by calendar month, pooling the 3-month season below 30 wet days on
-      either side and leaving a thinner season unmapped. Also whether the
-      map should adjust wet-day frequency (it doesn't: it keeps each month's
-      wet days and total, so a gauge wet on fewer days keeps part of its
-      heavy-day excess). Trigger: the hydrologist's answer, or the first
-      client period with the map on. Each is a constant in
-      `packages/engine/src/rainSourcePeriods.ts`.
+      #66, and CR-23's CHIRPS gap map, engine 1.53.0).** Built on documented
+      defaults: a heavy day is ≥ 20 mm; the check warns beyond 5 share
+      points; a wet day is ≥ 1 mm; both maps work by calendar month, pooling
+      the 3-month season below 30 wet days on either side and leaving a
+      thinner season unmapped (the CHIRPS map then takes the monthly factor
+      alone and warns). Also whether a replacement gauge's map should
+      adjust wet-day frequency as the CHIRPS map does (it doesn't: it keeps
+      each month's wet days and total, so a gauge wet on fewer days keeps
+      part of its heavy-day excess; the CHIRPS map dries CHIRPS' extra wet
+      days, since CHIRPS is the one wet too often), and whether the CHIRPS
+      map should be on by default once confirmed. Trigger: the
+      hydrologist's answer, or the first client run with either map on. The
+      shared constants are in `packages/engine/src/quantileMap.ts`, the
+      heavy-day ones in `rainSourcePeriods.ts` ([model.md §2.4b *Quantile
+      map*](./model.md#quantile-map-engine--1530-cr-23)).
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;
@@ -1224,11 +1239,7 @@ the suggested order (the IDs carry the detail):
       CR-34, the dry → wet ranking), are in issue #90.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
-      uncertainty and BFI, CR-23 CHIRPS quantile mapping (the pure mapper
-      exists since engine 1.21.0, `packages/engine/src/quantileMap.ts`: fit
-      CHIRPS' wet days against the catchment's over the §2.4b fit period and
-      apply it to the gap days with the monthly factor as the fallback),
-      CR-24 alternative
+      uncertainty and BFI, CR-24 alternative
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
@@ -2110,13 +2121,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       Home/End step the read-out and the dot (`keyStep` in
       `charts/sparkline.ts`), with the point in words as `aria-valuetext`. A
       mouse press doesn't focus it. ui-playbook § 3; `sparklines.spec.ts`.
-- [ ] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
-      diagram labels work). The help `Diagram` never draws text under
+- [x] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
+      diagram labels work; done 2026-09-30). The help `Diagram` never draws text under
       9.5 px, so at column width the model pipeline, workflow, calibration
       loop, validation and rain-sources diagrams scroll a little sideways
-      instead of shrinking. Durable fix: redraw those five narrower (fewer
-      boxes per row, or stacked) so they fit the column whole at 1280 and
-      up. Waits on the operator's choice (keep the scroll, or redraw).
+      instead of shrinking (measured: the pipeline 53 px at 1440; at 1280 all
+      five, 40 to 213 px). Redrawn, text floor kept: every diagram is at most
+      660 units wide, which fits the 582 px column at 1280 (the pipeline top
+      to bottom, the workflow in two rows, the other three tighter).
+      `help/diagrams/width.test.ts` holds the width, and
+      `diagram-labels.spec.ts` checks none scrolls at 1440 or 1280 (ui.md §
+      Help).
 - [x] **Deleting a scenario's released base run sometimes answers 404**
       (issue #77, found 2026-09-28, fixed 2026-09-28): the scenarios e2e
       failed ~1 in 15. The cause was in the browser, not RLS (an editor's
@@ -2214,8 +2229,9 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       the self-checks used), and the self-checks link to it; the printable
       report keeps it under the checks. `self-checks.spec.ts` and
       `runs.spec.ts` pin it.
-- [ ] **The same water balance by water year in two places, and the
-      catchment's in a third** (issue #175's overlap check, 2026-09-29).
+- [x] **The same water balance by water year in two places, and the
+      catchment's in a third** (issue #175's overlap check, 2026-09-29; the
+      UI half done 2026-09-30, the choice of table still open, below).
       Model quality's *Water balance* (`#res-water-balance`, issue #137) and
       Dig deeper › Self-checks both draw the per-unit column-V balance by
       water year (`runs/WaterBalanceTable.svelte`, `runs/checks.ts`
@@ -2238,10 +2254,30 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       closure check (each water year's residual, pass or fail) with a link,
       and the summary CSV and `.xlsx` export keep both tables. Pin the
       surviving table's rendered lines with an e2e spec first, and update
-      ui.md § Water account, § Self-checks and the help articles.
-      **Who:** operator (which table is the client's).
+      ui.md § Water account, § Self-checks and the help articles. The
+      surviving table also gets the playbook's "Show all N" fold: on a
+      30-water-year run the Water balance table scrolls inside its 70vh box
+      and sideways at 1440.
+      **Who:** operator (which table is the client's; asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93)).
       **Trigger:** the next change to the Water account, the Water balance
       section or the Self-checks panel, or a client asking for the table.
+      **Done (2026-09-30), the part that doesn't wait on that choice:** on
+      Runs & results the Self-checks panel is now only the closure check
+      (one line: the balance closes in every water year and the whole run,
+      or the years that don't with their residuals; `runs/checks.ts`
+      `balanceClosure`) and a link to the table; the Water balance and the
+      Water account link to each other for the same run, each saying what
+      the other adds, instead of one repeating the other
+      (`self-checks.spec.ts` follows both links and Back). The printable
+      report still draws the table under its self-checks, its only copy
+      there.
+      - [ ] **Still open: which table is the client's** (operator). Then
+            either the Water account gains rain (mm), the runoff
+            coefficient, start and end storage and an m³ / Mm³ switch and
+            Model quality's Water balance becomes a link, or the account
+            becomes the link; the report prints the chosen one, and the
+            summary CSV and `.xlsx` keep both. Trigger unchanged.
 
 ## Roles and what each member sees
 
@@ -3331,7 +3367,7 @@ from the WP:
       below the floor apart from the shortfall, with the l/person/day
       supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
       stay one % for every category (#53 O4). WP-3.8's drought restriction
-      rule (a cut by dam level) holds the same floor: done (engine 1.52.0,
+      rule (a cut by dam level) holds the same floor: done (engine 1.54.0,
       2026-09-30, [model.md §2.7i](./model.md)), through `planObjects`'
       floor and `dayFloor`, checked by the `droughtRestriction` self-check.
 - [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
@@ -3356,7 +3392,7 @@ from the WP:
       stacks on the unit's own and goes through the same basic-needs floor
       (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
       below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
-- [x] **WP-3.8's drought restriction rule** (engine 1.52.0, 2026-09-30,
+- [x] **WP-3.8's drought restriction rule** (engine 1.54.0, 2026-09-30,
       [model.md §2.7i](./model.md)). `settings.droughtRestriction`: review
       and lift dates and up to six levels, each a storage threshold on the
       total farm dam storage and a % cut per part of demand (crops, each
@@ -3367,7 +3403,7 @@ from the WP:
       restrictions, the Units & supply tables and the outlook's "Use as the
       drought restriction rule" (the review triggers, R6); `settings.set`
       in scenarios and the run comparison's lines. No migration: the rule is
-      part of `project.settings` (jsonb). Also built (engine 1.52.0, the
+      part of `project.settings` (jsonb). Also built (engine 1.54.0, the
       same PR): the rule on some dams or each unit's own dam (`basis`,
       `damNodeIds`) and on some units (`nodeIds`), moved with a project
       copy; the EWR-failure trigger (`ewrTrigger`, the site's EWR not met
@@ -3485,6 +3521,21 @@ from the WP:
       FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)
+
+- [x] **Fold the portfolio into the project list as a team filter** (done
+      2026-09-30, issue #176). The list's rows already carried the
+      portfolio's figures from the same helpers; it gained the Restriction
+      (under Lowest dam) and Alerts columns, the 30-day units-short count,
+      the Figures age sort (the Data heading) and `?dir=desc`, and the tiles'
+      counts in its header line; with a team's chip picked it states that
+      team's thresholds and who can change them. `/teams/:id/portfolio`
+      redirects to `/?owner=team:<id>&sort=status`, keeping its sort. The
+      team thresholds still judge the rows (`GET /projects/outcomes`). Tests:
+      `portfolio.spec.ts` (rewritten for the team filter: figures, thresholds
+      and a viewer, old links and Back, sorting both ways, a farmer, a team
+      that isn't yours, thirty catchments at 1440 and 1280, axe),
+      `projects.spec.ts`, `teams.spec.ts`, `grouping.test.ts`,
+      `outcomes.test.ts`.
 
 - [x] **The project list's data age counted to the viewer's day, not the
       project's** (WUA-manager persona, #51; done 2026-09-29, issue #137).
@@ -3725,19 +3776,23 @@ Applicant view and the Applications tab. Left:
       [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
       edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
       link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
-- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
-      Add `'pack'` to `share_link.target_kind` (its CHECK and
-      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
-      and PDF key, redacted as `app_share_scenario` is, answering only an
-      issued pack), `app_share_link_creatable` / `_visible` for packs (an
-      editor for any issued pack, the applicant for their own), a nullable
-      `note.pack_id` (same-project trigger through `assert_same_project`,
-      covering index, `note_one_target` and `note_participation_on_scenario`
-      widened to it, `note_write_revision` for pack notes), the notes helpers
-      taking a pack, `POST /share/pack` on the public allowlist,
-      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
-      met** (`evidence_pack` landed in migration 112, 2026-09-29); the next
-      piece of WP-3.15, tracked in issue #71.
+- [x] **Pack targets for share links and notes** (WP-3.15, the pack half):
+      done in `128_pack_share_notes` (2026-09-30, issue #71). An editor
+      links an **issued** pack from its page (`targetKind: 'pack'`,
+      `app_share_link_creatable` / `_visible`); `POST /share/pack`
+      (`app_share_pack`, public) answers exactly what verify does plus,
+      while the pack stands, a redacted projection of its own frozen report
+      (the river's rows and sites, the `k` rule on volumes); a superseded or
+      withdrawn pack's link says so, and why, with no figure. `note.pack_id`
+      (`team` or `public_participation`, open while a pack link is live, every
+      edit kept), `GET|POST …/notes?packId=`, the pack page's Notes, and a
+      pack view on `/share` ([evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)).
+      Two decisions against the first sketch here: no PDF key through the
+      link (the PDF carries every unit's figures and the applicant's
+      statement, which the projection withholds), and no applicant-made
+      link, since applicants read no pack yet ("Applicants' access to their
+      own application's packs", § Evidence report, holds both for when they
+      do).
 - [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
@@ -3752,18 +3807,21 @@ Applicant view and the Applications tab. Left:
       if the client accepts that they could then file applications).
       Trigger: the first real NGO invited to comment (client decision,
       step-3 D5).
-- [ ] **The owner's inventory of every public link.** The Project page's
-      Share links list shows the baseline links only; scenario links are
-      listed per application (its Share dialog), made by assessors and
-      applicants. Durable fix: list every live link for the owner with its
-      target, and revoke from there. Trigger: before the first scenario
-      link is used with a real catchment.
-- [ ] **Afrikaans for the shared application page** (WP-3.15): the
-      `share.scenario` strings are on the translation sheet
-      (docs/i18n/af-translation-sheet.md). If they are not translated in the
-      same change, the Afrikaans catalogue is incomplete and `/share` falls
-      back to English words. Trigger: this PR's translation round (see its
-      description).
+- [x] **The owner's inventory of every public link.** Done 2026-09-30:
+      the Project page's Share links list is every link in the project
+      (`GET …/share-links?scope=all`, owner only), the baseline's and each
+      application's, with what it opens, who made it, its dates and a
+      Withdraw behind a confirm ([ui.md § Project](./ui.md#project), [security.md §
+      Scenario links](./security.md#scenario-links-wp-315-115_scenario_share_notessql)).
+      Pack links join the same list once packs are a share-link target (the
+      item under § Evidence report).
+- [x] **Afrikaans for the shared application page** (WP-3.15): done. The
+      `share.scenario` strings are in the Afrikaans catalogue, and
+      `pnpm check:i18n` reports no untranslated site, email or glossary
+      string (checked 2026-09-30); the pack view's `share.pack` strings went
+      through the same round in its own change. The native speaker's review
+      is the Afrikaans item above
+      ([#90](https://github.com/Absence0760/project-water-management/issues/90)).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
@@ -3819,7 +3877,7 @@ Applicant view and the Applications tab. Left:
       the lever left is the ~0.5 s render delay: less script before the
       landing's first paint (the root layout's app-wide code). Trigger: the
       first deploy (Phase 6), tracked on #92 (moved there when #57 closed).
-- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+- [x] **`/welcome` in Afrikaans before hydration** (issue #51, the
       international persona). The page is prerendered once, in English, and
       `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
       `lang` switch together only once the app hydrates and loads the
@@ -3834,6 +3892,13 @@ Applicant view and the Applications tab. Left:
       or browser choice to the right one. Trigger: the landing page is
       linked from somewhere Afrikaans readers arrive first (a WUA's
       Afrikaans newsletter), or a screen-reader user reports it.
+      **Done** (issue #137, 2026-09-30): `/welcome` and `/welcome/af` are
+      prerendered from one route, `routes/welcome/[[lang=locale]]`, each in
+      its language with its own `<html lang>` (`hooks.server.ts`, no inline
+      script), canonical, `hreflang` alternates (`x-default` → `/welcome`)
+      and `og:locale`; the switch there is a pair of links, and `/welcome`
+      sends a visitor whose choice is Afrikaans on to `/welcome/af`
+      (ui.md § Landing page; `landing-language.spec.ts`).
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
@@ -4092,10 +4157,30 @@ Left, from the design and the persona review (§11), each with its trigger.
       partial results would mean the browser writing them mid-run, which the
       report doesn't need: the cited ensemble is the first *complete* one on
       the declared rule (G4), so an abandoned start can't be cited either way.
-- [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
-      description and run notes as written. Durable fix: fixed prompts
-      (purpose and need, mitigation, monitoring), each answered or *Not
-      given*. Trigger: before the pilot.
+- [x] **Appendix C's fixed prompts.** Built (report version `evidence-8`):
+      three fixed prompts, purpose and need, mitigation and monitoring
+      (engine `evidence/prompts.ts`), answered on the scenario where it is
+      edited (**Applicant's statement**, `ScenarioStatement.svelte`) and
+      stored on it (`129_scenario_statement`, following the scenario's RLS:
+      an editor on a team scenario, only the applicant on an application;
+      a decision can't change them). Appendix C prints each with its question,
+      the answer verbatim or *Not given*, before the description and run
+      notes; a pack freezes them in its manifest, and one drafted before
+      `evidence-8` says they aren't part of it
+      ([design/evidence-report.md § 4.2](./design/evidence-report.md)).
+- [ ] **Appendix C's answers on the shared application page.** The scenario
+      share link (`app_share_scenario`, 115) shows the description to the
+      public but not the three fixed prompts' answers (purpose and need,
+      mitigation, monitoring). Showing them helps the public comment on an
+      application; it also publishes the applicant's own words beyond the
+      assessor. **Recommendation:** show them, since the description is
+      already public and the answers are the applicant's case. Durable fix:
+      redefine `app_share_scenario` from its latest body to add the three
+      fields, a `share.scenario` i18n round for their headings, and a
+      pack-share-style DB test. **Who:** operator, asked on
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      **Trigger:** the answer, or the first application shared for public
+      comment.
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
       issued* watermark (`position: fixed` in `@media print`, repeated on
       every printed page by Chromium), `aria-hidden` beside the section heads'
@@ -4121,14 +4206,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %
       band (R1) and hatches the application's own curve's (R2), or says why
       there is none.
-- [ ] **The paired change of the FDC check curve** (engine review of ER5).
+- [x] **The paired change of the FDC check curve** (engine review of ER5).
       § 1's chart bands each run's own curve (R1 shaded, R2 hatched); the two
       come from the same parameter sets, so they overlap even when every
-      pair shifts the curve the same way, and the caption says so. Durable
-      fix: band the per-pair difference of the impacted curve at each table
-      point with its worse-share in `summarisePaired`, printed as a small
-      table under the chart. Trigger: an assessor reads the FDC chart for
-      the application's effect, or the next change to § 1.
+      pair shifts the curve the same way, and the caption said so. Built
+      (report format `evidence-7`): `summarisePaired` bands the per-pair
+      difference of the impacted curve at each table point with the share of
+      pairs in which the application's flow is lower
+      (`PairedSummary.reserveFdcChange`); the evidence document carries it
+      per month and point with the runs' own difference and "worse in k of
+      n" (`EvidenceSite.fdcChange`), and § 1 prints it as a table under each
+      FDC plot (screen and the server-rendered PDF alike), the caption no
+      longer apologising for the overlap. A pack issued before `evidence-7`
+      keeps its frozen document, with no table and the old caption. No
+      `ENGINE_VERSION` bump: no run's output changes.
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue
@@ -4223,9 +4314,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       Contributors read no pack today (operator decision, 2026-09-29:
       issuing stays with editors). Durable fix: a read policy for the
       scenario's owner and members on packs of their application once
-      issued, with the D2 anonymising applied to the manifest they see.
-      Trigger: WP-3.15, or the first applicant who needs the pack itself
-      rather than its verify link.
+      issued, with the D2 anonymising applied to the manifest they see; then
+      `app_share_link_creatable` / `_visible` (128) let the applicant link
+      their own issued pack and list and revoke the links they made, as for
+      a scenario link. Trigger: the first applicant who needs the pack itself
+      rather than its verify link (WP-3.15's share links to packs landed in
+      128 without it).
 - [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner. Trigger: with the pack
       view.

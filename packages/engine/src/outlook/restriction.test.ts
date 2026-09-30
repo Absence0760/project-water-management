@@ -1,4 +1,4 @@
-// The review triggers as WP-3.8's drought restriction rule (engine 1.52.0,
+// The review triggers as WP-3.8's drought restriction rule (engine 1.54.0,
 // docs/model.md §2.15a, §2.7i): restrictionRuleFromTriggers, and the outlook
 // and its triggers running without the rule (withoutDroughtRestriction).
 import { describe, expect, it } from 'vitest';

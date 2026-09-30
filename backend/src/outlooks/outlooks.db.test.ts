@@ -418,7 +418,7 @@ describe('seasonal_outlook RLS', () => {
 	});
 });
 
-describe('the drought restriction rule (engine 1.52.0, WP-3.8)', () => {
+describe('the drought restriction rule (engine 1.54.0, WP-3.8)', () => {
 	it('the job runs the outlook and its triggers without the rule: the same result and table as with none', async () => {
 		const owner = await signUp('DroughtOutlook');
 		const c = await catchment(owner, 'Outlook with restrictions');

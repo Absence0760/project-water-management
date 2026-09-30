@@ -5,7 +5,17 @@
 	// there is one layout. Everything comes from one EvidenceReport document
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
-	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, ENSEMBLE_MEASURES_SINCE, type Band, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
+	import {
+		ALLOCATION_MODE_LABEL,
+		APPLICANT_PROMPTS,
+		declaredRuleText,
+		describeFitRecord,
+		ENSEMBLE_MEASURES_SINCE,
+		type Band,
+		type EvidenceReport,
+		type EwrAssuranceSite,
+		type ModelInput
+	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
 	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
@@ -27,7 +37,7 @@
 	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
-	import { fdcMonths } from './grid';
+	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 
@@ -175,13 +185,29 @@
 								/>
 							{/if}
 							{#each fdcMonths(site, app) as f (f.month)}
+								{@const points = fdcPoints(site.key, f.month)}
+								{@const moved = app ? fdcChangeRows(site, f.month, points.map((p) => p.point)) : []}
 								<div data-testid="evidence-fdc-{f.kind}">
 									<FdcPlot
 										title="{monthName(f.month)} flow-duration curve at {site.name} against the EWR curve"
 										unit={site.unit}
-										caption="{monthName(f.month)}: {f.why} The simulated curve should lie on or above the EWR curve.{site.fdcBands ? ' Shaded: the range of the kept parameter sets (R1; the application’s under R2, not a difference). Overlapping ranges don’t mean no change: the paired change is in the rows above and in § 2.' : ` Curve band: ${site.fdcBandNote ?? 'no band'}.`}{site.fdcBands && site.fdcBandNote ? ` ${site.fdcBandNote}` : ''}"
-										points={fdcPoints(site.key, f.month)}
+										caption={fdcCaption(site, f, app)}
+										{points}
 									/>
+									{#if moved.length}
+										<!-- evidence-7: the paired change in the curve, each kept set on both runs (an older pack's document has none). -->
+										<div class="table-wrap">
+											<table class="data compact" data-testid="evidence-fdc-change">
+												<caption class="small">{monthName(f.month)} curve, paired change (application − baseline, {site.unit})</caption>
+												<thead><tr><th scope="col">Flow exceeded</th><th scope="col" class="num">Change: median (5 to 95 %)</th><th scope="col" class="num">Application’s flow lower in</th></tr></thead>
+												<tbody>
+													{#each moved as row, j (j)}
+														<tr><th scope="row">{fmtNum(row.point)} % of the time</th><td class="num">{row.main}{#if row.sub}<span class="sub">{row.sub}</span>{/if}</td><td class="num">{row.worse}</td></tr>
+													{/each}
+												</tbody>
+											</table>
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -712,6 +738,24 @@
 			{:else if s.id === 'applicantStatement' && report.applicantStatement}
 				{@const st = report.applicantStatement}
 				<p class="small muted">The applicant’s own words, verbatim: the only free text in this report (G13). Not checked by the app.</p>
+				<!-- evidence-8: the fixed prompts, each answered or "Not given"; a pack drafted before it froze none, and says so. -->
+				{#if st.prompts}
+					{@const prompts = st.prompts}
+					<div class="prompts" data-testid="evidence-prompts">
+						{#each APPLICANT_PROMPTS as p (p.id)}
+							<div data-testid="evidence-prompt-{p.id}">
+								<h3>{p.heading}</h3>
+								<p class="small muted q">{p.question}</p>
+								{#if prompts[p.id].trim()}<p class="verbatim">{prompts[p.id]}</p>{:else}<p class="na">Not given.</p>{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="na" data-testid="evidence-prompts-absent">
+						The fixed prompts (purpose and need, mitigation, monitoring) are not part of this pack: it was drafted before the evidence report asked
+						them (report format evidence-8). A new version of the pack carries them.
+					</p>
+				{/if}
 				<h3>Description of “{st.scenarioName}”{st.ownerName ? `, by ${st.ownerName}` : ''}</h3>
 				{#if st.description.trim()}<p class="verbatim">{st.description}</p>{:else}<p class="na">None given.</p>{/if}
 				<h3>Notes on the application run</h3>
@@ -870,6 +914,10 @@
 	.hash {
 		font-size: 0.72rem;
 		word-break: break-all;
+	}
+	.prompts .q {
+		max-width: 80ch;
+		margin: 0.15rem 0 0.35rem;
 	}
 	.verbatim {
 		white-space: pre-wrap;

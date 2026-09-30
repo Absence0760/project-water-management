@@ -216,7 +216,7 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
 `fullAllocation`: a full-allocation scenario on a base run is the "every
 registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
-and from engine 1.52.0 (WP-3.8) `droughtRestriction`: the drought
+and from engine 1.54.0 (WP-3.8) `droughtRestriction`: the drought
 restriction rule, whole (review and lift dates, levels with a threshold and
 a % cut per part of demand), or `null` for off, checked by the engine's
 `droughtRestrictionIssues` as a settings save is ([model.md §2.7i](./model.md));
@@ -615,6 +615,10 @@ Migration `024_scenarios.sql`
   among the project's team scenarios, an application's among its owner's
   applications (ignoring case; 049, so naming a draft never says a hidden one
   exists), at most 500 ops. `op_names` (047) is the ops' display names above.
+  `purpose_need`, `mitigation`, `monitoring` (129) are the answers to the
+  evidence report's fixed Appendix C prompts, written with the description
+  by whoever may change the scenario and printed in Appendix C, each answered
+  or *Not given* ([design/evidence-report.md § 4.3](./design/evidence-report.md)).
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only.
 - Triggers: the base is a run of the same project and not a scenario run; a
@@ -764,7 +768,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
 - **The drought restriction rule** (`settings.set droughtRestriction`,
-  engine ≥ 1.52.0) is edited whole in the Settings tab's own editor
+  engine ≥ 1.54.0) is edited whole in the Settings tab's own editor
   (`settings/DroughtRestrictionFields.svelte`, loaded when picked),
   starting from the rule the scenario meets (or off); its first problem
   blocks Add, in the same words as Settings. Described as "Drought

@@ -69,7 +69,7 @@ describe('describeOp', () => {
 	const b = base();
 	const d = (op: ScenarioOp, input: ModelInput | null = b) => describeOp(op, input, namesOf([b.model], [op]));
 
-	it('says what a drought restriction op changes: off when the base has none (engine 1.52.0)', () => {
+	it('says what a drought restriction op changes: off when the base has none (engine 1.54.0)', () => {
 		const rule = { reviewDates: ['10-05'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
 		expect(d({ op: 'settings.set', path: 'droughtRestriction', value: rule })).toBe('Drought restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %');
 		const withRule = { ...b, settings: { ...b.settings, droughtRestriction: rule } } as ModelInput;
@@ -209,7 +209,7 @@ describe('buildOp', () => {
 		expect(draftSpec({ kind: 'node.set', field: 'supplyRule' })).toMatchObject({ t: 'enum' });
 	});
 
-	it('builds the drought restriction rule whole from the editor’s copy, off as null, and says what is wrong first (engine 1.52.0)', () => {
+	it('builds the drought restriction rule whole from the editor’s copy, off as null, and says what is wrong first (engine 1.54.0)', () => {
 		const rule = { reviewDates: ['01-01'], levels: [{ belowPct: 0.5, cuts: { crops: 0.4 } }] };
 		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: rule }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'droughtRestriction', value: rule } });
 		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: null }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'droughtRestriction', value: null } });

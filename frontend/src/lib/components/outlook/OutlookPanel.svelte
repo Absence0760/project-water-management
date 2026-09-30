@@ -54,7 +54,7 @@
 		/** settings.outlook (the season and the planning share); an older API sends none. */
 		outlook: OutlookSettings | undefined;
 		canEdit: boolean;
-		/** settings.droughtRestriction (engine ≥ 1.52.0): the rule the triggers would replace; null = none. */
+		/** settings.droughtRestriction (engine ≥ 1.54.0): the rule the triggers would replace; null = none. */
 		droughtRestriction?: DroughtRestrictionRule | null;
 		/** Saving the triggers as the drought restriction rule changed the project's settings: the page takes the new project. */
 		onProjectChange?: (p: Project) => void;
@@ -92,7 +92,7 @@
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 	const triggers = $derived(outlook && shown?.kind === 'complete' ? buildTriggersView(outlook) : null);
-	// The trigger table as the drought restriction rule (engine ≥ 1.52.0, WP-3.8): an editor saves it to Settings.
+	// The trigger table as the drought restriction rule (engine ≥ 1.54.0, WP-3.8): an editor saves it to Settings.
 	const triggerRule = $derived(outlook && shown?.kind === 'complete' ? triggerRuleView(outlook) : null);
 	let ruleSaving = $state(false);
 	let ruleSaved = $state(false);

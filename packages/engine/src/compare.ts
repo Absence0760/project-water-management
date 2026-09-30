@@ -22,7 +22,7 @@ import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOr
 import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
-import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
+import { chirpsQuantileMapText, fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import { declaredRuleText } from './uncertainty/options';
 import {
@@ -197,6 +197,13 @@ export interface RunComparison {
 		segmentsB?: string[];
 		fitWindowsA?: string[];
 		fitWindowsB?: string[];
+		/**
+		 * Engine ≥ 1.53.0 (CR-23): each run's CHIRPS gap map in words
+		 * (chirpsQuantileMapText; null = off, as every run before it); both
+		 * absent when neither run had one. A different map counts in `changed`.
+		 */
+		quantileMapA?: string | null;
+		quantileMapB?: string | null;
 		changed: boolean;
 	} | null;
 	/**
@@ -396,6 +403,8 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	const rsa = rainSourceLines(a.summary.rainSource);
 	const rsb = rainSourceLines(b.summary.rainSource);
 	const rainSource = rsa.length || rsb.length ? { periodsA: rsa, periodsB: rsb, changed: !same(rsa, rsb) } : null;
+	const qma = chirpsQuantileMapText(xa?.quantileMap);
+	const qmb = chirpsQuantileMapText(xb?.quantileMap);
 	const chirpsFit =
 		xa || xb
 			? {
@@ -408,7 +417,9 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 					segmentsB: segsOf(xb).map(fitSegmentName),
 					fitWindowsA: fitWindowLabels(xa),
 					fitWindowsB: fitWindowLabels(xb),
+					...(qma || qmb ? { quantileMapA: qma, quantileMapB: qmb } : {}),
 					changed:
+						qma !== qmb ||
 						!xa ||
 						!xb ||
 						!same(xa.excludedWaterYears, xb.excludedWaterYears) ||
@@ -713,6 +724,14 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.29.0; a snapshot without it takes the default, 'all', which is what older runs did.
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
+	// Engine ≥ 1.53.0 (CR-23); a snapshot without it ran without (null, the default).
+	chirpsQuantileMap: {
+		label: 'CHIRPS quantile map',
+		fmt: (v) => {
+			const w = v && typeof v === 'object' ? (v as { wetDayMm?: unknown }).wetDayMm : undefined;
+			return w === undefined ? 'off (the monthly factor alone)' : `on (wet days ≥ ${fmtValue(w)} mm)`;
+		}
+	},
 	// Engine ≥ 0.30.0; a snapshot without it had none.
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
@@ -956,7 +975,7 @@ function diffSettings(
 	// Automated calibration's rules (engine ≥ 1.25.0, issue #153): a snapshot without them ran the defaults.
 	for (const c of calibrationRulesChanges(resolveCalibrationRules(a.calibrationRules, []), resolveCalibrationRules(b.calibrationRules, []))) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
-	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8): a snapshot without one ran without it.
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a snapshot without one ran without it.
 	for (const t of droughtRestrictionChanges(a.droughtRestriction, b.droughtRestriction, (id) => siteName(id))) push(DROUGHT_RESTRICTION_LABEL, `${DROUGHT_RESTRICTION_LABEL}: ${t}`);
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([

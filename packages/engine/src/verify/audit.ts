@@ -184,9 +184,9 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	[ALLOCATION_SERIES.groundwaterLeft.key, 'an allocation cap'],
 	['senior_requirement', 'senior water users downstream'],
 	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)'],
-	// Engine ≥ 1.52.0: the day's level cuts what the sources are asked for.
+	// Engine ≥ 1.54.0: the day's level cuts what the sources are asked for.
 	['restricted_demand', 'a drought restriction rule'],
-	// Engine ≥ 1.52.0: a unit's own level under the 'own' basis (always beside its restricted demand).
+	// Engine ≥ 1.54.0: a unit's own level under the 'own' basis (always beside its restricted demand).
 	['restriction_level', 'a drought restriction rule']
 ];
 

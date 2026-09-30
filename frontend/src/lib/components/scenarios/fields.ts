@@ -88,7 +88,7 @@ export type ValueSpec =
 	| { t: 'reductions' }
 	/**
 	 * The drought restriction rule (settings.droughtRestriction, engine ≥
-	 * 1.52.0, WP-3.8), whole, edited with the Settings form's editor
+	 * 1.54.0, WP-3.8), whole, edited with the Settings form's editor
 	 * (settings/DroughtRestrictionFields.svelte); null is off.
 	 */
 	| { t: 'restriction' };
@@ -322,7 +322,7 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } },
 	// Registered volumes (engine ≥ 1.18.0, issue #72): a full-allocation scenario is the cumulative-impact background.
 	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } },
-	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8): a WUA compares restriction policies with it.
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a WUA compares restriction policies with it.
 	droughtRestriction: { label: 'Drought restriction rule', spec: { t: 'restriction' } }
 };
 

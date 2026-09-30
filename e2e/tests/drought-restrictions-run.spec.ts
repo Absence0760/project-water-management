@@ -1,4 +1,4 @@
-// Drought restrictions in use (engine 1.52.0, WP-3.8, docs/ui.md § Drought
+// Drought restrictions in use (engine 1.54.0, WP-3.8, docs/ui.md § Drought
 // restrictions): a scenario sets a restriction rule through "Change a
 // setting"; Settings starts a rule from the WUA's published notice, reads each
 // unit's own dam and adds an EWR trigger; an editor replaces it with an

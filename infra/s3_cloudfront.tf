@@ -159,10 +159,12 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   /index.html with a 200, and the client router takes over. Done here rather
 #   than with a distribution-wide custom_error_response because those also
 #   rewrite the API's own 403/404 JSON responses into index.html. The
-#   prerendered pages, the landing page (issue #57), the legal pages and the
-#   methods page, are served from their own HTML: /welcome, /privacy, /terms,
-#   /methods → <path>.html
-#   (static HTML for crawlers and link previews).
+#   prerendered pages (PRERENDERED), the landing page in each language
+#   (issues #57, #137), the legal pages and the methods page, are served from
+#   their own HTML: /welcome, /welcome/af, /privacy, /terms, /methods →
+#   <path>.html (static HTML for crawlers and link previews). A language
+#   added to the table (packages/engine/src/languages.ts) adds its
+#   /welcome/<code> here; the test below fails until it does.
 #   A path WITH an extension goes to S3 only where the build keeps files:
 #   under STATIC_DIRS (/_app/… and frontend/static's directories) or one of
 #   STATIC_FILES at the root (frontend/static's files and the HTML the build
@@ -190,6 +192,7 @@ resource "aws_cloudfront_function" "spa_rewrite" {
   comment = "Serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
   publish = true
   code    = <<-EOT
+    var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods'];
     var STATIC_DIRS = ['_app', 'fonts', 'help', 'landing'];
     var STATIC_FILES = [
       'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html',
@@ -218,7 +221,7 @@ resource "aws_cloudfront_function" "spa_rewrite" {
     function handler(event) {
       var request = event.request;
       var uri = request.uri;
-      if (uri === '/welcome' || uri === '/privacy' || uri === '/terms' || uri === '/methods') {
+      if (PRERENDERED.indexOf(uri) !== -1) {
         request.uri = uri + '.html';
         return request;
       }

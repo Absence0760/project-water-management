@@ -1,12 +1,12 @@
 <!--
-	The drought restriction rule's editor (engine ≥ 1.52.0, WP-3.8, docs/ui.md
+	The drought restriction rule's editor (engine ≥ 1.54.0, WP-3.8, docs/ui.md
 	§ Drought restrictions, docs/model.md §2.7i): Settings → Drought
 	restrictions, and the scenario form's "Change a setting" for comparing
 	restriction policies. On each review date the model reads the total farm
 	dam storage at the start of the day and picks the deepest level whose
 	threshold it is below; the level's cuts hold until the next review or
 	lift date. One card per level, side by side where there is room and one
-	under the other on a phone. From engine 1.52.0 also which storage it reads
+	under the other on a phone. From engine 1.54.0 also which storage it reads
 	(every farm dam, some dams, or each unit's own), which units it cuts, an
 	EWR-failure trigger, and a start from the WUA's published notice. Bind the
 	rule (null = off); `error` is set while it can't be saved, so the parent
@@ -85,7 +85,7 @@
 		value = on ? { ...rest, ewrTrigger: { siteNodeId: null, level: 1 } } : rest;
 		fromTemplate = false;
 	}
-	// The WUA's published notice as a starting rule (engine ≥ 1.52.0): never the other way round.
+	// The WUA's published notice as a starting rule (engine ≥ 1.54.0): never the other way round.
 	let noticeMessage = $state<string | null>(null);
 	let noticeBusy = $state(false);
 	async function fromNotice() {

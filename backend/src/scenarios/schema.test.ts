@@ -98,10 +98,28 @@ describe('checkOps', () => {
 
 describe('bodies', () => {
 	it('creates with defaults, and refuses unknown keys', () => {
-		expect(CreateScenarioBody.parse({ name: ' Dam ', baseRunId: a })).toEqual({ name: 'Dam', description: '', baseRunId: a, ops: [], ownedNodeIds: [] });
+		expect(CreateScenarioBody.parse({ name: ' Dam ', baseRunId: a })).toEqual({
+			name: 'Dam',
+			description: '',
+			purposeAndNeed: '',
+			mitigation: '',
+			monitoring: '',
+			baseRunId: a,
+			ops: [],
+			ownedNodeIds: []
+		});
 		expect(CreateScenarioBody.safeParse({ name: 'Dam', baseRunId: a, status: 'submitted' }).success).toBe(false);
 		expect(CreateScenarioBody.safeParse({ name: '  ', baseRunId: a }).success).toBe(false);
 		expect(CreateScenarioBody.parse({ name: 'D', baseRunId: a, ownedNodeIds: [a, a, b] }).ownedNodeIds).toEqual([a, b]);
+	});
+
+	it('trims each answer to Appendix C’s prompts and holds it to 4 000 characters, without NUL (129_scenario_statement)', () => {
+		expect(PatchScenarioBody.parse({ mitigation: '  Releases.\n' })).toEqual({ mitigation: 'Releases.' });
+		expect(PatchScenarioBody.parse({ monitoring: '   ' })).toEqual({ monitoring: '' });
+		expect(PatchScenarioBody.parse({ purposeAndNeed: 'x'.repeat(4000) }).purposeAndNeed).toHaveLength(4000);
+		expect(PatchScenarioBody.safeParse({ purposeAndNeed: 'x'.repeat(4001) }).success).toBe(false);
+		expect(PatchScenarioBody.safeParse({ monitoring: 'a\u0000b' }).success).toBe(false);
+		expect(CreateScenarioBody.parse({ name: 'D', baseRunId: a, purposeAndNeed: ' Storage. ' }).purposeAndNeed).toBe('Storage.');
 	});
 
 	it('patches at least one field', () => {

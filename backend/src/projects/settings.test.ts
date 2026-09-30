@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, dataQualityPatchError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -434,6 +434,40 @@ describe('SettingsPatch.arealRain (engine ≥ 1.13.0)', () => {
 		expect(forcing.safeParse({ ...base, arealRain: null }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, arealRain: areal }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, arealRain: { ...areal, source: '' } }).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.chirpsQuantileMap (engine ≥ 1.53.0, CR-23)', () => {
+	const ok = (chirpsQuantileMap: unknown) => SettingsPatch.safeParse({ chirpsQuantileMap }).success;
+
+	it('accepts exactly what the engine runs (a table test holds the two together)', () => {
+		for (const [name, v] of [
+			['off', null],
+			['the default threshold', { wetDayMm: 1 }],
+			['the bottom of the range', { wetDayMm: 0.1 }],
+			['the top of the range', { wetDayMm: 10 }],
+			['below the range', { wetDayMm: 0.09 }],
+			['above the range', { wetDayMm: 10.5 }],
+			['NaN', { wetDayMm: NaN }],
+			['a string', { wetDayMm: '1' }],
+			['no threshold', {}],
+			['an extra key', { wetDayMm: 1, fromWaterYear: 2000 }],
+			['a bare number', 1]
+		] as [string, unknown][]) {
+			expect(ok(v), name).toBe(chirpsQuantileMapError(v) === null);
+		}
+	});
+
+	it('is off by default, replaced whole by a patch, and recorded in a fit record’s forcing, optionally', () => {
+		expect(mergeSettings({}).chirpsQuantileMap).toBeNull();
+		const stored = patchSettings({}, { chirpsQuantileMap: { wetDayMm: 2 } });
+		expect(stored.chirpsQuantileMap).toEqual({ wetDayMm: 2 });
+		expect(patchSettings(stored, { chirpsQuantileMap: null }).chirpsQuantileMap).toBeNull();
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).chirpsQuantileMap).toEqual({ wetDayMm: 2 });
+		const forcing = FitRecord.shape.forcing.unwrap();
+		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
+		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 1 } }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, chirpsQuantileMap: { wetDayMm: 20 } }).success).toBe(false);
 	});
 });
 
@@ -1297,7 +1331,7 @@ describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
 	});
 });
 
-describe('settings.droughtRestriction (engine 1.52.0, WP-3.8)', () => {
+describe('settings.droughtRestriction (engine 1.54.0, WP-3.8)', () => {
 	const rule = { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3 } }, { belowPct: 0.3, cuts: { crops: 0.6, domestic: 0.2 } }] };
 	it('takes a rule or null, checked by the engine’s own rule checks', () => {
 		expect(SettingsPatch.safeParse({ droughtRestriction: rule }).success).toBe(true);
@@ -1323,7 +1357,7 @@ describe('settings.droughtRestriction (engine 1.52.0, WP-3.8)', () => {
 	});
 });
 
-describe('remapSettingNodeIds and the drought restriction rule (engine 1.52.0)', () => {
+describe('remapSettingNodeIds and the drought restriction rule (engine 1.54.0)', () => {
 	it('moves its dams, units and EWR site to the copy’s node ids, and leaves unknown ids as they were', () => {
 		const ids = new Map([
 			['a', 'A'],

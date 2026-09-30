@@ -8,7 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
-	import { isLandingRoot, isPublicPath, routeAccess, session, STATIC_PATHS, termsGateApplies } from '$lib/auth/session.svelte';
+	import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import ConfirmHost from '$lib/components/common/ConfirmHost.svelte';
@@ -24,12 +24,12 @@
 	// The landing page (issue #57): a signed-out visitor to `/` sees it in place
 	// of the projects list, loaded as its own chunk, fetched beside /auth/me so
 	// it is usually in by the time the answer is. /welcome is the same page
-	// prerendered (routes/welcome), shown at once, before the session is known,
+	// prerendered once per language (routes/welcome/[[lang=locale]]), shown at once, before the session is known,
 	// since nothing on it depends on who is looking.
 	const loadLanding = () => import('$lib/components/landing/Landing.svelte');
 	// By route, not by path: while prerendering, `base` is relative ('.'), so a
 	// path comparison would miss it and the page would prerender as "Loading…".
-	const staticPage = $derived(STATIC_PATHS.includes(page.route.id ?? ''));
+	const staticPage = $derived(STATIC_ROUTES.includes(page.route.id ?? ''));
 	const landingRoot = $derived(session.checked && isLandingRoot(page.url.pathname, base, !!session.user));
 
 	async function checkSession() {
@@ -154,7 +154,19 @@
 		try {
 			const m = i18nModule ?? (await import('$lib/i18n/locale.svelte'));
 			i18nModule = m;
-			await m.setLocale(m.resolveLocale(chosen, m.readStoredLocale()));
+			// The landing page's language is its address's (issue #137): the
+			// page set it as it rendered. /welcome itself is also the address
+			// for anyone whose language isn't known yet, so a visitor whose
+			// choice (the account's, this device's, the browser's) is another
+			// language goes on to that one's address; /welcome/<code> is kept
+			// as it is. Reading it there counts as this device's choice when it
+			// has none, so the sign-in pages it leads to carry on in it.
+			if (page.route.id === LANDING_ROUTE) {
+				const choice = m.resolveLocale(chosen, m.readStoredLocale());
+				const here = page.params.lang;
+				if (!here && choice !== m.DEFAULT_LOCALE) await goto(`${base}${landingPath(choice)}`, { replaceState: true });
+				else if (here && m.isLocale(here) && !m.readStoredLocale()) m.storeLocale(here);
+			} else await m.setLocale(m.resolveLocale(chosen, m.readStoredLocale()));
 			i18nReady = true;
 		} catch {
 			// The i18n module or the catalogue chunk didn't arrive. Only a reload
@@ -170,14 +182,17 @@
 	});
 	// <html lang> names the language the page's words are in (wordsLang: it
 	// stays English until the chosen language's catalogue is complete).
+	// The landing page's prerendered HTML already says its own (hooks.server.ts),
+	// so it is left alone until the i18n module is here (issue #137).
 	$effect(() => {
+		if (page.route.id === LANDING_ROUTE && !i18nModule) return;
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
 	// The static pages (/welcome, /privacy, /terms, /methods) render at once (and
 	// prerender), so crawlers and a slow API still get them (even with the API
-	// down: they need none). /welcome is English until the language's words
-	// arrive, the one page that may switch; the legal and methods pages are English only.
+	// down: they need none). The landing page is prerendered once per language
+	// (/welcome, /welcome/af; issue #137); the legal and methods pages are English only.
 	const shown = $derived(staticPage || ready);
 </script>
 

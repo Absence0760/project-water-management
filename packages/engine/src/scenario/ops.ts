@@ -385,7 +385,7 @@ export interface SettingsPathValues {
 	/** What the registered volumes do to the run (engine ≥ 1.18.0, issue #72): compare only, cap, or a full allocation. */
 	allocationMode: AllocationMode;
 	/**
-	 * The drought restriction rule (engine ≥ 1.52.0, WP-3.8), whole: a rule or
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8), whole: a rule or
 	 * null (off). So a WUA can compare restriction policies; always a baseline
 	 * assumption (classifyOp), never an applicant's proposal.
 	 */

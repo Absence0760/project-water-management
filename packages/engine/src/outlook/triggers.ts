@@ -444,7 +444,7 @@ function checkReview(input: ModelInput, options: ReviewTriggerBandOptions): void
  * does for the dates and the dams.
  */
 export function reviewTriggerBands(raw: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
-	// Without the drought restriction rule, on a base run without it (engine ≥ 1.52.0), as the outlook.
+	// Without the drought restriction rule, on a base run without it (engine ≥ 1.54.0), as the outlook.
 	const input = withoutDroughtRestriction(raw);
 	assertUnrestrictedBase(baseRun);
 	checkReview(input, options);
@@ -572,7 +572,7 @@ export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'm
 }
 
 /**
- * A trigger table as WP-3.8's drought restriction rule (engine ≥ 1.52.0,
+ * A trigger table as WP-3.8's drought restriction rule (engine ≥ 1.54.0,
  * docs/model.md §2.15a and §2.7i): so a run, or a scenario, simulates
  * following the table. The review date's month and day is the rule's review
  * date and the day after the season end its lift date; each row, fullest

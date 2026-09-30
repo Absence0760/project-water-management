@@ -69,7 +69,7 @@ const STATS: Record<keyof CalibrationStats, true> = {
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'observed_flow_other', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
-	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
+	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// A dam's capacity on the day, when sediment or an in-service date changes it (engine 1.30.0, issue #67)
 	'dam_capacity',
@@ -96,7 +96,7 @@ const RUN_KEYS = [
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)
 	'river_abstraction',
-	// The drought restriction rule (engine 1.52.0, WP-3.8)
+	// The drought restriction rule (engine 1.54.0, WP-3.8)
 	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',

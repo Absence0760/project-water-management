@@ -2,7 +2,7 @@ import { droughtRestrictionIssues, RESTRICTION_DATES_MAX, RESTRICTION_LEVELS_MAX
 import { describe, expect, it } from 'vitest';
 import { joinMonthDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
-describe('the drought restriction form (engine 1.52.0, WP-3.8)', () => {
+describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 	it('starts from a rule the engine accepts: reviews on 1 October and 1 January, lifted 1 May, three deepening levels', () => {
 		const r = startingRule();
 		expect(droughtRestrictionIssues(r)).toEqual([]);

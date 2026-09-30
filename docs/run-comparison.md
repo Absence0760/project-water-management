@@ -158,7 +158,13 @@ bottom:
    each side's period, ranges and windows named; `chirpsFit.ts`). A change of
    the `chirpsFitPeriod` setting itself is also a settings line ("CHIRPS fit
    period: whole record → listed water years: …"); a run saved before 0.29.0
-   compares as the whole record, with no windows to compare. The
+   compares as the whole record, with no windows to compare. From engine
+   1.53.0 the CHIRPS gap map (CR-23) is part of it too: `chirpsFit`
+   carries each side's map in words (`quantileMapA/B`, null = off, only
+   when either run had one) and a different map counts as a change; the
+   note says "quantile map: off → …", and the `chirpsQuantileMap` setting
+   is a settings line ("CHIRPS quantile map: off (the monthly factor
+   alone) → on (wet days ≥ 1 mm)"); a run saved before it compares as off. The
    factors can move with no settings line at all: new rain data, a keep-dry
    or missing period (which since engine 0.18.0 also decides which days the
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
@@ -239,14 +245,14 @@ bottom:
    none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
    a changed method and a reworded source.
    A change of the drought restriction rule (`settings.droughtRestriction`,
-   engine ≥ 1.52.0, [model.md §2.7i](./model.md)) is one settings line per
+   engine ≥ 1.54.0, [model.md §2.7i](./model.md)) is one settings line per
    change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;
    Level 1 (below 70 %): crops 50 %" when one side has none (a run saved
-   before 1.52.0 had none, and one the run couldn't use counts as off),
+   before 1.54.0 had none, and one the run couldn't use counts as off),
    else the review and lift dates, each level's threshold ("level 1 starts
    below 70 % → 60 %"), name and cut per part ("level 1 cut on municipal
    (town) demand objects 0 % → 10 %"), levels added or removed, and a
-   reworded source, and (engine ≥ 1.52.0) the storage read ("storage read
+   reworded source, and (engine ≥ 1.54.0) the storage read ("storage read
    every farm dam → the storage of Upper farm"), the units cut and the EWR
    trigger, nodes by name (engine `droughtRestrictionChanges`). A scenario that
    sets another rule shows here, so comparing two restriction policies

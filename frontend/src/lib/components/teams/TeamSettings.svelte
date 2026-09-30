@@ -86,7 +86,7 @@
 			team = await api.teams.setThresholds(team.id, next);
 			green = team.portfolioThresholds.green;
 			amber = team.portfolioThresholds.amber;
-			thresholdsSaved = next ? 'Saved. The portfolio now uses these thresholds.' : 'Saved. The portfolio uses the default thresholds again.';
+			thresholdsSaved = next ? 'Saved. The team’s projects are now judged by these thresholds.' : 'Saved. The team’s projects are judged by the default thresholds again.';
 		} catch (err) {
 			thresholdsFailed = msg(err);
 		} finally {
@@ -123,9 +123,9 @@
 	{/if}
 
 	<section class="part" aria-labelledby="pt-h">
-		<h3 id="pt-h">Portfolio traffic lights</h3>
+		<h3 id="pt-h">EWR traffic lights</h3>
 		<p class="small rule">
-			A catchment's EWR status on the <a href="{base}/teams/{team.id}/portfolio">portfolio</a> counts the days in the last 30 its outlet
+			A catchment's EWR status in the <a href="{base}/?owner=team:{team.id}&sort=status">project list</a> counts the days in the last 30 its outlet
 			EWR was not met: {thresholdsRule(team.portfolioThresholds)}.
 		</p>
 		<p class="muted small">{thresholdsSource(team.portfolioThresholds)}</p>

@@ -230,7 +230,7 @@ export interface NetworkPlan {
 	/** The run day the dams with a storageResetM3 start from it (engine ≥ 0.46.0); absent = none. */
 	storageResetDay?: number;
 	/**
-	 * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, ./restriction.ts,
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8, ./restriction.ts,
 	 * docs/model.md §2.7i); absent = off. Decided at the start of a review day
 	 * from the farm dams' storage then (after any storage reset, before the
 	 * transfers), so a day's level never reads a later day.
@@ -306,7 +306,7 @@ export interface NodeResult {
 	riverAbstraction?: Float64Array;
 	/**
 	 * The unit's abstraction demand after the drought restriction (engine ≥
-	 * 1.52.0, docs/model.md §2.7i): what its sources are asked for, ≤ demand.
+	 * 1.54.0, docs/model.md §2.7i): what its sources are asked for, ≤ demand.
 	 * `demand` and `deficit` stay the unrestricted demand's, so a cut shows as
 	 * a shortfall. Absent without the rule, and on gauges and other users.
 	 */
@@ -422,9 +422,9 @@ export interface NetworkState {
 	boreholeUsedM3: (number[] | null)[];
 	/** Surface and groundwater use so far this water year under an allocation cap (before a 1 October clears it); null without a cap. */
 	allocationUsedM3: ([number, number] | null)[];
-	/** The drought restriction level each node held the day before (engine ≥ 1.52.0); all 0 without the rule. */
+	/** The drought restriction level each node held the day before (engine ≥ 1.54.0); all 0 without the rule. */
 	restrictionLevels: number[];
-	/** Whether the rule's EWR trigger site failed the day before (engine ≥ 1.52.0); false without one. */
+	/** Whether the rule's EWR trigger site failed the day before (engine ≥ 1.54.0); false without one. */
 	restrictionEwrFailed: boolean;
 }
 
@@ -439,14 +439,14 @@ export interface NetworkResult {
 	/** Volume each river off-take took per day (m³, before conveyance losses), in plan.offtakes order; absent without off-takes. */
 	offtakes?: Float64Array[];
 	/**
-	 * The drought restriction level in force each day (engine ≥ 1.52.0; 0 =
+	 * The drought restriction level in force each day (engine ≥ 1.54.0; 0 =
 	 * none): the one level under a shared basis, the deepest any unit was at
 	 * under 'own'; absent without the rule.
 	 */
 	restrictionLevel?: Uint8Array;
 	/** Under the 'own' basis, each unit's level each day (node order; null for a unit the rule doesn't cut). */
 	restrictionUnitLevel?: (Uint8Array | null)[];
-	/** Days a review found the EWR trigger's site failed the day before (engine ≥ 1.52.0); 1 = yes. */
+	/** Days a review found the EWR trigger's site failed the day before (engine ≥ 1.54.0); 1 = yes. */
 	restrictionEwrFailed?: Uint8Array;
 }
 
@@ -665,7 +665,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.18.0).
 	const allocUsed = nodes.map((n) => (n.allocationCap ? Float64Array.from(n.initialAllocationUsedM3 ?? [0, 0]) : null));
-	// The drought restriction (engine ≥ 1.52.0, ./restriction.ts, docs/model.md §2.7i): the level held, each
+	// The drought restriction (engine ≥ 1.54.0, ./restriction.ts, docs/model.md §2.7i): the level held, each
 	// day's level, and each unit's demand after today's cut: its abstraction demand, the crop requirement and
 	// a view of its demand objects' demand (what splitSupply reads), filled at the start of each day.
 	const rp = plan.restriction;
@@ -803,7 +803,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				if (r.storageSet) r.storageSet[t] = startStorage(i, t) - (t === 0 ? nodes[i]!.initialStorageM3 : r.storage[t - 1]!);
 			}
 		}
-		// The drought restriction (engine ≥ 1.52.0): a review decides the level from the storage at the start of the
+		// The drought restriction (engine ≥ 1.54.0): a review decides the level from the storage at the start of the
 		// day (a fresh run's first day too, when the latest date before it is a review), a lift ends it; then each
 		// unit's demand after its cuts, before the transfers, whose room reads it.
 		if (rp) {
@@ -878,7 +878,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const q = prevQ(tr.to);
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
-				// After the drought restriction's cut (engine ≥ 1.52.0), when the rule is on.
+				// After the drought restriction's cut (engine ≥ 1.54.0), when the rule is on.
 				const dstD = rD ? rD[tr.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
 				const draw = damDrawBound(dst, dstD, bhUsed[tr.to]!, allocUsed[tr.to]!, t);
@@ -1061,7 +1061,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const Dc = F / node.irrigationEfficiency;
 			const objs = node.objects;
 			const D = objs ? Dc + objs.total[t]! : Dc;
-			// What the unit's sources are asked for (engine ≥ 1.52.0): D after the drought restriction's cut, when
+			// What the unit's sources are asked for (engine ≥ 1.54.0): D after the drought restriction's cut, when
 			// the rule is on. D itself, and the deficit D − G, stay the unrestricted demand's.
 			const Dr = rD ? rD[i]! : D;
 			const H = sumU;
@@ -1252,7 +1252,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let T: number;
 			if (objs) {
 				const got = r.objectSupplied!;
-				// Split against the restricted demands when the rule is on (engine ≥ 1.52.0).
+				// Split against the restricted demands when the rule is on (engine ≥ 1.54.0).
 				const Gc = rp ? splitSupply(G, rF![i]! / node.irrigationEfficiency, rObjs![i]!, t, got) : splitSupply(G, Dc, objs, t, got);
 				T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * Gc;
 				for (let k = 0; k < got.length; k++) T += objs.returnShare[k]! * got[k]![t]!;

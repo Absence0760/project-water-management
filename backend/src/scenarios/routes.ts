@@ -168,9 +168,21 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const names = applicant ? ownNames({ opNames: all, ownedNodeIds: owned }).opNames : all;
 			const { rows } = await db
 				.query<{ id: string }>(
-					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, op_names)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), owned, JSON.stringify(names)]
+					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, op_names, purpose_need, mitigation, monitoring)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+					[
+						id,
+						body.name,
+						body.description,
+						body.baseRunId,
+						JSON.stringify(body.ops),
+						opsSha256(body.ops),
+						owned,
+						JSON.stringify(names),
+						body.purposeAndNeed,
+						body.mitigation,
+						body.monitoring
+					]
 				)
 				.catch(duplicateName(applicant));
 			const s = await loadScenario(db, id, rows[0]!.id);
@@ -249,6 +261,10 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const set: [string, unknown][] = [];
 			if (body.name !== undefined) set.push(['name', body.name]);
 			if (body.description !== undefined) set.push(['description', body.description]);
+			// Appendix C's fixed prompts (129): changed on the description's terms, not frozen by a submission.
+			if (body.purposeAndNeed !== undefined) set.push(['purpose_need', body.purposeAndNeed]);
+			if (body.mitigation !== undefined) set.push(['mitigation', body.mitigation]);
+			if (body.monitoring !== undefined) set.push(['monitoring', body.monitoring]);
 			if (body.ops !== undefined)
 				set.push(
 					['ops', JSON.stringify(body.ops)],
@@ -269,6 +285,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const was: Record<string, unknown> = {
 				name: s.name,
 				description: s.description,
+				purposeAndNeed: s.purposeAndNeed,
+				mitigation: s.mitigation,
+				monitoring: s.monitoring,
 				ops: s.opsSha256,
 				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
 				status: s.status
@@ -276,6 +295,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const now: Record<string, unknown> = {
 				name: body.name,
 				description: body.description,
+				purposeAndNeed: body.purposeAndNeed,
+				mitigation: body.mitigation,
+				monitoring: body.monitoring,
 				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status
