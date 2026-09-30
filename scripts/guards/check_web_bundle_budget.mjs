@@ -1316,6 +1316,12 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, CHIRPS bounding box: the Data
+//             feeds panel's box fields took the Settings tab chunk to 61 KB,
+//             over its 60 KB ceiling). API keys render for owners only, so
+//             ApiKeysPanel is now a lazy chunk of its own: the Settings tab
+//             measures 58 KB. Total 1201 KB with main @ 3be3106b merged, at
+//             its ceiling: the next frontend change measures and raises it.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
