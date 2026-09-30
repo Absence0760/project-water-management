@@ -43,7 +43,8 @@ const MODEL_JSON = `json_build_object(
 		SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
 			max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled, priority,
 			monthly_rate_m3s AS "monthlyRateM3s", source, hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr",
-			loss_pct AS "lossPct", sizing, top_up_dam AS "topUpDam"
+			loss_pct AS "lossPct", sizing, top_up_dam AS "topUpDam",
+			loss_return_pct AS "lossReturnPct", loss_return_node_id AS "lossReturnNodeId"
 		FROM transfer WHERE project_id = $1) r), '[]'),
 	'landCover', coalesce((SELECT json_agg(r ORDER BY r."nodeId", r."coverClass", r.id) FROM (
 		SELECT id, node_id AS "nodeId", cover_class AS "coverClass", area_km2 AS "areaKm2", density_pct AS "densityPct", factors
@@ -55,7 +56,7 @@ const MODEL_JSON = `json_build_object(
 	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
 		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
 			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
-			return_pct AS "returnPct", priority, destination, enabled, schedule, note
+			return_pct AS "returnPct", priority, destination, enabled, schedule, population, note
 		FROM demand_object WHERE project_id = $1) r)
 )`;
 
@@ -264,16 +265,17 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	await upsertAll(
 		`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3,
 			min_storage_pct, enabled, priority, monthly_rate_m3s, source, hands_off_m3_day, hands_off_ewr, loss_pct, sizing,
-			top_up_dam)
+			top_up_dam, loss_return_pct, loss_return_node_id)
 		 SELECT id, $1, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3, min_storage_pct, enabled, priority,
-			monthly_rate_m3s, source, hands_off_m3_day, hands_off_ewr, loss_pct, sizing, top_up_dam
+			monthly_rate_m3s, source, hands_off_m3_day, hands_off_ewr, loss_pct, sizing, top_up_dam, loss_return_pct, loss_return_node_id
 		 FROM jsonb_populate_recordset(NULL::transfer, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET from_node_id = EXCLUDED.from_node_id, to_node_id = EXCLUDED.to_node_id,
 			months = EXCLUDED.months, max_rate_m3s = EXCLUDED.max_rate_m3s, daily_cap_m3 = EXCLUDED.daily_cap_m3,
 			min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled, priority = EXCLUDED.priority,
 			monthly_rate_m3s = EXCLUDED.monthly_rate_m3s, source = EXCLUDED.source, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
 			hands_off_ewr = EXCLUDED.hands_off_ewr, loss_pct = EXCLUDED.loss_pct, sizing = EXCLUDED.sizing,
-			top_up_dam = EXCLUDED.top_up_dam
+			top_up_dam = EXCLUDED.top_up_dam, loss_return_pct = EXCLUDED.loss_return_pct,
+			loss_return_node_id = EXCLUDED.loss_return_node_id
 		 WHERE transfer.project_id = EXCLUDED.project_id`,
 		m.transfers.map((t) => ({
 			id: t.id,
@@ -293,7 +295,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			hands_off_ewr: t.handsOffEwr ?? OFFTAKE_DEFAULTS.handsOffEwr,
 			loss_pct: t.lossPct ?? OFFTAKE_DEFAULTS.lossPct,
 			sizing: t.sizing ?? OFFTAKE_DEFAULTS.sizing,
-			top_up_dam: t.topUpDam ?? OFFTAKE_DEFAULTS.topUpDam
+			top_up_dam: t.topUpDam ?? OFFTAKE_DEFAULTS.topUpDam,
+			// Canal seepage back to the river (engine ≥ 1.42.0, migration 126); absent = none returns.
+			loss_return_pct: t.lossReturnPct ?? OFFTAKE_DEFAULTS.lossReturnPct,
+			loss_return_node_id: t.lossReturnNodeId ?? null
 		})),
 		'transfer'
 	);
@@ -332,9 +337,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	);
 	await upsertAll(
 		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, note)
+			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, population, note)
 		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, note
+			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, population, note
 		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
 		 ON CONFLICT (id) DO NOTHING`,
 		(m.demandObjects ?? []).map((o) => ({
@@ -354,6 +359,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			enabled: o.enabled,
 			// No schedule and an empty one run alike (engine 1.17.0); store both as NULL.
 			schedule: o.schedule?.length ? o.schedule : null,
+			// The people it serves, for the basic-needs floor (engine 1.44.0); absent and null alike = its count.
+			population: o.population ?? null,
 			note: o.note
 		})),
 		'demand object'

@@ -1,8 +1,10 @@
 import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
+	allocationCapLines,
 	chirpsFactorLines,
 	curtailmentLines,
+	demandObjectLines,
 	ewrAssuranceLines,
 	otherUserLines,
 	landCoverLines,
@@ -234,6 +236,22 @@ describe('summary sheet', () => {
 		expect(lines[at + 2]).toMatch(/^Water year,Days counted,Both below the EWR,/);
 		expect(lines[at + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
 		expect(lines[at + 4]!.startsWith('1999/00,100,')).toBe(true);
+		// Engine ≥ 1.41.0: the same test at each gauge EWR site with a record of its own, after the outlet's.
+		s.catchment.ewrAgreementSites = [{ nodeId: 'g1', name: 'Middle weir', flowKind: 'flow_logger_m3s', agreement: s.catchment.ewrAgreement! }];
+		const withSite = [...summaryCsvLines(meta, s)];
+		const site = withSite.findIndex((l) => l.startsWith('"EWR test at Middle weir'));
+		expect(site).toBeGreaterThan(withSite.findIndex((l) => l.startsWith('"Outlet EWR test')));
+		expect(withSite[site]).toContain('logger');
+		expect(withSite[site + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
+	});
+
+	it('names the calibration site when the statistics were scored at a gauge (engine ≥ 1.41.0)', () => {
+		const s = structuredClone(summary);
+		s.calibration!.siteNodeId = 'g1';
+		s.calibration!.siteName = 'Middle weir';
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines).toContain('Scored at the gauge (calibration site),Middle weir');
+		expect(lines.some((l) => l.startsWith('siteName,'))).toBe(false);
 	});
 });
 
@@ -312,6 +330,49 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
 	});
 
+	it('lists an allocation cap’s water years: the volume reached and the days the licence limit bound, by limit (engine 1.40.0)', () => {
+		const base = { wholeYears: 2, yearsOver: 0, meanModelledM3PerYear: 100, meanRegisteredM3PerYear: 120 };
+		const a: NonNullable<RunSummary['allocations']> = {
+			mode: 'cap',
+			tolerance: 0.1,
+			used: 2,
+			notMatched: 0,
+			nodes: [
+				{
+					nodeId: 'a',
+					name: 'Farm A',
+					sources: [
+						{
+							...base,
+							waterSource: 'surface',
+							capReached: [{ waterYear: 2003, budgetM3: 120, usedM3: 120 }],
+							limitBound: [
+								{ waterYear: 2003, days: 40, volumeDays: 30, rateDays: 4, monthsDays: 6 },
+								{ waterYear: 2004, days: 12, volumeDays: 0, rateDays: 0, monthsDays: 12 }
+							]
+						},
+						// A run before 1.40.0: no day counts.
+						{ ...base, waterSource: 'groundwater', capReached: [{ waterYear: 2004, budgetM3: 50, usedM3: 50 }] }
+					]
+				}
+			]
+		};
+		const lines = [...allocationCapLines(a)];
+		expect(lines[1]).toBe('Farm or user,Water source,Water year,Registered volume (m³),Used (m³),Volume reached,Days the limit bound,Of which: volume used up,Of which: maximum rate,Of which: outside the months of use');
+		expect(lines.slice(2)).toEqual([
+			'Farm A,Surface water,2003/04,120,120,yes,40,30,4,6',
+			// Held back only outside its months: capReached alone read "never reached".
+			'Farm A,Surface water,2004/05,,,no,12,0,0,12',
+			'Farm A,Groundwater,2004/05,50,50,yes,,,,'
+		]);
+		const never = structuredClone(a);
+		never.nodes[0]!.sources = [{ ...base, waterSource: 'surface', capReached: [], limitBound: [] }];
+		expect([...allocationCapLines(never)].at(-1)).toBe('"The cap never bound: no water year reached its registered volume, and the licence held no day back."');
+		// In the summary sheet of a cap run only.
+		expect([...summaryCsvLines(meta, { ...summary, allocations: a })]).toContain('Farm A,Surface water,2003/04,120,120,yes,40,30,4,6');
+		expect([...summaryCsvLines(meta, { ...summary, allocations: { ...a, mode: 'none' } })].some((l) => l.startsWith('Allocation cap by water year'))).toBe(false);
+	});
+
 	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 volume, then per borehole', () => {
 		const lines = [
 			...groundwaterAnnualLines([
@@ -372,6 +433,37 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
 		expect(lines).toContain('Town,senior,100,90,45,5,no (senior),0,0,5');
 		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
+	});
+
+	it('engine 1.44.0: adds the basic-needs floor and what it held back, only when a farm has a floor', () => {
+		const plain = [...curtailmentLines(c)];
+		expect(plain.join('\n')).not.toMatch(/Basic-needs floor/);
+		const floored = [...curtailmentLines({ ...c, farms: [{ ...farm, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 }], totals: { ...c.totals, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 7.5 } })];
+		const header = floored.find((l) => l.startsWith('Farm,'))!.split(',');
+		const row = floored.find((l) => l.startsWith('"Farm, upper"'))!.replace('"Farm, upper"', 'F').split(',');
+		const total = floored.find((l) => l.startsWith('Total,'))!.split(',');
+		expect(header.slice(-2)).toEqual(['Basic-needs floor (m³/day)', 'Held back of the cut for basic needs (m³/day)']);
+		expect(row.slice(-2)).toEqual(['25', '7.5']);
+		expect(total).toHaveLength(header.length);
+		expect(total.slice(-2)).toEqual(['25', '7.5']);
+	});
+
+	it('engine 1.44.0: lists the demand objects with their basic-needs floor apart from the shortfall', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const town = { ...object, id: 't', name: 'Town', category: 'industrial' as const };
+		const withFloor = { ...object, basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 1, avgBelowBasicNeedsM3Day: 5, avgSuppliedLitresPerPersonDay: 20 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [withFloor, town] }] })];
+		expect(lines[0]).toBe('Demand objects (whole run)');
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short,People served,"Basic-needs floor (m³/day, 25 l/person/day)",Days below the floor,Average below the floor (m³/day),Supplied per person (l/person/day)'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,first,internal,25,20,5,80,0,1,1000,25,1,5,20');
+		expect(lines[3]).toBe('"Farm, upper",Town,industrial,first,internal,25,20,5,80,0,1,,,,,');
+		// No floor anywhere: no floor columns; no objects: no block.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [town] }] })][1]).not.toMatch(/floor/);
+		expect([...demandObjectLines(summary)]).toEqual([]);
+		expect([...summaryCsvLines(meta, { ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [withFloor] }] })]).toContain('Demand objects (whole run)');
+		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {

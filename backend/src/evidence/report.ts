@@ -19,6 +19,7 @@ import {
 	type EnsembleHeader,
 	type EnsembleSummary,
 	type EvidenceEnsembleInput,
+	type EvidenceImpactInput,
 	type EvidenceInput,
 	type EvidenceReport,
 	type EvidenceRunInput,
@@ -36,6 +37,7 @@ import { type Db, withUser } from '../db/tx.js';
 import { revisionsBetween } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { listNominations } from '../runs/evidence.js';
 
@@ -274,6 +276,34 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 	return { otherApplications, otherApplicationsTruncated: truncated };
 }
 
+/**
+ * Page 1's licence impact inputs (issue #53 R7, evidence-5): the project's
+ * outcome settings (no run records them, so the report, and a pack's
+ * manifest, freezes them as they are now) and the three catchment series the
+ * board reads. A series the reader can't see, or the run hasn't, is null, and
+ * the report says what is missing.
+ */
+async function loadImpactInput(db: Db, projectId: string, baselineRunId: string, applicationRunId: string): Promise<EvidenceImpactInput> {
+	const { rows: settings } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
+	const outcomes = resolveOutcomes(settings[0]?.settings);
+	const { rows } = await db.query<{ runId: string; key: string; values: (number | null)[] }>(
+		`SELECT run_id AS "runId", key, "values" FROM run_series
+		 WHERE project_id = $1 AND node_id IS NULL
+		   AND ((run_id = $2 AND key IN ('natural_flow', 'ewr_shortfall')) OR (run_id = $3 AND key = 'ewr_shortfall'))`,
+		[projectId, baselineRunId, applicationRunId]
+	);
+	const find = (runId: string, key: string) => rows.find((r) => r.runId === runId && r.key === key)?.values ?? null;
+	return {
+		yearClassMethod: outcomes.yearClassMethod,
+		siteNodeId: outcomes.siteNodeId,
+		series: {
+			backgroundNatural: find(baselineRunId, 'natural_flow'),
+			backgroundEwrShortfall: find(baselineRunId, 'ewr_shortfall'),
+			applicationEwrShortfall: find(applicationRunId, 'ewr_shortfall')
+		}
+	};
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
@@ -349,7 +379,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		changes,
 		applicationRuns,
 		...others,
-		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version }
+		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version },
+		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null
 	};
 }
 

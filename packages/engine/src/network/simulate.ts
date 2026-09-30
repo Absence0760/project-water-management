@@ -286,6 +286,14 @@ export interface NodeResult {
 	 * absent on a node without one.
 	 */
 	allocationRoom?: { surface: Float64Array | null; groundwater: Float64Array | null };
+	/**
+	 * allocationMode 'cap' with licence conditions (engine ≥ 1.40.0): what is
+	 * left of each capped source's water-year volume at the start of each day
+	 * (m³), before the day's limit; the room is MIN(this, the limit). null for
+	 * a source without a limit (its room is what is left); absent on a node
+	 * with no limit on either source.
+	 */
+	allocationLeft?: { surface: Float64Array | null; groundwater: Float64Array | null };
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
 	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
@@ -294,6 +302,12 @@ export interface NodeResult {
 	offtakeIn?: Float64Array;
 	/** Taken by river off-takes from the flow leaving this unit (engine ≥ 1.14.0), before losses; absent on a unit no off-take draws on. */
 	offtakeOut?: Float64Array;
+	/**
+	 * River off-takes' conveyance losses seeping back to the river below this
+	 * farm (engine ≥ 1.42.0), part of its outflow; absent on a unit no
+	 * off-take returns seepage to.
+	 */
+	offtakeReturn?: Float64Array;
 	/**
 	 * The storage reset's step (engine ≥ 0.46.0): on the reset day, the
 	 * storage set − the storage the day before left (m³, + added / − taken);
@@ -528,16 +542,25 @@ function capRoom(budget: Float64Array | null, limit: Float64Array | null | undef
 /**
  * What a node may still take today under an allocation cap (engine ≥ 1.18.0):
  * [surface, groundwater], each capRoom; Infinity for a source (or a node)
- * without a cap. Records the room in the node's allocation_room columns.
+ * without a cap. Records the room in the node's allocation_room columns, and
+ * what is left of the year's volume in its allocation_left ones (a source with
+ * a limit, engine ≥ 1.40.0).
  */
 function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null, t: number): [number, number] {
 	const c = node.allocationCap;
 	if (!c || !used) return [Infinity, Infinity];
 	const room = r.allocationRoom!;
+	const left = r.allocationLeft;
 	let s = Infinity;
 	let g = Infinity;
-	if (c.surface) s = room.surface![t] = capRoom(c.surface, c.surfaceLimit, used[0]!, t);
-	if (c.groundwater) g = room.groundwater![t] = capRoom(c.groundwater, c.groundwaterLimit, used[1]!, t);
+	if (c.surface) {
+		s = room.surface![t] = capRoom(c.surface, c.surfaceLimit, used[0]!, t);
+		if (left?.surface) left.surface[t] = Math.max(0, c.surface[t]! - used[0]!);
+	}
+	if (c.groundwater) {
+		g = room.groundwater![t] = capRoom(c.groundwater, c.groundwaterLimit, used[1]!, t);
+		if (left?.groundwater) left.groundwater[t] = Math.max(0, c.groundwater[t]! - used[1]!);
+	}
 	return [s, g];
 }
 
@@ -579,8 +602,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
+		if (plan.offtakes?.some((o) => o.lossReturn > 0 && o.returnAt === i)) r.offtakeReturn = new Float64Array(days);
 		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
 		if (n.allocationCap) r.allocationRoom = { surface: n.allocationCap.surface ? new Float64Array(days) : null, groundwater: n.allocationCap.groundwater ? new Float64Array(days) : null };
+		// What is left of the year's volume, beside the room, for a source whose licence states conditions (engine ≥ 1.40.0).
+		if (n.allocationCap && ((n.allocationCap.surface && n.allocationCap.surfaceLimit) || (n.allocationCap.groundwater && n.allocationCap.groundwaterLimit))) {
+			const c = n.allocationCap;
+			r.allocationLeft = { surface: c.surface && c.surfaceLimit ? new Float64Array(days) : null, groundwater: c.groundwater && c.groundwaterLimit ? new Float64Array(days) : null };
+		}
 		return r;
 	});
 	// The storage reset (engine ≥ 0.46.0, settings.damStorageReset): the day, −1 = none.
@@ -638,6 +667,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Delivered into each unit today (after losses), the part from rules that top up the dam, and each demand-sized rule's share of its destination's need.
 	const otIn = new Float64Array(nodes.length);
+	// Conveyance losses seeping back to the river below each farm today (engine ≥ 1.42.0).
+	const otRet = new Float64Array(nodes.length);
 	const otInDam = new Float64Array(nodes.length);
 	const otShare = new Float64Array(offtakes.length);
 	const otWant = new Float64Array(offtakes.length);
@@ -810,6 +841,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// today, so the split never depends on which source is simulated first.
 		if (offtakes.length) {
 			otIn.fill(0);
+			otRet.fill(0);
 			otInDam.fill(0);
 			otCapInto.fill(0);
 			for (const o of offtakes) if (o.sizing === 0) otCapInto[o.to]! += o.capM3Day[month[t]!]!;
@@ -1149,12 +1181,22 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						Xout += v;
 						const got = v * (1 - o.loss);
 						otIn[o.to]! += got;
+						// A share of the losses seeps back to the river, below the source or a farm below it (engine ≥ 1.42.0).
+						if (o.lossReturn > 0) otRet[o.returnAt]! += v * o.loss * o.lossReturn;
 						if (o.topUpDam) otInDam[o.to]! += got;
 					}
 				}
 				// The shares of a level can add up one ulp past the flow they split; the river never goes below 0.
 				U = Math.max(0, U0 - Xout);
 				r.offtakeOut![t] = Xout;
+			}
+			// Canal seepage returning below this farm (engine ≥ 1.42.0, docs/model.md §2.6a): it joins the flow
+			// leaving it after its own off-takes, so no off-take takes back its own losses.
+			let Xret = 0;
+			if (r.offtakeReturn) {
+				Xret = otRet[i]!;
+				U += Xret;
+				r.offtakeReturn[t] = Xret;
 			}
 			if (r.offtakeIn) r.offtakeIn[t] = Xin;
 			r.groundwater[t] = Ggw;
@@ -1198,7 +1240,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				w.damSeepageLost[t] = SpLost;
 				w.damRelease[t] = Rel;
 				w.balanceResidual[t] =
-					Xin > 0 || Xout > 0 ? H + I + J + Pd + Ggw + Gd + Xin - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
+					Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
 				w.passedForSenior[t] = passed;
 				if (w.offtakeUsed) {
 					w.offtakeUsed[t] = Xused;

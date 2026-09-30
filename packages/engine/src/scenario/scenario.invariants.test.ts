@@ -15,7 +15,7 @@ import { buildTopology } from '../network/topology';
 import { transferActiveMonths, transferRatesM3s } from '../network/transferRates';
 import { defaultProjectSettings, upgradeLegacyModel, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { randomInput } from '../testing/fuzz';
-import { checkAll, sameOutput } from '../testing/invariants';
+import { checkAll, floorLift, sameOutput } from '../testing/invariants';
 import { randomOps } from '../testing/scenarioFuzz';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { Rng } from '../random';
@@ -212,6 +212,15 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 					continue;
 				}
 				targeted++;
+				// The basic-needs floor (engine ≥ 1.44.0): a full cut leaves each domestic and municipal
+				// object with people exactly MIN(floor, its demand), worked from the model (floorLift).
+				const lifted = D!.map((_, t) => floorLift(base, x, n.id, t, 0));
+				if (lifted.some((v) => v > 0)) {
+					D!.forEach((v, t) => expect(Math.abs(v - lifted[t]!), `seed ${seed} ${n.id} day ${t}: demand at the floor`).toBeLessThanOrEqual(1e-9 * Math.max(1, lifted[t]!)));
+					G!.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D![t]! * (1 + 1e-12) + 1e-12));
+					if (GW) GW.forEach((v, t) => expect(v, `seed ${seed} ${n.id} day ${t}: groundwater`).toBeLessThanOrEqual(G![t]! * (1 + 1e-12) + 1e-12));
+					continue;
+				}
 				expect(D!.every((v) => v === 0), `seed ${seed} ${n.id}: demand`).toBe(true);
 				expect(G!.every((v) => v === 0), `seed ${seed} ${n.id}: supplied`).toBe(true);
 				if (GW) expect(GW.every((v) => v === 0), `seed ${seed} ${n.id}: groundwater`).toBe(true);
@@ -234,9 +243,12 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D, G] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!, col(y, n.id, 'supplied')!];
+				// The basic-needs floor (engine ≥ 1.44.0): exactly k × the base's demand plus what the floor
+				// holds on a cut (k < 1), worked from the model (floorLift); nothing more.
 				for (let t = 0; t < D.length; t++) {
 					const k = months.includes(monthOfEpochDay(day0 + t)) ? factor : 1;
-					expect(Math.abs(D[t]! - k * D0[t]!), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
+					const want = k * D0[t]! + floorLift(base, x, n.id, t, k);
+					expect(Math.abs(D[t]! - want), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
 					expect(G[t]!, `seed ${seed} ${n.id} day ${t}: supplied`).toBeLessThanOrEqual(D[t]! * (1 + 1e-12) + 1e-12);
 				}
 			}

@@ -9,6 +9,7 @@
 // refuses what isn't evidence.
 import {
 	declaredRuleRequest,
+	licenceImpactSection,
 	runEnsemble,
 	runPairedEnsemble,
 	type DeclaredUncertaintyRule,
@@ -217,7 +218,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-4');
+		expect(r.version).toBe('evidence-6');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -329,5 +330,43 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect((await viewer.call('GET', runPath(teamDraft.runId))).status).toBe(200);
 		expect(JSON.stringify(c)).not.toContain('Draft idea');
 		expect(JSON.stringify(await others(owner))).not.toContain('Draft idea');
+	});
+});
+
+describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
+	it('is built on the server from the runs’ stored series and the project’s outcome settings', async () => {
+		const r = (await report(viewer, appRun)).body.report as EvidenceReport;
+		expect(r.licenceImpact).toMatchObject({ yearClassMethod: 'auto', requestedSite: null, site: null, siteFellBack: false });
+		// The same board the browser built before evidence-5, from the series the viewer can fetch.
+		const series = async (runId: string, key: string) => (await viewer.call('GET', `${runPath(runId)}/series?key=${key}`)).body.values as (number | null)[];
+		const baseline = (await viewer.call('GET', `/projects/${projectId}/runs/${r.identity.baseline.runId}`)).body.run;
+		const application = (await viewer.call('GET', runPath(appRun))).body.run;
+		const expected = licenceImpactSection(
+			{ ...baseline, inputs: r.appendix.baselineInputs },
+			application,
+			{
+				yearClassMethod: 'auto',
+				siteNodeId: null,
+				series: {
+					backgroundNatural: await series(r.identity.baseline.runId, 'natural_flow'),
+					backgroundEwrShortfall: await series(r.identity.baseline.runId, 'ewr_shortfall'),
+					applicationEwrShortfall: await series(appRun, 'ewr_shortfall')
+				}
+			}
+		);
+		expect(r.licenceImpact).toEqual(expected);
+		expect(r.licenceImpact?.result.status).toBe('ok');
+	});
+
+	it('follows the project’s year-class method, and has no board for baseline evidence', async () => {
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { outcomes: { yearClassMethod: 'terciles' } } })).status).toBe(200);
+		try {
+			const r = (await report(viewer, appRun)).body.report as EvidenceReport;
+			expect(r.licenceImpact?.yearClassMethod).toBe('terciles');
+			expect(r.licenceImpact?.result.status === 'ok' && r.licenceImpact.result.impact.method).toBe('terciles');
+		} finally {
+			expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { outcomes: { yearClassMethod: 'auto' } } })).status).toBe(200);
+		}
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).licenceImpact).toBeNull();
 	});
 });

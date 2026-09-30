@@ -1,9 +1,9 @@
-import { toEpochDay, type DailySeries } from '@water-management/engine';
+import { licenceImpactByYearClass, toEpochDay, type DailySeries, type EvidenceLicenceImpact, type RunSeries } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunCompareResponse } from '$lib/api/types';
 import { OUTLET_SITE } from '$lib/components/outcomes/matrix';
 import { loadImpactSeries, type ImpactSeries } from './impactSeries';
-import { buildLicenceImpactBoard, VERDICT_LABEL } from './licenceImpact';
+import { buildLicenceImpactBoard, evidenceBoard, VERDICT_LABEL } from './licenceImpact';
 
 // Nine invented water years from 1 October 2000, natural totals 900 … 8100 m³
 // (terciles: 2000–02 dry, 2003–05 normal, 2006–08 wet).
@@ -158,6 +158,46 @@ describe('buildLicenceImpactBoard', () => {
 	it('has a verdict label for every verdict of both metrics', () => {
 		for (const m of Object.values(VERDICT_LABEL)) expect(Object.keys(m).sort()).toEqual(['fewerBelow', 'moreBelow', 'noChange', 'notEnoughYears']);
 		expect(OUTLET_SITE.id).toBeNull();
+	});
+});
+
+describe('evidenceBoard (evidence-5: the engine’s numbers from the document)', () => {
+	const data = { a: side('Baseline', 100), b: side('More orchard', 160) };
+	const sr = series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : 0));
+	const asRun = (key: string, s: DailySeries): RunSeries => ({ nodeId: null, key, label: key, unit: 'm³/day', values: s.values as number[] });
+	const impact = licenceImpactByYearClass({
+		background: { startDate: START, summary: data.a.run.summary, series: [asRun('natural_flow', sr.background.natural!), asRun('ewr_shortfall', sr.background.ewrShortfall!)] },
+		application: { startDate: START, summary: data.b.run.summary, series: [asRun('ewr_shortfall', sr.application.ewrShortfall!)] },
+		yearClassMethod: 'auto'
+	});
+	const li = (over: Partial<EvidenceLicenceImpact> = {}): EvidenceLicenceImpact => ({
+		yearClassMethod: 'auto',
+		requestedSite: null,
+		site: null,
+		siteFellBack: false,
+		result: { status: 'ok', impact },
+		...over
+	});
+
+	it('words the frozen numbers exactly as the impact report words the same runs', () => {
+		expect(evidenceBoard(li(), data)).toEqual(buildLicenceImpactBoard({ data, series: sr, method: 'auto', applicationName: 'the application' }));
+	});
+
+	it('names the gauge it reads, and says so when the chosen gauge fell back to the outlet', () => {
+		const at = evidenceBoard(li({ requestedSite: { nodeId: 'g', name: 'Upper' }, site: { nodeId: 'g', name: 'Upper' }, result: { status: 'ok', impact: { ...impact, metric: 'reserveMonthsMet' } } }), data);
+		expect(at.status === 'ok' && at.belowLabel).toBe('Months below the Reserve (the rule table at gauge Upper)');
+		const back = evidenceBoard(li({ requestedSite: { nodeId: 'g', name: 'Upper' }, siteFellBack: true }), data);
+		expect(back.status === 'ok' && back.notes[0]).toBe('The baseline or the application has no Reserve results at gauge Upper, so the board reads the outlet.');
+	});
+
+	it('says why a board is missing', () => {
+		const why = (reason: 'notBuilt' | 'noNaturalFlow' | 'noWaterAccount' | 'noEwrShortfall' | 'failed', detail: string | null = null) =>
+			evidenceBoard(li({ result: { status: 'unavailable', reason, detail } }), data);
+		expect(why('noNaturalFlow')).toEqual({ status: 'unavailable', reason: 'The baseline has no natural flow series, so its water years cannot be classed.' });
+		expect(why('noWaterAccount')).toMatchObject({ reason: expect.stringMatching(/engine 0\.32\.0/) });
+		expect(why('noEwrShortfall')).toMatchObject({ reason: expect.stringMatching(/no EWR shortfall series/) });
+		expect(why('notBuilt')).toMatchObject({ reason: expect.stringMatching(/built without licence impact/) });
+		expect(why('failed', 'boom')).toEqual({ status: 'unavailable', reason: 'The board could not be built: boom' });
 	});
 });
 

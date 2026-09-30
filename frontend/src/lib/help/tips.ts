@@ -93,9 +93,9 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'calibration-window',
 		term: 'Calibration window',
-		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
+		short: 'The period, observed flow record and site (the outlet or an inner gauge) that score the fit. Empty = every day with an observation.',
 		category: 'fit',
-		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind']
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
 	},
 	{
 		id: 'gauge-logger-agreement',
@@ -229,6 +229,14 @@ export const TIPS: HelpTipText[] = [
 		short: 'Date windows that scale a demand object’s daily demand (weekends, a season, a shutdown, Easter); a factor of 0 switches it off.',
 		category: 'network',
 		fields: ['demandObject.schedule']
+	},
+	{
+		id: 'basic-needs-floor',
+		term: 'Basic-needs floor',
+		short: 'The 25 litres a person a day a restriction never cuts a domestic or municipal demand object below: people served × 25 l.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['demandObject.population']
 	},
 	{
 		id: 'supply-rule',
@@ -583,9 +591,9 @@ export const TIPS: HelpTipText[] = [
 		id: 'transfer-offtake',
 		term: 'River off-take',
 		short: 'A transfer that takes from the river leaving its source hydrological unit, not from a dam: a canal or pipe fed from a weir.',
-		units: 'hands-off m³/day; losses %',
+		units: 'hands-off m³/day; losses %; share of the losses seeping back %',
 		category: 'transfers',
-		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam']
+		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam', 'transfer.lossReturnPct', 'transfer.lossReturnNodeId']
 	},
 	{
 		id: 'transfer-min-storage',

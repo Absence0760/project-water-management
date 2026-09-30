@@ -152,7 +152,9 @@ jobs:
       # same version as e2e's @playwright/test, so this is its browser.
       - name: Playwright version
         id: pw
-        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
 
       - name: Cache Chromium
         id: pw-cache
@@ -161,13 +163,30 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # The .debs install-deps pulls (~34 MB of fonts and mesa). Azure's Ubuntu
+      # mirror throttles when every job asks at once: one shard spent 7 min
+      # 21 s fetching them at 73 kB/s. apt checks a cached .deb against the
+      # signed index before using it and downloads anything missing or newer,
+      # so a stale cache costs a download, never trust. Saved once per runner
+      # image and Playwright version; a new image starts from the last one's.
+      - name: Cache apt packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-debs
+          key: apt-debs-db-${{ steps.pw.outputs.image }}-${{ steps.pw.outputs.version }}
+          restore-keys: apt-debs-db-
+
       - name: Install Chromium
         run: |
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-debs > /dev/null
+          mkdir -p ~/apt-debs
+          find ~/apt-debs -name '*.deb' -exec sudo cp -t /var/cache/apt/archives/ {} +
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
             pnpm -C e2e exec playwright install-deps chromium
           else
             pnpm -C e2e exec playwright install --with-deps chromium
           fi
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/apt-debs/ {} +
 
       # The report PDF store for render.db.test.ts, from docker-compose.yml
       # on the local-dev port (:9002). Mail is in-memory under vitest.
@@ -177,7 +196,7 @@ jobs:
       - name: DB tests
         run: pnpm test:backend:db
 
-  # E2E runs as 14 shards (e2e/README.md § CI). The site under test is built
+  # E2E runs as 14 shards balanced by time (e2e/README.md § CI). The site under test is built
   # once here (with the slot-0 API URL, :3101, that every CI runner uses) and
   # handed to each shard, so no shard spends its minutes on `vite build`.
   e2e-build:
@@ -254,10 +273,13 @@ jobs:
 
       - name: Playwright version
         id: pw
-        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
 
       # The browser download is keyed on the Playwright version; the system
-      # libraries it needs still come from apt on every run (install-deps).
+      # libraries it needs install from apt on every run (install-deps), from
+      # cached .debs (below).
       - name: Cache Chromium
         id: pw-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -265,8 +287,24 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # The .debs install-deps pulls (~34 MB of fonts and mesa). Azure's Ubuntu
+      # mirror throttles when every job asks at once: one shard spent 7 min
+      # 21 s fetching them at 73 kB/s. apt checks a cached .deb against the
+      # signed index before using it and downloads anything missing or newer,
+      # so a stale cache costs a download, never trust. Saved once per runner
+      # image and Playwright version; a new image starts from the last one's.
+      - name: Cache apt packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-debs
+          key: apt-debs-e2e-${{ steps.pw.outputs.image }}-${{ steps.pw.outputs.version }}
+          restore-keys: apt-debs-e2e-
+
       - name: Install Chromium
         run: |
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-debs > /dev/null
+          mkdir -p ~/apt-debs
+          find ~/apt-debs -name '*.deb' -exec sudo cp -t /var/cache/apt/archives/ {} +
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
             pnpm -C e2e exec playwright install-deps chromium
           else
@@ -276,7 +314,9 @@ jobs:
       # report-schematic-print.spec.ts measures type sizes in the printed PDF
       # with pdftotext (the apt index is fresh from install-deps above).
       - name: Install poppler-utils
-        run: sudo apt-get install -y --no-install-recommends poppler-utils
+        run: |
+          sudo apt-get install -y --no-install-recommends poppler-utils
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/apt-debs/ {} +
 
       - name: Download the site
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -295,6 +335,15 @@ jobs:
       - name: Start MinIO and Mailpit
         run: docker compose up -d --wait minio mailpit
 
+      # Shards are packed by time, not count (e2e/README.md § CI): each one
+      # plans the whole suite from `--list` and e2e/shard-timings.json and runs
+      # only its own list. Playwright's --shard splits by count, which left
+      # one shard four times as long as another.
+      - name: Plan this shard
+        env:
+          E2E_PREBUILT: '1'
+        run: node e2e/support/shard-list.ts ${{ matrix.shard }}/${{ strategy.job-total }} "$RUNNER_TEMP/shard-tests.txt"
+
       # Global setup creates + migrates water_e2e; Playwright starts the
       # backend (:3101) and serves the prebuilt site (:7801). The config refuses
       # a site built for another API URL.
@@ -302,7 +351,7 @@ jobs:
         env:
           E2E_PREBUILT: '1'
           E2E_BLOB: '1'
-        run: pnpm -C e2e exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: pnpm -C e2e exec playwright test --test-list "$RUNNER_TEMP/shard-tests.txt"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -353,7 +402,24 @@ jobs:
       - name: Merge into one report
         env:
           PLAYWRIGHT_HTML_OPEN: never
-        run: pnpm -C e2e exec playwright merge-reports --reporter=list,html ./all-blob-reports
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/merged-report.json
+        run: pnpm -C e2e exec playwright merge-reports --reporter=list,html,json ./all-blob-reports
+
+      # Every test ran on exactly one shard (a test the shard plan dropped
+      # would pass CI without ever running), and the run's per-test timings
+      # for `pnpm gen:e2e:timings`. Only when every shard finished: a failed
+      # shard's missing tests are already red.
+      - name: Check the shard plan and write the timings
+        if: needs.e2e.result == 'success'
+        run: node e2e/support/shard-timings.ts report "$RUNNER_TEMP/merged-report.json" "$RUNNER_TEMP/shard-timings.json"
+
+      - name: Upload the timings
+        if: needs.e2e.result == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-timings
+          path: ${{ runner.temp }}/shard-timings.json
+          retention-days: 30
 
       - name: Upload report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -518,6 +584,43 @@ jobs:
       - name: unittest
         run: python -m unittest discover -s scripts/wbt-import
 
+  # The independent cross-check of the engine (verify/README.md): a Python
+  # model written only from the docs, run beside runModel on the example
+  # catchments, the probes and 200 random networks, with its mutation
+  # self-test. Stdlib Python; tsx from the pnpm install runs the engine side.
+  verify:
+    name: Engine cross-check (Python)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Cross-check the engine
+        env:
+          VERIFY_TEST_RANDOM: '200'
+        run: pnpm test:verify
+
   # Credential-free Terraform checks (fmt, validate, plan-only `terraform
   # test` with mocked providers) + Trivy IaC. Called, so every job in it
   # fans into the gate. Same checks as `pnpm check:infra` locally.
@@ -551,7 +654,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, verify, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:

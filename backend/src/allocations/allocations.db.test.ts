@@ -200,6 +200,8 @@ describe('the run comparison', () => {
 		const res = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const { comparison } = res.body;
+		// Not a cap run: no cap years to show.
+		expect(res.body.capYears).toEqual([]);
 		expect(comparison.nodes.map((n: { name: string }) => n.name).sort()).toEqual(['Farm A', 'Farm B', 'Farm C', 'Farm D', 'Farm E']);
 		const a = comparison.nodes.find((n: { nodeId: string }) => n.nodeId === farmA.id);
 		// The engine's own arithmetic on the stored series, not a copy of it.
@@ -296,6 +298,17 @@ describe('the run comparison', () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.25`)).body.comparison.tolerance).toBe(0.25);
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=2`)).status).toBe(400);
 		expect((await farmer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`)).status).toBe(403);
+	});
+
+	it('is a 404 for someone who isn’t a member, the same as a run that doesn’t exist, and never reads another project’s run', async () => {
+		// Positive control: a member reads it.
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`)).status).toBe(200);
+		const res = await stranger.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
+		expect(res.status).toBe(404);
+		expect(JSON.stringify(res.body)).not.toMatch(/Farm A|comparison|capYears/);
+		expect((await stranger.call('GET', `/projects/${projectId}/runs/${crypto.randomUUID()}/allocations`)).status).toBe(404);
+		// Their own project, this project's run: not found, not this run's comparison.
+		expect((await stranger.call('GET', `/projects/${otherProjectId}/runs/${runId}/allocations`)).status).toBe(404);
 	});
 });
 

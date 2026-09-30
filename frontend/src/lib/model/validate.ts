@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -268,6 +268,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!inRange(o.lossPct, 0, 0.999999) || !inRange(o.returnPct, 0, 1) || (o.monthlyFactor ?? []).some((v) => !inRange(v, 0, Infinity)))
 			issues.push({ area: 'network', message: `${label}: losses are 0–99%, the return share 0–100%, and the monthly profile can't be negative.` });
 		if (o.destination === 'external' && o.returnPct > 0) issues.push({ area: 'network', message: `${label}: water piped out of the catchment returns nothing; set its return share to 0%.` });
+		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): the API refuses a negative one.
+		if (o.population !== null && o.population !== undefined && !inRange(o.population, 0, Infinity))
+			issues.push({ area: 'network', message: `${label}: the people it serves can't be negative.` });
 		// Its schedule (engine ≥ 1.17.0): the engine's own window rule, as the API applies it.
 		if ((o.schedule?.length ?? 0) > DEMAND_SCHEDULE_MAX_WINDOWS) issues.push({ area: 'network', message: `${label}: a schedule has at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows.` });
 		(o.schedule ?? []).forEach((w, i) => {
@@ -305,6 +308,10 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			if (kinds.some((k) => k && k !== 'farm')) issues.push({ area: 'transfers', message: `${label}: a river off-take runs from one hydrological unit to another.` });
 			if (!inRange(t.lossPct ?? 0, 0, 0.999999)) issues.push({ area: 'transfers', message: `${label}: conveyance losses are 0–99%.` });
 			if (t.handsOffM3Day != null && !inRange(t.handsOffM3Day, 0, Infinity)) issues.push({ area: 'transfers', message: `${label}: the hands-off flow can't be negative.` });
+			// Canal seepage back to the river (engine ≥ 1.42.0): a share 0–100 %, rejoining below the source or a farm below it.
+			if (!inRange(t.lossReturnPct ?? 0, 0, 1)) issues.push({ area: 'transfers', message: `${label}: the share of the losses seeping back is 0–100%.` });
+			if (t.lossReturnNodeId && nodes.some((n) => n.id === t.fromNodeId) && offtakeReturnAt(t, nodes.findIndex((n) => n.id === t.fromNodeId), nodes) === undefined)
+				issues.push({ area: 'transfers', message: `${label}: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.` });
 		}
 	});
 

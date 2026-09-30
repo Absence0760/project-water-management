@@ -650,6 +650,36 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists a demand object’s people served, and reads none and null alike (engine 1.44.0)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.population = null;
+		expect(texts(a, b)).toEqual([]);
+		b.model.demandObjects![0]!.population = 12000;
+		const [text, ...rest] = texts(a, b);
+		expect(rest).toEqual([]);
+		// fmtValue groups thousands with a narrow space.
+		expect(text).toMatch(/^Rooikloof: demand object "Town" Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first → Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first, serves 12\D000 people$/);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
@@ -785,6 +815,21 @@ describe('diffInputs', () => {
 		]);
 		const c = snapshot({ model: { ...a.model, transfers: [] } });
 		expect(texts(c, b)).toEqual(['Transfer Rooikloof → Bergwater added (a river off-take, 0.05 m³/s, Dec, Jan)']);
+	});
+
+	it('describes canal seepage back to the river (engine 1.42.0): the share and where it rejoins; none written out is no change', () => {
+		const t = { id: 't1', fromNodeId: 'f1', toNodeId: 'f2', months: [12, 1], maxRateM3s: 0.05, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const, lossPct: 0.2 };
+		const a = snapshot();
+		const a2 = snapshot({ model: { ...a.model, transfers: [t] } });
+		const same = structuredClone(a2);
+		Object.assign(same.model.transfers[0]!, { lossReturnPct: 0, lossReturnNodeId: null });
+		expect(texts(a2, same)).toEqual([]);
+		const b = structuredClone(a2);
+		Object.assign(b.model.transfers[0]!, { lossReturnPct: 0.5, lossReturnNodeId: 'f2' });
+		expect(texts(a2, b)).toEqual([
+			'Transfer Rooikloof → Bergwater: share of the losses seeping back to the river 0% → 50%',
+			'Transfer Rooikloof → Bergwater: seepage rejoins below the source → Bergwater'
+		]);
 	});
 
 	it('describes settings: scalars, calibration, monthly tables and unknown keys', () => {

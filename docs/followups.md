@@ -201,6 +201,18 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+- [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
+      engine 1.44.0, issue #123; to put to the hydrologist through #90).
+      A restriction what-if holds a domestic or municipal object's floor
+      (25 l a person a day), on a full-allocation run too, but a full
+      allocation alone rescales the object, floor included, to the unit's
+      registered volume (0 in a year with nothing registered), and the
+      results then never show it below basic needs. Domestic use and basic
+      human needs aren't licensed uses. Decide: (a) hold the floor after the
+      allocation factor on every day, or (b) keep the rescale and report the
+      floor from the demand before it, so those days show as below basic
+      needs. Either is a change to `allocations/mode.ts` `planAllocations`
+      or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -1244,9 +1256,41 @@ the suggested order (the IDs carry the detail):
       hydrologist, not a
       calculation error. Still open: the regression suite against the
       re-extracted workbook.
-- [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
-      formulas, which the engine no longer follows. Decide whether to delete it
-      or rebuild it against the audited model. Operator call.
+- [x] **`verify/` (Python cross-check):** it transcribed the workbook's
+      formulas, which the engine no longer follows. **Decided (operator,
+      2026-09-30): rebuild, not delete** (roadmap D4 / WP-1.6 option (b)).
+      **Done, phase 1:** `verify/` is now an independent cross-check of the
+      audited engine ([verify/README.md](../verify/README.md), model.md §6
+      Verification): a stdlib Python model of the core daily chain written
+      only from the docs, run beside `runModel` on the example catchments,
+      eight probes and random networks from its own seeded generator, every
+      daily series compared to float noise, with a 24-mutant self-test
+      (`pnpm test:verify`, CI job `verify`, 200 random networks). On engine
+      1.36.0 the examples, the probes and 750 random networks agree on every
+      column (largest difference 9e-9 m³/day); no engine departure from its
+      documentation. Six points the docs left open were settled from
+      `runModel`'s outputs and written into model.md (§2.4a no catchment
+      area, `uh_store`; §2.4b a negative reading; §2.4d the accumulation run
+      test's window; §2.6 the order of the room and band sharing, and the
+      room from yesterday's storage; §2.10a the median of an even count). The
+      workbook formula dumper moved to `scripts/wbt-import/dumpwb.py`.
+- [ ] **`verify/` phase 2: the rest of the model.** Phase 1 covers the core
+      daily chain only; `verify/model.py`'s `unsupported()` names what it
+      leaves out and the harness refuses an input that uses it. To add, each
+      from its model.md section, with random-generator coverage, a probe for
+      anything the docs leave open and a mutant per rule
+      ([verify/README.md § Phase 2](../verify/README.md#phase-2-not-covered-yet)):
+      boreholes (§2.7d), allocations and the licence cap (§2.12a), demand
+      objects and the basic-needs floor (§2.7f), river off-takes and canal
+      seepage (§2.6a), Reserve rule tables A1–A7 (§2.9c–d), forecast mode
+      (§2.4f), calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
+      development (§2.7g); then other water users, supply rules, dam curves
+      and releases, hands-off flows, rain-source periods, the areal
+      correction, the daily A-pan, CHIRPS fit ranges, keep-dry and the
+      non-default data-quality limits. **Trigger:** the next engine change to
+      any of these features (its PR adds that feature to `verify/` first, so
+      the change lands against an independent reading), or before the first
+      licence evidence pack relies on one of them, whichever comes first.
 - [x] **A fourth full page load of the Settings tab fails in e2e** with
       `net::ERR_INSUFFICIENT_RESOURCES` / "Failed to fetch dynamically
       imported module" against the Vite dev server (:7801). Done 2026-09-24:
@@ -1697,8 +1741,10 @@ the suggested order (the IDs carry the detail):
       added; no SheetJS in the app); the bulk route pages the fetch, so the
       5 MB limit doesn't bind. The formulas are one expression tree that the
       engine evaluates, held to `runModel` on random networks. AB (a
-      diagnostic that needs every upstream AA) is left out. Whether this
-      replaces the `verify/` Python cross-check is the operator's call in #90.
+      diagnostic that needs every upstream AA) is left out. It doesn't
+      replace the `verify/` Python cross-check: the operator chose to rebuild
+      that too (2026-09-30), and the two are complementary, one farm's
+      formulas in Excel against the whole network from the docs (§ Verification).
       Original entry: an `.xlsx` for one farm, inputs as values, each working
       column as a live formula and a column comparing Excel's value with the
       model's, so Excel recomputes the model independently. Trigger was: after
@@ -3054,16 +3100,22 @@ from the WP:
       only ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
       Whether the months and rate should bind the dam draw or only the
       river-side takes is engine-audit L2 (pending the hydrologist, #90).
-- [ ] **Say when a licence's months or rate bound, not only the volume.**
-      `RunSummary.allocations` `capReached` lists the water years a source
-      used up its volume; a run held to its rate all season, or dry outside
-      its months, reads "never reached". And `allocation_room_*` is now the
-      day's room (1.37.0), so what is left of the year's volume isn't
-      visible on a day the limit binds. The durable fix: per source, the
-      days the licence limit bound per water year beside `capReached`, and
-      an `allocation_left_*` column when a licence states conditions.
-      Trigger: the evidence report (#71) citing the cap, or an assessor
-      reading a capped run's conditions.
+- [x] **Say when a licence's months or rate bound, not only the volume**
+      (2026-09-30, engine 1.40.0). `RunSummary.allocations` sources carry
+      `limitBound` beside `capReached`: per water year the days the limit
+      held use back (the source took all its room and the unit went short),
+      split into volume used up, maximum rate and outside the months of use.
+      A source whose licence states conditions stores `allocation_left_*`
+      beside the room. Checked from the columns by `checkAllocations`; shown
+      under the picked unit on the Allocations page, in the compare
+      endpoint's `capYears`, the summary CSV's *Allocation cap by water
+      year* and the evidence report's § 5 ([allocations.md](./allocations.md), [model.md § Which limit
+      bound](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+- [x] **Cite the cap's limit days in the evidence report** (2026-09-30,
+      report version `evidence-6`). § 5 carries each cap run's
+      `capReached` / `limitBound` per unit and source
+      (`EvidenceAllocationSource.capA` / `capB`) and prints them in *What the
+      cap held back* ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
@@ -3193,19 +3245,19 @@ from the WP:
       report. Trigger: the evidence report (or a WUA screen) needing to
       grade demands by source, or the first catchment with objects from
       more than one source.
-- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
-      #54 Q13, agreed by the client in issue #90). A restriction never cuts
-      domestic supply below 25 litres per person per day; cuts follow DWS's
-      % restrictions; a municipality's own restriction levels are an
-      optional display only. Nothing applies a floor today: a curtailment or
-      `demand.scale` cut reaches a domestic object like any other demand.
-      Durable fix: a per-object floor (population × 25 l/p/d, from a
-      `perUnit` object's count, or entered) that the drought restriction
-      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
-      shortfall reported apart, and an optional municipal-level label on the
-      share-the-pain board. Trigger: building WP-3.8's drought restriction
-      rule, or the first catchment with a domestic object under a
-      restriction.
+- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
+      issue #123, migration 127; agreed in issue #90 Q13). A domestic or
+      municipal demand object has a floor of population × 25 l a day (its
+      `population`, or a per-person object's count); a `demand.scale`
+      restriction never cuts it below that, the curtailment report and the
+      share-the-pain board never leave its unit less than its floor once the
+      EWR is met (what the floor keeps is shown), and the results, the
+      summary CSV and the demand-objects table report the days and volume
+      below the floor apart from the shortfall, with the l/person/day
+      supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
+      stay one % for every category (#53 O4). Still to do when it is built:
+      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
+      same floor; it doesn't exist yet, so there is nothing to wire.
 - [ ] **A scenario op for demand objects.** Scenarios can't add, change or
       remove one (`demand.scale` on a unit scales its crops and objects
       together); override mode says an object edit can't be recorded. Durable
@@ -3261,20 +3313,46 @@ from the WP:
       plan.md question 20. Durable fix: the client's numbers in the private
       per-workbook settings, and the sensitivity note in the private repo
       updated. Trigger: the answer to question 20.
-- [ ] **Canal seepage back to the river.** An off-take's conveyance losses
-      leave the catchment (model.md §2.6a), the conservative side for the
-      EWR. Some of a canal's seepage reaches the river lower down. Durable
-      fix: a return share of the losses and the unit it rejoins at, like a
-      dam's seepage return (WP-3.5), with the balance and the attribution
-      following. Trigger: a hydrologist wanting canal seepage credited, or a
-      measured loss split.
-- [ ] **Calibrating at a gauge inside the network.** Calibration and the
-      observed-flow EWR test read the outlet's record only; a record
-      attached to an inner gauge (084) feeds the plausibility checks
-      (model.md §2.10d). Durable fix: `calibrationSiteNodeId` (null = the
-      outlet), with calibrate() scoring that gauge's simulated flow and the
-      fit record recording the site. Trigger: a project whose calibration
-      record sits at an inner gauge.
+- [x] **Canal seepage back to the river** (2026-09-30, engine 1.42.0,
+      migration 126). An off-take's `lossReturnPct` (default 0, so every
+      stored rule runs as before) returns that share of its conveyance losses
+      to the river the same day, below the source or below the farm
+      `lossReturnNodeId` downstream of it along the river (model.md §2.6a).
+      The balance, the water account (`conveyanceLossM3` net of it), the
+      self-checks, the EWR attribution (credited where the losses were
+      charged), the run comparison, the scenario ops, the API, the model
+      checks and the Transfers tab follow; the run stores
+      `offtake_loss_return` on the return unit.
+- [x] **Calibrating at a gauge inside the network.** Done 2026-09-30,
+      engine 1.41.0: `settings.calibrationSiteNodeId` (null = the outlet,
+      the default, so nothing changes for a project that never sets it).
+      calibrate() scores the gauge's simulated flow (its outflow) against
+      the gauge's own record, `calibrationFlowKind` and the
+      independent-record test pick among the gauge's records, and the
+      report, the fit record (`siteNodeId`, flagged `siteChanged` when the
+      settings move) and automated calibration's plan carry the site; the
+      server's rules and the uncertainty ensemble follow it. A gauge's
+      record has no gauged range and no gap filling (those settings are the
+      outlet records'). The API checks a new site is a gauge above the
+      outlet with a record, and a copy or import moves it. Settings →
+      Calibration record → *Scored at* picks it. The outlet's observed-flow
+      EWR test stays the outlet's, since its requirement is the outlet's
+      pragmatic EWR and a gauge's flow can't be judged against it; each gauge
+      EWR site with a record gets its own test (below)
+      ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
+  - [x] **The run's calibration statistics at the calibration site.** Done
+        2026-09-30 (engine 1.41.0): runModel scores `summary.calibration` at
+        the site (`siteNodeId`, `siteName`; `fitStatus` against a fit at the
+        same site), stores the gauge's record as that node's
+        `observed_flow`, and the Results tab charts it as the calibration
+        site's hydrograph. A stored site the run can't use warns and scores
+        the outlet; Settings says so under *Scored at*.
+  - [x] **EWR agreement at a gauge EWR site with its own record.** Done
+        2026-09-30 (engine 1.41.0): `summary.catchment.ewrAgreementSites`,
+        each gauge EWR site's record against its simulated outflow and its
+        own pragmatic requirement (`ewr_cumulative`), beside the outlet's
+        unchanged test, in the Runs tab and the summary CSV
+        ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
 - [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
       is typed; `arealFactorFromMap` (engine) needs the forcing's values,
       which Settings doesn't load. Durable fix: a small panel that fetches
@@ -3949,24 +4027,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       1 prints the impact report's `LicenceImpactBoard` after the change
       table, the application named as such, from the three daily series the
       page fetches before ready (`loadImpactSeries`), with the full-allocation
-      note as the impact report has it. Left: the board's view model is
-      computed in the browser, not in the engine's document, so an issued
-      pack can't freeze it yet; it moves into `evidenceReport` with the pack's
-      manifest. Tracked under *The server-rendered evidence PDF* below
-      (WP-3.14). Until then the pack's page leaves the board out and says
-      it isn't part of the pack (ui.md § Evidence pack).
+      note as the impact report has it. Since 2026-09-30 (report format
+      `evidence-5`) the engine builds the board into the document
+      (`evidence/impact.ts`) from the series the backend loads, so the draft
+      and an issued pack print the same board; the page no longer fetches
+      series for it.
 - [ ] **The server-rendered evidence PDF.** An *issued pack* is printed on
       the server now (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
       from its frozen manifest; the *draft* evidence report on the report
-      route still prints from the browser only. Left: page 1's licence
-      impact board isn't in the manifest (the browser builds it from three
-      daily series, and a pack's render session reads no run), so a pack's
-      page and PDF print without it. Durable fix: build the board in the
-      engine's `evidenceReport` from the two runs' series, so the manifest
-      carries it; a server render of the draft report (`POST …/reports
-      { runId, evidence: true }`, a render scope over the baseline, ER1) is
-      only worth it if someone asks for a draft PDF by email. Trigger: before
-      a pack goes to a real authority (the board is part of page 1).
+      route still prints from the browser only. Page 1's licence impact
+      board is in the manifest since `evidence-5` (2026-09-30), so a pack's
+      page and PDF print it. Left: a server render of the draft report
+      (`POST …/reports { runId, evidence: true }`, a render scope over the
+      baseline, ER1), only worth it if someone asks for a draft PDF by
+      email. Trigger: that request.
 - [x] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       done (issue #70), [§ Liability and sign-off](#liability-and-sign-off-wp-313).
 

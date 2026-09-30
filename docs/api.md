@@ -388,7 +388,20 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
-  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (the data-check limits) takes
+  (`flow_pitman_m3s` was removed in engine 0.10.0).
+  `calibrationSiteNodeId` (engine ≥ 1.41.0, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410))
+  is where calibration scores: `null` (the default) = the outlet, else a
+  UUID. A new site must be a gauge of the project's network above the outlet
+  with an observed flow record attached to it (`time_series.site_node_id`)
+  (`400 calibrationSiteNodeId: no such node in this project` / `the site is
+  the outlet (null) or a gauge above it` / `that gauge has no observed flow
+  record attached`); the check runs only when the site changes, so a stored
+  site whose gauge or record has gone doesn't block other saves (a fit then
+  refuses it, saying why). A copy or an imported project document moves it to
+  the copy's gauge. A run reads it too: its calibration statistics are
+  scored at the site (`RunSummary.calibration.siteNodeId`, below), and a
+  stored site the run can't use (its gauge gone, or no record attached any
+  more) warns (`Calibration site: …`) while the run scores the outlet. `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
   `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
@@ -592,6 +605,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
   multi-start fit (absent on a record made before those, i.e. one start),
+  `siteNodeId` (engine ≥ 1.41.0: the gauge the fit was scored at, a node
+  id of at most 100 characters, or `null` for the outlet; absent on older
+  records = the outlet; a copy moves it with `calibrationSiteNodeId`),
   `observedOrigin` (`{ source, unit, factor }` of the fitted record, 107, or
   `null`) and `flowGapFill` (`{ spec }`, engine ≥ 1.23.0; both
   absent on older records), and from engine 1.22.0 the optional `qualityFlags` (validated like the
@@ -1132,12 +1148,18 @@ may be a river off-take (engine ≥ 1.14.0, migration 091, [model.md
 `handsOffM3Day` (≥ 0 or `null`, the default: none), `handsOffEwr` (default
 false), `lossPct` (0 ≤ l < 1, default 0), `sizing` (`"demand"`, the default,
 or `"capacity"`) and `topUpDam` (default false); a body without them is a dam
-transfer. `PUT` refuses a river off-take that isn't unit to unit or whose
-destination drains into its source (along the river or through other
-off-takes). A run with off-takes stores `offtake_out` on each source,
+transfer. Canal seepage back to the river (engine ≥ 1.42.0, migration 126):
+`lossReturnPct` (0–1, default 0: the losses all leave the catchment) and
+`lossReturnNodeId` (a uuid or `null`, the default: the source), the unit whose
+outflow the returned seepage joins. `PUT` refuses a river off-take that isn't
+unit to unit or whose destination drains into its source (along the river or
+through other off-takes), and a return unit that isn't the source or a farm
+downstream of it along the river. A run with off-takes stores `offtake_out` on each source,
 `offtake_in`, `offtake_used` and `offtake_to_dam` on each destination, and
-each rule's `transfer_rule@<id>` (what it took, before losses);
-`summary.waterBalance` and the water account gain `conveyanceLossM3`;
+each rule's `transfer_rule@<id>` (what it took, before losses), and
+`offtake_loss_return` on each unit seepage rejoins below (engine ≥ 1.42.0);
+`summary.waterBalance` and the water account gain `conveyanceLossM3` (what
+was lost, net of the seepage returned);
 nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
 (nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
@@ -1213,11 +1235,19 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, schedule (below, or null), note (≤ 1000 chars) }[]`,
+'external'), enabled, schedule (below, or null), population (≥ 0 or null),
+note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
+internal, true, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
-without a count and litres, and an external one with a return share above 0.
+without a count and litres, an external one with a return share above 0, and
+a negative population.
+
+A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
+[model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
+floor of a domestic or municipal object (population × 25 l a day; read for
+those two categories only). Null = a per-unit object's `count`; a monthly one
+without a population has no floor.
 
 A demand object's `schedule` (engine ≥ 1.17.0, migration 105, issue #90 Q4,
 [model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
@@ -1503,7 +1533,16 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `otherPeriod`): whether the run's parameters were fitted on the days scored,
   i.e. whether the scores are in-sample ([model.md §2.10](./model.md)); the
   run comparison's `calibration.fitStatus` is `{ a, b }` of it (`null` when a
-  run predates it). When the project has both a gauge and a logger record,
+  run predates it). Engine ≥ 1.41.0: scored at `settings.calibrationSiteNodeId`
+  when it names a usable gauge inside the network, and then carrying
+  `siteNodeId` and `siteName` (absent at the outlet): the gauge's record
+  against its simulated outflow, with that record stored as the node series
+  `observed_flow` (and `observed_flow_other`) beside the node's `outflow`.
+  `summary.catchment.ewrAgreementSites` (engine ≥ 1.41.0, absent when none)
+  is the EWR test against observed flow at each gauge EWR site with a record
+  of its own, `{ nodeId, name, flowKind, agreement }[]` with `agreement`
+  shaped like `catchment.ewrAgreement` ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
+  When the project has both a gauge and a logger record,
   the run also stores the one not scored as the catchment series
   `observed_flow_other` (labelled "Observed flow" for the gauge, "Observed
   flow (logger)" for the logger, like `observed_flow`).
@@ -1591,7 +1630,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
-  and the objects' together.
+  and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
+  #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
+  `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
+  `avgBelowBasicNeedsM3Day` (days and mean volume supplied below the day's
+  floor, apart from `daysShort` and the deficit) and
+  `avgSuppliedLitresPerPersonDay` (what it got per person at the tap, the
+  municipal restriction level, for display); its unit has the run series
+  `basic_needs` (Σ each floored object's MIN(floor, demand), m³/day).
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's
@@ -1610,7 +1656,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewrSupplyCutM3Day` (the change in supply), `volumeLeftM3Day` is
   `MAX(target + ewrSupplyCutM3Day, 0)`, `fractionOfDemandLeft` is in 0–1, and
   `ewrCutBeyondShareM3Day` (≥ 0, also in `totals`) is how far the EWR supply
-  cut exceeds the equitable share. `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) and
+  cut exceeds the equitable share. From 1.44.0 (issue #123) a unit with a
+  basic-needs floor adds `basicNeedsM3Day` (the window mean of its
+  `basic_needs`) and `basicNeedsHeldM3Day` (≥ 0, what the floor held back of
+  the cut), both also in `totals` when a farm has them; its
+  `volumeLeftM3Day` is then `MAX(MAX(target + ewrSupplyCutM3Day, 0), floor)`
+  and its `totalChangeM3Day` `MAX(reduce/gain + ewrSupplyCutM3Day, floor −
+  supplied)`. `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) and
   `demandPctNote()` are exported by the engine for clients that show demand
   left %. The summary adds `ewrAttribution: 'netImpactProRata'` and
   `ewrSites` (outlet first, then gauges by node id): `{ nodeId, name,
@@ -1975,7 +2027,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-4`: § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-6`: § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2140,7 +2192,7 @@ whether a use is lawful.
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
 | GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison, capYears }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
@@ -2171,6 +2223,21 @@ whether a use is lawful.
   `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
   ([Projects](#projects)); `RunSummary.allocations` is the run's own
   comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+  In a cap run each of its sources carries `capReached: [{ waterYear,
+  budgetM3, usedM3 }]` (the years the volume was used up) and, engine ≥
+  1.40.0, `limitBound: [{ waterYear, days, volumeDays, rateDays, monthsDays
+  }]` (the days per year the licence limit held use back, by limit; only
+  years with one). A capped source whose licence states months or a rate has
+  the run series `allocation_left_surface` / `allocation_left_groundwater`
+  (what is left of the year's volume, m³, start of the day) beside
+  `allocation_room_*`. The summary CSV adds an "Allocation cap by water year"
+  block in a cap run.
+- `capYears` (the run comparison, `GET …/runs/:runId/allocations`): in a cap
+  run, one `{ nodeId, waterSource, capReached, limitBound }` per unit and
+  capped source of `RunSummary.allocations` (`limitBound` `null` on a run
+  before engine 1.40.0); `[]` for a run of another mode. Read from the run's
+  summary, not recomputed, so for a forecast run it covers the forecast days
+  too, unlike `comparison` (the page says so).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
@@ -2691,7 +2758,9 @@ kept fit is the server's too.
   applied one is never deleted). Each case job gets 2 attempts.
 - `AutoCalibration = { id, trigger ('manual' | 'new_data'), status
   ('running' | 'complete' | 'failed'), rulesRevision, rules, plan: {
-  flowKind, validationRecord, years, ruleExclusions, notes, cases }, cases:
+  flowKind, siteNodeId, validationRecord, years, ruleExclusions, notes, cases }
+  (`siteNodeId` the calibration site the rules ran at, engine ≥ 1.41.0, `null`
+  = the outlet, absent on older runs), cases:
   AutoCalibrationCase[], report: { chosen, notes, eligible, reasons } |
   null, chosen, error, engineVersion, job, createdBy, createdAt, completedAt,
   appliedBy, appliedAt, appliedRunId, uncertaintyId }`. `cases` grows by one

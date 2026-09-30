@@ -11,6 +11,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
+	import { basicNeedsNote } from './shareThePain';
 	import { SUPPLY_TARGET } from '$lib/components/runs/results';
 
 	let {
@@ -124,6 +125,9 @@
 								{/if}
 								{#if r.beyondShare}
 									<span class="badge badge-warn">EWR cut exceeds this hydrological unit's equitable share by {r.beyondShare} m³/day</span>
+								{/if}
+								{#if r.basicNeedsHeld}
+									<span class="badge" data-testid="basic-needs-held">{basicNeedsNote(r.basicNeedsHeld, r.basicNeeds)}</span>
 								{/if}
 							</th>
 							<td class="num">{r.demand}</td>

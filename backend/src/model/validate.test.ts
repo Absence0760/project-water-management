@@ -195,6 +195,22 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(ModelBody.parse(body({ ...river, toNodeId: out.id })) as never).join()).toMatch(/runs from one unit to another/);
 	});
 
+	it('canal seepage back to the river (engine 1.42.0): none by default, a share 0–1, rejoining below the source or a farm below it', () => {
+		const out = node('Gauge', null);
+		const low = node('Low', out.id);
+		const up = node('Up', low.id);
+		const canal = node('Canal', out.id);
+		const t = { id: crypto.randomUUID(), fromNodeId: up.id, toNodeId: canal.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', lossPct: 0.2 };
+		const body = (tr: object) => ({ nodes: [out, low, up, canal], crops: [], cropAreas: [], transfers: [tr] });
+		expect(ModelBody.parse(body(t)).transfers[0]).toMatchObject({ lossReturnPct: 0, lossReturnNodeId: null });
+		for (const at of [null, up.id, low.id]) expect(modelProblems(ModelBody.parse(body({ ...t, lossReturnPct: 0.5, lossReturnNodeId: at })) as never), String(at)).toEqual([]);
+		for (const bad of [{ lossReturnPct: 1.01 }, { lossReturnPct: -0.1 }, { lossReturnNodeId: 'not-a-uuid' }])
+			expect(ModelBody.safeParse(body({ ...t, ...bad })).success, JSON.stringify(bad)).toBe(false);
+		// The canal and the gauge aren't below Up on the river as farms: refused.
+		for (const at of [canal.id, out.id, crypto.randomUUID()])
+			expect(modelProblems(ModelBody.parse(body({ ...t, lossReturnPct: 0.5, lossReturnNodeId: at })) as never).join()).toMatch(/its seepage can rejoin the river only below "Up" or a farm downstream of it/);
+	});
+
 	it('refuses bad fields, and a curve that is not monotone or sits on a gauge', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });
@@ -328,6 +344,13 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ sizing: 'perUnit' }))).join()).toMatch(/needs a count and litres/);
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), nodeId: gauge.id }))).join()).toMatch(/only a unit has demand objects/);
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), destination: 'external', returnPct: 0.2 }))).join()).toMatch(/nothing returns/);
+	});
+
+	it('takes the people an object serves for its basic-needs floor (engine 1.44.0), none by default, never negative', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
+		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.population).toBeNull();
+		expect(ModelBody.parse(body({ ...monthly, population: 2000 })).demandObjects![0]!.population).toBe(2000);
+		for (const population of [-1, Number.POSITIVE_INFINITY, 'many']) expect(ModelBody.safeParse(body({ ...monthly, population })).success, String(population)).toBe(false);
 	});
 
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {

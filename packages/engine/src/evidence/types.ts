@@ -10,11 +10,13 @@ import type { InputChange, RunInputsSnapshot } from '../compare';
 import type { Erratum } from '../liability/errata';
 import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
-import type { RunSummary } from '../project';
+import type { AllocationLimitBound, RunSummary } from '../project';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import type { Band } from '../uncertainty/bands';
 import type { EnsembleSummary } from '../uncertainty/ensemble';
+import type { LicenceImpact } from '../views/licenceImpact';
+import type { YearClassMethod } from '../views/yearClasses';
 import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } from '../uncertainty/options';
 import type { PairedSummary } from '../uncertainty/paired';
 
@@ -31,8 +33,13 @@ import type { PairedSummary } from '../uncertainty/paired';
  * works" (`ewrBelowWorks`); paired bands on the supply rows and in § 4 (`EvidenceUser.change`);
  * "served in full while the site fails" (`servedWhileFailing`, § 4, with its flag); and the
  * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.33.0).
+ * evidence-5: page 1's licence impact by year class (`licenceImpact`, issue #53 R7), built
+ * here from the runs' daily series instead of in the browser, so an issued pack freezes it.
+ * evidence-6: § 5 cites a capped run's cap (`EvidenceAllocationSource.capA` / `capB`): the
+ * water years the registered volume was used up and the days the licence limit held use
+ * back, by limit (RunSummary.allocations, engine ≥ 1.40.0 for the days).
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-4';
+export const EVIDENCE_REPORT_VERSION = 'evidence-6';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -196,6 +203,25 @@ export interface EvidenceInput {
 	otherApplicationsTruncated: boolean;
 	/** What the report cites for its methods and limits (the engine's generated lists). */
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
+	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
+	impact?: EvidenceImpactInput | null;
+}
+
+/**
+ * The licence impact board's inputs (issue #53 R7): the project's outcome
+ * settings (settings.outcomes, which no run records) and three stored daily
+ * series at the outlet. A value is null where the stored series has a gap
+ * (JSON has no NaN); a series is null when the run hasn't one.
+ */
+export interface EvidenceImpactInput {
+	yearClassMethod: YearClassMethod;
+	/** The Reserve site the project's outcome matrix reads: null = the outlet, else a gauge. */
+	siteNodeId: string | null;
+	series: {
+		backgroundNatural: (number | null)[] | null;
+		backgroundEwrShortfall: (number | null)[] | null;
+		applicationEwrShortfall: (number | null)[] | null;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +532,22 @@ export interface EvidenceAllocationSource {
 	meanRegisteredA: number | null;
 	meanModelledB: number | null;
 	meanRegisteredB: number | null;
+	/**
+	 * A cap run's cap on this unit and source, per run (evidence-6, from its
+	 * RunSummary.allocations): null when that run isn't a cap run or doesn't
+	 * cap the source (baseline evidence: capB null). Absent from an older
+	 * pack's document.
+	 */
+	capA?: EvidenceCapYears | null;
+	capB?: EvidenceCapYears | null;
+}
+
+/** One run's cap on one unit and source (evidence-6). */
+export interface EvidenceCapYears {
+	/** The water years the use reached the registered volume. */
+	capReached: { waterYear: number; budgetM3: number; usedM3: number }[];
+	/** The days per water year the licence limit held use back, by limit (engine ≥ 1.40.0); null for a run before it. */
+	limitBound: AllocationLimitBound[] | null;
 }
 
 /** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */
@@ -535,6 +577,32 @@ export interface EvidenceAllocations {
 	/** Registered volumes matched to no unit of the run, or to one the run lacks: counted, not compared. */
 	notMatchedA: number;
 	notMatchedB: number | null;
+}
+
+/** Why the licence impact board couldn't be built; the page words it. */
+export type EvidenceLicenceImpactUnavailable =
+	/** The report was built without the board's inputs. */
+	| 'notBuilt'
+	/** The baseline has no natural flow series, so its water years can't be classed. */
+	| 'noNaturalFlow'
+	/** A run predates the water account (engine 0.32.0). */
+	| 'noWaterAccount'
+	/** A run has no ewr_shortfall series, so its days below the EWR can't be counted. */
+	| 'noEwrShortfall'
+	/** Anything else; `detail` has the engine's message. */
+	| 'failed';
+
+/** Page 1's licence impact by year class: the baseline as the background, the application beside it. */
+export interface EvidenceLicenceImpact {
+	/** As the project set it when the report was built. */
+	yearClassMethod: YearClassMethod;
+	/** The Reserve site the project asked for (settings.outcomes.siteNodeId): null = the outlet; `name` is null when the baseline's model hasn't the node. */
+	requestedSite: { nodeId: string; name: string | null } | null;
+	/** The site read: null = the outlet, else the gauge and its name in the baseline's model. */
+	site: { nodeId: string; name: string } | null;
+	/** The requested gauge has no Reserve results in one of the runs, so the board reads the outlet. */
+	siteFellBack: boolean;
+	result: { status: 'ok'; impact: LicenceImpact } | { status: 'unavailable'; reason: EvidenceLicenceImpactUnavailable; detail: string | null };
 }
 
 export interface EvidenceReport {
@@ -625,6 +693,8 @@ export interface EvidenceReport {
 	cumulative: EvidenceCumulative;
 	/** § 5: registered water use against modelled use (WP-3.10). */
 	allocations: EvidenceAllocations;
+	/** Page 1's licence impact by year class (issue #53 R7, evidence-5); null for baseline evidence. Absent from an older pack's document. */
+	licenceImpact?: EvidenceLicenceImpact | null;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;

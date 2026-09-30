@@ -374,6 +374,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
 	// Hands-off flows and River to dam by month (engine ≥ 1.32.0), from their own stream, last of all.
 	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
+	// Canal seepage back to the river (engine ≥ 1.42.0), from its own stream, last of all.
+	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
 	return {
 		settings,
 		model: {
@@ -443,6 +445,23 @@ function addOfftakes(g: Rng, nodes: NetworkNode[], transfers: Transfer[]): void 
 		};
 		if (g.bool(0.2)) Object.assign(t, withMonthlyRates(Array.from({ length: 12 }, () => (g.bool(0.3) ? 0 : g.logFloat(1e-4, 1)))));
 		transfers.push(t);
+	}
+}
+
+/**
+ * Canal seepage back to the river (engine ≥ 1.42.0): on half the river
+ * off-takes with losses, a share of them (all of it now and then) rejoining
+ * below the source or a unit on the river below it, now and then one that
+ * isn't (the engine returns none, with a warning).
+ */
+function addOfftakeReturns(g: Rng, nodes: NetworkNode[], transfers: Transfer[]): void {
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	for (const t of transfers) {
+		if (t.source !== 'river' || !((t.lossPct ?? 0) > 0) || !g.bool(0.5)) continue;
+		t.lossReturnPct = g.bool(0.2) ? 1 : g.float(0, 1);
+		const below: string[] = [];
+		for (let id: string | null | undefined = t.fromNodeId; id && !below.includes(id); id = byId.get(id)?.downstreamNodeId) below.push(id);
+		t.lossReturnNodeId = g.bool(0.05) ? g.pick(nodes).id : g.bool(0.4) ? null : g.pick(below);
 	}
 }
 
@@ -656,7 +675,9 @@ function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
  * to three on half the farms (now and then one on a gauge or user, or one
  * switched off, which the engine skips), monthly or per unit, from a trickle
  * to more than the river carries, months without any, losses, profiles, any
- * return share (0 when piped out), any priority class.
+ * return share (0 when piped out), any priority class; half the monthly
+ * ones with people, so a domestic or municipal one has a basic-needs floor
+ * from under to over its demand (engine ≥ 1.44.0).
  */
 function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 	if (!g.bool(0.25)) return [];
@@ -683,6 +704,9 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				priority: g.pick(['first', 'shared', 'last'] as const),
 				destination: external ? 'external' : 'internal',
 				enabled: g.bool(0.9),
+				// The basic-needs floor (engine ≥ 1.44.0): a per-unit object's count sets it; every other
+				// monthly one names people from its level, no draw, so the rest of the seed is unchanged.
+				population: !perUnit && k % 2 === 0 ? Math.round(level * 40) : null,
 				note: ''
 			});
 		}

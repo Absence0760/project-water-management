@@ -34,6 +34,16 @@ export const CATCHMENT_FLOW_KEYS: [keyof CatchmentFlows, string][] = [
 	['ewr', 'ewr']
 ];
 
+/**
+ * The calibration site's node (engine ≥ 1.41.0, settings.calibrationSiteNodeId):
+ * a run that scores a gauge inside the network stores that gauge's record as
+ * the node's `observed_flow`, beside its `outflow`. null when the run scores
+ * the outlet (or predates it).
+ */
+export function calibrationSiteOf(refs: readonly { key: string; nodeId: string | null }[]): string | null {
+	return refs.find((r) => r.key === 'observed_flow' && r.nodeId !== null)?.nodeId ?? null;
+}
+
 /** Converts a series' m³/day values to the chart's unit. */
 type Convert = (d: DailySeries) => (number | null)[];
 
@@ -54,8 +64,8 @@ const recordOf = (label: string): FlowRecord => (label === OBSERVED_SERIES_LABEL
  * "Observed flow (logger)" the logger), so runs made before the other record
  * was written are labelled right too.
  */
-export function observedSources(refs: readonly { key: string; nodeId: string | null; label: string }[]): ObservedSources {
-	const at = (key: string) => refs.find((r) => r.key === key && r.nodeId === null);
+export function observedSources(refs: readonly { key: string; nodeId: string | null; label: string }[], nodeId: string | null = null): ObservedSources {
+	const at = (key: string) => refs.find((r) => r.key === key && r.nodeId === nodeId);
 	const obs = at('observed_flow');
 	const other = at('observed_flow_other');
 	return { ...(obs ? { observed: recordOf(obs.label) } : {}), ...(other ? { observedOther: recordOf(other.label) } : {}) };

@@ -158,7 +158,8 @@ export interface WaterAccountEwr {
  *   out = land-cover reduction + natural flow not allocated to a farm
  *       + consumptive irrigation + other users' consumptive use
  *       + dam evaporation + dam seepage lost from the catchment (WP-3.5)
- *       + stream depletion + river off-takes' conveyance losses (engine ≥ 1.14.0)
+ *       + stream depletion + river off-takes' conveyance losses (engine ≥ 1.14.0,
+ *         less the share that seeps back to the river, engine ≥ 1.42.0)
  *       + outflow at the outlet
  * A dam release (WP-3.5) joins the river below the dam, so it is already in
  * the outflow (or taken again downstream): a memo, not a term.
@@ -201,7 +202,7 @@ export interface WaterAccountRow {
 	damSeepageLostM3?: number;
 	/** Taken from the river by the boreholes' lagged stream depletion. */
 	streamDepletionM3: number;
-	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered; present only on a run with off-takes. */
+	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered − seeped back to the river (engine ≥ 1.42.0); present only on a run with off-takes. */
 	conveyanceLossM3?: number;
 	/** Simulated outflow at the outlet. */
 	outflowM3: number;
@@ -286,6 +287,8 @@ export interface AccountNodeInput {
 	/** River off-takes (engine ≥ 1.14.0): taken from the flow leaving this node, and delivered into it; missing = none. */
 	offtakeOut?: ArrayLike<number>;
 	offtakeIn?: ArrayLike<number>;
+	/** Their conveyance losses seeping back to the river below this node (engine ≥ 1.42.0, part of its outflow); missing = none. */
+	offtakeReturn?: ArrayLike<number>;
 	initialStorageM3: number;
 }
 
@@ -617,7 +620,7 @@ interface DailyTotals {
 	storage: Float64Array;
 	/** The storage reset's steps over all nodes; null without one (engine ≥ 0.46.0). */
 	storageSet: Float64Array | null;
-	/** River off-takes' conveyance losses (taken − delivered) over all nodes; null without off-takes (engine ≥ 1.14.0). */
+	/** River off-takes' conveyance losses lost from the catchment (taken − delivered − seeped back) over all nodes; null without off-takes (engine ≥ 1.14.0). */
 	conveyance: Float64Array | null;
 	initialStorage: number;
 }
@@ -673,6 +676,8 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 			const d = n.offtakeIn;
 			if (o) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! + o[t]!;
 			if (d) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! - d[t]!;
+			const b = n.offtakeReturn;
+			if (b) for (let t = 0; t < days; t++) c.conveyance[t] = c.conveyance[t]! - b[t]!;
 		}
 	}
 	return c;

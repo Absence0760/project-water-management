@@ -127,7 +127,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				handsOffEwr: z.boolean().default(false),
 				lossPct: z.number().finite().min(0).lt(1).default(0),
 				sizing: z.enum(TRANSFER_SIZINGS).default('demand'),
-				topUpDam: z.boolean().default(false)
+				topUpDam: z.boolean().default(false),
+				// Canal seepage back to the river (engine ≥ 1.42.0, migration 126): the share of the losses, and the
+				// unit it rejoins below (null = the source; modelRuleIssues holds it to the source or a farm below it).
+				lossReturnPct: frac.default(0),
+				lossReturnNodeId: uuid.nullable().default(null)
 			})
 		)
 		.max(500),
@@ -198,6 +202,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.max(DEMAND_SCHEDULE_MAX_WINDOWS)
 					.nullable()
 					.default(null),
+				// The people it serves, for the basic-needs floor (engine 1.44.0, issue #123). Null = a per-unit count.
+				population: nonNeg.nullable().default(null),
 				note: z.string().max(1000).default('')
 			})
 		)

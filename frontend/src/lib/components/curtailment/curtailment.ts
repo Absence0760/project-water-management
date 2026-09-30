@@ -94,6 +94,13 @@ export interface CurtailmentRow {
 	demandLeftTitle: string | null;
 	/** How far the EWR supply cut exceeds the equitable share (m³/day); "" when it doesn't (audit Q13). */
 	beyondShare: string;
+	/**
+	 * What the basic-needs floor held back of the cut (engine ≥ 1.44.0, issue
+	 * #123), m³/day, and the floor itself; "" when it held nothing back (or
+	 * the unit has no floor, or the run is older).
+	 */
+	basicNeedsHeld: string;
+	basicNeeds: string;
 	/** Short plain-language summary for the row (also used as the badge / screen-reader text). */
 	verdict: string;
 }
@@ -144,6 +151,8 @@ export function curtailmentRows(c: CurtailmentSummary, names: Record<string, str
 			demandLeftPct: left.text,
 			demandLeftTitle: left.title,
 			beyondShare: (f.ewrCutBeyondShareM3Day ?? 0) >= 0.05 ? fmtVol(f.ewrCutBeyondShareM3Day) : '',
+			basicNeedsHeld: (f.basicNeedsHeldM3Day ?? 0) >= 0.05 ? fmtVol(f.basicNeedsHeldM3Day) : '',
+			basicNeeds: f.basicNeedsM3Day === undefined ? '' : fmtVol(f.basicNeedsM3Day),
 			verdict: verdict(f, action)
 		};
 	});

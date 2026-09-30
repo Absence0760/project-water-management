@@ -103,7 +103,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.35.0): `name` (1–100 characters, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationEfficiency` (above 0 to 1, or null for the farm's). It changes the crop on every farm that grows it. |
 | `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.35.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
 | `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
-| `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem). `transfer.add` takes the same fields, each optional. |
+| `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem), `lossReturnPct` (0–1) and `lossReturnNodeId` (a node id, or null for the source; engine ≥ 1.42.0: canal seepage back to the river, an edit to a unit that isn't the source or a farm below it on the river is skipped with that rule as its problem; in an application the unit must be the applicant's own, as the ends must). `node.remove` of a unit an off-take's seepage rejoins below leaves that off-take returning none (share 0, the source), with a note. `transfer.add` takes the same fields, each optional. |
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
 | `landCover.add` | `patch` | Adds a land-cover patch on a farm (WP-1.35). |
 | `landCover.remove` | `patchId` | Removes a patch, e.g. clearing invasive aliens. |
@@ -240,7 +240,10 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   crop area, the gross demand, the rain used, the irrigation efficiency and
   the loss return stay as they are: 85 % means "85 % of what they'd take".
   A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
-  month by month; there is no op for one object yet (followups.md).
+  month by month; there is no op for one object yet (followups.md). A cut
+  (a factor below 1) never takes a domestic or municipal object with people
+  below its basic-needs floor, MIN(people × 25 l a day, its demand)
+  (engine ≥ 1.44.0, issue #123), also under a full allocation.
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of

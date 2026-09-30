@@ -34,20 +34,21 @@ import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './network/transferRates';
-import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './network/offtake';
+import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
-import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
-import { ALLOCATION_SERIES, matchAllocations, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
+import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
+import { calibrationSiteError } from './calibrate/site';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
@@ -59,6 +60,9 @@ import {
 	AREAL_RAIN_COLUMN,
 	arealRainFactors,
 	CALIBRATION_FLOW_KINDS,
+	calibrationRecordsAt,
+	calibrationSeriesKey,
+	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
@@ -83,6 +87,7 @@ import {
 	type RunAllocationSource,
 	type UserSummary
 } from './project';
+import type { AllocationLimitBound } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
@@ -387,6 +392,25 @@ function runNetwork(
 			push(null, c.code.key, c.code.label, '', f.code);
 		}
 	}
+	// The calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId): a gauge inside the network whose
+	// record the run's calibration statistics score. Its record is that node's `observed_flow` series (and the
+	// other record, when it has both), beside the node's own `outflow`. An unusable site warns and the run scores the outlet.
+	const calSite = runCalibrationSite(input, settings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	let calKind = observedKind;
+	let calObserved = observedM3s;
+	let calSim = simOutflow;
+	if (calSite) {
+		const kinds = calibrationRecordsAt(series, calSite.nodeId);
+		const wanted = settings.calibrationFlowKind;
+		calKind = wanted && kinds.includes(wanted) ? wanted : kinds[0]!;
+		const at = (k: CalibrationFlowKind) => alignFlow(series[calibrationSeriesKey(k, calSite.nodeId)], start, days);
+		calObserved = at(calKind);
+		calSim = sim.nodes[calSite.node]!.outflow;
+		const toDay = (v: (number | null)[]) => v.map((x) => (x === null ? NaN : x * SEC_PER_DAY));
+		push(calSite.nodeId, 'observed_flow', OBSERVED_SERIES_LABEL[calKind], 'm³/day', toDay(calObserved));
+		const other = kinds.find((k) => k !== calKind);
+		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
+	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
 
@@ -456,6 +480,8 @@ function runNetwork(
 		// A river off-take (engine ≥ 1.14.0) counts like a transfer, with what it took at both ends: its conveyance
 		// losses are charged to its destination, for which the water was taken.
 		transfers: [...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })), ...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! }))],
+		// The share of its losses that seeps back (engine ≥ 1.42.0) is credited where the losses were charged.
+		...(plan.offtakes?.some((o) => o.lossReturn > 0) ? { returns: offtakeReturns(plan.offtakes, sim.offtakes!) } : {}),
 		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
 	});
 	const posInOrder = new Int32Array(nodes.length);
@@ -492,7 +518,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -533,6 +559,8 @@ function runNetwork(
 	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	// Each unit's enabled demand objects' names, in the plan's order (engine ≥ 1.7.0).
 	const objectNames = new Map<string, string[]>();
+	// Each unit's basic-needs floor per day (engine ≥ 1.44.0, docs/model.md §2.7f); null without one.
+	const basicNeeds = plan.nodes.map((n) => (n.objects ? unitBasicNeeds(n.objects) : null));
 	for (const [nodeId, list] of demandObjectsByNode(upgradeLegacyModel(input.model), [])) objectNames.set(nodeId, list.map((o) => o.name));
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
@@ -561,6 +589,9 @@ function runNetwork(
 		// and the full-allocation demand factor, so the self-checks redo each day from the stored columns.
 		if (r.allocationRoom?.surface) push(node.id, ALLOCATION_SERIES.surfaceRoom.key, ALLOCATION_SERIES.surfaceRoom.label, 'm³', r.allocationRoom.surface);
 		if (r.allocationRoom?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterRoom.key, ALLOCATION_SERIES.groundwaterRoom.label, 'm³', r.allocationRoom.groundwater);
+		// What is left of the year's volume, for a source whose licence states conditions (engine ≥ 1.40.0).
+		if (r.allocationLeft?.surface) push(node.id, ALLOCATION_SERIES.surfaceLeft.key, ALLOCATION_SERIES.surfaceLeft.label, 'm³', r.allocationLeft.surface);
+		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
@@ -568,6 +599,8 @@ function runNetwork(
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
+		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
+		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
 		const po = plan.nodes[i]!.objects;
 		if (po) {
@@ -576,6 +609,9 @@ function runNetwork(
 				push(node.id, objectDemandKey(id), DEMAND_OBJECT_SERIES.demandLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, po.demand[k]!);
 				push(node.id, objectSuppliedKey(id), DEMAND_OBJECT_SERIES.suppliedLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, r.objectSupplied![k]!);
 			});
+			// The basic-needs floor (engine ≥ 1.44.0): only on a unit with a domestic or municipal object with people.
+			const floor = basicNeeds[i];
+			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
 		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
@@ -702,6 +738,8 @@ function runNetwork(
 					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
 					// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned.
 					...(plan.nodes[i]!.objects ? { returned: sim.workings![i]!.returnFlow } : {}),
+					// Its basic-needs floor (engine ≥ 1.44.0): the volume left never goes below it.
+					...(basicNeeds[i] ? { basicNeeds: basicNeeds[i]! } : {}),
 					ewrBindingSiteId: bind < 0 ? null : nodes[attribution.sites[bind]!.node]!.id
 				}
 			];
@@ -731,21 +769,23 @@ function runNetwork(
 	}
 
 	// Gauge and logger records measure the impacted river (farms, dams,
-	// abstraction), so they are compared with the simulated outflow.
-	const calibration = observedKind
+	// abstraction), so they are compared with the simulated outflow: the
+	// outlet's, or the calibration site's (engine ≥ 1.41.0).
+	const calibration = calKind
 		? {
-				...calibrationStats(simOutflow, observedM3s, {
+				...calibrationStats(calSim, calObserved, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd,
 					exclusions: exclusionRanges(settings.calibrationExclusions)
 				}),
-				flowKind: observedKind,
+				flowKind: calKind,
 				simulatedKey: 'simulated_outflow' as const,
-				fitStatus: calibrationFitStatus(settings, observedKind)
+				...(calSite ? { siteNodeId: calSite.nodeId, siteName: nodes[calSite.node]!.name } : {}),
+				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
 			}
 		: null;
-	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
+	if (!calKind) warnings.push('no observed flow series: calibration statistics not computed');
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
 			calibration.excludedDays
@@ -767,6 +807,24 @@ function runNetwork(
 		observedKind
 			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
+	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
+	// its record against its simulated outflow and its own pragmatic requirement.
+	const ewrAgreementSites: EwrAgreementSite[] = [];
+	for (const node of [...siteNodes].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
+		if (node === topo.outflow) continue;
+		const id = nodes[node]!.id;
+		const kinds = calibrationRecordsAt(series, id);
+		if (!kinds.length) continue;
+		const kind = settings.calibrationFlowKind && kinds.includes(settings.calibrationFlowKind) ? settings.calibrationFlowKind : kinds[0]!;
+		const obs = alignFlow(series[calibrationSeriesKey(kind, id)], start, days);
+		const r = sim.nodes[node]!;
+		ewrAgreementSites.push({
+			nodeId: id,
+			name: nodes[node]!.name,
+			flowKind: kind,
+			agreement: ewrAgreement(r.outflow, obs, r.ewrCumulative, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+		});
+	}
 
 	// Input data quality: do the two observed flow records agree? Are there
 	// impossible or suspicious values? Do the farm areas add up?
@@ -860,6 +918,7 @@ function runNetwork(
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
+				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -925,6 +984,7 @@ function runNetwork(
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0,
 				ewrAgreement: ewrObserved,
+				...(ewrAgreementSites.length ? { ewrAgreementSites } : {}),
 				...(topo.outflow >= 0 ? { noFlow: noFlowDays(simOutflow, days) } : {})
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
@@ -1041,6 +1101,32 @@ function runPlausibility(r: {
 		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
 		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
 	});
+}
+
+/**
+ * The run's calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId,
+ * docs/model.md §2.10k): null for the outlet, else the gauge's node index and
+ * id. A site the run can't use (gone from the model, not a gauge, the outlet
+ * node, or no record attached) warns, naming why, and the run's statistics
+ * are the outlet's; calibration refuses the same site outright.
+ */
+function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflow: number, warnings: string[]): { node: number; nodeId: string } | null {
+	if (siteNodeId === null) return null;
+	const nodes = input.model.nodes;
+	const err = calibrationSiteError(nodes, outflow, siteNodeId);
+	const fallback = 'the run’s calibration statistics use the outlet’s record, and Fit automatically refuses the site';
+	if (err) {
+		warnings.push(`Calibration site: ${err}. Until it is changed, ${fallback}.`);
+		return null;
+	}
+	const node = nodes.findIndex((n) => n.id === siteNodeId);
+	if (!calibrationRecordsAt(input.series, siteNodeId).length) {
+		warnings.push(
+			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Settings → Calibration record. Until then, ${fallback}.`
+		);
+		return null;
+	}
+	return { node, nodeId: siteNodeId };
 }
 
 /**
@@ -1493,6 +1579,29 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 		if (s) for (let t = 0; t < s.length; t++) if (s[t] === 0) off++;
 		const avgDemand = mean(d);
 		const avgSupplied = mean(g);
+		// The basic-needs floor (engine ≥ 1.44.0, docs/model.md §2.7f): days and volume below it, apart from the shortfall.
+		const floor = po.floor[k];
+		let basic = {};
+		if (floor !== null && floor !== undefined) {
+			const pop = basicNeedsPopulation(o)!;
+			const lack = new Float64Array(d.length);
+			let below = 0;
+			for (let t = 0; t < d.length; t++) {
+				const b = dayFloor(floor, d[t]!);
+				if (g[t]! < b * (1 - 1e-12)) {
+					below++;
+					lack[t] = b - g[t]!;
+				}
+			}
+			const loss = o.sizing === 'perUnit' && Number.isFinite(o.lossPct) && o.lossPct >= 0 && o.lossPct < 1 ? o.lossPct : 0;
+			basic = {
+				basicNeedsPopulation: pop,
+				basicNeedsM3Day: floor,
+				daysBelowBasicNeeds: below,
+				avgBelowBasicNeedsM3Day: mean(lack),
+				avgSuppliedLitresPerPersonDay: (avgSupplied * (1 - loss) * 1000) / pop
+			};
+		}
 		return {
 			id,
 			name: o.name,
@@ -1505,7 +1614,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgReturnedM3Day: avgSupplied * po.returnShare[k]!,
 			daysShort: short,
-			...(s ? { daysOff: off } : {})
+			...(s ? { daysOff: off } : {}),
+			...basic
 		};
 	});
 }
@@ -1659,7 +1769,12 @@ function runAllocations(
 				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear
 			};
 			const budget = plan.nodes[i]!.allocationCap?.[side.waterSource];
-			if (ap.mode === 'cap' && budget) src.capReached = capReached(budget, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3);
+			if (ap.mode === 'cap' && budget) {
+				const cap = plan.nodes[i]!.allocationCap!;
+				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
+				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3));
+			}
 			sources.push(src);
 		}
 		const sc = ap.scaled.get(i);
@@ -1670,25 +1785,33 @@ function runAllocations(
 }
 
 /**
- * The water years a capped source's use reached its budget (within float
- * noise). A run resumed inside a water year (`before`, the snapshot's use so
- * far that year) counts the year's use before the snapshot too, as the cap did.
+ * A capped source's water years (RunAllocationSource): `capReached`, the
+ * years its use reached its budget (within float noise), and `limitBound`
+ * (engine ≥ 1.40.0), the days per year the licence limit bound, split by
+ * which limit set the room (limitBoundKind). A run resumed inside a water
+ * year (`before`, the snapshot's use so far that year) counts the year's use
+ * before the snapshot too, as the cap did.
  */
-function capReached(
+function capYears(
 	budget: Float64Array,
+	limit: Float64Array | null,
+	outside: Uint8Array | null,
 	source: 'surface' | 'groundwater',
 	r: NodeResult,
 	startDate: string,
 	before?: readonly [number, number]
-): { waterYear: number; budgetM3: number; usedM3: number }[] {
-	const out: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
+): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
+	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
+	const limitBound: AllocationLimitBound[] = [];
 	const start = toEpochDay(startDate);
 	let wy = NaN;
 	let used = 0;
 	let lastT = 0;
+	let bound: AllocationLimitBound | null = null;
 	const close = () => {
 		const b = budget[lastT]!;
-		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) out.push({ waterYear: wy, budgetM3: b, usedM3: used });
+		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) capReached.push({ waterYear: wy, budgetM3: b, usedM3: used });
+		if (bound?.days) limitBound.push(bound);
 	};
 	for (let t = 0; t < budget.length; t++) {
 		const y = waterYearOf(start + t);
@@ -1697,12 +1820,19 @@ function capReached(
 			// A run that starts on 1 October starts the year afresh (simulateNetwork clears the use then too).
 			used = t === 0 && before && startDate.slice(5) !== '10-01' ? before[source === 'surface' ? 0 : 1] : 0;
 			wy = y;
+			bound = { waterYear: y, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		}
-		used += source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		const kind = limitBoundKind(Math.max(0, budget[t]! - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, budget[t]!);
+		if (kind) {
+			bound!.days++;
+			bound![kind]++;
+		}
+		used += use;
 		lastT = t;
 	}
 	close();
-	return out;
+	return { capReached, limitBound };
 }
 
 /**

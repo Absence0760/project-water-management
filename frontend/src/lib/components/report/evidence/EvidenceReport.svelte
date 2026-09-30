@@ -6,12 +6,10 @@
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
 	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, ENSEMBLE_MEASURES_SINCE, type Band, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
-	import type { OutcomeSettings, PackSignoffList, SignoffList } from '$lib/api';
+	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
-	import { chooseSite, matrixSites } from '$lib/components/outcomes/matrix';
 	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
-	import type { ImpactSeries } from '../impactSeries';
-	import { buildLicenceImpactBoard } from '../licenceImpact';
+	import { evidenceBoard } from '../licenceImpact';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
@@ -19,14 +17,14 @@
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '$lib/components/report/inputs';
 	import { CLASS_LABEL, describeOp, namesOf, snapshotInput, stepInputs } from '$lib/components/scenarios/ops';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '$lib/series/provenance';
 	import { WATER_YEAR_MONTHS, monthName } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import EvidenceSummary from './EvidenceSummary.svelte';
 	import FdcPlot from './FdcPlot.svelte';
 	import IntervalPlot from './IntervalPlot.svelte';
 	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
-	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
+	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import { fdcMonths } from './grid';
@@ -37,8 +35,6 @@
 		report,
 		projectId,
 		stamp,
-		impactSeries = null,
-		outcomes = null,
 		frozen = false,
 		verify = null,
 		signoffs = null,
@@ -49,11 +45,7 @@
 		projectId: string;
 		/** "Draft · not issued" until a pack issues it (G12); an issued pack's "Issued · version n · date". */
 		stamp: string;
-		/** The daily series page 1's licence impact by year class reads (loadImpactSeries); null when not fetched, and the board says what is missing. */
-		impactSeries?: ImpactSeries | null;
-		/** The project's settings.outcomes (year-class method, Reserve site), as the impact report reads them: a run doesn't record them. */
-		outcomes?: Partial<OutcomeSettings> | null;
-		/** An evidence pack's frozen report: what isn't in its manifest (the licence impact board) is left out, and page 1 says so. */
+		/** An evidence pack's frozen report: a pack from before evidence-5 has no licence impact board in its manifest, so page 1 says so. */
 		frozen?: boolean;
 		/** An issued pack's manifest hash, short code and verify link, printed in every section (G11); null for a draft. */
 		verify?: VerifyRef | null;
@@ -101,25 +93,21 @@
 	/**
 	 * Page 1's licence impact by year class (issue #53 R7): the impact report's
 	 * board, the baseline as the background and the application beside it.
-	 * Application reports only. The application's period is the baseline's (a
-	 * report on another period is refused), so the baseline's first day serves both.
+	 * The engine built its numbers into the document (evidence-5), so a draft
+	 * and an issued pack show the same board; application reports only. The
+	 * application's period is the baseline's (a report on another period is
+	 * refused), so the baseline's first day serves both.
 	 */
 	const board = $derived.by(() => {
 		const appSummary = report.summaries.application;
-		if (frozen || !app || !appSummary || !id.application) return null;
-		const rules = (base.settings as { ewrRules?: { siteNodeId: string | null }[] }).ewrRules ?? [];
-		const site = chooseSite(outcomes?.siteNodeId, matrixSites(base.model.nodes, rules)).site;
-		return buildLicenceImpactBoard({
-			data: {
-				a: { run: { label: id.baseline.label, startDate: id.baseline.startDate, summary: report.summaries.baseline } },
-				b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
-			},
-			series: impactSeries ?? { background: { natural: null, ewrShortfall: null }, application: { ewrShortfall: null } },
-			method: outcomes?.yearClassMethod ?? 'auto',
-			site,
-			applicationName: 'the application'
+		if (!app || !appSummary || !id.application || !report.licenceImpact) return null;
+		return evidenceBoard(report.licenceImpact, {
+			a: { run: { label: id.baseline.label, startDate: id.baseline.startDate, summary: report.summaries.baseline } },
+			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
 		});
 	});
+	/** An older pack (before evidence-5) froze no board: page 1 says it isn't part of the pack. */
+	const boardNotFrozen = $derived(frozen && app && report.licenceImpact === undefined);
 
 	const cov = $derived(report.uncertainty.baseline?.coverage ?? []);
 	const bandsA = $derived(report.uncertainty.baseline?.bands ?? null);
@@ -157,7 +145,7 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} boardNotFrozen={frozen && app} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} {boardNotFrozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				{#if !report.river.length}
 					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>
@@ -333,7 +321,7 @@
 						chirpsSource={chirpsSourceOfInput(base.series)}
 						apanDaily={apanDailyOfInput(base.series)}
 						chirpsFactors={runChirpsFactors(sum)}
-						observedOrigin={originOfInput(base.series, (fit as { flowKind?: string }).flowKind)}
+						observedOrigin={originOfFit(base.series, fit as { flowKind?: string; siteNodeId?: string | null })}
 					/>
 				{:else}
 					<p class="na">Not assessed: the parameters don’t come from a stored automatic fit, so there are no split-sample or dry → wet scores (C6).</p>
@@ -578,6 +566,36 @@
 							</tbody>
 						</table>
 					</div>
+					{#if al.units.some((u) => u.sources.some((x) => x.capA || x.capB))}
+						<!-- evidence-6: a capped run's cap, per unit and source (RunSummary.allocations); an older pack's document has none. -->
+						<h3>What the cap held back</h3>
+						<p class="small muted">
+							A capped run holds each unit’s use to its registered volume and its licence’s months of use and maximum rate. A day counts when the source took all the room
+							the licence left it and the unit still went short; it is put to the limit that set the room that day.
+						</p>
+						<div class="table-wrap">
+							<table class="data compact" data-testid="evidence-allocation-cap">
+								<thead>
+									<tr>
+										<th scope="col">Unit and source</th>
+										<th scope="col">Baseline</th>
+										{#if app}<th scope="col">Application</th>{/if}
+									</tr>
+								</thead>
+								<tbody>
+									{#each al.units as u (u.nodeId)}
+										{#each u.sources.filter((x) => x.capA || x.capB) as src (src.waterSource)}
+											<tr>
+												<th scope="row">{unitSourceLabel(u, src)}</th>
+												<td>{src.capA ? capYearsText({ nodeId: u.nodeId, waterSource: src.waterSource, ...src.capA }) : 'Not capped'}</td>
+												{#if app}<td>{src.capB ? capYearsText({ nodeId: u.nodeId, waterSource: src.waterSource, ...src.capB }) : 'Not capped'}</td>{/if}
+											</tr>
+										{/each}
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
 				{/if}
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>

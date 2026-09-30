@@ -1615,6 +1615,19 @@ export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'indus
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';
 
+/**
+ * A cap run's water years for one unit and source (GET …/runs/:runId/allocations
+ * `capYears`, from RunSummary.allocations): the years the registered volume was
+ * used up, and the days per year the licence limit held use back, by limit
+ * (engine ≥ 1.40.0; null on an older run).
+ */
+export interface AllocationCapYears {
+	nodeId: string;
+	waterSource: AllocationWaterSourceKind;
+	capReached: { waterYear: number; budgetM3: number; usedM3: number }[];
+	limitBound: { waterYear: number; days: number; volumeDays: number; rateDays: number; monthsDays: number }[] | null;
+}
+
 /** A registered or licensed volume (GET /projects/:id/allocations). */
 export interface Allocation {
 	id: string;
@@ -1820,7 +1833,7 @@ export interface AutoCalibration {
 	status: 'running' | 'complete' | 'failed';
 	rulesRevision: number;
 	rules: CalibrationRules;
-	plan: { flowKind: string; validationRecord: string | null; years: FlaggedYearShare[]; ruleExclusions: CalibrationExclusion[]; notes: string[]; cases: { label: string }[] };
+	plan: { flowKind: string; /** The calibration site (engine ≥ 1.41.0): null = the outlet; absent on a run from before. */ siteNodeId?: string | null; validationRecord: string | null; years: FlaggedYearShare[]; ruleExclusions: CalibrationExclusion[]; notes: string[]; cases: { label: string }[] };
 	cases: AutoCalibrationCase[];
 	report: { chosen: number | null; notes: string[] } | null;
 	chosen: number | null;

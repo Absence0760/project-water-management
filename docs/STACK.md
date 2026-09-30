@@ -147,8 +147,10 @@ pnpm check:renderer-image   # build the report renderer's container image and sm
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
+pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
+pnpm gen:e2e:timings       # refresh e2e/shard-timings.json (CI's e2e shards are packed by it) from the newest green main run; needs gh (e2e/README.md § CI)
 pnpm gen:liability          # regenerate the known limitations, the engine errata and the methodology hashes from engine-audit.md, engine-errata.md and docs/methodology/ (after changing any)
 pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
                              # packages/engine/src/languages.ts); check:i18n checks every language
@@ -238,7 +240,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
-- `docs/testing.md`: which test command when, and how long each takes
+- `docs/testing.md`: which test command when, and how long each takes; `verify/README.md`: the independent cross-check of the engine (what it covers, its findings, phase 2)
 - `docs/contributing.md`: the git workflow for sessions sharing a checkout, code organization, the root scripts format, and which files the templates repo owns; `.claude/README.md`: the Claude agents and commands
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
@@ -317,7 +319,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside, and the
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python's stdlib `unittest` for the importer (`scripts/wbt-import/`) and the cross-check (`verify/`) aside, and the
   dependency-free CI/release guards under `scripts/` (and `e2e/support/*.test.ts`) use Node's built-in `node:test`
   (the estate pattern), since the root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.

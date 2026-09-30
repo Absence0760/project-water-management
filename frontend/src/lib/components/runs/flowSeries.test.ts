@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_SERIES_LABEL } from '@water-management/engine';
-import { ewrChartSeries, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
+import { calibrationSiteOf, ewrChartSeries, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
 
 const d = (v: number) => ({ startDate: '2020-01-01', values: [v, v] });
 const conv = (s: { values: (number | null)[] }) => s.values.map((v) => (v == null ? null : v * 10));
@@ -40,6 +40,19 @@ describe('observed flow by record (issue #45)', () => {
 			])
 		).toEqual({ observed: 'logger', observedOther: 'gauge' });
 		expect(observedSources([])).toEqual({});
+	});
+
+	it('finds the calibration site from its node’s observed series, and reads that node’s records (engine ≥ 1.41.0)', () => {
+		const refs = [
+			ref('observed_flow', OBSERVED_SERIES_LABEL.flow_observed_m3s),
+			ref('observed_flow', OBSERVED_SERIES_LABEL.flow_logger_m3s, 'weir'),
+			ref('observed_flow_other', OBSERVED_SERIES_LABEL.flow_observed_m3s, 'weir'),
+			ref('outflow', 'Outflow', 'weir')
+		];
+		expect(calibrationSiteOf(refs)).toBe('weir');
+		expect(observedSources(refs, 'weir')).toEqual({ observed: 'logger', observedOther: 'gauge' });
+		expect(observedSources(refs)).toEqual({ observed: 'gauge' });
+		expect(calibrationSiteOf(refs.slice(0, 1))).toBeNull();
 	});
 
 	it('labels one record by its instrument, never plain "Observed" for a logger', () => {

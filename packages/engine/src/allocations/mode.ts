@@ -191,6 +191,33 @@ export function dailyLimits(allocs: readonly AllocationEntry[], source: Allocati
 }
 
 /**
+ * The run days outside a licence's months of use (`cap` mode, engine ≥
+ * 1.40.0), for one water source: 1 on a day some allocation of `source` is in
+ * force (its validity dates) and none of those in force may use the day's
+ * month (dailyLimits gives 0 then, whatever the rates); else 0. null when no
+ * allocation of the source states months of use.
+ */
+export function outsideMonths(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): Uint8Array | null {
+	const own = allocs.filter((a) => a.waterSource === source);
+	if (!own.some((a) => a.months != null && a.months.length > 0)) return null;
+	const span = own.map((a) => ({ lo: a.validFrom ? toEpochDay(a.validFrom) : -Infinity, hi: a.validTo ? toEpochDay(a.validTo) : Infinity, months: a.months?.length ? new Set(a.months) : null }));
+	const out = new Uint8Array(days);
+	for (let t = 0; t < days; t++) {
+		const d = start + t;
+		const m = monthOfEpochDay(d);
+		let inForce = false;
+		let may = false;
+		for (const a of span) {
+			if (d < a.lo || d > a.hi) continue;
+			inForce = true;
+			if (!a.months || a.months.has(m)) may = true;
+		}
+		out[t] = inForce && !may ? 1 : 0;
+	}
+	return out;
+}
+
+/**
  * `fullAllocation`: the factor each run day's demand is scaled by, one per
  * water year: the registered volume (both sources) in force over the run's
  * days of the year ÷ the unit's abstraction demand over them (`demand`,
@@ -250,7 +277,8 @@ export function fullAllocationFactors(
 interface ModePlanNode {
 	demand: Float64Array;
 	irrigationEfficiency: number;
-	objects?: { demand: Float64Array[]; total: Float64Array };
+	/** `floor` and `restricted` (engine ≥ 1.44.0): a restricted day's rescaling never takes an object below its basic-needs floor. */
+	objects?: { demand: Float64Array[]; total: Float64Array; floor?: readonly (number | null)[]; restricted?: Uint8Array | null };
 	borehole?: unknown;
 	allocationCap?: AllocationCap;
 }
@@ -375,7 +403,14 @@ export function planAllocations(
 		const factor = scaleDemandToAllocation(ap, i, D, start, days, nodes[i]!.name, warnings)!;
 		p.demand = Float64Array.from(p.demand, (v, t) => v * factor[t]!);
 		if (p.objects) {
-			const demand = p.objects.demand.map((d) => Float64Array.from(d, (v, t) => v * factor[t]!));
+			// A restriction what-if on a full-allocation run (engine ≥ 1.44.0, issue #123): on a day the unit is
+			// restricted, an object with a basic-needs floor keeps MIN(floor, its restricted demand), as the
+			// restriction alone would leave it; the rest of its demand, and every other day, scale as before.
+			const { floor, restricted } = p.objects;
+			const demand = p.objects.demand.map((d, k) => {
+				const fl = floor?.[k] ?? null;
+				return Float64Array.from(d, (v, t) => (fl !== null && restricted?.[t] ? Math.max(v * factor[t]!, Math.min(fl, v)) : v * factor[t]!));
+			});
 			const total = new Float64Array(days);
 			for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
 			p.objects = { ...p.objects, demand, total };
@@ -383,9 +418,33 @@ export function planAllocations(
 	}
 }
 
+/**
+ * Whether the licence limit bound a capped source on a day, and which limit
+ * (engine ≥ 1.40.0, ../run.ts capYears): the source took all its room, MIN(`left` of the year's
+ * volume, the day's `limit`), within float noise, and the unit still went
+ * short (`deficit` > 0 beyond noise on its `demand`). The room is what was
+ * left when that is no more than the limit, within 10⁻⁹ of the year's
+ * `budget` ('volumeDays'), else the limit:
+ * on a day `outside` the months of use (outsideMonths) 'monthsDays', else
+ * the maximum rate ('rateDays', a rate of 0 included). null when it didn't bind.
+ * It says which limit set the room on a short day, not that the limit alone
+ * caused the shortfall: a day the river or dam had exactly the room left
+ * counts too, and outside the months every short day does. Also ../verify/checks.ts
+ * checkAllocations, which redoes it from the stored columns.
+ */
+export function limitBoundKind(left: number, limit: number, outside: boolean, use: number, demand: number, deficit: number, budget: number): 'volumeDays' | 'rateDays' | 'monthsDays' | null {
+	if (!(deficit > 1e-9 * Math.max(demand, 1))) return null;
+	const room = Math.min(left, limit);
+	if (use < room - 1e-9 * Math.max(room, 1)) return null;
+	// What is left carries the year's summing noise: a volume used up to within 10⁻⁹ of the budget is used up.
+	return left <= limit + 1e-9 * Math.max(budget, 1) ? 'volumeDays' : outside ? 'monthsDays' : 'rateDays';
+}
+
 /** The run series the modes add (engine ≥ 1.18.0), per farm or water user they touch. */
 export const ALLOCATION_SERIES = {
 	surfaceRoom: { key: 'allocation_room_surface', label: 'Allocation cap: surface water it may take today (what is left of the water year’s volume, within the licence’s months and rate)' },
 	groundwaterRoom: { key: 'allocation_room_groundwater', label: 'Allocation cap: groundwater it may take today (what is left of the water year’s volume, within the licence’s months and rate)' },
+	surfaceLeft: { key: 'allocation_left_surface', label: 'Allocation cap: what is left of the water year’s surface-water volume (start of the day, before the licence’s months and rate)' },
+	groundwaterLeft: { key: 'allocation_left_groundwater', label: 'Allocation cap: what is left of the water year’s groundwater volume (start of the day, before the licence’s months and rate)' },
 	demandFactor: { key: 'allocation_demand_factor', label: 'Full allocation: demand × this factor (the water year’s registered volume ÷ its demand)' }
 } as const;

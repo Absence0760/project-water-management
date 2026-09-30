@@ -728,7 +728,9 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },
 	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
-	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') }
+	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') },
+	// Engine ≥ 1.41.0; a snapshot without it calibrated at the outlet. Only calibration reads it, never the run.
+	calibrationSiteNodeId: { label: 'Calibration site', fmt: (v) => (v ? `gauge node ${String(v)}` : 'the outlet') }
 };
 /** Engine ≥ 0.31.0; a snapshot without settings.pe ran pan coefficient × A-pan. */
 const PE_LABEL = 'Potential evaporation (GR4J)';
@@ -1415,7 +1417,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
 		const describe = (x: DemandObject) =>
-			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.enabled ? '' : ', off'}`;
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.enabled ? '' : ', off'}`;
 		// No schedule, null and an empty one all run the same (engine ≥ 1.17.0). Each window in a fixed
 		// key order, since a model read back from jsonb has its keys in Postgres's order, not the editor's.
 		const scheduleOf = (x: DemandObject) =>
@@ -1427,8 +1429,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [x, y] of objs.pairs) {
 			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
+			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
+			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
-			if (moved || scheduleChanged || fields.some((f) => !same(x[f], y[f])))
+			if (moved || scheduleChanged || populationChanged || fields.some((f) => !same(x[f], y[f])))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}` });
 		}
 	}
@@ -1515,6 +1519,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const sizing = (t: Transfer) => (t.sizing === 'capacity' ? 'up to capacity' : "to the destination's need");
 		if ((x.sizing ?? 'demand') !== (y.sizing ?? 'demand')) parts.push(`sized ${sizing(x)} → ${sizing(y)}`);
 		if (!!x.topUpDam !== !!y.topUpDam) parts.push(y.topUpDam ? "now tops up the destination's dam" : "no longer tops up the destination's dam");
+		// Canal seepage back to the river (engine ≥ 1.42.0): the share, and where it rejoins (by name, A's in B's names).
+		if ((x.lossReturnPct ?? 0) !== (y.lossReturnPct ?? 0)) parts.push(`share of the losses seeping back to the river ${pct(x.lossReturnPct ?? 0)} → ${pct(y.lossReturnPct ?? 0)}`);
+		const backA = x.lossReturnNodeId ? (nodeRename.get(x.lossReturnNodeId) ?? na.node(x.lossReturnNodeId)) : null;
+		const backB = y.lossReturnNodeId ? nb.node(y.lossReturnNodeId) : null;
+		if (backA !== backB) parts.push(`seepage rejoins below ${backA ?? 'the source'} → ${backB ?? 'the source'}`);
 		return parts;
 	};
 	for (const t of transfers.onlyA) {
