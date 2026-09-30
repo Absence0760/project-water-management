@@ -802,7 +802,8 @@ same way on every screen:
   `form` attribute). With a file read but not uploaded, **Cancel**, the close
   button and Esc ask "Discard the file?" first (the confirmation dialog)
   (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
-  question). Closing gives focus back to what opened it
+  question, on the window, so an Esc pressed after the focus fell to the
+  page's body asks too). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
   decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
@@ -2319,7 +2320,10 @@ name focused. The sheet shows the factors four to a row (labelled "Orchard
 crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
 much. **Remove crop** asks first when the crop is planted anywhere, removes
-it with its areas, and closes the sheet. It edits the shared `ModelEditor`
+it with its areas, and closes the sheet. The Edit button that opened it went
+with its row, so the focus moves to the Edit button now in that place in the
+list (the next crop's, or the last one's), or to **Add crop** once the list is
+empty (`CropSheet` `onremove`, `CropsTab`'s `removed`). It edits the shared `ModelEditor`
 and, being modal, carries the save row (`ModelSaveRow`); a viewer gets the
 values read-only and Close. `Dialog` `side`, full width on a phone.
 
@@ -5435,7 +5439,13 @@ name", "chosen by you"); type and source share a column. **Import N rows**
 preview and goes back to the file picker, keeping the kind and reference) stores the valid ones, closes the
 sheet and says how many were imported, left out and still unmatched. Errors
 (a refused file, a file already imported) show in an alert in the sheet;
-closing the sheet drops a preview.
+closing the sheet drops a preview. While the file is read or the import runs
+the sheet can't be closed: Close is disabled, and Escape and the ✕ do nothing
+(`beforeclose`); while importing, a status line says "Importing… the sheet
+closes when it's done." A read or import that answers after the sheet was
+closed some other way (Back takes `import=1` away) leaves the sheet as it now
+is: a reopened sheet isn't filled or shut by the older request, and a
+finished import is still reported on the page.
 
 **Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
@@ -6624,7 +6634,9 @@ methods and verify pages (their readers are assessors).
   its own language with its own `lang` (`LanguageSwitch.test.ts`,
   `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
-  also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
+  also sets the farm view's volume unit (m³ or ML; saved as chosen, one save
+after another in order, and a save that fails puts the radios back on the
+saved unit with the error above them). There it is `segmented`:
   the two buttons joined into one control sized like the form fields
   (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
@@ -6950,7 +6962,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   card's footnote (also each starred row's description) says "Not switched
   on for this catchment yet: you get nothing until the WUA turns it on." A
   catchment muted by a digest's unsubscribe says so, with *Turn alert emails
-  back on*. An owner's four catchments fit 1440 × 960 unscrolled; thirty
+  back on*; once it is, the note and its button go and the focus moves to
+  the card's title. A save that fails shows the error in the card and puts
+  the switch back where the server has it (each radio is set from the
+  server's answer, not left as picked). An owner's four catchments fit 1440 × 960 unscrolled; thirty
   farms read as two columns of rows (`alerts.spec.ts` pins both, and the
   phone).
 - **Paused alert emails** (translated; on `/account/alerts` and in the
@@ -6961,8 +6976,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   marked as spam, so we stopped sending."), "Once <address> can receive
   email again, turn alert emails back on. Your choices are kept.", and
   **Turn alert emails back on** (`POST /me/alerts/resume`; "Alert emails are
-  back on." in a status line). Turned back on and refused again within a
-  day, it says to check the address and try tomorrow.
+  back on." in a status line). The banner and its button go, so the focus
+  moves to a title that stays: the page's title on `/account/alerts`, the
+  **Alert emails** panel's title on the account page. Turned back on and
+  refused again within a day, it says to check the address and try tomorrow.
 - **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
   signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
   token from the fragment (`#t=…`) once, strips it from the address bar,
