@@ -292,9 +292,9 @@ test('an application’s packs show in the Applications tab and its panel; a new
 	await expect(page).toHaveURL(/\/packs\/[0-9a-f-]+$/);
 	const v1 = page.url().split('/').pop()!;
 	await ready(page);
-	// The licence impact board reads live series and settings a pack-1 manifest doesn't freeze: the pack says so instead.
-	await expect(page.getByTestId('evidence-impact-board')).toHaveCount(0);
-	await expect(page.getByTestId('evidence-impact-board-omitted')).toContainText('Licence impact by year class is not part of this pack');
+	// The licence impact board is in the manifest (evidence-5), so the pack prints it, not the note an older pack shows.
+	await expect(page.getByTestId('evidence-impact-board').getByRole('heading', { name: 'Impact by year class' })).toBeVisible();
+	await expect(page.getByTestId('evidence-impact-board-omitted')).toHaveCount(0);
 	await signPack(page.request, project.id, v1);
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/packs/${v1}/issue`, { data: {} })).status()).toBe(200);
 	const first = await getPack(page.request, project.id, v1);

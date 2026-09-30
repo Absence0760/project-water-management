@@ -6705,7 +6705,9 @@ changes, so `ENGINE_VERSION` doesn't move. Pure
 (`packages/engine/src/views/licenceImpact.ts`). The design is
 [design/planning-outputs.md §3.7](./design/planning-outputs.md#37-r7-licence-impact-by-year-class-m-inside-the-evidence-report)
 (sketch S4, finding 5); the board is on page 1 of the impact report
-([ui.md § Report](./ui.md#report)).
+([ui.md § Report](./ui.md#report)) and of the evidence report, where the
+engine's `evidenceReport` builds it into the document
+(`evidence/impact.ts`, report format `evidence-5`) so an issued pack freezes it.
 
 `licenceImpactByYearClass({ background, application, siteNodeId?, yearClassMethod? })`
 compares a **background** run (what the impact is judged against: the

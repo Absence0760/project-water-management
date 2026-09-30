@@ -15,6 +15,8 @@ import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import type { Band } from '../uncertainty/bands';
 import type { EnsembleSummary } from '../uncertainty/ensemble';
+import type { LicenceImpact } from '../views/licenceImpact';
+import type { YearClassMethod } from '../views/yearClasses';
 import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } from '../uncertainty/options';
 import type { PairedSummary } from '../uncertainty/paired';
 
@@ -31,8 +33,10 @@ import type { PairedSummary } from '../uncertainty/paired';
  * works" (`ewrBelowWorks`); paired bands on the supply rows and in § 4 (`EvidenceUser.change`);
  * "served in full while the site fails" (`servedWhileFailing`, § 4, with its flag); and the
  * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.33.0).
+ * evidence-5: page 1's licence impact by year class (`licenceImpact`, issue #53 R7), built
+ * here from the runs' daily series instead of in the browser, so an issued pack freezes it.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-4';
+export const EVIDENCE_REPORT_VERSION = 'evidence-5';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -196,6 +200,25 @@ export interface EvidenceInput {
 	otherApplicationsTruncated: boolean;
 	/** What the report cites for its methods and limits (the engine's generated lists). */
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
+	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
+	impact?: EvidenceImpactInput | null;
+}
+
+/**
+ * The licence impact board's inputs (issue #53 R7): the project's outcome
+ * settings (settings.outcomes, which no run records) and three stored daily
+ * series at the outlet. A value is null where the stored series has a gap
+ * (JSON has no NaN); a series is null when the run hasn't one.
+ */
+export interface EvidenceImpactInput {
+	yearClassMethod: YearClassMethod;
+	/** The Reserve site the project's outcome matrix reads: null = the outlet, else a gauge. */
+	siteNodeId: string | null;
+	series: {
+		backgroundNatural: (number | null)[] | null;
+		backgroundEwrShortfall: (number | null)[] | null;
+		applicationEwrShortfall: (number | null)[] | null;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -537,6 +560,32 @@ export interface EvidenceAllocations {
 	notMatchedB: number | null;
 }
 
+/** Why the licence impact board couldn't be built; the page words it. */
+export type EvidenceLicenceImpactUnavailable =
+	/** The report was built without the board's inputs. */
+	| 'notBuilt'
+	/** The baseline has no natural flow series, so its water years can't be classed. */
+	| 'noNaturalFlow'
+	/** A run predates the water account (engine 0.32.0). */
+	| 'noWaterAccount'
+	/** A run has no ewr_shortfall series, so its days below the EWR can't be counted. */
+	| 'noEwrShortfall'
+	/** Anything else; `detail` has the engine's message. */
+	| 'failed';
+
+/** Page 1's licence impact by year class: the baseline as the background, the application beside it. */
+export interface EvidenceLicenceImpact {
+	/** As the project set it when the report was built. */
+	yearClassMethod: YearClassMethod;
+	/** The Reserve site the project asked for (settings.outcomes.siteNodeId): null = the outlet; `name` is null when the baseline's model hasn't the node. */
+	requestedSite: { nodeId: string; name: string | null } | null;
+	/** The site read: null = the outlet, else the gauge and its name in the baseline's model. */
+	site: { nodeId: string; name: string } | null;
+	/** The requested gauge has no Reserve results in one of the runs, so the board reads the outlet. */
+	siteFellBack: boolean;
+	result: { status: 'ok'; impact: LicenceImpact } | { status: 'unavailable'; reason: EvidenceLicenceImpactUnavailable; detail: string | null };
+}
+
 export interface EvidenceReport {
 	version: typeof EVIDENCE_REPORT_VERSION;
 	mode: EvidenceMode;
@@ -625,6 +674,8 @@ export interface EvidenceReport {
 	cumulative: EvidenceCumulative;
 	/** § 5: registered water use against modelled use (WP-3.10). */
 	allocations: EvidenceAllocations;
+	/** Page 1's licence impact by year class (issue #53 R7, evidence-5); null for baseline evidence. Absent from an older pack's document. */
+	licenceImpact?: EvidenceLicenceImpact | null;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;
