@@ -355,7 +355,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'A dam loses open-water evaporation from its surface and catches the rain falling on it, every day before irrigation, in m³/day.',
 		units: 'm³/day; area m²; factor × A-pan',
 		category: 'farm',
-		fields: ['settings.lakeEvapFactor', 'settings.lakeEvapFactorMonthly', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam']
+		fields: ['settings.lakeEvapFactor', 'settings.lakeEvapFactorMonthly', 'settings.lakeEvapFactorSource', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam']
 	},
 	{
 		id: 'dam-seepage',

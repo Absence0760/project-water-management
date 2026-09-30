@@ -119,4 +119,6 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	// A preset replaces the row and names itself in the note.
 	await page.getByLabel('Pan-coefficient preset').selectOption({ label: 'Generic (flat 0.70)' });
 	await expect(page.getByLabel('Pan coefficient source')).toHaveValue(/^Generic \(flat 0\.70\) preset: indicative, from FAO-56 Table 5/);
+	// The picker is an action, not a setting: it goes back to "Choose a preset…", so the same preset can be picked again.
+	await expect(page.getByLabel('Pan-coefficient preset')).toHaveValue('');
 });

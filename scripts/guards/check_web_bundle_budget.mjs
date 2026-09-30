@@ -1571,15 +1571,21 @@
 //             LineChart's lanes: +2 KB (1306 → 1308 with main @ 8266a682);
 //             measured 1317 locally with #252 merged, main @ 17c4a590;
 //             CI runs ~2 KB above that). Headroom ~3 KB.
-// 2026-09-30  total 1322 → 1325 KB (the combined UI/UX round: issue #137's
+// 2026-09-30  total 1322 → 1324 KB (engine 1.49.0, dam evaporation presets:
+//             the engine's lake-factor preset table and fill, Settings'
+//             preset picker, source note and stale-preset warning, the help
+//             article's paragraph; +1 976 bytes gzipped; measured 1319
+//             locally with #257 merged, main @ ede070dc; CI runs ~2 KB
+//             above that). Headroom ~3 KB.
+// 2026-09-30  total 1324 → 1327 KB (the combined UI/UX round: issue #137's
 //             landing page prerendered once per language, /welcome and
 //             /welcome/af, +1.6 KB: the language switch's link form, the
 //             hreflang and og:locale tags, the route's load and entries, the
 //             root layout's URL-language step; the project list's team filter
 //             (#176) and the owner's share-link list, partly offset by the
-//             portfolio page's removal). Measured 1319 locally on the combined
-//             branch with main @ ede070dc; CI runs ~2 KB above that. Headroom
-//             ~4 KB.
+//             portfolio page's removal). Measured 1322 locally on the combined
+//             branch with main @ 3571e104; CI runs ~2 KB above that. Headroom
+//             ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1590,7 +1596,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1325,
+	totalCodeKb: 1327,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
