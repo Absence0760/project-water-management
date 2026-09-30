@@ -3286,8 +3286,12 @@ from the WP:
       `JobHandler.alsoRole`, so the job dies once they lose the role or the
       dam. Tests: `yield/contributor.db.test.ts` (positive controls and
       fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
-      allowlist). Left for the applicant's view of results below: a Yield
-      panel on the Applicant view (the API is ready).
+      allowlist). The Yield panel on the Applicant view followed in #73
+      (`applications.spec.ts`): it offers the applicant only their own units
+      and the ones their ops add, only the owner queues, and it follows the
+      job on `GET …/jobs`, which now lists a contributor their own yield jobs
+      (RLS, 096) where it had refused them, so the panel had never left
+      "Queued" nor cancelled one (`yield/contributor.db.test.ts`).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
       browser for an instant preview, through WP-1.17's preview worker
       (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
@@ -3323,18 +3327,29 @@ The first slice (migrations 044/045, [scenarios.md § Applications](./scenarios.
 built the role, its RLS, applications and their workflow, sharing, the
 Applicant view and the Applications tab. Left:
 
-- [ ] **The applicant's view of results.** An applicant runs their
-      application but sees no result: `/compare/runs` refuses a contributor
-      (it returns `inputs`, every farm), and the scenario run answers with
-      metadata only. Durable fix: a contributor projection of a scenario run
-      against its base (the roadmap's D2 default: catchment series, their own
-      nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
-      downstream: supply −4 %"), built from the run and base server-side like
-      `applicant.ts`, with the WP-2.1 string scan on its output. It must
-      also show an item the application's ops added under a hidden item's id
-      by the id the applicant gave it (the check's `reIds` map it back; the
-      run holds it under a fresh one). Trigger: the next WP-3.3 slice, before
-      an applicant uses it for real.
+- [x] **The applicant's view of results** (issue #73). An applicant ran
+      their application but saw no result: `/compare/runs` refuses a
+      contributor (it returns `inputs`), and the scenario run answered with
+      metadata only. Done in `118_applicant_results` and
+      `GET …/scenarios/:sid/results`: the server reads the run and its base
+      past RLS (`app_application_run_results`, for whoever reads the
+      application), rebuilds the check that made the run (its `reIds`), and
+      projects them (`scenarios/applicantResults.ts`, D2's default): every
+      EWR site, the catchment's flows and outlet series at five or more farm
+      holders, their own units and those their ops add in full, every other
+      unit downstream only as "Farm 3" and a whole percentage, and what ran
+      on their units, an item added under a hidden item's id shown by the id
+      they gave. A run with a baseline assumption shows the EWR only (the
+      share link's rule: such an op on a hidden farm makes the difference
+      from the base that farm's figures), and RLS now hands a contributor
+      none of that run's series (it had let them read both the catchment's
+      and their own units'). The Applicant view shows it as **Your results
+      against the baseline**. Tests: `scenarios/applicantResults.test.ts`,
+      `scenarios/results.db.test.ts` (the string scan, who may ask, RLS,
+      each with its positive control), e2e `applications.spec.ts`
+      ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+      Whether an applicant may see more (the catchment below five holders,
+      or results with a baseline assumption) is D2, below.
 - [x] **A contributor can `SELECT` their own application runs' rows**, whose
       `inputs` snapshot holds the whole base (every farm's parameters); the
       API never returns them (RLS can't hide a column). Done in
@@ -3348,7 +3363,9 @@ Applicant view and the Applications tab. Left:
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
 - [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
-      recommended defaults: D2's anonymised baseline and the outcome words
+      recommended defaults: D2's anonymised baseline and results (downstream
+      units as a whole percentage, nothing but the EWR for a run with a
+      baseline assumption) and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's

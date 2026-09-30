@@ -430,6 +430,7 @@ const ALLOWED_WITH_IDS = [
 	'PATCH /projects/:id/scenarios/:sid',
 	'DELETE /projects/:id/scenarios/:sid',
 	'GET /projects/:id/scenarios/:sid/base',
+	'GET /projects/:id/scenarios/:sid/results',
 	'POST /projects/:id/scenarios/:sid/runs',
 	'POST /projects/:id/scenarios/:sid/rebase',
 	'POST /projects/:id/scenarios/:sid/submit',
