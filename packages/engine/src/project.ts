@@ -2467,6 +2467,28 @@ export interface RunAllocationSource {
 	 * use (m³). Empty when the cap never bound.
 	 */
 	capReached?: { waterYear: number; budgetM3: number; usedM3: number }[];
+	/**
+	 * 'cap' only (engine ≥ 1.40.0): per water year (part years included), the
+	 * days the licence limit bound: the source took all the room it had that
+	 * day and the unit still went short (its deficit > 0), split by which
+	 * limit set the room: `volumeDays` what was left of the year's volume,
+	 * `rateDays` the maximum rate, `monthsDays` a month outside the months of
+	 * use (the day's limit 0 with volume left). A year the volume is used up
+	 * counts as volume, whatever the month. The run's own days: a run resumed
+	 * inside a water year counts that year from the snapshot on. Only years
+	 * with a bound day; empty when the limit never bound. Absent on older runs.
+	 */
+	limitBound?: AllocationLimitBound[];
+}
+
+/** One water year of RunAllocationSource.limitBound (engine ≥ 1.40.0). */
+export interface AllocationLimitBound {
+	waterYear: number;
+	/** Days the limit bound; volumeDays + rateDays + monthsDays. */
+	days: number;
+	volumeDays: number;
+	rateDays: number;
+	monthsDays: number;
 }
 
 /** One node's groundwater abstraction in one water year (WP-3.9, RunSummary.groundwaterAnnualUse). */

@@ -214,7 +214,9 @@ test('closing the dialog mid-import: the late answer never overwrites a new pick
 	await review(dialog, synthetic(), 'synthetic_b023');
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	await reached;
-	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	// Closing doesn't stop the request (the project still lands, below), so the button says Close, not Cancel.
+	await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	const again = await openWorkbookImport(page);
 	const answered = page.waitForResponse((r) => r.url().includes('/projects/import'));
 	release();

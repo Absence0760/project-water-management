@@ -166,7 +166,7 @@
 	</div>
 	{#snippet actions()}
 		{#if preview && (phase === 'preview' || phase === 'importing')}
-			<button type="button" class="btn" onclick={reset} disabled={phase === 'importing'}>Cancel</button>
+			<button type="button" class="btn" onclick={reset} disabled={phase === 'importing'}>Choose another file</button>
 			<button type="button" class="btn btn-primary" onclick={commit} disabled={phase === 'importing' || valid.length === 0}>
 				{phase === 'importing' ? 'Importing…' : `Import ${fmtNum(valid.length)} row${valid.length === 1 ? '' : 's'}`}
 			</button>

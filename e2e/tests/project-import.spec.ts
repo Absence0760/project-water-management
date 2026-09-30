@@ -55,6 +55,8 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 
 	// The preview: the file's name (editable), what's in it, the team and run choices.
 	await expect(dialog.getByLabel('Name')).toHaveValue(example.name);
+	// The file input it replaced had the focus: it moves to the name, not back to the dialog.
+	await expect(dialog.getByLabel('Name')).toBeFocused();
 	await expect(dialog.getByText('From droevlei_project.json')).toBeVisible();
 	const contents = dialog.getByRole('region', { name: 'In this file' });
 	await expect(contents.getByRole('definition').nth(3)).toHaveText(String(example.series.length));
@@ -67,6 +69,8 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	const done = page.getByRole('dialog', { name: 'Project imported' });
 	await expect(done.getByRole('status')).toHaveText(/Imported Droëvlei — imported into Import Hydrology\.\s+Its first run is ready on the Runs tab\./);
 	await expect(done.getByRole('alert')).toHaveCount(0);
+	// The Import button it replaced had the focus: it moves to the next step's action.
+	await expect(done.getByRole('link', { name: 'Open project' })).toBeFocused();
 	// The list behind the dialog already has it, in the team's group.
 	await done.getByRole('button', { name: 'Close', exact: true }).click();
 	const group = page.getByRole('region', { name: 'Import Hydrology' });
@@ -178,7 +182,10 @@ test('a broken file is refused and nothing is created', async ({ page, owner }) 
 	await expect(alert).toContainText('The import failed.');
 	await expect(alert).toContainText(`the network needs exactly one outflow node (drains into nothing); found ${broken.model.nodes.length}`);
 	await expect(alert).toContainText('Nothing was created.');
-	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog.getByRole('button', { name: 'Back to the preview' })).toBeFocused();
+	// Nothing is left to cancel, so the way out is Close.
+	await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
 	const list = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: unknown[] };
 	expect(list.projects).toEqual([]);

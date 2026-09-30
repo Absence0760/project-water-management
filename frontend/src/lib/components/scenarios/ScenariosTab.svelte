@@ -215,6 +215,9 @@
 	});
 	$effect(() => {
 		if (!createOpen) return;
+		// Each opening starts empty: a name typed and then cancelled (Cancel, Esc, Back) is thrown away, not shown again.
+		newName = '';
+		newBase = '';
 		createError = null;
 		void tick().then(() => document.getElementById('new-scenario-name')?.focus());
 	});

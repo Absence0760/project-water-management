@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
+import { allocationsContext, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
 
 const comparison = () =>
 	compareAllocations({
@@ -204,5 +204,38 @@ describe('licence conditions (issue #72)', () => {
 		expect(MODE_NOTE.cap).toMatch(/capped each unit’s use at its registered volume/);
 		expect(MODE_NOTE.fullAllocation).toMatch(/every registered user took their entitlement/);
 		for (const t of [MODE_NOTE.cap!, MODE_NOTE.fullAllocation!]) expect(t).not.toMatch(/lawful|unlawful|illegal|compliant/i);
+	});
+});
+
+describe('capYearsText (engine 1.40.0)', () => {
+	const at = (limitBound: { waterYear: number; days: number; volumeDays: number; rateDays: number; monthsDays: number }[] | null, reached: number[] = []) =>
+		capYearsText({ nodeId: 'a', waterSource: 'surface', capReached: reached.map((waterYear) => ({ waterYear, budgetM3: 1, usedM3: 1 })), limitBound });
+
+	it('says on how many days each limit held use back, then the years the volume was used up', () => {
+		expect(
+			at(
+				[
+					{ waterYear: 2003, days: 40, volumeDays: 30, rateDays: 4, monthsDays: 6 },
+					{ waterYear: 2004, days: 200, volumeDays: 200, rateDays: 0, monthsDays: 0 }
+				],
+				[2003, 2004]
+			)
+		).toBe('The cap held use back on 240 days in 2 water years: 230 with the volume used up, 4 at the maximum rate, 6 outside the months of use. The registered volume was used up in 2003/04 and 2004/05.');
+	});
+
+	it('names a run held only to its months, which the volume alone reads as never reached', () => {
+		expect(at([{ waterYear: 2005, days: 1, volumeDays: 0, rateDays: 0, monthsDays: 1 }])).toBe(
+			'The cap held use back on 1 day in 1 water year: 1 outside the months of use. The registered volume was never used up.'
+		);
+	});
+
+	it('says when the cap never held use back, and what an older run can’t say', () => {
+		expect(at([])).toBe('The cap never held use back. The registered volume was never used up.');
+		expect(capYearsText({ nodeId: 'a', waterSource: 'surface', capReached: [], limitBound: [] }, true)).toBe(
+			'The cap never held use back. The registered volume was never used up. These counts include the run’s forecast days, which the comparison above leaves out.'
+		);
+		expect(at(null, [2003, 2004, 2006])).toBe(
+			'The registered volume was used up in 2003/04, 2004/05 and 2006/07. (This run is from before the app counted the days the licence held use back; run the model again to see them.)'
+		);
 	});
 });

@@ -17,7 +17,7 @@ async function createThroughDialog(page: Page, name: string, description = '') {
 	const dialog = page.getByRole('dialog', { name: 'New project' });
 	await dialog.getByLabel('Name').fill(name);
 	if (description) await dialog.getByLabel(/Description/).fill(description);
-	await dialog.getByRole('button', { name: 'Create' }).click();
+	await dialog.getByRole('button', { name: 'Create project' }).click();
 	// Creating opens the new project's workspace.
 	await expect(page.getByTestId('project-name').filter({ hasText: name })).toBeVisible();
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
@@ -46,7 +46,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	const dialog = page.getByRole('dialog', { name: 'Copy project' });
 	await expect(dialog.getByLabel('Name of the copy')).toHaveValue('Example Valley — baseline (copy)');
 	await dialog.getByLabel('Name of the copy').fill('Example Valley — new orchard');
-	await dialog.getByRole('button', { name: 'Copy' }).click();
+	await dialog.getByRole('button', { name: 'Copy project' }).click();
 	await expect(dialog).toBeHidden();
 	await expect(row(page, 'Example Valley — new orchard')).toBeVisible();
 	await expect(page.getByRole('row')).toHaveCount(5);

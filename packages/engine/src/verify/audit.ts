@@ -180,6 +180,8 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	['dam_storage_set', 'a dam storage reset'],
 	[ALLOCATION_SERIES.surfaceRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterRoom.key, 'an allocation cap'],
+	[ALLOCATION_SERIES.surfaceLeft.key, 'an allocation cap'],
+	[ALLOCATION_SERIES.groundwaterLeft.key, 'an allocation cap'],
 	['senior_requirement', 'senior water users downstream'],
 	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)']
 ];

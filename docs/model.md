@@ -6402,7 +6402,9 @@ bits whatever order they came in).
   The run stores each capped source's room (`allocation_room_surface`,
   `allocation_room_groundwater`, m³ at the start of the day), and
   `RunSummary.allocations` lists per source the water years the cap bound
-  (`capReached`: use within 10⁻⁹ of the budget).
+  (`capReached`: use within 10⁻⁹ of the budget) and, per water year, the
+  days the limit held use back (`limitBound`, engine ≥ 1.40.0; see the
+  licence conditions below).
 
   The cap counts every draw from the dam as surface use, groundwater pumped
   into it included: §2.12's netting (a pumped m³ drawn back out isn't a
@@ -6472,6 +6474,33 @@ may take from April in any month at any rate. A full
 allocation doesn't apply them (it scales to the volume, keeping the unit's
 own seasonal shape), and the conditions in words are never applied.
 
+**Which limit bound** (engine ≥ 1.40.0, `allocations/mode.ts`
+`limitBoundKind`): `capReached` alone reads "never reached" for a run held
+to its rate all season or dry outside its months, so each capped source also
+carries, per water year, the days the limit bound (`limitBound`: `days`,
+split into `volumeDays`, `rateDays` and `monthsDays`, only years with such a
+day). A day counts when the source took all its room (use ≥ room − 10⁻⁹ of
+it) and the unit still went short (deficit > 10⁻⁹ of its demand), so a day
+with no demand, or one the river or dam couldn't fill anyway without the
+room being used, doesn't count. The day goes to `volumeDays` when what was
+left of the year's volume was no more than the limit (a year whose volume is
+used up counts as volume in every month), else to `monthsDays` on a day
+outside the months of use (some allocation of the source in force, none of
+them for this month: `outsideMonths`), else to `rateDays` (a stated rate of
+0 included). When a licence of the source states a month or a rate, the run
+also stores what is left of the year's volume at the start of each day
+(`allocation_left_surface`, `allocation_left_groundwater`, m³), so the room
+column no longer hides it on a day the limit binds: room = MIN(left,
+limit). A source without conditions has no such column (its room is what is
+left). The count says which limit set the room on a day the unit went short,
+not that the limit alone caused the shortfall: a day the river or dam had
+exactly the room left counts too, and outside the months every short day
+does. What is left is compared with the limit within 10⁻⁹ of the year's
+budget, so a volume used up to summing noise counts as volume. The days are
+the run's own: a run resumed inside a water year counts that year's days
+from the snapshot on (its `capReached` counts the use before it, as the cap
+does), and the whole run, a forecast tail included, is counted.
+
 **Warm starts** (§2.16): a snapshot keeps each capped unit's use so far in
 the water year (`allocationUsedM3`) and a full allocation's factor for the
 year in progress (`allocationFactor`), so a resumed run's days are the
@@ -6491,7 +6520,11 @@ volume, the licence limit recomputed from the input) and never more than the
 year's budget less its use on the run's days so far, the left part falling
 by exactly the day's use within a water year and starting again at the
 recomputed budget on 1 October, never below 0, and the day's use never above
-it; a full
+it; an `allocation_left_*` column exactly for a capped source with licence
+conditions (engine ≥ 1.40.0), within [0, the year's budget], starting at
+the budget on 1 October, falling by the day's use, with the room MIN(it, the
+limit); `limitBound` redone per day from those columns, the use, `demand` and
+`deficit` with `limitBoundKind`; a full
 allocation's factor constant within a year and each scaled unit's demand over
 the run's days of a year equal to the volume registered over them; no mode
 column in a run of another mode; and `RunSummary.allocations` equal to
@@ -6734,7 +6767,9 @@ changes, so `ENGINE_VERSION` doesn't move. Pure
 (`packages/engine/src/views/licenceImpact.ts`). The design is
 [design/planning-outputs.md §3.7](./design/planning-outputs.md#37-r7-licence-impact-by-year-class-m-inside-the-evidence-report)
 (sketch S4, finding 5); the board is on page 1 of the impact report
-([ui.md § Report](./ui.md#report)).
+([ui.md § Report](./ui.md#report)) and of the evidence report, where the
+engine's `evidenceReport` builds it into the document
+(`evidence/impact.ts`, report format `evidence-5`) so an issued pack freezes it.
 
 `licenceImpactByYearClass({ background, application, siteNodeId?, yearClassMethod? })`
 compares a **background** run (what the impact is judged against: the

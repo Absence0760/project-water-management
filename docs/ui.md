@@ -1244,7 +1244,8 @@ it scrolls, and isn't fitted to the window.
   `project/farmers.ts`). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's
   error), from a server dry run that sends nothing; **Send** then does it and
-  the table shows the results. Everyone is invited, account or not (issue
+  the table shows the results. Opened again after a send, the CSV box is
+  empty. Everyone is invited, account or not (issue
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
@@ -1408,7 +1409,9 @@ turns a project document into a new project through `POST /projects/import`:
    (farms, gauges and other water users, crops and planted areas, transfers,
    and a table of the time series with their days and dates) and *Run the
    model after importing*.
-3. **Importing:** a status line; the controls are disabled.
+3. **Importing:** a status line; the controls are disabled. The dialog's
+   Cancel reads *Close* here: closing doesn't stop the request, and the
+   list still takes the project.
 4. **Done:** "Imported *name*", plus "Its first run is ready on the Runs tab"
    after a run, or a warning with the reason when the run failed (the project
    is still imported). *Open project* goes to it; the list behind has already
@@ -1416,7 +1419,12 @@ turns a project document into a new project through `POST /projects/import`:
 5. **Failed:** the server's message (zod or model problems are listed) and
    "Nothing was created." When the server couldn't be reached, it says the
    import may or may not have gone through and to check the list first. *Back
-   to the preview* keeps the file and choices.
+   to the preview* keeps the file and choices; *Close* (nothing is left to
+   cancel) leaves.
+
+Each step that replaces the focused control moves focus on: the name when
+the preview appears, *Open project* when done, *Back to the preview* after a
+failure, the file picker after *Choose another file*.
 
 The dialog is the wide variant: full width less the page gutter on a phone.
 Its preview and submit steps take an already-parsed document
@@ -2805,7 +2813,10 @@ in view rendered), one row per day across the union of their periods, plus colum
 the model actually used that day's data — not only what checkSeries flags.
 The section header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
-un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
+un-hidden, scrolled into view and highlighted. It shows Loading… while the
+values arrive; a series whose values fail to load is named with the error and a
+**Try again** (all of them failed: in place of the table; some: above it, the
+column blank), never an endless Loading…. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
@@ -4137,7 +4148,11 @@ read it before.
   language: `noticeTextFields`; issue #58) and an optional note for the staff
   ("farmers don't see it"). **Publish** answers "Published. N farm views
   updated." **Edit notice** changes the current notice in place (`PATCH`,
-  no re-publishing): "Notice saved." A legacy-model run (a stored run from
+  no re-publishing): "Notice saved." The edit form and the publish dialog
+  keep separate notices and errors, so opening one never overwrites the
+  other's typing. A publish that succeeds but whose history refresh
+  fails still closes as published, with "The publication history couldn't
+  be refreshed: reload the page to see it." rather than an error. A legacy-model run (a stored run from
   before engine 1.0.0) says why it can't be published: that model was
   removed and the run is a workbook comparison only. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
@@ -5033,7 +5048,7 @@ them scenarios).
   runs, that the model must be run first. The chosen scenario is
   `&scenario=<id>` in the URL.
 - **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
-  it, dropping `new` in place): a name and a base run, the published run by
+  it, dropping `new` in place, and each opening starts with an empty name): a name and a base run, the published run by
   default, else the latest; scenario runs aren't offered (a scenario run
   can't be a base). **Create scenario** picks the new one and
   replaces the dialog's history entry. `new=1` opens nothing for a viewer or
@@ -5192,6 +5207,12 @@ says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
 full allocation ("… what the river would look like if every registered user
 took their entitlement, not what they take").
+In a cap run the picked unit's card says, per capped source under its water
+years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
+days the cap held use back and by which limit (the volume used up, the
+maximum rate, outside the months of use), then the years the volume was
+used up; a run before 1.40.0 says only the years, and to run again for the
+days.
 
 **The page flows** in the window's one scroll, and nothing scrolls inside a
 card: each long list shows its first few, the ones that matter most, with a
@@ -5300,7 +5321,8 @@ what the file is (WARMS extract or CSV template), a reference, the file, and
 didn't, or have problems; the table lists rows with problems first (the
 problem in red), then unmatched rows, each with a unit picker ("by farm
 name", "chosen by you"); type and source share a column. **Import N rows**
-(pinned at the sheet's foot, with Cancel) stores the valid ones, closes the
+(pinned at the sheet's foot, with **Choose another file**, which drops the
+preview and goes back to the file picker, keeping the kind and reference) stores the valid ones, closes the
 sheet and says how many were imported, left out and still unmatched. Errors
 (a refused file, a file already imported) show in an alert in the sheet;
 closing the sheet drops a preview.
@@ -5499,7 +5521,7 @@ the viewer's day, with a request's change set folded into one entry.
   its buttons (44 px targets), and the page scrolls. The two selects share a
   row, the parameter box has its own.
 - **Restore this version** (editors) opens a confirm that previews the diff,
-  with an optional reason; restore buttons are disabled while there are
+  with an optional reason (Enter in it restores, once the preview is in); restore buttons are disabled while there are
   unsaved model edits (a note says so), and a restored farm lists the
   farmers to re-link (a link to the Project page's Farmers list). After a
   restore the new entry (the restore itself) is picked, in place.
@@ -5576,7 +5598,9 @@ March") is kept against what it is about.
   around `NotesList.svelte` with `formFirst`): the add form on top, the notes
   newest first under it, scrolling inside the sheet, and **Close** pinned at
   the foot, so thirty notes push neither the form nor Close off the screen
-  (`notes.spec.ts` checks 30). It is not in the URL: it opens from inside
+  (`notes.spec.ts` checks 30). A half-typed note or an unsaved edit makes
+  Escape, the close button and **Close** ask "Discard your note?" first
+  (`NotesList`'s bindable `unsaved`). It is not in the URL: it opens from inside
   other overlays (the Node table's grid modal) and from several places that
   can show the same target at once (a node's card and its grid row), so a
   param would open two. Opened from:
@@ -5823,7 +5847,9 @@ baseline card links to the published run's report (**Report**, beside
   disabled, described by the list of what's missing, until everything is
   done (`signoffForm.ts` `signoffBlockers`). It sends back the statement's
   hash; a `409` (the statement changed) shows the error and reloads the
-  statement, which clears the ticks and the read state. The Runs tab tags a
+  statement, which clears the ticks and the read state. Once anything is
+  filled in, Escape, the close button and Cancel ask "Discard the
+  sign-off?" first. The Runs tab tags a
   signed run **Signed off**, and the History tab reads "Signed off a run as
   …, Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, …" (an older
   event: "… (SACNASP …)").
@@ -5959,13 +5985,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     one combined run, WP-3.11; *None* when there are none the reader can
     see)), with the paired band and "worse in k of n"; then **Impact by year
     class** (the impact report's `LicenceImpactBoard`, the baseline as the
-    background, the application beside it, from the three daily series
-    `loadImpactSeries` fetches before ready; the year-class method and the
-    Reserve site are the project's `settings.outcomes`, as the impact report
-    reads them; *Not enough years* per class on a short record, and the
-    note when only one run is at full allocation; an [evidence
-    pack](#evidence-pack) leaves it out and says so, since its manifest
-    doesn't freeze those inputs); *Where
+    background, the application beside it, worded by `evidenceBoard` from
+    the report's `licenceImpact`, which the engine builds on the server from
+    the runs' stored series and the project's `settings.outcomes` (the
+    year-class method and the Reserve site, as the impact report reads
+    them), so an [evidence pack](#evidence-pack) prints the same board from
+    its manifest; *Not enough years* per class on a short record, and the
+    note when only one run is at full allocation); *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -6078,12 +6104,10 @@ pack.
   with **Try again**, and `data-report-ready` stays set. Only the latest
   load is applied, so following **Open the newer version** while a load is
   in flight can't show the older pack.
-- **What isn't frozen is left out.** Page 1's licence impact by year class
-  reads the runs' daily series and the project's year-class settings, which
-  a `pack-1` manifest doesn't carry, so a pack prints a line saying it is not
-  part of the pack instead of the board (tracked in
-  [followups.md § Evidence report](./followups.md#evidence-report-issue-71):
-  the manifest will carry it).
+- **What isn't frozen is left out.** A pack drafted before report format
+  `evidence-5` has no licence impact board in its manifest, so it prints a
+  line saying the board is not part of the pack (a new version carries it)
+  instead of building one from live data.
 - **The bar** (screen only): Back (to the application in Scenarios, or the
   baseline run in Runs), the status badge, **Download PDF** (the browser's
   print), **Download manifest** (the canonical RFC 8785 bytes the hash is
