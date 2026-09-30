@@ -244,6 +244,10 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	const farmRow = compare.getByRole('region', { name: 'Hydrological units' }).getByRole('row', { name: /^Upper farm/ });
 	await expect(farmRow.getByTestId('farm-feature-avgRiverAbstractionM3Day')).toContainText('A: none (0)');
 	await expect(compare.getByTestId('farm-feature-note')).toHaveText('Pumped from the river: a run with no river pump at a hydrological unit reads as 0 there (“none”).');
+	// Assurance of supply per farm, the scenario's with the change from the base (issue #70).
+	const assurance = compare.getByRole('region', { name: 'Assurance of supply' });
+	await expect(assurance.getByRole('columnheader', { name: 'Demand days fully met' })).toBeVisible();
+	await expect(assurance.getByRole('row', { name: /^Upper farm/ })).toContainText(/\d+%/);
 	// …and the daily overlay offers the farm's river pumping, the base drawn as zeros and said so.
 	const overlay = compare.getByRole('region', { name: 'Daily series' });
 	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });

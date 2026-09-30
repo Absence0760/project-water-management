@@ -13,6 +13,7 @@
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import AssuranceDeltaTable from '$lib/components/compare/AssuranceDeltaTable.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
@@ -97,6 +98,12 @@
 					<h3 id="sc-farms-h">Hydrological units</h3>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
+				{#if data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance}
+					<section aria-labelledby="sc-assurance-h">
+						<h3 id="sc-assurance-h">Assurance of supply</h3>
+						<AssuranceDeltaTable a={data.a.run.summary.supplyAssurance} b={data.b.run.summary.supplyAssurance} />
+					</section>
+				{/if}
 				<section aria-labelledby="sc-chart-h">
 					<h3 id="sc-chart-h">Daily series</h3>
 					<Lazy load={loadOverlay}>
