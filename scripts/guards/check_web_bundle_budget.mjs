@@ -1379,12 +1379,18 @@
 // 2026-09-30  total 1235 → 1238 KB (issue #71: measured 1235 with #216's
 //             branch and main @ 3f9b4c17 merged, against #216's 1232): the
 //             registered water use section above. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1241 KB (issue #71: measured 1238 with #217's
+//             branch merged, against its 1235). The Allocations tab's
+//             over/under-use chart. No new dependency. Headroom ~3 KB.
 // 2026-09-30  total 1235 → 1239 KB (issue #71: measured 1236 with #223's
 //             branch merged, against its 1232): the issued pack's PDF. Headroom
 //             ~3 KB.
 // 2026-09-30  total 1238 → 1244 KB (issue #71: measured 1241 with main @
 //             848000ac merged). The issued pack's PDF, on top of #223's
 //             evidence packs. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1247 KB (issue #71: measured 1244 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1395,7 +1401,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1244,
+	totalCodeKb: 1247,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

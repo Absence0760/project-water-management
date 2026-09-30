@@ -35,6 +35,7 @@ describe('useRows', () => {
 		const { rows, axisMax, clipped } = useRows({ units: [unit('Upper', true, [year(2001), year(2002)])] });
 		expect(rows).toHaveLength(1);
 		expect(rows[0]!.label).toBe('Upper (the applicant’s), surface water');
+		expect([rows[0]!.name, rows[0]!.suffix]).toEqual(['Upper (the applicant’s)', ', surface water']);
 		expect(rows[0]!.marks.map((m) => [m.waterYear, m.run, m.ratio])).toEqual([
 			[2001, 'baseline', 0.5],
 			[2001, 'application', 1.2],
