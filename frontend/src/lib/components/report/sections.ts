@@ -3,8 +3,10 @@
 // print. Data-driven so the licensing evidence pack (#15) can extend the same
 // route with sections of its own. A section appears only when the run has its
 // data: the report never prints a placeholder for something that doesn't
-// exist yet (the published-by line and restriction notice wait for WP-2.3,
-// changes since the last publication for WP-2.4). Three sections close every
+// exist. A published run's cover says who published it and its restriction
+// notice, and a run with a publication before it (its own earlier one, or
+// for an unpublished run the current one) gets "Changes since the previous
+// publication" (issue #70, GET …/runs/:runId/publication). Three sections close every
 // report (WP-3.13): the validation statement, the professional sign-off
 // (saying plainly when there is none) and the disclaimer (D10). A forecast
 // run's report says on its cover that its days from the first forecast day
@@ -15,7 +17,21 @@
 import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED, REPORT_READ_FIRST, REPORT_SIGNED_BY } from '@water-management/engine';
 import type { Run, Signoff } from '$lib/api/types';
 
-export type ReportSectionId = 'cover' | 'impact' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
+export type ReportSectionId =
+	| 'cover'
+	| 'impact'
+	| 'network'
+	| 'inputs'
+	| 'calibration'
+	| 'curtailment'
+	| 'ewr'
+	| 'assurance'
+	| 'farms'
+	| 'notes'
+	| 'changes'
+	| 'validation'
+	| 'signoff'
+	| 'disclaimer';
 
 export interface ReportSection {
 	id: ReportSectionId;
@@ -28,7 +44,11 @@ export type ReportChartId = 'hydrograph' | 'ewr';
 
 type ReportRun = Pick<Run, 'summary' | 'model' | 'notes'>;
 
-export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}): ReportSection[] {
+/**
+ * `impact`: opened against a baseline (an impact report). `previousPublication`:
+ * the run has a publication before it to list the changes since.
+ */
+export function reportSections(run: ReportRun, opts: { impact?: boolean; previousPublication?: boolean } = {}): ReportSection[] {
 	const out: ReportSection[] = [{ id: 'cover', title: opts.impact ? 'Impact report' : 'Catchment report' }];
 	if (opts.impact) out.push({ id: 'impact', title: 'Impact against the baseline' });
 	if (run.model?.nodes?.length) out.push({ id: 'network', title: 'Network' });
@@ -36,8 +56,11 @@ export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}):
 	out.push({ id: 'calibration', title: 'Calibration' });
 	if (run.summary.curtailment) out.push({ id: 'curtailment', title: 'Shortfalls and curtailment' });
 	out.push({ id: 'ewr', title: 'EWR compliance' });
+	// Engine ≥ 0.32.0, with a farm or other water user to assure.
+	if (run.summary.supplyAssurance?.reliability.length) out.push({ id: 'assurance', title: 'Assurance of supply' });
 	out.push({ id: 'farms', title: 'Hydrological units, warnings and checks' });
 	if (run.notes?.trim()) out.push({ id: 'notes', title: 'Notes' });
+	if (opts.previousPublication) out.push({ id: 'changes', title: 'Changes since the previous publication' });
 	out.push({ id: 'validation', title: 'Validation statement' });
 	out.push({ id: 'signoff', title: 'Professional sign-off' });
 	out.push({ id: 'disclaimer', title: 'Disclaimer' });

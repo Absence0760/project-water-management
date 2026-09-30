@@ -632,7 +632,8 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
-  headline, farm and daily-overlay components (issue #8), where a feature
+  headline, farm, assurance-of-supply (issue #70) and daily-overlay
+  components (issue #8), where a feature
   only one side has (a river pump, boreholes, a release rule, land cover)
   reads as 0 on the other ([run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has)); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.

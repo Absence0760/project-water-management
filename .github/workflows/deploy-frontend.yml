@@ -17,7 +17,9 @@ name: Deploy frontend
 #              Actions), `production` environment with a required reviewer and
 #              a main + release-tags deployment policy, the release-tag
 #              ruleset, every AWS variable/secret set. No AWS.
-#   build      pnpm build + the CSP hash check. No AWS.
+#   build      the engine suite + a soak (the build record the report's
+#              validation statement prints), pnpm build + the CSP hash
+#              check. No AWS.
 #   deploy     `environment: production` (required reviewer, then OIDC):
 #              S3 sync + CloudFront invalidation.
 #   attach     `contents: write` only: attaches the build zip to the Release.
@@ -88,7 +90,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,6 +129,16 @@ jobs:
       # are empty, like .env.production: no puzzle, and the sign-in page says
       # to wait. svelte.config.js refuses a script URL that isn't the CAPTCHA
       # SDK's and adds its two origins to the meta CSP.
+      # The engine build record (WP-3.13, docs/model.md §2.10f): the engine's
+      # unit suite, its invariant tests included, with a soak of 1 600 random
+      # networks (4× CI's; each shard's time budget is 0.2 s a case, so a
+      # larger soak needs the budget raised first). A failure stops the
+      # release. The script puts ENGINE_BUILD in $GITHUB_ENV, which the next
+      # step's build injects (frontend/vite.config.ts), so every report of
+      # this site states the version, commit and results it shipped with.
+      - name: Engine invariants and soak (the build record)
+        run: node scripts/release/engine-build.mjs --soak-cases 1600
+
       - name: Build frontend
         env:
           SITE_ORIGIN: ${{ vars.PUBLIC_SITE_URL }}

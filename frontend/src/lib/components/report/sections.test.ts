@@ -4,24 +4,32 @@ import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED } from '@wat
 import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from './sections';
 
 type R = Pick<Run, 'summary' | 'model' | 'notes'>;
-const run = (over: { curtailment?: boolean; nodes?: number; notes?: string } = {}): R =>
+const run = (over: { curtailment?: boolean; nodes?: number; notes?: string; assurance?: number } = {}): R =>
 	({
-		summary: { farms: [], warnings: [], calibration: null, ...(over.curtailment ? { curtailment: {} } : {}) },
+		summary: {
+			farms: [],
+			warnings: [],
+			calibration: null,
+			...(over.curtailment ? { curtailment: {} } : {}),
+			...(over.assurance !== undefined ? { supplyAssurance: { reliability: Array.from({ length: over.assurance }, (_, i) => ({ nodeId: `n${i}` })) } } : {})
+		},
 		model: { nodes: Array.from({ length: over.nodes ?? 0 }, (_, i) => ({ id: `n${i}`, name: `Node ${i}` })) },
 		notes: over.notes ?? ''
 	}) as unknown as R;
 
 describe('reportSections', () => {
 	it('lists every section in the report order when the run has the data for all of them', () => {
-		expect(reportSections(run({ curtailment: true, nodes: 3, notes: 'Baseline for the licence.' })).map((s) => s.id)).toEqual([
+		expect(reportSections(run({ curtailment: true, nodes: 3, notes: 'Baseline for the licence.', assurance: 2 }), { previousPublication: true }).map((s) => s.id)).toEqual([
 			'cover',
 			'network',
 			'inputs',
 			'calibration',
 			'curtailment',
 			'ewr',
+			'assurance',
 			'farms',
 			'notes',
+			'changes',
 			'validation',
 			'signoff',
 			'disclaimer'
@@ -31,6 +39,17 @@ describe('reportSections', () => {
 	it('leaves out a section whose data the run lacks, with no placeholder', () => {
 		const ids = reportSections(run()).map((s) => s.id);
 		expect(ids).toEqual(['cover', 'inputs', 'calibration', 'ewr', 'farms', 'validation', 'signoff', 'disclaimer']);
+	});
+
+	it('prints the assurance of supply only for a run that has it with someone to assure (engine ≥ 0.32.0)', () => {
+		expect(reportSections(run({ assurance: 1 })).find((s) => s.id === 'assurance')?.title).toBe('Assurance of supply');
+		expect(reportSections(run({ assurance: 0 })).some((s) => s.id === 'assurance')).toBe(false);
+		expect(reportSections(run()).some((s) => s.id === 'assurance')).toBe(false);
+	});
+
+	it('lists the changes since the previous publication only when there is one (issue #70)', () => {
+		expect(reportSections(run(), { previousPublication: true }).find((s) => s.id === 'changes')?.title).toBe('Changes since the previous publication');
+		expect(reportSections(run()).some((s) => s.id === 'changes')).toBe(false);
 	});
 
 	it('always closes with the validation statement, the sign-off and the disclaimer (WP-3.13), even when unsigned', () => {
