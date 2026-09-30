@@ -377,7 +377,8 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(link).toHaveAttribute('href', '?tab=dams');
-	// Below the reserve strip, under the published baseline.
+	// Below the reserve strip, under the published baseline (measured once the page has stopped growing).
+	await summaryReady(page);
 	const strip = (await page.getByRole('region', { name: 'Days below the reserve' }).boundingBox())!;
 	expect((await link.boundingBox())!.y).toBeGreaterThan(strip.y);
 	const baseline = (await page.getByRole('region', { name: 'Published baseline' }).boundingBox())!;

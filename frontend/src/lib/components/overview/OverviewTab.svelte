@@ -212,11 +212,12 @@
 	// and so has its final height. The Latest run card is on the page (busy) while its record loads,
 	// and Supply by farm, the alerts and the published baseline fill in after it, so the page grows
 	// as they arrive; a test that measures the layout waits on this first (docs/ui.md § Summary).
+	// The Supply by farm chunk has arrived, or its download failed (ChunkFailed is that card's final state).
 	let supplyChunk = $state(peek(loadSupply) !== undefined);
 	$effect(() => {
 		if (!runFarms.length || supplyChunk) return;
 		const done = () => (supplyChunk = true);
-		loadOnce(loadSupply).then(done, done); // a failed chunk shows ChunkFailed: settled too
+		loadOnce(loadSupply).then(done, done);
 	});
 	let alertsReady = $state(false);
 	let baselineReady = $state(false);
