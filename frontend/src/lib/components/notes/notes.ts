@@ -12,7 +12,7 @@ export type NoteTarget =
 	| { kind: 'setting'; key: string; label: string }
 	/**
 	 * A scenario's comments (WP-3.15): `audiences` are the visibilities the
-	 * caller may post with (the server holds the rule, 113_scenario_share_notes),
+	 * caller may post with (the server holds the rule, 115_scenario_share_notes),
 	 * the first being the default.
 	 */
 	| { kind: 'scenario'; scenarioId: string; name: string; audiences: NoteVisibility[] };

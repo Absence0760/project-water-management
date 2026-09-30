@@ -1,5 +1,5 @@
 // The scenario link's answer (WP-3.15, share/links.ts toShareScenario): the
-// database's allowlist (app_share_scenario, 113_scenario_share_notes.sql) is
+// database's allowlist (app_share_scenario, 115_scenario_share_notes.sql) is
 // applied again field by field, so a key the database starts returning, or a
 // summary field a later engine adds, never reaches a signed-out reader by
 // default. A string scan in the spirit of WP-2.1's farmer-privacy guard:

@@ -3,7 +3,7 @@
 // Plain-text notes kept against a node, a run, a setting, a scenario or the
 // project. The min role is farmer on every route, and RLS does the scoping: a
 // farmer reads and writes only `farm` notes on their linked nodes, and never
-// sees a `team` note. A scenario note (WP-3.15, 113_scenario_share_notes.sql)
+// sees a `team` note. A scenario note (WP-3.15, 115_scenario_share_notes.sql)
 // has one of three more audiences, `assessors`, `parties` and
 // `public_participation` (docs/data-model.md § Notes has the matrix), and
 // every edit of one keeps the text it replaced (note_revision). The checks
@@ -30,7 +30,7 @@ export const SETTING_KEY = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$/;
 const uuid = z.string().regex(UUID, 'not a valid id');
 const settingKey = z.string().max(100).regex(SETTING_KEY, 'not a settings key');
 
-/** Who reads a note (037, 113): the two node-note audiences and the three on a scenario. */
+/** Who reads a note (037, 115): the two node-note audiences and the three on a scenario. */
 export const NOTE_VISIBILITIES = ['team', 'farm', 'assessors', 'parties', 'public_participation'] as const;
 export type NoteVisibility = (typeof NOTE_VISIBILITIES)[number];
 /** The audiences only a scenario note has (note_participation_on_scenario). */

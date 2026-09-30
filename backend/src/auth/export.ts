@@ -79,7 +79,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'model_run.notes_updated_by': { excluded: 'the project’s run note; its last editor only' },
 	'note.author_id': { section: 'notes' },
 	'note.deleted_by': { excluded: 'notes the person hid; note.deleted is in auditEvents' },
-	// Their own earlier texts of a scenario note, under that note (113_scenario_share_notes).
+	// Their own earlier texts of a scenario note, under that note (115_scenario_share_notes).
 	'note_revision.edited_by': { section: 'notes' },
 	'project.created_by': { excluded: 'the project itself; the membership is in projectMemberships' },
 	'outlook_publication.ended_by': { excluded: 'the project’s outlook publication to farmers; outlook.unpublished is in auditEvents' },

@@ -3392,7 +3392,7 @@ Applicant view and the Applications tab. Left:
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
 - [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in
-      `113_scenario_share_notes`. A submitted or decided application gets
+      `115_scenario_share_notes`. A submitted or decided application gets
       read-only share links (the Application panel's Share dialog: an
       assessor or its applicant; `POST /share/scenario`, a redacted
       projection with the EWR per site first, results only when the stamps

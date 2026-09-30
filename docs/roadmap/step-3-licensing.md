@@ -1828,7 +1828,7 @@ must build WP-2.15 Phase B.
 > Assessor and NGO access, comments on a pack and refusing an *issued* pack
 > remain with this WP.
 >
-> **Scenario half built (issue #71, `113_scenario_share_notes`):** share links
+> **Scenario half built (issue #71, `115_scenario_share_notes`):** share links
 > to a submitted or decided scenario (`app_share_scenario`, the EWR per site
 > first), scenario notes with the `assessors`, `parties` and
 > `public_participation` audiences and `note_revision`, the Share dialog and

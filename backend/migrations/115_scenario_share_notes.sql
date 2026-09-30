@@ -1,4 +1,4 @@
--- 113_scenario_share_notes — share links to one application, and comments on
+-- 115_scenario_share_notes — share links to one application, and comments on
 -- it for public participation (roadmap WP-3.15, issue #71 "comments / NGO
 -- access"; docs/data-model.md § Share links, § Notes; docs/security.md
 -- § Share links, § Notes; docs/api.md § Share, § Notes; docs/scenarios.md
@@ -135,9 +135,9 @@ ALTER TABLE share_link
 	ADD COLUMN target_id uuid,
 	ADD CONSTRAINT share_link_target_both CHECK ((target_kind IS NULL) = (target_id IS NULL));
 COMMENT ON COLUMN share_link.target_kind IS
-	'NULL: the project''s published baseline (025, WP-2.3). ''scenario'': one scenario, target_id (113, WP-3.15). Evidence packs add ''pack''. Fixed once made.';
+	'NULL: the project''s published baseline (025, WP-2.3). ''scenario'': one scenario, target_id (115, WP-3.15). Evidence packs add ''pack''. Fixed once made.';
 COMMENT ON COLUMN share_link.target_id IS
-	'The scenario a targeted link opens (113); no foreign key, since the kind picks the table: share_link_target_check checks it on insert. A deleted scenario leaves a dead link.';
+	'The scenario a targeted link opens (115); no foreign key, since the kind picks the table: share_link_target_check checks it on insert. A deleted scenario leaves a dead link.';
 
 -- The links to one scenario (its Share dialog).
 CREATE INDEX share_link_target_idx ON share_link (target_id, created_at DESC) WHERE target_id IS NOT NULL;
@@ -542,7 +542,7 @@ ALTER TABLE note ADD CONSTRAINT note_farm_on_node CHECK (visibility <> 'farm' OR
 ALTER TABLE note ADD CONSTRAINT note_participation_on_scenario
 	CHECK (visibility NOT IN ('assessors', 'parties', 'public_participation') OR scenario_id IS NOT NULL);
 COMMENT ON COLUMN note.visibility IS
-	'team: viewers and above. farm: also the farmers linked to its node (037). assessors | parties | public_participation: a scenario note''s audiences (113, WP-3.15; app_scenario_note_visible).';
+	'team: viewers and above. farm: also the farmers linked to its node (037). assessors | parties | public_participation: a scenario note''s audiences (115, WP-3.15; app_scenario_note_visible).';
 
 -- note_same_project, from 037: the scenario too (assert_same_project above).
 DROP TRIGGER note_same_project ON note;
@@ -689,7 +689,7 @@ CREATE TABLE note_revision (
 	edited_by  uuid REFERENCES app_user(id) ON DELETE SET NULL
 );
 COMMENT ON TABLE note_revision IS
-	'Each earlier text of a scenario note, written on every edit (113, WP-3.15): a participation record keeps its history. Read as the note is read; written only by note_write_revision.';
+	'Each earlier text of a scenario note, written on every edit (115, WP-3.15): a participation record keeps its history. Read as the note is read; written only by note_write_revision.';
 CREATE INDEX note_revision_note_idx ON note_revision (note_id, edited_at);
 CREATE INDEX note_revision_project_idx ON note_revision (project_id);
 CREATE INDEX note_revision_edited_by_idx ON note_revision (edited_by);

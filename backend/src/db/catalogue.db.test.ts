@@ -89,7 +89,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * is a professional's signature on a run, never changed (036_signoff.sql).
  * A farm's figures in an outlook publication are what its farmers were
  * shown (106_outlook_triggers_publication.sql). A note's earlier text is the
- * participation record (113_scenario_share_notes.sql).
+ * participation record (115_scenario_share_notes.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',
@@ -134,7 +134,7 @@ const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_s
  * water_app: a stored run input's key is the SHA-256 the database computes
  * from its text, so no caller can choose it (074_series_blob_digest,
  * app_store_series_blob). A note's earlier text is written by its trigger
- * on every edit, never by the caller (113_scenario_share_notes, note_write_revision).
+ * on every edit, never by the caller (115_scenario_share_notes, note_write_revision).
  */
 const NO_INSERT = new Set(['series_blob', 'note_revision']);
 /**

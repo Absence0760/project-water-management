@@ -267,7 +267,7 @@ const FK_SQL = `
  */
 const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
 	'note_revision.note_id': {
-		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (113)',
+		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (115)',
 		premise: 'not writable'
 	},
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },

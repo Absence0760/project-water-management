@@ -1,5 +1,5 @@
 // Share links to one scenario, and comments on it (roadmap WP-3.15, issue
-// #71; 113_scenario_share_notes.sql; docs/security.md § Share links, § Notes;
+// #71; 115_scenario_share_notes.sql; docs/security.md § Share links, § Notes;
 // docs/data-model.md § Notes). An NGO opens a submitted application's link
 // signed out, and comments as a viewer; the assessors see it. Every "cannot"
 // has its positive control (CLAUDE.md rule 5):

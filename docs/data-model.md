@@ -1530,7 +1530,7 @@ Read-only links to the current publication for people outside the project
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
-- **Targets (113_scenario_share_notes, WP-3.15).** `target_kind` (`NULL` or
+- **Targets (115_scenario_share_notes, WP-3.15).** `target_kind` (`NULL` or
   `'scenario'`; evidence packs will add `'pack'`) and `target_id` (uuid),
   both or neither (`share_link_target_both`). `NULL` is the baseline link
   above, unchanged. A scenario link's `target_id` is a scenario of the same
@@ -1574,11 +1574,11 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
   created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
   text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
-  setting_key text, scenario_id → scenario CASCADE (113), visibility 'team'
+  setting_key text, scenario_id → scenario CASCADE (115), visibility 'team'
   | 'farm' | 'assessors' | 'parties' | 'public_participation')`.
   - **The target** is a nullable typed foreign key, not a polymorphic id, so
     the foreign keys and the same-project trigger (`assert_same_project
-    ('node_id', 'run_id', 'scenario_id')`; 113 taught it `%scenario_id`)
+    ('node_id', 'run_id', 'scenario_id')`; 115 taught it `%scenario_id`)
     work. `note_one_target` allows at most one of `node_id`, `run_id`,
     `setting_key`, `scenario_id`; none is a project-level note.
     `setting_key` is a settings group (`flow`, `ewr`, …) or path
@@ -1589,7 +1589,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
   - **`visibility`**: `team` (viewers and above) or `farm` (also the farmers
     linked to the note's node). `note_farm_on_node` requires a node for
     `farm`; the API also requires the node to be a farm. A scenario note
-    (113, WP-3.15) may also be `assessors`, `parties` or
+    (115, WP-3.15) may also be `assessors`, `parties` or
     `public_participation` (`note_participation_on_scenario` requires a
     scenario for those three). Who reads (`note_select` for `team`,
     `note_select_scenario` through `app_scenario_note_visible`) and writes
@@ -1636,7 +1636,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - The API lists no deleted note to anyone. Deleting records `note.deleted`
   in the audit log; adding and editing don't (the row carries its author,
   `created_at` and `edited_at`).
-- **`note_revision`** (113, WP-3.15): `(id, note_id → note CASCADE,
+- **`note_revision`** (115, WP-3.15): `(id, note_id → note CASCADE,
   project_id → project CASCADE, body, written_at, edited_at, edited_by →
   app_user SET NULL)`, the text a scenario note had before each edit (when
   it was written, when an edit replaced it, by whom: the author, the only

@@ -675,7 +675,7 @@ result without signing in, until it expires or its owner revokes it.
   control) and `routes.test.ts` (the two reads on the public allowlist,
   answering `400` rather than `401`).
 
-### Scenario links (WP-3.15, 113_scenario_share_notes.sql)
+### Scenario links (WP-3.15, 115_scenario_share_notes.sql)
 
 A link to **one** submitted or decided scenario (an application), so an NGO
 or a catchment forum can read it during a comment period. The same token
@@ -1306,7 +1306,7 @@ In short:
   someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
   `notes/notes.db.test.ts`, with positive controls; `role-ladder.db.test.ts`
   lists the note routes among the farmer-allowed ones (`BELOW_VIEWER`).
-  **Scenario notes (WP-3.15, 113):** three more audiences, `assessors`,
+  **Scenario notes (WP-3.15, 115):** three more audiences, `assessors`,
   `parties` and `public_participation`, each read and written as the matrix
   in [data-model.md § Notes](./data-model.md#notes-037_notessql) says,
   through `SECURITY DEFINER` helpers; the viewer policy (`note_select`) now
@@ -2097,8 +2097,8 @@ PDF someone else asked for kept the person as a recipient
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
-| A scenario note's earlier texts, and who edited (113, WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
-| A public comment's author's display name, shown on the scenario's share link (113) | `note` (`public_participation`), read by `app_share_scenario` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
+| A scenario note's earlier texts, and who edited (115, WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A public comment's author's display name, shown on the scenario's share link (115) | `note` (`public_participation`), read by `app_share_scenario` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
 | Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |

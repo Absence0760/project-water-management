@@ -865,7 +865,7 @@ scenario is `'team'`, and behaves exactly as above).
 
 ### Sharing and comments (WP-3.15)
 
-`113_scenario_share_notes.sql`; [api.md § Share](./api.md#share),
+`115_scenario_share_notes.sql`; [api.md § Share](./api.md#share),
 [§ Notes](./api.md#notes); [security.md § Share
 links](./security.md#share-links).
 

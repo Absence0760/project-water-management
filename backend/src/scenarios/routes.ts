@@ -292,7 +292,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				[sid]
 			);
 			if (signed.rowCount) throw signedKept();
-			// Public comments are a participation record: the scenario_comments_kept trigger (113) refuses too.
+			// Public comments are a participation record: the scenario_comments_kept trigger (115) refuses too.
 			const { rows: commented } = await db.query<{ yes: boolean }>('SELECT app_scenario_has_public_comments($1, $2) AS yes', [id, sid]);
 			if (commented[0]?.yes) throw commentsKept();
 			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string; message?: string }) => {

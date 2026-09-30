@@ -127,7 +127,7 @@ export interface ProjectDocumentNote {
  * The project's notes for the export, as the caller sees them (RLS), without
  * deleted ones. Only viewers and above can export, and they see every
  * undeleted note, `farm` ones included, so the file is what they can read in
- * the app. Notes on a scenario (113_scenario_share_notes) stay out, as the
+ * the app. Notes on a scenario (115_scenario_share_notes) stay out, as the
  * scenarios themselves do: they are about an application, not the model.
  */
 export async function loadDocumentNotes(db: Db, projectId: string): Promise<ProjectDocumentNote[]> {

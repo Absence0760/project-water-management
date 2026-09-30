@@ -28,7 +28,7 @@ export const CreateBody = z
 			.max(SHARE_LABEL_MAX)
 			.refine((s) => !s.includes('\u0000'), 'label cannot contain NUL characters'),
 		expiresInDays: z.number().int().min(1).max(SHARE_DAYS_MAX),
-		/** A link to one scenario (WP-3.15, 113_scenario_share_notes); absent: the published baseline. */
+		/** A link to one scenario (WP-3.15, 115_scenario_share_notes); absent: the published baseline. */
 		targetKind: z.enum(SHARE_TARGET_KINDS).optional(),
 		targetId: z.string().regex(UUID, 'not a valid id').optional()
 	})
@@ -187,7 +187,7 @@ export const toShareSeries = (key: string, r: ShareSeriesRow): ShareSeries => ({
 });
 
 // ---------------------------------------------------------------------------
-// A scenario link (WP-3.15, 113_scenario_share_notes.sql app_share_scenario)
+// A scenario link (WP-3.15, 115_scenario_share_notes.sql app_share_scenario)
 // ---------------------------------------------------------------------------
 
 /** One EWR site's Reserve compliance on a shared run: counts and rates; the deficit only past the k rule. */

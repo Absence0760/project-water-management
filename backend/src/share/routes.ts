@@ -2,7 +2,7 @@
 //
 // Owners list, create and revoke links to the published baseline (RLS in
 // 025_share_links.sql enforces the same). A link to one scenario (WP-3.15,
-// 113_scenario_share_notes.sql) is made by an editor on a scenario they read,
+// 115_scenario_share_notes.sql) is made by an editor on a scenario they read,
 // or by an applicant on their own, once it is submitted or decided; the
 // assessors list and revoke every link to it, an applicant the ones they
 // made. The public reads, POST /share/view, /share/series and
