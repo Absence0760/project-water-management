@@ -2351,24 +2351,26 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | `?scenarioId=` or `?scope=all` (optional, not both: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With neither: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404` | owner; contributor with `scenarioId` |
-| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided | owner; contributor for a scenario link |
-| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made; anyone else `403`. A link is never deleted | contributor (RLS decides) |
+| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (below editor `403`; a pack of another project or none `404`) | owner; contributor with `scenarioId`; editor with `packId` |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner (`403` below editor), `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands) | owner; contributor for a scenario link; editor for a pack link |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made, an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
 | POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |
+| POST | `/share/pack` *(public)* | `{ token }` | `SharePack` (below), `Cache-Control: no-store` | – |
 
 - `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt, targetKind, targetId, mine }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
   gone; `targetKind` `null` = the baseline, `'scenario'` with `targetId` its
-  scenario; `target` = `{ name, status }` of that scenario as the caller
-  reads it under RLS, `null` for the baseline and for a scenario they can't
+  scenario, `'pack'` with `targetId` its evidence pack; `target` = `{ name, status }` of that scenario as the caller
+  reads it under RLS (a pack's: `{ name: its report's title, status, version }`), `null` for the baseline and for a target they can't
   read now (an application reopened as a draft, or deleted), whose link
   opens nothing; `mine` = the caller made it). `lastUsedAt` moves at most once an
-  hour, on a `/share/view` or `/share/scenario`.
-- A link opens **only its own target**: a scenario link answers `404` on
-  `/share/view` and `/share/series`, a baseline link `404` on
-  `/share/scenario`.
+  hour, on a `/share/view`, `/share/scenario` or `/share/pack`.
+- A link opens **only its own target**: a scenario or pack link answers
+  `404` on `/share/view` and `/share/series`, a baseline or pack link `404`
+  on `/share/scenario`, and a baseline or scenario link `404` on
+  `/share/pack`.
 - `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, notice }, nextExpectedOn } }`.
   `catchmentView = { runStart, dataUntil, runDays, season, last30, farmCount, sites }`,
   the publication's [`catchmentView`](#publication) cut to an allowlist
@@ -2411,6 +2413,30 @@ never a farm's row, name or id.
   visibility (the newest 500), oldest first, `{ body, author, createdAt, editedAt }` (the
   author's display name: posting a public comment says so). No other farm's
   name, id or figures, no member list, no e-mail, no allocation holder.
+- `SharePack` (WP-3.15, 128, `app_share_pack`, a redacted projection of
+  the pack's own frozen report,
+  [evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)):
+  `{ project: { id }, pack: { id, title, mode, version, shortCode }, verify, figures, comments }`.
+  `verify` is exactly [`GET /verify/:code`](#evidence-packs)'s `pack` for
+  it. `figures`, only while the pack is `issued` (`null` once superseded or
+  withdrawn: `verify.status`, `withdrawnReason` and `successorSha256` say
+  why):
+  `{ identity: { title, mode, baseline: { startDate, endDate, engineVersion, runoffModel }, application: { engineVersion, proposals, assumptions } | null }, volumes, rows, river, byMonth, disclaimerVersion }`,
+  where `rows` are page 1's river rows (`reserve` per site, `ewrDays`,
+  `noFlowDays`; `shortfall` and `outflowMar` only when `volumes`, i.e. 5 or
+  more farm holders and no changed baseline assumption), each
+  `{ id, subject, unit, higherIsWorse, baseline, application, change: { run, band: { n, p5, p50, p95 }, bandNote, worse: { k, n } }, notAssessed, note }`
+  (`subject` a gauge's name on a reserve row, else `null`; no label or
+  basis: a client words the row by its `id`, and a reserve row's basis
+  quotes the rule table's free-text source); `river` each EWR
+  site `{ name, isOutlet, category, monthsA, rateA, rateB, longestA, longestB, lost, gained }`
+  (the outlet's `name` `null`); `byMonth` `{ month, run, band }[]` or
+  `null`. It answers for a pack that was issued (issued, superseded or
+  withdrawn); a draft, or a pack withdrawn before it was issued, is `404`.
+  `comments` as a scenario link's (its `public_participation` notes). No
+  user, farm or allocation row, no other application, no settings, model or
+  input diff, no applicant statement, no person but the signers verify
+  names.
 - No session and no rate limit of its own: the WAF's per-IP limit on `/api/*`
   covers the reads, and a 256-bit token can't be guessed.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
@@ -2420,24 +2446,26 @@ never a farm's row, name or id.
 ## Notes
 
 Plain-text notes and comments on a node, a run, a settings group, a
-scenario or the project (WP-2.7, WP-3.15;
+scenario, an evidence pack or the project (WP-2.7, WP-3.15;
 [data-model.md § Notes](./data-model.md#notes-037_notessql)). The min role is
 **farmer** on every route, and RLS does the scoping: a farmer reads and
 writes only `farm` notes on their linked farms, and never sees a `team`
 note. A scenario's notes have three more audiences, `assessors`, `parties`
 and `public_participation`; who reads and writes each is the matrix in
-data-model.md.
+data-model.md. A pack's notes (128) are `team` (whoever reads the pack) or
+`public_participation` (any member contributor and up while the pack is
+issued with a live pack link).
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&scenarioId=&target=project\|node\|run\|setting\|scenario&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
-| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n }, scenarios: { [scenarioId]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
-| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey? \| scenarioId?, visibility?: 'team' \| 'farm' \| 'assessors' \| 'parties' \| 'public_participation' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node, the last three a scenario (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404`. On a scenario (contributor and above): its default is the caller's natural audience (an assessor: `assessors`; one of its parties: `parties`; anyone else: `public_participation`); a scenario the caller can neither read nor comment on is `404`, an audience they may not post to `403` (`public_participation` needs the scenario open for comment, for everyone: a live scenario link, or decided after it was ever shared; codes `note_comment_closed` and `note_audience_denied`) | farmer |
+| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&scenarioId=&packId=&target=project\|node\|run\|setting\|scenario\|pack&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
+| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n }, scenarios: { [scenarioId]: n }, packs: { [packId]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
+| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey? \| scenarioId? \| packId?, visibility?: 'team' \| 'farm' \| 'assessors' \| 'parties' \| 'public_participation' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node, `assessors` and `parties` a scenario, `public_participation` a scenario or a pack (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404`. On a scenario (contributor and above): its default is the caller's natural audience (an assessor: `assessors`; one of its parties: `parties`; anyone else: `public_participation`); a scenario the caller can neither read nor comment on is `404`, an audience they may not post to `403` (`public_participation` needs the scenario open for comment, for everyone: a live scenario link, or decided after it was ever shared; codes `note_comment_closed` and `note_audience_denied`). On a pack (128; contributor and above): `team` (the default for a reader of the pack) or `public_participation` (the default for anyone else); a pack the caller can neither read nor comment on is `404` (a member who could once comment on a withdrawn or superseded one gets the `403 note_comment_closed`), `public_participation` while no pack link is live `403 note_comment_closed`, a scenario audience `400` | farmer |
 | PATCH | `/projects/:id/notes/:noteId` | `{ body }` | `{ note }` with `editedAt` set. Author only (`403`) | farmer |
 | DELETE | `/projects/:id/notes/:noteId` | – | `204`: a soft delete, recorded as `note.deleted`. The author or an editor (`403`); a deleted or unknown note is `404` | farmer |
-| GET | `/projects/:id/notes/:noteId/revisions` | – | `{ note, revisions: { body, writtenAt, editedAt }[] }`: each earlier text of a scenario note, oldest first (what it said from `writtenAt` until an edit replaced it at `editedAt`); read as the note is, so a note the caller can't read (or a deleted one) is `404`. Other notes keep no history (`[]`) | farmer |
+| GET | `/projects/:id/notes/:noteId/revisions` | – | `{ note, revisions: { body, writtenAt, editedAt }[] }`: each earlier text of a scenario or pack note, oldest first (what it said from `writtenAt` until an edit replaced it at `editedAt`); read as the note is, so a note the caller can't read (or a deleted one) is `404`. Other notes keep no history (`[]`) | farmer |
 
-- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting' | 'scenario', nodeId, nodeName, runId, settingKey, scenarioId, visibility, mine, canDelete }`.
+- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting' | 'scenario' | 'pack', nodeId, nodeName, runId, settingKey, scenarioId, packId, visibility, mine, canDelete }`.
   `author` is a display name (`null` once that account is gone); `nodeName`
   is the node's name when the caller can see it; `mine` = the caller wrote
   it (and may edit it); `canDelete` = the author or an editor.

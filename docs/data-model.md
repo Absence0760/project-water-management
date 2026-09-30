@@ -1587,13 +1587,14 @@ Read-only links to the current publication for people outside the project
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
-- **Targets (115_scenario_share_notes, WP-3.15).** `target_kind` (`NULL` or
-  `'scenario'`; evidence packs will add `'pack'`) and `target_id` (uuid),
+- **Targets (115_scenario_share_notes, WP-3.15; 128_pack_share_notes).** `target_kind` (`NULL`,
+  `'scenario'` or `'pack'`) and `target_id` (uuid),
   both or neither (`share_link_target_both`). `NULL` is the baseline link
   above, unchanged. A scenario link's `target_id` is a scenario of the same
   project (the `share_link_target_check` trigger, on insert only: the target
   is fixed, water_app has no UPDATE on it, and a revoke must still work once
-  the scenario is deleted, which leaves a dead link). Indexed on
+  the scenario is deleted, which leaves a dead link); a pack link's is an
+  evidence pack of the same project (the same trigger, 128). Indexed on
   `(target_id, created_at DESC)` where set.
   - **RLS** (`app_share_link_visible` / `app_share_link_creatable`,
     `SECURITY DEFINER`): the owner reads, makes and revokes every link, as
@@ -1603,7 +1604,9 @@ Read-only links to the current publication for people outside the project
     a team scenario's ops name the real farms with their values) while it is
     `submitted` or `decided`; it is
     listed and revoked by the editors who read the scenario and by whoever
-    made it.
+    made it. A pack link (128) is made by an editor or the owner, only while
+    the pack is `issued`, and listed and revoked by the project's editors
+    (they read every pack) and the owner.
   - `app_share_view` and `app_share_series` answer an untargeted link only.
   - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
     scenario link whose application is `submitted` or `decided`, one row of
@@ -1619,6 +1622,18 @@ Read-only links to the current publication for people outside the project
     verifies. `comments` are the undeleted `public_participation` notes on
     it, the newest 500, with their authors' display names. Bumps
     `last_used_at` at most once an hour.
+  - `app_share_pack(p_hash)` (128, `SECURITY DEFINER`, `VOLATILE`): for a
+    live pack link whose pack was issued (issued, superseded or withdrawn;
+    never a draft), one row of `pack (id, project id, title, mode,
+    version), verify (app_verify_pack's object for it, unchanged), figures,
+    comments`. `figures` only while the pack is `issued`:
+    `app_share_pack_projection(manifest.report, volumes)`, an allowlist of
+    the frozen report (identity dates and versions, page 1's river rows,
+    each EWR site's compliance with the outlet unnamed, the paired change by
+    month; the volume rows only at 5 or more farm holders and no changed
+    baseline assumption). `app_share_pack_projection` and
+    `app_share_pack_band` are callable only by the schema owner. Bumps
+    `last_used_at` at most once an hour.
   - `app_run_digest` (077) is split: `app_run_digest_body(p_run)` is the
     digest, unchanged, callable only by the schema owner (and so by definer
     functions); `app_run_digest` keeps its read check and calls it.
@@ -1631,13 +1646,15 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
   created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
   text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
-  setting_key text, scenario_id → scenario CASCADE (115), visibility 'team'
-  | 'farm' | 'assessors' | 'parties' | 'public_participation')`.
+  setting_key text, scenario_id → scenario CASCADE (115), pack_id →
+  evidence_pack CASCADE (128), visibility 'team' | 'farm' | 'assessors' |
+  'parties' | 'public_participation')`.
   - **The target** is a nullable typed foreign key, not a polymorphic id, so
     the foreign keys and the same-project trigger (`assert_same_project
-    ('node_id', 'run_id', 'scenario_id')`; 115 taught it `%scenario_id`)
-    work. `note_one_target` allows at most one of `node_id`, `run_id`,
-    `setting_key`, `scenario_id`; none is a project-level note.
+    ('node_id', 'run_id', 'scenario_id', 'pack_id')`; 115 taught it
+    `%scenario_id`, 112 `%pack_id`) work. `note_one_target` allows at most
+    one of `node_id`, `run_id`, `setting_key`, `scenario_id`, `pack_id`;
+    none is a project-level note.
     `setting_key` is a settings group (`flow`, `ewr`, …) or path
     (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
   - **A note goes with its target**: a deleted node or run, or a trimmed
@@ -1648,7 +1665,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     `farm`; the API also requires the node to be a farm. A scenario note
     (115, WP-3.15) may also be `assessors`, `parties` or
     `public_participation` (`note_participation_on_scenario` requires a
-    scenario for those three). Who reads (`note_select` for `team`,
+    scenario for the first two, and a scenario or a pack for the third). Who reads (`note_select` for `team`,
     `note_select_scenario` through `app_scenario_note_visible`) and writes
     (`note_insert` through `app_scenario_note_writable`) each, on a scenario:
 
@@ -1670,6 +1687,18 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     author and to editors, as for every note. In practice: an NGO joins as a
     viewer and posts `public_participation`; the applicant and their
     consultant talk to the assessors in `parties` or `assessors`.
+  - **A pack note** (128, WP-3.15) is `team` or `public_participation`
+    only (`note_pack_audience`):
+
+    | visibility | reads | writes |
+    | --- | --- | --- |
+    | `team` | viewers and above who read the pack (`note_select`, through evidence_pack's own policy) | the same (`note_insert`) |
+    | `public_participation` | editors and above; its author; any member contributor or above while the pack is **open for comment**, or once it was ever shared and is superseded or withdrawn (`note_select_pack`, `app_pack_note_visible`) | any member contributor or above while it is open for comment (`app_pack_note_writable`) |
+
+    Open for comment (`app_pack_commentable`, members only): the pack is
+    `issued` and has a live pack link. A pack past draft is never deleted
+    (112), so its comments stay; a draft's team notes go with it (cascade).
+    Every edit of a scenario or pack note is kept (`note_write_revision`).
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
 - **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
   for the audit trail. `water_app` has no `DELETE` (the catalogue test's
