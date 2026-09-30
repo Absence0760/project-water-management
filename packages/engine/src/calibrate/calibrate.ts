@@ -534,10 +534,10 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 /**
  * What a fit at an inner gauge (engine ≥ 1.41.0) leaves out: the gauged
  * ranges and gap filling are the outlet records' settings, and the run's own
- * statistics stay at the outlet.
+ * EWR test stays the outlet's.
  */
 export const siteNote = (name: string): string =>
-	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Settings → Calibration record are the outlet records', so none applies to this record, and the run's calibration statistics and the observed-flow EWR test stay at the outlet.`;
+	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Settings → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {

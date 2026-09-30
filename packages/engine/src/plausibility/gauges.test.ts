@@ -90,7 +90,7 @@ describe('plausibility checks at gauge nodes (engine ≥ 1.4.0)', () => {
 		expect('gauges' in out.summary.plausibility!).toBe(false);
 	});
 
-	it('a gauge record changes nothing but the gauges block and its own warnings', () => {
+	it('a gauge record changes nothing but the gauges block, its EWR test (a gauge EWR site, engine ≥ 1.41.0) and its own warnings', () => {
 		const without = run(withRecords({}).input);
 		const withGauge = run(withRecords({ H: 3 }).input);
 		expect(withGauge.series).toEqual(without.series);
@@ -100,9 +100,11 @@ describe('plausibility checks at gauge nodes (engine ≥ 1.4.0)', () => {
 		const extra = withGauge.summary.warnings.filter((w) => !without.summary.warnings.includes(w));
 		expect(extra.length).toBeGreaterThan(0);
 		expect(extra.every((w) => w.startsWith('At gauge "Node H": '))).toBe(true);
-		const { plausibility: _a, warnings: _b, ...summaryRest } = withGauge.summary;
+		const { plausibility: _a, warnings: _b, catchment: { ewrAgreementSites, ...catchment }, ...summaryRest } = withGauge.summary;
 		const { plausibility: _c, warnings: _d, ...summaryRestWithout } = without.summary;
-		expect(summaryRest).toEqual(summaryRestWithout);
+		expect({ ...summaryRest, catchment }).toEqual(summaryRestWithout);
+		expect(without.summary.catchment.ewrAgreementSites).toBeUndefined();
+		expect(ewrAgreementSites?.map((x) => x.nodeId)).toEqual(['H']);
 	});
 
 	it('reports a failing gauge record at its own node (positive control: a matching one passes)', () => {

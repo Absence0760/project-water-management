@@ -454,8 +454,9 @@ export interface ProjectSettings {
 	 * the network with an observed record of its own (a GaugeSeriesKey series,
 	 * 084_gauge_records.sql). calibrate() then scores that gauge's simulated
 	 * flow against that gauge's record (calibrationFlowKind picks among its
-	 * records). The run's own calibration statistics and the observed-flow EWR
-	 * test stay at the outlet.
+	 * records), and the run's own calibration statistics (summary.calibration)
+	 * are scored there too. The outlet's observed-flow EWR test stays the
+	 * outlet's; each gauge EWR site with a record gets its own.
 	 */
 	calibrationSiteNodeId: string | null;
 	/**
@@ -647,6 +648,15 @@ export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
  * records.
  */
 export type GaugeSeriesKey = `${CalibrationFlowKind}@${string}`;
+/** The EWR agreement at one gauge EWR site with its own record (RunSummary.catchment.ewrAgreementSites). */
+export interface EwrAgreementSite {
+	nodeId: string;
+	name: string;
+	/** The gauge's record tested: the run's calibration kind when it has one, else its other record. */
+	flowKind: CalibrationFlowKind;
+	agreement: EwrAgreement;
+}
+
 export const gaugeSeriesKey = (kind: CalibrationFlowKind, nodeId: string): GaugeSeriesKey => `${kind}@${nodeId}`;
 /** The kind and node of a gauge record's key; null for any other key. */
 export function parseGaugeSeriesKey(key: string): { kind: CalibrationFlowKind; nodeId: string } | null {
@@ -2150,6 +2160,16 @@ export interface CalibrationStats {
 	 */
 	simulatedKey?: 'natural_flow' | 'simulated_outflow';
 	/**
+	 * Where the statistics were scored (engine ≥ 1.41.0,
+	 * settings.calibrationSiteNodeId, docs/model.md §2.10k): the gauge's node
+	 * id and name when the run scored a gauge inside the network (its record
+	 * against its simulated outflow, the node's `outflow` series; the run
+	 * also has the record as that node's `observed_flow` series). Absent at
+	 * the outlet, and on older runs.
+	 */
+	siteNodeId?: string;
+	siteName?: string;
+	/**
 	 * The stored calibration exclusions the run applied (engine ≥ 0.8.0), as
 	 * dates with their reasons; absent when none. Excluded days are not scored.
 	 */
@@ -2574,6 +2594,13 @@ export interface RunSummary {
 		 * on older runs.
 		 */
 		ewrAgreement?: EwrAgreement | null;
+		/**
+		 * The same EWR test at each gauge EWR site with a record of its own
+		 * (engine ≥ 1.41.0, docs/model.md §2.10k): that gauge's record against
+		 * its simulated outflow and its pragmatic EWR requirement, in node-id
+		 * order. Absent when no such site has a record, and on older runs.
+		 */
+		ewrAgreementSites?: EwrAgreementSite[];
 		/**
 		 * Days the simulated outflow at the outlet is below 1 L/s (engine ≥
 		 * 1.33.0, issue #71, ./reserve/riverMeasures.ts, docs/model.md §2.9e),

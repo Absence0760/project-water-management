@@ -216,3 +216,89 @@ describe('calibration sites', () => {
 		expect(s.skill).toBeGreaterThan(0.99);
 	});
 });
+
+describe('a run at the calibration site (engine ≥ 1.41.0)', () => {
+	const EWR = [2000, 1500, 1000, 1000, 1000, 1500, 2500, 4000, 5000, 5000, 4000, 3000];
+	const truthRun = (i: ModelInput) => runModel({ ...i, settings: { ...i.settings, gr4j: { ...TRUTH } } });
+	const series = (out: ReturnType<typeof runModel>, nodeId: string | null, key: string) => out.series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
+
+	it('scores its statistics at the gauge, with the gauge’s record beside its outflow; a gauge-only project gets statistics', () => {
+		const input = atSite(network(), 'H');
+		const out = truthRun(input);
+		expect(out.summary.calibration).toMatchObject({ siteNodeId: 'H', siteName: 'Weir', flowKind: 'flow_observed_m3s' });
+		expect(out.summary.calibration!.days).toBeGreaterThan(1000);
+		expect(out.summary.calibration!.nse).toBeGreaterThan(0.999);
+		expect(series(out, 'H', 'observed_flow')).toBeDefined();
+		// The outlet has no record, so it has no observed series of its own.
+		expect(series(out, null, 'observed_flow')).toBeUndefined();
+		expect(out.summary.warnings).not.toContain('no observed flow series: calibration statistics not computed');
+		// At the outlet (the default), the same project has none, as before.
+		const outlet = truthRun(network());
+		expect(outlet.summary.calibration).toBeNull();
+		expect(series(outlet, 'H', 'observed_flow')).toBeUndefined();
+	});
+
+	it('the default scores the outlet exactly as before', () => {
+		const input = network({ outletRecord: true, loggerAtH: true });
+		const a = truthRun(input);
+		const b = truthRun(atSite(input, null));
+		expect(b.summary.calibration).toEqual(a.summary.calibration);
+		expect(a.summary.calibration!.siteNodeId).toBeUndefined();
+		expect(a.series.filter((s) => s.nodeId !== null && s.key.startsWith('observed_flow'))).toEqual([]);
+	});
+
+	it('a fit at the gauge is in-sample for a run that scores the gauge', { timeout: 60_000 }, () => {
+		const input = atSite(network({ outletRecord: true }), 'H');
+		const r = calibrate(input, { budget: 100, validate: false, seed: 2 });
+		const record = fitRecordFromReport(r, {
+			settings: { ...input.settings, calibrationStart: null, calibrationEnd: null, panCoefficient: [], apanMm: apan, chirpsBiasCorrection: 'monthly' } as never,
+			validate: false,
+			validationRecord: null,
+			engineVersion: 'test',
+			fittedAt: '2026-09-30T00:00:00.000Z'
+		});
+		const settings = { ...input.settings, gr4j: { ...r.params, warmupDays: 365 }, fitRecord: record } as unknown as ModelInput['settings'];
+		expect(runModel({ ...input, settings }).summary.calibration!.fitStatus).toBe('fitted');
+		expect(runModel({ ...input, settings: { ...settings, calibrationSiteNodeId: null } }).summary.calibration!.fitStatus).toBe('otherPeriod');
+	});
+
+	it('warns, and scores the outlet, when the saved site’s gauge or record is gone', () => {
+		const input = network({ outletRecord: true });
+		for (const [site, text] of [
+			['gone', 'Calibration site: the calibration site is no longer in the model'],
+			['A', 'Calibration site: the calibration site "Farm A" is not a gauge'],
+			['K', 'Calibration site: the gauge "Bare gauge" has no observed flow record attached']
+		] as const) {
+			const out = truthRun(atSite(input, site));
+			expect(out.summary.warnings.some((w) => w.startsWith(text)), site).toBe(true);
+			expect(out.summary.calibration!.siteNodeId).toBeUndefined();
+			expect(out.summary.calibration!.days).toBeGreaterThan(0);
+		}
+		expect(truthRun(input).summary.warnings.some((w) => w.startsWith('Calibration site:'))).toBe(false);
+	});
+
+	it('runs the EWR test at each gauge EWR site with its own record, beside the outlet’s, which is unchanged', () => {
+		const input = network({ outletRecord: true });
+		input.settings.ewrPragmaticM3PerDay = EWR as never;
+		const out = truthRun(input);
+		const sites = out.summary.catchment.ewrAgreementSites!;
+		// The weir only: the bare gauge has no record, and the outlet keeps its own test.
+		expect(sites.map((s) => [s.nodeId, s.name, s.flowKind])).toEqual([['H', 'Weir', 'flow_observed_m3s']]);
+		const a = sites[0]!.agreement;
+		expect(a.days).toBeGreaterThan(1000);
+		// The record is the weir's simulated flow, so the model and the river agree on every day.
+		expect(a.overall.miss + a.overall.falseAlarm).toBe(0);
+		expect(a.overall.bothBelow).toBeGreaterThan(0);
+		// Its requirement is the weir's own (ewr_cumulative), not the outlet's.
+		const flow = series(out, 'H', 'outflow')!;
+		const req = series(out, 'H', 'ewr_cumulative')!;
+		const below = flow.filter((q, t) => q < req[t]! - 1e-9).length;
+		expect(a.overall.bothBelow).toBe(below);
+		// The outlet's test is what it was without the weir's record.
+		const without = { ...input, series: Object.fromEntries(Object.entries(input.series).filter(([k]) => !k.includes('@'))) } as ModelInput;
+		expect(out.summary.catchment.ewrAgreement).toEqual(truthRun(without).summary.catchment.ewrAgreement);
+		// A gauge that only measures isn't an EWR site: no test there.
+		const measuring = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'H' ? { ...n, ewrSite: false } : n)) } };
+		expect(truthRun(measuring).summary.catchment.ewrAgreementSites).toBeUndefined();
+	});
+});
