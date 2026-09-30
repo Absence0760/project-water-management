@@ -5,7 +5,7 @@
 	import { USER_PRIORITIES, type NetworkNode, type UserPriority } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import MonthFields from './MonthFields.svelte';
 	import { userDemandOf } from './users';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
@@ -17,17 +17,6 @@
 		junior: 'Junior: takes what reaches it'
 	};
 	const demand = $derived(userDemandOf(node));
-
-	function setMonth(i: number, v: number | null) {
-		const next = [...userDemandOf(node)];
-		next[i] = v ?? 0;
-		node.userDemandM3Day = next;
-	}
-
-	function fillAll() {
-		const first = userDemandOf(node)[0] ?? 0;
-		node.userDemandM3Day = new Array(12).fill(first);
-	}
 </script>
 
 <div class="user" data-testid="user-fields-{node.id}">
@@ -51,26 +40,15 @@
 			/>
 		</div>
 	</div>
-	<table class="data compact months">
-		<caption>
-			Demand from the river, m³/day, per month <HelpTip key="node.userDemandM3Day" />
-		</caption>
-		<thead>
-			<tr>{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}</tr>
-		</thead>
-		<tbody>
-			<tr>
-				{#each WATER_YEAR_MONTHS as m, i (m)}
-					<td>
-						<NumberInput label="Demand of {label} in {m}, m³/day" min={0} grouped={readonly} disabled={readonly} value={demand[i] ?? 0} onchange={(v) => setMonth(i, v)} />
-					</td>
-				{/each}
-			</tr>
-		</tbody>
-	</table>
-	{#if !readonly}
-		<button type="button" class="btn btn-sm" onclick={fillAll}>Use October’s demand for every month</button>
-	{/if}
+	<MonthFields
+		values={demand}
+		label={(m) => `Demand of ${label} in ${m}, m³/day`}
+		caption="Demand from the river, m³/day, per month"
+		help="node.userDemandM3Day"
+		fillLabel="Use October’s demand for every month"
+		{readonly}
+		onchange={(next) => (node.userDemandM3Day = next)}
+	/>
 </div>
 
 <style>
@@ -92,26 +70,6 @@
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
-	}
-	.months {
-		display: block;
-		overflow-x: auto;
-		margin: 0.5rem 0;
-	}
-	.months caption {
-		text-align: left;
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: var(--text-2);
-		padding-bottom: 0.25rem;
-	}
-	.months td {
-		min-width: 76px;
-	}
-	.months td :global(input) {
-		width: 100%;
-		text-align: right;
-		font-variant-numeric: tabular-nums;
 	}
 	@media (max-width: 640px) {
 		.field select,

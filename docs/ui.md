@@ -1913,9 +1913,62 @@ note's link on the Summary, `notes.ts` `noteHref`).
   pump capacity. A farm on river first or dam, river when low that also has
   **River to dam** (the diversion into the dam, under Routing) gets a note that
   the run counts the two as separate pumps, so one pump doing both jobs needs
-  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
-  while it still has supply settings, so they can be reset. Read-only for
-  viewers (no calculator).
+  its capacity split between them (`sharedPumpHint`; with River to dam by
+  month, any month above 0 counts, `diverts`). Under them, **Hands-off flow**
+  (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
+  flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
+  **Use October’s flow for every month**; unticked = none), and **Also leave
+  the EWR in the river** keeps the EWR required at the farm too. A line under
+  them says in plain words what the farm leaves and before which of its takes
+  (`handsOffPreview`, `handsOffTakers`): no hands-off flow (senior users only,
+  not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
+  m³/day by month", every figure as entered) with the months without one, the
+  EWR, or the larger of the two, before only the takes that apply: the river
+  pump (any rule but dam only, unless its capacity is 0), River to dam (on a
+  farm with a dam), or, on a farm with no dam, what it irrigates straight from
+  the river (what is routed to its dam). Where none applies (dam only with no
+  River to dam) it says the flow changes nothing. The save rules (farms only,
+  12 values none negative, `operatingIssues` in `lib/model/validate.ts`, a
+  test holds its kind rule to the engine's) show as alerts under the section.
+  A farm turned into a gauge or other user keeps the section while it still
+  has supply or hands-off settings (or River to dam by month, with a **Clear
+  River to dam by month** button beside the alert, since Routing is gone), so
+  they can be reset. The two boxes' help tips sit beside their labels, not in
+  them, so each box's name is its words alone. Read-only for viewers (no
+  calculator).
+- **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
+  every twelve-month row of the one-node form (the dam release, a demand
+  object's demand or profile, an other water user's demand, the hands-off flow
+  and River to dam by month) is the one component: a caption naming the group
+  (its help tip beside it, outside the name), an optional **Use October’s …
+  for every month** button on the caption line, and twelve fields, each with
+  its month shown above it and an accessible name of its own ("Demand of Town
+  in Oct, m³/day"). The fields wrap by the room the group has (a container
+  query, not the viewport): six to a row in the node sheet, four on a phone,
+  three on the narrowest, all twelve in one row only from 70rem, where each
+  still holds 12 345.5 whole. It never scrolls sideways, and the fields have
+  no spin buttons (the arrow keys still step them), so 12 345.5 and 0.0129
+  show whole for owners and viewers alike (`supply.spec.ts` checks
+  `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
+  button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
+  a profile) is in the `.ts` neighbour, unit-tested.
+- **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
+  one-node form, farms, under **River to dam** in Routing: **Set River to dam
+  by month** opens twelve m³/day fields (started from the one value, with
+  **Use October’s capacity for every month**); while it is on, the one River
+  to dam field is read-only with the hint "Not used: River to dam is set by
+  month below", and a line gives the capacity ("up to 800 m³/day", or
+  "between 800 and 12 345.5 m³/day by month") and names the months it takes
+  nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
+  dam's own hint says what it leaves in the river: senior users' demand, and
+  the hands-off flow under Supply when there is one. The months are edited
+  only here: on a farm set by month the node table's River to dam cell
+  (`NetworkTab.svelte`, desktop and phone card) has no input for the one
+  value the run ignores, but the months' range, read-only ("by month:
+  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
+  tables it is plain text. A farm with the one value edits it in the table as
+  before.
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
@@ -5313,13 +5366,18 @@ last by Ann, 12 Aug 2026: 40% → 60%", that links to History filtered to that
 field (`?tab=history&kind=revision&unit=<unit>&q=<words>`, the unit only for a
 unit's own fields). A field never changed since it was set shows nothing.
 
-- **Where:** the node sheet's numeric fields and **Drains into**, the farm
+- **Where:** the node sheet's numeric fields and **Drains into**, its
+  Supply section (the supply rule, the river pump capacity, the trigger's two
+  levels, the hands-off flow and its EWR tick) and **Set River to dam by
+  month**, the dam's survey curve, release rule and release months, the farm
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
   warm-up, the rain threshold, the flow-share method, the annual assurance
-  threshold, the data-quality thresholds). Monthly tables and rule editors
-  have none.
+  threshold, the data-quality thresholds). A twelve-month row set or cleared
+  reads as its range on the line ("none → by month: 0–800 m³/day", "300
+  m³/day every month", `compactMonths`); History keeps the full row. Other
+  monthly tables and rule editors have none.
 - **Data:** one `GET …/history/fields` for the whole project
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at

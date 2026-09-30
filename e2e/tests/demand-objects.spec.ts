@@ -29,6 +29,14 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	await group.getByRole('button', { name: 'Use October’s demand for every month' }).click();
 	await expect(group.getByLabel('Demand of Town in Sep, m³/day')).toHaveValue('400');
 	await expect(group.getByTestId(/^demand-object-mean-/)).toHaveText('400 m³/day on average.');
+	// Per unit, the months are a profile (× the daily use, 1 by default) with no fill button; back to m³/day, the demand is kept.
+	await group.getByLabel('Demand given as').selectOption('perUnit');
+	await expect(group.getByRole('group', { name: 'Monthly profile (× the daily use; blank = 1)', exact: true })).toBeVisible();
+	await expect(group.getByLabel('Profile of Town in Oct', { exact: true })).toHaveValue('1');
+	await expect(group.getByRole('button', { name: 'Use October’s demand for every month' })).toHaveCount(0);
+	await group.getByLabel('Demand given as').selectOption('monthly');
+	await expect(group.getByRole('group', { name: 'Demand, m³/day, per month', exact: true })).toBeVisible();
+	await expect(group.getByLabel('Demand of Town in Sep, m³/day')).toHaveValue('400');
 	// Piped out: nothing can return, so the share is set to 0 and locked.
 	await group.getByLabel('Destination').selectOption('external');
 	await expect(group.getByLabel('Share returned (%)')).not.toBeEditable();

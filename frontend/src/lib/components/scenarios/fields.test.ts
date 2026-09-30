@@ -266,3 +266,37 @@ describe('the GR4J PE input (settings.pe, issue #39)', () => {
 		expect(parseValue(spec, 'pan')).toEqual({ ok: false, error: 'pick where the PE comes from' });
 	});
 });
+
+describe('the hands-off flow and River to dam by month (engine 1.32.0, issue #204)', () => {
+	const handsOff = NODE_FIELD_SPECS.handsOffM3Day.spec;
+	const divert = NODE_FIELD_SPECS.divertMonthlyM3Day.spec;
+	const ewr = NODE_FIELD_SPECS.handsOffEwr.spec;
+	const row = [0.0129, 12_345.5, 0, 0, 150, 150, 150, 800, 800, 800, 800, 0];
+
+	it('shows none for no row, and reads an empty box back as none', () => {
+		for (const spec of [handsOff, divert]) {
+			expect(formatValue(spec, null)).toBe('none');
+			expect(valueText(spec, null)).toBe('');
+			expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		}
+	});
+
+	it('round-trips 12 values through the text box, every figure kept', () => {
+		for (const spec of [handsOff, divert]) {
+			expect(parseValue(spec, valueText(spec, row))).toEqual({ ok: true, value: row });
+			expect(nodeFieldError(spec === handsOff ? 'handsOffM3Day' : 'divertMonthlyM3Day', row)).toBeNull();
+		}
+		expect(formatValue(handsOff, new Array(12).fill(150))).toBe('150 m³/day every month');
+		expect(formatValue(divert, row)).toBe('0.0129, 12 345.5, 0, 0, 150, 150, 150, 800, 800, 800, 800, 0 m³/day (Oct–Sep)');
+		expect(parseValue(divert, '1 2 3')).toEqual({ ok: false, error: 'enter 12 values, Oct to Sep (got 3)' });
+	});
+
+	it('keeps the EWR as yes or no', () => {
+		expect(formatValue(ewr, true)).toBe('yes');
+		expect(formatValue(ewr, false)).toBe('no');
+		expect(valueText(ewr, true)).toBe('true');
+		expect(parseValue(ewr, valueText(ewr, true))).toEqual({ ok: true, value: true });
+		expect(parseValue(ewr, valueText(ewr, false))).toEqual({ ok: true, value: false });
+		expect(parseValue(ewr, 'maybe')).toEqual({ ok: false, error: 'pick yes or no' });
+	});
+});
