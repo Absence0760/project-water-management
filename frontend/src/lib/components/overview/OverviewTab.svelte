@@ -11,6 +11,7 @@
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { loadOnce, peek } from '$lib/components/common/lazy';
 	import { attention, runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
 	import { supplyHref } from '$lib/components/supply/links';
@@ -206,6 +207,24 @@
 	// window with the cards scrolling inside themselves, which hid everything below it with no cue
 	// that it was there. Supply by farm shows its emptiest units and a "Show all" instead.
 	const runFarms = $derived(shown?.summary.farms ?? []);
+
+	// --- data-ready: true once every section that loads its own data has settled (loaded or failed)
+	// and so has its final height. The Latest run card is on the page (busy) while its record loads,
+	// and Supply by farm, the alerts and the published baseline fill in after it, so the page grows
+	// as they arrive; a test that measures the layout waits on this first (docs/ui.md § Summary).
+	let supplyChunk = $state(peek(loadSupply) !== undefined);
+	$effect(() => {
+		if (!runFarms.length || supplyChunk) return;
+		const done = () => (supplyChunk = true);
+		loadOnce(loadSupply).then(done, done); // a failed chunk shows ChunkFailed: settled too
+	});
+	let alertsReady = $state(false);
+	let baselineReady = $state(false);
+	const runReady = $derived(!pick || shown !== null || runError !== null);
+	const previousReady = $derived(!pick?.previous || previousRun?.id === pick.previous.id || previousError !== null || runError !== null);
+	const ready = $derived(
+		runReady && previousReady && !damsLoading && (!runFarms.length || supplyChunk) && alertsReady && baselineReady
+	);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 
 	// The project's calendar date, as in the header and on the project list (issue #137).
@@ -259,17 +278,17 @@
 	<SetupChecklist {steps} tabs={visibleTabs} />
 	{#if attentionItems.length}<div class="pre-run"><NeedsAttention items={attentionItems} /></div>{/if}
 	<!-- Below it, before the first run: the alerts beside the published baseline, then the links. -->
-	<div class="below">
+	<div class="below" data-testid="summary-body" data-ready={ready ? 'true' : undefined}>
 		<div class="pair">
 			<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
-			<AlertsPanel projectId={project.id} {canEdit} />
+			<AlertsPanel projectId={project.id} {canEdit} bind:ready={alertsReady} />
 			<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
-			<PublishedBaseline projectId={project.id} {runs} {canEdit} />
+			<PublishedBaseline projectId={project.id} {runs} {canEdit} bind:ready={baselineReady} />
 		</div>
 		{@render moreLinks()}
 	</div>
 {:else}
-	<div class="first">
+	<div class="first" data-testid="summary-body" data-ready={ready ? 'true' : undefined}>
 		<LatestRun
 			meta={pick.latest}
 			run={latestRun}
@@ -296,7 +315,7 @@
 			<div class="act">
 				<NeedsAttention items={attentionItems} />
 				<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
-				<AlertsPanel projectId={project.id} {canEdit} />
+				<AlertsPanel projectId={project.id} {canEdit} bind:ready={alertsReady} />
 			</div>
 			<div class="side">
 				{#if runFarms.length}
@@ -305,7 +324,7 @@
 					</Lazy>
 				{/if}
 				<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
-				<PublishedBaseline projectId={project.id} {runs} {canEdit} />
+				<PublishedBaseline projectId={project.id} {runs} {canEdit} bind:ready={baselineReady} />
 				{@render moreLinks()}
 			</div>
 		</div>

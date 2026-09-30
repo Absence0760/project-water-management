@@ -9,7 +9,16 @@
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import { eventText, KIND_NAME } from './alerts';
 
-	let { projectId, canEdit }: { projectId: string; canEdit: boolean } = $props();
+	let {
+		projectId,
+		canEdit,
+		ready = $bindable(false)
+	}: {
+		projectId: string;
+		canEdit: boolean;
+		/** True once the alerts list has loaded or failed (the card has its final height); for the Summary's data-ready. */
+		ready?: boolean;
+	} = $props();
 
 	let events = $state<AlertEvent[] | null>(null);
 	let error = $state<string | null>(null);
@@ -25,6 +34,9 @@
 		}
 	}
 	onMount(load);
+	$effect(() => {
+		ready = events !== null || error !== null;
+	});
 
 	// A failed download says so and offers a reload (ChunkFailed; lazy.ts says
 	// why pressing again can't help).
