@@ -635,10 +635,11 @@ export type ReproductionDifference =
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
  * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
- * signer's name. Evidence packs and assessments (WP-3.14) will add kinds.
+ * signer's name; for an evidence pack (WP-3.14, 112), `version N`.
+ * Assessments will add a kind.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
 	id: string;
 	name: string;
 }
@@ -1362,10 +1363,13 @@ export interface NoteCounts {
 	scenarios: Record<string, number>;
 }
 
-/** A professional sign-off on a run (036_signoff, docs/api.md § Sign-offs). Immutable. */
+/** A professional sign-off on a run or an evidence pack (036_signoff, 112_evidence_pack; docs/api.md § Sign-offs). Immutable. */
 export interface Signoff {
 	id: string;
-	runId: string;
+	/** The run signed; null for a sign-off of an evidence pack. */
+	runId: string | null;
+	/** The evidence pack signed; null for a sign-off of a run. */
+	packId: string | null;
 	fullName: string;
 	/** 'sacnasp' or 'ecsa' from signoff-3 (engine liability/registration.ts); the signer's free text on older rows. */
 	registrationBody: string;

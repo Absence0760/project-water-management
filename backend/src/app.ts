@@ -28,6 +28,7 @@ import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { evidenceReportRoutes } from './evidence/report.js';
+import { packRoutes, verifyRoutes } from './evidence/packs.js';
 import { reproduceRoutes } from './runs/reproduce.js';
 import { runRoutes } from './runs/routes.js';
 import { scenarioRoutes } from './scenarios/routes.js';
@@ -142,6 +143,7 @@ export function createApp() {
 	projects.route('/', uncertaintyRoutes);
 	projects.route('/', evidenceRoutes);
 	projects.route('/', evidenceReportRoutes);
+	projects.route('/', packRoutes);
 	projects.route('/', reproduceRoutes);
 	projects.route('/', scenarioRoutes);
 	projects.route('/', signoffRoutes);
@@ -178,6 +180,9 @@ export function createApp() {
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.
 	app.route('/share', sharePublicRoutes);
+
+	// Verify an evidence pack (WP-3.14): no session; the printed code finds only a pack's public fields (app_verify_pack).
+	app.route('/verify', verifyRoutes);
 
 	// The ingest endpoint (WP-2.9): no session, a per-project API key is the credential (ingest/auth.ts).
 	app.route('/ingest', ingestRoutes);

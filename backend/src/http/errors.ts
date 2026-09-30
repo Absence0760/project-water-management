@@ -98,6 +98,7 @@ export function mustChange(r: { rowCount: number | null }): void {
 const PG_UNIQUE = '23505';
 const PG_FK = '23503';
 const PG_CHECK = '23514';
+const PG_EXCLUSION = '23P01';
 const PG_RLS = '42501';
 
 export function handleError(err: unknown, c: Context) {
@@ -129,6 +130,8 @@ export function handleError(err: unknown, c: Context) {
 	// Never echo raw database error text — it leaks schema details.
 	if (code === PG_FK) return c.json({ error: 'references something that does not exist in this project' }, 400);
 	if (code === PG_CHECK) return c.json({ error: 'violates a data rule' }, 409);
+	// An exclusion constraint (e.g. one issued evidence pack per application, 112): a conflict with another row.
+	if (code === PG_EXCLUSION) return c.json({ error: 'conflicts with another record' }, 409);
 	// RLS WITH CHECK failures surface as insufficient_privilege.
 	if (code === PG_RLS) return c.json({ error: 'forbidden' }, 403);
 	// Answering 500 means the Lambda invocation itself succeeds, so the

@@ -245,6 +245,21 @@ beforeAll(async () => {
 		await tx.query(`UPDATE auto_calibration SET status = 'complete', report = '{"chosen": 0, "notes": [], "eligible": [], "reasons": []}', chosen = 0 WHERE id = $1`, [a.id]);
 		await tx.query('UPDATE auto_calibration SET applied_at = now() WHERE id = $1', [a.id]);
 	});
+	// An evidence pack they drafted and issued (112): created_by and issued_by. Planted as the drafting route makes it (the
+	// manifest names its own row), signed, then issued as the subject, whose id the guard stamps as issued_by.
+	const packId = crypto.randomUUID();
+	await asOwner(
+		`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+		 VALUES ($1, $2, $3, 1, $4, $5, 'x', 'x', $6)`,
+		[packId, projectId, runId, JSON.stringify({ pack: { id: packId, version: 1 }, project: { id: projectId }, engine: { version: 'x' }, report: { version: 'x' } }), Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex'), subject.id]
+	);
+	await asOwner(
+		`INSERT INTO signoff (project_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope,
+		   statement_version, statement_sha256, disclaimer_version)
+		 VALUES ($1, $2, $3, $4, 'sacnasp', 'pr_sci_nat', 'water_resources', $5, 'pack', 'pack-signoff-1', $6, 'x')`,
+		[projectId, packId, subject.id, TYPED_NAME, `P-${tag}`, '0'.repeat(64)]
+	);
+	await withUser(subject.id, (tx) => tx.query(`UPDATE evidence_pack SET status = 'issued' WHERE id = $1`, [packId]));
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);

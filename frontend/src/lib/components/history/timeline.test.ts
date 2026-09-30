@@ -93,6 +93,20 @@ describe('what an item says', () => {
 				})
 			)
 		).toBe('Signed off a run as Dr A. Hydrologist, Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, Water Resources Science, no. 400999/20');
+		// An evidence pack's sign-off and lifecycle (112, WP-3.14).
+		expect(eventLine(ev('signoff.created', { packId: 'p1', fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
+			'Signed off an evidence pack as Dr A. Hydrologist (SACNASP 400999/20)'
+		);
+		expect(eventLine(ev('pack.drafted', { version: 1, shortCode: 'a1b2-c3d4-e5f6' }))).toBe('Drafted evidence pack version 1 (a1b2-c3d4-e5f6)');
+		expect(eventLine(ev('pack.deleted', { version: 1, shortCode: 'a1b2-c3d4-e5f6' }))).toBe('Deleted the draft evidence pack version 1 (a1b2-c3d4-e5f6)');
+		expect(eventLine(ev('pack.issued', { version: 2, shortCode: 'ffff-0000-1111', supersedesVersion: 1 }))).toBe(
+			'Issued evidence pack version 2 (ffff-0000-1111), replacing version 1'
+		);
+		expect(eventLine(ev('pack.issued', { version: 1, shortCode: 'a1b2-c3d4-e5f6' }))).toBe('Issued evidence pack version 1 (a1b2-c3d4-e5f6)');
+		expect(eventLine(ev('pack.superseded', { version: 1, shortCode: 'a1b2-c3d4-e5f6', byVersion: 2 }))).toBe('Evidence pack version 1 (a1b2-c3d4-e5f6) was superseded by version 2');
+		expect(eventLine(ev('pack.withdrawn', { version: 2, shortCode: 'ffff-0000-1111', reason: 'the application lapsed' }))).toBe(
+			'Withdrew evidence pack version 2 (ffff-0000-1111): the application lapsed'
+		);
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the hydrological unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the hydrological unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(

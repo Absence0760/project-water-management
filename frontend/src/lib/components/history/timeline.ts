@@ -18,6 +18,7 @@ export const KIND_FILTERS: { value: string; label: string }[] = [
 	{ value: 'farmer', label: 'Farmer links' },
 	{ value: 'invite', label: 'Invites' },
 	{ value: 'scenario', label: 'Scenarios' },
+	{ value: 'pack', label: 'Evidence packs' },
 	{ value: 'feed', label: 'Data feeds' },
 	{ value: 'report_schedule', label: 'Report schedules' },
 	{ value: 'restore', label: 'Restores of data' }
@@ -107,6 +108,13 @@ const UNLINK_CAUSES: Record<string, string> = {
 const wuaNamePart = (to: unknown) => (str(to) ? `named the WUA “${str(to)}”` : 'cleared the WUA’s name');
 
 /** One sentence for an audit event, without its actor or time. */
+/** "evidence pack version 2 (a1b2-c3d4-e5f6)", from a pack event's subject. */
+function packName(s: Record<string, unknown>, capital = false): string {
+	const v = num(s.version);
+	const code = typeof s.shortCode === 'string' ? s.shortCode : '';
+	return `${capital ? 'Evidence' : 'evidence'} pack${v ? ` version ${v}` : ''}${code ? ` (${code})` : ''}`;
+}
+
 export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 	const s = e.subject ?? {};
 	const who = str(s.displayName) || 'someone';
@@ -226,13 +234,25 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'scenario.deleted':
 			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
 		case 'signoff.created': {
-			// From signoff-3 the event names the category and field too (issue #47).
+			// From signoff-3 the event names the category and field too (issue #47); a sign-off of an evidence pack names the pack (112).
 			const opt = (v: unknown) => (v ? str(v) : null);
+			const what = s.packId ? 'an evidence pack' : 'a run';
 			const line = registrationLine(str(s.registrationBody), opt(s.registrationCategory), opt(s.registrationField), str(s.registrationNo));
 			return line
-				? `Signed off a run as ${str(s.fullName)}, ${line}`
-				: `Signed off a run as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
+				? `Signed off ${what} as ${str(s.fullName)}, ${line}`
+				: `Signed off ${what} as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
 		}
+		// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): by version and short code, never a name.
+		case 'pack.drafted':
+			return `Drafted ${packName(s)}`;
+		case 'pack.deleted':
+			return `Deleted the draft ${packName(s)}`;
+		case 'pack.issued':
+			return `Issued ${packName(s)}${num(s.supersedesVersion) ? `, replacing version ${num(s.supersedesVersion)}` : ''}`;
+		case 'pack.superseded':
+			return `${packName(s, true)} was superseded${num(s.byVersion) ? ` by version ${num(s.byVersion)}` : ''}`;
+		case 'pack.withdrawn':
+			return `Withdrew ${packName(s)}${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
 		case 'calibration_rules.signed_off':
 			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
 		case 'calibration_rules.sign_off_withdrawn':

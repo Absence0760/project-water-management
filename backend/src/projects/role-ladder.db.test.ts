@@ -215,6 +215,7 @@ async function snapshot() {
 		series: await get('/series'),
 		runs: (await get('/runs')).runs.map((r: { id: string; label: string; pinned: boolean }) => [r.id, r.label, r.pinned]),
 		evidence: await get('/evidence'),
+		packs: await get('/packs'),
 		scenarios: await get('/scenarios'),
 		publication: await get('/publication'),
 		farmers: await get('/farmers'),

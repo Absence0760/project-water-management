@@ -88,7 +88,8 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 
 /** restrict_violation: scenario_signed_run_guard (072) refused the DELETE. */
 const PG_RESTRICT = '23001';
-const signedKept = () => new ApiError(409, 'this scenario has a signed-off run, so it is kept: the run stays the scenario run that was signed');
+const signedKept = () =>
+	new ApiError(409, 'this scenario has a signed-off run or an evidence pack, so it is kept: the run stays the scenario run that was signed or packed');
 const commentsKept = () => new ApiError(409, 'this application drew public comments, so it is kept: they are the record of its public participation');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
@@ -284,7 +285,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// (model_run.scenario_id would go NULL). The scenario_signed_run_guard
 			// trigger (072) refuses the DELETE too, whoever runs it, and sees the
 			// sign-offs a contributor can't read; its restrict_violation is the same 409.
-			const signed = await db.query('SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1 LIMIT 1', [sid]);
+			// An evidence pack of the scenario likewise (112_evidence_pack): the same trigger refuses it.
+			const signed = await db.query(
+				`SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1
+				 UNION ALL SELECT 1 FROM evidence_pack ep WHERE ep.scenario_id = $1 LIMIT 1`,
+				[sid]
+			);
 			if (signed.rowCount) throw signedKept();
 			// Public comments are a participation record: the scenario_comments_kept trigger (113) refuses too.
 			const { rows: commented } = await db.query<{ yes: boolean }>('SELECT app_scenario_has_public_comments($1, $2) AS yes', [id, sid]);
