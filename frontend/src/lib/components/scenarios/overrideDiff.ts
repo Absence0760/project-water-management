@@ -349,7 +349,7 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 			nodes: byId(m.nodes, node),
 			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationEfficiency ?? null]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
-			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam]),
+			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
 			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1))),
 			objects: byId(m.demandObjects ?? [], (x) => [x.id, x.nodeId, ...DEMAND_OBJECT_SET_FIELDS.map((f) => objectField(x, f))])

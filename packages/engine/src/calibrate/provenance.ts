@@ -163,6 +163,13 @@ export interface FitRecord {
 	startParams: ParamSet;
 	/** The record fitted to, and the series it was compared with. */
 	flowKind: string;
+	/**
+	 * Where the fit was scored (engine ≥ 1.41.0, settings.calibrationSiteNodeId):
+	 * null = the outlet, else the gauge node whose record `flowKind` is and
+	 * whose simulated flow it was compared with. Absent on a record made
+	 * before it: the outlet.
+	 */
+	siteNodeId?: string | null;
 	simulatedKey: 'simulated_outflow';
 	/** The calibration window and exclusions the fit used (the form's, at the time). */
 	calibrationStart: string | null;
@@ -399,6 +406,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		params: { ...r.params },
 		startParams: { ...r.startParams },
 		flowKind: r.flowKind,
+		siteNodeId: r.siteNodeId ?? null,
 		simulatedKey: r.simulatedKey,
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
@@ -426,7 +434,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			rainChecks: rainChecksOf(ctx.settings.dataQuality)
 		},
 		...(ctx.observedOrigin !== undefined ? { observedOrigin: ctx.observedOrigin ? { ...ctx.observedOrigin } : null } : {}),
-		flowGapFill: { spec: fillSpecOf(ctx.settings.flowGapFill, r.flowKind) },
+		// A gauge's record is never gap filled (the specs are the outlet records').
+		flowGapFill: { spec: r.siteNodeId ? null : fillSpecOf(ctx.settings.flowGapFill, r.flowKind) },
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
@@ -487,6 +496,12 @@ export interface FitRecordStatus {
 	 */
 	qualityFlagsChanged: boolean;
 	flowKindChanged: boolean;
+	/**
+	 * The calibration site (settings.calibrationSiteNodeId, engine ≥ 1.41.0)
+	 * differs from the fit's: another gauge's record, or the outlet's. A
+	 * record made before it was fitted at the outlet.
+	 */
+	siteChanged: boolean;
 	/**
 	 * The potential-evaporation input (`settings.pe`: its kind, or its
 	 * monthly row; not its source note), the pan coefficient and A-pan
@@ -714,7 +729,15 @@ function flowFillDiffers(record: FitRecord, settings: Partial<ProjectSettings>, 
 	const scoredThen = record.qualityFlags?.infilled === 'include';
 	const scoredNow = resolveQualityFlags(settings.qualityFlags, []).infilled === 'include';
 	if (!scoredThen || !scoredNow) return false;
+	// A fit at a gauge read no fill (engine ≥ 1.41.0), whatever the outlet records' specs say.
+	if (record.siteNodeId) return false;
 	return !sameJson(record.flowGapFill?.spec ?? null, fillSpecOf(settings.flowGapFill, kind));
+}
+
+/** Quality-flag settings as a fit at the record's site scored with them: a gauge's record has no gauged range. */
+function flagsAsScored(q: unknown, record: FitRecord): QualityFlagSettings {
+	const r = resolveQualityFlags(q, []);
+	return record.siteNodeId ? { ...r, ratings: {} } : r;
 }
 
 /** Compare a fit record with the settings (the form, or a run's snapshot), and with the CHIRPS series' version when `now` gives it. */
@@ -747,9 +770,11 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// Compared resolved on both sides, so a stored field left at its default is no change.
-		qualityFlagsChanged: record.qualityFlags !== undefined && !sameJson(resolveQualityFlags(settings.qualityFlags, []), resolveQualityFlags(record.qualityFlags, [])),
+		// A fit at a gauge (engine ≥ 1.41.0) read no gauged range, so a change of the outlet records' ratings is none to it.
+		qualityFlagsChanged: record.qualityFlags !== undefined && !sameJson(flagsAsScored(settings.qualityFlags, record), flagsAsScored(record.qualityFlags, record)),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
+		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),
 		forcingChanged:
 			chirpsSourceChanged ||
 			apanDailyChanged ||
@@ -773,12 +798,21 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
  * (apanDailyChanged, engine ≥ 0.40.0): the days are still the ones fitted;
  * the fit record's forcingChanged says the fit may no longer hold.
  */
-export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind): CalibrationFitStatus {
+export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind, siteNodeId: string | null = null): CalibrationFitStatus {
 	const record = resolveFitRecord(settings as Partial<ProjectSettings> & Record<string, unknown>);
 	if (!record || (record.model as string) !== 'gr4j') return 'notFitted';
 	const status = fitRecordStatus(settings, record);
 	if (status.editedParams.length) return 'edited';
-	if (status.windowChanged || status.exclusionsChanged || status.qualityFlagsChanged || record.flowKind !== flowKind || status.flowFillChanged) return 'otherPeriod';
+	// A fit at another site (engine ≥ 1.41.0; the run's statistics are the outlet's) scored another record's days.
+	if (
+		status.windowChanged ||
+		status.exclusionsChanged ||
+		status.qualityFlagsChanged ||
+		record.flowKind !== flowKind ||
+		(record.siteNodeId ?? null) !== siteNodeId ||
+		status.flowFillChanged
+	)
+		return 'otherPeriod';
 	return 'fitted';
 }
 
@@ -795,6 +829,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 		out.push('The quality-flag settings (a gauged range, or how extrapolated, suspect or infilled days are scored) have changed since the fit, so it was fitted on other days. Refit before relying on the parameters.');
 	}
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
+	if (status.siteChanged) out.push('The calibration site has changed since the fit, so it was fitted to another gauge’s record.');
 	if (status.chirpsSourceChanged) {
 		out.push(
 			'The CHIRPS series holds another product or version than the fit ran on, so the monthly CHIRPS factors and the rain on every day CHIRPS fills have changed. Refit before relying on the parameters.'

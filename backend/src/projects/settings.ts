@@ -118,7 +118,8 @@ function withoutRetiredCalibration(c: Json): Json {
  * Stored settings for a copy whose nodes got fresh ids (POST /projects/:id/copy,
  * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) and the
  * outcome matrix's site (settings.outcomes.siteNodeId, issue #53 R4) follow
- * their node. A site not in the map (already dangling) is left as it was, so
+ * their node, as do the calibration site (settings.calibrationSiteNodeId,
+ * engine ≥ 1.41.0) and the site its fit record was scored at. A site not in the map (already dangling) is left as it was, so
  * the copy's runs warn about it as the original's do. Anything else is
  * unchanged.
  */
@@ -131,6 +132,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	}
 	if (isObj(s.outcomes) && typeof s.outcomes.siteNodeId === 'string' && ids.has(s.outcomes.siteNodeId)) {
 		s.outcomes = { ...s.outcomes, siteNodeId: ids.get(s.outcomes.siteNodeId) };
+	}
+	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
+	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
+		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };
 	}
 	return s;
 }
@@ -705,6 +710,8 @@ export const FitRecord = z
 		params,
 		startParams: params,
 		flowKind,
+		// Engine ≥ 1.41.0: the gauge the fit was scored at (null = the outlet); absent on a record made before it.
+		siteNodeId: z.string().min(1).max(100).nullable().optional(),
 		simulatedKey: z.literal('simulated_outflow'),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
@@ -930,6 +937,8 @@ export const SettingsPatch = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
+		// Where calibration scores (engine ≥ 1.41.0): null = the outlet, else an inner gauge with a record (checked by the route).
+		calibrationSiteNodeId: z.string().uuid().nullable(),
 		calibrationExclusions: ExclusionList,
 		// Gap filling of the observed flow records (engine flowGapFill.ts, issue #66): either record's spec (replaced whole) or the switch.
 		flowGapFill: FlowGapFill,

@@ -56,9 +56,37 @@ test('the evidence report compares modelled use with the registered volumes, by 
 	const years = section.getByTestId('evidence-allocation-years');
 	await expect(years.getByRole('row', { name: /Upper farm/ })).toHaveCount(2);
 	await expect(years.getByRole('row', { name: /Upper farm/ }).first()).toContainText('Above registered');
+	// A run that compares only cites no cap.
+	await expect(section.getByTestId('evidence-allocation-cap')).toHaveCount(0);
 	// Volumes only: no holder's name or registration number anywhere in the report (D3).
 	const text = await page.getByTestId('evidence-report').innerText();
 	for (const secret of ['Invented Holder Upper', 'Invented Holder Lower', 'E2E-EV-1', 'E2E-EV-2']) expect(text).not.toContain(secret);
 
+	await expectNoViolations(page);
+});
+
+test('the evidence report cites a capped run’s cap: the years it used its volume up and the days each limit held use back (evidence-6)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Evidence allocation cap');
+	const days = 731;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2019-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: syntheticFlow(days) });
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', allocationMode: 'cap' });
+	const nodes = project.model.nodes as { id: string; name: string }[];
+	// Upper farm: a volume far above its use, taken only October to March, so the months are what hold it back.
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/allocations`, {
+		data: { nodeId: nodes.find((n) => n.name === 'Upper farm')!.id, waterSource: 'surface', authorisation: 'licence', volumeM3PerYear: 1e9, months: [10, 11, 12, 1, 2, 3] }
+	});
+	expect(res.status()).toBe(201);
+	const run = await createRun(page.request, project.id, 'Capped baseline');
+	await nominateRun(page.request, project.id, run, 'Capped baseline');
+
+	await page.goto(`/projects/${project.id}/report?run=${run}&evidence`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	const cap = page.locator('#ev-allocations').getByTestId('evidence-allocation-cap');
+	const row = cap.getByRole('row', { name: /^Upper farm, surface water/ });
+	await expect(row.getByRole('cell')).toHaveText('The cap held use back on 18 days in 2 water years: 18 outside the months of use. The registered volume was never used up.');
+	// Lower farm has no volume: not capped, not listed.
+	await expect(cap.getByRole('row', { name: /^Lower farm/ })).toHaveCount(0);
 	await expectNoViolations(page);
 });

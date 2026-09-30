@@ -34,7 +34,7 @@ import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './network/transferRates';
-import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './network/offtake';
+import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
@@ -49,6 +49,7 @@ import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, pla
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
+import { calibrationSiteError } from './calibrate/site';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
@@ -60,6 +61,9 @@ import {
 	AREAL_RAIN_COLUMN,
 	arealRainFactors,
 	CALIBRATION_FLOW_KINDS,
+	calibrationRecordsAt,
+	calibrationSeriesKey,
+	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
 	DEMAND_PARTS,
 	ESTIMATED_DAM_DEPTH_M,
@@ -395,6 +399,25 @@ function runNetwork(
 			push(null, c.code.key, c.code.label, '', f.code);
 		}
 	}
+	// The calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId): a gauge inside the network whose
+	// record the run's calibration statistics score. Its record is that node's `observed_flow` series (and the
+	// other record, when it has both), beside the node's own `outflow`. An unusable site warns and the run scores the outlet.
+	const calSite = runCalibrationSite(input, settings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	let calKind = observedKind;
+	let calObserved = observedM3s;
+	let calSim = simOutflow;
+	if (calSite) {
+		const kinds = calibrationRecordsAt(series, calSite.nodeId);
+		const wanted = settings.calibrationFlowKind;
+		calKind = wanted && kinds.includes(wanted) ? wanted : kinds[0]!;
+		const at = (k: CalibrationFlowKind) => alignFlow(series[calibrationSeriesKey(k, calSite.nodeId)], start, days);
+		calObserved = at(calKind);
+		calSim = sim.nodes[calSite.node]!.outflow;
+		const toDay = (v: (number | null)[]) => v.map((x) => (x === null ? NaN : x * SEC_PER_DAY));
+		push(calSite.nodeId, 'observed_flow', OBSERVED_SERIES_LABEL[calKind], 'm³/day', toDay(calObserved));
+		const other = kinds.find((k) => k !== calKind);
+		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
+	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.46.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
@@ -474,6 +497,8 @@ function runNetwork(
 		// A river off-take (engine ≥ 1.14.0) counts like a transfer, with what it took at both ends: its conveyance
 		// losses are charged to its destination, for which the water was taken.
 		transfers: [...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })), ...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! }))],
+		// The share of its losses that seeps back (engine ≥ 1.42.0) is credited where the losses were charged.
+		...(plan.offtakes?.some((o) => o.lossReturn > 0) ? { returns: offtakeReturns(plan.offtakes, sim.offtakes!) } : {}),
 		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
 	});
 	const posInOrder = new Int32Array(nodes.length);
@@ -510,7 +535,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -593,6 +618,8 @@ function runNetwork(
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
+		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
+		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
 		const po = plan.nodes[i]!.objects;
 		if (po) {
@@ -761,21 +788,23 @@ function runNetwork(
 	}
 
 	// Gauge and logger records measure the impacted river (farms, dams,
-	// abstraction), so they are compared with the simulated outflow.
-	const calibration = observedKind
+	// abstraction), so they are compared with the simulated outflow: the
+	// outlet's, or the calibration site's (engine ≥ 1.41.0).
+	const calibration = calKind
 		? {
-				...calibrationStats(simOutflow, observedM3s, {
+				...calibrationStats(calSim, calObserved, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd,
 					exclusions: exclusionRanges(settings.calibrationExclusions)
 				}),
-				flowKind: observedKind,
+				flowKind: calKind,
 				simulatedKey: 'simulated_outflow' as const,
-				fitStatus: calibrationFitStatus(settings, observedKind)
+				...(calSite ? { siteNodeId: calSite.nodeId, siteName: nodes[calSite.node]!.name } : {}),
+				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
 			}
 		: null;
-	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
+	if (!calKind) warnings.push('no observed flow series: calibration statistics not computed');
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
 			calibration.excludedDays
@@ -797,6 +826,24 @@ function runNetwork(
 		observedKind
 			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
+	// The same test at each gauge EWR site with a record of its own (engine ≥ 1.41.0, docs/model.md §2.10k):
+	// its record against its simulated outflow and its own pragmatic requirement.
+	const ewrAgreementSites: EwrAgreementSite[] = [];
+	for (const node of [...siteNodes].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
+		if (node === topo.outflow) continue;
+		const id = nodes[node]!.id;
+		const kinds = calibrationRecordsAt(series, id);
+		if (!kinds.length) continue;
+		const kind = settings.calibrationFlowKind && kinds.includes(settings.calibrationFlowKind) ? settings.calibrationFlowKind : kinds[0]!;
+		const obs = alignFlow(series[calibrationSeriesKey(kind, id)], start, days);
+		const r = sim.nodes[node]!;
+		ewrAgreementSites.push({
+			nodeId: id,
+			name: nodes[node]!.name,
+			flowKind: kind,
+			agreement: ewrAgreement(r.outflow, obs, r.ewrCumulative, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+		});
+	}
 
 	// Input data quality: do the two observed flow records agree? Are there
 	// impossible or suspicious values? Do the farm areas add up?
@@ -890,6 +937,7 @@ function runNetwork(
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
+				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -957,6 +1005,7 @@ function runNetwork(
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0,
 				ewrAgreement: ewrObserved,
+				...(ewrAgreementSites.length ? { ewrAgreementSites } : {}),
 				...(topo.outflow >= 0 ? { noFlow: noFlowDays(simOutflow, days) } : {})
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
@@ -1073,6 +1122,32 @@ function runPlausibility(r: {
 		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
 		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
 	});
+}
+
+/**
+ * The run's calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId,
+ * docs/model.md §2.10k): null for the outlet, else the gauge's node index and
+ * id. A site the run can't use (gone from the model, not a gauge, the outlet
+ * node, or no record attached) warns, naming why, and the run's statistics
+ * are the outlet's; calibration refuses the same site outright.
+ */
+function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflow: number, warnings: string[]): { node: number; nodeId: string } | null {
+	if (siteNodeId === null) return null;
+	const nodes = input.model.nodes;
+	const err = calibrationSiteError(nodes, outflow, siteNodeId);
+	const fallback = 'the run’s calibration statistics use the outlet’s record, and Fit automatically refuses the site';
+	if (err) {
+		warnings.push(`Calibration site: ${err}. Until it is changed, ${fallback}.`);
+		return null;
+	}
+	const node = nodes.findIndex((n) => n.id === siteNodeId);
+	if (!calibrationRecordsAt(input.series, siteNodeId).length) {
+		warnings.push(
+			`Calibration site: the gauge "${nodes[node]!.name}" has no observed flow record attached: attach one on the Data page, or pick another site in Settings → Calibration record. Until then, ${fallback}.`
+		);
+		return null;
+	}
+	return { node, nodeId: siteNodeId };
 }
 
 /**

@@ -10,7 +10,7 @@ import type { InputChange, RunInputsSnapshot } from '../compare';
 import type { Erratum } from '../liability/errata';
 import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
-import type { RunSummary } from '../project';
+import type { AllocationLimitBound, RunSummary } from '../project';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import type { Band } from '../uncertainty/bands';
@@ -35,8 +35,11 @@ import type { PairedSummary } from '../uncertainty/paired';
  * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.33.0).
  * evidence-5: page 1's licence impact by year class (`licenceImpact`, issue #53 R7), built
  * here from the runs' daily series instead of in the browser, so an issued pack freezes it.
+ * evidence-6: § 5 cites a capped run's cap (`EvidenceAllocationSource.capA` / `capB`): the
+ * water years the registered volume was used up and the days the licence limit held use
+ * back, by limit (RunSummary.allocations, engine ≥ 1.40.0 for the days).
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-5';
+export const EVIDENCE_REPORT_VERSION = 'evidence-6';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -529,6 +532,22 @@ export interface EvidenceAllocationSource {
 	meanRegisteredA: number | null;
 	meanModelledB: number | null;
 	meanRegisteredB: number | null;
+	/**
+	 * A cap run's cap on this unit and source, per run (evidence-6, from its
+	 * RunSummary.allocations): null when that run isn't a cap run or doesn't
+	 * cap the source (baseline evidence: capB null). Absent from an older
+	 * pack's document.
+	 */
+	capA?: EvidenceCapYears | null;
+	capB?: EvidenceCapYears | null;
+}
+
+/** One run's cap on one unit and source (evidence-6). */
+export interface EvidenceCapYears {
+	/** The water years the use reached the registered volume. */
+	capReached: { waterYear: number; budgetM3: number; usedM3: number }[];
+	/** The days per water year the licence limit held use back, by limit (engine ≥ 1.40.0); null for a run before it. */
+	limitBound: AllocationLimitBound[] | null;
 }
 
 /** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */

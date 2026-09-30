@@ -43,6 +43,17 @@ any `note:` lines about things it had to interpret. Then run the engine tests:
 `pnpm -C packages/engine test`. The client catchment regression in `run.test.ts` runs
 when `data/client-catchment/expected.json` exists and is skipped otherwise.
 
+To read a workbook's cell formulas (array formulas included) while working
+on the importer, `dumpwb.py` prints them sheet by sheet (read-only, openpyxl;
+moved here from `verify/`, whose workbook transcription it served):
+
+```sh
+.venv/bin/python scripts/wbt-import/dumpwb.py "<workbook>.xlsm" <max rows> [Sheet1,Sheet2]
+```
+
+Its output quotes the client's cells, so it stays on your machine, never in
+an issue or a commit.
+
 ## What it reads
 
 The workbook must have been **calculated and saved in Excel**. The script opens

@@ -28,6 +28,22 @@
 	const transfers = $derived(editor.model.transfers);
 	const name = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
 	const canAdd = $derived(!readonly && nodes.length >= 2);
+	/**
+	 * Where a river off-take's canal seepage can rejoin the river (engine ≥ 1.42.0): below its source, or
+	 * below a farm downstream of it along the river (the engine's offtakeReturnAt), nearest first.
+	 */
+	function rejoinUnits(fromId: string): { id: string; name: string }[] {
+		const out: { id: string; name: string }[] = [];
+		const seen = new Set<string>([fromId]);
+		for (let id = nodes.find((n) => n.id === fromId)?.downstreamNodeId; id && !seen.has(id); ) {
+			seen.add(id);
+			const n = nodes.find((x) => x.id === id);
+			if (!n) break;
+			if (n.kind === 'farm') out.push({ id: n.id, name: n.name || '(unnamed)' });
+			id = n.downstreamNodeId;
+		}
+		return out;
+	}
 
 	let root: HTMLDivElement | undefined = $state();
 	/** Adds a rule after the others and puts the cursor in its From, scrolled into view. */
@@ -187,6 +203,22 @@
 											<span class="fld-l"><span aria-hidden="true">Losses on the way, %</span> <HelpTip key="transfer.lossPct" /></span>
 											<NumberInput label="Conveyance losses of {label}, %" min={0} max={99.9} scale={100} disabled={readonly} value={t.lossPct ?? 0} onchange={(v) => (t.lossPct = v ?? 0)} />
 										</div>
+										<!-- Canal seepage back to the river (engine ≥ 1.42.0, §2.6a): a share of the losses, and where it rejoins. -->
+										<div class="fld">
+											<span class="fld-l"><span aria-hidden="true">Losses seeping back, %</span> <HelpTip key="transfer.lossReturnPct" /></span>
+											<NumberInput label="Share of the losses of {label} seeping back to the river, %" min={0} max={100} scale={100} disabled={readonly} value={t.lossReturnPct ?? 0} onchange={(v) => (t.lossReturnPct = v ?? 0)} />
+										</div>
+										{#if (t.lossReturnPct ?? 0) > 0}
+											{@const below = rejoinUnits(t.fromNodeId)}
+											<div class="fld sel">
+												<span class="fld-l"><span aria-hidden="true">Rejoins the river below</span> <HelpTip key="transfer.lossReturnNodeId" /></span>
+												<select aria-label="Where the seepage of {label} rejoins the river" disabled={readonly} value={t.lossReturnNodeId ?? ''} onchange={(e) => (t.lossReturnNodeId = e.currentTarget.value || null)}>
+													<option value="">The source ({name(t.fromNodeId)})</option>
+													{#each below as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+													{#if t.lossReturnNodeId && !below.some((b) => b.id === t.lossReturnNodeId)}<option value={t.lossReturnNodeId}>{name(t.lossReturnNodeId)} (not below the source)</option>{/if}
+												</select>
+											</div>
+										{/if}
 										<div class="checks">
 											<label class="check">
 												<input type="checkbox" aria-label="{label} leaves the EWR in the river" disabled={readonly} checked={!!t.handsOffEwr} onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)} />

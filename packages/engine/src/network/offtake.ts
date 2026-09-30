@@ -8,7 +8,8 @@
 // set), by the flow there, and by what must stay in the river: the senior
 // users' requirement passing the source, a hands-off flow and, when asked,
 // the EWR at the source. A share of what it takes (conveyance losses) never
-// arrives. Pure; the plan (../run.ts), the simulation (./simulate.ts) and the
+// arrives; a share of those losses may seep back to the river the same day
+// below the source or a farm downstream of it (engine ≥ 1.42.0). Pure; the plan (../run.ts), the simulation (./simulate.ts) and the
 // self-checks (../verify/checks.ts) read a rule through these functions, so a
 // stored rule means the same thing to each.
 import { cmpStr } from '../order';
@@ -29,6 +30,8 @@ export const OFFTAKE_SERIES = {
 	in: { key: 'offtake_in', label: 'Delivered by river off-takes into this unit (after conveyance losses)' },
 	used: { key: 'offtake_used', label: 'River off-take water that met the demand directly (part of supplied)' },
 	toDam: { key: 'offtake_to_dam', label: 'River off-take water that went into the dam' },
+	/** On the unit the returned seepage rejoins below (engine ≥ 1.42.0): part of its outflow. */
+	returned: { key: 'offtake_loss_return', label: 'River off-takes’ conveyance losses seeping back to the river below this unit (part of the outflow)' },
 	rule: (toName: string) => `Taken from the river for ${toName} by one off-take (before conveyance losses)`
 } as const;
 
@@ -49,6 +52,10 @@ export interface PlanOfftake {
 	handsOffEwr: boolean;
 	/** Conveyance loss share, 0 ≤ l < 1. */
 	loss: number;
+	/** Share of the losses that seeps back to the river the same day, 0 ≤ r ≤ 1 (engine ≥ 1.42.0); 0 = all lost. */
+	lossReturn: number;
+	/** Node index of the farm whose outflow the returned seepage joins: the source or one downstream of it along the river. */
+	returnAt: number;
 	/** 0 = sized to the destination's need, 1 = up to capacity. */
 	sizing: 0 | 1;
 	topUpDam: boolean;
@@ -77,6 +84,11 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 		warnings.push(`${who}: hands-off flow ${String(handsOff)} m³/day is not a size ≥ 0; none`);
 		handsOff = 0;
 	}
+	let lossReturn = tr.lossReturnPct ?? 0;
+	if (!(finite(lossReturn) && lossReturn >= 0 && lossReturn <= 1)) {
+		warnings.push(`${who}: share of the conveyance losses returning ${String(lossReturn)} is outside [0, 1]; none returns`);
+		lossReturn = 0;
+	}
 	const sizing = tr.sizing === 'capacity' ? 1 : 0;
 	if (tr.sizing !== undefined && tr.sizing !== 'capacity' && tr.sizing !== 'demand') warnings.push(`${who}: unknown sizing "${String(tr.sizing)}"; sized to the destination's need`);
 	return {
@@ -86,6 +98,8 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 		handsOffM3Day: handsOff,
 		handsOffEwr: tr.handsOffEwr === true,
 		loss,
+		lossReturn: loss > 0 ? lossReturn : 0,
+		returnAt: from,
 		sizing,
 		topUpDam: tr.topUpDam === true,
 		priority: Number.isFinite(tr.priority) ? tr.priority : 0
@@ -113,11 +127,41 @@ function reaches(start: number, target: number, downstream: Int32Array, extra: r
 }
 
 /**
+ * Where a river off-take's returned seepage rejoins the river (engine ≥
+ * 1.42.0): the node index of `tr.lossReturnNodeId`, or `from` when it is
+ * null / absent. Only the source or a farm downstream of it along the river
+ * qualifies: the seepage reaches the river below the off-take, and a unit
+ * below the source is simulated after it, so the day's losses are known when
+ * the return joins its outflow. Otherwise undefined (the caller returns none).
+ */
+export function offtakeReturnAt(
+	tr: Pick<Transfer, 'lossReturnNodeId'>,
+	from: number,
+	nodes: readonly Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId'>[],
+	index: ReadonlyMap<string, number> = new Map(nodes.map((n, i) => [n.id, i]))
+): number | undefined {
+	const id = tr.lossReturnNodeId;
+	if (id === null || id === undefined) return from;
+	const at = index.get(id);
+	if (at === undefined || nodes[at]!.kind !== 'farm') return undefined;
+	const seen = new Set<number>();
+	for (let i: number | undefined = from; i !== undefined && !seen.has(i); ) {
+		if (i === at) return at;
+		seen.add(i);
+		const down: string | null = nodes[i]!.downstreamNodeId;
+		i = down === null ? undefined : index.get(down);
+	}
+	return undefined;
+}
+
+/**
  * The river off-takes a model runs, from its enabled `source: 'river'` rules
  * in id order. Skipped with a warning: an end that doesn't exist or isn't a
  * farm, a rule from a unit to itself, and one whose destination drains into
  * its source (directly, or through the river off-takes accepted before it),
- * since the destination is simulated after its source each day.
+ * since the destination is simulated after its source each day. A return
+ * unit that isn't the source or a farm below it returns nothing, with a
+ * warning (engine ≥ 1.42.0).
  */
 export function planOfftakes(
 	transfers: readonly Transfer[],
@@ -150,8 +194,37 @@ export function planOfftakes(
 		}
 		extra[from]!.push(to);
 		const key = seriesKey(tr);
-		out.push({ id: tr.id, ...(key ? { seriesKey: key } : {}), ...offtakeOf(tr, from, to, a.name, b.name, warnings) });
+		const o = offtakeOf(tr, from, to, a.name, b.name, warnings);
+		if (o.lossReturn > 0) {
+			const at = offtakeReturnAt(tr, from, nodes, index);
+			if (at === undefined) {
+				warnings.push(`river off-take ${a.name} → ${b.name}: its seepage return unit is not ${a.name} or a farm below it on the river; no seepage returns`);
+				o.lossReturn = 0;
+			} else o.returnAt = at;
+		}
+		out.push({ id: tr.id, ...(key ? { seriesKey: key } : {}), ...o });
 	}
+	return out;
+}
+
+/** A river off-take's returned seepage as the EWR attribution counts it (engine ≥ 1.42.0, ./attribution.ts). */
+export interface OfftakeReturnLeg {
+	/** The off-take's source and destination, and the farm whose outflow the seepage joins. */
+	source: number;
+	destination: number;
+	at: number;
+	/** What seeped back each day, v × l × r (m³). */
+	volume: Float64Array;
+}
+
+/** Each off-take that returns seepage, with what it returned each day, from what it took (`volumes`, in `offtakes` order). */
+export function offtakeReturns(offtakes: readonly PlanOfftake[], volumes: readonly ArrayLike<number>[]): OfftakeReturnLeg[] {
+	const out: OfftakeReturnLeg[] = [];
+	offtakes.forEach((o, k) => {
+		if (!(o.lossReturn > 0)) return;
+		const v = volumes[k]!;
+		out.push({ source: o.from, destination: o.to, at: o.returnAt, volume: Float64Array.from(v, (x) => x * o.loss * o.lossReturn) });
+	});
 	return out;
 }
 

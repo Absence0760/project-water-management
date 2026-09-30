@@ -1530,20 +1530,44 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
-// 2026-09-30  total 1301 → 1313 KB (engine 1.45.0, the demand-object scenario
-//             ops and demand.scale by part: measured 1311 with main @ 82248f4e
-//             and #250's basic-needs floor (feat/123-basic-needs-floor @
-//             1f94fc78, engine 1.44.0) merged; 1303 before the part scaling, the schedule
-//             editor and #250). demandObject.add / .set / .remove in the
-//             engine's scenario code (validator with the schedule's window
-//             checks, apply, classification, the mask kind) and demand.scale's
-//             part, their "Add a change" forms (the Network form's schedule
-//             editor now also in the form's chunk), field specs and
-//             descriptions, override mode recording object edits, and four
-//             share-page lines in both catalogues. Headroom ~3 KB.
-// 2026-09-30  total 1313 → 1326 KB (engine 1.46.0, WP-3.8's drought
-//             restriction rule, on #252 @ 2ce0af99: measured 1311 → 1324,
-//             +12.6 KB, raised by that rounded up). The rule in the engine
+// 2026-09-30  total 1301 → 1304 KB (engine 1.41.0, calibrating at a gauge
+//             inside the network: Settings' "Scored at" select and its hint,
+//             the site's records deciding the fit's choices, the fit record
+//             naming its gauge, the Data page's calibration-site badge;
+//             measured 1302 with main @ 285c1c75). Headroom ~2 KB.
+// 2026-09-30  total 1304 → 1306 KB (engine 1.41.0 follow-ups: the run's
+//             calibration-site hydrograph and statistics line, the EWR test
+//             at each gauge EWR site with a record, the stale-site hint;
+//             measured 1304 with main @ 2f644d45). Headroom ~2 KB.
+// 2026-09-30  total 1306 → 1309 KB (engine 1.42.0, canal seepage back to the
+//             river: the Transfers tab's return share and unit, the inputs
+//             table's losses and return; measured 1305 locally with main @
+//             8266a682, CI runs ~2 KB above that). Headroom ~2 KB.
+// 2026-09-30  total stays 1309 KB (#251, issue #72 follow-up: evidence § 5's
+//             "What the cap held back" table, the cap's water years and the
+//             days each licence limit held use back, per unit and source,
+//             and the engine's capOf copying them from each run's summary).
+//             Measured against main @ 82248f4e: 1,333,296 → 1,333,517 gzip
+//             bytes (+0.22 KB), in the evidence report's own lazy chunk; it
+//             fits the headroom left above, so no raise.
+// 2026-09-30  total 1309 → 1313 KB (engine 1.44.0, issue #123, the basic-needs
+//             floor: People served on a demand object, the floor columns in
+//             the human-impact tables, the curtailment badge and board note;
+//             measured 1308 locally with #248 merged, main @ 564ede95; CI
+//             runs ~2 KB above that). Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1319 KB (engine 1.45.0, the demand-object scenario
+//             ops and demand.scale by part: demandObject.add / .set / .remove
+//             in the engine's scenario code (validator with the schedule's
+//             window checks, apply, classification, the mask kind) and
+//             demand.scale's part, their "Add a change" forms (the Network
+//             form's schedule editor now also in the form's chunk), field
+//             specs and descriptions, override mode recording object edits,
+//             and four share-page lines in both catalogues; measured 1314
+//             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+//             above that). Headroom ~3 KB.
+// 2026-09-30  total 1319 → 1332 KB (engine 1.46.0, WP-3.8's drought
+//             restriction rule: measured +12.6 KB on #252 @ 2ce0af99 (1311 →
+//             1324), raised by that rounded up over #252's 1319). The rule in the engine
 //             (network/restriction.ts, its daily step in simulate, the
 //             droughtRestriction self-check, the triggers-to-rule mapping and
 //             the run comparison's lines), the Settings editor (its own chunk,
@@ -1560,7 +1584,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1326,
+	totalCodeKb: 1332,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

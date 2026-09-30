@@ -93,9 +93,9 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'calibration-window',
 		term: 'Calibration window',
-		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
+		short: 'The period, observed flow record and site (the outlet or an inner gauge) that score the fit. Empty = every day with an observation.',
 		category: 'fit',
-		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind']
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
 	},
 	{
 		id: 'gauge-logger-agreement',
@@ -599,9 +599,9 @@ export const TIPS: HelpTipText[] = [
 		id: 'transfer-offtake',
 		term: 'River off-take',
 		short: 'A transfer that takes from the river leaving its source hydrological unit, not from a dam: a canal or pipe fed from a weir.',
-		units: 'hands-off m³/day; losses %',
+		units: 'hands-off m³/day; losses %; share of the losses seeping back %',
 		category: 'transfers',
-		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam']
+		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam', 'transfer.lossReturnPct', 'transfer.lossReturnNodeId']
 	},
 	{
 		id: 'transfer-min-storage',

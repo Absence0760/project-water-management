@@ -2,7 +2,7 @@
 // change touched, and what a series change did day by day. No I/O.
 import { fromEpochDay, toEpochDay, type ProjectModel } from '@water-management/engine';
 
-/** What a node is, as far as a change to it goes: its own row, crop areas, land cover, boreholes, demand objects and transfers at either end. */
+/** What a node is, as far as a change to it goes: its own row, crop areas, land cover, boreholes, demand objects, transfers at either end and the off-takes whose seepage rejoins below it. */
 function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	const facts = new Map<string, unknown[]>();
 	const add = (id: string, x: unknown) => {
@@ -18,6 +18,8 @@ function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	for (const t of m?.transfers ?? []) {
 		add(t.fromNodeId, ['transfer', t]);
 		add(t.toNodeId, ['transfer', t]);
+		// The unit an off-take's canal seepage rejoins below (engine ≥ 1.42.0) is touched by it too.
+		if (t.lossReturnNodeId && t.lossReturnNodeId !== t.fromNodeId && t.lossReturnNodeId !== t.toNodeId) add(t.lossReturnNodeId, ['transfer', t]);
 	}
 	// Order-insensitive: crop areas and patches come back from the database in any order.
 	return new Map([...facts].map(([id, list]) => [id, list.map((x) => stableJson(x)).sort().join('\n')]));

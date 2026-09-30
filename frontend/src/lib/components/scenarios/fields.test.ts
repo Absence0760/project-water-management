@@ -119,6 +119,14 @@ describe('field specs cover the engine’s op catalogue', () => {
 		check(TRANSFER_FIELD_SPECS, transferFieldError);
 		check(SETTINGS_SPECS, settingsValueError, ['gr4j.x1', 'gr4j.x2', 'gr4j.x3', 'gr4j.x4']);
 	});
+
+	it('reads the unit an off-take’s seepage rejoins below, empty as the source (engine 1.42.0), and a plain node field never empty', () => {
+		const spec = TRANSFER_FIELD_SPECS.lossReturnNodeId.spec;
+		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		expect(formatValue(spec, null)).toBe('the source');
+		expect(transferFieldError('lossReturnNodeId', null)).toBeNull();
+		expect(parseValue(TRANSFER_FIELD_SPECS.toNodeId.spec, '')).toEqual({ ok: false, error: 'pick a node' });
+	});
 });
 
 describe('development over the run (engine 1.30.0, issue #67)', () => {

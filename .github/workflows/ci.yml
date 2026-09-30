@@ -584,6 +584,43 @@ jobs:
       - name: unittest
         run: python -m unittest discover -s scripts/wbt-import
 
+  # The independent cross-check of the engine (verify/README.md): a Python
+  # model written only from the docs, run beside runModel on the example
+  # catchments, the probes and 200 random networks, with its mutation
+  # self-test. Stdlib Python; tsx from the pnpm install runs the engine side.
+  verify:
+    name: Engine cross-check (Python)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Cross-check the engine
+        env:
+          VERIFY_TEST_RANDOM: '200'
+        run: pnpm test:verify
+
   # Credential-free Terraform checks (fmt, validate, plan-only `terraform
   # test` with mocked providers) + Trivy IaC. Called, so every job in it
   # fans into the gate. Same checks as `pnpm check:infra` locally.
@@ -617,7 +654,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, verify, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:
