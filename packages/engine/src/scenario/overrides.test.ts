@@ -571,6 +571,55 @@ describe('hostile op names and fields (a worker message or request body is untru
 		for (const e of r.errors) expect(typeof e).toBe('string');
 	});
 
+	it.each(HOSTILE)('the later ops (engine ≥ 1.35.0) refuse %s as a field or id, never a throw, and touch no prototype', (name) => {
+		const b = base();
+		const r = applyScenario(b, [
+			hostile({ op: 'crop.set', cropId: 'c1', field: name, value: { polluted: true } }),
+			hostile({ op: 'landCover.set', patchId: 'lc1', field: name, value: { polluted: true } }),
+			hostile({ op: 'crop.remove', cropId: name }),
+			hostile({ op: 'node.move', nodeId: name, downstreamNodeId: 'G' }),
+			hostile({ op: 'node.move', nodeId: 'A', downstreamNodeId: name }),
+			hostile({ op: 'allocation.remove', allocationId: name })
+		]);
+		expect(r.applied).toEqual([]);
+		expect(r.problems).toHaveLength(6);
+		for (const p of r.problems) expect(typeof p).toBe('string');
+		expect(r.problems[0]).toMatch(/is not a crop field a scenario can set/);
+		expect(r.problems[1]).toMatch(/is not a land-cover field a scenario can set/);
+		expect(r.input).toEqual(b);
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+		const v = validateScenarioOps([
+			{ op: 'crop.set', cropId: 'c1', field: name, value: 1 },
+			{ op: 'landCover.set', patchId: 'lc1', field: name, value: 1 }
+		]);
+		expect(v.errors).toEqual(['ops[0].field: is not a crop field a scenario can set', 'ops[1].field: is not a land-cover field a scenario can set']);
+	});
+
+	it('the later ops keep only their allowlisted keys: a hostile key in an allocation, crop, patch or inserted node is dropped (positive controls apply)', () => {
+		const withKey = (o: object) => JSON.parse(JSON.stringify(o).replace(/^\{/, '{"__proto__":{"polluted":true},"constructor":1,'));
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'allocation.set', allocation: withKey({ id: 'al9', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 }) },
+			{ op: 'node.insert', upstreamNodeIds: ['A'], node: withKey(node('N', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 })) },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: 'Maize' },
+			{ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0.25 }
+		]);
+		expect(errors).toEqual([]);
+		const alloc = (ops[0] as Extract<ScenarioOp, { op: 'allocation.set' }>).allocation;
+		const inserted = (ops[1] as Extract<ScenarioOp, { op: 'node.insert' }>).node;
+		for (const o of [alloc, inserted]) {
+			expect(Object.hasOwn(o, '__proto__')).toBe(false);
+			expect(Object.hasOwn(o, 'constructor')).toBe(false);
+		}
+		const r = applyScenario(base(), ops);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops[0]!.name).toBe('Maize');
+		expect(r.input.model.landCover![0]!.densityPct).toBe(0.25);
+		expect(r.input.model.allocations).toEqual([{ id: 'al9', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 1000 }]);
+		expect(r.input.model.nodes.find((n) => n.id === 'A')!.downstreamNodeId).toBe('N');
+		expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+	});
+
 	it.each(HOSTILE)('an unknown op name %s is refused by the validator and is a problem in applyScenario', (name) => {
 		expect(validateScenarioOps([{ op: name }]).errors[0]).toMatch(/^ops\[0\]\.op: must be one of node\.set/);
 		const r = applyScenario(base(), [hostile({ op: name })]);
@@ -1112,7 +1161,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(one({ op: 'crop.set', cropId: 'cx', field: 'name', value: 'X' }).problems).toEqual(['op 1 (crop.set): crop cx not found']);
 		expect(one({ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: [1] } as unknown as ScenarioOp).problems).toEqual(['op 1 (crop.set): cropFactor must be 12 crop factors ≥ 0']);
 		expect(one({ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: 0 }).problems).toEqual(['op 1 (crop.set): irrigationEfficiency must be above 0']);
-		expect(one({ op: 'crop.set', cropId: 'c1', field: 'id', value: 'c9' } as unknown as ScenarioOp).problems).toEqual(['op 1 (crop.set): id "id" is not a crop field a scenario can set']);
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'id', value: 'c9' } as unknown as ScenarioOp).problems).toEqual(['op 1 (crop.set): "id" is not a crop field a scenario can set']);
 		const b = base();
 		b.model.crops.push({ id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.7) });
 		expect(applyScenario(b, [{ op: 'crop.set', cropId: 'c2', field: 'name', value: 'LUCERNE' }]).problems).toEqual(['op 1 (crop.set): duplicate crop name "lucerne"']);
@@ -1178,7 +1227,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	it('landCover.set refuses a missing patch, a bad value and nodeId; classified by the patch’s farm', () => {
 		expect(one({ op: 'landCover.set', patchId: 'lx', field: 'areaKm2', value: 1 }).problems).toEqual(['op 1 (landCover.set): land-cover patch lx not found']);
 		expect(one({ op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 2 }).problems).toEqual(['op 1 (landCover.set): densityPct must be at most 1']);
-		expect(one({ op: 'landCover.set', patchId: 'lc1', field: 'nodeId', value: 'A' } as unknown as ScenarioOp).problems).toEqual(['op 1 (landCover.set): nodeId "nodeId" is not a land-cover field a scenario can set']);
+		expect(one({ op: 'landCover.set', patchId: 'lc1', field: 'nodeId', value: 'A' } as unknown as ScenarioOp).problems).toEqual(['op 1 (landCover.set): "nodeId" is not a land-cover field a scenario can set']);
 		const op: ScenarioOp = { op: 'landCover.set', patchId: 'lc1', field: 'densityPct', value: 0 };
 		expect(classifyOp(op, ['B'], base())).toBe('proposal');
 		expect(classifyOp(op, ['A'], base())).toBe('baseline');

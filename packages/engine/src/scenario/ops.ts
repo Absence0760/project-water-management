@@ -595,8 +595,10 @@ const CROP_FIELD_CHECKS: Record<CropSetField, Check> = {
 	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
 };
 
+const CROP_FIELD_CHECK = checksOf(CROP_FIELD_CHECKS);
+
 export function cropFieldError(field: string, value: unknown): string | null {
-	const c = (CROP_FIELD_CHECKS as Record<string, Check>)[field];
+	const c = checkFor(CROP_FIELD_CHECK, field);
 	return c ? c(value) : `"${field}" is not a crop field a scenario can set`;
 }
 
@@ -619,8 +621,10 @@ const LAND_COVER_FIELD_CHECKS: Record<LandCoverSetField, Check> = {
 /** A patch's reductions rebuilt from their two known keys (null stays null). */
 export const reductions = (v: unknown): { mar: number; lowFlow: number } | null => (isObj(v) ? { mar: v.mar as number, lowFlow: v.lowFlow as number } : null);
 
+const LAND_COVER_FIELD_CHECK = checksOf(LAND_COVER_FIELD_CHECKS);
+
 export function landCoverFieldError(field: string, value: unknown): string | null {
-	const c = (LAND_COVER_FIELD_CHECKS as Record<string, Check>)[field];
+	const c = checkFor(LAND_COVER_FIELD_CHECK, field);
 	return c ? c(value) : `"${field}" is not a land-cover field a scenario can set`;
 }
 
@@ -944,8 +948,8 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'crop.set': {
 			const cropId = need('cropId', id);
-			const field = need('field', (v) => (typeof v === 'string' && v in CROP_FIELD_CHECKS ? null : 'is not a crop field a scenario can set'));
-			if (typeof field === 'string' && field in CROP_FIELD_CHECKS) need('value', (v) => cropFieldError(field, v));
+			const field = need('field', (v) => (typeof v === 'string' && CROP_FIELD_CHECK.byName.has(v) ? null : 'is not a crop field a scenario can set'));
+			if (typeof field === 'string' && CROP_FIELD_CHECK.byName.has(field)) need('value', (v) => cropFieldError(field, v));
 			op = { op: 'crop.set', cropId, field, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
@@ -973,8 +977,8 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'landCover.set': {
 			const patchId = need('patchId', id);
-			const field = need('field', (v) => (typeof v === 'string' && v in LAND_COVER_FIELD_CHECKS ? null : 'is not a land-cover field a scenario can set'));
-			if (typeof field === 'string' && field in LAND_COVER_FIELD_CHECKS) need('value', (v) => landCoverFieldError(field, v));
+			const field = need('field', (v) => (typeof v === 'string' && LAND_COVER_FIELD_CHECK.byName.has(v) ? null : 'is not a land-cover field a scenario can set'));
+			if (typeof field === 'string' && LAND_COVER_FIELD_CHECK.byName.has(field)) need('value', (v) => landCoverFieldError(field, v));
 			op = { op: 'landCover.set', patchId, field, value: field === 'factors' ? reductions(raw.value) : cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}

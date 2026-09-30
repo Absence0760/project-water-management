@@ -415,7 +415,9 @@ through it, never through the op's text. A name every object inherits (`__proto_
 `toString`, `hasOwnProperty`…) is refused like any unknown one, as an error
 or a problem, never a throw and never a prototype write (`overrides.test.ts` ›
 hostile op names and fields; CodeQL js/remote-property-injection and
-js/unvalidated-dynamic-method-call, PR #234).
+js/unvalidated-dynamic-method-call, PR #234). The later ops' `crop.set` and
+`landCover.set` fields go through the same path (`CROP_SET_FIELDS`,
+`LAND_COVER_SET_FIELDS`); their other ops name ids only, matched by equality.
 
 ## Tests
 

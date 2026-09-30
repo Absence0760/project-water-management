@@ -8,6 +8,8 @@ import { withMonthlyRates } from '../network/transferRates';
 import { DAM_AREA_EXPONENT, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
+	CROP_SET_FIELDS,
+	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
@@ -489,9 +491,11 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'crop.set': {
 			const c = m.crops.find((x) => x.id === op.cropId) ?? fail(`crop ${op.cropId} not found`);
-			const e = cropFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
-			(c as unknown as Record<string, unknown>)[op.field] = op.field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			// Written by the allowlist's own name for the field, never the op's text.
+			const field = allowed(CROP_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a crop field a scenario can set`);
+			const e = cropFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			(c as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
 			break;
 		}
 		case 'crop.remove': {
@@ -557,9 +561,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'landCover.set': {
 			const p = (m.landCover ?? []).find((x) => x.id === op.patchId) ?? fail(`land-cover patch ${op.patchId} not found`);
-			const e = landCoverFieldError(op.field, op.value);
-			if (e) fail(`${op.field} ${e}`);
-			(p as unknown as Record<string, unknown>)[op.field] = op.field === 'factors' ? reductions(op.value) : cloneData(op.value);
+			const field = allowed(LAND_COVER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a land-cover field a scenario can set`);
+			const e = landCoverFieldError(field, op.value);
+			if (e) fail(`${field} ${e}`);
+			(p as unknown as Record<string, unknown>)[field] = field === 'factors' ? reductions(op.value) : cloneData(op.value);
 			break;
 		}
 		case 'borehole.add': {
