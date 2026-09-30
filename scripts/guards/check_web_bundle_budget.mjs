@@ -1550,6 +1550,13 @@
 //             Measured against main @ 82248f4e: 1,333,296 → 1,333,517 gzip
 //             bytes (+0.22 KB), in the evidence report's own lazy chunk; it
 //             fits the headroom left above, so no raise.
+// 2026-09-30  total 1309 → 1312 KB (engine 1.47.0, CR-23, the CHIRPS gap
+//             map: its fit, month-block mapper and warnings in the engine's
+//             rain code, the shared month/season fit in quantileMap.ts,
+//             Settings' "CHIRPS quantile map" fieldset, the glossary entry,
+//             the fit-provenance line and the compare note). Measured
+//             against main @ ac3b2ef4: 1,338,970 → 1,342,201 gzip bytes
+//             (+3.16 KB), raised by that; headroom unchanged (~1.3 KB).
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1560,7 +1567,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1309,
+	totalCodeKb: 1312,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
