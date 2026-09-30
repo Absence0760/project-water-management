@@ -132,8 +132,21 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 
 	// Signed: the checklist is complete, and an editor issues it.
 	await expect(checklist.locator('li.fail')).toHaveCount(0);
+	// Reading the pack again after the issue fails once: the loaded pack stays, with the error inline and Try again.
+	const packUrl = `${API_URL}/projects/${project.id}/packs/${packId}`;
+	await page.route(packUrl, (route) =>
+		route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Server busy' }) }) : route.fallback()
+	);
 	await actions.getByRole('button', { name: 'Issue pack' }).click();
 	await answerConfirm(page, true, 'Its verify page then answers for code');
+	const reloadError = page.getByTestId('pack-reload-error');
+	await expect(reloadError).toContainText('The pack changed, but reading it again failed');
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(stamps.first()).toHaveText('Draft pack · not issued');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await page.unroute(packUrl);
+	await reloadError.getByRole('button', { name: 'Try again' }).click();
+	await expect(reloadError).toHaveCount(0);
 	await expect(actions).toContainText('Issued');
 	const issued = await getPack(page.request, project.id, packId);
 	expect(issued.status).toBe('issued');

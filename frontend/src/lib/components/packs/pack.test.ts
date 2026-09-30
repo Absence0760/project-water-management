@@ -6,7 +6,7 @@ import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Pack } from '$lib/api';
-import { checkFile, issueChecklist, issuedOf, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
+import { checkFile, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
 
 const tz = process.env.TZ;
 afterEach(() => {
@@ -176,5 +176,58 @@ describe('issueChecklist', () => {
 		const unsigned = issueChecklist({ issuable: true, runsVerified: true, signed: false });
 		expect(unsigned.find((c) => !c.ok)).toMatchObject({ id: 'signed' });
 		expect(unsigned[2]!.todo).toMatch(/Appendix B\.2/);
+	});
+});
+
+describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
+	const found = (code: string) => ({ shortCode: code }) as unknown as import('$lib/api').PackVerification;
+	const notFound = new Error('404');
+	const isNotFound = (e: unknown) => e === notFound;
+	const parse = (c: string) => (/^[0-9a-f-]+$/.test(c) ? c : null);
+
+	it('asks for a code, says "not found" alike for a malformed and an unknown code, and keeps any other failure', async () => {
+		const verify = async (c: string) => (c === 'ab12' ? found(c) : Promise.reject(c === 'ffff' ? notFound : new Error('network down')));
+		expect(await lookUpCode('', parse, verify, isNotFound)).toEqual({ status: 'no-code' });
+		expect(await lookUpCode('not a code', parse, verify, isNotFound)).toEqual({ status: 'not-found' });
+		expect(await lookUpCode('ffff', parse, verify, isNotFound)).toEqual({ status: 'not-found' });
+		expect(await lookUpCode('0000', parse, verify, isNotFound)).toEqual({ status: 'error', error: 'network down' });
+		expect(await lookUpCode('ab12', parse, verify, isNotFound)).toEqual({ status: 'found', v: found('ab12') });
+	});
+
+	it('shows only the latest of two quick lookups, whichever answers last (the page’s load)', async () => {
+		// Two navigations: the first code's answer is held until after the second's.
+		const answers = new Map<string, (v: import('$lib/api').PackVerification) => void>();
+		const failures = new Map<string, (e: unknown) => void>();
+		const verify = (c: string) => new Promise<import('$lib/api').PackVerification>((res, rej) => (answers.set(c, res), failures.set(c, rej)));
+		const shown: string[] = [];
+		const latest = latestOnly();
+		const load = async (c: string) => {
+			const current = latest.begin();
+			const r = await lookUpCode(c, parse, verify, isNotFound);
+			if (current()) shown.push(r.status === 'found' ? r.v.shortCode : r.status);
+		};
+		const first = load('aaaa');
+		const second = load('bbbb');
+		answers.get('bbbb')!(found('bbbb'));
+		await second;
+		answers.get('aaaa')!(found('aaaa'));
+		await first;
+		expect(shown).toEqual(['bbbb']);
+		// The error path too: a late failure of an older lookup doesn't replace the newer answer.
+		const third = load('cccc');
+		const fourth = load('dddd');
+		answers.get('dddd')!(found('dddd'));
+		await fourth;
+		failures.get('cccc')!(new Error('network down'));
+		await third;
+		expect(shown).toEqual(['bbbb', 'dddd']);
+	});
+
+	it('keeps each check true only until a later request begins', () => {
+		const latest = latestOnly();
+		const a = latest.begin();
+		expect(a()).toBe(true);
+		const b = latest.begin();
+		expect([a(), b()]).toEqual([false, true]);
 	});
 });

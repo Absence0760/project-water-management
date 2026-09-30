@@ -285,7 +285,10 @@ English only: its readers are licensing assessors, like the methods page's.
   withdrawn before issue) is one answer: *No issued evidence pack has this
   code*. The code is read in any case, with or without dashes, or as the full
   64-character hash. Bare `/verify` asks for a code; **Verify another pack**
-  is at the foot of every state.
+  is at the foot of every state. Only the latest lookup is shown
+  (`packs/pack.ts` `latestOnly`, `lookUpCode`): a slow first lookup that
+  answers after following *Verify the newer version* or **Verify another
+  pack** is dropped, and so is a file check of the pack no longer shown.
 - Everything shown is text (Svelte escapes it). The links are underlined,
   not colour alone.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (signed out, a wrong code, a
@@ -5961,7 +5964,11 @@ pack.
   the pack and its sign-offs, and the project for the caller's role; a
   render session, which may read only the first two, skips the project, and
   a project that can't be read leaves the pack shown without the editor's
-  moves.
+  moves. After a sign-off, issue or withdrawal the page reads the pack again
+  quietly; if that fails, the pack stays as it was, under an inline alert
+  with **Try again**, and `data-report-ready` stays set. Only the latest
+  load is applied, so following **Open the newer version** while a load is
+  in flight can't show the older pack.
 - **What isn't frozen is left out.** Page 1's licence impact by year class
   reads the runs' daily series and the project's year-class settings, which
   a `pack-1` manifest doesn't carry, so a pack prints a line saying it is not

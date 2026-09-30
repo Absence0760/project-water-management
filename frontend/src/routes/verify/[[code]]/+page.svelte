@@ -20,7 +20,7 @@
 	import { api, ApiError, type PackVerification } from '$lib/api';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { checkFile, type FileCheck } from '$lib/components/packs/pack';
+	import { checkFile, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
 	import { fmtDate } from '$lib/format/number';
 
 	const code = $derived(page.params.code ?? '');
@@ -28,28 +28,18 @@
 	let status = $state<'loading' | 'found' | 'not-found' | 'error' | 'no-code'>('loading');
 	let error = $state('');
 
+	// Each navigation starts a lookup; only the latest one's answer is shown (a slow first one can't overwrite it).
+	const latest = latestOnly();
 	async function load(c: string) {
+		const current = latest.begin();
 		status = 'loading';
 		v = null;
 		check = null;
-		if (!c) {
-			status = 'no-code';
-			return;
-		}
-		if (!parsePackCode(c)) {
-			status = 'not-found';
-			return;
-		}
-		try {
-			v = await api.verify(c);
-			status = 'found';
-		} catch (e) {
-			if (e instanceof ApiError && e.status === 404) status = 'not-found';
-			else {
-				error = e instanceof Error ? e.message : String(e);
-				status = 'error';
-			}
-		}
+		const r = await lookUpCode(c, parsePackCode, api.verify, (e) => e instanceof ApiError && e.status === 404);
+		if (!current()) return;
+		if (r.status === 'found') v = r.v;
+		if (r.status === 'error') error = r.error;
+		status = r.status;
 	}
 	$effect(() => {
 		const c = code;
@@ -70,10 +60,13 @@
 	let dragging = $state(false);
 	async function checkOne(file: File | undefined) {
 		if (!file || !v) return;
+		const of = v;
 		checking = true;
 		check = null;
 		try {
-			check = { ...(await checkFile(new Uint8Array(await file.arrayBuffer()), v)), name: file.name };
+			const r = { ...(await checkFile(new Uint8Array(await file.arrayBuffer()), of)), name: file.name };
+			// Checked against the pack still shown: a navigation meanwhile drops it.
+			if (v === of) check = r;
 		} finally {
 			checking = false;
 		}

@@ -160,3 +160,46 @@ export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks;
 		}
 	];
 }
+
+/**
+ * A guard against stale responses: each `begin()` starts a new request and
+ * returns a check that stays true only while no later request has begun. A
+ * page that loads on navigation applies an answer only when its check is
+ * still true, so a slow first lookup can't overwrite a later one.
+ */
+export function latestOnly(): { begin: () => () => boolean } {
+	let seq = 0;
+	return {
+		begin() {
+			const mine = ++seq;
+			return () => mine === seq;
+		}
+	};
+}
+
+/** What the verify page shows for a code: a lookup's outcome, as its states. */
+export type VerifyLookup =
+	| { status: 'no-code' | 'not-found' }
+	| { status: 'found'; v: PackVerification }
+	| { status: 'error'; error: string };
+
+/**
+ * Look a code up for the verify page: no code asks for one; a code that
+ * can't be a pack's (`parse`) or that the API answers 404 is "not found",
+ * the same answer whatever the reason; any other failure is an error.
+ */
+export async function lookUpCode(
+	code: string,
+	parse: (c: string) => unknown,
+	verify: (c: string) => Promise<PackVerification>,
+	isNotFound: (e: unknown) => boolean
+): Promise<VerifyLookup> {
+	if (!code) return { status: 'no-code' };
+	if (!parse(code)) return { status: 'not-found' };
+	try {
+		return { status: 'found', v: await verify(code) };
+	} catch (e) {
+		if (isNotFound(e)) return { status: 'not-found' };
+		return { status: 'error', error: e instanceof Error ? e.message : String(e) };
+	}
+}
