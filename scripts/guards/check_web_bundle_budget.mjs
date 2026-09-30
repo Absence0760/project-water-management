@@ -1484,6 +1484,14 @@
 //             b72ba4eb merged). #229's share links and #204's hands-off flow
 //             now in main; nothing of the evidence measures changed, engine
 //             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
+// 2026-09-30  total 1267 → 1285 KB (issue #71, WP-3.14: the evidence pack's
+//             screens, measured 1282 with main @ 848000ac merged). Two new
+//             routes, each its own lazy chunk loaded only when opened: the
+//             pack view with its actions (~6 KB) and the public verify page
+//             with its in-browser file check (~6 KB); the pack helpers and
+//             badge (~2 KB) and the pack lists on the evidence report and
+//             the Applications tab and panel. No new dependency: the hash is
+//             WebCrypto, the canonical JSON the engine's. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1494,7 +1502,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1267,
+	totalCodeKb: 1285,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
