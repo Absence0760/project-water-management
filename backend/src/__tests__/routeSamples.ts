@@ -5,7 +5,7 @@
 // A route whose validation refuses an empty body needs a SAMPLE here; both
 // sweeps fail until it has one.
 import { expect } from 'vitest';
-import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, signUp } from './helpers.js';
+import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, retirePendingJobs, signUp } from './helpers.js';
 
 export type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -185,3 +185,11 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 		}
 	};
 }
+
+/**
+ * Retire the jobs the ladder left pending: buildLadder's yield job, and
+ * whatever the routes a file sends queued (re-runs, yields, sweeps …). Call it
+ * in the file's afterAll: the job queue is shared by every DB test file, and a
+ * later file's tick would claim them (src/__tests__/db-setup.ts).
+ */
+export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);

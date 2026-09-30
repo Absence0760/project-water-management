@@ -26,7 +26,8 @@ export interface FeedMeta {
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
-	schedule: 'daily' | 'hourly';
+	/** Always daily (backend FEED_SCHEDULES): no source publishes more often. */
+	schedule: 'daily';
 	createdAt: string;
 	updatedAt: string;
 	actingUser: string | null;
@@ -92,7 +93,7 @@ export interface FeedBody {
 	config: { cells: GridCell[]; product?: ChirpsProduct; startDate?: string } | { station: string };
 	targetKind: string;
 	targetName: string;
-	schedule: 'daily' | 'hourly';
+	schedule: 'daily';
 	/** The owner confirmed replacing a target that holds another product or version (issue #40c). */
 	replaceSeries?: boolean;
 }
@@ -117,7 +118,7 @@ export interface FeedDraft {
 	station: string;
 	targetKind: string;
 	targetName: string;
-	schedule: 'daily' | 'hourly';
+	schedule: 'daily';
 	/** CHIRPS only: which v3 daily product. */
 	product: ChirpsProduct;
 	/** CHIRPS only: the first day to fetch, YYYY-MM-DD, or '' for the default (60 days back). */

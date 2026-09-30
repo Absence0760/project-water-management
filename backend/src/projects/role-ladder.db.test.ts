@@ -31,7 +31,7 @@
 // through the allowed routes is farms/farmer-privacy.security.db.test.ts, a
 // contributor scenarios/applications.db.test.ts; isolation.db.test.ts covers
 // non-members.
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Check = { min: string; ok: boolean };
 const checks: Check[] = [];
@@ -52,7 +52,7 @@ vi.mock('./access.js', async (orig) => {
 	};
 });
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
-import { buildLadder, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { rank, type Role } from './access.js';
 
 const ORIGIN = 'http://localhost:7777';
@@ -228,6 +228,8 @@ async function snapshot() {
 const minRole = new Map<string, Role>();
 const viewerStatus = new Map<string, number>();
 let before: Awaited<ReturnType<typeof snapshot>>;
+
+afterAll(() => clearLadderJobs(ctx));
 
 beforeAll(async () => {
 	Object.assign(ctx, await buildLadder('L'));
