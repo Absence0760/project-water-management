@@ -1430,6 +1430,52 @@ export interface SharePack {
 	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
 }
 
+/** One pack of an application as its party sees it (131_applicant_packs; backend evidence/applicantPacks.ts). */
+export interface ApplicantPackMeta {
+	id: string;
+	scenarioId: string;
+	title: string;
+	mode: 'baseline' | 'application';
+	version: number;
+	status: Exclude<PackStatus, 'draft'>;
+	issuedAt: string;
+	manifestSha256: string;
+	shortCode: string;
+	verifyPath: string;
+	supersedesId: string | null;
+	supersededById: string | null;
+	withdrawnReason: string | null;
+	/** The caller is the application's owner: they list and revoke the links they made. */
+	isOwner: boolean;
+	/** The application's owner may link it, while it is issued. */
+	canShare: boolean;
+}
+
+/** One of the applicant's own units in the pack (D2: by name, in full). */
+export interface ApplicantPackOwnUnit {
+	name: string;
+	kind: 'farm' | 'user';
+	onlyIn: 'application' | null;
+	suppliedA: number | null;
+	suppliedB: number | null;
+	timeReliabilityA: number | null;
+	timeReliabilityB: number | null;
+	annualReliabilityA: number | null;
+	annualReliabilityB: number | null;
+	/** Change in share of demand supplied, percentage points. */
+	change: { run: number | null; band: SharedBand | null; worse: { k: number; n: number } | null } | null;
+}
+
+/** GET /projects/:id/scenarios/:sid/packs/:packId: an application's issued pack, D2-anonymised. */
+export interface ApplicantPack {
+	pack: ApplicantPackMeta;
+	verify: PackVerification;
+	/** What a pack link shows of the frozen report, for every standing. */
+	figures: NonNullable<SharePack['figures']> | null;
+	/** Their own units by name; every other only as "Farm n" with its change in whole points. null when a baseline assumption changed. */
+	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; n: number; changePts: number }[] } | null;
+}
+
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
 export interface SharedCatchmentView {
 	runStart: string;
