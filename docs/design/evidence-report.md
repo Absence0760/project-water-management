@@ -326,6 +326,38 @@ An ensemble stored before engine 1.33.0 has none of these measures: each such
 cell prints "no band: the ensemble was stored before engine 1.33.0", and a run
 made before it prints the row *Not assessed* with the reason.
 
+**Report version `evidence-7`** (issue #71 follow-up, before the pilot):
+Appendix C's fixed prompts. Until then Appendix C printed the scenario's
+description and the run's notes as written, so what an applicant left out
+(mitigation, say) was simply absent and an assessor had to notice. Now it
+asks three questions of every application (engine `evidence/prompts.ts`,
+`APPLICANT_PROMPTS`) and prints each with its answer or *Not given*:
+
+- **Purpose and need**: what the change is for, and why this water is needed
+  (what the works serve, why less water or another source would not do).
+  Among the factors [NWA] s27 weighs is efficient and beneficial use in the
+  public interest, and a WULA's motivation opens with it ([GEOSS]).
+- **Mitigation**: what will avoid, reduce or offset the effect on the river
+  and other users (releases, a lower take in dry months, a smaller dam, a
+  condition accepted). The applicant persona's "shows mitigation, not only
+  impact" (§ 10); the report's numbers stay the model's, the words the
+  applicant's.
+- **Monitoring**: how the effect will be measured once built (what, where,
+  how often, by whom, who sees the records), which a licence condition
+  would rest on.
+
+Judgement: fixed prompts, not a form per authority, since ER-D1 is still
+open; three because they are the parts of a WULA motivation the report's
+numbers can't supply, and a short list keeps *Not given* meaningful. The
+answers are stored on the scenario (`129_scenario_statement`) and written
+where it is edited ([ui.md § Scenarios](../ui.md)), by whoever may change it,
+on the description's terms (not frozen by a submission; an issued pack
+freezes what it printed, [evidence-pack.md](../evidence-pack.md#what-a-pack-holds)).
+The description and run notes stay after them: the description is often the
+one line that names the works, and the run notes carry the modeller's reason
+next to a WR2012 query. A pack drafted before `evidence-7` says the prompts
+aren't part of it.
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 
@@ -335,7 +367,7 @@ two downstream farms; a catchment with more gets its own page.
 | --- | --- | --- |
 | A | Inputs and assumptions | A.1 settings that drive results; A.2 the application's ops and the full input diff; A.3 input series (kind, dates, days, SHA-256); A.4 baseline history; A.5 every run warning, verbatim |
 | B | Limitations, sign-off and verification | B.1 generated known limitations and errata; B.2 sign-off; B.3 disclaimer (D10); B.4 manifest hash, short code, verify link, in-browser check, reproduction command, page count |
-| C | Applicant's statement (optional) | The only free text the applicant writes, labelled as theirs: the scenario description and the run notes, verbatim with author and time (§6 G13) |
+| C | Applicant's statement | The only free text the applicant writes, labelled as theirs (§6 G13): first three fixed prompts, **purpose and need**, **mitigation** and **monitoring**, each with its question and the answer verbatim or *Not given* (report version `evidence-7`); then the scenario description and the run notes, verbatim with author and time |
 
 ### 4.4 Table, chart or prose
 
@@ -562,7 +594,8 @@ no-flow row, a flag for flows below the table's lowest point, the days a user
 is served in full while the site fails, Appendix C's fixed prompts, and paired
 bands on each unit's supply (ER4 rest). Built since, in the follow-ups: the
 driest month's FDC, the other applications on the baseline with their sum,
-the diagonal draft stamp and the licence impact by year class on page 1; and
+the diagonal draft stamp, the licence impact by year class on page 1 and
+Appendix C's fixed prompts (`evidence-7`, § 4.3); and
 for cancelled ensembles, the finding that nothing interim is stored (a
 started row holds no summary or result, `run_uncertainty`'s check), which the
 ledger now says.

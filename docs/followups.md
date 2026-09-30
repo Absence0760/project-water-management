@@ -4084,10 +4084,17 @@ Left, from the design and the persona review (§11), each with its trigger.
       partial results would mean the browser writing them mid-run, which the
       report doesn't need: the cited ensemble is the first *complete* one on
       the declared rule (G4), so an abandoned start can't be cited either way.
-- [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
-      description and run notes as written. Durable fix: fixed prompts
-      (purpose and need, mitigation, monitoring), each answered or *Not
-      given*. Trigger: before the pilot.
+- [x] **Appendix C's fixed prompts.** Built (report version `evidence-7`):
+      three fixed prompts, purpose and need, mitigation and monitoring
+      (engine `evidence/prompts.ts`), answered on the scenario where it is
+      edited (**Applicant's statement**, `ScenarioStatement.svelte`) and
+      stored on it (`129_scenario_statement`, following the scenario's RLS:
+      an editor on a team scenario, only the applicant on an application;
+      a decision can't change them). Appendix C prints each with its question,
+      the answer verbatim or *Not given*, before the description and run
+      notes; a pack freezes them in its manifest, and one drafted before
+      `evidence-7` says they aren't part of it
+      ([design/evidence-report.md § 4.2](./design/evidence-report.md)).
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
       issued* watermark (`position: fixed` in `@media print`, repeated on
       every printed page by Chromium), `aria-hidden` beside the section heads'
