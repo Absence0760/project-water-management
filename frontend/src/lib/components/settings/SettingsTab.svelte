@@ -9,6 +9,10 @@
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
 	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
+	// API keys render for owners only, so the rest of the team never downloads them.
+	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
+	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
+	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -84,10 +88,8 @@
 	// reports save through their own APIs, never through Save settings (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import DataFeedsPanel from '$lib/components/feeds/DataFeedsPanel.svelte';
 	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
 	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
-	import ApiKeysPanel from '$lib/components/apiKeys/ApiKeysPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 
@@ -1215,10 +1217,17 @@
 		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with Save settings.
 	</p>
 {/if}
-<DataFeedsPanel projectId={project.id} />
+<!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
+<div id="set-feeds">
+	<Lazy load={loadDataFeeds}>
+		{#snippet children(DataFeedsPanel)}<DataFeedsPanel projectId={project.id} />{/snippet}
+	</Lazy>
+</div>
 
 {#if project.role === 'owner'}
-	<ApiKeysPanel projectId={project.id} />
+	<Lazy load={loadApiKeys}>
+		{#snippet children(ApiKeysPanel)}<ApiKeysPanel projectId={project.id} />{/snippet}
+	</Lazy>
 {/if}
 
 <ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
