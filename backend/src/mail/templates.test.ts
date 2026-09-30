@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, farmerInviteMail, inviteMail, listText, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -173,5 +173,59 @@ describe('farmer invite email (WP-2.2)', () => {
 		expect(mail.html).not.toContain('<img');
 		expect(mail.html).toContain('&lt;script&gt;');
 		expect(mail.text).toContain('<script>x</script>');
+	});
+});
+
+describe('packNoticeMail (issue #71)', () => {
+	const base = {
+		projectId: 'p1',
+		packId: 'k1',
+		projectName: 'Kloof',
+		scenarioName: 'Upper dam',
+		version: 2,
+		supersedesVersion: 1,
+		shortCode: 'ab12-cd34-ef56',
+		reason: null,
+		as: 'applicant'
+	} as const;
+
+	it('tells the applicant an issue: version, subject, short code and the public verify link, no pack page and no figure', () => {
+		const m = packNoticeMail('a@example.com', { ...base, event: 'issued' });
+		expect(m).toMatchObject({ kind: 'pack_notice', to: 'a@example.com', subject: 'Evidence pack issued: Upper dam — Kloof' });
+		expect(m.text).toContain('Version 2 of the evidence pack for the application “Upper dam” in Kloof has been issued.');
+		expect(m.text).toContain('It replaces version 1, which is now marked as superseded.');
+		expect(m.text).toContain('Its short code is ab12-cd34-ef56.');
+		expect(m.text).toContain('Check the pack: http://localhost:7777/verify/ab12-cd34-ef56');
+		expect(m.text).toContain('because the application “Upper dam” is yours');
+		expect(m.text).not.toContain('/packs/');
+		expect(m.html).toMatch(/<html lang="en">/);
+	});
+
+	it('gives an editor the pack’s own page too, and says why they get it', () => {
+		const m = packNoticeMail('e@example.com', { ...base, event: 'issued', as: 'editor', supersedesVersion: null });
+		expect(m.text).toContain('Open the pack in the catchment: http://localhost:7777/projects/p1/packs/k1');
+		expect(m.text).toContain('You get this email because you can issue and withdraw evidence packs in Kloof.');
+		expect(m.text).not.toContain('replaces version');
+	});
+
+	it('names baseline evidence as such', () => {
+		const m = packNoticeMail('e@example.com', { ...base, event: 'issued', as: 'editor', scenarioName: null, version: 1, supersedesVersion: null });
+		expect(m.subject).toBe('Evidence pack issued: Baseline evidence — Kloof');
+		expect(m.text).toContain('Version 1 of the evidence pack for the baseline evidence in Kloof has been issued.');
+	});
+
+	it('says a withdrawal with its reason, and never mentions a replaced version', () => {
+		const m = packNoticeMail('a@example.com', { ...base, event: 'withdrawn', reason: 'the licence application lapsed' });
+		expect(m.subject).toBe('Evidence pack withdrawn: Upper dam — Kloof');
+		expect(m.text).toContain('has been withdrawn. It no longer stands as evidence, and the verify page now says so.');
+		expect(m.text).toContain('The reason given: “the licence application lapsed”');
+		expect(m.text).not.toContain('replaces version');
+	});
+
+	it('follows the recipient’s language (an applicant may read Afrikaans), marked lang="af"', () => {
+		const m = packNoticeMail('a@example.com', { ...base, event: 'issued' }, 'af');
+		expect(m.html).toMatch(/<html lang="af">/);
+		expect(m.subject).toBe('Bewyspakket uitgereik: Upper dam — Kloof');
+		expect(m.text).toContain('http://localhost:7777/verify/ab12-cd34-ef56');
 	});
 });

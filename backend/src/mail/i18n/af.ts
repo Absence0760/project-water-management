@@ -188,4 +188,36 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.restriction.level.restricted': 'beperk',
 	// This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.
 	'mail.alert.restriction.wua': 'Hierdie kennisgewing is die WGV s’n. Dit word hier gewys soos die WGV dit gepubliseer het. Rig vrae daaroor aan jou WGV.',
+	// Evidence pack issued: {name} — {project}
+	'mail.pack.issued.subject': 'Bewyspakket uitgereik: {name} — {project}',
+	// Evidence pack issued
+	'mail.pack.issued.heading': 'Bewyspakket uitgereik',
+	// Version {version} of the evidence pack for {what} in {project} has been issued.
+	'mail.pack.issued.body': 'Weergawe {version} van die bewyspakket vir {what} in {project} is uitgereik.',
+	// It replaces version {previous}, which is now marked as superseded.
+	'mail.pack.issued.supersedes': 'Dit neem die plek in van weergawe {previous}, wat nou as vervang gemerk is.',
+	// Evidence pack withdrawn: {name} — {project}
+	'mail.pack.withdrawn.subject': 'Bewyspakket teruggetrek: {name} — {project}',
+	// Evidence pack withdrawn
+	'mail.pack.withdrawn.heading': 'Bewyspakket teruggetrek',
+	// Version {version} of the evidence pack for {what} in {project} has been withdrawn. It no longer stands as evidence, and the verify page now says so.
+	'mail.pack.withdrawn.body': 'Weergawe {version} van die bewyspakket vir {what} in {project} is teruggetrek. Dit geld nie meer as bewys nie, en die verifikasiebladsy sê nou so.',
+	// The reason given: “{reason}”
+	'mail.pack.withdrawn.reason': 'Die rede wat gegee is: “{reason}”',
+	// the application “{name}”
+	'mail.pack.what.application': 'die aansoek “{name}”',
+	// the baseline evidence
+	'mail.pack.what.baseline': 'die basislynbewyse',
+	// Baseline evidence
+	'mail.pack.name.baseline': 'Basislynbewyse',
+	// Its short code is {code}. Anyone with the code can check the pack, and whether it still stands, on the verify page.
+	'mail.pack.code': 'Sy kort kode is {code}. Enigiemand met die kode kan die pakket, en of dit nog staan, op die verifikasiebladsy kontroleer.',
+	// Check the pack
+	'mail.pack.action': 'Kontroleer die pakket',
+	// Open the pack in the catchment
+	'mail.pack.open': 'Maak die pakket in die opvanggebied oop',
+	// You get this email because you can issue and withdraw evidence packs in {project}.
+	'mail.pack.why.editor': 'Jy kry hierdie e-pos omdat jy bewyspakkette in {project} kan uitreik en terugtrek.',
+	// You get this email because the application “{name}” is yours.
+	'mail.pack.why.applicant': 'Jy kry hierdie e-pos omdat die aansoek “{name}” joune is.',
 };

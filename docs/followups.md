@@ -4279,9 +4279,19 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       pack's code. Trigger: an applicant or the client asks for a file of
       their own copy, or D2 is settled with the client (it may instead open
       the assessors' copy to the applicant).
-- [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
-      project's editors and the scenario's owner. Trigger: with the pack
-      view.
+- [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
+      project's editors and the scenario's owner: built 2026-09-30
+      (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,
+      or withdrawing one that was issued (with its reason), emails the
+      project's editors and owners and the application's owner, never the
+      actor; a supersede is told in the new version's email, and a draft
+      withdrawn is told to no one. Queued in the route's transaction, sent
+      by the tick as each recipient under RLS, with the role and address
+      checked again at send; the email carries the version, the short code
+      and the verify link, never a figure
+      ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
+      Afrikaans words went through the i18n translator and checker (the
+      native speaker's review is pending with the rest, § Afrikaans).
 
 ## Alerts (WP-2.13)
 

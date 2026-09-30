@@ -10,8 +10,9 @@ holding it can check it against the app with its short code.
 
 This page covers what a pack holds, what its hash covers, the short code, the
 lifecycle, the PDF, verification, the reproduction bundle, sharing a
-pack by link with comments on it, and what an applicant reads of their own
-application's packs. The routes are in
+pack by link with comments on it, what an applicant reads of their own
+application's packs, and the emails sent when a pack is issued or
+withdrawn. The routes are in
 [api.md § Evidence packs](./api.md#evidence-packs), the table in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
@@ -28,7 +29,9 @@ panel, and the public verify page with its in-browser file check
 to an issued pack with public comments on it
 ([§ Sharing and comments](#sharing-and-comments), 2026-09-30); and the
 applicant's own copy of their application's issued packs, with share links
-([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30). What is left is
+([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
+"pack issued" and "pack withdrawn" emails to the editors and the applicant
+([§ Notices](#notices), 133_pack_notices, 2026-09-30). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -499,6 +502,68 @@ Tests: `backend/src/evidence/applicant-packs.db.test.ts`,
 `e2e/tests/applicant-pack.spec.ts` (the applicant opens their issued pack
 from the Application panel, sees their farm by name and the neighbour as
 "Farm 1", makes a link, and it opens signed out).
+
+## Notices
+
+When a pack is **issued**, or one that was issued is **withdrawn**, the
+project's editors and the application's owner get an email (133_pack_notices;
+Mailpit locally, SES in production; `backend/src/evidence/notices.ts`). It
+follows the alert mails' pattern ([architecture.md § Alert emails](./architecture.md#alert-emails)):
+
+1. **Queued with the change.** The issue and withdraw routes call
+   `app_pack_notice_queue(pack, event)` in their own transaction, as the
+   editor who acted: one `pack_notice` row per recipient, so the notice
+   commits with the issue or withdrawal, or neither does. The function
+   refuses anyone but an editor of the pack's project, and a pack not in
+   that state.
+2. **Sent by the worker's tick**, after the jobs and the alert mails. Each
+   email is built in a transaction *as its recipient*, under RLS: their role
+   is checked again (someone removed or demoted since gets nothing), so is
+   their address (confirmed, and not suppressed by SES since:
+   `app_user.mail_suppressed_at`), and the catchment's and the application's
+   names are read as they may read them. The mail goes out after that
+   transaction; a transport failure is retried on the next ticks (3 attempts)
+   and logged as `mail_send_failed` (kind `pack_notice`), which the
+   `mail-send-failed` alarm counts. A worker that dies mid-send leaves the
+   notice failed, never sent twice.
+
+**Who gets it.** Everyone whose role on the project, direct or through its
+team, is editor or owner (they issue and withdraw packs), and, for an
+application's pack, the scenario's owner while they still hold a role above
+farmer (an applicant is a contributor). Never a viewer, a farmer, another
+applicant or a non-member, and never the person who issued or withdrew it:
+they just did it. Once per pack, person and event (the primary key).
+
+**Which events** (decided 2026-09-30):
+
+| Event | Emailed? | Why |
+| --- | --- | --- |
+| issued | yes | the pack now stands; the email of a new version says which version it replaces |
+| superseded | no email of its own | it happens in the same step as the new version's issue, whose email says so |
+| withdrawn, after it was issued | yes, with the reason | the verify link the applicant may have given an authority now says withdrawn |
+| withdrawn as a draft | no | a draft was never public (verify answers `404` for it) |
+
+**What it says.** The pack's version, what it is for (the application's
+name, or the baseline evidence), the catchment, the short code and the
+public verify link (**Check the pack**); for a withdrawal, the reason, which
+verify shows anyone already. Never a figure. Editors also get a link to the
+pack's own page; an applicant doesn't, since applicants read no pack yet
+([followups.md](./followups.md), "Applicants' access to their own
+application's packs"): the verify link works for them. The words are in the
+mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
+recipient's language, English where a key has no translation.
+
+There is no opt-out: like a report-ready email, it goes to the few people
+who act on packs, once per issue or withdrawal. The rows are the person's
+(in their data export as `packNotices`, deleted with the account) and are
+purged 30 days after they are settled.
+
+Tests: `backend/src/evidence/notices.db.test.ts` (who is queued, each
+refusal with its control, the worker-only claim, each recipient's email, the
+re-checks at send, a lapsed lease and the retries, the export and the purge), `evidence/packs.db.test.ts`
+(the issue and withdraw routes queue them; a withdrawn draft queues none),
+`mail/templates.test.ts` and `mail/outbound.security.test.ts` (the email,
+against hostile names).
 
 ## Guards
 

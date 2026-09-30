@@ -50,6 +50,8 @@ import { withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
 import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
+import { outbox } from '../mail/transport.js';
+import { sendPackNotices } from './notices.js';
 import { acceptPackRenderResult } from '../reports/schedule.js';
 import { packBundleKey, packPdfKey, packsBucket, putPackBundle, putPackPdf, resetStorageClient } from '../reports/storage.js';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -147,8 +149,16 @@ const rawS3 = () =>
 		credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || 'minioadmin', secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || 'minioadmin' }
 	});
 
+/** The pack's notices of one event (133_pack_notices), by recipient. */
+const notices = async (packId: string, event = 'issued') =>
+	(await asOwner('SELECT user_id::text, event, status FROM pack_notice WHERE pack_id = $1 AND event = $2 ORDER BY user_id', [packId, event])) as { user_id: string; event: string; status: string }[];
+
 // Whatever this file queued and left (issuing v2 queues its PDF's render, a retry waits two minutes): no later file's tick may claim it.
-afterAll(() => retirePendingJobs(projectId));
+afterAll(async () => {
+	await retirePendingJobs(projectId);
+	// And the pack notices it queued, so no later file's tick sends them.
+	await asOwner('DELETE FROM pack_notice WHERE project_id = $1', [projectId]);
+});
 
 beforeAll(async () => {
 	[owner, editor, viewer, stranger, contributor, farmer] = (await Promise.all(
@@ -343,6 +353,8 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
 		expect((await issue(owner, v1.id)).status).toBe(409);
+		// The "pack issued" notice (133_pack_notices), queued with the issue: the other editor; not the issuer, a viewer, an applicant or a farmer.
+		expect(await notices(v1.id)).toEqual([{ user_id: editor.id, event: 'issued', status: 'pending' }]);
 	});
 
 	it('stores the reproduction bundle at issue under its derived key; its hash is on the pack and on verify', async () => {
@@ -473,6 +485,8 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		const w = await editor.call('POST', `${packPath(signed.id)}/withdraw`, { reason: 'drafted in error' });
 		expect(w.status).toBe(200);
 		expect(w.body.pack).toMatchObject({ status: 'withdrawn', issuedAt: null, statusReason: 'drafted in error' });
+		// Never public, so nobody is told.
+		expect(await notices(signed.id, 'withdrawn')).toEqual([]);
 		// Never issued, so never public.
 		expect((await anon('GET', `/verify/${signed.shortCode}`)).status).toBe(404);
 	});
@@ -709,6 +723,9 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toContain('ER-991');
 		expect(v2Verified.errataFoundSince).toEqual([]);
 		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991']);
+		// Issued by the editor this time: the owner is told (the notice names the version it replaces); the superseded pack gets no notice of its own.
+		expect(await notices(v2.id)).toEqual([{ user_id: owner.id, event: 'issued', status: 'pending' }]);
+		expect((await notices(v1.id)).map((n) => n.event)).toEqual(['issued']);
 	});
 
 	it('withdraws an issued pack once, with its reason, and says so to verify', async () => {
@@ -718,6 +735,14 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('POST', `${packPath(v2.id)}/withdraw`, { reason: 'again' })).status).toBe(409);
 		await expect(asOwner(`UPDATE evidence_pack SET status_reason = 'changed' WHERE id = $1`, [v2.id])).rejects.toMatchObject({ code: '23514' });
 		expect((await anon('GET', `/verify/${v2.shortCode}`)).body.pack).toMatchObject({ status: 'withdrawn', withdrawnReason: 'the licence application lapsed' });
+		expect(await notices(v2.id, 'withdrawn')).toEqual([{ user_id: owner.id, event: 'withdrawn', status: 'pending' }]);
+		// The tick's send step (sendPackNotices, not the whole tick: v2's render job stays queued), as each recipient:
+		// the owner's withdrawal email carries the public reason and verify link.
+		await sendPackNotices();
+		const mail = outbox.filter((m) => m.to === owner.email && m.kind === 'pack_notice').at(-1);
+		expect(mail!.text).toContain('The reason given: “the licence application lapsed”');
+		expect(mail!.text).toContain(`/verify/${v2.shortCode}`);
+		expect(await notices(v2.id, 'withdrawn')).toEqual([{ user_id: owner.id, event: 'withdrawn', status: 'sent' }]);
 		// A viewer can't withdraw (editor only).
 		expect((await viewer.call('POST', `${packPath(v1.id)}/withdraw`, { reason: 'x' })).status).toBe(403);
 	});
