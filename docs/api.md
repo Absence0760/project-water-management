@@ -2624,7 +2624,7 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
-| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. `409` for a switched-off feed | editor |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
@@ -2641,8 +2641,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
-    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
-    `hourly`; `enabled` (default true);
+    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
+    the only value: no source publishes more often, 111_feed_daily_only;
+    `hourly` is a `400`); `enabled` (default true);
   - `replaceSeries` (default false): the owner confirms the feed may replace
     its target series, which holds values of another product or version, or
     an unrecorded one. Without it, attaching (or re-targeting, or switching

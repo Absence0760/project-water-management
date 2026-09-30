@@ -8,6 +8,7 @@
 // while it runs: afterEach removes every feed, so no other file's tick finds
 // one due.
 import { fitRecordStatus, type FitRecord } from '@water-management/engine';
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,7 +24,7 @@ import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { FEED_META_MAX_BYTES, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
-import { MAX_FEEDS } from './routes.js';
+import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
 import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
@@ -108,7 +109,7 @@ describe('data_feed RLS and the routes', () => {
 		const list = await viewer.call('GET', `/projects/${pid}/feeds`);
 		expect(list.status).toBe(200);
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
-		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily', 'hourly'] });
+		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
 		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws']);
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: true, canRun: true });
 		expect((await editor.call('GET', `/projects/${pid}/feeds`)).body).toMatchObject({ canEdit: false, canRun: true });
@@ -162,9 +163,12 @@ describe('data_feed RLS and the routes', () => {
 		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'dws', config: { station: 'X0H001' }, targetName: 'Upper weir' })).status).toBe(201);
 
 		const id = a.body.feed.id;
-		const off = await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { enabled: false, schedule: 'hourly' });
+		// Daily only (111_feed_daily_only): hourly is a 400, on attach and on change.
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'dws', config: { station: 'X0H002' }, targetName: 'Hourly', schedule: 'hourly' })).status).toBe(400);
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).status).toBe(400);
+		const off = await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { enabled: false, schedule: 'daily' });
 		expect(off.status).toBe(200);
-		expect(off.body.feed).toMatchObject({ enabled: false, schedule: 'hourly', config: { station: 'X0H000' }, health: { state: 'disabled' } });
+		expect(off.body.feed).toMatchObject({ enabled: false, schedule: 'daily', config: { station: 'X0H000' }, health: { state: 'disabled' } });
 		// Changing the source needs a config for it.
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { source: 'chirps' })).status).toBe(400);
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { source: 'chirps', config: { cells: [cell()] } })).body.feed).toMatchObject({
@@ -341,12 +345,7 @@ describe('the scheduler', () => {
 		// A day later it is due again (with a minute's slack for the tick).
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '1 day' + interval '30 seconds' WHERE id = $1`, [on]);
 		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
-		// Hourly feeds, an hour later.
-		await owner.call('PATCH', `/projects/${pid}/feeds/${on}`, { schedule: 'hourly' });
-		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '61 minutes' WHERE id = $1`, [on]);
-		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
 		// A failing feed retries sooner than daily: 15 min after one failure.
-		await owner.call('PATCH', `/projects/${pid}/feeds/${on}`, { schedule: 'daily' });
 		await asOwner(`UPDATE data_feed SET consecutive_failures = 1, last_scheduled_at = now() - interval '16 minutes' WHERE id = $1`, [on]);
 		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
 		await expect(claimDue(0)).rejects.toMatchObject({ code: '22023' });
@@ -377,7 +376,7 @@ describe('the scheduler', () => {
 		expect((await claimDue(2)).map((f) => f.id)).toEqual([ids[0]]);
 	});
 
-	it('a failing feed backs off 15 min × 2^(failures − 1), never beyond its own interval', async () => {
+	it('a failing feed backs off 15 min × 2^(failures − 1), never beyond the day', async () => {
 		const owner = await signUp('Backoff');
 		const pid = await project(owner);
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
@@ -391,10 +390,6 @@ describe('the scheduler', () => {
 		// Eight failures would be 32 h: capped at the day.
 		expect(await dueAfter(8, 23 * 60)).toBe(false);
 		expect(await dueAfter(8, 24 * 60)).toBe(true);
-		// An hourly feed's cap is its hour.
-		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' });
-		expect(await dueAfter(5, 50)).toBe(false);
-		expect(await dueAfter(5, 60)).toBe(true);
 	});
 
 	it('a daily CHIRPS-GEFS feed is due once the day’s 08:45 UTC has passed since it was last scheduled, in UTC whatever the session time zone (#33)', async () => {
@@ -421,11 +416,13 @@ describe('the scheduler', () => {
 			// Failing: the backoff still applies (one failure, 15 min).
 			expect(await due('chirps_gefs', 'daily', 1, '2026-03-01T09:00:00Z', '2026-03-01T09:13:00Z')).toBe(false);
 			expect(await due('chirps_gefs', 'daily', 1, '2026-03-01T09:00:00Z', '2026-03-01T09:14:00Z')).toBe(true);
-			// Positive controls: other feeds keep the day-after rule, and hourly GEFS its hour.
+			// Positive controls: other feeds keep the day-after rule.
 			expect(await due('chirps', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:45:00Z')).toBe(false);
 			expect(await due('chirps', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-02T05:59:00Z')).toBe(true);
-			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T06:59:00Z')).toBe(true);
-			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T06:58:00Z')).toBe(false);
+			// No hourly interval any more (111): whatever p_schedule says, the day's rule holds.
+			expect(await due('chirps', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T07:30:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:40:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:45:00Z')).toBe(true);
 		} finally {
 			await client.end();
 		}
@@ -1119,7 +1116,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
 		expect(feed).toMatchObject({ versionConflict: true, replaceFrom: null, series: { filled: true, provenance: { product: 'CHIRPS', version: '2.0' } } });
 		// A save that doesn't touch where or what the feed writes is still allowed (and still refused at fetch time).
-		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { enabled: true })).status).toBe(200);
 	});
 
 	it('a replacement is a full backfill: a start date after the series’ first day is refused, and none gets that day', async () => {
@@ -1238,7 +1235,7 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		};
 		await stageOnce();
 		// A save that doesn't touch the confirmation or the target keeps the stage …
-		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).body.feed).toMatchObject({ replaceFrom: 'CHIRPS/2.0' });
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { enabled: true })).body.feed).toMatchObject({ replaceFrom: 'CHIRPS/2.0' });
 		expect(await stage()).toHaveLength(1);
 		// … withdrawing (replaceSeries: false) discards it.
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { replaceSeries: false })).body.feed).toMatchObject({ replaceFrom: null, rebuilding: null, versionConflict: true });
@@ -1325,5 +1322,155 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		// sat can't reach 1985, and switching the product is a version question like any other.
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()], startDate: '1985-01-01', product: 'sat' } })).status).toBe(400);
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()], startDate: addDays(-20) } })).status).toBe(409);
+	});
+});
+
+describe('daily only, and the "Run now" limit (111_feed_daily_only)', () => {
+	const MIGRATION = readFileSync(new URL('../../migrations/111_feed_daily_only.sql', import.meta.url), 'utf8');
+	/** Press "Run now" with the raw response, for its Retry-After. */
+	const press = async (u: User, pid: string, id: string) => {
+		const r = await app.request(`/projects/${pid}/feeds/${id}/run-now`, { method: 'POST', headers: { cookie: u.cookie, origin: 'http://localhost:7777' } });
+		return { status: r.status, retryAfter: r.headers.get('retry-after'), body: (await r.json()) as Record<string, any> };
+	};
+	const pending = (id: string) => asOwner(`SELECT id FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1 AND status IN ('queued', 'failed')`, [id]);
+	/** The fetch ran (or went): the next press queues a new one. */
+	const clearJobs = (id: string) => asOwner(`DELETE FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1`, [id]);
+	/** The pending fetch waits (a backfill's next window): the next press pulls it forward. */
+	const delay = (id: string) => asOwner(`UPDATE job SET run_after = now() + interval '1 minute' WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1`, [id]);
+
+	it('a feed takes 6 presses that queue or pull a fetch, then answers 429 with Retry-After and queues nothing; presses onto a due fetch take none', async () => {
+		expect(RUN_NOW_RATE).toEqual({ capacity: 6, refillSeconds: 600 });
+		const owner = await signUp('Presser');
+		const editor = await signUp('PressEditor');
+		const pid = await project(owner);
+		await member(owner, pid, editor, 'editor');
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const other = (await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: 'other' })).body.feed.id;
+
+		for (let i = 0; i < RUN_NOW_RATE.capacity; i++) {
+			// Alternate: a press that queues (202), and one that pulls a waiting fetch forward (200); both count.
+			const pull = i % 2 === 1;
+			if (pull) await delay(id);
+			else await clearJobs(id);
+			const r = await press(i < 3 ? owner : editor, pid, id);
+			expect(r.status, `press ${i + 1}`).toBe(pull ? 200 : 202);
+			// A press while that fetch is already due dedupes onto it and takes nothing, however many.
+			for (let k = 0; k < 3; k++) expect((await press(owner, pid, id)).status).toBe(200);
+		}
+		// The seventh that would queue: refused, and the enqueue rolled back.
+		await clearJobs(id);
+		const refused = await press(editor, pid, id);
+		expect(refused.status).toBe(429);
+		expect(refused.body.error).toMatch(/^“Run now” was used too often for this feed \(6 fetches, then one every 10 minutes\): try again in \d+ minutes?, or let it run on its daily schedule$/);
+		const wait = refused.body.details.retryAfter as number;
+		expect(wait).toBeGreaterThan(0);
+		expect(wait).toBeLessThanOrEqual(RUN_NOW_RATE.refillSeconds);
+		expect(refused.retryAfter).toBe(String(wait));
+		expect(await pending(id)).toEqual([]);
+		// Positive control: the bucket is per feed.
+		expect((await press(owner, pid, other)).status).toBe(202);
+		// A pull is refused too, and leaves the fetch waiting: one press back queues a fetch, which then waits.
+		await asOwner(`UPDATE data_feed_run_now SET tokens = 1, refilled_at = clock_timestamp() WHERE feed_id = $1`, [id]);
+		expect((await press(owner, pid, id)).status).toBe(202);
+		await delay(id);
+		expect((await press(owner, pid, id)).status).toBe(429);
+		expect(await asOwner(`SELECT run_after > now() AS later FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1`, [id])).toEqual([{ later: true }]);
+		// A refused press takes nothing either: the bucket is still empty, not in debt.
+		const [row] = await asOwner('SELECT tokens FROM data_feed_run_now WHERE feed_id = $1', [id]);
+		expect(row.tokens).toBeLessThan(1);
+		expect(row.tokens).toBeGreaterThanOrEqual(0);
+	});
+
+	it('refills one press every 10 minutes, up to 6', async () => {
+		const owner = await signUp('Refill');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		expect((await press(owner, pid, id)).status).toBe(202);
+		// Empty since 9 minutes ago: not yet, and the wait says about a minute.
+		await clearJobs(id);
+		await asOwner(`UPDATE data_feed_run_now SET tokens = 0, refilled_at = clock_timestamp() - interval '9 minutes' WHERE feed_id = $1`, [id]);
+		const early = await press(owner, pid, id);
+		expect(early.status).toBe(429);
+		expect(early.body.details.retryAfter).toBeGreaterThan(55);
+		expect(early.body.details.retryAfter).toBeLessThanOrEqual(60);
+		expect(early.body.error).toContain('try again in 1 minute,');
+		// Ten minutes: one press back.
+		await asOwner(`UPDATE data_feed_run_now SET tokens = 0, refilled_at = clock_timestamp() - interval '10 minutes' WHERE feed_id = $1`, [id]);
+		expect((await press(owner, pid, id)).status).toBe(202);
+		await clearJobs(id);
+		expect((await press(owner, pid, id)).status).toBe(429);
+		// A day idle fills it to 6, not 144.
+		await asOwner(`UPDATE data_feed_run_now SET tokens = 0, refilled_at = clock_timestamp() - interval '1 day' WHERE feed_id = $1`, [id]);
+		for (let i = 0; i < 6; i++) {
+			await clearJobs(id);
+			expect((await press(owner, pid, id)).status, `press ${i + 1}`).toBe(202);
+		}
+		await clearJobs(id);
+		expect((await press(owner, pid, id)).status).toBe(429);
+	});
+
+	it('the wait reads in whole minutes, rounded up', () => {
+		expect(runNowWait(1)).toBe('1 minute');
+		expect(runNowWait(60)).toBe('1 minute');
+		expect(runNowWait(61)).toBe('2 minutes');
+		expect(runNowWait(600)).toBe('10 minutes');
+	});
+
+	it('only an editor of the feed’s project takes a press; nobody reads or writes the bucket directly', async () => {
+		const owner = await signUp('BucketOwner');
+		const editor = await signUp('BucketEditor');
+		const viewer = await signUp('BucketViewer');
+		const farmer = await signUp('BucketFarmer');
+		const stranger = await signUp('BucketStranger');
+		const pid = await project(owner);
+		await member(owner, pid, editor, 'editor');
+		await member(owner, pid, viewer, 'viewer');
+		await asOwner(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, 'farmer')`, [pid, farmer.id]);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const take = (u: User) => withUser(u.id, (db) => db.query<{ wait: number }>('SELECT app_feed_take_run_now($1, 6, 600) AS wait', [id]));
+		for (const u of [viewer, farmer, stranger]) await expect(take(u)).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(editor.id, (db) => db.query('SELECT app_feed_take_run_now($1, 6, 600)', ['00000000-0000-4000-8000-000000000000']))).rejects.toMatchObject({ code: '42501' });
+		// Positive control: the editor takes one.
+		expect((await take(editor)).rows[0]!.wait).toBe(0);
+		// Bounds on what the backend passes.
+		await expect(withUser(editor.id, (db) => db.query('SELECT app_feed_take_run_now($1, 0, 600)', [id]))).rejects.toMatchObject({ code: '22023' });
+		await expect(withUser(editor.id, (db) => db.query('SELECT app_feed_take_run_now($1, 6, 0)', [id]))).rejects.toMatchObject({ code: '22023' });
+		// The bucket row exists (positive control), but water_app sees none of it and can't refill it, even as the owner.
+		expect(await asOwner('SELECT tokens FROM data_feed_run_now WHERE feed_id = $1', [id])).toEqual([{ tokens: 5 }]);
+		expect((await withUser(owner.id, (db) => db.query('SELECT * FROM data_feed_run_now'))).rows).toEqual([]);
+		expect((await withUser(owner.id, (db) => db.query('UPDATE data_feed_run_now SET tokens = 6 WHERE feed_id = $1', [id]))).rowCount).toBe(0);
+		await expect(withUser(owner.id, (db) => db.query('DELETE FROM data_feed_run_now WHERE feed_id = $1', [id]))).resolves.toMatchObject({ rowCount: 0 });
+		await expect(
+			withUser(owner.id, (db) => db.query(`INSERT INTO data_feed_run_now (feed_id, tokens, refilled_at) VALUES ('00000000-0000-4000-8000-000000000001', 6, now())`))
+		).rejects.toMatchObject({ code: '42501' });
+		// Removing the feed removes its bucket.
+		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
+		expect(await asOwner('SELECT tokens FROM data_feed_run_now WHERE feed_id = $1', [id])).toEqual([]);
+	});
+
+	it('the table holds only daily feeds, and the migration turned hourly ones daily without touching their health or acting user', async () => {
+		const owner = await signUp('DailyOnly');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		await expect(asOwner(`UPDATE data_feed SET schedule = 'hourly' WHERE id = $1`, [id])).rejects.toMatchObject({ code: '23514' });
+		// The migration's UPDATE, as the owner role on the real table (its data_feed_stamp
+		// trigger included), with the old CHECK back for the length of a rolled-back transaction.
+		const update = MIGRATION.match(/UPDATE data_feed SET schedule = 'daily' WHERE schedule = 'hourly';/)?.[0];
+		expect(update).toBeDefined();
+		await asOwner(`UPDATE data_feed SET consecutive_failures = 2, last_scheduled_at = '2026-03-01T06:00:00Z' WHERE id = $1`, [id]);
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query(`ALTER TABLE data_feed DROP CONSTRAINT data_feed_schedule_check`);
+			await client.query(`ALTER TABLE data_feed ADD CONSTRAINT data_feed_schedule_check CHECK (schedule IN ('daily', 'hourly'))`);
+			await client.query(`UPDATE data_feed SET schedule = 'hourly' WHERE id = $1`, [id]);
+			await client.query(update!);
+			const { rows } = await client.query(`SELECT schedule, consecutive_failures, last_scheduled_at, acting_user_id FROM data_feed WHERE id = $1`, [id]);
+			expect(rows).toEqual([{ schedule: 'daily', consecutive_failures: 2, last_scheduled_at: new Date('2026-03-01T06:00:00Z'), acting_user_id: owner.id }]);
+		} finally {
+			await client.query('ROLLBACK');
+			await client.end();
+		}
 	});
 });
