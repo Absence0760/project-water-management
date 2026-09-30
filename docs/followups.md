@@ -3018,7 +3018,7 @@ from the WP:
       `cap`: each unit's surface and groundwater use per water year within
       its whole-year registered volumes; `fullAllocation`: its demand scaled
       per water year to them, keeping its own seasonal shape (not the
-      licence's months: those aren't applied yet, below). Warm starts carry
+      licence's months, which only the cap applies, below). Warm starts carry
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
@@ -3045,11 +3045,25 @@ from the WP:
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
       input.
-- [ ] **Apply licence conditions in the cap**: no supply outside the months
-      of use, and a unit's daily take at most its maximum rate × 86 400. The
-      engine already receives them (`AllocationEntry.months`, `maxRateM3s`).
-      Trigger: a licence whose conditions bind in a scenario an assessor
-      runs, or the client asking.
+- [x] **Apply licence conditions in the cap** (2026-09-30, engine 1.37.0,
+      issue #72): no supply of a source on a day outside the months of use
+      of every allocation of it in force, and at most their maximum rates
+      × 86 400 a day (`dailyLimits`); the day's room is the smaller of that
+      and what is left of the year's volume, and the `allocations`
+      self-check replays both. `fullAllocation` still scales to the volume
+      only ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+      Whether the months and rate should bind the dam draw or only the
+      river-side takes is engine-audit L2 (pending the hydrologist, #90).
+- [ ] **Say when a licence's months or rate bound, not only the volume.**
+      `RunSummary.allocations` `capReached` lists the water years a source
+      used up its volume; a run held to its rate all season, or dry outside
+      its months, reads "never reached". And `allocation_room_*` is now the
+      day's room (1.37.0), so what is left of the year's volume isn't
+      visible on a day the limit binds. The durable fix: per source, the
+      days the licence limit bound per water year beside `capReached`, and
+      an `allocation_left_*` column when a licence states conditions.
+      Trigger: the evidence report (#71) citing the cap, or an assessor
+      reading a capped run's conditions.
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,

@@ -5304,7 +5304,7 @@ closing the sheet drops a preview.
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
 source, purpose, volume, storage, valid from/to, registration number,
 property, the registered user (editors), reference, and **Licence
-conditions** (issue #72; "shown, not yet applied by the model"): the months
+conditions** (issue #72; "a cap run keeps to the months and the rate"): the months
 water may be taken (twelve boxes in water-year order, none ticked = none
 stated, each a 24 px target), the maximum rate (m³/s) and the other
 conditions one a line; Save and Cancel pinned.

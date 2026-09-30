@@ -33,8 +33,8 @@ export interface AllocationEntry {
 	/**
 	 * Licence conditions (engine ≥ 1.18.0, issue #72): the calendar months
 	 * (1–12) the use may happen in, and the most it may take at once (m³/s).
-	 * Recorded and shown; neither the comparison nor allocationMode `cap`
-	 * enforces them yet (docs/allocations.md). null/absent = none stated.
+	 * allocationMode `cap` applies them from engine 1.37.0 (./mode.ts
+	 * dailyLimits); the comparison doesn't. null/absent = none stated.
 	 */
 	months?: readonly number[] | null;
 	maxRateM3s?: number | null;

@@ -344,6 +344,10 @@ requested volume in a full-allocation background, is one op.
   (0 to below 10¹² m³, the API's limit), and optionally `storageM3`,
   `validFrom` / `validTo` (ISO dates, from ≤ to), `months` (1–12, no
   repeats; stored as a sorted set) and `maxRateM3s` (0 to below 10⁶).
+  Under `cap` (engine ≥ 1.37.0) the months of use and the maximum rate
+  bind the scenario run as they bind a stored licence ([model.md
+  §2.12a](./model.md)), so "what if this licence were winter-only" is one
+  op too.
   Unknown keys are dropped, so a holder's name or a registration number never
   enters an op. An id the input has replaces that volume in place; a new id
   adds one.

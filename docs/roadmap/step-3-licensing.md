@@ -1244,10 +1244,11 @@ must build WP-2.15 Phase B.
   self-check (engine 1.18.0, [model.md §2.12a](../model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
   allocations on every run's input, `settings.allocationTolerance`, and
   licence conditions (migration 103: `months`, `max_rate_m3s`, `conditions`,
-  recorded and shown, not yet applied). Deviations: `fullAllocation` keeps the
-  unit's own demand shape rather than a monthly pattern of the allocation
-  (the licence's months aren't applied yet), and `conditions` is a list of
-  texts. Left: applying the licence conditions, XLSX and column mapping, the
+  recorded and shown; the cap applies the months and the maximum rate from
+  engine 1.37.0, 2026-09-30). Deviations: `fullAllocation` keeps the unit's
+  own demand shape rather than a monthly pattern of the allocation (it
+  doesn't apply the licence's months), and `conditions` is a list of texts.
+  Left: XLSX and column mapping, the
   farm view and the chart
   ([followups.md § Allocations](../followups.md#allocations-wp-310),
   [allocations.md](../allocations.md)).

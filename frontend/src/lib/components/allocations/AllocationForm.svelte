@@ -172,7 +172,7 @@
 			<input id="af-ref" type="text" maxlength="500" bind:value={draft.reference} />
 		</div>
 		<fieldset class="conditions">
-			<legend>Licence conditions <span class="muted">(optional; shown, not yet applied by the model)</span></legend>
+			<legend>Licence conditions <span class="muted">(optional; a cap run keeps to the months and the rate)</span></legend>
 			<div class="field">
 				<span class="lbl" id="af-months-l">Months water may be taken</span>
 				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">
