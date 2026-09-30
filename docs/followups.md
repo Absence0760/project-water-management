@@ -1175,7 +1175,7 @@ the suggested order (the IDs carry the detail):
   ui.md § Self-checks).
 - [x] **A farm's assurance of supply carried another farm's figures**
       (issue #192, [engine-audit.md V1](./engine-audit.md#findings), engine
-      1.32.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
+      1.33.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
       code re-entered on later calls). Worked around by moving the loop into
       `tallyWindow`, which takes the series as parameters (bit-identical;
       0 of 88 stressed runs failed, against 34 of 64 before). It is guarded

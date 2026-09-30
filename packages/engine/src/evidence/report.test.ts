@@ -503,7 +503,7 @@ describe('errata', () => {
 		const ids16 = r.verification.errata.map((e) => e.id);
 		expect(ids16).toContain('ER-3');
 		expect(new Set(ids16).size).toBe(ids16.length);
-		// The fixture's runs are engine 1.30.0: inside ER-10 (engine-audit.md V1, fixed in 1.32.0), and no other run erratum.
+		// The fixture's runs are engine 1.30.0: inside ER-10 (engine-audit.md V1, fixed in 1.33.0), and no other run erratum.
 		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run').map((e) => e.id)).toEqual(['ER-10']);
 		// Runs by the current engine carry none.
 		const now = evidenceReport(input({ baseline: { ...i.baseline, engineVersion: ENGINE_VERSION }, application: { ...i.application!, engineVersion: ENGINE_VERSION } }));

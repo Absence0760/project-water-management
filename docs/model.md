@@ -6126,7 +6126,7 @@ the annual measure on complete water years only (engine 1.11.0, from the same
 and the allocation summary already count whole years); the stress-class
 thresholds as they stand.
 
-**Checked on every saved run (engine ≥ 1.32.0, issue #192).** The
+**Checked on every saved run (engine ≥ 1.33.0, issue #192).** The
 `assurance` self-check (`checkSupplyAssurance`, §6 Verification) redoes each
 node's window sums, demand and met days, months and stress cells from its own
 `demand` and `supplied` columns. It was added after a V8 miscompile gave a
@@ -7393,7 +7393,7 @@ text:
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
 | `checkWaterAccount` | Engine ≥ 0.32.0 (§2.11b): the account closes to 10⁻¹⁰ of Σ\|terms\| in every water year and over the run, the years add up to the run, each year opens with the last year's closing storage, and 0 ≤ EWR met ≤ required. |
-| `checkSupplyAssurance` | Engine ≥ 1.32.0 (§2.11a, issue #192), per saved run: `summary.supplyAssurance` lists every farm and water user once, with its kind; each one's Σ demand, Σ supplied, demand days, met days and ratios over the reporting window, overall and per water-year month, are those of its own `demand` and `supplied` columns; and every cell of each node's stress grid, and of the system's (every node together), is Σ supplied ÷ Σ demand of those columns. Read from the output's series, not from the code that built the summary; to 10⁻⁹ of Σ\|x\| (a sound run agrees to the bit). It is the guard for [engine-audit.md V1](./engine-audit.md#findings), a V8 miscompile that gave a node another node's sums under its own id. |
+| `checkSupplyAssurance` | Engine ≥ 1.33.0 (§2.11a, issue #192), per saved run: `summary.supplyAssurance` lists every farm and water user once, with its kind; each one's Σ demand, Σ supplied, demand days, met days and ratios over the reporting window, overall and per water-year month, are those of its own `demand` and `supplied` columns; and every cell of each node's stress grid, and of the system's (every node together), is Σ supplied ÷ Σ demand of those columns. Read from the output's series, not from the code that built the summary; to 10⁻⁹ of Σ\|x\| (a sound run agrees to the bit). It is the guard for [engine-audit.md V1](./engine-audit.md#findings), a V8 miscompile that gave a node another node's sums under its own id. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
 **Recomputed outside the engine (issue #68).** The checks show the model
@@ -7452,8 +7452,8 @@ through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
 `checkBalance`, `checkWorkings`, `checkSoilWater`, `checkRunoffBalance`, `checkTransferLimits`,
 `checkReportTotals`, (engine ≥ 0.17.0) `checkEwrAttribution`, `checkGroundwater`, `checkLandCover`,
-`checkAllocations` and (engine ≥ 1.32.0) `checkSupplyAssurance`, ids `balance` … `allocations`
-and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
+`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules` and (engine ≥ 1.33.0) `checkSupplyAssurance`,
+ids `balance` … `allocations`, `operatingRules` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
 another, and a check that throws counts as failed with the reason. The result
 is `RunSummary.verification`: pass/fail per check, the first broken property
 with node ids and day numbers turned into farm names and dates, and the largest
