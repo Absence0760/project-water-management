@@ -280,6 +280,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const cd = new Rng(seed ^ 0x85ebca6b);
 	if (cd.bool(0.2)) settings.effectiveRainFractionMonthly = monthly(() => (cd.bool(0.1) ? 0 : cd.bool(0.05) ? 1 : cd.float(0, 1)));
 	for (const c of crops) if (cd.bool(1 / 3)) c.irrigationEfficiency = cd.bool(0.1) ? 1 : cd.bool(0.05) ? cd.float(0.01, 0.1) : cd.float(0.5, 1);
+	// The CHIRPS gap map (engine ≥ 1.47.0, CR-23) in 30 % of seeds with CHIRPS, from its own stream so a seed still builds the same network.
+	const qm = new Rng(seed ^ 0x1b873593);
+	if (series.rain_chirps_mm && qm.bool(0.3)) settings.chirpsQuantileMap = { wetDayMm: qm.pick([1, 1, qm.float(0.1, 10)]) };
 	// Calibration exclusions: date ranges and water years, in or around the run,
 	// overlapping or not. Their own stream too.
 	const cx = new Rng(seed ^ 0xbb67ae85);

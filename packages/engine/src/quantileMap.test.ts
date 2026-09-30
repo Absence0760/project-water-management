@@ -1,6 +1,6 @@
 // The pure quantile mapper (./quantileMap.ts, engine ≥ 1.21.0, issue #66).
 import { describe, expect, it } from 'vitest';
-import { heavyDayShare, mapWetDay, QUANTILE_POINTS, quantileMapValue, quantileTable, rescaleToTotal } from './quantileMap';
+import { fitMonthlyTables, heavyDayShare, mapBlockDryBelow, mapBlockToTotal, mapWetDay, quantileMapBasisText, QUANTILE_POINTS, quantileMapValue, quantileTable, rescaleToTotal } from './quantileMap';
 
 describe('quantileTable', () => {
 	it('reads percentiles from the sorted sample by linear interpolation, min and max included', () => {
@@ -79,5 +79,58 @@ describe('heavyDayShare', () => {
 	it('is the share of rain on days of at least the threshold', () => {
 		expect(heavyDayShare([10, 20, 30, 0, -1], 20)).toEqual({ share: 50 / 60, totalMm: 60, heavyTotalMm: 50, heavyDays: 2 });
 		expect(heavyDayShare([0, 0], 20).share).toBeNull();
+	});
+});
+
+describe('fitMonthlyTables (engine ≥ 1.47.0, shared by rain-source periods and the CHIRPS gap map)', () => {
+	const byMonth = (f: (m: number) => number[]) => Array.from({ length: 13 }, (_, m) => (m === 0 ? [] : f(m)));
+	const wet = (n: number, scale = 1) => Array.from({ length: n }, (_, i) => (i + 1) * scale);
+
+	it('maps a month on its own wet days, else on its season, else not at all', () => {
+		// 40 wet days a month except the winter (JJA: 5 each) and September (10, with Oct and Nov: SON 90).
+		const n = (m: number) => ([6, 7, 8].includes(m) ? 5 : m === 9 ? 10 : 40);
+		const f = fitMonthlyTables(byMonth((m) => wet(n(m))), byMonth((m) => wet(n(m), 2)), 30);
+		expect(f.months.map((x) => x.basis)).toEqual(['month', 'month', 'month', 'month', 'month', null, null, null, 'season', 'month', 'month', 'month']);
+		expect(f.months[8]).toEqual({ month: 9, basis: 'season', targetN: 90, sourceN: 90 });
+		expect(f.months[6]).toEqual({ month: 7, basis: null, targetN: 5, sourceN: 5 });
+		expect(f.tables[6]).toBeNull();
+		expect(quantileMapValue(f.tables[0]!.source, f.tables[0]!.target, 80)).toBe(40);
+		expect(quantileMapBasisText(f.months)).toBe(
+			'by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May; by season: Sep; not mapped (fewer than 30 wet days even over the season): Jun, Jul, Aug'
+		);
+	});
+
+	it('with matchFrequency, raises the source threshold until its wet-day rate is the target’s', () => {
+		// 100 paired days: the target wet on 40 (≥ 1 mm), the source on 80, drizzle on the extra 40.
+		const target = byMonth(() => [...wet(40, 0.5).map((x) => x + 1), ...new Array(60).fill(0)]);
+		const source = byMonth(() => [...wet(40).map((x) => x + 5), ...new Array(40).fill(1.5), ...new Array(20).fill(0)]);
+		const f = fitMonthlyTables(target, source, 30, { wetDayMm: 1, matchFrequency: true });
+		expect(f.months[0]).toEqual({ month: 1, basis: 'month', targetN: 40, sourceN: 40, sourceWetMm: 6 });
+		// A source drier than the target keeps the wet-day threshold.
+		const g = fitMonthlyTables(source, target, 30, { wetDayMm: 1, matchFrequency: true });
+		expect(g.months[0]!.sourceWetMm).toBe(1);
+		expect(g.months[0]!.sourceN).toBe(40);
+	});
+});
+
+describe('mapBlockDryBelow (the CHIRPS gap map)', () => {
+	const table = { source: quantileTable([2, 4, 6, 8])!, target: quantileTable([1, 5, 10, 20])! };
+
+	it('drys the days below the threshold, maps the rest and keeps the block total', () => {
+		const r = mapBlockDryBelow([0, 1, 1.5, 2, 8], table, 2);
+		expect(r.kept).toBe(false);
+		expect(r.values.slice(0, 3)).toEqual([0, 0, 0]);
+		expect(r.values.reduce((s, x) => s + x, 0)).toBeCloseTo(12.5, 12);
+		expect(r.values[4]! / r.values[3]!).toBeCloseTo(20 / 1, 12);
+	});
+
+	it('keeps a block with rain but no day at the threshold, and a dry block dry', () => {
+		expect(mapBlockDryBelow([0.5, 1], table, 2)).toEqual({ values: [0.5, 1], kept: true });
+		expect(mapBlockDryBelow([0, 0], table, 2)).toEqual({ values: [0, 0], kept: false });
+	});
+
+	it('mapBlockToTotal (a rain-source period) maps wet values only, total kept', () => {
+		const r = mapBlockToTotal([2, 8], table, 1);
+		expect(r.values.reduce((s, x) => s + x, 0)).toBeCloseTo(10, 12);
 	});
 });

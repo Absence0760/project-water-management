@@ -52,7 +52,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+// rain_chirps_mapped (engine ≥ 1.47.0, the CHIRPS gap map) is NaN where rain_chirps_corrected is (checkChirpsGapMap).
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -119,6 +120,53 @@ export function checkRainSource(out: ModelOutput): string | null {
 	return null;
 }
 
+/**
+ * The CHIRPS gap map's column (engine ≥ 1.47.0, CR-23) against
+ * `rain_chirps_corrected`: blank on exactly the same days, never below 0
+ * where CHIRPS isn't, and over every calendar month the run holds whole,
+ * the same total: the map moves rain between a month's days, never in or
+ * out of the month (docs/model.md §2.4b *Quantile map*).
+ */
+export function checkChirpsGapMap(out: ModelOutput): string | null {
+	const mapped = out.series.find((s) => s.nodeId === null && s.key === 'rain_chirps_mapped')?.values;
+	const corrected = out.series.find((s) => s.nodeId === null && s.key === 'rain_chirps_corrected')?.values;
+	if (!mapped) return null;
+	if (!corrected || corrected.length !== mapped.length) return 'rain_chirps_mapped without a rain_chirps_corrected of the same length';
+	const d0 = toEpochDay(out.startDate);
+	let month = -1;
+	let from = 0;
+	let a = 0;
+	let b = 0;
+	const close = (t: number): string | null => {
+		// A month is whole when it starts on the 1st inside the run and ends before the run does.
+		const whole = from > 0 || monthOfEpochDay(d0 - 1) !== month;
+		if (whole && t < mapped.length && Math.abs(a - b) > 1e-9 * Math.max(1, Math.abs(b))) return `rain_chirps_mapped totals ${a} over days ${from}–${t - 1}, the corrected CHIRPS ${b}`;
+		return null;
+	};
+	for (let t = 0; t < mapped.length; t++) {
+		const x = mapped[t]!;
+		const y = corrected[t]!;
+		if (Number.isNaN(x) !== Number.isNaN(y)) return `rain_chirps_mapped[${t}] is ${x} where rain_chirps_corrected is ${y}`;
+		if (x < 0 && !(y < 0)) return `rain_chirps_mapped[${t}] is ${x}`;
+		const m = monthOfEpochDay(d0 + t);
+		if (m !== month) {
+			if (month !== -1) {
+				const bad = close(t);
+				if (bad) return bad;
+			}
+			month = m;
+			from = t;
+			a = 0;
+			b = 0;
+		}
+		if (!Number.isNaN(x)) {
+			a += x;
+			b += y;
+		}
+	}
+	return null;
+}
+
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
@@ -131,6 +179,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	}
 	const rainSourceProblem = checkRainSource(out);
 	if (rainSourceProblem) return rainSourceProblem;
+	const gapMapProblem = checkChirpsGapMap(out);
+	if (gapMapProblem) return gapMapProblem;
 	const nodes = input.model.nodes;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null)!;
 	let totIn = 0;

@@ -2,9 +2,15 @@
 // docs/model.md §2.4e *Daily intensity*, calibration-research.md §4 and
 // CR-23).
 //
-// Pure and self-contained, so the same mapper can serve a rain-source
-// period's replacement gauge (rainSourcePeriods.ts, today's only caller) and,
-// later, CHIRPS against the catchment record (CR-23, docs/followups.md).
+// Pure and self-contained, so the same mapper serves a rain-source period's
+// replacement gauge (rainSourcePeriods.ts, engine ≥ 1.21.0) and CHIRPS where
+// it fills gaps in the catchment rain (rain.ts, engine ≥ 1.47.0, CR-23,
+// docs/model.md §2.4b *Quantile map*). Both fit per calendar month with the
+// same month-else-season-else-nothing rule (fitMonthlyTables) and keep each
+// block's total. CHIRPS also has its wet-day frequency matched (a 0.05° cell
+// is wet on more days than a gauge): its drizzle days go dry and their rain
+// moves onto its wet days (mapBlockDryBelow); a replacement gauge's dry days
+// keep their values (mapBlockToTotal).
 //
 // A sample is summarised as a quantile table: QUANTILE_POINTS values at
 // non-exceedance probabilities 0, 1/(N−1), …, 1, read from the sorted sample
@@ -16,6 +22,91 @@
 
 /** Points in a quantile table: every percentile, min and max included. */
 export const QUANTILE_POINTS = 101;
+
+/** The wet-day threshold a new quantile map starts with, and its allowed range, mm. */
+export const QM_WET_DAY_MM_DEFAULT = 1;
+export const QM_WET_DAY_MM_MIN = 0.1;
+export const QM_WET_DAY_MM_MAX = 10;
+/** Wet days a month (else its season) needs on each side, target and source, before it is mapped. */
+export const QM_MIN_WET_DAYS = 30;
+
+/** The calendar months of a month's 3-month season (DJF, MAM, JJA, SON). */
+export const seasonOf = (m: number): number[] => {
+	if (m === 12 || m <= 2) return [12, 1, 2];
+	const first = m - (m % 3);
+	return [first, first + 1, first + 2];
+};
+
+/** What a calendar month is mapped with: its own wet days, its 3-month season's, or nothing (the monthly factor alone). */
+export type QuantileMapBasis = 'month' | 'season' | null;
+
+/** One calendar month's fit (fitMonthlyTables). */
+export interface MonthlyFit {
+	month: number;
+	basis: QuantileMapBasis;
+	/** Wet days behind the basis (the month's own when it isn't mapped), target and source. */
+	targetN: number;
+	sourceN: number;
+	/** With `matchFrequency`: the source's wet-day threshold, mm (≥ the wet-day threshold; above it where the source is wet more often). */
+	sourceWetMm?: number;
+}
+
+/**
+ * One quantile table pair per calendar month (Jan … Dec) from samples
+ * indexed by calendar month (1–12; index 0 unused). The rule every caller
+ * shares: a month with at least `minWetDays` wet days on each side is mapped
+ * on its own; else on its 3-month season's pooled wet days when those reach
+ * `minWetDays` on each side; else not at all (null: the monthly factor
+ * alone).
+ *
+ * Without options the samples are the wet days themselves. With
+ * `{ wetDayMm, matchFrequency: true }` (the CHIRPS gap map, engine ≥
+ * 1.47.0) they are every day's value, and where the source is wet (≥
+ * wetDayMm) more often than the target, its wet days are only its
+ * wettest days at the target's wet-day rate: the source threshold
+ * `sourceWetMm` rises until the rates agree (Schmidli et al. 2006's local
+ * intensity scaling). A source drier than the target keeps wetDayMm: a map
+ * can't make wet days out of dry ones.
+ */
+export function fitMonthlyTables(
+	target: readonly (readonly number[])[],
+	source: readonly (readonly number[])[],
+	minWetDays = QM_MIN_WET_DAYS,
+	opts: { wetDayMm?: number; matchFrequency?: boolean } = {}
+): { months: MonthlyFit[]; tables: ({ source: number[]; target: number[] } | null)[] } {
+	const pool = (ms: number[], src: readonly (readonly number[])[]) => ms.flatMap((k) => src[k] ?? []);
+	const w = opts.wetDayMm;
+	const wetOf = (t: readonly number[], s: readonly number[]): { t: readonly number[]; s: readonly number[]; thr?: number } => {
+		if (w === undefined) return { t, s };
+		const tw = t.filter((x) => x >= w);
+		let sw = s.filter((x) => x >= w);
+		let thr = w;
+		if (opts.matchFrequency && t.length && s.length) {
+			const k = Math.round((tw.length / t.length) * s.length);
+			if (k > 0 && sw.length > k) {
+				thr = [...sw].sort((a, b) => b - a)[k - 1]!;
+				sw = sw.filter((x) => x >= thr);
+			}
+		}
+		return { t: tw, s: sw, ...(opts.matchFrequency ? { thr } : {}) };
+	};
+	const months: MonthlyFit[] = [];
+	const tables: ({ source: number[]; target: number[] } | null)[] = [];
+	for (let m = 1; m <= 12; m++) {
+		let basis: QuantileMapBasis = null;
+		let x = wetOf(target[m] ?? [], source[m] ?? []);
+		if (!(x.t.length >= minWetDays && x.s.length >= minWetDays)) {
+			const y = wetOf(pool(seasonOf(m), target), pool(seasonOf(m), source));
+			if (y.t.length >= minWetDays && y.s.length >= minWetDays) {
+				basis = 'season';
+				x = y;
+			}
+		} else basis = 'month';
+		months.push({ month: m, basis, targetN: x.t.length, sourceN: x.s.length, ...(x.thr !== undefined ? { sourceWetMm: x.thr } : {}) });
+		tables.push(basis ? { source: quantileTable(x.s as number[])!, target: quantileTable(x.t as number[])! } : null);
+	}
+	return { months, tables };
+}
 
 /** The sample's quantile table (ascending), or null for an empty sample. Non-finite values are left out. */
 export function quantileTable(sample: readonly number[], points = QUANTILE_POINTS): number[] | null {
@@ -95,6 +186,58 @@ export function rescaleToTotal(mapped: readonly number[], fallback: readonly num
 	if (!(sum > 0)) return { values: [...fallback], kept: true };
 	const k = total / sum;
 	return { values: mapped.map((x) => x * k), kept: false };
+}
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Water-year order, as the app's monthly settings. */
+const WY_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** The months (water-year order) grouped by the quantile map's basis: "by month: Oct, Nov; by season: Apr, May; not mapped …: Jun". `months` is Jan … Dec. */
+export function quantileMapBasisText(months: readonly { basis: QuantileMapBasis }[], minWetDays = QM_MIN_WET_DAYS): string {
+	const groups: [string, QuantileMapBasis][] = [
+		['by month', 'month'],
+		['by season', 'season'],
+		[`not mapped (fewer than ${minWetDays} wet days even over the season)`, null]
+	];
+	return groups
+		.map(([label, basis]) => {
+			const ms = WY_MONTHS.filter((m) => (months[m - 1]?.basis ?? null) === basis).map((m) => MONTH_ABBR[m - 1]);
+			return ms.length ? `${label}: ${ms.join(', ')}` : '';
+		})
+		.filter(Boolean)
+		.join('; ');
+}
+
+/**
+ * One block's wet values (each ≥ `wetDayMm`), mapped through `table` and
+ * rescaled to the block's total before mapping (rescaleToTotal): the map
+ * moves rain between the block's days, never in or out of the block.
+ * `kept` = the block couldn't be scaled and keeps its unmapped values.
+ */
+export function mapBlockToTotal(wet: readonly number[], table: { source: readonly number[]; target: readonly number[] }, wetDayMm: number): { values: number[]; kept: boolean } {
+	const total = wet.reduce((s, x) => s + x, 0);
+	return rescaleToTotal(
+		wet.map((x) => mapWetDay(table.source, table.target, x, wetDayMm)),
+		wet,
+		total
+	);
+}
+
+/**
+ * One block's values (every day with a reading, the CHIRPS gap map's month):
+ * a value at or above `sourceWetMm` is mapped through `table`, any other is
+ * dry (0 mm), and the mapped values are rescaled to the block's total before
+ * mapping. So rain moves between the block's days, dry days included, never
+ * in or out of the block. A block with rain but no day at or above
+ * `sourceWetMm` can't be scaled and keeps its values (`kept`).
+ */
+export function mapBlockDryBelow(values: readonly number[], table: { source: readonly number[]; target: readonly number[] }, sourceWetMm: number): { values: number[]; kept: boolean } {
+	const total = values.reduce((s, x) => s + x, 0);
+	return rescaleToTotal(
+		values.map((x) => (x >= sourceWetMm ? quantileMapValue(table.source, table.target, x) : 0)),
+		values,
+		total
+	);
 }
 
 /** Share of `values`' total that fell on days of at least `heavyMm` (0 … 1), or null with no rain. */

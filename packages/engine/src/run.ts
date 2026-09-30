@@ -19,7 +19,7 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
-import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
+import { chirpsFactorOn, chirpsQuantileMapper, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
@@ -984,7 +984,7 @@ function runNetwork(
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
-			chirpsCorrection,
+			chirpsCorrection: summaryCorrection(chirpsCorrection),
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),
@@ -2264,8 +2264,21 @@ export function chirpsColumns(
 		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
 		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
 		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
+		// The gap map (engine ≥ 1.47.0, CR-23): what a gap day reads, on every day, as rain_chirps_corrected is.
+		const mapper = chirpsQuantileMapper(corr, chirps);
+		if (mapper) {
+			const mapped = corrected.map((v, t) => mapper(start + t) ?? v);
+			out.push({ key: 'rain_chirps_mapped', label: 'CHIRPS rain bias-corrected and quantile-mapped (wet days, month totals kept)', unit: 'mm', values: mapped });
+		}
 	}
 	return out;
+}
+
+/** The correction as a run summary keeps it: without the gap map's tables (they stay with the pinned fit, as a rain-source period's do). */
+function summaryCorrection(c: ChirpsCorrection | null): ChirpsCorrection | null {
+	if (!c?.quantileMap?.tables) return c;
+	const { tables: _tables, ...qm } = c.quantileMap;
+	return { ...c, quantileMap: qm };
 }
 
 /** Daily net irrigation demand per node (zeros for gauges and crop-less farms). */
