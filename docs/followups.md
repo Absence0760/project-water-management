@@ -3897,7 +3897,7 @@ verify lookup; 2026-09-30: the reproduction bundle,
       verify returns it, through a `SECURITY DEFINER` setter the renderer
       calls (`water_app` has no grant on the PDF and bundle columns). Trigger: before a pack goes to a real authority.
 - [x] **The reproduction bundle and `pnpm reproduce:pack`** (built
-      2026-09-30, 117_pack_bundle, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+      2026-09-30, 120_pack_bundle, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
       issue builds a deterministic ZIP (`manifest.json`, each run's stored
       inputs and results digest, the input series as CSV, the scenario, a
       README), checks it, stores it under `packs/` and records its hash

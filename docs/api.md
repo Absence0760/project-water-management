@@ -2020,7 +2020,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 ## Evidence packs
 
 A licensing evidence report frozen as a hashed, versioned, signed pack
-(roadmap WP-3.14, issue #71, migrations 112 and 117; [evidence-pack.md](./evidence-pack.md)
+(roadmap WP-3.14, issue #71, migrations 112 and 120; [evidence-pack.md](./evidence-pack.md)
 covers the manifest, the hash, the short code, the lifecycle and the
 reproduction bundle).
 

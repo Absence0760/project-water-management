@@ -1,4 +1,4 @@
--- 117_pack_bundle — the evidence pack's reproduction bundle (roadmap WP-3.14
+-- 120_pack_bundle — the evidence pack's reproduction bundle (roadmap WP-3.14
 -- item 11, issue #71; docs/evidence-pack.md § Reproduction, docs/api.md §
 -- Evidence packs, docs/security.md § Evidence packs).
 --
@@ -63,7 +63,7 @@ CREATE FUNCTION app_record_pack_bundle(p_pack uuid, p_sha256 text) RETURNS text
 	END
 	$$;
 COMMENT ON FUNCTION app_record_pack_bundle(uuid, text) IS
-	'Records an evidence pack''s reproduction bundle (key packs/<project>/<pack>/<sha256>.zip and its SHA-256) once, in the transaction in which the caller, an editor, issued it (117_pack_bundle). Returns the key, or NULL when one is recorded already.';
+	'Records an evidence pack''s reproduction bundle (key packs/<project>/<pack>/<sha256>.zip and its SHA-256) once, in the transaction in which the caller, an editor, issued it (120_pack_bundle). Returns the key, or NULL when one is recorded already.';
 REVOKE ALL ON FUNCTION app_record_pack_bundle(uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_record_pack_bundle(uuid, text) TO water_app;
 
@@ -124,4 +124,4 @@ CREATE OR REPLACE FUNCTION app_verify_pack(p_code text) RETURNS jsonb
 	END
 	$$;
 COMMENT ON FUNCTION app_verify_pack(text) IS
-	'The public verify lookup (112_evidence_pack, 117_pack_bundle; GET /verify/:code): only the printed fields of a pack that was issued, by short code or manifest hash, with its PDF and bundle hashes; NULL otherwise.';
+	'The public verify lookup (112_evidence_pack, 120_pack_bundle; GET /verify/:code): only the printed fields of a pack that was issued, by short code or manifest hash, with its PDF and bundle hashes; NULL otherwise.';
