@@ -1612,6 +1612,13 @@ must build WP-2.15 Phase B.
 > route, "Draft · not issued"), and this WP's pack route renders the same
 > components from the frozen manifest instead of a second layout. The spec's
 > §10 lists what it adds to the contents below.
+>
+> **Report content built (issue #71, 2026-09-29):** WP-2.15 Phase C, the
+> evidence mode ([ui.md § Evidence report](../ui.md#evidence-report)),
+> with its engine builder (`packages/engine/src/evidence/`) and
+> `GET …/runs/:runId/evidence-report`. What this WP still adds: issue and
+> status, the frozen manifest and its hash, the server-rendered PDF, the
+> pack route and `/verify`.
 
 - **Goal.** A versioned, reproducible, **immutable once issued** report to
   attach to a WULA, with a verification hash and link.
@@ -1784,6 +1791,13 @@ must build WP-2.15 Phase B.
 > started for the run and what differed in their rules, and refuse a pack
 > whose bands use thresholds other than the project's declared ones (the
 > pre-declared rule set in [followups.md](../followups.md)).
+>
+> **Partly built (issue #71):** the declared rule (`settings.evidenceUncertaintyRule`),
+> the first cited ensemble on it and the ledger of every start are in the
+> evidence report, as are the refusal checks and gaming measures G1–G6, G8–G10,
+> G13–G15, and G7 and G16 in part ([design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)).
+> Assessor and NGO access, comments on a pack and refusing an *issued* pack
+> remain with this WP.
 
 > **Gaming rules designed** (issue #15): [design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)
 > keeps items 1–8 below and adds G1, G4–G9 and G13–G16 (nomination-only

@@ -1347,6 +1347,38 @@
 // 2026-09-29  total 1208 → 1210 KB (issue #69: measured 1207 with main @
 //             327afa6e merged, #211's errata entry above included). Nothing
 //             of the bounding box changed. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1226 KB (issue #71, the licensing evidence
+//             report: measured 1226 against 1201 on its base 84fb2a6b). The
+//             report is a lazy chunk of its own (report/evidence/
+//             EvidenceReport.svelte with its summary, grids and SVG plots,
+//             15.6 KB + 1.8 KB CSS), loaded only in the report page's
+//             `&evidence` mode; its shell (EvidencePage) adds ~3 KB to the
+//             report page, where Disclaimer / SignoffSection / inputs.ts now
+//             sit in a chunk the two share; Settings' Evidence rule fields
+//             are another lazy chunk (2.8 KB); the declared-rule text and
+//             check (engine uncertainty/options.ts, which the settings diff
+//             in compare.ts reads) ~1.3 KB in the shared engine chunk; help
+//             text ~0.5 KB. Trimmed first: EvidenceReport imported the
+//             engine's monthName from uncertainty/ensemble.ts, so the
+//             calibration worker's whole engine (37 → 3 KB worker, a 34 KB
+//             chunk) became a shared chunk the report page loaded
+//             statically; it now uses $lib/format/months' identical helper.
+//             No new dependency. Headroom 0 KB: the next change is measured.
+// 2026-09-29  total 1226 → 1231 KB (issue #71: measured 1228 with main @
+//             b681786e merged; main grew ~2 KB since the entry above, #206's
+//             CHIRPS final-day marker and #212's Summary readiness signal).
+//             Nothing of the evidence report changed. Headroom ~3 KB.
+// 2026-09-30  total 1231 → 1235 KB (issue #71: measured 1232 with main @
+//             3f9b4c17 merged, #205's bounding box included). Nothing of the
+//             evidence report changed. Headroom ~3 KB.
+// 2026-09-30  total 1231 → 1234 KB (issue #71: measured 1231 with main @
+//             327afa6e and #216's branch merged, against #216's 1228). The
+//             evidence report's registered water use section (§ 5: the
+//             over/under-use chart, its page-1 row and flag). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-30  total 1235 → 1238 KB (issue #71: measured 1235 with #216's
+//             branch and main @ 3f9b4c17 merged, against #216's 1232): the
+//             registered water use section above. Headroom ~3 KB.
 // 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
 //             1200, the branch 1204). The report's publication cover,
 //             "Changes since the previous publication" (ChangesList and the
@@ -1363,6 +1395,9 @@
 // 2026-09-30  total 1210 → 1214 KB (issue #70: measured 1211 with main @
 //             3f9b4c17 merged, #205's bounding box included). Nothing of the
 //             report changed. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1244 KB (issue #70: measured 1241 with main @
+//             848000ac merged). The report's publication, assurance and build
+//             record on top of main's evidence report. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1373,7 +1408,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1214,
+	totalCodeKb: 1244,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

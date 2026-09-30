@@ -121,7 +121,7 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
  * whole-series hash that any date change breaks. Runs from before stored
  * inputs have none; the diff says their shared days weren't checked.
  */
-async function storedValues(db: Db, runId: string, kinds: string[]): Promise<StoredSeriesValues> {
+export async function storedValues(db: Db, runId: string, kinds: string[]): Promise<StoredSeriesValues> {
 	if (!kinds.length) return {};
 	const { rows } = await db.query<{ kind: string; values: (number | null)[] | null }>(
 		`SELECT i.kind, b."values"
@@ -133,7 +133,7 @@ async function storedValues(db: Db, runId: string, kinds: string[]): Promise<Sto
 }
 
 /** Series kinds both runs used whose dates or content hash differ: the only ones worth fetching. */
-function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
+export function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
 	const sa = a?.series ?? {};
 	const sb = b?.series ?? {};
 	return Object.keys(sa).filter((k) => {

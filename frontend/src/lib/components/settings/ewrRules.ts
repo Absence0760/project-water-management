@@ -45,6 +45,15 @@ export function tableErrors(t: EwrRuleTable): Record<string, string> {
 	return out;
 }
 
+/**
+ * The REC (ER9) as typed: spaces dropped and upper-cased ("b / c" → "B/C"),
+ * empty → null (not given). ewrRuleTableIssues then checks its form.
+ */
+export function categoryFromText(text: string): string | null {
+	const v = text.replace(/\s+/g, '').toUpperCase();
+	return v || null;
+}
+
 /** Everything that blocks Save for the list, or null. */
 export function rulesError(tables: readonly EwrRuleTable[]): string | null {
 	const list = ewrRuleListIssues(tables);

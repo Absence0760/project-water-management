@@ -8,6 +8,8 @@
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
 	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
+	// The head links to the run's evidence report (issue #71).
+	import { base } from '$app/paths';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { untrack } from 'svelte';
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
@@ -69,7 +71,13 @@
 <section class="panel" aria-labelledby="sc-compare-h">
 	<div class="panel-head">
 		<h2 id="sc-compare-h">Scenario against its base</h2>
-		{#if data}<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>{/if}
+		{#if data}
+			<span class="acts">
+				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>
+				<!-- The licensing evidence report of this run on its base (issue #71, docs/ui.md § Evidence report). -->
+				<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(data.b.run.id)}&evidence" data-testid="scenario-evidence-link">Evidence report</a>
+			</span>
+		{/if}
 	</div>
 	{#if !scenario.lastRun}
 		<p class="muted" data-testid="scenario-not-run">Not run yet. Run the scenario to compare it with its base run.</p>
@@ -119,6 +127,11 @@
 </section>
 
 <style>
+	.acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
 	.sides {
 		margin: 0 0 0.75rem;
 		overflow-wrap: anywhere;

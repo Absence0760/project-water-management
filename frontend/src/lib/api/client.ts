@@ -8,6 +8,7 @@ import type {
 	AllocationMode,
 	DailySeries,
 	DayBoundary,
+	EvidenceReport,
 	InputChange,
 	FarmIndex,
 	FarmView,
@@ -549,6 +550,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			reproduce: (id: string, runId: string) => request<Reproduction>('GET', `${p(id)}/runs/${enc(runId)}/reproduce`),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
+		},
+		/** The licensing evidence report of a run (issue #71, docs/api.md § Evidence report): an application run on its base, or a baseline alone. */
+		evidence: {
+			report: (id: string, runId: string) =>
+				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
 		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */

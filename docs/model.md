@@ -3372,7 +3372,16 @@ flow), what it covers (`total` or `lowFlow`, a label only), a required
 report turn into a confidence line: "Gazetted Reserve", "Desktop estimate,
 low confidence", "Other source, confidence not stated"; absent = not stated,
 and a table stored before it resolves and reports as it did; the site's
-report carries it only when set), a `scale` (default 1; multiplies every value, for a table given for
+report carries it only when set), an optional `category` (ER9, issue #71:
+the recommended ecological category, REC, the determination sets at the
+site, one class `A` … `F` or a band of two neighbouring ones such as `B/C`,
+as a Reserve determination states it (Kleynhans & Louw 2007); absent or null
+= not given. A label only: no result depends on it, so no `ENGINE_VERSION`
+bump (but a malformed one makes the table unusable like any other bad
+field, so the run skips it with a warning; the settings API and
+`ewrRule.set` refuse it first); the licensing evidence report's § 1 site strip prints it, and a
+change to it is listed in run comparison like any other rule-table
+field), a `scale` (default 1; multiplies every value, for a table given for
 a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 
@@ -3449,7 +3458,14 @@ deficit  = MAX(R − A, 0) as m³
 - **Below the table.** Drier than the driest point, the requirement scales
   with the flow (T_last × V / N_last: the table's EWR-to-natural ratio at its
   driest point, applied to the flow), rather than asking a river with less
-  than its driest natural flow for the full drought flow.
+  than its driest natural flow for the full drought flow. The rule is
+  pending the hydrologist: it makes those months easier to meet, so the
+  licensing evidence report counts them per site (the month's `beyond:
+  'drier'`) and flags them as a caution (G16, issue #71). The ratio
+  R ÷ V stays T_last ÷ N_last: the requirement is below T_last, but
+  not relaxed against the flow. With the percentile from the `run`, about
+  (100 − P_last) % of months fall there by construction (1 % at the DRM's
+  99 % point).
 - **Above the table.** Wetter than the wettest point, the requirement stays
   T_1: the rule table does not ask for more than its wettest flow.
 
@@ -3608,7 +3624,10 @@ from the client's hydrologist: which table applies at which site (and
 whether total or low-flow), whether the percentile should come from the run
 or the gazette's natural curve, linear or log interpolation, whether the
 requirement below the driest point should scale or hold, and whether the
-daily charge should follow the rule table (`ewrChargeSource`).
+daily charge should follow the rule table (`ewrChargeSource`). Each open
+choice is a row of the engine audit (A1–A4,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so it is printed in
+the known limitations on every validation statement and sign-off.
 
 **Sources.** Full references are in
 [calibration-research.md § References](./calibration-research.md#references).
@@ -3621,7 +3640,9 @@ drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
 2011, WRC K8/881/2 (rule tables in Mm³ or m³/s against the natural curve; FDC
 and monthly compliance; interpolating a requirement between points) ·
 Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
-months, seasonality, magnitude, contiguity).
+months, seasonality, magnitude, contiguity) · Kleynhans & Louw 2007, WRC
+TT 329/08, *River EcoClassification*, Module A (the ecological categories
+A–F a REC is stated in).
 
 ### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.33.0, roadmap WP-3.7)
 
@@ -3905,7 +3926,9 @@ how an event is found in daily flow (engine 1.9.0: at least half the
 duration at or above half the peak, above) and whether the level should
 sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
-this is signed off.
+this is signed off; each is a row of the engine audit (A5–A7,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so the known
+limitations list it.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
@@ -5246,6 +5269,24 @@ it never changes a run's results.
   paired band is refused when the baseline's ensemble varied the pan
   coefficient and the other run is GR4J on a monthly PE row, which doesn't
   use it: the pairs would not be the same members.
+  Each Reserve site's band also carries `worse` (issue #71): the share of
+  pairs in which the other run meets fewer months at that site, counted over
+  the pairs with a rate on both sides; `null` below the 30-member gate. A
+  summary stored before it has no `worse`, and the evidence report then
+  prints no "worse in" for the row.
+- **The declared rule and the cited ensemble** (issue #71,
+  `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
+  G4): a project may declare one rule for its evidence,
+  `settings.evidenceUncertaintyRule` (members, bounds, pan shift and the
+  four thresholds). An evidence report cites the **first** complete, unpaired
+  ensemble on its baseline whose resolved options match that rule exactly
+  (`declaredRuleMismatches` empty; seed, records and rain sources are not
+  part of the rule), and the first complete paired ensemble on it. First,
+  not newest or kindest: the database draws each seed, so once one ensemble
+  on the rule has completed, starting more changes nothing the report cites,
+  and there is nothing to re-roll. Every other start is listed with how it
+  departs from the rule. No rule declared: nothing is cited, and no change
+  carries a band.
 - **Reproducible and checked.** The same input and options give an identical
   ensemble (tested); metrics are rounded to 6 significant figures. The server
   assigns the seed and stores the resolved options before the browser runs

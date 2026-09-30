@@ -58,6 +58,20 @@ export function ewrSourceConfidence(kind: EwrRuleSourceKind | null | undefined):
 }
 
 /**
+ * The Reserve's recommended ecological category at the site (REC, ER9,
+ * issue #71): one class A (natural) … F (critically modified), or a band of
+ * two neighbouring classes like "B/C", as a Reserve determination states it
+ * (Kleynhans & Louw 2007). Metadata for the reader: no result depends on it.
+ */
+export const EWR_CATEGORY_PATTERN = /^[A-F](\/[A-F])?$/;
+
+/** Whether a REC is one class A … F or a band of two neighbouring ones ("B/C"). */
+export function isEwrCategory(v: unknown): v is string {
+	if (typeof v !== 'string' || !EWR_CATEGORY_PATTERN.test(v)) return false;
+	return v.length === 1 || v.charCodeAt(2) === v.charCodeAt(0) + 1;
+}
+
+/**
  * What the daily EWR charge and curtailment follow at an EWR site
  * (settings.ewrChargeSource, engine ≥ 1.3.0, issue #64; docs/model.md
  * §2.9c): 'pragmatic' (the default, every earlier run) = the daily pragmatic
@@ -132,6 +146,13 @@ export interface EwrRuleTable {
 	source: string;
 	/** What kind of source it is (engine ≥ 1.5.0): gazetted, desktop or other. Absent / null = not stated. */
 	sourceKind?: EwrRuleSourceKind | null;
+	/**
+	 * The recommended ecological category (REC) the determination sets at the
+	 * site: "A" … "F", or a band of two neighbouring ones ("B/C")
+	 * (EWR_CATEGORY_PATTERN, isEwrCategory). Absent / null = not given. A
+	 * label only: no result depends on it (ER9).
+	 */
+	category?: string | null;
 	component: EwrRuleComponent;
 	unit: EwrRuleUnit;
 	/** Exceedance % points, rising: 0 < p ≤ 100. */
@@ -220,6 +241,9 @@ export function ewrRuleTableIssues(t: EwrRuleTable): EwrRuleIssue[] {
 	else if (t.source.length > EWR_RULE_SOURCE_MAX) out.push({ field: 'source', message: `Keep the source under ${EWR_RULE_SOURCE_MAX} characters.` });
 	if (t.sourceKind !== undefined && t.sourceKind !== null && !(EWR_RULE_SOURCE_KINDS as readonly unknown[]).includes(t.sourceKind)) {
 		out.push({ field: 'sourceKind', message: 'Pick what kind of source it is: gazetted Reserve, desktop estimate or other.' });
+	}
+	if (t.category !== undefined && t.category !== null && !isEwrCategory(t.category)) {
+		out.push({ field: 'category', message: 'The REC is one category A to F, or a band of two neighbouring ones such as B/C, or left blank.' });
 	}
 	if (!(EWR_RULE_UNITS as readonly unknown[]).includes(t.unit)) out.push({ field: 'unit', message: 'Pick the unit the table is in.' });
 	if (!(EWR_RULE_COMPONENTS as readonly unknown[]).includes(t.component)) out.push({ field: 'component', message: 'Pick what the table covers.' });
@@ -368,6 +392,8 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			source: typeof r.source === 'string' ? r.source : '',
 			// Only when set, so a table from before engine 1.5.0 resolves as it did.
 			...(r.sourceKind !== undefined && r.sourceKind !== null ? { sourceKind: r.sourceKind as EwrRuleSourceKind } : {}),
+			// The REC (ER9), only when set: a label, so a table without it resolves as it did.
+			...(r.category !== undefined && r.category !== null ? { category: r.category as string } : {}),
 			component: r.component as EwrRuleComponent,
 			unit: r.unit as EwrRuleUnit,
 			points: r.points as number[],

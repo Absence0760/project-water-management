@@ -23,6 +23,7 @@ const SETTINGS_LINKS = [
 	'Data quality',
 	'Outcome matrix',
 	'Seasonal outlook',
+	'Evidence',
 	'Automatic runs',
 	'Data feeds',
 	'API keys',
@@ -103,7 +104,7 @@ test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most t
 	}
 });
 
-/** Settings & calibration at 1024 px, where its seventeen links don't fit in two rows. */
+/** Settings & calibration at 1024 px, where its eighteen links don't fit in two rows. */
 async function narrowSettings(page: Page, name: string) {
 	const project = await createProject(page.request, name);
 	await page.setViewportSize({ width: 1024, height: 768 });

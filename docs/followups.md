@@ -25,7 +25,7 @@ here that holds each item's detail. Tick an item in both places.
 | Engine verification and regression coverage | #68 |
 | Data-feed hardening | #69 |
 | Printable and server-side reports | #70 |
-| Licensing evidence pack (WP-3.14) and its dependents | #71 |
+| Licensing evidence pack (WP-3.14) and its dependents (the evidence report, [§ Evidence report](#evidence-report-issue-71)) | #71 |
 | Water-use allocations, second slice | #72 |
 | Applicants, scenarios and firm yield | #73 |
 | Farmer view and alerts | #74 |
@@ -2986,8 +2986,14 @@ from the WP:
       allocations matched to it with the holder name (what RLS already lets
       the farmer read). Never matched by name to an account: names aren't
       unique ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
-- [ ] **Evidence pack and chart**: the over/under-use chart and the
-      comparison in the licence evidence pack (WP-3.14).
+- [x] **Evidence pack and chart** (2026-09-29, issue #71): the evidence
+      report's § 5 *Registered water use* (the over/under-use chart, the
+      per-unit and per-year comparison, each run's own volumes and mode),
+      the fixed page-1 row *Registered vs modelled use* and its flag
+      ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
+      The issued pack (WP-3.14) freezes the document, so it carries § 5 once
+      the pack lands. An over/under-use chart on the Allocations tab itself
+      is not built.
 
 ## Crop factors (issue #54 item 1)
 
@@ -3610,6 +3616,127 @@ Left, each with its trigger:
 - [x] **Flagged years are capped** (done, engine 1.31.1, issue #70): the
       low-vs-CHIRPS check's examples list every flagged year, so the
       statement does too.
+
+## Evidence report (issue #71)
+
+Built 2026-09-29: WP-2.15 Phase C, the evidence mode of the report route
+([ui.md § Evidence report](./ui.md#evidence-report),
+[design/evidence-report.md §12](./design/evidence-report.md#12-changes-to-the-roadmap-the-wp-215-build-plan)).
+Left, from the design and the persona review (§11), each with its trigger.
+"Before the pilot" means before a report goes to the pilot CMA.
+
+- [x] **§ 3 said the WR2012 five-statistic table was "not computed".** It is
+      built (CR-28, engine 1.19.0, `summary.calibration.wr2012Fit`) and the
+      calibration record shows it. Fixed in the same change: the line now
+      prints *Not assessed* only when `wr2012Fit` is null.
+- [ ] **Applied-for works against the modelled ones** (licensing
+      authority). Nothing ties the scenario's ops to what the WULA applies
+      for. Durable fix: a WULA reference field on the scenario (application
+      number, the works as applied for), printed on page 1 and Appendix A.2,
+      and a check that each proposal op names the works it models. Trigger:
+      before the pilot.
+- [ ] **Labelled mitigation alternatives** (licence applicant). The report
+      shows one application; applicants must show the mitigation they
+      weighed. Durable fix: an application may cite other scenario runs on
+      the same baseline as labelled alternatives ("smaller dam", "winter
+      abstraction only"), each a page-1 column with its paired change.
+      Trigger: before the pilot, or the first applicant asks.
+- [ ] **EWR rows below each storage or abstraction op** (environmentalist).
+      The Reserve is assessed at the rule-table sites only, which may be far
+      from where the works act. Durable fix: for each proposal op on a dam
+      or off-take, a row at the first EWR site downstream, and *Not
+      assessed* with the reason where there is none. Trigger: before the
+      pilot.
+- [ ] **A no-flow-days row** (environmentalist; the benchmark report's key
+      impact is zero-flow time). Durable fix: days with outlet flow below a
+      stated threshold, baseline and application, with a paired band once
+      the ensemble carries it (a `MemberMetrics` field, `ENGINE_VERSION`
+      bump). Trigger: before the pilot.
+- [x] **A flag for flows below the rule table's lowest point** (G16). A
+      natural flow drier than the table's driest point gets a requirement
+      scaled down with the flow (model.md §2.9c), below the table's driest
+      requirement, which makes those months easier to meet. Durable fix:
+      count those months per site and flag them on page 1. **Done:** the
+      evidence report counts each site's months with `beyond: 'drier'`
+      (baseline and application, `belowTableA/B`), prints them in § 1's site
+      strip and flags them as a caution on page 1 with their effect (the
+      requirement shrinks with the flow), with the share expected by
+      construction when the percentile is from the run. The scaling rule
+      itself stays pending the hydrologist (model.md §2.9c).
+- [x] **The Reserve method's open choices are not in the known-limitations
+      list.** Done 2026-09-29: engine-audit rows A1–A7 (below the driest
+      point, interpolation, the percentile's source and the ±15 % MAR
+      tolerance, the charge source, low flows on base flow, finding a
+      high-flow event, capping and counting events), each pending the
+      hydrologist, regenerated with `pnpm gen:liability`; plan.md question 17
+      and engine-audit's open question 12 carry them. Was: model.md §2.9c lists them as pending the hydrologist (the
+      requirement below the driest point scaled or held, linear or log
+      interpolation, the percentile from the run or the table, the charge
+      source), and the evidence report's G16 flag says so, but
+      `docs/engine-audit.md` has no row for them, so the generated Known
+      limitations (printed on every validation statement) omit them. Durable
+      fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
+      choices, then `pnpm gen:liability`. Trigger: the next change to the
+      engine-audit tables, or before the pilot, whichever is first.
+- [ ] **Days a user is served in full while the site fails** (environmentalist).
+      Durable fix: per unit, days fully supplied on days the outlet is below
+      the EWR, in § 4 and as a count flag. Trigger: before the pilot.
+- [ ] **The driest month's FDC beside the largest-change month.** § 1 plots
+      one month (`fdcMonth`: the largest drop in months met, else the
+      driest). Durable fix: plot both when they differ. Trigger: the next
+      change to § 1.
+- [ ] **A cumulative row over other applications on the baseline**
+      (licensing authority, s27 "other water users"). A.6 lists the other
+      application runs but nothing sums them. Durable fix: a scenario that
+      applies every submitted application's ops, run on the baseline, as a
+      page-1 "all applications" row. Trigger: a second application on one
+      baseline.
+- [ ] **Cancelled ensembles' interim results.** The ledger lists a start
+      that never completed, but not what it had shown. Durable fix: store a
+      started ensemble's partial summary when it is abandoned and print it in
+      the ledger. Trigger: before issue (WP-3.14).
+- [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
+      description and run notes as written. Durable fix: fixed prompts
+      (purpose and need, mitigation, monitoring), each answered or *Not
+      given*. Trigger: before the pilot.
+- [ ] **A diagonal draft stamp.** "Draft · not issued" is in each section
+      head and the footer; a cropped page can lose both. Durable fix: a
+      diagonal print watermark on every page until issued. Trigger: before
+      the pilot.
+- [ ] **Paired bands on each unit's supply (ER4 rest).** Rows 5 and 6 and
+      § 4 carry the run's own difference only. Durable fix: a per-unit
+      supplied fraction in `MemberMetrics`, banded in `summarisePaired` with
+      its worse-share (`ENGINE_VERSION` bump; old ensembles print *no band*).
+      Trigger: before the pilot.
+- [x] **REC per rule table (ER9).** The site strip prints REC *Not given*.
+      Durable fix: `category` and `reference` on `EwrRuleTable` (a settings
+      field, a baseline assumption in the diff). **Done:** an optional
+      `category` (A–F or a band like B/C) on the rule table: Settings, the
+      settings API, `ewrRule.set`, the run-comparison diff and the § 1 site
+      strip (*Not given* and the assessor question only when absent). A
+      label: no result changes, no `ENGINE_VERSION` bump. No separate
+      `reference`: the table's required `source` is the gazette notice.
+      The values themselves still wait on ER-D2.
+- [ ] **Banded FDC (ER5).** The FDC chart has no band: the ensemble's FDC
+      bands are daily against the pragmatic EWR. Durable fix: a banded
+      monthly FDC check against the rule table per member. Trigger: an
+      assessor asks for the FDC's uncertainty.
+- [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
+      indicative until checked in WRC TT 689/690: tracked in
+      [§ Calibration research](#calibration-research-2026-09-24) (issue
+      #90).
+- [ ] **Licence impact by year class on page 1 (issue #53 R7).** The impact
+      report opens with `LicenceImpactBoard`; the evidence report doesn't
+      show it. Durable fix: build the board's view model in the engine
+      builder from the two runs' series and print it on page 1. Trigger:
+      before the pilot.
+- [ ] **The server-rendered evidence PDF.** Browser print only: no running
+      footer, no "page x of y". Durable fix: `POST …/reports { runId,
+      evidence: true }` and a render scope that reads the baseline (ER1),
+      with the pack. Trigger: WP-3.14.
+- [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
+      tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
+      Trigger: before the first evidence pack (WP-3.14).
 
 ## Alerts (WP-2.13)
 

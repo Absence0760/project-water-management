@@ -493,6 +493,7 @@ const EWR_TABLE_FIELDS: Record<string, Check> = {
 	siteNodeId: nullable(id),
 	source: (v) => (typeof v === 'string' ? null : 'must be text'),
 	sourceKind: nullable(oneOf(EWR_RULE_SOURCE_KINDS)),
+	category: nullable((v) => (typeof v === 'string' ? null : 'must be text')),
 	component: oneOf(EWR_RULE_COMPONENTS),
 	unit: oneOf(EWR_RULE_UNITS),
 	points: (v) => (Array.isArray(v) ? null : 'must be a list of % points'),
@@ -504,8 +505,8 @@ const EWR_TABLE_FIELDS: Record<string, Check> = {
 	highFlows: (v) => (Array.isArray(v) ? null : 'must be a list'),
 	naturalMarMcm: nullable((v) => (isNum(v) ? null : 'must be a finite number'))
 };
-/** Left out = not stated (sourceKind, naturalMarMcm), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
-const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'lowFlow', 'highFlows', 'naturalMarMcm']);
+/** Left out = not stated (sourceKind, category, naturalMarMcm), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
+const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'category', 'lowFlow', 'highFlows', 'naturalMarMcm']);
 const HIGH_FLOW_KEYS = ['label', 'months', 'peakM3s', 'durationDays', 'perYear'] as const;
 
 /**

@@ -7,6 +7,10 @@
 	// every chart has drawn: e2e waits on it, and so does the server-side render
 	// (backend/src/reports/render.ts), which prints this same page.
 	//
+	// `&evidence` (issue #71) is the licensing evidence report of the run:
+	// EvidencePage, its own layout (report/evidence/), from one server-built
+	// document (GET …/runs/:runId/evidence-report).
+	//
 	// `&against=<projectId>:<runId>` (Compare runs' Export impact report, issue
 	// #17 A4) makes it an impact report: an "Impact against the baseline"
 	// section after the cover (report/ImpactSection.svelte, its own chunk),
@@ -69,9 +73,13 @@
 	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
 	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
 	import ServerPdf from '$lib/components/report/ServerPdf.svelte';
+	// Evidence mode's shell is small; its report is a chunk of its own (EvidencePage loads it).
+	import EvidencePage from '$lib/components/report/evidence/EvidencePage.svelte';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
+	/** `&evidence`: the licensing evidence report of the run (issue #71, WP-2.15 Phase C), its own page and chunk. */
+	const evidenceMode = $derived(page.url.searchParams.has('evidence'));
 	/** The baseline of an impact report ("<projectId>:<runId>", as Compare runs' refs); null for the plain report. */
 	const againstParam = $derived(page.url.searchParams.get('against') || null);
 	// The impact section: its own chunk, loaded (before "ready") only for an impact report.
@@ -186,6 +194,7 @@
 		const id = projectId;
 		const want = runParam;
 		const against = againstParam;
+		if (evidenceMode) return;
 		untrack(() => load(id, want, against));
 	});
 
@@ -263,7 +272,11 @@
 	});
 </script>
 
-<svelte:head><title>{project ? `Report · ${project.name} · ` : ''}Water Management</title></svelte:head>
+<svelte:head>{#if !evidenceMode}<title>{project ? `Report · ${project.name} · ` : ''}Water Management</title>{/if}</svelte:head>
+
+{#if evidenceMode}
+	<EvidencePage {projectId} runId={runParam} />
+{:else}
 
 <main class="page report" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={!ready && status === 'loading'}>
 	{#if status === 'not-found'}
@@ -503,6 +516,7 @@
 		{/each}
 	{/if}
 </main>
+{/if}
 
 <!-- A titled table of text rows: the first column heads each row; `nums` are the right-aligned (numeric) columns. -->
 {#snippet table(title: string, head: string[], nums: number[], rows: string[][])}
