@@ -729,7 +729,7 @@ resource "aws_cloudwatch_metric_alarm" "report_render_failed" {
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "The renderer answered a report render as failed (a retryable failure is asked again with backoff; the report shows failed once the attempts are used up). Logs Insights on the renderer log group: filter message.event = \"report_render_failed\" | stats count() by message.reason, message.retry. reason = store: the reports bucket refused the PDF (IAM); render with retry = false: the token was refused or the page said it can't show the report; with retry = true: a timeout, a WAF block or a browser crash. The report's own error (Reports tab) has the text. Runbook: docs/deployment.md § Reports."
+  alarm_description   = "The renderer answered a report render as failed (a retryable failure is asked again with backoff; the report shows failed once the attempts are used up). Logs Insights on the renderer log group: filter message.event = \"report_render_failed\" | stats count() by message.reason, message.retry. reason = store: the reports bucket refused the PDF (IAM); render with retry = false: the token was refused or the page said it can't show the report; with retry = true: a timeout, a WAF block or a browser crash. The report's own error (Reports tab) has the text. A line with packId instead of reportId is an issued evidence pack's PDF (store: the packs bucket refused it, see pack_store_failed; the pack's pdf state has the text). Runbook: docs/deployment.md § Reports, § Evidence packs."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }
