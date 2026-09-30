@@ -737,7 +737,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			update: (
 				id: string,
 				sid: string,
-				body: { name?: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[]; status?: ScenarioStatus }
+				body: {
+					name?: string;
+					description?: string;
+					/** Appendix C's fixed prompts (engine APPLICANT_PROMPTS): changed on the description's terms, not frozen by a submission. */
+					purposeAndNeed?: string;
+					mitigation?: string;
+					monitoring?: string;
+					ops?: ScenarioOp[];
+					ownedNodeIds?: string[];
+					status?: ScenarioStatus;
+				}
 			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
 			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
 			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */

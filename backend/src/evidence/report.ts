@@ -318,8 +318,16 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	let changes: EvidenceInput['changes'] = [];
 	let applicationRuns: EvidenceInput['applicationRuns'] = [];
 	if (recorded) {
-		const { rows: sc } = await db.query<{ name: string; description: string | null; status: string; ownerName: string | null }>(
-			`SELECT s.name, s.description, s.status, u.display_name AS "ownerName"
+		const { rows: sc } = await db.query<{
+			name: string;
+			description: string | null;
+			purposeAndNeed: string;
+			mitigation: string;
+			monitoring: string;
+			status: string;
+			ownerName: string | null;
+		}>(
+			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, u.display_name AS "ownerName"
 			 FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id
 			 WHERE s.project_id = $1 AND s.id = $2`,
 			[projectId, recorded.id]
@@ -331,6 +339,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 				id: recorded.id,
 				name: meta?.name ?? recorded.name,
 				description: meta?.description ?? '',
+				// Appendix C's fixed prompts (129), as the scenario holds them now: a deleted scenario answered none.
+				prompts: { purposeAndNeed: meta?.purposeAndNeed ?? '', mitigation: meta?.mitigation ?? '', monitoring: meta?.monitoring ?? '' },
 				status: meta?.status ?? null,
 				ownerName: meta?.ownerName ?? null,
 				baseRunId: recorded.baseRunId,

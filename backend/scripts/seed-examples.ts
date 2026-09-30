@@ -205,8 +205,20 @@ async function seedApplication(project: { id: string; owner: string }) {
 		const ops = [{ op: 'node.set' as const, nodeId: own[0]!.id, field: 'damCapacityM3' as const, value: dam[0]!.capacity * 2 }];
 		const name = `Raise the ${APPLICANT.farm} dam`;
 		const { rows } = await db.query<{ id: string }>(
-			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			[project.id, name, 'Demo application: double the farm dam (invented).', pub[0]!.run_id, JSON.stringify(ops), opsSha256(ops), own.map((r) => r.id)]
+			// Appendix C's prompts (129): two answered, mitigation left for the demo to show "Not given".
+			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, purpose_need, monitoring)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			[
+				project.id,
+				name,
+				'Demo application: double the farm dam (invented).',
+				pub[0]!.run_id,
+				JSON.stringify(ops),
+				opsSha256(ops),
+				own.map((r) => r.id),
+				'Invented: winter storage so the orchard can be irrigated through the dry months without pumping from the river.',
+				'Invented: a gauge plate on the dam wall, read weekly, and the outflow below the dam logged daily.'
+			]
 		);
 		await recordAudit(db, project.id, 'scenario.created', { scenarioId: rows[0]!.id, application: true, baseRunId: pub[0]!.run_id, ops: ops.length });
 		return rows[0]!.id;

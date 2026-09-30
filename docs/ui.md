@@ -5286,6 +5286,19 @@ them scenarios).
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+- **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
+  application's too): the evidence report's fixed Appendix C prompts
+  (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
+  need**, **Mitigation** and **Monitoring**, with "n of 3 answered" beside the
+  heading. Read, each prompt's answer as written or *Not given*. Whoever may
+  change the scenario (an editor on a team scenario, only its applicant on
+  an application) gets **Answer the prompts** (**Edit statement** once one
+  is answered): a box per prompt, labelled with its heading and described by
+  its question, 4 000 characters each; **Save statement** sends only the
+  answers that changed, trimmed. Not frozen by a submission, as the
+  description isn't; a half-typed statement asks before the scenario is
+  left (the leave guard). Tests: `scenarios/statement.test.ts`,
+  `e2e/tests/evidence-statement.spec.ts`.
 - **Actions** (editors), in the scenario's head row beside its name, status
   and Rename, so they're on the first screen however long the changes and
   the node list get; a run's error shows under the base banner: **Run
@@ -6219,8 +6232,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     history since the previous publication; A.5 warnings verbatim; A.6 every
     application run on the baseline), **Appendix B** (B.1 methodology,
     limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
-    issued* for a draft), **Appendix C** (application only): the scenario's
-    description and the run's notes, verbatim, the only free text.
+    issued* for a draft), **Appendix C** (application only): the fixed prompts
+    first (`evidence-7`), each prompt's heading and question, then the
+    scenario's answer verbatim or *Not given.*; then the scenario's
+    description and the run's notes, verbatim. The only free text. A pack
+    drafted before `evidence-7` froze no prompts, so its Appendix C says they
+    aren't part of the pack rather than printing *Not given*.
 - **Evidence packs of this report** (screen only, under the checks): the
   packs of this run's report (an application pack by its scenario run, a
   baseline pack by the nominated run), each with its status badge, version,

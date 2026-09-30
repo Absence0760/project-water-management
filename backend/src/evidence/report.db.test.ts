@@ -91,7 +91,15 @@ beforeAll(async () => {
 
 	// The application: a dam on Upper, the applicant's own node (a proposal).
 	const dam = { op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 500_000 };
-	const created = await owner.call('POST', `/projects/${projectId}/scenarios`, { name: 'Upper dam', description: 'A 500 000 m³ dam on Upper.', baseRunId: baseRun, ops: [dam], ownedNodeIds: [farmId] });
+	const created = await owner.call('POST', `/projects/${projectId}/scenarios`, {
+		name: 'Upper dam',
+		description: 'A 500 000 m³ dam on Upper.',
+		purposeAndNeed: '  Winter storage for Upper’s orchards.  ',
+		monitoring: 'A weir below the dam, read weekly.',
+		baseRunId: baseRun,
+		ops: [dam],
+		ownedNodeIds: [farmId]
+	});
 	expect(created.status, JSON.stringify(created.body)).toBe(201);
 	const ran = await owner.call('POST', `/projects/${projectId}/scenarios/${created.body.scenario.id}/runs`, {});
 	expect(ran.status, JSON.stringify(ran.body)).toBe(201);
@@ -147,6 +155,8 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		expect(r.appendix.changes.some((c) => c.subject === 'Upper')).toBe(true);
 		expect(r.appendix.applicationRuns.map((x) => x.runId)).toEqual([appRun]);
 		expect(r.applicantStatement?.description).toBe('A 500 000 m³ dam on Upper.');
+		// Appendix C's fixed prompts (evidence-7), as the scenario holds them (trimmed); the unanswered one empty, for "Not given".
+		expect(r.applicantStatement?.prompts).toEqual({ purposeAndNeed: 'Winter storage for Upper’s orchards.', mitigation: '', monitoring: 'A weir below the dam, read weekly.' });
 		// Every input series with the run's recorded SHA-256.
 		expect(r.appendix.series.filter((s) => s.run === 'baseline').every((s) => /^[0-9a-f]{64}$/.test(s.sha256 ?? ''))).toBe(true);
 	});
