@@ -123,6 +123,9 @@ erDiagram
 | `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; inert under `damFirst`. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
+| `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 114, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
+| `hands_off_ewr` | (none) | Farms only (migration 114): also leave the EWR required at the farm (its cumulative requirement) in the river, as a river off-take's `transfer.hands_off_ewr` does. `false` (default, every existing row). Keep = MAX(the month's hands-off amount, the EWR when ticked) |
+| `divert_monthly_m3_day` | (none: b023's one m³/s) | Farms only (migration 114): River to dam's capacity by water-year month, `float8[]` of 12 m³/day values; when set it replaces `divert_capacity_m3_day` (0 in a month = no diversion, a dam filled in winter only). NULL (default) = the one value all year. CHECK 12 values, none NULL, none negative. The API refuses any of the three off a farm (the engine's `modelRuleIssues`, `operatingKind`) |
 | `ewr_site` | (none: b023 checks the EWR at every gauge) | Gauges (migration 086, engine ≥ 1.5.0, [model.md §2.7b](./model.md)): whether the EWR is assessed here. `true` (default, every existing row); `false` only on a gauge (CHECK `node_ewr_site_gauge`), never the outlet (a model rule the API applies on save). False = the gauge charges nobody and a Reserve rule table there is skipped |
 | `ga_property_area_ha` | (none) | Farms and other users with boreholes (migration 089, engine ≥ 1.12.0, [model.md §2.7d](./model.md)): the property's size, ha (0 to 10 000 000), for the GN 538 groundwater volume. NULL (default, every existing row) = unknown: the run shows the 40 000 m³/a ceiling and warns |
 | `ga_rate_m3_ha_year` | (none) | Same: the GN 538 Table 2 rate for the property's quaternary, m³/ha/a, CHECK one of 0, 45, 75, 150, 275, 400. NULL = not looked up. Volume = min(area × rate, 40 000), context only |
@@ -1527,6 +1530,41 @@ Read-only links to the current publication for people outside the project
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
+- **Targets (115_scenario_share_notes, WP-3.15).** `target_kind` (`NULL` or
+  `'scenario'`; evidence packs will add `'pack'`) and `target_id` (uuid),
+  both or neither (`share_link_target_both`). `NULL` is the baseline link
+  above, unchanged. A scenario link's `target_id` is a scenario of the same
+  project (the `share_link_target_check` trigger, on insert only: the target
+  is fixed, water_app has no UPDATE on it, and a revoke must still work once
+  the scenario is deleted, which leaves a dead link). Indexed on
+  `(target_id, created_at DESC)` where set.
+  - **RLS** (`app_share_link_visible` / `app_share_link_creatable`,
+    `SECURITY DEFINER`): the owner reads, makes and revokes every link, as
+    before. A scenario link is also made by an editor on a scenario they read
+    (`app_scenario_readable`) or by its applicant (`owner_user_id`, a
+    contributor or above), only for an application (`origin = 'applicant'`:
+    a team scenario's ops name the real farms with their values) while it is
+    `submitted` or `decided`; it is
+    listed and revoked by the editors who read the scenario and by whoever
+    made it.
+  - `app_share_view` and `app_share_series` answer an untargeted link only.
+  - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
+    scenario link whose application is `submitted` or `decided`, one row of
+    `project_name, scenario (allowlisted jsonb: ids, name, description,
+    origin, status, decision, ops and hash, owned node ids, the op names of
+    the owned nodes only), base_run, base_stamp, base_digest, runs,
+    comments`. `runs` are the newest 5 runs whose snapshot records the
+    scenario's current ops hash and base, each with its projection
+    (app_share_run_projection: dates, engine version, EWR days not met, each
+    EWR site's compliance with the outlet unnamed; volumes only at 5 or more
+    farm holders and only when every op of the run was a proposal), its
+    classes per op, stamp and digest: the API shows the newest whose stamp
+    verifies. `comments` are the undeleted `public_participation` notes on
+    it, the newest 500, with their authors' display names. Bumps
+    `last_used_at` at most once an hour.
+  - `app_run_digest` (077) is split: `app_run_digest_body(p_run)` is the
+    digest, unchanged, callable only by the schema owner (and so by definer
+    functions); `app_run_digest` keeps its read check and calls it.
 
 ### Notes (037_notes.sql)
 
@@ -1536,11 +1574,13 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
   created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
   text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
-  setting_key text, visibility 'team' | 'farm')`.
+  setting_key text, scenario_id → scenario CASCADE (115), visibility 'team'
+  | 'farm' | 'assessors' | 'parties' | 'public_participation')`.
   - **The target** is a nullable typed foreign key, not a polymorphic id, so
     the foreign keys and the same-project trigger (`assert_same_project
-    ('node_id', 'run_id')`) work. `note_one_target` allows at most one of
-    `node_id`, `run_id`, `setting_key`; none is a project-level note.
+    ('node_id', 'run_id', 'scenario_id')`; 115 taught it `%scenario_id`)
+    work. `note_one_target` allows at most one of `node_id`, `run_id`,
+    `setting_key`, `scenario_id`; none is a project-level note.
     `setting_key` is a settings group (`flow`, `ewr`, …) or path
     (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
   - **A note goes with its target**: a deleted node or run, or a trimmed
@@ -1548,7 +1588,31 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     a save keeps them.
   - **`visibility`**: `team` (viewers and above) or `farm` (also the farmers
     linked to the note's node). `note_farm_on_node` requires a node for
-    `farm`; the API also requires the node to be a farm.
+    `farm`; the API also requires the node to be a farm. A scenario note
+    (115, WP-3.15) may also be `assessors`, `parties` or
+    `public_participation` (`note_participation_on_scenario` requires a
+    scenario for those three). Who reads (`note_select` for `team`,
+    `note_select_scenario` through `app_scenario_note_visible`) and writes
+    (`note_insert` through `app_scenario_note_writable`) each, on a scenario:
+
+    | visibility | reads | writes |
+    | --- | --- | --- |
+    | `team` | viewers and above who read the scenario (`app_scenario_readable`) | the same |
+    | `assessors` | editors and above who read it; the author | editors who read it; its parties |
+    | `parties` | editors who read it; its parties (the owner and `scenario_member`s, contributor or above, `app_scenario_party`) | the same |
+    | `public_participation` | editors who read it; its parties; any member contributor or above while it is **open for comment** | any member contributor or above, the assessors included, while it is open for comment |
+
+    Open for comment (`app_scenario_commentable`, members only): a live
+    scenario share link, or decided after it was ever shared. A scenario that drew public
+    comments can't be deleted (the `scenario_comments_kept` trigger, a
+    `restrict_violation`; the route answers `409` first through
+    `app_scenario_has_public_comments`), so the participation record doesn't
+    cascade away with a withdrawn application; deleting the project still
+    takes it. A farmer reads and writes none of them. A
+    note's author always reads it, and a deleted one stays readable to its
+    author and to editors, as for every note. In practice: an NGO joins as a
+    viewer and posts `public_participation`; the applicant and their
+    consultant talk to the assessors in `parties` or `assessors`.
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
 - **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
   for the audit trail. `water_app` has no `DELETE` (the catalogue test's
@@ -1572,6 +1636,19 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - The API lists no deleted note to anyone. Deleting records `note.deleted`
   in the audit log; adding and editing don't (the row carries its author,
   `created_at` and `edited_at`).
+- **`note_revision`** (115, WP-3.15): `(id, note_id → note CASCADE,
+  project_id → project CASCADE, body, written_at, edited_at, edited_by →
+  app_user SET NULL)`, the text a scenario note had before each edit (when
+  it was written, when an edit replaced it, by whom: the author, the only
+  one who edits). Written by the `note_write_revision` trigger (`AFTER
+  UPDATE OF body`, `SECURITY DEFINER`) on every body change of a note with a
+  `scenario_id`; other notes keep none. RLS: SELECT where the note itself is
+  readable (the policy's subquery runs under the caller's note policies);
+  water_app has SELECT only (the catalogue test's append-only and
+  written-through-a-function lists). Indexed on `(note_id, edited_at)`,
+  `project_id` and `edited_by`. In the person's data export under each of
+  their notes (`revisions`), and not in the project export (which leaves
+  scenario notes out, as it leaves scenarios out).
 - **In the project export** (`GET /projects/:id/export.json`,
   `loadDocumentNotes` in `projects/document.ts`): yes. What the team wrote
   down is the project's data as much as its series, so the document carries

@@ -10,7 +10,8 @@
 	// make it decides it. Drafts never appear: they are the applicant's alone
 	// (RLS, 045_contributor_scope). Each row lists the application's evidence
 	// packs (WP-3.14) with their status, newest version first, each linking to
-	// its page.
+	// its page, and has its comments (the notes drawer on the scenario,
+	// WP-3.15); its share links are in the scenario's Application panel.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -18,6 +19,8 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
@@ -71,6 +74,8 @@
 	const counts = $derived(applicationCounts(items ?? []));
 	const shown = $derived(sortApplications(filterApplications(items ?? [], filter), sort));
 	const next = $derived(longestWaiting(items ?? []));
+	// The assessors' list: they write to the assessors by default.
+	const ASSESSOR_AUDIENCES = scenarioAudiences({ assessor: true, party: false });
 	const scenarioHref = (id: string) => `?tab=scenarios&scenario=${encodeURIComponent(id)}`;
 	const filterHref = (f: ApplicationFilter) => (f === 'all' ? withoutParam(page.url, 'status') : withParam(page.url, 'status', f));
 	const EMPTY_FILTER: Record<ApplicationFilter, string> = {
@@ -163,6 +168,7 @@
 								<th scope="col" class="num">Changes</th>
 								<th scope="col" class="num">Runs</th>
 								<th scope="col">Evidence packs</th>
+								<th scope="col"><span class="visually-hidden">Comments</span></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -197,6 +203,7 @@
 											{/each}
 										{/if}
 									</td>
+									<td class="c-notes"><NotesDrawer {projectId} compact target={{ kind: 'scenario', scenarioId: a.id, name: a.name, audiences: ASSESSOR_AUDIENCES }} /></td>
 								</tr>
 							{/each}
 						</tbody>
@@ -402,7 +409,8 @@
 				'who who'
 				'when when'
 				'ops runs'
-				'packs packs';
+				'packs packs'
+				'notes notes';
 			justify-content: start;
 			gap: 0.35rem 1rem;
 			padding: 0.75rem;
@@ -441,6 +449,9 @@
 		}
 		.c-packs {
 			grid-area: packs;
+		}
+		.c-notes {
+			grid-area: notes;
 		}
 		.c-status .sub {
 			display: inline;

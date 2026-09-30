@@ -22,8 +22,17 @@ import type { PairedSummary } from '../uncertainty/paired';
  * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
  * evidence-2: registered water use (`allocations`, § 5) and the page-1 row "Registered vs
  * modelled use" (`registeredUse`), with its flag, were added (issue #71, WP-3.10).
+ * evidence-3: each Reserve site's driest month (`river[].fdcDriestMonth`, § 1 plots its
+ * FDC beside the largest-change month's), and the other applications on the baseline
+ * (`cumulative`, § 4) with their summed change as the page-1 row "Other applications on
+ * this baseline, summed" (`otherApplications`). A new field an old document lacks, and a
+ * new row: a pack built before it must say which version it is (issue #71 follow-ups).
+ * evidence-4: the page-1 rows "No-flow days at the outlet" (`noFlowDays`) and "EWR below the
+ * works" (`ewrBelowWorks`); paired bands on the supply rows and in § 4 (`EvidenceUser.change`);
+ * "served in full while the site fails" (`servedWhileFailing`, § 4, with its flag); and the
+ * banded Reserve FDC (`EvidenceSite.fdcBands`, ER5) (issue #71, engine 1.33.0).
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-2';
+export const EVIDENCE_REPORT_VERSION = 'evidence-4';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -137,6 +146,32 @@ export interface EvidenceApplicationRun {
 	createdBy: string | null;
 }
 
+/**
+ * Another application on the same baseline, for the cumulative table (§ 4): a
+ * scenario other than the report's own, submitted or decided with approval,
+ * with its newest run of its current ops on this baseline. Read under the
+ * reader's RLS, so it lists only what the reader may see (a submitted
+ * application is visible to the project's editors, a draft only to its
+ * applicant). Only the measures the table needs, read from that run's summary.
+ */
+export interface EvidenceOtherApplicationInput {
+	scenarioId: string;
+	scenarioName: string;
+	status: 'submitted' | 'decided';
+	/** The assessor's outcome, when decided ('approved' | 'approved_with_conditions'). */
+	outcome: string | null;
+	runId: string;
+	runCreatedAt: string;
+	engineVersion: string;
+	runoffModel: string;
+	startDate: string;
+	endDate: string;
+	/** summary.catchment.ewrDaysNotMet. */
+	ewrDaysNotMet: number | null;
+	/** The outlet's Reserve compliance (summary.ewrAssurance, the outlet's `overall`); null without a rule table at the outlet. */
+	reserveOutlet: { months: number; met: number; rate: number | null } | null;
+}
+
 export interface EvidenceInput {
 	project: { id: string; name: string };
 	/** The run the report treats as the baseline: the application's base run, or the run itself for baseline evidence. */
@@ -155,6 +190,10 @@ export interface EvidenceInput {
 	history: { since: EvidencePublication; revisions: EvidenceRevision[]; truncated: boolean } | null;
 	/** Other scenario runs on the same baseline, newest first, this one included. */
 	applicationRuns: EvidenceApplicationRun[];
+	/** Other submitted or approved applications with a run on the baseline (not this report's own), for § 4's cumulative table. */
+	otherApplications: EvidenceOtherApplicationInput[];
+	/** More than the backend's cap (the newest 50 are listed): the sum is then not assessed. */
+	otherApplicationsTruncated: boolean;
 	/** What the report cites for its methods and limits (the engine's generated lists). */
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
 }
@@ -217,7 +256,7 @@ export interface EvidenceChange {
 }
 
 export interface EvidenceRow {
-	id: 'reserve' | 'ewrDays' | 'shortfall' | 'outflowMar' | 'registeredUse' | 'applicantSupply' | 'userSupply';
+	id: 'reserve' | 'ewrDays' | 'shortfall' | 'noFlowDays' | 'ewrBelowWorks' | 'outflowMar' | 'registeredUse' | 'applicantSupply' | 'userSupply' | 'otherApplications';
 	/** The measure, in words. */
 	label: string;
 	/** What it is measured against, so two EWRs are never confused (persona E: "label each measure's basis"). */
@@ -302,8 +341,24 @@ export interface EvidenceSite {
 	belowTableExpectedPct: number | null;
 	/** By calendar month (water-year order): complete years and met, baseline and application. */
 	byMonth: { month: number; years: number; metA: number; metB: number | null }[];
-	/** The calendar month whose FDC check the report plots: the one with the largest drop in months met, else the driest month. */
+	/** The calendar month whose FDC check the report plots: the one with the largest drop in months met, else the month met least often. */
 	fdcMonth: number | null;
+	/**
+	 * The banded FDC check (ER5), per calendar month (water-year order): the
+	 * baseline's band (R1) and the application's own curve under the same
+	 * parameter sets (R2, not a difference), at each of the table's points,
+	 * table unit. Null when there is no band (`fdcBandNote` says why).
+	 */
+	fdcBands: { month: number; a: (Band | null)[]; b: (Band | null)[] | null }[] | null;
+	fdcBandNote: string | null;
+	/**
+	 * The site's driest calendar month: the lowest mean natural flow over its
+	 * complete months in the baseline (evidence-3). A property of the river,
+	 * not of the requirement or the application, so no one can choose it; § 1
+	 * plots its FDC beside `fdcMonth`'s when the two differ. Null without a
+	 * complete month.
+	 */
+	fdcDriestMonth: number | null;
 }
 
 /** An ensemble in the uncertainty ledger (D-U7): every start on the baseline, listed. */
@@ -338,6 +393,76 @@ export interface EvidenceUser {
 	annualReliabilityB: number | null;
 	/** Only in one of the runs (a node the application added or removed). */
 	onlyIn: 'baseline' | 'application' | null;
+	/** The change in its share supplied, percentage points, with the paired band (ER4); null for baseline evidence or a unit in one run only. */
+	change: EvidenceChange | null;
+}
+
+/** A farm or water user upstream of an EWR site, served in full on days the site failed (§ 4). */
+export interface EvidenceServedUnit {
+	nodeId: string;
+	name: string;
+	own: boolean;
+	/** Days, per run; null where the run lacks the unit. */
+	daysA: number | null;
+	daysB: number | null;
+}
+
+/** Per EWR site, the days units upstream got their whole demand while the site's EWR failed (§ 4, engine ≥ 1.33.0). */
+export interface EvidenceServedWhileFailing {
+	/** Set when the runs don't carry it: printed in the section's place. */
+	notAssessed: string | null;
+	sites: {
+		key: string;
+		name: string;
+		isOutlet: boolean;
+		/** The daily requirement the site is judged on, in words. */
+		basis: string;
+		/** Days the site's EWR was not met, per run. */
+		daysNotMetA: number;
+		daysNotMetB: number | null;
+		/** Units upstream with demand, most days first (the reported run's); units never served in full on a failing day included, with 0. */
+		units: EvidenceServedUnit[];
+	}[];
+}
+
+/** Another application's own change against the baseline (§ 4's cumulative table). */
+export interface EvidenceCumulativeApplication {
+	scenarioId: string;
+	scenarioName: string;
+	status: 'submitted' | 'decided';
+	outcome: string | null;
+	runId: string;
+	runCreatedAt: string;
+	/**
+	 * Same engine, period and runoff model as the baseline, so its difference is counted in the sum.
+	 * Any other difference from the baseline is the application's own ops (its scenario snapshot), which the sum is meant to carry.
+	 */
+	comparable: boolean;
+	/** Why it isn't counted, in words; null when it is. */
+	reason: string | null;
+	/** Its days below the pragmatic EWR at the outlet minus the baseline's. */
+	ewrDays: number | null;
+	/** Its Reserve months met at the outlet minus the baseline's, percentage points; null without a rule table at the outlet. */
+	reservePp: number | null;
+}
+
+/**
+ * What else is proposed on the baseline (licensing authority, s27 "other
+ * water users"): each other application's own change, and their sum. A sum of
+ * separate runs, not one combined run: two applications drawing on the same
+ * water may take less, or more, together than the sum says. A true cumulative
+ * run is WP-3.11 (combineScenarios).
+ */
+export interface EvidenceCumulative {
+	applications: EvidenceCumulativeApplication[];
+	/** Applications counted in the sum (the comparable ones). */
+	counted: number;
+	/** The list was cut at the backend's cap: the sum would understate, so it is not assessed. */
+	truncated: boolean;
+	/** Σ over the counted applications; null when none carries the measure. */
+	total: { ewrDays: number | null; reservePp: number | null };
+	/** The sum with this report's own change added; null for baseline evidence. */
+	withThis: { ewrDays: number | null; reservePp: number | null } | null;
 }
 
 /** One water year of a unit's use from one water source, both runs (§ 5). */
@@ -494,6 +619,10 @@ export interface EvidenceReport {
 		nominations: EvidenceNomination[];
 	};
 	users: EvidenceUser[];
+	/** § 4: users served in full while an EWR site below them fails. */
+	servedWhileFailing: EvidenceServedWhileFailing;
+	/** § 4: the other applications on the baseline and their summed change (evidence-3). */
+	cumulative: EvidenceCumulative;
 	/** § 5: registered water use against modelled use (WP-3.10). */
 	allocations: EvidenceAllocations;
 	appendix: {

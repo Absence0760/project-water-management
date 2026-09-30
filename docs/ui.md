@@ -1913,9 +1913,62 @@ note's link on the Summary, `notes.ts` `noteHref`).
   pump capacity. A farm on river first or dam, river when low that also has
   **River to dam** (the diversion into the dam, under Routing) gets a note that
   the run counts the two as separate pumps, so one pump doing both jobs needs
-  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
-  while it still has supply settings, so they can be reset. Read-only for
-  viewers (no calculator).
+  its capacity split between them (`sharedPumpHint`; with River to dam by
+  month, any month above 0 counts, `diverts`). Under them, **Hands-off flow**
+  (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
+  flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
+  **Use October’s flow for every month**; unticked = none), and **Also leave
+  the EWR in the river** keeps the EWR required at the farm too. A line under
+  them says in plain words what the farm leaves and before which of its takes
+  (`handsOffPreview`, `handsOffTakers`): no hands-off flow (senior users only,
+  not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
+  m³/day by month", every figure as entered) with the months without one, the
+  EWR, or the larger of the two, before only the takes that apply: the river
+  pump (any rule but dam only, unless its capacity is 0), River to dam (on a
+  farm with a dam), or, on a farm with no dam, what it irrigates straight from
+  the river (what is routed to its dam). Where none applies (dam only with no
+  River to dam) it says the flow changes nothing. The save rules (farms only,
+  12 values none negative, `operatingIssues` in `lib/model/validate.ts`, a
+  test holds its kind rule to the engine's) show as alerts under the section.
+  A farm turned into a gauge or other user keeps the section while it still
+  has supply or hands-off settings (or River to dam by month, with a **Clear
+  River to dam by month** button beside the alert, since Routing is gone), so
+  they can be reset. The two boxes' help tips sit beside their labels, not in
+  them, so each box's name is its words alone. Read-only for viewers (no
+  calculator).
+- **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
+  every twelve-month row of the one-node form (the dam release, a demand
+  object's demand or profile, an other water user's demand, the hands-off flow
+  and River to dam by month) is the one component: a caption naming the group
+  (its help tip beside it, outside the name), an optional **Use October’s …
+  for every month** button on the caption line, and twelve fields, each with
+  its month shown above it and an accessible name of its own ("Demand of Town
+  in Oct, m³/day"). The fields wrap by the room the group has (a container
+  query, not the viewport): six to a row in the node sheet, four on a phone,
+  three on the narrowest, all twelve in one row only from 70rem, where each
+  still holds 12 345.5 whole. It never scrolls sideways, and the fields have
+  no spin buttons (the arrow keys still step them), so 12 345.5 and 0.0129
+  show whole for owners and viewers alike (`supply.spec.ts` checks
+  `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
+  button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
+  a profile) is in the `.ts` neighbour, unit-tested.
+- **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
+  one-node form, farms, under **River to dam** in Routing: **Set River to dam
+  by month** opens twelve m³/day fields (started from the one value, with
+  **Use October’s capacity for every month**); while it is on, the one River
+  to dam field is read-only with the hint "Not used: River to dam is set by
+  month below", and a line gives the capacity ("up to 800 m³/day", or
+  "between 800 and 12 345.5 m³/day by month") and names the months it takes
+  nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
+  dam's own hint says what it leaves in the river: senior users' demand, and
+  the hands-off flow under Supply when there is one. The months are edited
+  only here: on a farm set by month the node table's River to dam cell
+  (`NetworkTab.svelte`, desktop and phone card) has no input for the one
+  value the run ignores, but the months' range, read-only ("by month:
+  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
+  tables it is plain text. A farm with the one value edits it in the table as
+  before.
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
@@ -5073,7 +5126,33 @@ scrolling in its box. Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
 
-**Every hydrological unit and water year**: the whole comparison as one table (one row
+**Every hydrological unit and water year**: first the **over/under-use
+chart** (`allocations/UsePlot.svelte`, the evidence report's § 5 chart, shared
+since 2026-09-29, issue #71 follow-up): one row per unit and water source with a
+registered volume, in the list's order (`comparisonUseRows`), one hollow mark
+per whole water year at modelled use ÷ the registered volume, a line at
+100 % and the project's band shaded behind it; a year past the axis (at most
+300 %) is an arrowhead at its edge. One neutral hue: the side of the band is
+read from position, never colour. Part years, years with nothing registered
+and units with no registered volume aren't drawn (the table lists them). On
+screen the chart is drawn px for px at its box's width (`fit`, 11 px text, at
+most 900 px wide); below 480 px (a phone) each row's label takes its own line
+above its marks, and the band and the 100 % line are drawn in each row's strip
+only, so nothing runs through a label (each has a halo on screen). A name cut
+to fit keeps the source whole and stays distinct from the others
+(`distinctShortNames`); the full label is its tooltip, and each mark's is its
+water year and share. A one-line lead above it names the quantity. The
+report's fixed drawing never draws its 9 px text under 9.5 px (a 549 px
+minimum), scrolling sideways in a focusable box on a phone. Its SVG is named by its title and described by a sentence
+counting the whole years above the band and in how many units
+(`useSummary`, which the report's chart carries too, per run), from the
+engine's own status for each year so it agrees with the table's "Above
+registered", counting every row even while the chart is folded (and saying
+how many it draws); the caption says what
+a mark, the line, the band and an arrowhead are, "modelled, not metered". It
+shows the first ten rows until **Show all N in the chart** / **Show the first
+10 in the chart** (`aria-controls="alloc-use-plot"`); the axis is the whole
+chart's, so opening it doesn't move the marks shown. Then the whole comparison as one table (one row
 per unit, source and water year, in the list's order so the units to look
 into first come first, each unit's years together, `rowsInListOrder`; a
 source with neither use nor a volume is left out), the WUA manager's
@@ -5164,6 +5243,19 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
   applicant never does.
+- **Comments and share links** (WP-3.15), at the top of the panel: the
+  application's **Notes** button (the notes drawer on the scenario, titled
+  "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
+  assessors, **Share link…**, which opens the **Share dialog** (a side sheet,
+  `ShareLinksPanel.svelte` with a `scenario`): what the viewer will see (its
+  changes, the EWR at each site against the baseline, the catchment's totals
+  at five or more units, the public comments; never another unit, a member
+  or a registered volume), "Who it's for" and "Works for" (1 week to 1
+  year), **Make link** and the link shown once to copy, then the links to it
+  (live first, who made it, when it ends, last opened) with **Withdraw**. A
+  draft or withdrawn application says it must be submitted first and offers
+  no form. The assessors list and withdraw every link to it; the applicant
+  their own.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`, issue #17 option A): every submitted, withdrawn or
@@ -5185,7 +5277,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   with N" under it), status as a pill in words (Awaiting a decision;
   Approved, Approved with conditions or Refused in the band colours, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
-  "waiting N days" while it awaits a decision), changes and runs.
+  "waiting N days" while it awaits a decision), changes and runs, and the
+  application's comments (the compact notes button, WP-3.15; its share
+  links are in its Application panel).
 - **Fit:** from 1100 × 620 the card fills the window and the rows scroll
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs") and the
@@ -5287,13 +5381,18 @@ last by Ann, 12 Aug 2026: 40% → 60%", that links to History filtered to that
 field (`?tab=history&kind=revision&unit=<unit>&q=<words>`, the unit only for a
 unit's own fields). A field never changed since it was set shows nothing.
 
-- **Where:** the node sheet's numeric fields and **Drains into**, the farm
+- **Where:** the node sheet's numeric fields and **Drains into**, its
+  Supply section (the supply rule, the river pump capacity, the trigger's two
+  levels, the hands-off flow and its EWR tick) and **Set River to dam by
+  month**, the dam's survey curve, release rule and release months, the farm
   drawer's planted area per crop (under the crop's name), and Settings &
   calibration's scalar parameters (effective rainfall, soil-water store, dam
   evaporation factor, days in February, catchment area, GR4J X1–X4 and
   warm-up, the rain threshold, the flow-share method, the annual assurance
-  threshold, the data-quality thresholds). Monthly tables and rule editors
-  have none.
+  threshold, the data-quality thresholds). A twelve-month row set or cleared
+  reads as its range on the line ("none → by month: 0–800 m³/day", "300
+  m³/day every month", `compactMonths`); History keeps the full row. Other
+  monthly tables and rule editors have none.
 - **Data:** one `GET …/history/fields` for the whole project
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at
@@ -5347,6 +5446,19 @@ March") is kept against what it is about.
   hidden from everyone, kept for the audit trail). On a farm, *Also show to
   this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
+- **On a scenario** (WP-3.15, the Application panel and each Applications
+  row): the drawer is "Comments on “name”", with a **Who reads it** picker
+  of the audiences the caller may post to, their natural one first (an
+  assessor: *The assessors only*, *The assessors and the applicant's party*,
+  *Public participation: shown with your name on the shared link*, *The
+  project team*; one of the application's parties: the parties, the
+  assessors, public participation; anyone else, only public participation,
+  shown as a line instead of a picker). Each comment carries its audience as
+  a badge (Assessors, Parties, Public, Team), and an edited one says
+  *edited: history*, a button that opens its earlier texts inline, oldest
+  first, with when each was written and replaced (`GET …/revisions`). The
+  server holds the matrix (data-model.md § Notes); the picker only offers
+  what it allows.
 - **Farmer view.** *Notes about your hydrological unit* (`farm/FarmNotes.svelte`) lists
   the farmer's own notes and the WUA's farm-visible ones on that farm, and
   adds a note, always shown to the farm. The WUA previewing the page sees the
@@ -5363,11 +5475,17 @@ March") is kept against what it is about.
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
 WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
 anyone who can view the project. Without `?run=` it reports the latest run. It
-uses only existing API routes (the project, the run with its settings and model
-snapshot, the series list, four catchment series) and is its own lazy route
-chunk. A non-member gets the workspace's "This project doesn't exist or you
-don't have access to it"; a project with no runs, or a run that no longer
-exists, says so with a link to Runs & results.
+reads the project, the run with its settings and model snapshot, the series
+list, four catchment series, the run's sign-offs and its place in the
+project's publications (`GET …/runs/:runId/publication`, issue #70), and is
+its own lazy route chunk. A non-member gets the workspace's "This project
+doesn't exist or you don't have access to it"; a farmer (403 on the project)
+is sent to their farm page, as the workspace sends them; any other role
+below viewer (an applicant) reads "The catchment report isn’t part of your
+role in this project."; a project with no runs, or a run that no longer
+exists, says so with a link to Runs & results. The Overview's published
+baseline card links to the published run's report (**Report**, beside
+**Open in Runs**).
 
 - **Impact report** (`&against=<projectId>:<runId>`, Compare runs' **Export
   impact report**, issue #17 A4): the same report with the cover's eyebrow
@@ -5434,7 +5552,12 @@ exists, says so with a link to Runs & results.
   signed the run, "Signed off by <name> (<body> <number>)", or "Not signed
   off by a registered professional."; an unsigned run nominated as evidence,
   or any unsigned impact report, adds **Not signed off: not for use as
-  evidence in a licence application.** in bold; then the contents), then numbered
+  evidence in a licence application.** in bold; then the contents; for a
+  published run, or one that was, **Published** with the date, by whom, and
+  "; the run stakeholders see now" or "; replaced <date>", and the
+  publication's restriction notice as a note, "Restriction notice: Restricted
+  · 20 %…" (or "(on the publication since replaced)"), then the WUA's text in
+  each language it wrote, each marked with its `lang`), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -5456,22 +5579,33 @@ exists, says so with a link to Runs & results.
   chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
-  for the outlet and every farm), **Hydrological units, warnings and checks** (the run
+  for the outlet and every farm), **Assurance of supply** (when the run has
+  it, engine ≥ 0.32.0: the Runs tab's Assurance panel in print mode, every
+  stress grid printed, the system's then each unit's, each under its own
+  "Stress classes by month: <name>" heading, with no picker; issue #70),
+  **Hydrological units, warnings and checks** (the run
   summary: warnings, headline cards, the farm table; the self-checks and the
-  water balance by water year, without Trace a day) and **Notes** (the run's
-  notes, when it has any). A section appears only when the run has its data;
+  water balance by water year, without Trace a day), **Notes** (the run's
+  notes, when it has any) and **Changes since the previous publication**
+  (issue #70: against the publication before this run's own, or, for a run
+  never published, against the current publication, named with its label,
+  date and publisher; who made the saved changes, then the input changes,
+  `ChangesList`, as Compare runs lists them). A section appears only when the run has its data;
   nothing is printed as a placeholder. Every report then closes with three
   sections (WP-3.13, `components/liability/`):
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
-    engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the methodology statement it
-    cites (version and a 12-digit hash prefix, `docs/methodology/`), the
-    run's self-checks, the
+    engine version, the build's invariant and soak results (the web
+    release's build record, `ENGINE_BUILD`, injected at build time; *Not
+    recorded for this build* in a build without one, such as local dev), the
+    methodology statement it cites (version and a 12-digit hash prefix,
+    `docs/methodology/`), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years and checks, the **errata** of
+    caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
+    older run that hit the old cap of 5 says its list may be cut short) and
+    checks, the **errata** of
     the run's engine version or its fit's (ID, what goes wrong, when it
     applies, fixed in; "None recorded for this engine version in
     docs/engine-errata.md" without one), and the **known limitations** table
@@ -5504,8 +5638,6 @@ exists, says so with a link to Runs & results.
     `draft`, a bold *Draft wording, pending the client's legal review
     (decision D10)* line stands above it.
 
-  Not yet: the published-by line and restriction notice (WP-2.3), changes
-  since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
   opened): full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
@@ -5552,7 +5684,14 @@ exists, says so with a link to Runs & results.
   the bar says "Preparing the report…" and **Download PDF** is disabled. The
   signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
-  PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
+  PDF**. Print CSS: A4 (`@page`, added while the page is open,
+  `report/printPage.ts`), a running footer on every page in the bottom
+  margin from CSS page-margin boxes (`@bottom-center`, Chromium 131+): the
+  page's `data-report-footer` (the engine's `REPORT_FOOTER`: project · run ·
+  "Model estimates; see the Disclaimer (section N, version …). The operator
+  of this software accepts no responsibility to anyone who relies on this
+  report.") and "Page X of Y." (a browser without margin boxes, Firefox,
+  prints the pages without it), a page break
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
@@ -5575,12 +5714,9 @@ exists, says so with a link to Runs & results.
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
   pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)),
-  plus a running footer on every page: the page's `data-report-footer`
-  (the engine's `REPORT_FOOTER`: project · run · "Model estimates; see the
-  Disclaimer (section N, version …). The operator of this software accepts
-  no responsibility to anyone who relies on this report.") and "Page X of
-  Y" (`reports/render.ts` `footerTemplate`). The browser's own print
-  (Download PDF) has no running footer.
+  the running footer included: it comes from the page's own CSS, so the
+  renderer adds none of its own (issue #70; it used `footerTemplate` until
+  then, which the browser's print didn't have).
   The bar then follows the job's status (`role="status"`: "PDF queued: waiting
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
@@ -5650,10 +5786,25 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     before caution before counts, each saying which way it pushes the
     numbers), the change table (fixed rows, each with its basis: Reserve
     months met per rule-table site, days below the pragmatic EWR, shortfall
-    volume, outflow MAR with % of natural MAR, the applicant's own supply,
+    volume, *No-flow days at the outlet* (below 1 L/s, with the longest
+    spell), *Days below the EWR, first site below the works* (one row per EWR
+    site that is the first below one of the application's storage or
+    abstraction works, or *Not assessed* naming the works with no site
+    between them and the outlet), outflow MAR with % of natural MAR, the
+    applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
-    summed, no band; *Not assessed* without volumes), other users' supply),
-    with the paired band and "worse in k of n", *Where
+    summed, no band; *Not assessed* without volumes), other users' supply,
+    and *Other applications on this baseline, summed* (the other submitted
+    or approved applications' own changes in days below the pragmatic EWR,
+    added up, no band, its basis saying it is a sum of separate runs and not
+    one combined run, WP-3.11; *None* when there are none the reader can
+    see)), with the paired band and "worse in k of n"; then **Impact by year
+    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    background, the application beside it, from the three daily series
+    `loadImpactSeries` fetches before ready; the year-class method and the
+    Reserve site are the project's `settings.outcomes`, as the impact report
+    reads them; *Not enough years* per class on a short record, and the
+    note when only one run is at full allocation); *Where
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
@@ -5666,17 +5817,39 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
-    the FDC check of one month against the EWR curve (`FdcPlot`) and the
+    the FDC check against the EWR curve (`FdcPlot`: from engine 1.33.0 the
+    baseline's 5–95 % band shaded behind its line and the application's
+    hatched, or the caption says why there is none) of the month the report
+    ranks first (the largest drop in months met, else the one met least
+    often) and, beside it, of the river's driest month (the lowest mean
+    natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
+    both, when they are the same month; `grid.ts` `fdcMonths`), and the
     compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
-    each departs from the rule), the baseline's bands (R1), the paired bands
+    each departs from the rule; a start not completed reads *started, not
+    completed: no result stored*, with a note that the app keeps nothing of
+    it but who, when and its rule, since the browser stores an ensemble only
+    when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
   - **3 Model and data**: calibration record, validation (`FitProvenance`, or
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
-    days and years fully met, baseline and application.
+    days and years fully met, baseline and application, the change with its
+    paired band and "worse in"; then *Served in full while an EWR site below
+    fails*: per EWR site, the days each unit upstream got its whole demand on
+    the site's failing days (`data-testid="evidence-served"`), and a "read
+    these first" count naming them.
+    Then **Other
+    applications on this baseline** (`evidence-cumulative`): each other
+    submitted or approved application, its status and its own change in days
+    below the pragmatic EWR and in Reserve months met at the outlet, the sum
+    of those counted (same engine, period and runoff model; any other says
+    why it isn't) and the sum with this application; the words say it is a
+    sum of separate runs, not a combined run (WP-3.11), listed as the reader
+    can see them; past 50 the newest 50 are listed and nothing is summed
+    (page 1's row then *Not assessed*).
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
@@ -5697,7 +5870,11 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     issued* for a draft), **Appendix C** (application only): the scenario's
     description and the run's notes, verbatim, the only free text.
 - **Draft stamp.** Every section head and the footer (`data-report-footer`)
-  read *Draft · not issued* until an evidence pack issues it (WP-3.14).
+  read *Draft · not issued* until an evidence pack issues it (WP-3.14), and
+  in print a diagonal *Draft · not issued* watermark crosses every page
+  (`position: fixed` in `@media print`, which Chromium repeats on each page;
+  `aria-hidden`, the text stamps being the accessible ones), so a cropped
+  page still says it.
 - **Ready and print.** `data-report-ready` follows the catchment report's
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
   browser's print (always light, A4). There is no server-rendered evidence
@@ -5920,7 +6097,14 @@ published.
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
-  summary sentence and a full table behind "Show the numbers"); last
+  summary sentence and a full table behind "Show the numbers": each month's
+  needed and received, and under the received a line with the share of the
+  need and the engine's stress class in plain words ("99 % · all or nearly
+  all"; a line in the cell, not a fourth column, which didn't fit a 320 px
+  phone in Afrikaans) (all or nearly all ≥ 95 %, a little short
+  ≥ 85 %, short ≥ 70 %, very short ≥ 50 %, far too little; `chart.ts`
+  `supplyLevel`, `STRESS_THRESHOLDS`, issue #70), and a line under the table
+  saying what the words mean; last
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
@@ -6477,6 +6661,34 @@ signed in or out, for someone outside the project, on a phone first.
   Try again. Every string is in `lib/components/share/share.ts`, the chart
   in `share/chart.ts`, the loading rules in `share/load.ts`, all
   unit-tested.
+- **A scenario link** (WP-3.15, `/share#t=…&k=scenario`,
+  `share/ScenarioView.svelte`, words in `share/scenario.ts`, the
+  `share.scenario` section): the same shell, header and states, reading
+  `POST /share/scenario`. Top to bottom: the application's name, "An
+  application in *catchment*, shared read-only", where it stands
+  ("Submitted on *date*, awaiting a decision" or the decision and its date),
+  the caveat; then in the left column **The river's ecological reserve
+  first**: for each EWR site (the outlet unnamed) the months the Reserve is
+  met on the baseline beside the application, and the change in words
+  ("2 months more below the Reserve with this application", in red when
+  worse), and the days below the EWR at the outlet; or why there are no
+  results (not run on its current changes; or not stored by the model run
+  itself, so not shown). Then **What the application changes**: each change
+  in words, the applicant's own unit by name and any other as "another
+  hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
+  (with a line saying what that means), and the description. In the right
+  column: the decision's reasons (once decided), **The catchment's totals**
+  (flow out, water supplied, units short of 95 % of demand, baseline and
+  application; only at five or more units), **Public comments** (oldest
+  first, author and date, *edited*), and **About this page**. A signed-in
+  member gets **Add a comment** (posted for public participation, "Shown
+  with your name to everyone this application is shared with"); anyone else
+  gets **Sign in to comment**, which keeps the link in this tab's
+  `sessionStorage` (never the address bar) so the page opens it again after
+  the sign-in. A server `404` says only members can comment, a `403` that
+  it isn't open for comment. Same two-column layout from 860 px, one
+  column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
+  sign in, comment, the assessor's view) with axe.
 
 ## Viewers
 

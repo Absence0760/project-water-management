@@ -180,7 +180,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C10 | Reserve compliance by the assurance rules, per site: months met, by month of the year, deficit, longest run, FDC check; baseline and application | Monthly compliance with contiguity (evidence: [Pollard 2011], [Riddell 2014]) | built (§2.9c), per rule-table site | Page 1 row 1; § 1 heat maps, table |
 | C11 | Days below the daily EWR (the pragmatic EWR) and the shortfall volume | The app's daily EWR sets curtailment; % of time not met (evidence: CR-29) | built | Page 1 rows 2–3 |
 | C12 | MAR and outflow as % of natural MAR, baseline and application | R267 lists MAR; the Reserve is stated in % nMAR (evidence: [R267], [Reserve GN]) | built (means); % nMAR is a division | Page 1 row 4 |
-| C13 | Low flows: the change in the flow-duration curve against the EWR curve, in the months that matter | The benchmark's key impact is at low flows (evidence: [Dabrowski 2025] §5.1) | built: one month's FDC against the EWR curve, unbanded (ER5) | § 1 FDC chart |
+| C13 | Low flows: the change in the flow-duration curve against the EWR curve, in the months that matter | The benchmark's key impact is at low flows (evidence: [Dabrowski 2025] §5.1) | built: the FDC against the EWR curve of the month with the largest change and of the river's driest month (lowest mean natural flow), unbanded (ER5) | § 1 FDC charts |
 | C14 | Downstream users: supply and reliability per user, baseline and application, anonymised per Step 3 D2 | s27 "other water users"; R267 user survey (evidence) | partial: supply, days and years fully met built, no band (ER4 rest); anonymising ask ER10 | Page 1 row 6 |
 | C15 | The applicant's own assurance of supply | Applicants must show the works meet their need (evidence: [Dabrowski 2025] Table 9; roadmap WP-3.4) | partial: share of demand supplied, over the applicant's own units, no band (ER4 rest) | Page 1 row 5 |
 | C16 | Curtailment: the application's EWR charge under the attribution rule, and the rule's name | model.md §2.7b, §2.11 | built | § 1 (application evidence only) |
@@ -193,6 +193,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C23 | Sign-off by a registered natural scientist, bound to a statement hash | Professional responsibility (evidence: roadmap WP-3.13, [SACNASP]) | WP-3.13 | Appendix B.2 |
 | C24 | Reproducibility: input series hashes, ops hash, manifest hash and short code, verify link, reproduction bundle, page count | Verify an unaltered, reproducible report (evidence: roadmap WP-3.1, WP-3.14) | partial: series hashes (Appendix A.3) and stored values built; manifest WP-3.14 | Every footer; Appendix A.3, B.4 |
 | C25 | Registered water use: each unit's registered volumes (WARMS registrations, licences) against its modelled use per water year, baseline and application; units by name, never the holder (D3) | s27 "existing lawful water uses"; the licence applicant persona asked for a registered-vs-modelled row (judgement) | built (WP-3.10 comparison per run, each run's own volumes; no band) | Page 1 row "Registered vs modelled use" and flag; § 5 |
+| C26 | What else is proposed on the baseline: every other submitted or approved application's own change, and their sum | s27 "other water users" (licensing authority persona); a true cumulative run is WP-3.11 | built (`cumulative`, evidence-3): a sum of separate runs, said so, no band | Page 1 row "Other applications on this baseline, summed"; § 4 |
 
 ## 4. Information architecture
 
@@ -239,20 +240,24 @@ Fixed content, in this order (mock-up sheet 1):
 **Impact by year class** (planning-outputs R7, issue #53) goes on page 1
 after item 4: per dry / normal / wet class, the annual waterfall and the
 Reserve months not met, baseline vs application, the verdict from the
-months. It is built on the impact report already
-([ui.md § Report](../ui.md#report),
-[model.md §2.14a](../model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report));
-Phase C reuses its component. Its "existing authorised use" waits on a
-full-allocation background run (WP-3.10).
+months. Built (issue #71 follow-ups): page 1 prints the impact report's
+`LicenceImpactBoard` ([ui.md § Report](../ui.md#report),
+[model.md §2.14a](../model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report))
+from the two runs' daily series, the application named as such. Its
+"existing authorised use" is the baseline's use when the baseline is a
+full-allocation run (WP-3.10), and the board says so when only one of the
+two runs is. The board is computed in the browser, not in the engine's
+document: an issued pack (WP-3.14) will need its view model in the
+manifest, and that is when it moves into `evidenceReport`.
 
 ### 4.2 Sections
 
 | § | Title | Holds | Checklist |
 | --- | --- | --- | --- |
-| 1 | The river | Per EWR site: the site strip (C9); month × water-year heat maps, baseline and application side by side, changed months outlined; extra days below the EWR by month of the year (paired interval plot); the flow-duration curve against the EWR curve for the month with the largest change; the compliance table; the application's EWR charge (C16) | C9–C13, C16 |
+| 1 | The river | Per EWR site: the site strip (C9); month × water-year heat maps, baseline and application side by side, changed months outlined; extra days below the EWR by month of the year (paired interval plot); the flow-duration curve against the EWR curve for the month with the largest change and, beside it, the river's driest month; the compliance table; the application's EWR charge (C16) | C9–C13, C16 |
 | 2 | Uncertainty | The coverage warning if any; the cited ensemble; the ledger of every start on the baseline; the baseline's bands against the nominated run; the paired bands against zero; R1 and R2 | C18 |
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
-| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply | C14, C15 |
+| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change and their sum | C14, C15, C26 |
 | 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
 
 § 5 was added in report version `evidence-2`. Its page-1 row fits the
@@ -261,6 +266,65 @@ registered volume, summed, or *Not assessed* with the reason (no volumes in
 the runs, none on a unit of theirs, no whole water year). One sum rather
 than a row per unit keeps page 1 fixed in length whatever the catchment's
 register holds; § 5 and the flag name the units.
+
+**Report version `evidence-3`** (issue #71 follow-ups) added three things.
+*The driest month* (`river[].fdcDriestMonth`): the calendar month with the
+lowest mean natural flow over its complete months in the baseline. Natural
+flow, not the simulated flow or its ratio to the requirement, so it is a
+property of the river that neither the requirement's shape nor the
+application can move; § 1 plots its FDC beside the largest-change month's,
+one plot when they coincide. *The other applications* (`cumulative`): every
+other scenario on the baseline that is submitted, or decided with approval,
+with its newest run of its current ops, read under the reader's RLS (a
+viewer's report lists no submitted application, since only editors read
+those; nobody's lists a draft). Each one's own change in days below the
+pragmatic EWR and in Reserve months met at the outlet, and their sum over
+those run on the baseline's engine, period and runoff model (any other
+difference is the application's own ops, which the sum is meant to carry;
+past 50 applications nothing is summed, since part of a sum understates). It is a sum of
+separate runs, not a combined run: two applications drawing on the same
+water can take less together than the sum says, or push the river further,
+so the words say so and the row carries no band. A true cumulative run, every
+application's ops together, is WP-3.11 (`combineScenarios`). *Its page-1
+row* fits G6 the way § 5's does: always printed in an application report,
+one row whatever the number of applications (the sum, the names in its
+note), *None* in the value's place when there are none the reader can see;
+§ 4 lists each. Days below the pragmatic EWR is the row's measure because
+every run has it; the Reserve's change is in § 4 beside it.
+
+Report version `evidence-4` (engine 1.33.0) added three fixed page-1 rows and
+a § 4 table, each printed whether or not it has anything to show (G6):
+
+- **No-flow days at the outlet**: days the simulated outflow is below 1 L/s
+  (0.001 m³/s, the flow a DWS gauge record reads as 0.000), both runs, with
+  the longest spell and the paired band ([model.md §2.9e](../model.md#29e-no-flow-days-and-users-served-in-full-while-an-ewr-site-fails-engine--1320-issue-71)).
+- **Days below the EWR, first site below the works**: for each proposal op
+  that builds or raises storage or abstraction at a node (a farm's or user's
+  dam, irrigation, supply, borehole or demand field, a new unit, a crop area,
+  a borehole, a transfer's or off-take's source, demand raised on named
+  nodes or, without names, on every node of its category; a gauge's own
+  fields are not works), the first EWR site downstream of it that is **not the outlet** (a
+  gauge marked as an EWR site): the days its daily EWR is not met, with the
+  paired band, and the Reserve's months met there when it has a rule table.
+  Works sharing a site share its row. Where the river reaches the outlet
+  without passing a site, one row names the works with *Not assessed: no EWR
+  site between the works and the outlet*, and the assessor's question
+  (whether a site closer to the works should be assessed) goes on the
+  questions list. Judgement: the outlet is always "downstream", but reading
+  it as the site below the works would hide the local effect the
+  environmentalist asked about behind the whole catchment's flow; the
+  outlet's own rows already say what the outlet sees.
+- **Supply bands (ER4 rest)**: *The applicant's own supply* and each other
+  user's row carry the paired band on the change in their share of demand
+  supplied, with "worse in" (the sets in which it falls); § 4's Change
+  column the same.
+- **§ 4 Served in full while an EWR site below fails**: per EWR site, the days
+  each unit upstream got its whole demand on the site's failing days, both
+  runs, and a "read these first" count naming them.
+
+An ensemble stored before engine 1.33.0 has none of these measures: each such
+cell prints "no band: the ensemble was stored before engine 1.33.0", and a run
+made before it prints the row *Not assessed* with the reason.
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
@@ -378,14 +442,14 @@ measure has a test in the build (§11).
 | G2 | Every nomination printed, with reasons | Quietly switching the baseline | `run_nomination` append-only | built |
 | G3 | Baseline-assumption ops refuse issue and turn every page's banner red | Moving the baseline inside a "proposal" (a pan coefficient, an EWR table) | `classifyOp`; WP-3.15 item 2 | built: red banner and flag, preview only, `issuable` false |
 | G4 | One cited ensemble, on the project's declared thresholds; every start listed | Trying seeds or thresholds until the band is kind | DB-drawn seed, kept starts (014); declared rule set (ER3); the *first* complete ensemble on the rule is cited | built |
-| G5 | Every change paired, with "worse in k of n" | Quoting the kind end of two overlapping bands | `summarisePaired` | built, Reserve included (`reserve[].worse`); per-user supply bands open (ER4 rest) |
+| G5 | Every change paired, with "worse in k of n" | Quoting the kind end of two overlapping bands | `summarisePaired` | built, Reserve included (`reserve[].worse`), and from engine 1.33.0 each unit's supply, the applicant's own, no-flow days and the EWR site below the works |
 | G6 | Fixed rows and sections; absence printed | Leaving out the measure that looks bad | Evidence-mode section list with "Not assessed" | built |
 | G7 | Fixed windows: EWR measures over every complete month of the run; a shorter reporting window is shown *beside* the whole run, never instead | Choosing a wet window | Reserve assessment already uses complete months; report rule (judgement) | partial: Reserve rows over every complete month; days-fully-met columns use the reporting window, not shown beside the whole run |
 | G8 | Months and sites, not averages; worst months on page 1 | Averaging a dry-season impact away | §2.9c by month; paired by month | built |
 | G9 | Data flags above the table | Burying forecast days, infill or plausibility failures in an appendix | Page-1 flags from the run summary | built (each with its direction) |
 | G10 | Same engine version, period and runoff model on both runs | Comparing across engine changes | Refusal (§2); WP-3.15 item 5 | built |
 | G11 | Hash in every footer; page count in the manifest; in-browser PDF check | Editing or dropping a page of the PDF | WP-3.14 manifest and `/verify` | WP-3.14 |
-| G12 | "Draft · not issued" on every page until issued | Submitting a draft as final | WP-3.14 status | partial: the draft stamp on every section and footer; issue WP-3.14 |
+| G12 | "Draft · not issued" on every page until issued | Submitting a draft as final | WP-3.14 status | partial: the draft stamp on every section head and the footer, and a diagonal print watermark on every page (so a cropped page keeps it); issue WP-3.14 |
 | G13 | Applicant free text only in a labelled Appendix C, verbatim with author | A persuasive narrative on page 1 | Layout rule (judgement) | built (Appendix C) |
 | G14 | One source for the numbers: the report and the compare page read the same engine outputs | A report that disagrees with the app | Shared code paths; a parity test | built (`evidence/report.test.ts` checks page 1 against `compareRuns`) |
 | G15 | No verdict colour; neutral encodings | Arguing with a traffic light | Visual rule (§5 D-U8) | built |
@@ -441,8 +505,8 @@ Nothing here changes `runModel`'s results.
 | ER1 | The render session may read a **second run** (the baseline, for an application report) and its uncertainty rows: `RenderScope` becomes `{ projectId, runIds[] }`, the runs named by the job | Today `reports/scope.ts` allows exactly one run, so the headless render of an evidence report would be refused | WP-2.15 Phase C (§12) |
 | ER2 | **Evidence mode** on the report route: its own section list (`report/sections.ts`), the refusal checks, page 1, flags, "Not assessed" rows, footers with page x of y, Appendix C | §§2, 4, 6 | WP-2.15 Phase C |
 | ER3 | A **declared uncertainty rule set** per project (thresholds, members, bounds), fixed before results are seen and versioned like settings; a cited ensemble must match it | G4; followups "Automated calibration with pre-declared rules" is the same idea for fits | WP-2.15 Phase C (the setting); the fit-side rule set stays its own follow-up |
-| ER4 | `summarisePaired` adds the worse-share for the Reserve rate per site, and paired bands on each farm's share of demand supplied and on the FDC-check rate | D-U3; C14, C15 rows have no band today | Engine, before Phase C |
-| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Engine, optional for Phase C |
+| ER4 | `summarisePaired` adds the worse-share for the Reserve rate per site, and paired bands on each farm's share of demand supplied and on the FDC-check rate | D-U3; C14, C15 rows have no band today | Built: the Reserve share (Phase C); each unit's supply and the applicant's own (engine 1.33.0). The FDC check is banded as its curve (ER5), not as a rate |
+| ER5 | Banded Reserve FDC check (monthly m³/s, the rule-table reading), so the FDC chart can carry a band | The ensemble's FDC bands are daily m³/day against the pragmatic EWR, a different quantity; they can't share the chart | Built (engine 1.33.0): the impacted curve at the table's points per site and month in each member (`reserveFdc`); § 1's chart shades the baseline's band (R1) and hatches the application's own (R2) |
 | ER6 | The WR2012 five-statistic table (CR-28) | C8 | Built as CR-28 (engine 1.19.0); the report shows it in § 3's calibration record |
 | ER7 | Report the fit record's validation scores, and "Not assessed" with the reason when the parameters aren't from a stored fit | C6 | Phase C (frontend only) |
 | ER8 | Assurance of supply metrics per farm (time-based, volumetric, annual) | C15 | WP-3.4, unchanged |
@@ -495,10 +559,13 @@ Left, each tracked in [followups.md § Evidence report](../followups.md#evidence
 the applied-for works against the modelled ones (a WULA reference), labelled
 mitigation alternatives, EWR rows below each storage or abstraction op, a
 no-flow row, a flag for flows below the table's lowest point, the days a user
-is served in full while the site fails, the driest month's FDC, a cumulative
-row over other applications, cancelled ensembles' interim results, Appendix
-C's fixed prompts and a diagonal draft stamp, and paired bands on each unit's
-supply (ER4 rest).
+is served in full while the site fails, Appendix C's fixed prompts, and paired
+bands on each unit's supply (ER4 rest). Built since, in the follow-ups: the
+driest month's FDC, the other applications on the baseline with their sum,
+the diagonal draft stamp and the licence impact by year class on page 1; and
+for cancelled ensembles, the finding that nothing interim is stored (a
+started row holds no summary or result, `run_uncertainty`'s check), which the
+ledger now says.
 
 **With the build** (Phase C, §12):
 - Unit (frontend): the evidence section list is fixed and complete for
@@ -568,6 +635,9 @@ layout from the frozen manifest.
   (`backend/src/allocations/runUse.ts`), the over/under-use chart
   (`UsePlot`), the page-1 row *Registered vs modelled use* and its flag
   ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
+- The evidence measures (report version `evidence-4`, engine 1.33.0, §4.2):
+  no-flow days, the EWR site below the works, users served in full while a
+  site fails, ER4's supply bands and ER5's banded FDC.
 
 Not built, or changed:
 - **ER1 avoided.** One run-scoped endpoint returns the whole document, the
@@ -576,10 +646,6 @@ Not built, or changed:
 - `POST /projects/:id/reports` with `evidence: true` is not built: the
   evidence report prints from the browser only. The server-rendered PDF
   comes with the issued pack (WP-3.14).
-- ER4's per-unit supply bands, ER5 (banded FDC) and the licence-impact
-  board by year class on page 1. Each is
-  tracked in
-  [followups.md § Evidence report](../followups.md#evidence-report-issue-71).
 - Page numbers ("page x of y") in the footer: the browser print has none;
   they come with the server render.
 

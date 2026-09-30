@@ -1029,6 +1029,29 @@ export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 	updatedBy: string | null;
 }
 
+/**
+ * One run's place in its project's publications (GET …/runs/:runId/publication,
+ * issue #70): the printable report's published-by line and notice, and its
+ * changes since the previous publication.
+ */
+export interface RunPublication {
+	/** The run's newest publication (null: never published); the restriction as that publication has it. */
+	publication: { id: string; publishedAt: string; publishedBy: string | null; supersededAt: string | null; restriction: PublicationRestriction } | null;
+	/**
+	 * The publication before it (a published run's earlier one of another run, or for a run never
+	 * published the current one), with the net input changes from its run to this one and who made them.
+	 */
+	previous: {
+		id: string;
+		runId: string;
+		runLabel: string;
+		publishedAt: string;
+		publishedBy: string | null;
+		changes: InputChange[];
+		attribution: CompareAttribution | null;
+	} | null;
+}
+
 export interface PublishRequest {
 	runId: string;
 	note?: string;
@@ -1188,6 +1211,74 @@ export interface ShareLink {
 	revokedBy: string | null;
 	/** Bumped at most once an hour when the link is opened. */
 	lastUsedAt: string | null;
+	/** null: the published baseline; 'scenario': one scenario (WP-3.15). */
+	targetKind: ShareTargetKind | null;
+	targetId: string | null;
+	/** The caller made it. */
+	mine: boolean;
+}
+
+/** What a link may name besides the published baseline (backend SHARE_TARGET_KINDS). */
+export type ShareTargetKind = 'scenario';
+
+/** One EWR site's Reserve compliance on a shared run (backend share/links.ts SharedEwrSite). */
+export interface SharedEwrSite {
+	/** A gauge's name; null for the outlet. */
+	name: string | null;
+	isOutlet: boolean;
+	months: number | null;
+	met: number | null;
+	rate: number | null;
+	longestNotMetRun: number | null;
+	/** null below the k rule (fewer than 5 farm holders). */
+	deficitM3: number | null;
+	byMonth: { month: number; years: number; met: number; rate: number | null }[];
+}
+
+/** What a scenario link shows of a run; `volumes` null below the k rule. */
+export interface SharedRun {
+	engineVersion: string;
+	startDate: string;
+	endDate: string;
+	createdAt: string;
+	ewrDaysNotMet: number | null;
+	ewrFractionDaysNotMet: number | null;
+	volumes: {
+		meanNaturalFlowM3Day: number | null;
+		meanSimulatedOutflowM3Day: number | null;
+		farms: { count: number; demandM3Day: number; suppliedM3Day: number; belowTarget: number };
+	} | null;
+	ewrSites: SharedEwrSite[];
+}
+
+/** POST /share/scenario (public, WP-3.15): a submitted or decided scenario, redacted. */
+export interface ShareScenario {
+	/** Ids let a signed-in member comment from the page; they grant nothing on their own. */
+	project: { id: string; name: string };
+	scenario: {
+		id: string;
+		name: string;
+		description: string;
+		origin: 'team' | 'applicant';
+		status: 'submitted' | 'decided';
+		submittedAt: string | null;
+		decidedAt: string | null;
+		outcome: ScenarioOutcome | null;
+		decisionNote: string;
+		ops: ScenarioOp[];
+		opsSha256: string;
+		ownedNodeIds: string[];
+		/** Names of its own nodes only; any other node is anonymous. */
+		opNames: { id: string; name: string }[];
+		/** Each op's class as its latest run applied it; null without a run. */
+		classified: ('proposal' | 'baseline')[] | null;
+	};
+	/** ready: both runs verify; none: not run on its current ops; unverified: a stamp fails, so no result. */
+	results: 'ready' | 'none' | 'unverified';
+	base: SharedRun | null;
+	run: SharedRun | null;
+	/** Comments posted for public participation, oldest first; plain text. */
+	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
@@ -1228,9 +1319,13 @@ export interface ShareSeries {
 /** Longest note, in characters (backend NOTE_MAX, 037_notes.sql). */
 export const NOTE_MAX = 4000;
 
-/** Who may read a note: the team (viewers and above), or also the farmers of its farm. */
-export type NoteVisibility = 'team' | 'farm';
-export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting';
+/**
+ * Who may read a note: the team (viewers and above), or also the farmers of
+ * its farm; on a scenario (WP-3.15) also the assessors, the application's
+ * parties, or everyone taking part in public participation (docs/data-model.md § Notes).
+ */
+export type NoteVisibility = 'team' | 'farm' | 'assessors' | 'parties' | 'public_participation';
+export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting' | 'scenario';
 
 /** A plain-text note on a node, run, setting or the project (WP-2.7; docs/api.md § Notes). */
 export interface Note {
@@ -1247,6 +1342,7 @@ export interface Note {
 	nodeName: string | null;
 	runId: string | null;
 	settingKey: string | null;
+	scenarioId: string | null;
 	visibility: NoteVisibility;
 	/** The caller wrote it, and may edit it. */
 	mine: boolean;
@@ -1259,6 +1355,7 @@ export interface NotesQuery {
 	nodeId?: string;
 	runId?: string;
 	settingKey?: string;
+	scenarioId?: string;
 	target?: NoteTargetKind;
 	limit?: number;
 }
@@ -1269,7 +1366,17 @@ export interface NoteCreate {
 	nodeId?: string;
 	runId?: string;
 	settingKey?: string;
+	scenarioId?: string;
 	visibility?: NoteVisibility;
+}
+
+/** GET …/notes/:noteId/revisions: each earlier text of a scenario note, oldest first. */
+export interface NoteRevision {
+	body: string;
+	/** When this text was written (the note made, or an earlier edit). */
+	writtenAt: string;
+	/** When an edit replaced it. */
+	editedAt: string;
 }
 
 /** How many notes the caller can see on each target (the count badges). */
@@ -1278,6 +1385,7 @@ export interface NoteCounts {
 	nodes: Record<string, number>;
 	runs: Record<string, number>;
 	settings: Record<string, number>;
+	scenarios: Record<string, number>;
 }
 
 /** A professional sign-off on a run or an evidence pack (036_signoff, 112_evidence_pack; docs/api.md § Sign-offs). Immutable. */

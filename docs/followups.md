@@ -2266,10 +2266,13 @@ role and not before it.
         at a site with a table is the table's (rows say `ewrSource:
         'ruleTable'`), the same choice as the charge; the pragmatic EWR
         stays the default, pending the hydrologist.
-  - [ ] **Where else the metrics show**: the printable report
-        (`report/`), the farm view (a farmer's own reliability and stress
-        months) and the scenario compare view (Δ reliability per farm).
-        Trigger: WP-3.10's evidence pack, which needs them in the report.
+  - [x] **Where else the metrics show** (done, issue #70): the printable
+        report's **Assurance of supply** section, the farm view's share of
+        each month's need received with its stress class in plain words, and
+        the compare and scenario views' per-farm table with the change B − A
+        (`compare/AssuranceDeltaTable.svelte`). The farm view shows stress
+        months only, not the reliability measures, which are over the
+        modeller's report window rather than the farmer's season.
   - [x] **Bundle budget** (superseded by later ceiling moves; now 994 KB,
         19f02741 then the 2026-09-27 raise): the build was 829 KB against the 821 KB ceiling
         (both panels are lazy; the growth is the engine module in every
@@ -2386,25 +2389,23 @@ role and not before it.
         D9, when someone asks for emailed or scheduled reports. The job queue
         (WP-2.8) is in place; the route and `data-report-ready` are what it
         would open and wait on.
-  - [ ] **Sections waiting on other work**, added to `report/sections.ts`
-        when their data exists (no placeholders until then). WP-2.3 and
-        WP-2.4 have landed, so the published-by line, the restriction
-        notice, the changes since the previous publication and the Overview's
-        Report entry point are unblocked and not built; the evidence pack
-        still waits on Phase C: the cover's
-        published-by line and restriction notice (WP-2.3), changes since the
-        previous publication (WP-2.4), and the licensing evidence pack's sections and uncertainty
-        display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
+  - [x] **Publication sections** (done, issue #70): the cover's published-by
+        line and restriction notice (WP-2.3), **Changes since the previous
+        publication** (WP-2.4), both from `GET …/runs/:runId/publication`,
+        and the Overview published card's **Report** link.
+  - [ ] **The licensing evidence pack's sections and uncertainty display**
+        (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
         built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
-        run against the mock-up in that spec's §11). WP-2.3 also adds the Overview published card's Report
-        entry point.
+        run against the mock-up in that spec's §11).
   - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
         Chromium and Firefox; e2e runs Chromium only, so print the largest
-        example from Firefox by hand before calling Phase A accepted.
-  - [ ] **Farmer access test** (a farmer gets 403): the farmer role exists and
-        `reports.db.test.ts` covers the server-side report API, but the print
-        route's e2e (`report.spec.ts`) still tests a non-member, with a viewer
-        as the positive control. Add the farmer case there.
+        example from Firefox by hand before calling Phase A accepted. Firefox
+        has no CSS page-margin boxes, so its print has no running footer
+        (issue #70 moved the footer into the page's CSS); check the rest.
+        Owner: the operator, by hand.
+  - [x] **Farmer access test** (done, issue #70): `report.spec.ts` checks a
+        farmer gets 403 from the run and its publication and is sent to their
+        farm page.
 
 - **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
@@ -2991,8 +2992,14 @@ from the WP:
       the fixed page-1 row *Registered vs modelled use* and its flag
       ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
       The issued pack (WP-3.14) freezes the document, so it carries § 5 once
-      the pack lands. An over/under-use chart on the Allocations tab itself
-      is not built.
+      the pack lands.
+- [x] **Over/under-use chart on the Allocations tab** (2026-09-29, issue #71
+      follow-up): the report's `UsePlot`, moved to `allocations/` and shared,
+      heads the tab's *Every hydrological unit and water year* for the
+      compared run (drawn at its box's width, labels on their own line on a
+      phone, the first ten rows until Show all), and both charts carry a
+      screen-reader description counting the whole years above the band
+      ([ui.md § Allocations](./ui.md#allocations-taballocations)).
 
 ## Crop factors (issue #54 item 1)
 
@@ -3384,9 +3391,54 @@ Applicant view and the Applications tab. Left:
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
-- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
-      access** (WP-3.15) link from the list and the Application panel.
-      Trigger: those WPs.
+- [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in
+      `115_scenario_share_notes`. A submitted or decided application gets
+      read-only share links (the Application panel's Share dialog: an
+      assessor or its applicant; `POST /share/scenario`, a redacted
+      projection with the EWR per site first, results only when the stamps
+      verify), and comments (the notes drawer on the Application panel and
+      each Applications row) with the `assessors`, `parties` and
+      `public_participation` audiences, the read/write matrix in
+      [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
+      edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
+      link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
+- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
+      Add `'pack'` to `share_link.target_kind` (its CHECK and
+      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
+      and PDF key, redacted as `app_share_scenario` is, answering only an
+      issued pack), `app_share_link_creatable` / `_visible` for packs (an
+      editor for any issued pack, the applicant for their own), a nullable
+      `note.pack_id` (same-project trigger through `assert_same_project`,
+      covering index, `note_one_target` and `note_participation_on_scenario`
+      widened to it, `note_write_revision` for pack notes), the notes helpers
+      taking a pack, `POST /share/pack` on the public allowlist,
+      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
+      `evidence_pack` lands** (WP-3.14, migration 112, being built beside
+      this).
+- [ ] **Packs from the Applications list** (WP-3.14) link from the list and
+      the Application panel. Trigger: that WP.
+- [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
+      as a `viewer` to comment, and the e2e does so; but a viewer reads every
+      farm's figures, every team note and every decided application, far
+      more than commenting needs and everything the share link redacts. A
+      member contributor with no farm links can already post
+      `public_participation` and reads almost nothing (045). Durable fix: a
+      comment-only role or scope (or invite NGOs as linkless contributors,
+      if the client accepts that they could then file applications).
+      Trigger: the first real NGO invited to comment (client decision,
+      step-3 D5).
+- [ ] **The owner's inventory of every public link.** The Project page's
+      Share links list shows the baseline links only; scenario links are
+      listed per application (its Share dialog), made by assessors and
+      applicants. Durable fix: list every live link for the owner with its
+      target, and revoke from there. Trigger: before the first scenario
+      link is used with a real catchment.
+- [ ] **Afrikaans for the shared application page** (WP-3.15): the
+      `share.scenario` strings are on the translation sheet
+      (docs/i18n/af-translation-sheet.md). If they are not translated in the
+      same change, the Afrikaans catalogue is incomplete and `/share` falls
+      back to English words. Trigger: this PR's translation round (see its
+      description).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
@@ -3582,13 +3634,12 @@ professional sign-off on a run, all on the report route
 [data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
 Left, each with its trigger:
 
-- [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an
-      `EngineBuild` (version, git SHA, invariants passed, soak cases) and the
-      report says *Not recorded for this build* without one. Durable fix: the
-      web release workflow runs the invariant suite and a soak, writes the
-      record, and the frontend build injects it (a Vite `define`) for the
-      report to pass in. Trigger: before the first evidence pack (WP-3.14),
-      which must state it.
+- [x] **`ENGINE_BUILD` from CI** (done, issue #70): `deploy-frontend.yml`
+      runs `scripts/release/engine-build.mjs --soak-cases 1600` (the engine
+      suite with the soak at 1 600 cases; a failure stops the release), and
+      the frontend build injects the record (`__ENGINE_BUILD__`), so a
+      released site's validation statement states it
+      ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
 - [x] **Methodology statement and engine errata** (issue #71, 2026-09-29):
       `docs/methodology/v1.md` (versioned, its SHA-256 pinned by
       `methodology.test.ts`) and `docs/engine-errata.md`, both generated into
@@ -3614,10 +3665,9 @@ Left, each with its trigger:
       signer's typed name and registration; the export and account deletion
       must list them (deletion keeps the row with `user_id` nulled, as the
       professional record, and the privacy notice must say so).
-- [ ] **Flagged years are capped** at the data-quality check's example limit
-      (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
-      years lists only the first ones. Trigger: a catchment that hits it;
-      the fix is a full list on the check or in the statement.
+- [x] **Flagged years are capped** (done, engine 1.31.1, issue #70): the
+      low-vs-CHIRPS check's examples list every flagged year, so the
+      statement does too.
 
 ## Evidence report (issue #71)
 
@@ -3643,17 +3693,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       the same baseline as labelled alternatives ("smaller dam", "winter
       abstraction only"), each a page-1 column with its paired change.
       Trigger: before the pilot, or the first applicant asks.
-- [ ] **EWR rows below each storage or abstraction op** (environmentalist).
-      The Reserve is assessed at the rule-table sites only, which may be far
-      from where the works act. Durable fix: for each proposal op on a dam
-      or off-take, a row at the first EWR site downstream, and *Not
-      assessed* with the reason where there is none. Trigger: before the
-      pilot.
-- [ ] **A no-flow-days row** (environmentalist; the benchmark report's key
-      impact is zero-flow time). Durable fix: days with outlet flow below a
-      stated threshold, baseline and application, with a paired band once
-      the ensemble carries it (a `MemberMetrics` field, `ENGINE_VERSION`
-      bump). Trigger: before the pilot.
+- [x] **EWR rows below each storage or abstraction op** (environmentalist).
+      Built (engine 1.33.0, report `evidence-4`): for each proposal op that
+      builds or raises storage or abstraction at a node, a page-1 row at the
+      first EWR site downstream that isn't the outlet (days its daily EWR is
+      not met, the paired band, the Reserve's months met when it has a
+      table); works with no site between them and the outlet share one *Not
+      assessed* row and an assessor's question
+      ([design/evidence-report.md §4.2](./design/evidence-report.md#42-sections)).
+- [x] **A no-flow-days row** (environmentalist; the benchmark report's key
+      impact is zero-flow time). Built (engine 1.33.0): days the outlet's
+      simulated outflow is below 1 L/s (`summary.catchment.noFlow`,
+      [model.md §2.9e](./model.md#29e-no-flow-days-and-users-served-in-full-while-an-ewr-site-fails-engine--1320-issue-71)),
+      both runs, the longest spell, and the paired band with "worse in"
+      (`MemberMetrics.noFlowDays`).
 - [x] **A flag for flows below the rule table's lowest point** (G16). A
       natural flow drier than the table's driest point gets a requirement
       scaled down with the flow (model.md §2.9c), below the table's driest
@@ -3665,6 +3718,11 @@ Left, from the design and the persona review (§11), each with its trigger.
       requirement shrinks with the flow), with the share expected by
       construction when the percentile is from the run. The scaling rule
       itself stays pending the hydrologist (model.md §2.9c).
+- [x] **Days a user is served in full while the site fails** (environmentalist).
+      Built (engine 1.33.0): per EWR site, not only the outlet, the days each
+      unit upstream got its whole demand while the site's EWR failed
+      (`summary.servedWhileEwrFails`), in a § 4 table and a "read these
+      first" count naming them.
 - [x] **The Reserve method's open choices are not in the known-limitations
       list.** Done 2026-09-29: engine-audit rows A1–A7 (below the driest
       point, interpolation, the percentile's source and the ±15 % MAR
@@ -3680,36 +3738,50 @@ Left, from the design and the persona review (§11), each with its trigger.
       fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
       choices, then `pnpm gen:liability`. Trigger: the next change to the
       engine-audit tables, or before the pilot, whichever is first.
-- [ ] **Days a user is served in full while the site fails** (environmentalist).
-      Durable fix: per unit, days fully supplied on days the outlet is below
-      the EWR, in § 4 and as a count flag. Trigger: before the pilot.
-- [ ] **The driest month's FDC beside the largest-change month.** § 1 plots
-      one month (`fdcMonth`: the largest drop in months met, else the
-      driest). Durable fix: plot both when they differ. Trigger: the next
-      change to § 1.
-- [ ] **A cumulative row over other applications on the baseline**
-      (licensing authority, s27 "other water users"). A.6 lists the other
-      application runs but nothing sums them. Durable fix: a scenario that
-      applies every submitted application's ops, run on the baseline, as a
-      page-1 "all applications" row. Trigger: a second application on one
-      baseline.
-- [ ] **Cancelled ensembles' interim results.** The ledger lists a start
-      that never completed, but not what it had shown. Durable fix: store a
-      started ensemble's partial summary when it is abandoned and print it in
-      the ledger. Trigger: before issue (WP-3.14).
+- [x] **The driest month's FDC beside the largest-change month.** Built
+      (evidence-3): `EvidenceSite.fdcDriestMonth`, the calendar month with
+      the lowest mean natural flow over its complete months in the baseline
+      (a property of the river, so neither the requirement nor the
+      application moves it); § 1 plots its FDC beside `fdcMonth`'s, one plot
+      captioned as both when they coincide (`grid.ts` `fdcMonths`).
+- [x] **A cumulative row over other applications on the baseline**
+      (licensing authority, s27 "other water users"). Built (evidence-3) as
+      a sum, not a combined run: every other application submitted or
+      decided with approval, with its newest run of its current ops on the
+      baseline (read under the reader's RLS, so a viewer's report lists no
+      submitted application and nobody's a draft), each one's own change in
+      days below the pragmatic EWR and Reserve months met at the outlet, and
+      their sum over those on the baseline's engine, period and runoff model:
+      § 4's table and page 1's *Other applications on this baseline, summed*,
+      whose basis says it is a sum of separate runs. The durable fix, a
+      combined run of every application's ops, is WP-3.11
+      (`combineScenarios`, with its conflict rules); the row then reads that
+      run instead. Trigger: WP-3.11.
+- [x] **Cancelled ensembles' interim results.** Finding: there are none to
+      print. The browser runs an ensemble and stores it only when every set
+      has run; a `started` row of `run_uncertainty` holds no summary or result
+      (014's check requires both null until complete), so nothing interim
+      exists. The ledger now says so for each start not completed (*started,
+      not completed: no result stored*, with the note that the app keeps who,
+      when and its rule), rather than implying a result was hidden. Storing
+      partial results would mean the browser writing them mid-run, which the
+      report doesn't need: the cited ensemble is the first *complete* one on
+      the declared rule (G4), so an abandoned start can't be cited either way.
 - [ ] **Appendix C's fixed prompts.** Appendix C prints the scenario's
       description and run notes as written. Durable fix: fixed prompts
       (purpose and need, mitigation, monitoring), each answered or *Not
       given*. Trigger: before the pilot.
-- [ ] **A diagonal draft stamp.** "Draft · not issued" is in each section
-      head and the footer; a cropped page can lose both. Durable fix: a
-      diagonal print watermark on every page until issued. Trigger: before
-      the pilot.
-- [ ] **Paired bands on each unit's supply (ER4 rest).** Rows 5 and 6 and
-      § 4 carry the run's own difference only. Durable fix: a per-unit
-      supplied fraction in `MemberMetrics`, banded in `summarisePaired` with
-      its worse-share (`ENGINE_VERSION` bump; old ensembles print *no band*).
-      Trigger: before the pilot.
+- [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
+      issued* watermark (`position: fixed` in `@media print`, repeated on
+      every printed page by Chromium), `aria-hidden` beside the section heads'
+      text stamps, until a pack issues the report.
+- [x] **Paired bands on each unit's supply (ER4 rest).** Built (engine
+      1.33.0): each unit's mean demand and supply in `MemberMetrics`; the
+      paired summary bands each unit's share supplied and, with the
+      application's own units, their group's, each with its worse-share. The
+      applicant's own supply, the other users' rows and § 4's Change column
+      carry them; an ensemble stored before 1.33.0 prints *no band* with the
+      reason.
 - [x] **REC per rule table (ER9).** The site strip prints REC *Not given*.
       Durable fix: `category` and `reference` on `EwrRuleTable` (a settings
       field, a baseline assumption in the diff). **Done:** an optional
@@ -3719,23 +3791,38 @@ Left, from the design and the persona review (§11), each with its trigger.
       label: no result changes, no `ENGINE_VERSION` bump. No separate
       `reference`: the table's required `source` is the gazette notice.
       The values themselves still wait on ER-D2.
-- [ ] **Banded FDC (ER5).** The FDC chart has no band: the ensemble's FDC
-      bands are daily against the pragmatic EWR. Durable fix: a banded
-      monthly FDC check against the rule table per member. Trigger: an
-      assessor asks for the FDC's uncertainty.
+- [x] **Banded FDC (ER5).** Built (engine 1.33.0): each member carries the
+      Reserve's FDC check curve per site and month at the table's points
+      (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %
+      band (R1) and hatches the application's own curve's (R2), or says why
+      there is none.
+- [ ] **The paired change of the FDC check curve** (engine review of ER5).
+      § 1's chart bands each run's own curve (R1 shaded, R2 hatched); the two
+      come from the same parameter sets, so they overlap even when every
+      pair shifts the curve the same way, and the caption says so. Durable
+      fix: band the per-pair difference of the impacted curve at each table
+      point with its worse-share in `summarisePaired`, printed as a small
+      table under the chart. Trigger: an assessor reads the FDC chart for
+      the application's effect, or the next change to § 1.
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue
       #90).
-- [ ] **Licence impact by year class on page 1 (issue #53 R7).** The impact
-      report opens with `LicenceImpactBoard`; the evidence report doesn't
-      show it. Durable fix: build the board's view model in the engine
-      builder from the two runs' series and print it on page 1. Trigger:
-      before the pilot.
+- [x] **Licence impact by year class on page 1 (issue #53 R7).** Built: page
+      1 prints the impact report's `LicenceImpactBoard` after the change
+      table, the application named as such, from the three daily series the
+      page fetches before ready (`loadImpactSeries`), with the full-allocation
+      note as the impact report has it. Left: the board's view model is
+      computed in the browser, not in the engine's document, so an issued
+      pack can't freeze it yet; it moves into `evidenceReport` with the pack's
+      manifest. Tracked under *The server-rendered evidence PDF* below
+      (WP-3.14).
 - [ ] **The server-rendered evidence PDF.** Browser print only: no running
       footer, no "page x of y". Durable fix: `POST …/reports { runId,
       evidence: true }` and a render scope that reads the baseline (ER1),
-      with the pack. Trigger: WP-3.14.
+      with the pack; the pack's manifest also carries page 1's licence
+      impact board, built in the engine from the two runs' series (today the
+      browser builds it). Trigger: WP-3.14.
 - [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
       Trigger: before the first evidence pack (WP-3.14).
