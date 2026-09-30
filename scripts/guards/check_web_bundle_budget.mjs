@@ -1530,6 +1530,19 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
+// 2026-09-30  total 1301 → 1303 KB (#251, issue #72 follow-up: evidence § 5's
+//             "What the cap held back" table, the cap's water years and the
+//             days each licence limit held use back, per unit and source,
+//             and the engine's capOf copying them from each run's summary).
+//             Measured against main @ 82248f4e: 1,333,296 → 1,333,517 gzip
+//             bytes (+0.22 KB). No new chunk or dependency: the table sits in
+//             the evidence report's own lazy chunk and reuses capYearsText,
+//             already in the chunk it imports SOURCE_LABEL from, so there is
+//             nothing to split (totalCodeKb counts lazy chunks anyway). Main
+//             itself already reads 1302 KB in CI (#246 and #247 merged, each
+//             measured alone), so the raise covers that 1 KB and #251's
+//             fraction rounded up. No headroom added: #249 and #252 raise
+//             this too and are summed at merge.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1540,7 +1553,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1301,
+	totalCodeKb: 1303,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
