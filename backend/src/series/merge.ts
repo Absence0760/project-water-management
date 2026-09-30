@@ -150,13 +150,6 @@ export const bodyOrigin = (b: { source?: string | null; givenUnit?: string; unit
 export const rowOrigin = (r: { source?: string | null; sourceUnit?: string | null; sourceUnitFactor?: number | null }): SeriesOrigin | null => seriesOrigin(r);
 export type SeriesBody = z.output<typeof SeriesBody>;
 
-// updatedAt: when the values last changed (upload, merge) — lets the UI tell
-// "new data since the last run" even for corrections inside the run period.
-// product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
-// lastValueDate: the last day with a value (series/lastDay.ts), null when
-// every day is blank: "data up to", where startDate + length counts blanks.
-// rebuilding: a data feed is backfilling a confirmed replacement of this
-// series (feed_stage); the values here stay as they are until it swaps in.
 /**
  * Which data feed wrote days of a series, and how many (the Data tab's "from
  * the CHIRPS feed" mark): the feed's source and the days in feed_days
@@ -169,6 +162,14 @@ const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source
 		FROM data_feed f, LATERAL (SELECT sum(upper(r) - lower(r))::int AS n FROM unnest(${t}.feed_days) r) d
 		WHERE f.project_id = ${t}.project_id AND f.id = ${t}.feed_id AND d.n > 0)`;
 
+// updatedAt: when the values last changed (upload, merge) — lets the UI tell
+// "new data since the last run" even for corrections inside the run period.
+// product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
+// lastValueDate: the last day with a value (series/lastDay.ts), null when
+// every day is blank: "data up to", where startDate + length counts blanks.
+// rebuilding: a data feed is backfilling a confirmed replacement of this
+// series (feed_stage); the values here stay as they are until it swaps in.
+// feed: the data feed that wrote days of the series, and how many (feedMarkSql).
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
 	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
