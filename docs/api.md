@@ -2156,6 +2156,38 @@ reproduction bundle).
   errata: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
   and nothing else (`app_verify_pack`, security.md § Evidence packs).
+### An applicant's packs
+
+An application's parties (its owner, and whoever they shared it with) read
+its packs that were issued, as the database projects them for them
+(131_applicant_packs, D2's default; [evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
+They read no pack row, so the routes above answer them `403`.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/scenarios/:sid/packs` | – | `{ packs: ApplicantPackMeta[] }`, newest version first: its issued, superseded and withdrawn-after-issue packs, never a draft. `404` for a scenario the caller can't read; `[]` to anyone who reads it but isn't a party (an editor reads the packs through `GET …/packs`) | contributor |
+| GET | `/projects/:id/scenarios/:sid/packs/:packId` | – | `ApplicantPack` (below); `Cache-Control: no-store`. `404` alike for a pack that isn't theirs, isn't of this application, is a draft or was never issued | contributor |
+
+- `ApplicantPackMeta = { id, scenarioId, title, mode, version, status:
+  'issued' | 'superseded' | 'withdrawn', issuedAt, manifestSha256,
+  shortCode, verifyPath, supersedesId, supersededById, withdrawnReason,
+  isOwner, canShare }`. `isOwner`: the caller owns the application (they
+  list and revoke the links they made); `canShare`: they may make a link to
+  it now (the owner, while it is issued).
+- `ApplicantPack = { pack: ApplicantPackMeta, verify: PackVerification,
+  figures, units }`. `figures` is exactly a pack link's
+  ([Share](#share), `POST /share/pack`), for every standing. `units` is
+  `{ own: { name, kind, onlyIn: 'application' | null, suppliedA, suppliedB,
+  timeReliabilityA, timeReliabilityB, annualReliabilityA,
+  annualReliabilityB, change: { run, band, worse } | null }[], others: {
+  kind: 'farm' | 'user', n, changePts }[] }`, or `null` when the report
+  changed a baseline assumption. `own`: the application's owned nodes its
+  owner still links and the nodes it adds; `others`: every other unit in
+  both runs as its kind and a number (per kind, by a hash of its id; the
+  same in every version), `changePts` its change in share of demand
+  supplied in whole percentage points. Never another unit's name or id.
+- No PDF, manifest or bundle: each carries the whole report.
+
 - A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
   can't be deleted or trimmed, and the scenario can't be deleted. A project
   with a pack past draft can't be deleted (`409`, [Projects](#projects)).
@@ -2367,9 +2399,9 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (below editor `403`; a pack of another project or none `404`) | owner; contributor with `scenarioId`; editor with `packId` |
-| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner (`403` below editor), `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands) | owner; contributor for a scenario link; editor for a pack link |
-| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made, an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
+| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (a pack of another project or none `404`); to an applicant (131) the ones they made to a pack of an application of theirs; anyone else below editor `403`, found or not | owner; contributor with `scenarioId` or `packId` |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner, `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands); below editor, the application's owner on their own application's pack (131; `409` unless it is issued), anyone else `403` (someone the applicant shared it with included), found or not | owner; contributor for a scenario or pack link |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made (to their application or its pack), an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
 | POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |

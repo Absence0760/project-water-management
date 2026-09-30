@@ -1066,7 +1066,26 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `app_record_pack_pdf`, 119 below; the bundle's, 122 below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
-  `DELETE` editor, drafts only.
+  `DELETE` editor, drafts only. No policy for contributors, on purpose: the
+  manifest names every unit, and a row policy can't hide a column.
+- **An applicant's packs** (131_applicant_packs, `SECURITY DEFINER`,
+  `STABLE`, search path pinned, `EXECUTE` for `water_app`):
+  `app_applicant_pack_meta(project, pack)` is a pack's lifecycle fields
+  (`id, scenarioId, title, mode, version, status, issuedAt,
+  manifestSha256, supersedesId, supersededById, withdrawnReason, isOwner,
+  canShare`) for its application's parties (`app_scenario_party`), when it
+  is of an application (`origin = 'applicant'`) and was issued; else NULL.
+  `app_applicant_packs(project, scenario)` lists them, newest version
+  first. `app_applicant_pack(project, pack)` is one row of `pack, verify`
+  (`app_verify_pack`), `figures` (`app_share_pack_projection`, 128, with the
+  `k` rule and no changed baseline assumption for the volumes) and `units`
+  (`app_applicant_pack_units(report, own)`, IMMUTABLE, not `water_app`'s:
+  the report's users, their own by name, `own` being
+  `app_application_own_nodes`, 071, plus the nodes only in the application
+  run; every other unit in both runs as `{ kind, n, changePts }`, numbered
+  per kind by `md5` of its id, the change rounded to whole points; NULL
+  when the report changed a baseline assumption). Nothing else of the
+  manifest ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - **Cites both runs**: `model_run_cited` (latest body here) has a clause for
   each, so `trimRuns`, the unpin and the run `DELETE` keep them, and
   `citedBy` lists `{ kind: 'pack', name: 'version N' }`.
@@ -1619,7 +1638,10 @@ Read-only links to the current publication for people outside the project
     listed and revoked by the editors who read the scenario and by whoever
     made it. A pack link (128) is made by an editor or the owner, only while
     the pack is `issued`, and listed and revoked by the project's editors
-    (they read every pack) and the owner.
+    (they read every pack) and the owner; since 131 also by the
+    application's owner for their own application's issued pack
+    (`app_applicant_pack_meta`'s `canShare`), listed and revoked by the
+    contributor who made it.
   - `app_share_view` and `app_share_series` answer an untargeted link only.
   - `app_share_scenario(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live
     scenario link whose application is `submitted` or `decided`, one row of

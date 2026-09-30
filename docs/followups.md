@@ -3733,9 +3733,9 @@ Applicant view and the Applications tab. Left:
       Two decisions against the first sketch here: no PDF key through the
       link (the PDF carries every unit's figures and the applicant's
       statement, which the projection withholds), and no applicant-made
-      link, since applicants read no pack yet ("Applicants' access to their
-      own application's packs", § Evidence report, holds both for when they
-      do).
+      link, since applicants read no pack then (since built in 131:
+      "Applicants' access to their own application's packs", § Evidence
+      report).
 - [x] **Packs from the Applications list** (WP-3.14): built 2026-09-30
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
@@ -4253,16 +4253,29 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the fit's), marked "found since issue". Trigger: the first erratum
       added while an issued pack exists, or the verify page, whichever is
       first.
-- [ ] **Applicants' access to their own application's packs** (WP-3.15).
-      Contributors read no pack today (operator decision, 2026-09-29:
-      issuing stays with editors). Durable fix: a read policy for the
-      scenario's owner and members on packs of their application once
-      issued, with the D2 anonymising applied to the manifest they see; then
-      `app_share_link_creatable` / `_visible` (128) let the applicant link
-      their own issued pack and list and revoke the links they made, as for
-      a scenario link. Trigger: the first applicant who needs the pack itself
-      rather than its verify link (WP-3.15's share links to packs landed in
-      128 without it).
+- [x] **Applicants' access to their own application's packs** (WP-3.15):
+      done in `131_applicant_packs` (2026-09-30, issue #71). Issuing stays
+      with the editors. An application's parties (its owner and whoever they
+      shared it with) read its issued, superseded and withdrawn-after-issue
+      packs, never a draft, through `SECURITY DEFINER` functions rather than
+      a row policy (the manifest names every unit, and RLS can't hide a
+      column): verify's fields, a pack link's figures and D2's units (their
+      own by name, every other as "Farm n" with its change in whole points;
+      none when a baseline assumption changed). `GET
+      …/scenarios/:sid/packs[/:packId]`, the Application panel's list and
+      the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
+      `app_share_link_creatable` / `_visible` let the application's owner
+      link their own issued pack and list and revoke the links they made.
+- [ ] **An anonymised printable copy of the pack for its applicant.** The
+      applicant's view (131) offers no PDF, manifest or bundle: each carries
+      the whole report, every unit named (the assessors' copy, D2). An
+      applicant who needs a document to attach has the verify code and the
+      assessors' copy. Durable fix: a D2-anonymised print of the applicant's
+      view (the server renderer, a render session scoped to that route), not
+      hashed as the pack (it isn't the pack), saying so and carrying the
+      pack's code. Trigger: an applicant or the client asks for a file of
+      their own copy, or D2 is settled with the client (it may instead open
+      the assessors' copy to the applicant).
 - [ ] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner. Trigger: with the pack
       view.

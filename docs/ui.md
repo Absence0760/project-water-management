@@ -5591,12 +5591,17 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   draft or withdrawn application says it must be submitted first and offers
   no form. The assessors list and withdraw every link to it; the applicant
   their own.
-- **Evidence packs** (WP-3.14), for the project's viewers and up (an
-  applicant reads no pack, [evidence-pack.md § Lifecycle](./evidence-pack.md#lifecycle)):
-  each of the application's packs with its status badge, "Version n, code
+- **Evidence packs** (WP-3.14). For the project's viewers and up: each of
+  the application's packs with its status badge, "Version n, code
   xxxx-xxxx-xxxx" linking to its [pack view](#evidence-pack), and when it was
   issued or drafted; *None* says an editor makes one from a run's evidence
-  report.
+  report. For its applicant and whoever they shared it with
+  (`application-panel-my-packs`, 131_applicant_packs,
+  [evidence-pack.md § Applicants](./evidence-pack.md#applicants)): the
+  packs that were issued (never a draft), each linking to
+  [the applicant's pack view](#the-applicants-pack-view), and when it was
+  issued; *None issued yet* says the assessors issue one once it is
+  submitted.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`, issue #17 option A): every submitted, withdrawn or
@@ -6267,8 +6272,8 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
 WP-3.14, issue #71, [evidence-pack.md](./evidence-pack.md)): one evidence
 pack, rendered with the evidence report's own layout (`EvidenceReport`)
 from the pack's frozen manifest (`GET …/packs/:packId`), never from the
-live run. Viewer role and up; the project's applicants and farmers read no
-pack.
+live run. Viewer role and up; farmers read no pack, and an applicant reads
+their own application's in [their own view](#the-applicants-pack-view).
 
 - **The stamp** on every section head and in the footer
   (`packs/pack.ts` `packStamp`): *Draft pack · not issued*, *Issued · version
@@ -6336,6 +6341,43 @@ pack.
   download, withdraw; an application's packs in the Applications tab and
   panel, and version 2 superseding version 1), `e2e/tests/pack-share.spec.ts`
   (share link, notes) and `packs/pack.test.ts`.
+
+#### The applicant's pack view
+
+`/projects/:id/scenarios/:sid/packs/:packId`
+(`routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte`;
+WP-3.15, 131_applicant_packs, [evidence-pack.md § Applicants](./evidence-pack.md#applicants)):
+an issued (or since superseded or withdrawn) pack of the caller's own
+application, from `GET …/scenarios/:sid/packs/:packId`, the D2 projection.
+Part of the workspace, so English, like the rest of the Applicant view
+([§ Language](#language)); its words are in `packs/applicantPack.ts`.
+
+- **The head**: *Evidence pack vN · title*, the status badge, **Share
+  link…** (the application's owner, whatever its standing, so they can
+  withdraw their links too; making one needs it issued), **Verify page**,
+  where it stands (`standingLine`: issued and standing; replaced, with
+  **Open the version that replaced it**; withdrawn, with the reason), and a
+  note that this is their copy: their own units by name, every other only
+  by a number, as the rest of the application; the assessors' copy, its PDF
+  and bundle name them; issuing and withdrawing are the assessors'.
+- **The river**: the Reserve at each EWR site (the outlet unnamed) and the
+  river's rows of page 1's change table with the likely range, the volume
+  rows only when the API gives them (a line says why not otherwise).
+- **Hydrological units**: *Yours* (share of demand supplied, baseline, with
+  the application, the change in points and its likely range; a unit the
+  application adds says so) and *Everyone else* (a one-line count of who
+  gets less and who more, then "Farm n" / "Water user n" with the change in
+  whole points, and a line saying the numbers are the pack's own). When the
+  report changed a baseline assumption, a line says why no unit is shown.
+- **Check this pack**: the code, issue date, manifest, PDF and bundle
+  hashes, and the signers. No download: the PDF, manifest and bundle are
+  the assessors' copies.
+- 404 (not theirs, not issued, another application's) and 403 each have
+  their own line; the Back link returns to the application.
+- Tested by `packs/applicantPack.test.ts` and
+  `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
+  view, their farm named and the neighbour as "Farm 1", no download, a
+  share link opened signed out, axe, the phone layout).
 
 ## Help (`/help`)
 
