@@ -6,7 +6,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -677,7 +677,7 @@
 						/>
 						{#if shownSettings}
 							<div class="provenance">
-								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} chirpsFactors={runChirpsFactors(shownRun.summary)} observedOrigin={originOfInput(shownRun.inputSeries, shownSettings.fitRecord?.flowKind)} />
+								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} chirpsFactors={runChirpsFactors(shownRun.summary)} observedOrigin={originOfFit(shownRun.inputSeries, shownSettings.fitRecord)} />
 							</div>
 						{/if}
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}

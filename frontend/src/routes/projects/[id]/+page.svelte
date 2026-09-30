@@ -746,6 +746,7 @@
 								project={project!}
 								{editor}
 								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
+								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
 								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}

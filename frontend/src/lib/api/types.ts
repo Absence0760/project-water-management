@@ -1820,7 +1820,7 @@ export interface AutoCalibration {
 	status: 'running' | 'complete' | 'failed';
 	rulesRevision: number;
 	rules: CalibrationRules;
-	plan: { flowKind: string; validationRecord: string | null; years: FlaggedYearShare[]; ruleExclusions: CalibrationExclusion[]; notes: string[]; cases: { label: string }[] };
+	plan: { flowKind: string; /** The calibration site (engine ≥ 1.41.0): null = the outlet; absent on a run from before. */ siteNodeId?: string | null; validationRecord: string | null; years: FlaggedYearShare[]; ruleExclusions: CalibrationExclusion[]; notes: string[]; cases: { label: string }[] };
 	cases: AutoCalibrationCase[];
 	report: { chosen: number | null; notes: string[] } | null;
 	chosen: number | null;

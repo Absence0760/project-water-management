@@ -1530,6 +1530,11 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
+// 2026-09-30  total 1301 → 1304 KB (engine 1.41.0, calibrating at a gauge
+//             inside the network: Settings' "Scored at" select and its hint,
+//             the site's records deciding the fit's choices, the fit record
+//             naming its gauge, the Data page's calibration-site badge;
+//             measured 1302 with main @ 285c1c75). Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1540,7 +1545,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1301,
+	totalCodeKb: 1304,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
