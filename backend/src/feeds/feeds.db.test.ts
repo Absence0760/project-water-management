@@ -782,6 +782,36 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { prelimDays: 37, finalThrough: addDays(-40) } });
 	});
 
+	it('an rnl feed never sends heldThrough: it has no preliminary days (positive control: a sat feed holding the same days does)', async () => {
+		for (const product of ['rnl', 'sat'] as const) {
+			const o = await fetchJob({ config: { cells: [cell()], product } });
+			// The first day final: the next window starts on the second, which the series holds.
+			await acceptIngestResult(msg(o, { ...result(o, [1, 2, 3]), meta: { days: 3, finalThrough: o.window.start } }));
+			await tick();
+			await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+			const next = await runFetchJob();
+			expect(next.request.start).toBe(plus(o.window.start, 1));
+			if (product === 'rnl') expect(next.request).not.toHaveProperty('heldThrough');
+			else expect(next.request).toMatchObject({ heldThrough: plus(o.window.start, 2) });
+		}
+	});
+
+	it('while a confirmed replacement stages, the held days are the stage’s; once the live series stops conflicting, the live series’', async () => {
+		const owner = await signUp('StageHeld');
+		const pid = await project(owner);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-150), values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' });
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await tick()).done).toBe(1); // window 1 (120 days) staged, inline from the fixtures
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		// The live series holds v2.0 there, but the answer goes to the stage, which holds every day through -31.
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-31) });
+		// The live series emptied: it no longer conflicts, so the ingest merges into it, and it holds none of those days.
+		await asOwner(`UPDATE time_series SET "values" = array_fill(NULL::double precision, ARRAY[3]) WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid]);
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).not.toHaveProperty('heldThrough');
+	});
+
 	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
 	it('an empty answer records how far it read, so the next fetch moves past the empty stretch', async () => {
 		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: '1960-01-01' }, targetKind: 'flow_observed_m3s' });

@@ -341,7 +341,7 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 	});
 
 	// A queue message: heldThrough only ever names a CHIRPS day inside the window (heldThrough()).
-	it('takes heldThrough only as a CHIRPS day inside the window', () => {
+	it('takes heldThrough only as a CHIRPS sat day inside the window', () => {
 		const req = (source: string, config: unknown, held: unknown) =>
 			FetchRequestSchema.safeParse({ source, config, start: '2026-01-01', end: '2026-01-31', today: '2026-02-01', heldThrough: held }).success;
 		expect(req('chirps', grid, '2026-01-01')).toBe(true);
@@ -350,6 +350,9 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		for (const bad of ['2025-12-31', '2026-02-01', '2026-02-30', 'soon', 7, null]) expect(req('chirps', grid, bad), String(bad)).toBe(false);
 		expect(req('dws', { station: 'X0H000' }, '2026-01-10')).toBe(false);
 		expect(req('chirps_gefs', grid, '2026-01-10')).toBe(false);
+		// rnl has no preliminary days to hold.
+		expect(req('chirps', { ...grid, product: 'rnl' }, '2026-01-10')).toBe(false);
+		expect(req('chirps', { ...grid, product: 'rnl' }, undefined)).toBe(true);
 	});
 
 	it('heldThrough() is the last day of the window’s leading run the series holds a value on, CHIRPS only', () => {

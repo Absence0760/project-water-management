@@ -195,9 +195,9 @@ export const FetchRequestSchema = z
 			ctx.addIssue({ code: 'custom', path: ['end'], message: 'the window is longer than one fetch reads' });
 			return z.NEVER;
 		}
-		// Only as heldThrough() gives it: a CHIRPS day inside the window.
-		if (v.heldThrough !== undefined && (v.source !== 'chirps' || v.heldThrough < v.start || v.heldThrough > v.end)) {
-			ctx.addIssue({ code: 'custom', path: ['heldThrough'], message: 'not a CHIRPS day inside the window' });
+		// Only as the feed_fetch job gives it: a CHIRPS sat day inside the window (rnl has no preliminary days).
+		if (v.heldThrough !== undefined && (v.source !== 'chirps' || chirpsProduct(config.data) !== 'sat' || v.heldThrough < v.start || v.heldThrough > v.end)) {
+			ctx.addIssue({ code: 'custom', path: ['heldThrough'], message: 'not a CHIRPS sat day inside the window' });
 			return z.NEVER;
 		}
 		return { ...v, config: config.data };

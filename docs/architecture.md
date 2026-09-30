@@ -951,10 +951,12 @@ merges into:
   fetch. A preliminary value is published once and only replaced by the
   final, so a day with no final that the feed already holds isn't read
   again: it comes back null, which the merge keeps, and still counts in
-  `prelimDays`. "Holds" is read from the series the answer merges into (the
-  live target, or the stage while a replacement backfills; store.ts
-  `heldSeries`) as the leading run of the window's days with a value, sent
-  as the request's `heldThrough`: an empty day inside it (published late,
+  `prelimDays`. "Holds" is read from the series the answer merges into, the
+  same choice the ingest makes (the stage while a confirmed replacement
+  backfills and the live series still conflicts, else the live target;
+  store.ts `heldSeries`), as the leading run of the window's days with a
+  value, sent as the request's `heldThrough` (`sat` only: `rnl` has no
+  preliminary days): an empty day inside it (published late,
   deleted, or a gap the merge kept) ends the run and is read again. On the
   fixtures a caught-up feed's daily fetch goes from 194 range requests to 3
   (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
