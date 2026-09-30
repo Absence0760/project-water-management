@@ -46,7 +46,7 @@ describe('hasSupplySettings', () => {
 		expect(hasSupplySettings({ pumpCapacityM3Day: 0 })).toBe(true);
 	});
 
-	it('counts the hands-off flow and River to dam by month (engine 1.31.0), so a gauge left with them can clear them', () => {
+	it('counts the hands-off flow and River to dam by month (engine 1.32.0), so a gauge left with them can clear them', () => {
 		expect(hasSupplySettings({ handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null })).toBe(false);
 		expect(hasSupplySettings({ handsOffM3Day: new Array(12).fill(0) })).toBe(true);
 		expect(hasSupplySettings({ handsOffEwr: true })).toBe(true);
@@ -109,7 +109,7 @@ describe('handsOffTakers', () => {
 		expect(handsOffTakers({ ...farm, divertCapacityM3Day: 800, divertMonthlyM3Day: new Array(12).fill(0) }).riverToDam).toBe(false);
 	});
 
-	it('is what a farm with no dam irrigates straight from the river, except on run of river (engine 1.31.0)', () => {
+	it('is what a farm with no dam irrigates straight from the river, except on run of river (engine 1.32.0)', () => {
 		expect(handsOffTakers({ ...farm, damCapacityM3: 0 })).toEqual({ pump: false, riverToDam: false, noDamRouting: true });
 		expect(handsOffTakers({ ...farm, damCapacityM3: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0 }).noDamRouting).toBe(false);
 		expect(handsOffTakers({ ...farm, damCapacityM3: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 10 }).noDamRouting).toBe(true);
@@ -164,7 +164,7 @@ describe('handsOffPreview', () => {
 		);
 	});
 
-	it('on a farm with no dam, limits what it irrigates straight from the river (engine 1.31.0)', () => {
+	it('on a farm with no dam, limits what it irrigates straight from the river (engine 1.32.0)', () => {
 		expect(handsOffPreview({ ...pumpAndDivert, supplyRule: 'damFirst', damCapacityM3: 0, divertCapacityM3Day: 0, handsOffM3Day: new Array(12).fill(150) })).toBe(
 			'Leaves 150 m³/day in the river before its irrigation straight from the river takes anything. It has no dam, so what is routed to its dam (upstream inflow, runoff, River to dam) is irrigated straight from the river. When less flows, nothing is taken.'
 		);

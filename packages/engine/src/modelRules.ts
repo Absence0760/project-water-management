@@ -98,7 +98,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
-		// Hands-off flow and River to dam by month (engine ≥ 1.31.0): a farm's, 12 monthly values each.
+		// Hands-off flow and River to dam by month (engine ≥ 1.32.0): a farm's, 12 monthly values each.
 		const hasOps = (n.handsOffM3Day !== null && n.handsOffM3Day !== undefined) || n.handsOffEwr === true || (n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined);
 		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a farm has a hands-off flow and River to dam by month`);
 		else {

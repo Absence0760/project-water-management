@@ -134,7 +134,7 @@ describe('modelRuleIssues', () => {
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
 	});
 
-	it('hands-off flow and River to dam by month (engine 1.31.0): a farm\'s, 12 values each', () => {
+	it('hands-off flow and River to dam by month (engine 1.32.0): a farm\'s, 12 values each', () => {
 		const n = (id: string, kind: string, over: object = {}) => ({ id, name: id, kind, damCapacityM3: 0, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
 		const twelve = new Array(12).fill(100);
 		const m = {

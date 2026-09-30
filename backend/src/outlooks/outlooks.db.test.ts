@@ -509,5 +509,7 @@ describe('review triggers (issue #53 R6)', () => {
 		const plain = await dry.call('POST', `/projects/${d.projectId}/outlooks`, outlookOf(run));
 		expect(plain.status).toBe(202);
 		expect(plain.body.outlook.reviewDate).toBeNull();
+		// Run it, so no later file's tick claims it (src/__tests__/db-setup.ts).
+		expect((await tick()).done).toBe(1);
 	});
 });

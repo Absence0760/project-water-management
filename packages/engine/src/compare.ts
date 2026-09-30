@@ -1196,7 +1196,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
-	// Hands-off flow (engine ≥ 1.31.0); its monthly amounts and River to dam by month are diffed below.
+	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
 	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')],
@@ -1289,7 +1289,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
-		// Operating rules (engine ≥ 1.31.0).
+		// Operating rules (engine ≥ 1.32.0).
 		const ho = optionalMonthlyChange(x.handsOffM3Day, y.handsOffM3Day, 'm³/day', 'none');
 		if (ho) parts.push(`hands-off flow ${ho}`);
 		const dv = optionalMonthlyChange(x.divertMonthlyM3Day, y.divertMonthlyM3Day, 'm³/day', 'the one diversion capacity');
@@ -1714,7 +1714,7 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
 		['dam release', 'damReleaseM3Day'],
-		// Operating rules (engine ≥ 1.31.0): the monthly rows diffModel words itself.
+		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
 		['hands-off flow', 'handsOffM3Day'],
 		['River to dam by month', 'divertMonthlyM3Day'],
 		['dam survey curve', 'damCurve'],

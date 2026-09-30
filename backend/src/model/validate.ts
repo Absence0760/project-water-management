@@ -74,7 +74,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
-				// Hands-off flow and River to dam by month (engine ≥ 1.31.0, issue #204), m³/day by water-year
+				// Hands-off flow and River to dam by month (engine ≥ 1.32.0, issue #204), m³/day by water-year
 				// month; null = none / the one divertCapacityM3Day. Farms only is a model rule (operatingKind).
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				handsOffEwr: z.boolean().default(false),

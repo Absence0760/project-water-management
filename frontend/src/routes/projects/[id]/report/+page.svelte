@@ -425,7 +425,7 @@
 						<p class="notes">{run.notes}</p>
 						{#if run.notesUpdatedAt}<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>{/if}
 					{:else if s.id === 'validation'}
-						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} />
+						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={run.settings?.fitRecord?.engineVersion ?? null} />
 					{:else if s.id === 'signoff' && signoffs}
 						<SignoffSection {projectId} runId={run.id} list={signoffs} onchange={signoffsChanged} />
 					{:else if s.id === 'disclaimer'}

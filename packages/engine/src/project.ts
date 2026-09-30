@@ -1125,25 +1125,25 @@ export interface NetworkNode {
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
 	supplyStopPct?: number;
 	/**
-	 * Farms only (engine ≥ 1.31.0, WP-3.8, issue #204, docs/model.md §2.7h):
+	 * Farms only (engine ≥ 1.32.0, WP-3.8, issue #204, docs/model.md §2.7h):
 	 * a hands-off flow, m³/day per water-year month (Oct–Sep, 12 values ≥ 0),
 	 * left in the river at this farm before the river pump takes anything and
 	 * before River to dam (the diversion O) takes anything. null / absent =
-	 * none, every engine before 1.31.0.
+	 * none, every engine before 1.32.0.
 	 */
 	handsOffM3Day?: number[] | null;
 	/**
-	 * Farms only (engine ≥ 1.31.0): also leave the EWR required at this farm
+	 * Farms only (engine ≥ 1.32.0): also leave the EWR required at this farm
 	 * (its cumulative requirement Z, its own and upstream shares) in the river,
 	 * as a river off-take's `handsOffEwr` does. Absent / false = not kept.
 	 */
 	handsOffEwr?: boolean;
 	/**
-	 * Farms only (engine ≥ 1.31.0): River to dam's capacity per water-year
+	 * Farms only (engine ≥ 1.32.0): River to dam's capacity per water-year
 	 * month (Oct–Sep, 12 values ≥ 0, m³/day). When set it replaces
 	 * `divertCapacityM3Day`, which is then inert; 0 in a month = no diversion
 	 * that month (a dam filled only in winter). null / absent = the one
-	 * `divertCapacityM3Day` all year, every engine before 1.31.0.
+	 * `divertCapacityM3Day` all year, every engine before 1.32.0.
 	 */
 	divertMonthlyM3Day?: number[] | null;
 	/**
@@ -1204,7 +1204,7 @@ export const SUPPLY_DEFAULTS = {
 } as const;
 
 /**
- * What a node without the operating-rule fields (engine ≥ 1.31.0, issue #204,
+ * What a node without the operating-rule fields (engine ≥ 1.32.0, issue #204,
  * docs/model.md §2.7h) runs as: no hands-off flow, the EWR not kept, and the
  * one `divertCapacityM3Day` all year.
  */
@@ -1391,7 +1391,7 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
-				// Hands-off flow and River to dam by month (engine ≥ 1.31.0): off unless set.
+				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
 				if (n.divertMonthlyM3Day === undefined) n.divertMonthlyM3Day = OPERATING_DEFAULTS.divertMonthlyM3Day;

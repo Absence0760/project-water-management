@@ -37,7 +37,7 @@ export function supplyIssues(
 
 /**
  * A node's hands-off flow and River to dam by month problems (engine ≥
- * 1.31.0, issue #204), as the API refuses them (engine modelRules and the
+ * 1.32.0, issue #204), as the API refuses them (engine modelRules and the
  * backend's zod: 12 finite values ≥ 0), in words for the node form; farms
  * only.
  */
@@ -154,7 +154,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (development) issues.push({ area: 'network', message: `${label}: ${development}` });
 		// Supply rule and river pump (WP-3.8), as the API checks them.
 		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
-		// Hands-off flow and River to dam by month (engine ≥ 1.31.0), as the API checks them.
+		// Hands-off flow and River to dam by month (engine ≥ 1.32.0), as the API checks them.
 		for (const m of operatingIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
 		// EWR site flag (engine ≥ 1.5.0), as the API checks it.
 		const ewrSite = ewrSiteIssue(n);

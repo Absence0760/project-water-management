@@ -1381,7 +1381,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Fixtures** are JSON (`chirps-sample.json`, `gefs-sample.json`) encoded
 >   into real LZW GeoTIFFs at request time, plus `dws-sample.html`, all
 >   re-dated to today, so a dev feed shows healthy.
-> - **Config**: cells only (1–25, weighted), no `bbox` yet. Optional
+> - **Config**: cells (1–25, weighted) or, since issue #69, a `bbox`
+>   (`{ south, west, north, east }`, the area-weighted mean of the 0.05° cells
+>   it overlaps, at most 100 cells in 25 rows). Optional
 >   `startDate` and `staleAfterDays`. One feed per series (unique target).
 > - **RLS**: as designed (viewer reads, owner writes), plus: the health
 >   columns can't be written directly (a trigger keeps them; a `SECURITY
@@ -1390,6 +1392,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Scheduling**: the tick claims due feeds with `app_claim_due_feeds`
 >   (stamping `last_scheduled_at`) instead of a per-day dedupe key, so a
 >   running fetch isn't queued twice; failing feeds retry on a backoff.
+>   Daily only since issue #69 (`111_feed_daily_only.sql`): no source
+>   publishes more often, so the design's `hourly` below was dropped, and
+>   "Run now" is capped per feed (6 presses, then one per 10 minutes).
 > - **API**: `PATCH` merges the fields sent; `run-now` as designed.
 > - **Merging** adds `keepOnNull` to the shared merge: a day the source has no
 >   value for never erases an existing one.

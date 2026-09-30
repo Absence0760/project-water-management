@@ -267,7 +267,7 @@ describe('the GR4J PE input (settings.pe, issue #39)', () => {
 	});
 });
 
-describe('the hands-off flow and River to dam by month (engine 1.31.0, issue #204)', () => {
+describe('the hands-off flow and River to dam by month (engine 1.32.0, issue #204)', () => {
 	const handsOff = NODE_FIELD_SPECS.handsOffM3Day.spec;
 	const divert = NODE_FIELD_SPECS.divertMonthlyM3Day.spec;
 	const ewr = NODE_FIELD_SPECS.handsOffEwr.spec;

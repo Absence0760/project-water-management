@@ -142,7 +142,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   raised levels are `supplyStopPct` and `supplyTriggerPct`. "What if this
   farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
   `riverFirst` and `pumpCapacityM3Day` → 1200. The farm's other operating
-  rules (engine ≥ 1.31.0, [model.md §2.7h](./model.md)): `handsOffM3Day`
+  rules (engine ≥ 1.32.0, [model.md §2.7h](./model.md)): `handsOffM3Day`
   (12 values ≥ 0 m³/day, Oct–Sep, or null = none), `handsOffEwr` (true /
   false) and `divertMonthlyM3Day` (River to dam by month, 12 values ≥ 0 or
   null = the one `divertCapacityM3Day`); farms only (a save rule), each the

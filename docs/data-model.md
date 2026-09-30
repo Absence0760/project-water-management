@@ -123,9 +123,9 @@ erDiagram
 | `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; inert under `damFirst`. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
-| `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 111, engine ≥ 1.31.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
-| `hands_off_ewr` | (none) | Farms only (migration 111): also leave the EWR required at the farm (its cumulative requirement) in the river, as a river off-take's `transfer.hands_off_ewr` does. `false` (default, every existing row). Keep = MAX(the month's hands-off amount, the EWR when ticked) |
-| `divert_monthly_m3_day` | (none: b023's one m³/s) | Farms only (migration 111): River to dam's capacity by water-year month, `float8[]` of 12 m³/day values; when set it replaces `divert_capacity_m3_day` (0 in a month = no diversion, a dam filled in winter only). NULL (default) = the one value all year. CHECK 12 values, none NULL, none negative. The API refuses any of the three off a farm (the engine's `modelRuleIssues`, `operatingKind`) |
+| `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 112, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
+| `hands_off_ewr` | (none) | Farms only (migration 112): also leave the EWR required at the farm (its cumulative requirement) in the river, as a river off-take's `transfer.hands_off_ewr` does. `false` (default, every existing row). Keep = MAX(the month's hands-off amount, the EWR when ticked) |
+| `divert_monthly_m3_day` | (none: b023's one m³/s) | Farms only (migration 112): River to dam's capacity by water-year month, `float8[]` of 12 m³/day values; when set it replaces `divert_capacity_m3_day` (0 in a month = no diversion, a dam filled in winter only). NULL (default) = the one value all year. CHECK 12 values, none NULL, none negative. The API refuses any of the three off a farm (the engine's `modelRuleIssues`, `operatingKind`) |
 | `ewr_site` | (none: b023 checks the EWR at every gauge) | Gauges (migration 086, engine ≥ 1.5.0, [model.md §2.7b](./model.md)): whether the EWR is assessed here. `true` (default, every existing row); `false` only on a gauge (CHECK `node_ewr_site_gauge`), never the outlet (a model rule the API applies on save). False = the gauge charges nobody and a Reserve rule table there is skipped |
 | `ga_property_area_ha` | (none) | Farms and other users with boreholes (migration 089, engine ≥ 1.12.0, [model.md §2.7d](./model.md)): the property's size, ha (0 to 10 000 000), for the GN 538 groundwater volume. NULL (default, every existing row) = unknown: the run shows the 40 000 m³/a ceiling and warns |
 | `ga_rate_m3_ha_year` | (none) | Same: the GN 538 Table 2 rate for the property's quaternary, m³/ha/a, CHECK one of 0, 45, 75, 150, 275, 400. NULL = not looked up. Volume = min(area × rate, 40 000), context only |
@@ -946,7 +946,7 @@ results for plausibility; and that they read its known limitations
   `signoff-1` and `-2` rows), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-3` today; rows made earlier keep `signoff-1` or `signoff-2`, and
+  (`signoff-4` today; rows made earlier keep `signoff-1` to `signoff-3`, and
   every row keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
@@ -2233,20 +2233,20 @@ functions and changes no table, policy or grant:
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 | Column | Holds |
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
-| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
+| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
-| `enabled`, `schedule` | `daily` or `hourly` |
+| `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69) |
 | `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
@@ -2269,11 +2269,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
     from the enqueues.
   - Due (`app_feed_is_due`, 027, a plain function only the two above call):
-    never scheduled; or not scheduled within a day (or an hour, for hourly),
-    with a minute's slack; or, for a **daily `chirps_gefs`** feed, scheduled
-    before the latest 08:45 UTC (after CHC publishes the day's issue, #33);
-    or, while failing, after 15 min × 2^(failures − 1), capped at the
-    interval. UTC whatever the session time zone.
+    never scheduled; or not scheduled within a day, with a minute's slack;
+    or, for a **`chirps_gefs`** feed, scheduled before the latest 08:45 UTC
+    (after CHC publishes the day's issue, #33); or, while failing, after
+    15 min × 2^(failures − 1), capped at the day. UTC whatever the session
+    time zone. 111 dropped the hourly interval; the `schedule` argument
+    stays so the callers are unchanged.
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.
@@ -2300,6 +2301,16 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     pending but waiting (a backfill's next window, a retry): makes that job
     due now, as an editor, and says whether it moved one (`water_app` can't
     UPDATE `job`).
+  - `app_feed_take_run_now(feed, capacity, refill_seconds)` (111): takes one
+    "Run now" press from the feed's token bucket, as an editor of its
+    project; returns 0, or the seconds until a press is back (taking
+    nothing). The route passes `RUN_NOW_RATE` (6, one back every 600 s) and
+    calls it only for a press that queued or pulled a fetch, in the press's
+    transaction, so a refusal rolls the enqueue back. The bucket is
+    **`data_feed_run_now (feed_id PK → data_feed CASCADE, tokens,
+    refilled_at)`**, the `api_key_throttle` pattern: RLS on with a policy
+    that matches no row, so `water_app` neither reads nor refills it; only
+    this function does. No personal information.
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.

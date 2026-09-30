@@ -227,7 +227,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	const why = new Set<string>();
 	for (const [key, feature] of AUDIT_UNSUPPORTED_SERIES) if (run.farm.has(key)) why.add(feature);
 	if (demandObjectsByNode(model, []).get(n.id)) why.add('demand objects');
-	// Operating rules (engine ≥ 1.31.0): they change O by month and by the day's flow.
+	// Operating rules (engine ≥ 1.32.0): they change O by month and by the day's flow.
 	const ops = operatingOf(n, []);
 	if (ops.handsOff) why.add('a hands-off flow');
 	if (ops.divertM3DayByMonth) why.add('River to dam by month');

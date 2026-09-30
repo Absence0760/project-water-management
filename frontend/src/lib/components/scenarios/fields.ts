@@ -140,7 +140,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
 	supplyStopPct: { label: 'Supply switch-back level', spec: pct() },
-	// Hands-off flow and River to dam by month (engine ≥ 1.31.0, docs/model.md §2.7h).
+	// Hands-off flow and River to dam by month (engine ≥ 1.32.0, docs/model.md §2.7h).
 	handsOffM3Day: { label: 'Hands-off flow by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	handsOffEwr: { label: 'Hands-off flow keeps the EWR', spec: { t: 'bool' } },
 	divertMonthlyM3Day: { label: 'River to dam by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },

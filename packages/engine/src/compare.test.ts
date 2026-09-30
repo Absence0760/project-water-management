@@ -537,7 +537,7 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual([]);
 	});
 
-	it('lists a farm’s hands-off flow and River to dam by month changed, and not an older run’s absent fields (engine 1.31.0)', () => {
+	it('lists a farm’s hands-off flow and River to dam by month changed, and not an older run’s absent fields (engine 1.32.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
 		const winter = [0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500];
@@ -547,7 +547,7 @@ describe('diffInputs', () => {
 			'Rooikloof: hands-off flow none → 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 m³/day (Oct–Sep)',
 			'Rooikloof: River to dam by month the one diversion capacity → 0, 0, 0, 0, 0, 0, 500, 500, 500, 500, 500, 500 m³/day (Oct–Sep)'
 		]);
-		// A run from before engine 1.31.0 has none of the fields: it reads as the defaults, so no change.
+		// A run from before engine 1.32.0 has none of the fields: it reads as the defaults, so no change.
 		const c = copyWithFreshIds(a);
 		for (const n of c.model.nodes) Object.assign(n, { handsOffM3Day: null, handsOffEwr: false, divertMonthlyM3Day: null });
 		expect(texts(a, c)).toEqual([]);
@@ -1515,7 +1515,7 @@ describe('field history tables (settingsChangePaths, nodeChangeFields)', () => {
 		expect(new Set(labels.map(([l]) => l)).size).toBe(labels.length);
 	});
 
-	it('names the operating rules and supply fields (engine 1.31.0), the monthly rows included', () => {
+	it('names the operating rules and supply fields (engine 1.32.0), the monthly rows included', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
 		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, {

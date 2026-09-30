@@ -1230,7 +1230,7 @@ a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
 
-Hands-off flow and River to dam by month (engine ≥ 1.31.0, migration 111,
+Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 112,
 issue #204, [model.md §2.7h](./model.md)): every node carries
 `handsOffM3Day` (12 finite m³/day values ≥ 0 by water-year month, Oct–Sep, or
 `null` = none), `handsOffEwr` (boolean) and `divertMonthlyM3Day` (12 finite
@@ -1380,7 +1380,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off; `forecastRainSource`: a forecast run's rain source, `chirps_gefs` when a CHIRPS-GEFS feed wrote every forecast day (from the first to the forecast series' end), `other` otherwise (an uploaded forecast, or a day a person wrote), `null` for any other run and a forecast run stored before it was recorded; the report credits CHIRPS-GEFS only on `chirps_gefs` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
-| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day` (the day's month's value for a farm with River to dam by month, engine ≥ 1.31.0), `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day: initial % × that day's capacity, engine ≥ 1.30.0; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
+| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day` (the day's month's value for a farm with River to dam by month, engine ≥ 1.32.0), `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day: initial % × that day's capacity, engine ≥ 1.30.0; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (on the run's first day, each store after the warm-up from `summary.runoff.storesStartMm`, engine ≥ 1.20.0; each `null` there on a run from before, which recorded only their total) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model (a stored run from before engine 1.0.0): `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run; `409 { error: "this run can't be deleted" }` when row-level security refuses the delete of a run you can read (never a `404`); `404` only for a run that isn't there (already deleted or trimmed). The check and the delete see one locked row | editor |
@@ -1929,10 +1929,14 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
-  Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
+  Limitation[], errata: Erratum[], methodology: { version, sha256 }, notes:
+  string[], disclaimerVersion }` (`errata`: the known bugs of the run's
+  engine version, `docs/engine-errata.md`; `methodology`: the current
+  methodology statement, `docs/methodology/`). `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
   sends it back and the server recomputes it. The current version is
-  `signoff-3` (issue #47), with ten confirmation ids, in order: `identity`,
+  `signoff-4` (issue #71: `signoff-3`, issue #47, plus the errata and the
+  methodology citation), with ten confirmation ids, in order: `identity`,
   `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
   `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
   one. The signer's details are `fullName`, the registration as codes of
@@ -2633,13 +2637,22 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
-| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. `409` for a switched-off feed | editor |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
-  - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
-    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
+  - `config` for `chirps` / `chirps_gefs`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
+    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1), or
+    `{ bbox: { south, west, north, east } }` in degrees (south < north, west <
+    east, no crossing of 180°, the same ranges), read as the area-weighted mean
+    of every 0.05° cell the box overlaps and at most 100 cells in 25 rows
+    (about 0.5° × 0.5°; a bigger box is `400`, the issue at `config.bbox`,
+    architecture.md § Data feeds). A box may add `skipNoData: true`: its
+    no-data (sea) cells are left out and the rest renormalised, and each fetch's
+    `lastMeta` carries `cellsUsed`; a fetch with another count than the last
+    one's is refused as failed until the box is saved again (with `cells` it
+    is a `400`); for `dws`:
     `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
     three digits; upper-cased; a reservoir `R`, weather `E` or other station
     is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,
@@ -2650,8 +2663,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
-    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
-    `hourly`; `enabled` (default true);
+    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
+    the only value: no source publishes more often, 111_feed_daily_only;
+    `hourly` is a `400`); `enabled` (default true);
   - `replaceSeries` (default false): the owner confirms the feed may replace
     its target series, which holds values of another product or version, or
     an unrecorded one. Without it, attaching (or re-targeting, or switching
@@ -2685,8 +2699,11 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
   left alone because the series held a value the feed didn't write: an
   upload or import, #30), `staged` / `replaced` (a confirmed replacement's
-  days staged so far, or the label of what it replaced once swapped in) and
-  `through` (the last day the fetch asked for).
+  days staged so far, or the label of what it replaced once swapped in),
+  `through` (the last day the fetch asked for) and, for CHIRPS,
+  `finalThrough` (the last day through which the series is final, not read
+  again, #69). A CHIRPS `prelimDays` counts the preliminary days in the
+  window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all
@@ -2812,7 +2829,7 @@ RLS (`backend/src/history/fields.ts`), no request per field. Keys:
   …), from the label after "Name: " on a changed node's line (engine
   `nodeChangeFields`; the longest matching label wins). The supply fields
   (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`)
-  and the operating rules (engine ≥ 1.31.0: `handsOffEwr`, and the monthly
+  and the operating rules (engine ≥ 1.32.0: `handsOffEwr`, and the monthly
   `handsOffM3Day` and `divertMonthlyM3Day`, whose `change` is the engine's
   full row, "none → 0, 0, …, 800 m³/day (Oct–Sep)") are keyed too.
 - `crop:<nodeId>:<cropId>`: a unit's planted area of a crop, changed, added

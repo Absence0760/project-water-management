@@ -58,7 +58,7 @@ export function sharedPumpHint(
 /**
  * Whether a node carries supply settings other than the defaults (a farm
  * turned into a gauge or user keeps them): the supply rule, the river pump,
- * the hands-off flow and River to dam by month (engine ≥ 1.31.0).
+ * the hands-off flow and River to dam by month (engine ≥ 1.32.0).
  */
 export const hasSupplySettings = (n: Pick<NetworkNode, 'supplyRule' | 'pumpCapacityM3Day' | 'handsOffM3Day' | 'handsOffEwr' | 'divertMonthlyM3Day'>) =>
 	(n.supplyRule ?? 'damFirst') !== 'damFirst' ||
@@ -70,7 +70,7 @@ export const hasSupplySettings = (n: Pick<NetworkNode, 'supplyRule' | 'pumpCapac
 /**
  * Whether River to dam takes anything, as the run reads it (engine
  * network/supply.ts): any month above 0 when it is set by month (engine ≥
- * 1.31.0), else the one capacity above 0.
+ * 1.32.0), else the one capacity above 0.
  */
 export function diverts(n: Pick<NetworkNode, 'divertCapacityM3Day' | 'divertMonthlyM3Day'>): boolean {
 	return Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0;
@@ -118,7 +118,7 @@ type HandsOffNode = Pick<
  * but the dam only, unless its capacity is 0), and River to dam (O) on a farm
  * with a dam. A farm with no dam irrigates what is routed to its dam (K, M
  * and O) straight from the river, so there the hands-off flow limits that
- * (engine ≥ 1.31.0). Run of river routes nothing to the dam. The dam's own
+ * (engine ≥ 1.32.0). Run of river routes nothing to the dam. The dam's own
  * split (K, M) into a real dam is not a pump, so it isn't held back. Reads
  * the entered capacity: a dam not yet in service, or silted to nothing, runs
  * as no dam on those days (§2.7g), which a one-line preview doesn't split.
@@ -134,7 +134,7 @@ export function handsOffTakers(n: Partial<HandsOffNode>): { pump: boolean; river
 }
 
 /**
- * The hands-off flow in plain words under its fields (engine ≥ 1.31.0, issue
+ * The hands-off flow in plain words under its fields (engine ≥ 1.32.0, issue
  * #204, docs/model.md §2.7h): what the farm leaves in the river, and before
  * which of its takes (handsOffTakers), named only where they apply; where
  * none does, it says the flow changes nothing. Reads the node as the run does
@@ -158,7 +158,7 @@ export function handsOffPreview(n: Partial<HandsOffNode>): string {
 }
 
 /**
- * River to dam by month in plain words (engine ≥ 1.31.0): the months it
+ * River to dam by month in plain words (engine ≥ 1.32.0): the months it
  * diverts in and the months it doesn't; null when it isn't set by month.
  */
 export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>): string | null {
@@ -171,7 +171,7 @@ export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>):
 
 /**
  * The node table's River to dam cell on a farm set by month (engine ≥
- * 1.31.0): the run ignores the one value there, so the table shows the
+ * 1.32.0): the run ignores the one value there, so the table shows the
  * months' range, read-only, instead of an input, and points to the one-node
  * form where the months are edited. `text` is the cell ("by month: 0–800",
  * "by month: 500"), `aria` its accessible name. Null when it isn't set by

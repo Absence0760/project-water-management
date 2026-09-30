@@ -140,7 +140,7 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		expect(Math.min(...upStore)).toBeLessThan(25_000 * 0.9);
 	});
 
-	it('refuses a farm with a hands-off flow or River to dam by month (engine 1.31.0), naming each', () => {
+	it('refuses a farm with a hands-off flow or River to dam by month (engine 1.32.0), naming each', () => {
 		const input = handBuilt();
 		Object.assign(input.model.nodes.find((n) => n.id === 'low')!, { handsOffEwr: true, divertMonthlyM3Day: new Array(12).fill(500) });
 		const out = runModel(input);

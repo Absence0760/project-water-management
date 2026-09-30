@@ -4,7 +4,7 @@
 	// switch levels. Only the m³/day is stored; the pump count and rate are a
 	// calculator that fills it (the model stores one number that can't disagree
 	// with itself), so a saved capacity reloads into the m³/day field with the
-	// calculator empty. Below them, the hands-off flow (engine ≥ 1.31.0, issue
+	// calculator empty. Below them, the hands-off flow (engine ≥ 1.32.0, issue
 	// #204, §2.7h): a flow by month and/or the EWR left in the river before the
 	// pump or River to dam takes anything. The node is the editor's own
 	// object, so edits land in the model directly.

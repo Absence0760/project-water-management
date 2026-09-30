@@ -41,7 +41,7 @@ describe('ModelEditor', () => {
 		expect(validateModel(ed.model)).toEqual([]);
 	});
 
-	it('starts a new node with no hands-off flow and River to dam at the one value all year (engine 1.31.0)', () => {
+	it('starts a new node with no hands-off flow and River to dam at the one value all year (engine 1.32.0)', () => {
 		const ed = new ModelEditor();
 		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
 		ed.addNode();

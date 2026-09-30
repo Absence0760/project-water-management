@@ -130,7 +130,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
 	});
 
-	it('hands-off flow and River to dam by month (engine 1.31.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
+	it('hands-off flow and River to dam by month (engine 1.32.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });
 		const parse = (over: object, on: object = farm) => ModelBody.safeParse({ nodes: [out, { ...on, ...over }], crops: [], cropAreas: [], transfers: [] });

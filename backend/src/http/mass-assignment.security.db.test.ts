@@ -23,7 +23,7 @@ import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@wat
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
-import { buildLadder, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
@@ -394,8 +394,8 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(async () => {
-	// The run of the rules the last POST …/auto-calibrations queued: no other file's tick should pick it up.
-	if (ctx.projectId) await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
+	// The ladder's yield job and what the sweep's POSTs queued (the rules' run …/auto-calibrations queues among them).
+	await clearLadderJobs(ctx);
 	await db?.end();
 });
 

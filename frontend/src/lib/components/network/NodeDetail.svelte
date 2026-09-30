@@ -86,7 +86,7 @@
 	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
 	const showEwrSite = $derived(node.kind === 'gauge' || node.ewrSite === false);
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
-	/** River to dam set by month (engine ≥ 1.31.0): the one value is then inert. */
+	/** River to dam set by month (engine ≥ 1.32.0): the one value is then inert. */
 	const byMonth = $derived(node.divertMonthlyM3Day != null);
 </script>
 

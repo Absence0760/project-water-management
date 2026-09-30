@@ -370,7 +370,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
 	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
-	// Hands-off flows and River to dam by month (engine ≥ 1.31.0), from their own stream, last of all.
+	// Hands-off flows and River to dam by month (engine ≥ 1.32.0), from their own stream, last of all.
 	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
 	return {
 		settings,
@@ -543,7 +543,7 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 }
 
 /**
- * Hands-off flows and River to dam by month (engine ≥ 1.31.0, issue #204) in
+ * Hands-off flows and River to dam by month (engine ≥ 1.32.0, issue #204) in
  * 25 % of seeds, on each farm half the time: a hands-off flow by month (some
  * months 0, from a trickle to more than any flow, now and then 0 in every
  * month, which is none), the EWR kept or not, and River to dam by month (some

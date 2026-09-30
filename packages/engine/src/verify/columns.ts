@@ -44,7 +44,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'diverted_to_dam',
 		letter: 'O',
 		formula:
-			"MIN(diversion capacity (the month's, when River to dam is set by month), L + N); cut first so S passes the senior users' requirement MIN(Zs, H + I), and with a hands-off flow (engine ≥ 1.31.0) at most MAX(0, L + N − keep), keep = MAX(the month's hands-off amount, Z when the EWR is kept)"
+			"MIN(diversion capacity (the month's, when River to dam is set by month), L + N); cut first so S passes the senior users' requirement MIN(Zs, H + I), and with a hands-off flow (engine ≥ 1.32.0) at most MAX(0, L + N − keep), keep = MAX(the month's hands-off amount, Z when the EWR is kept)"
 	},
 	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m. With a survey curve (WP-3.5): the area linear in volume between its rows at Q[t−1] (from 0 m³, 0 m² below the lowest row; the top row\'s area above it)' },
 	{ key: 'rain_on_dam', letter: null, formula: 'rain (before any threshold) ÷ 1000 × dam area' },
@@ -107,7 +107,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'river_abstraction',
 		letter: 'Gr',
 		formula:
-			'the river pump, while the supply rule pumps from the river (river first, run of river; trigger from Q[t−1] < trigger × capacity until Q[t−1] ≥ stop × capacity): MIN(pump capacity, MAX(0, S − MAX(Zs, pass-inflow release target, hands-off keep)), D − primary GW) (hands-off keep = MAX(the month’s hands-off amount, Z when the EWR is kept), engine ≥ 1.31.0), before the dam (after it under run of river, where K = M = O = 0); part of G; U = R + S − Gr + T + returned seepage + release − Dep (WP-3.8)',
+			'the river pump, while the supply rule pumps from the river (river first, run of river; trigger from Q[t−1] < trigger × capacity until Q[t−1] ≥ stop × capacity): MIN(pump capacity, MAX(0, S − MAX(Zs, pass-inflow release target, hands-off keep)), D − primary GW) (hands-off keep = MAX(the month’s hands-off amount, Z when the EWR is kept), engine ≥ 1.32.0), before the dam (after it under run of river, where K = M = O = 0); part of G; U = R + S − Gr + T + returned seepage + release − Dep (WP-3.8)',
 		optional: true
 	},
 	{

@@ -217,7 +217,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
 			supply_stop_pct: n.supplyStopPct ?? 0.6,
-			// Hands-off flow and River to dam by month (engine ≥ 1.31.0, migration 111); absent = off.
+			// Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 112); absent = off.
 			hands_off_m3_day: n.handsOffM3Day ?? OPERATING_DEFAULTS.handsOffM3Day,
 			hands_off_ewr: n.handsOffEwr ?? OPERATING_DEFAULTS.handsOffEwr,
 			divert_monthly_m3_day: n.divertMonthlyM3Day ?? OPERATING_DEFAULTS.divertMonthlyM3Day,

@@ -242,7 +242,7 @@ describe('validateModel', () => {
 		]);
 	});
 
-	it('refuses a hands-off flow or River to dam by month off a farm, and a bad month, as the API does (engine 1.31.0)', () => {
+	it('refuses a hands-off flow or River to dam by month off a farm, and a bad month, as the API does (engine 1.32.0)', () => {
 		const g = node('g', 'Gauge', null);
 		const farm = (over: Partial<NetworkNode>) => ({ ...node('a', 'A', 'g'), ...over });
 		const twelve = new Array(12).fill(100);

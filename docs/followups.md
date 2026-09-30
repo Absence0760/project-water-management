@@ -2441,21 +2441,32 @@ role and not before it.
   - [x] A debounced re-run after new data (WP-2.11, built).
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
-  - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
-  - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
-        last 50 days daily (~200 range requests). Trigger: more than ~20
-        CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
-        once per tick and share it between feeds, or keep a per-day
-        preliminary/final marker so final days aren't re-read.
+  - [x] CHIRPS by bounding box (the roadmap's `{ bbox }`): `config.bbox`, the
+        area-weighted mean of the 0.05° cells it overlaps, at most 100 cells in
+        25 rows (issue #69; architecture.md § Data feeds).
+  - [x] ~~**Request volume grows with feeds.** Each CHIRPS feed re-reads its
+        last 50 days daily (~200 range requests).~~ **Only what can change
+        is read (#69):** the ingest keeps a checked final marker
+        (`last_meta.finalThrough`) and the next window starts after it; a
+        `sat` fetch stops probing finals after the first batch without one,
+        and doesn't re-read the preliminary days the series already holds
+        (`heldThrough`). architecture.md § Data feeds, the window. On the
+        fixtures a caught-up feed's daily fetch goes from 194 range requests
+        to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days
+        moves on 120 days a window instead of 70.
   - [x] ~~**Ingest doesn't check a result's dates against the window asked
         for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
         records its window on the feed before sending, and the ingest
         refuses an answer with a day outside it, and drops any answer but
         the newest fetch's (late or redelivered). A DWS backfill through an
         empty stretch now moves on too (#29, `last_meta.through`).
-  - [ ] Related: "Run now" is deduped per feed but not rate-limited, and an
-        hourly schedule re-reads CHIRPS (published daily) 24 times a day; cap
-        both when the request volume item above is done.
+  - [x] ~~Related: "Run now" is deduped per feed but not rate-limited, and an
+        hourly schedule re-reads CHIRPS (published daily) 24 times a day.~~
+        **Done (#69, `111_feed_daily_only`):** every feed runs daily (the
+        hourly schedule is gone for every source: none publishes more
+        often), and "Run now" is a token bucket per feed, 6 presses that
+        queue or pull a fetch, then one every 10 minutes (`429` with
+        `Retry-After`).
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):
@@ -3572,10 +3583,13 @@ Left, each with its trigger:
       record, and the frontend build injects it (a Vite `define`) for the
       report to pass in. Trigger: before the first evidence pack (WP-3.14),
       which must state it.
-- [ ] **Methodology statement and engine errata** (`docs/methodology/`,
-      versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
-      per engine version). Only the limitations list is generated so far.
-      Trigger: WP-3.14, the pack that records their version and hash.
+- [x] **Methodology statement and engine errata** (issue #71, 2026-09-29):
+      `docs/methodology/v1.md` (versioned, its SHA-256 pinned by
+      `methodology.test.ts`) and `docs/engine-errata.md`, both generated into
+      the engine by `pnpm gen:liability`. The validation statement and the
+      sign-off statement (`signoff-4`) cite the methodology by version and
+      hash and list the errata of the run's engine version. The pack records
+      the same (WP-3.14).
 - [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
       'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
       `pack_id` column with a check that exactly one target is set. A

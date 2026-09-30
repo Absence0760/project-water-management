@@ -154,7 +154,7 @@ const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
  */
 const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'] as const;
 /**
- * A farm's other operating rules (engine ≥ 1.31.0, WP-3.8, issue #204,
+ * A farm's other operating rules (engine ≥ 1.32.0, WP-3.8, issue #204,
  * docs/model.md §2.7h): the hands-off flow by month, whether the EWR is kept
  * too, and River to dam by month. Farms only (a model rule).
  */

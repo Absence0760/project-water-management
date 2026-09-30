@@ -5,6 +5,7 @@ import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
 import { withUser } from '../db/tx.js';
+import { RETIRE_PENDING_JOBS_SQL } from './pendingJobs.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
@@ -164,6 +165,12 @@ export async function asOwner(sql: string, params: unknown[] = []) {
 	} finally {
 		await client.end();
 	}
+}
+
+/** Retire the jobs a test file left pending in these projects, so no later file's tick claims them (db-setup.ts, pendingJobs.ts). */
+export async function retirePendingJobs(...projectIds: (string | undefined)[]) {
+	const ids = projectIds.filter((id): id is string => !!id);
+	if (ids.length) await asOwner(`${RETIRE_PENDING_JOBS_SQL} AND project_id = ANY($1::uuid[])`, [ids]);
 }
 
 /**

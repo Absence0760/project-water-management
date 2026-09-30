@@ -12,10 +12,11 @@
 //     checked against what was asked for and a late answer to an older fetch
 //     is dropped (feed-ingest.ts, issue #31).
 import { z } from 'zod';
-import { fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
+import { chirpsProduct } from '../../feeds/config.js';
+import { fetchWindow, heldThrough, runFetch, utcToday } from '../../feeds/fetch.js';
 import { feedHttp } from '../../feeds/http.js';
 import { ingestResult } from '../../feeds/ingest.js';
-import { beginFeedFetch, feedForJob } from '../../feeds/store.js';
+import { beginFeedFetch, feedForJob, heldSeries } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
 
@@ -32,8 +33,10 @@ export const feedFetchHandler = defineHandler({
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
-		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough);
-		const request = { source: feed.source, config: feed.config, ...window, today };
+		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
+		// A CHIRPS sat fetch needn't re-read the preliminary days the series it merges into already holds (fetchChirps); rnl has none.
+		const held = feed.source === 'chirps' && chirpsProduct(feed.config) === 'sat' ? heldThrough(feed.source, window, await heldSeries(db, feed, window)) : undefined;
+		const request = { source: feed.source, config: feed.config, ...window, today, ...(held ? { heldThrough: held } : {}) };
 		if (feedFetcher() === 'sqs') {
 			await beginFeedFetch(db, feed.id, job.id, window);
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };

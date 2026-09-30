@@ -1,4 +1,4 @@
-// Hands-off flow and River to dam by month (engine ≥ 1.31.0, WP-3.8, issue
+// Hands-off flow and River to dam by month (engine ≥ 1.32.0, WP-3.8, issue
 // #204, docs/model.md §2.7h): hand-worked cases on a fixed natural flow, the
 // resolver's validation, the new self-check catching broken series, and the
 // defaults (no fields, or fields that change nothing) running exactly as before.

@@ -2,7 +2,7 @@
 // #54 item 2c, docs/model.md §2.7e): set a farm to river first with 2 pumps ×
 // 25 m³/h, save, reload and read back 1,200 m³/day; and see run of river on a
 // farm with a dam blocked with the message the save would be refused with.
-// And the hands-off flow and River to dam by month (engine 1.31.0, issue #204,
+// And the hands-off flow and River to dam by month (engine 1.32.0, issue #204,
 // §2.7h): set, saved, reloaded and read back; their month fields show 12 345.5
 // and 0.0129 whole for an owner and a viewer, desktop and phone (ui-playbook
 // § 2); and a farm turned into a gauge clears River to dam by month beside

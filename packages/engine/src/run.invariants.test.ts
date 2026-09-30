@@ -28,7 +28,7 @@ describe('engine invariants on random networks', () => {
 		// draws in the generator, then 2079 until dam evaporation (N2); 25 is
 		// the first seed that shows it now.)
 		// The property is the network's, not the runoff model's: it was found under the legacy model's flow (removed in engine 1.0.0).
-		// Engine 1.31.0's generator gives seed 25 hands-off flows and River to dam by month (from their
+		// Engine 1.32.0's generator gives seed 25 hands-off flows and River to dam by month (from their
 		// own stream, the rest of the seed unchanged); they are taken off so it still shows the property.
 		const input = randomInput(25);
 		for (const n of input.model.nodes) Object.assign(n, OPERATING_DEFAULTS);
@@ -122,7 +122,7 @@ describe('engine invariants on random networks', () => {
 		// supply fraction rose 0.838 → 0.870. Evaporation is now capped at (1 − seepage) × Q[t−1] / b
 		// for b > 1 (network/simulate.ts damDay); the check itself is unchanged.
 		// (7686 and 15979 were found under the legacy model's flow, removed in engine 1.0.0; they now run GR4J.)
-		// Engine 1.31.0's generator gives some of these seeds hands-off flows and River to dam by month (4197
+		// Engine 1.32.0's generator gives some of these seeds hands-off flows and River to dam by month (4197
 		// and 15979 among them); they are taken off, as for seed 25, so the shallow dam still fills and empties
 		// as it did and the evaporation limiter is still exercised.
 		for (const seed of [4197, 7686, 15979, 17277]) {

@@ -1316,16 +1316,47 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
-// 2026-09-29  total 1201 → 1207 KB (issue #204: measured 1204 with main @
-//             7b0d2a73 merged, #203 included). A farm's hands-off flow and
-//             River to dam by month: the engine's operating rules
+// 2026-09-29  total 1201 → 1205 KB (issue #71: measured 1202 with main @
+//             e8cd5bc9 merged, against main's 1200). The errata section of
+//             the validation statement (liability/ValidationStatement: the
+//             errata table, keyed on the run's engine and its fit's) and the
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, CHIRPS bounding box: the Data
+//             feeds panel's box fields took the Settings tab chunk to 61 KB,
+//             over its 60 KB ceiling). API keys render for owners only, so
+//             ApiKeysPanel is now a lazy chunk of its own: the Settings tab
+//             measures 58 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #69: measured 1202 with main @
+//             7b0d2a73 merged, against main's 1200). The CHIRPS feed's
+//             bounding-box fields in the Data feeds panel (south, west,
+//             north, east, the cell count they cover) and their checks in
+//             feeds/feeds.ts; the lazy API keys chunk above adds its
+//             loader. No new dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, bounding box: measured with
+//             main @ 675277da and the branch's API-keys split merged). The box
+//             fields and "Leave out sea cells" grew the Data feeds panel
+//             again, so it is a lazy chunk of its own too (DataFeedsPanel
+//             via Lazy in SettingsTab, 9.6 KB), and the Settings tab
+//             measures 50,314 bytes (50 KB of 60, from 58). The total stays
+//             1202 KB of 1205. No new dependency. Headroom ~10 KB tab chunk.
+// 2026-09-29  total 1205 → 1208 KB (issue #69: measured 1205 with main @
+//             b681786e merged, at the ceiling; main grew since the entry
+//             above). Nothing of the bounding box changed; the usual
+//             headroom back. Headroom ~3 KB.
+// 2026-09-29  total 1208 → 1210 KB (issue #69: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the bounding box changed. Headroom ~3 KB.
+// 2026-09-29  total 1210 → 1214 KB (issue #204: measured 1211 with main @
+//             3f9b4c17 merged, the entries above included). A farm's
+//             hands-off flow and River to dam by month: the engine's operating rules
 //             (network/supply.ts operatingOf, the operatingRules self-check,
 //             the scenario and comparison fields) in the workspace and the
 //             workers that bundle the engine, and in the one-node form the
 //             Supply section's hands-off months and EWR tick, the new
 //             RiverToDamFields, their plain-words lines and save rules
 //             (network/supply.ts, model/validate.ts operatingIssues). The
-//             review's fixes held it at 1204: every twelve-month row of the
+//             review's fixes kept the growth to ~4 KB: every twelve-month row of the
 //             one-node form is now one MonthFields component (network/
 //             MonthFields.svelte + monthFields.ts; five callers' tables and
 //             setMonth/fillAll folded into it), and the engine's dam-less
@@ -1340,7 +1371,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1207,
+	totalCodeKb: 1214,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

@@ -427,7 +427,7 @@ const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]):
  * (D = F ÷ e): a farm whose crops carry their own (engine ≥ 0.43.0) runs on
  * them combined (engine demand.ts modelFarmEfficiency), else its own.
  * `divertCapacityM3Day` is the day's: a farm with River to dam by month
- * (engine ≥ 1.31.0) ran on that month's value.
+ * (engine ≥ 1.32.0) ran on that month's value.
  */
 function dayParams(
 	n: NetworkNode,

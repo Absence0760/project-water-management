@@ -250,7 +250,7 @@ generated `KNOWN_LIMITATIONS` (the list every report prints), and a
 departure's *Pending a hydrologist's confirmation* mark is read from it too.
 The departures' own words are `lib/methods/departures.ts`; its test checks
 that every id is a row of the audit. After changing an audit decision, run
-`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+`pnpm gen:liability` as usual and the page follows; when the audit adds or
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 
@@ -862,6 +862,14 @@ put the results first; its first screen follows board A1 of the redesign
    inside the window at any width. Until 2026-09-29 the complete checklist
    was a one-line `<details>` at the foot of the page that grew it by 125 px
    when opened.
+
+- **Ready.** The Summary's body (`data-testid="summary-body"`, in `overview/OverviewTab.svelte`)
+  sets `data-ready="true"` once every section that loads its own data has settled, loaded or
+  failed: the latest run's record and the previous run's, the dams' levels, the Supply by farm
+  chunk, the alerts (`AlertsPanel`'s `ready`) and the published baseline (`PublishedBaseline`'s
+  `ready`). The Latest run card is on the page while its record loads and the rest fill in after
+  it, so the page grows until then: an e2e spec that measures layout (page height, box positions)
+  waits on it first (`summaryReady` in `e2e/tests/overview.spec.ts`), never on a sleep.
 
 - **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
   `overview/reserveStrip.ts`), once the latest run's record is in: the days
@@ -1907,7 +1915,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   the run counts the two as separate pumps, so one pump doing both jobs needs
   its capacity split between them (`sharedPumpHint`; with River to dam by
   month, any month above 0 counts, `diverts`). Under them, **Hands-off flow**
-  (engine ≥ 1.31.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
+  (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
   flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
   **Use October’s flow for every month**; unticked = none), and **Also leave
   the EWR in the river** keeps the EWR required at the farm too. A line under
@@ -1944,7 +1952,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
   button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
   a profile) is in the `.ts` neighbour, unit-tested.
-- **River to dam by month** (engine ≥ 1.31.0, `RiverToDamFields.svelte`),
+- **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
   one-node form, farms, under **River to dam** in Routing: **Set River to dam
   by month** opens twelve m³/day fields (started from the one value, with
   **Use October’s capacity for every month**); while it is on, the one River
@@ -3461,14 +3469,30 @@ part of the Settings tab's chunk; WP-2.10,
   ("1 feed needs attention: …", `role="alert"`).
 - **Run now** (editors) queues a fetch at once and says so; the status
   updates once the background worker has run it (**Refresh status**).
+  Pressed too often (6 fetches, then one every 10 minutes per feed), the
+  section's error line shows the server's words, with the wait in whole
+  minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
-  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either **Grid cells**
-  (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
+  east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
+  area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
+  rows, the server's limits mirrored so a box too big is explained before
+  anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
+  a box on the coast; its hint says a land cell losing its data, or a box with
+  no land, still fails; the card then adds "· 3 of 4 cells with data",
+  `cellsUsedNote`). The card says where a feed reads: "cell -20.12, 25.17",
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
+  with the option; `describePlace`). The panel is its own lazy chunk inside
+  the Settings tab (`Lazy`, with the standard loading state); its
+  `#set-feeds` anchor sits on the wrapper, so the section menu and a link
+  find it while the chunk loads.
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
   days*, the default, or *rnl: from 1981, final days only*: one product end
   to end, never one spliced onto the other) and an optional **Start date**,
@@ -3501,14 +3525,14 @@ part of the Settings tab's chunk; WP-2.10,
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by
-  the message and focuses it; busy buttons are `aria-disabled` so they keep
+  the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
   focus; after **Remove**, focus goes to the section heading. Messages land
   in a live region that is always in the page. A failed action re-reads the
   list (it was usually changed elsewhere), and a failed refresh keeps the
   list shown.
 - When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
-  default in dev and CI), a **Sample data** badge says so, and the cells hint
-  names the sample grid's extent.
+  default in dev and CI), a **Sample data** badge says so, and the cells and box hints
+  name the sample grid's extent (the box hint with a sample box inside it).
 - Viewers see the list and the health, with no buttons. Tested by
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
@@ -5477,13 +5501,19 @@ exists, says so with a link to Runs & results.
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
     engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the run's self-checks, the
+    for this build* until CI injects them), the methodology statement it
+    cites (version and a 12-digit hash prefix, `docs/methodology/`), the
+    run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years and checks, and the **known
-    limitations** table (ID, limitation, where it stands) generated from
-    engine-audit.md. The same component is on screen, folded shut, in a
+    caveat, the flagged data-quality years and checks, the **errata** of
+    the run's engine version or its fit's (ID, what goes wrong, when it
+    applies, fixed in; "None recorded for this engine version in
+    docs/engine-errata.md" without one), and the **known limitations** table
+    (ID, limitation, where it stands) generated from engine-audit.md. The
+    sign-off dialog shows the same methodology line, and lists the errata
+    after the limitations in the box that must be scrolled to its end. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, date, the self-declared registration as "Pr.Sci.Nat.
@@ -5494,7 +5524,7 @@ exists, says so with a link to Runs & results.
     "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the ten
-    statements a signer of the current version confirms (`signoff-3`). When
+    statements a signer of the current version confirms (`signoff-4`). When
     a listed sign-off was made under an earlier version, a line says it
     confirmed that version's wording, recorded by its hash, not the
     statements below. An editor or owner gets **Sign off this

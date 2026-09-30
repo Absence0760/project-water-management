@@ -63,6 +63,15 @@ export interface FeedRow {
 	lastDataDate: string | null;
 	/** The last day the latest successful fetch asked for (last_meta.through): fetchWindow's progress through empty days. */
 	readThrough: string | null;
+	/**
+	 * How many of a skipNoData box's cells had data in the latest successful
+	 * fetch (last_meta.cellsUsed, carried forward by the ingest), or null. The
+	 * ingest refuses an answer with another count; saving a new box resets it
+	 * (data_feed_stamp clears last_meta when the config changes).
+	 */
+	cellsUsed?: number | null;
+	/** CHIRPS: the last day through which the series holds final values (last_meta.finalThrough, ingest.ts): fetchWindow doesn't re-read them. */
+	finalThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
 	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
@@ -188,11 +197,39 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 		`SELECT id, project_id AS "projectId", source, config, target_kind AS "targetKind", target_name AS "targetName", enabled,
 			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
 			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
+			CASE WHEN last_meta->>'cellsUsed' ~ '^[0-9]{1,4}$' THEN (last_meta->>'cellsUsed')::int END AS "cellsUsed",
+			CASE WHEN last_meta->>'finalThrough' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'finalThrough' END AS "finalThrough",
 			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]
 	);
 	return rows[0] ?? null;
+}
+
+/**
+ * The days of `window` the feed's answer will merge into, as the job's acting
+ * user (RLS), for fetch.ts heldThrough. The same choice as the ingest makes
+ * (ingest.ts): the staged record (feed_stage; none staged yet, nothing is
+ * held) while an owner confirmed a replacement and the live series still
+ * holds another version, else the live target series (a live series that
+ * stopped conflicting, emptied say, takes the merge again). The slice starts
+ * on the window's first day, or on the series' first day when that is later.
+ * Null when there is none.
+ */
+export async function heldSeries(db: Db, feed: FeedRow, window: FetchWindow): Promise<{ startDate: string; values: (number | null)[] } | null> {
+	if (window.start > window.end) return null;
+	const staged = feed.replaceFrom !== null && !seriesAccepts(feedProvenance(feed.source, feed.config), await targetSeries(db, feed.projectId, feed.targetKind, feed.targetName));
+	const slice = `to_char(greatest(start_date, $1::date), 'YYYY-MM-DD') AS "startDate",
+		"values"[greatest(1, ($1::date - start_date) + 1):($2::date - start_date) + 1] AS "values"`;
+	const { rows } =
+		staged
+			? await db.query<{ startDate: string; values: (number | null)[] | null }>(`SELECT ${slice} FROM feed_stage WHERE feed_id = $3`, [window.start, window.end, feed.id])
+			: await db.query<{ startDate: string; values: (number | null)[] | null }>(
+					`SELECT ${slice} FROM time_series WHERE project_id = $3 AND kind = $4 AND name = $5`,
+					[window.start, window.end, feed.projectId, feed.targetKind, feed.targetName]
+				);
+	const r = rows[0];
+	return r && r.values ? { startDate: r.startDate, values: r.values } : null;
 }
 
 /**

@@ -583,7 +583,7 @@
 										{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
 										<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
 									{:else if f.key === 'divertCapacityM3Day' && divertMonthsCell(node, label)}
-										<!-- Set by month (engine ≥ 1.31.0): the run ignores the one value, so the table shows the months, read-only, and points to the node's form. -->
+										<!-- Set by month (engine ≥ 1.32.0): the run ignores the one value, so the table shows the months, read-only, and points to the node's form. -->
 										{@const c = divertMonthsCell(node, label)!}
 										<td class="num by-month vol" data-testid="divert-by-month-{node.id}">
 											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>

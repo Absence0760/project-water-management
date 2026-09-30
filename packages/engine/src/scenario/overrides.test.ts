@@ -281,7 +281,7 @@ describe('applyScenario: each op', () => {
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 5000 }, ror)[0]).toMatch(/run of river has no dam/);
 	});
 
-	it('node.set sets a farm\'s hands-off flow and River to dam by month (engine 1.31.0, issue #204), and checks them', () => {
+	it('node.set sets a farm\'s hands-off flow and River to dam by month (engine 1.32.0, issue #204), and checks them', () => {
 		const winter = [0, 0, 0, 0, 0, 0, 5000, 5000, 5000, 5000, 5000, 5000];
 		const r = applyScenario(base(), [
 			{ op: 'node.set', nodeId: 'A', field: 'handsOffM3Day', value: new Array(12).fill(800) },

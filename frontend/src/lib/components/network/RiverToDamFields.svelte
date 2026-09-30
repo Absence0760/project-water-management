@@ -1,9 +1,9 @@
 <script lang="ts">
-	// River to dam by month (engine ≥ 1.31.0, issue #204, docs/model.md
+	// River to dam by month (engine ≥ 1.32.0, issue #204, docs/model.md
 	// §2.7h), under the River to dam field in the one-node form's Routing: a
 	// capacity for each water-year month in place of the one value, so 0 in
 	// the summer months fills the dam in winter only. Unticked is null: the one
-	// value all year, as on a model from before 1.31.0.
+	// value all year, as on a model from before 1.32.0.
 	import type { NetworkNode } from '@water-management/engine';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';

@@ -1046,7 +1046,7 @@ must build WP-2.15 Phase B.
 > (issue #54 item 2d) once the hydrologist confirms.
 >
 > **Hands-off flow and River to dam by month: engine, backend and UI built
-> 2026-09-29 (engine 1.31.0, issue #204), off by default; pending the
+> 2026-09-29 (engine 1.32.0, issue #204), off by default; pending the
 > hydrologist.**
 > Per farm: `handsOffM3Day` (12 values by water-year month, null = none),
 > `handsOffEwr` (also keep the EWR required at the farm, Z) and
@@ -1059,7 +1059,7 @@ must build WP-2.15 Phase B.
 > hands-off flow binds it too (a decision of issue #204). It cuts only the
 > diversion O, not the dam split's K and M (the on-channel dam). New
 > self-check `checkOperatingRules`, scenario `node.set` fields and the run
-> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 111
+> comparison lines ([model.md §2.7h](../model.md)). Stored in migration 112
 > (`node.hands_off_m3_day`, `hands_off_ewr`, `divert_monthly_m3_day`, farms
 > only, [data-model.md](../data-model.md)), saved and read by the model API
 > with the engine's save rules ([api.md](../api.md)), set in the one-node form
@@ -1537,7 +1537,7 @@ must build WP-2.15 Phase B.
   (`/projects/:id/report`): the disclaimer (draft then; agreed by the
   operator on 2026-09-28 after a pre-counsel review, version `2026-09-28`),
   `validationStatement` with the
-  limitations generated from engine-audit.md (`pnpm gen:limitations`, a
+  limitations generated from engine-audit.md (`pnpm gen:liability`, a
   doc-parsing test), and the immutable sign-off on a **run**
   (`036_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound
   to the statement's SHA-256, `signoff.created` in the audit log, the run

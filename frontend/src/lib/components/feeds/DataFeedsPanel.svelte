@@ -13,6 +13,7 @@
 	import { kindLabel } from '$lib/series/kinds';
 	import {
 		CHIRPS_PRODUCT_FIRST_DAY,
+		cellsUsedNote,
 		conflictMessage,
 		describePlace,
 		describeRunsAs,
@@ -51,7 +52,7 @@
 	let draft = $state<FeedDraft>(emptyDraft());
 	let formError = $state<string | null>(null);
 	/** The field formError is about (a client-side check), for aria-invalid and focus. */
-	let formField = $state<'cells' | 'station' | 'start' | null>(null);
+	let formField = $state<'cells' | 'bbox' | 'station' | 'start' | null>(null);
 	let heading = $state<HTMLElement>();
 	let attachButton = $state<HTMLButtonElement>();
 	/**
@@ -240,13 +241,14 @@
 	}
 </script>
 
-<section class="panel" id="set-feeds" aria-labelledby="{uid}-h">
+<!-- Its #set-feeds anchor is on the wrapper in SettingsTab.svelte, which lazy-loads this panel. -->
+<section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds</h2>
 		{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
 	</div>
 	<p class="hint muted">
-		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells over the
+		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells or a box over the
 		catchment, or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
 		no value for never erases what is there. A feed that stops shows as failing or stale here.
 	</p>
@@ -281,7 +283,7 @@
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
-						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}</p>
+						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}{#if cellsUsedNote(f)}{' '}· {cellsUsedNote(f)} with data{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
@@ -338,13 +340,6 @@
 						<label for="{uid}-name">Series name <span class="muted">(optional)</span></label>
 						<input id="{uid}-name" type="text" maxlength="100" bind:value={draft.targetName} />
 					</div>
-					<div class="field">
-						<label for="{uid}-sched">Schedule</label>
-						<select id="{uid}-sched" bind:value={draft.schedule}>
-							<option value="daily">Daily</option>
-							<option value="hourly">Hourly</option>
-						</select>
-					</div>
 				</div>
 				{#if draft.source === 'dws'}
 					<div class="field">
@@ -391,21 +386,65 @@
 						</span>
 					{/if}
 					<div class="field">
-						<label for="{uid}-cells">Grid cells</label>
-						<textarea
-							id="{uid}-cells"
-							rows="3"
-							required
-							spellcheck="false"
-							bind:value={draft.cells}
-							aria-invalid={formField === 'cells' || undefined}
-							aria-describedby="{uid}-cells-h{formField === 'cells' ? ` ${uid}-err` : ''}"
-						></textarea>
-						<span class="hint" id="{uid}-cells-h">
-							One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
-							holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
-						</span>
+						<label for="{uid}-area">Area</label>
+						<select
+							id="{uid}-area"
+							bind:value={draft.area}
+							onchange={() => {
+								// A problem with the other way of naming the area no longer applies.
+								if (formField === 'cells' || formField === 'bbox') formError = formField = null;
+							}}
+						>
+							<option value="cells">Grid cells</option>
+							<option value="bbox">Bounding box</option>
+						</select>
 					</div>
+					{#if draft.area === 'bbox'}
+						<div class="field">
+							<label for="{uid}-bbox">Bounding box</label>
+							<input
+								id="{uid}-bbox"
+								type="text"
+								required
+								autocomplete="off"
+								spellcheck="false"
+								inputmode="decimal"
+								bind:value={draft.bbox}
+								aria-invalid={formField === 'bbox' || undefined}
+								aria-describedby="{uid}-bbox-h{formField === 'bbox' ? ` ${uid}-err` : ''}"
+							/>
+							<span class="hint" id="{uid}-bbox-h">
+								“south, west, north, east” in degrees. The rainfall is the area-weighted mean of every 0.05° cell the box overlaps, a cell
+								partly inside counting for its share; at most 100 cells in 25 rows (about 0.5° × 0.5°). A sea cell in the box fails the fetch
+								unless the sea cells are left out.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40; try
+									−20.20, 25.10, −20.10, 25.20.{/if}
+							</span>
+						</div>
+						<div class="field">
+							<label class="check"><input type="checkbox" bind:checked={draft.skipNoData} aria-describedby="{uid}-skip-h" /> Leave out sea cells</label>
+							<span class="hint" id="{uid}-skip-h">
+								For a box on the coast: cells with no data (the sea) are left out and the rest averaged. A land cell that loses its data
+								still fails the fetch, and so does a box with no land.
+							</span>
+						</div>
+					{:else}
+						<div class="field">
+							<label for="{uid}-cells">Grid cells</label>
+							<textarea
+								id="{uid}-cells"
+								rows="3"
+								required
+								spellcheck="false"
+								bind:value={draft.cells}
+								aria-invalid={formField === 'cells' || undefined}
+								aria-describedby="{uid}-cells-h{formField === 'cells' ? ` ${uid}-err` : ''}"
+							></textarea>
+							<span class="hint" id="{uid}-cells-h">
+								One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
+								holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
+							</span>
+						</div>
+					{/if}
 				{/if}
 				{#if formError}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
 				{#if asking}
@@ -460,6 +499,18 @@
 </section>
 
 <style>
+	/* The box and its words on one line; a full-height target on a phone. */
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+	}
+	@media (pointer: coarse), (max-width: 640px) {
+		.check {
+			min-height: var(--tap);
+		}
+	}
 	.hint {
 		font-size: 0.8rem;
 		max-width: 75ch;

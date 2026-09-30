@@ -119,7 +119,7 @@ export function surfaceSplit(rule: PlanSupply['rule'], want: number, damAvail: n
 }
 
 /**
- * A farm's hands-off flow (engine ≥ 1.31.0, WP-3.8, issue #204, docs/model.md
+ * A farm's hands-off flow (engine ≥ 1.32.0, WP-3.8, issue #204, docs/model.md
  * §2.7h) as the simulation runs it: the flow left in the river at the farm
  * before the river pump or River to dam (the diversion O) takes anything.
  */
@@ -153,10 +153,10 @@ function monthlyRow(raw: unknown, who: string, what: string, warnings: string[])
 }
 
 /**
- * A farm's operating rules beyond the supply rule (engine ≥ 1.31.0, issue
+ * A farm's operating rules beyond the supply rule (engine ≥ 1.32.0, issue
  * #204): the hands-off flow and River to dam by month. {} when neither is
  * set (and on a node that isn't a farm, with a warning if one is), so a node
- * without them runs exactly as engines before 1.31.0 did. A hands-off flow of
+ * without them runs exactly as engines before 1.32.0 did. A hands-off flow of
  * 0 in every month without the EWR is none. Invalid months run as 0 with a
  * warning; the backend refuses them on save.
  */

@@ -43,7 +43,7 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		...DEVELOPMENT_DEFAULTS,
 		// The dam only, no river pump (WP-3.8).
 		...SUPPLY_DEFAULTS,
-		// No hands-off flow, River to dam all year at the one capacity (engine 1.31.0).
+		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
 		...OPERATING_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true

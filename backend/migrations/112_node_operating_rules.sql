@@ -1,5 +1,5 @@
--- 111_node_operating_rules — a farm's hands-off flow and River to dam by
--- month (engine 1.31.0, WP-3.8, issue #204, docs/model.md §2.7h,
+-- 112_node_operating_rules — a farm's hands-off flow and River to dam by
+-- month (engine 1.32.0, WP-3.8, issue #204, docs/model.md §2.7h,
 -- docs/data-model.md § Nodes).
 --
 -- hands_off_m3_day: a flow (m3/day) by water-year month (Oct-Sep, 12 values
@@ -25,7 +25,7 @@
 -- and node's RLS policies already cover them; no foreign key, so no index. No
 -- view, function or trigger lists node's columns (the model store,
 -- backend/src/model/store.ts, is the one place that does). Expand only: every
--- existing row reads NULL / false, which is what every engine before 1.31.0
+-- existing row reads NULL / false, which is what every engine before 1.32.0
 -- ran, so no stored result changes meaning.
 
 ALTER TABLE node
@@ -36,8 +36,8 @@ ALTER TABLE node
 		CHECK (divert_monthly_m3_day IS NULL OR (cardinality(divert_monthly_m3_day) = 12 AND array_position(divert_monthly_m3_day, NULL) IS NULL AND 0 <= ALL (divert_monthly_m3_day)));
 
 COMMENT ON COLUMN node.hands_off_m3_day IS
-	'Hands-off flow (m3/day) by water-year month (Oct-Sep, 12 values >= 0) left in the river before the river pump and River to dam; NULL = none. Farms only. Engine >= 1.31.0 (issue #204).';
+	'Hands-off flow (m3/day) by water-year month (Oct-Sep, 12 values >= 0) left in the river before the river pump and River to dam; NULL = none. Farms only. Engine >= 1.32.0 (issue #204).';
 COMMENT ON COLUMN node.hands_off_ewr IS
-	'Also leave the EWR required at the farm in the river before the river pump and River to dam. Default false. Farms only. Engine >= 1.31.0.';
+	'Also leave the EWR required at the farm in the river before the river pump and River to dam. Default false. Farms only. Engine >= 1.32.0.';
 COMMENT ON COLUMN node.divert_monthly_m3_day IS
-	'River to dam capacity (m3/day) by water-year month (12 values >= 0); replaces divert_capacity_m3_day when set; NULL = that one value all year. Farms only. Engine >= 1.31.0.';
+	'River to dam capacity (m3/day) by water-year month (12 values >= 0); replaces divert_capacity_m3_day when set; NULL = that one value all year. Farms only. Engine >= 1.32.0.';

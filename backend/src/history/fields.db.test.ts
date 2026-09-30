@@ -100,7 +100,7 @@ describe('GET /projects/:id/history/fields', () => {
 		expect((await fields(editor, pid)).body.fields[key]).toMatchObject({ count: 2, change: '5 ha → 0 ha' });
 	});
 
-	it('keys the supply rule, the river pump and the operating rules (engine 1.31.0), the monthly rows included', async () => {
+	it('keys the supply rule, the river pump and the operating rules (engine 1.32.0), the monthly rows included', async () => {
 		const pid = (await editor.call('POST', '/projects', { name: 'Operating rules' })).body.project.id;
 		const w = node('Weir', null);
 		const f4 = node('Vlei', w.id, { damCapacityM3: 50_000, divertCapacityM3Day: 400 });
