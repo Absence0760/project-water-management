@@ -11,7 +11,7 @@
 // this file's jobs.
 process.env.TZ = 'Pacific/Kiritimati';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
@@ -88,6 +88,7 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		expect(wait).toBeLessThanOrEqual(15 * MIN);
 		// The project says when, for the header.
 		expect((await u.call('GET', `/projects/${pid}`)).body.project.rerunQueuedFor).toBe(on.body.rerunQueuedFor);
+		await retirePendingJobs(pid);
 	});
 
 	it('an idempotent re-send queues nothing (no day changed)', async () => {
@@ -167,6 +168,7 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		const wait = pushed!.run_after.getTime() - Date.now();
 		expect(wait).toBeGreaterThan(29 * MIN);
 		expect(wait).toBeLessThanOrEqual(30 * MIN);
+		await retirePendingJobs(pid);
 	});
 
 	it('leaves a pending manual re-run as it is (it reads the new data too), and queues a new one behind a running re-run', async () => {
@@ -186,7 +188,7 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		const after = await rerunJobs(pid);
 		expect(after.map((j) => j.status)).toEqual(['running', 'queued']);
 		expect(after[1]!.payload).toMatchObject({ trigger: 'auto' });
-		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		await retirePendingJobs(pid);
 	});
 
 	it('a client can’t queue an auto re-run itself', async () => {

@@ -340,13 +340,6 @@
 						<label for="{uid}-name">Series name <span class="muted">(optional)</span></label>
 						<input id="{uid}-name" type="text" maxlength="100" bind:value={draft.targetName} />
 					</div>
-					<div class="field">
-						<label for="{uid}-sched">Schedule</label>
-						<select id="{uid}-sched" bind:value={draft.schedule}>
-							<option value="daily">Daily</option>
-							<option value="hourly">Hourly</option>
-						</select>
-					</div>
 				</div>
 				{#if draft.source === 'dws'}
 					<div class="field">

@@ -1392,6 +1392,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Scheduling**: the tick claims due feeds with `app_claim_due_feeds`
 >   (stamping `last_scheduled_at`) instead of a per-day dedupe key, so a
 >   running fetch isn't queued twice; failing feeds retry on a backoff.
+>   Daily only since issue #69 (`111_feed_daily_only.sql`): no source
+>   publishes more often, so the design's `hourly` below was dropped, and
+>   "Run now" is capped per feed (6 presses, then one per 10 minutes).
 > - **API**: `PATCH` merges the fields sent; `run-now` as designed.
 > - **Merging** adds `keepOnNull` to the shared merge: a day the source has no
 >   value for never erases an existing one.

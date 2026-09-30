@@ -310,6 +310,9 @@ describe('errorText', () => {
 	it('shows the server’s message with a capital, and never a raw script error', () => {
 		expect(errorText(new ApiError(409, 'another feed already writes that series'))).toBe('Another feed already writes that series');
 		expect(errorText(new ApiError(0, 'Could not reach the server'))).toBe('Could not reach the server');
+		// "Run now" pressed too often (429): the server's wait, as it wrote it.
+		const busy = '“Run now” was used too often for this feed (6 fetches, then one every 10 minutes): try again in 7 minutes, or let it run on its daily schedule';
+		expect(errorText(new ApiError(429, busy, { retryAfter: 400 }))).toBe(busy);
 		expect(errorText(new TypeError("Cannot read properties of undefined (reading 'feeds')"))).toBe('Something went wrong. Try again, or reload the page.');
 		expect(errorText('boom')).toBe('Something went wrong. Try again, or reload the page.');
 	});

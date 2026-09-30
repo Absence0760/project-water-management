@@ -5,9 +5,9 @@
 // withdraw it, and what was published never changes. The outlooks are
 // planted complete (helpers.ts plantCompleteOutlook): the job is
 // outlooks.db.test.ts's.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, plantCompleteOutlook, signUp } from '../__tests__/helpers.js';
-import { buildLadder, type LadderCtx } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, type LadderCtx } from '../__tests__/routeSamples.js';
 import { withUser } from '../db/tx.js';
 
 let c: LadderCtx;
@@ -16,6 +16,7 @@ beforeAll(async () => {
 	c = await buildLadder('Pub');
 	at = `/projects/${c.projectId}`;
 }, 120_000);
+afterAll(() => clearLadderJobs(c));
 
 const publish = (outlookId: string, levelId = '0', as = c.owner) => as.call('POST', `${at}/outlooks/${outlookId}/publish`, { levelId });
 const farmPage = (nodeId = c.farmId, as = c.farmer) => as.call('GET', `${at}/farm/${nodeId}`);
