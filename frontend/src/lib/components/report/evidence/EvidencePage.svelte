@@ -6,12 +6,19 @@
 	// (GET …/runs/:runId/evidence-report); this page shows the checks (board 1),
 	// a refusal when the run isn't evidence (board 2), or the report itself in
 	// its own chunk. data-report-ready follows the same contract as the
-	// catchment report, so e2e and a server render wait on it.
+	// catchment report, so e2e and a server render wait on it. Its evidence
+	// packs (WP-3.14) are listed under the checks, and an editor creates one
+	// from a report that may be issued (a new version of the application's
+	// issued pack, when there is one).
 	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { REPORT_FOOTER, type EvidenceReport } from '@water-management/engine';
-	import { api, ApiError, type Project, type SignoffList } from '$lib/api';
+	import { api, ApiError, hasRole, type Pack, type Project, type SignoffList } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import PackBadge from '$lib/components/packs/PackBadge.svelte';
+	import { issuedOf, packHref, packsOfRun } from '$lib/components/packs/pack';
+	import { fmtDate } from '$lib/format/number';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import { boardChecks, DRAFT_STAMP, refusedChecks } from './sections';
@@ -23,6 +30,10 @@
 	let project = $state.raw<Project | null>(null);
 	let report = $state.raw<EvidenceReport | null>(null);
 	let signoffs = $state.raw<SignoffList | null>(null);
+	/** This project's evidence packs; null when they couldn't be read (the report still shows). */
+	let packs = $state.raw<Pack[] | null>(null);
+	let creating = $state(false);
+	let createError = $state<string | null>(null);
 	let status = $state<'loading' | 'loaded' | 'no-run' | 'not-found' | 'forbidden' | 'error' | 'chunk-failed'>('loading');
 	let error = $state('');
 
@@ -34,10 +45,16 @@
 			return;
 		}
 		try {
-			const [p, r, so] = await Promise.all([api.projects.get(id), api.evidence.report(id, rid), api.signoffs.list(id, rid)]);
+			const [p, r, so, pk] = await Promise.all([
+				api.projects.get(id),
+				api.evidence.report(id, rid),
+				api.signoffs.list(id, rid),
+				api.packs.list(id).catch(() => null)
+			]);
 			project = p;
 			report = r;
 			signoffs = so;
+			packs = pk;
 			if (!r.refused) {
 				try {
 					await loadOnce(loadReport);
@@ -75,6 +92,26 @@
 		report?.identity.application ? `${base}/projects/${projectId}?tab=scenarios&scenario=${encodeURIComponent(report.identity.application.scenarioId)}` : `${base}/projects/${projectId}?tab=runs${runId ? `&run=${encodeURIComponent(runId)}` : ''}`
 	);
 	const failed = $derived(report ? refusedChecks(report) : []);
+
+	// --- evidence packs of this report ---
+	const scenarioId = $derived(report?.identity.application?.scenarioId ?? null);
+	const runPacks = $derived(packs && runId ? packsOfRun(packs, runId) : []);
+	/** The issued pack of this application (or of the baseline evidence) a new pack becomes a new version of. */
+	const current = $derived(packs ? issuedOf(packs, scenarioId) : null);
+	const canCreate = $derived(hasRole(project?.role, 'editor') && !!report && !report.refused && report.issuable && packs !== null);
+	async function createPack() {
+		if (!runId || creating) return;
+		creating = true;
+		createError = null;
+		try {
+			const pack = await api.packs.create(projectId, runId, current?.id);
+			await goto(packHref(base, projectId, pack.id));
+		} catch (e) {
+			createError = e instanceof Error ? e.message : String(e);
+		} finally {
+			creating = false;
+		}
+	}
 </script>
 
 <svelte:head><title>{project ? `Evidence report · ${project.name} · ` : ''}Water Management</title></svelte:head>
@@ -101,7 +138,7 @@
 			<button type="button" class="btn btn-primary" disabled={!ready || !!report?.refused} onclick={() => window.print()}>Download draft PDF</button>
 			<a class="btn" href="{base}/projects/{projectId}/report?run={runId}">Catchment report</a>
 			<p class="muted small" role="status">
-				{#if !ready}Preparing the evidence report…{:else}A draft: every page says “{DRAFT_STAMP}”. Issuing, with a hash and a verify link, is an evidence pack (WP-3.14).{/if}
+				{#if !ready}Preparing the evidence report…{:else}A draft: every page says “{DRAFT_STAMP}”. To issue it, with a hash, a short code and a public verify link, make it an evidence pack (below the checks).{/if}
 			</p>
 		</div>
 	{/if}
@@ -137,9 +174,43 @@
 					<ul class="small questions">{#each report.questions as q, i (i)}<li>{q}</li>{/each}</ul>
 				{/if}
 			</details>
+			<section class="board no-print" aria-labelledby="ev-packs-h" data-testid="evidence-packs">
+				<!-- Not a heading: the report below starts at its h1. -->
+				<p id="ev-packs-h" class="board-h">Evidence packs of this report</p>
+				<p class="small muted">
+					A pack freezes this report as it is now, with its SHA-256 and a short code; a registered professional signs it and an editor issues it. Its
+					public verify page then says whether it still stands.
+				</p>
+				{#if packs === null}
+					<p class="small muted">The packs couldn’t be read.</p>
+				{:else if runPacks.length}
+					<ul class="packs">
+						{#each runPacks as p (p.id)}
+							<li>
+								<PackBadge status={p.status} version={p.version} />
+								<a href={packHref(base, projectId, p.id)}>Version {p.version}, code {p.shortCode}</a>
+								<span class="muted small">{p.issuedAt ? `issued ${fmtDate(p.issuedAt)}` : `drafted ${fmtDate(p.createdAt)}`}</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="small">None yet.</p>
+				{/if}
+				{#if canCreate}
+					<p>
+						<button type="button" class="btn btn-primary" disabled={creating} onclick={createPack}
+							>{creating ? 'Creating…' : current ? `Create version ${current.version + 1} of the evidence pack` : 'Create evidence pack'}</button
+						>
+						{#if current}<span class="small muted">It replaces version {current.version} once it is signed and issued.</span>{/if}
+					</p>
+				{:else if hasRole(project?.role, 'editor') && !report.issuable}
+					<p class="small muted">A pack can be made once every check that stops issue passes.</p>
+				{/if}
+				{#if createError}<p class="alert alert-error" role="alert">{createError}</p>{/if}
+			</section>
 			<Lazy load={loadReport}>
 				{#snippet children(EvidenceReportView)}
-					<EvidenceReportView report={report!} {projectId} stamp={DRAFT_STAMP} {signoffs} signoffRunId={runId} onsignoffchange={signoffsChanged} />
+					<EvidenceReportView report={report!} {projectId} stamp={DRAFT_STAMP} {signoffs} signoffTarget={runId ? { kind: 'run', id: runId } : null} onsignoffchange={signoffsChanged} />
 				{/snippet}
 			</Lazy>
 		{/if}
@@ -174,6 +245,23 @@
 	}
 	summary {
 		cursor: pointer;
+	}
+	.board-h {
+		font-weight: 700;
+		margin: 0 0 0.25rem;
+	}
+	.packs {
+		list-style: none;
+		padding: 0;
+		margin: 0.5rem 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.packs li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.6rem;
 	}
 	.checks {
 		list-style: none;

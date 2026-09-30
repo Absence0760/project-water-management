@@ -8,9 +8,10 @@
 	import type { Signoff } from '$lib/api';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
+	import type { VerifyRef } from '$lib/components/packs/pack';
 	import { changeText, signed, valueText, worseText } from './format';
 
-	let { report, signoffs, verify }: { report: EvidenceReport; signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[]; verify: string | null } = $props();
+	let { report, signoffs, verify }: { report: EvidenceReport; signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[]; verify: VerifyRef | null } = $props();
 
 	const id = $derived(report.identity);
 	const app = $derived(report.mode === 'application');
@@ -67,7 +68,7 @@
 	</div>
 	<div>
 		<dt>Verify</dt>
-		<dd>{#if verify}<span class="mono">{verify}</span>{:else}<span class="na">Given when a pack is issued</span>{/if}</dd>
+		<dd>{#if verify}<span class="mono">{verify.code}</span><span class="sub">{verify.url}</span>{:else}<span class="na">Given when a pack is issued</span>{/if}</dd>
 	</div>
 </dl>
 

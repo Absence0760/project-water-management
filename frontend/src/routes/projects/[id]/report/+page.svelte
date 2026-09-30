@@ -440,7 +440,7 @@
 					{:else if s.id === 'validation'}
 						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={run.settings?.fitRecord?.engineVersion ?? null} />
 					{:else if s.id === 'signoff' && signoffs}
-						<SignoffSection {projectId} runId={run.id} list={signoffs} onchange={signoffsChanged} />
+						<SignoffSection {projectId} target={{ kind: 'run', id: run.id }} list={signoffs} onchange={signoffsChanged} />
 					{:else if s.id === 'disclaimer'}
 						<Disclaimer />
 					{/if}
