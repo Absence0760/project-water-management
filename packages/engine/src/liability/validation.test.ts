@@ -23,6 +23,7 @@ const bare = (over: Partial<RunSummary> = {}): RunSummary =>
 
 const ERRATUM: Erratum = {
 	id: 'ER-99',
+	keyedOn: 'run',
 	firstAffected: '0.30.0',
 	fixedIn: '0.32.0',
 	severity: 'High',

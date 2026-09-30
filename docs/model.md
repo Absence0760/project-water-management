@@ -5290,11 +5290,12 @@ review, Step 2 D10; a later edit may mark it `draft` again, and every surface
 then shows `DISCLAIMER_DRAFT_NOTE`), the forecast-rain line a forecast run's
 report prints (`FORECAST_RAIN_NOTE(from, source)`, naming CHIRPS-GEFS and its DOI
 only for source `chirps_gefs`, a plain line otherwise) and the sign-off
-statement (`signoffStatement(run)`, `signoff-3`): the ten confirmations (the
+statement (`signoffStatement(run)`, `signoff-4`): the ten confirmations (the
 signer's identity and registration, with its category and field, competence, conflicts of interest, the
 input data, then WP-3.13's calibration, EWR tables, works, assurance levels,
-plus plausibility and the limitations), the
-limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
+plus plausibility and the limitations, errata and methodology), the
+limitations, the errata of the run's engine (or its fit's), the methodology
+statement's version and hash, and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
 The registration choices themselves, and which categories may sign or only
 warn, are `liability/registration.ts` (issue #47).

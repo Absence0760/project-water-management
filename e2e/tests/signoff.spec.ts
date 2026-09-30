@@ -29,7 +29,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expect(validation.getByText('Methodology statement', { exact: true })).toBeVisible();
 	await expect(validation.getByText(/^methodology-\d+/)).toBeVisible();
 	await expect(validation.getByRole('heading', { name: /^Errata of engine \d+\.\d+\.\d+$/ })).toBeVisible();
-	await expect(validation.getByText('No known bugs in this engine version (docs/engine-errata.md).')).toBeVisible();
+	await expect(validation.getByText('None recorded for this engine version in docs/engine-errata.md.')).toBeVisible();
 	const disclaimer = page.locator('#rep-disclaimer');
 	await expect(disclaimer).toContainText('It is not an authorisation to use water.');
 	await expect(disclaimer).toContainText('Disclaimer version 2026-09-28.2.');
@@ -80,7 +80,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expect(dialog.getByText('Scroll to the end of the known limitations.')).toBeVisible();
 	await expect(dialog.getByText(/^Methods: methodology statement methodology-\d+/)).toBeVisible();
 	const list = dialog.getByRole('region', { name: /^Known limitations \(\d+\) and errata of engine/ });
-	await expect(list.getByText('None known for this engine version.')).toBeVisible();
+	await expect(list.getByText('None recorded for this engine version in docs/engine-errata.md.')).toBeVisible();
 	await list.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
 	await expect(dialog.getByText('You have reached the end of the list.')).toBeVisible();
 	// Unticking one statement blocks it again.

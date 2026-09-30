@@ -101,6 +101,8 @@ export interface ValidationInput {
 	summary: RunSummary;
 	engineVersion: string;
 	legacy: boolean;
+	/** The engine of the automatic fit the run's parameters came from (settings.fitRecord.engineVersion); null for entered parameters. */
+	fitEngineVersion?: string | null;
 }
 
 /** The validation statement of one saved run. */
@@ -142,7 +144,7 @@ export function validationStatement(
 		dataQuality: [...checks.map((x) => x.text), ...(s.dataQuality?.areaMismatches?.length ? [`${s.dataQuality.areaMismatches.length} farm area(s) differ from high + low MAP area by more than 1 %.`] : [])],
 		selfChecks: s.verification ? { passed: s.verification.passed, failed: s.verification.checks.filter((k) => !k.passed).map((k) => k.label) } : null,
 		limitations,
-		errata: errataFor(run.engineVersion, errata),
+		errata: errataFor(run.engineVersion, errata, run.fitEngineVersion ?? null),
 		methodology: { version: METHODOLOGY.version, sha256: METHODOLOGY.sha256 }
 	};
 }

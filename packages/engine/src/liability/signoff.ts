@@ -56,6 +56,8 @@ export interface SignoffRun {
 	engineVersion: string;
 	/** The run was made by a scenario (model_run.scenario_id). */
 	scenario: boolean;
+	/** The engine of the automatic fit the run's parameters came from (settings.fitRecord.engineVersion); null for entered parameters. */
+	fitEngineVersion?: string | null;
 }
 
 /** The statement a signer of this run is shown and confirms. */
@@ -102,7 +104,7 @@ export function signoffStatement(
 			}
 		],
 		limitations,
-		errata: errataFor(run.engineVersion, errata),
+		errata: errataFor(run.engineVersion, errata, run.fitEngineVersion ?? null),
 		methodology: { version: METHODOLOGY.version, sha256: METHODOLOGY.sha256 },
 		notes: [
 			'The registration details are the signer’s own declaration. This app does not check them. You can check them on the public register, whose address the report prints beside each signature: ECSA “Find a Registered Person”, or the SACNASP database of registered scientists.',

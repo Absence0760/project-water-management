@@ -175,13 +175,13 @@
 			<ul>
 				{#each statement.limitations as l (l.id)}<li><strong>{l.id}</strong> {l.title}. <span class="muted">{l.status}.</span></li>{/each}
 			</ul>
-			<p class="small"><strong>Errata</strong> (known bugs of engine {statement.engineVersion}, docs/engine-errata.md):</p>
+			<p class="small"><strong>Errata</strong> (known bugs recorded for engine {statement.engineVersion} or the engine of its fit, docs/engine-errata.md):</p>
 			{#if statement.errata.length}
 				<ul>
 					{#each statement.errata as e (e.id)}<li><strong>{e.id}</strong> {e.summary}. <span class="muted">Applies when: {e.appliesWhen}. {e.fixedIn ? `Fixed in engine ${e.fixedIn}.` : 'Not fixed yet.'}</span></li>{/each}
 				</ul>
 			{:else}
-				<p class="small muted">None known for this engine version.</p>
+				<p class="small muted">None recorded for this engine version in docs/engine-errata.md.</p>
 			{/if}
 		</div>
 		<p class="muted small" aria-live="polite">{readAll ? 'You have reached the end of the list.' : 'Scroll to the end of the list to continue.'}</p>

@@ -7,7 +7,7 @@ export const METHODOLOGY_VERSIONS: readonly MethodologyVersion[] = [
 	{
 		"version": "methodology-1",
 		"file": "v1.md",
-		"sha256": "e92bd23d5f99fdedb86142c38bff2b446189c03195c765df187d6f914fc62d1e"
+		"sha256": "8f26d0e2f723b302a0a499f6072db8c3c6ad35f4d12dc90f1501a2357cfcad88"
 	}
 ];
 

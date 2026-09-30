@@ -10,6 +10,12 @@ import { plainMarkdown } from './limitations';
 export interface Erratum {
 	/** ER-1, ER-2 …: never reused. */
 	id: string;
+	/**
+	 * Whose engine version decides it: the run's (`run`), or (`fit`) that of
+	 * the automatic calibration the run's parameters came from, whichever
+	 * engine runs them.
+	 */
+	keyedOn: 'run' | 'fit';
 	/** The first engine version with the bug. */
 	firstAffected: string;
 	/** The version that fixed it; null while it is open. */
@@ -37,12 +43,18 @@ export function compareEngineVersions(a: string, b: string): number {
 	return 0;
 }
 
-/** The errata that affect runs made by `engineVersion`: first affected ≤ it, and not yet fixed at it. */
-export function errataFor(engineVersion: string, errata: readonly Erratum[]): Erratum[] {
-	if (!SEMVER.test(engineVersion)) return [];
-	return errata.filter(
-		(e) => compareEngineVersions(e.firstAffected, engineVersion) <= 0 && (e.fixedIn === null || compareEngineVersions(engineVersion, e.fixedIn) < 0)
-	);
+const affects = (e: Erratum, v: string | null | undefined): boolean =>
+	!!v && SEMVER.test(v) && compareEngineVersions(e.firstAffected, v) <= 0 && (e.fixedIn === null || compareEngineVersions(v, e.fixedIn) < 0);
+
+/**
+ * The errata that affect a run: a `run` erratum when the run's
+ * `engineVersion` is in its range (first affected ≤ it < fixed in), a `fit`
+ * erratum when the engine of the fit its parameters came from
+ * (`fitEngineVersion`, settings.fitRecord.engineVersion) is; a run with
+ * entered parameters has no fit.
+ */
+export function errataFor(engineVersion: string, errata: readonly Erratum[], fitEngineVersion: string | null = null): Erratum[] {
+	return errata.filter((e) => affects(e, e.keyedOn === 'fit' ? fitEngineVersion : engineVersion));
 }
 
 function cells(row: string): string[] {
@@ -67,15 +79,16 @@ export function parseErrata(markdown: string): Erratum[] {
 	}
 	if (rows.length < 2) throw new Error('engine-errata.md has no errata table');
 	const header = rows[0]!.map((c) => c.toLowerCase());
-	const want = ['id', 'first affected', 'fixed in', 'severity', 'applies when', 'what goes wrong', 'source'];
+	const want = ['id', 'keyed on', 'first affected', 'fixed in', 'severity', 'applies when', 'what goes wrong', 'source'];
 	if (header.join('|') !== want.join('|')) throw new Error(`engine-errata.md's table columns changed: ${header.join(', ')}`);
 	const seen = new Set<string>();
 	return rows.slice(2).map((r) => {
 		if (r.length !== want.length) throw new Error(`engine-errata.md: a row has ${r.length} cells, not ${want.length}: ${r.join(' | ')}`);
-		const [id, first, fixed, severity, appliesWhen, summary, source] = r.map(plainMarkdown) as [string, string, string, string, string, string, string];
+		const [id, keyed, first, fixed, severity, appliesWhen, summary, source] = r.map(plainMarkdown) as [string, string, string, string, string, string, string, string];
 		if (!/^ER-\d+$/.test(id)) throw new Error(`engine-errata.md: bad id "${id}"`);
 		if (seen.has(id)) throw new Error(`engine-errata.md: ${id} is listed twice`);
 		seen.add(id);
+		if (keyed !== 'run' && keyed !== 'fit') throw new Error(`engine-errata.md ${id}: keyed on "${keyed}", not run or fit`);
 		if (!SEMVER.test(first)) throw new Error(`engine-errata.md ${id}: first affected "${first}" is not a version`);
 		const fixedIn = fixed.toLowerCase() === 'open' ? null : fixed;
 		if (fixedIn !== null) {
@@ -85,6 +98,6 @@ export function parseErrata(markdown: string): Erratum[] {
 		for (const [name, v] of [['severity', severity], ['applies when', appliesWhen], ['what goes wrong', summary], ['source', source]] as const) {
 			if (!v) throw new Error(`engine-errata.md ${id}: "${name}" is empty`);
 		}
-		return { id, firstAffected: first, fixedIn, severity, appliesWhen, summary, source };
+		return { id, keyedOn: keyed, firstAffected: first, fixedIn, severity, appliesWhen, summary, source };
 	});
 }

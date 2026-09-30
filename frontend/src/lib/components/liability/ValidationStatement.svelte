@@ -13,17 +13,20 @@
 		summary,
 		engineVersion,
 		legacy,
+		fitEngineVersion = null,
 		headingLevel = 3
 	}: {
 		summary: RunSummary;
 		engineVersion: string;
 		legacy: boolean;
+		/** The engine of the automatic fit the run's parameters came from (settings.fitRecord); null for entered parameters. */
+		fitEngineVersion?: string | null;
 		/** The level of its own headings (Calibration, Data quality, Known limitations): one below the heading it sits under. */
 		headingLevel?: 3 | 4;
 	} = $props();
 	const h = $derived(`h${headingLevel}`);
 
-	const v = $derived(validationStatement({ summary, engineVersion, legacy }));
+	const v = $derived(validationStatement({ summary, engineVersion, legacy, fitEngineVersion }));
 	const uid = `vs-${Math.random().toString(36).slice(2, 9)}`;
 	const metric = (x: number | null, id: string) => (x == null ? '–' : id === 'pbias' ? `${fmtNum(x, 1)} %` : fmtNum(x, 2));
 </script>
@@ -102,7 +105,10 @@
 
 	<svelte:element this={h} id="{uid}-err">Errata of engine {v.engineVersion}</svelte:element>
 	{#if v.errata.length}
-		<p class="muted small">Known bugs of this engine version (docs/engine-errata.md): each changes results only under the conditions given.</p>
+		<p class="muted small">
+			Known bugs recorded for this engine version, or for the engine of the fit its parameters came from (docs/engine-errata.md): each changes
+			results only under the conditions given.
+		</p>
 		<div class="table-wrap">
 			<table class="data compact" aria-labelledby="{uid}-err">
 				<thead><tr><th scope="col">Erratum</th><th scope="col">What goes wrong</th><th scope="col">Applies when</th><th scope="col">Fixed in</th></tr></thead>
@@ -112,7 +118,7 @@
 			</table>
 		</div>
 	{:else}
-		<p>No known bugs in this engine version (docs/engine-errata.md).</p>
+		<p>None recorded for this engine version in docs/engine-errata.md.</p>
 	{/if}
 
 	<svelte:element this={h} id="{uid}-lim">Known limitations</svelte:element>

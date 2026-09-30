@@ -5,6 +5,7 @@ import type { Erratum } from './errata';
 export const ENGINE_ERRATA: readonly Erratum[] = [
 	{
 		"id": "ER-1",
+		"keyedOn": "run",
 		"firstAffected": "0.0.0",
 		"fixedIn": "0.7.0",
 		"severity": "High",
@@ -14,6 +15,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	},
 	{
 		"id": "ER-2",
+		"keyedOn": "run",
 		"firstAffected": "0.0.0",
 		"fixedIn": "0.15.0",
 		"severity": "High",
@@ -23,6 +25,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	},
 	{
 		"id": "ER-3",
+		"keyedOn": "run",
 		"firstAffected": "0.15.0",
 		"fixedIn": "0.20.0",
 		"severity": "Medium",
@@ -32,6 +35,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	},
 	{
 		"id": "ER-4",
+		"keyedOn": "run",
 		"firstAffected": "0.0.0",
 		"fixedIn": "0.27.1",
 		"severity": "High",
@@ -41,6 +45,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	},
 	{
 		"id": "ER-5",
+		"keyedOn": "run",
 		"firstAffected": "0.0.0",
 		"fixedIn": "0.45.0",
 		"severity": "High",
@@ -50,11 +55,42 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	},
 	{
 		"id": "ER-6",
+		"keyedOn": "fit",
 		"firstAffected": "0.5.0",
 		"fixedIn": "1.22.0",
 		"severity": "Medium",
-		"appliesWhen": "An automatic calibration on a record with suspect days or flood days beyond the gauged range",
-		"summary": "Those days weighed in the fit's objective like any other, so a fit could chase a stuck logger or a rating-curve extrapolation",
+		"appliesWhen": "The run's parameters come from an automatic fit on a record with suspect days or flood days beyond the gauged range",
+		"summary": "Those days weighed in the fit's objective like any other, so the fit could chase a stuck logger or a rating-curve extrapolation",
 		"source": "engine-audit.md C2; model.md §2.10h"
+	},
+	{
+		"id": "ER-7",
+		"keyedOn": "run",
+		"firstAffected": "0.16.0",
+		"fixedIn": "0.19.0",
+		"severity": "Medium",
+		"appliesWhen": "A transfer into a dam that loses water to evaporation or seepage",
+		"summary": "The destination dam was topped up short by that day's losses, so it could sit under its dead storage and supply nothing while the source had water to send",
+		"source": "engine-audit.md N4; model.md §2.6"
+	},
+	{
+		"id": "ER-8",
+		"keyedOn": "run",
+		"firstAffected": "0.16.0",
+		"fixedIn": "0.21.1",
+		"severity": "Low",
+		"appliesWhen": "A very shallow dam with an area exponent above 1",
+		"summary": "A day's evaporation could exceed 1/b of the dam, so a fuller dam ended the day with less water than a lower one and more demand could raise a farm's supply fraction",
+		"source": "engine-audit.md N2; model.md §2.7a"
+	},
+	{
+		"id": "ER-9",
+		"keyedOn": "run",
+		"firstAffected": "0.35.0",
+		"fixedIn": "1.29.0",
+		"severity": "Low",
+		"appliesWhen": "A transfer into a full dam that has a fixed release",
+		"summary": "The dam's room ignored the release, so it sat one release below full instead of taking back what it released",
+		"source": "engine-audit.md N4; model.md §2.6"
 	}
 ];

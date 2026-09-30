@@ -13,8 +13,9 @@ const DOC = fileURLToPath(new URL('../../../../docs/engine-errata.md', import.me
 const GENERATED = fileURLToPath(new URL('./errata.generated.ts', import.meta.url));
 const doc = readFileSync(DOC, 'utf8');
 
-const e = (id: string, firstAffected: string, fixedIn: string | null): Erratum => ({
+const e = (id: string, firstAffected: string, fixedIn: string | null, keyedOn: Erratum['keyedOn'] = 'run'): Erratum => ({
 	id,
+	keyedOn,
 	firstAffected,
 	fixedIn,
 	severity: 'High',
@@ -44,6 +45,7 @@ describe('ENGINE_ERRATA (generated from docs/engine-errata.md)', () => {
 		expect(() => parseErrata(doc.replace(row, row.replace('| 0.20.0 |', '| 0.10.0 |')))).toThrow(/ER-3: fixed in 0.10.0, not after 0.15.0/);
 		expect(() => parseErrata(doc.replace(row, row.replace('| ER-3 |', '| ER-2 |')))).toThrow(/ER-2 is listed twice/);
 		expect(() => parseErrata(doc.replace(row, row.replace('| Medium |', '| |')))).toThrow(/"severity" is empty/);
+		expect(() => parseErrata(doc.replace(row, row.replace('| ER-3 | run |', '| ER-3 | model |')))).toThrow(/ER-3: keyed on "model"/);
 		expect(() => parseErrata(doc.replace('## Errata', '## Bugs'))).toThrow(/Errata/);
 		// Control: "open" is a fix version.
 		expect(parseErrata(doc.replace(row, row.replace('| 0.20.0 |', '| open |'))).find((x) => x.id === 'ER-3')?.fixedIn).toBeNull();
@@ -73,6 +75,16 @@ describe('errataFor', () => {
 		expect(compareEngineVersions('0.9.0', '0.10.0')).toBeLessThan(0);
 		expect(compareEngineVersions('1.2.3', '1.2.3')).toBe(0);
 		expect(() => compareEngineVersions('1.2', '1.2.0')).toThrow(/not an engine version/);
+	});
+
+	it('keys a fit erratum on the fit\'s engine, not the run\'s', () => {
+		const fit = [e('ER-9', '0.5.0', '1.22.0', 'fit')];
+		// A current run on parameters fitted by 1.21: affected. Control: the same run on a 1.22 fit, or entered parameters.
+		expect(errataFor('1.30.0', fit, '1.21.0').map((x) => x.id)).toEqual(['ER-9']);
+		expect(errataFor('1.30.0', fit, '1.22.0')).toEqual([]);
+		expect(errataFor('1.30.0', fit, null)).toEqual([]);
+		// An old run on a later fit: not affected, though its own engine is in the range.
+		expect(errataFor('1.10.0', fit, '1.25.0')).toEqual([]);
 	});
 
 	it('gives nothing for a version that is not x.y.z (a legacy or hand-made run)', () => {
