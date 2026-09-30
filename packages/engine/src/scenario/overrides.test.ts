@@ -850,6 +850,76 @@ describe('a dam raise', () => {
 	});
 });
 
+describe('demand.scale by part (engine ≥ 1.43.0, issue #123: DWS % restrictions per category)', () => {
+	/** Farm A (crops) with a village of 1 000 people at 230 l a day: 230 m³/day, a basic-needs floor of 25 m³/day. */
+	const withVillage = () => {
+		const b = base();
+		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1000, litresPerUnitDay: 230, returnPct: 0 })];
+		return b;
+	};
+	const scale = (factor: number, part?: string, extra: Record<string, unknown> = {}) => ({ op: 'demand.scale', factor, nodeIds: ['A'], ...(part ? { part } : {}), ...extra }) as ScenarioOp;
+	const run = (ops: ScenarioOp[]) => {
+		const r = applyScenario(withVillage(), ops);
+		expect(r.problems).toEqual([]);
+		const out = runModel(r.input);
+		const farm = out.summary.farms.find((f) => f.nodeId === 'A')!;
+		const village = farm.demandObjects![0]!.avgDemandM3Day;
+		return { input: r.input, village, crops: farm.avgDemandM3Day - village };
+	};
+
+	it('cuts one part of a unit\'s demand and leaves the others as they were, stacking on the unit\'s own factor', () => {
+		const b = run([]);
+		expect(b.village).toBeCloseTo(230, 9);
+		expect(b.crops).toBeGreaterThan(0);
+		// Domestic −10 %, irrigation (the crops) −30 %: two ops.
+		const cut = run([scale(0.9, 'domestic'), scale(0.7, 'crops')]);
+		expect(cut.village).toBeCloseTo(207, 9);
+		expect(cut.crops).toBeCloseTo(b.crops * 0.7, 6);
+		expect(cut.input.model.nodes.find((n) => n.id === 'A')!.partDemandFactor).toEqual({ domestic: new Array(12).fill(0.9), crops: new Array(12).fill(0.7) });
+		expect(cut.input.model.nodes.find((n) => n.id === 'A')!.demandFactor).toBeUndefined();
+		// Another category's cut doesn't reach the village.
+		expect(run([scale(0.5, 'livestock')]).village).toBeCloseTo(230, 9);
+		// On top of the unit's own factor: × 0.5 × 0.9.
+		const both = run([scale(0.5), scale(0.9, 'domestic')]);
+		expect(both.village).toBeCloseTo(230 * 0.45, 9);
+		expect(both.crops).toBeCloseTo(b.crops * 0.5, 6);
+		for (const x of [cut, both]) expect(checkAll(x.input)).toBeNull();
+	});
+
+	it('never cuts a domestic object below its basic-needs floor (the same floor as the unit\'s own factor, engine 1.38.0)', () => {
+		// 1 000 people × 25 l = 25 m³/day.
+		expect(run([scale(0, 'domestic')]).village).toBeCloseTo(25, 9);
+		expect(run([scale(0.05, 'domestic')]).village).toBeCloseTo(25, 9);
+		// Through the unit's factor and the part's together too.
+		expect(run([scale(0.3), scale(0.3, 'domestic')]).village).toBeCloseTo(25, 9);
+		// Positive control: a cut that stays above the floor runs as the factor says.
+		expect(run([scale(0.5, 'domestic')]).village).toBeCloseTo(115, 9);
+		expect(checkAll(run([scale(0, 'domestic')]).input)).toBeNull();
+	});
+
+	it('months, stacking and the input diff', () => {
+		const r = applyScenario(withVillage(), [scale(0.9, 'domestic', { months: [12, 1] }), scale(0.5, 'domestic', { months: [1] })]);
+		const f = r.input.model.nodes.find((n) => n.id === 'A')!.partDemandFactor!.domestic!;
+		// Water-year order: Dec is index 2, Jan index 3.
+		expect(f[2]).toBeCloseTo(0.9, 12);
+		expect(f[3]).toBeCloseTo(0.45, 12);
+		expect(f.filter((v) => v === 1)).toHaveLength(10);
+		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+		expect(diffInputs(snap(withVillage()), snap(r.input)).map((c) => c.text)).toEqual([expect.stringMatching(/^Farm A: domestic demand factor none → /)]);
+	});
+
+	it('is checked: a part that isn\'t one, and a part on an other water user', () => {
+		expect(validateScenarioOps([scale(0.9, 'towns')]).errors).toEqual([expect.stringMatching(/^ops\[0\]\.part: must be one of crops, domestic, municipal/)]);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 0.9, category: 'user', part: 'domestic' }]).errors).toEqual([
+			"ops[0].part: is a part of a hydrological unit's demand; an other water user's demand is scaled whole"
+		]);
+		expect(validateScenarioOps([scale(0.9, 'municipal')]).errors).toEqual([]);
+		// Classified as any demand.scale: the author's own units, named.
+		expect(classifyOp(scale(0.9, 'domestic'), ['A'])).toBe('proposal');
+		expect(classifyOp({ op: 'demand.scale', factor: 0.9, part: 'domestic' }, ['A'])).toBe('baseline');
+	});
+});
+
 describe('demand.scale (issue #53 R1)', () => {
 	const series = (out: { series: RunSeries[] }, nodeId: string) =>
 		Object.fromEntries(out.series.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.values]));
@@ -1369,7 +1439,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 });
 
-describe('demand-object ops (engine ≥ 1.41.0)', () => {
+describe('demand-object ops (engine ≥ 1.43.0)', () => {
 	const withObject = () => {
 		const b = base();
 		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Town' })];

@@ -1103,6 +1103,14 @@ export interface NetworkNode {
 	 */
 	demandFactor?: number[] | null;
 	/**
+	 * Demand factors by part of a unit's demand (engine ≥ 1.43.0, issue #123):
+	 * a multiplier per water-year month (Oct–Sep) on its crop water
+	 * requirement (`crops`) or on its demand objects of one category, on top
+	 * of `demandFactor`. Absent part = 1. Only the `demand.scale` scenario op
+	 * with a `part` sets it (docs/scenarios.md § Demand scaling); a farm's only.
+	 */
+	partDemandFactor?: Partial<Record<DemandPart, number[]>> | null;
+	/**
 	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
 	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
 	 * boreholes, and the other borehole fields are inert.
@@ -1558,6 +1566,14 @@ export interface ProjectModel {
  */
 export const DEMAND_OBJECT_CATEGORIES = ['domestic', 'municipal', 'industrial', 'livestock', 'irrigation', 'external', 'other'] as const;
 export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
+
+/**
+ * The parts of a unit's demand a restriction can cut on its own (engine ≥
+ * 1.43.0, issue #123, DWS's % restrictions per category): its crop water
+ * requirement, or its demand objects of one category.
+ */
+export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
+export type DemandPart = (typeof DEMAND_PARTS)[number];
 
 /** Each category in plain words (the node form, run results). */
 export const DEMAND_OBJECT_CATEGORY_LABEL: Record<DemandObjectCategory, string> = {

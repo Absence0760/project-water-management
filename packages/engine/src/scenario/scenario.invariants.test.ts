@@ -95,7 +95,7 @@ function baseFor(seed: number): ModelInput {
 describe('scenarios on random networks', () => {
 	it(`${CASES} random scenarios keep every engine invariant`, () => {
 		const failures: string[] = [];
-		// Demand-object ops (engine ≥ 1.41.0) that applied: the property is only as good as the ops it saw.
+		// Demand-object ops (engine ≥ 1.43.0) that applied: the property is only as good as the ops it saw.
 		let objectOps = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
 			const base = baseFor(seed);

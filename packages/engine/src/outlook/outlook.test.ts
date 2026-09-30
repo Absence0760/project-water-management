@@ -123,6 +123,9 @@ describe('a member continues the base run from the decision date', () => {
 		const a = outlookAnalogue(resolveSeason(SEASON), 2004);
 		const scaled = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'a' ? { ...n, demandFactor: new Array(12).fill(0.9) } : n)) } };
 		expect(() => outlookMemberInput(scaled, base, SEASON, a)).toThrow(/demand factor/);
+		// A part's factor (engine ≥ 1.43.0) likewise.
+		const byPart = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'a' ? { ...n, partDemandFactor: { domestic: new Array(12).fill(0.9) } } : n)) } };
+		expect(() => outlookMemberInput(byPart, base, SEASON, a)).toThrow(/demand factor/);
 		const short = { ...base, days: toEpochDay('2012-09-29') - toEpochDay(base.startDate) + 1 };
 		expect(() => outlookMemberInput(input, short, SEASON, a)).toThrow(/before 2012-09-30/);
 		expect(() => outlookMemberInput(input, base, { decisionDate: base.startDate, seasonEnd: '2001-04-30' }, a)).toThrow(/no history/);

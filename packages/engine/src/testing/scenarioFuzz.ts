@@ -5,7 +5,7 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
@@ -314,7 +314,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			bores.push(id);
 		}
 	}
-	// Demand-object ops (engine ≥ 1.41.0), from a stream of their own for the same reason: an object
+	// Demand-object ops (engine ≥ 1.43.0), from a stream of their own for the same reason: an object
 	// added on a unit (now and then on a user or gauge, or a missing node: a problem), fields set
 	// one or a few at a time on one object (an edit group), and removals. A sizing switched without
 	// its numbers, or a return from an object piped out, breaks a model rule (a problem).
@@ -356,7 +356,9 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 																? o.pick(['internal', 'external'] as const)
 																: field === 'enabled'
 																	? o.bool(0.8)
-																	: field === 'schedule'
+																	: field === 'population'
+																		? o.pick([null, o.int(0, 20_000)])
+																		: field === 'schedule'
 																		? o.bool(0.4)
 																			? null
 																			: [{ label: 'Scenario window', span: 'always' as const, from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: o.float(0, 2) }]
@@ -407,6 +409,10 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 				op.nodeIds = picked;
 			}
 			if (q.bool(0.4)) op.months = [...new Set(Array.from({ length: q.int(1, 6) }, () => q.int(1, 12)))];
+			// One part of a unit's demand (engine ≥ 1.43.0), from its own stream so the draws above are what they were;
+			// now and then on a user op (a problem).
+			const qp = new Rng(seed ^ 0x2f3a91c7 ^ k);
+			if (qp.bool(0.5) && (op.category !== 'user' || qp.bool(0.1))) op.part = qp.pick(DEMAND_PARTS);
 			ops.push(op);
 		}
 	}

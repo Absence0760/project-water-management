@@ -20,6 +20,7 @@ import {
 	DEMAND_OBJECT_DESTINATIONS,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
+	DEMAND_PARTS,
 	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
 	LAND_COVER_CLASSES,
@@ -36,6 +37,7 @@ import {
 	type Borehole,
 	type CropDef,
 	type DemandObject,
+	type DemandPart,
 	type DemandScheduleWindow,
 	type FlowShareMethod,
 	type LandCoverPatch,
@@ -520,12 +522,13 @@ const demandMonths: Check = (v) => {
 };
 
 /** Check a demand.scale op's fields (applyScenario checks the node ids exist and are of the category). */
-export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; months?: unknown; category?: unknown }): string | null {
+export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; months?: unknown; category?: unknown; part?: unknown }): string | null {
 	const checks: [string, Check][] = [
 		['factor', range(0, DEMAND_SCALE_MAX)],
 		['nodeIds', nodeIdList],
 		['months', demandMonths],
-		['category', oneOf(DEMAND_CATEGORIES)]
+		['category', oneOf(DEMAND_CATEGORIES)],
+		['part', oneOf(DEMAND_PARTS)]
 	];
 	for (const [k, c] of checks) {
 		const v = (op as Record<string, unknown>)[k];
@@ -533,6 +536,8 @@ export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; mont
 		const e = v === undefined ? 'missing' : c(v);
 		if (e) return `${k} ${e}`;
 	}
+	// A part is one part of a unit's demand (engine ≥ 1.43.0): an other water user's demand has none.
+	if (op.part !== undefined && op.category === 'user') return "part is a part of a hydrological unit's demand; an other water user's demand is scaled whole";
 	return null;
 }
 
@@ -681,7 +686,7 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 }
 
 // ---------------------------------------------------------------------------
-// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.41.0)
+// demandObject.add, demandObject.set, demandObject.remove (engine ≥ 1.43.0)
 // ---------------------------------------------------------------------------
 
 /**
@@ -707,6 +712,7 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'destination',
 	'enabled',
 	'schedule',
+	'population',
 	'note'
 ] as const;
 export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
@@ -762,6 +768,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	destination: oneOf(DEMAND_OBJECT_DESTINATIONS),
 	enabled: boolean,
 	schedule: demandSchedule,
+	// The people it serves, for the basic-needs floor (engine ≥ 1.38.0); null = a per-person object's count.
+	population: nullable(nonNeg),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
 
@@ -778,8 +786,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its
@@ -859,9 +867,9 @@ export type ScenarioOp =
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
 	| { op: 'borehole.remove'; boreholeId: string }
-	/** A new demand object on a unit (engine ≥ 1.41.0): a town, household, livestock or any other demand that isn't a crop. */
+	/** A new demand object on a unit (engine ≥ 1.43.0): a town, household, livestock or any other demand that isn't a crop. */
 	| { op: 'demandObject.add'; demandObject: DemandObject }
-	/** Change one field of a demand object (engine ≥ 1.41.0). */
+	/** Change one field of a demand object (engine ≥ 1.43.0). */
 	| DemandObjectSetOp
 	| { op: 'demandObject.remove'; demandObjectId: string }
 	| SettingsSetOp
@@ -905,7 +913,11 @@ export interface EwrRuleSetOp {
  * unchanged), or with `category: 'user'` the other water users'. `nodeIds`
  * limits it to those nodes (default: every node of the category); `months`
  * to those calendar months (1–12, Oct = 10; default: every month). Ops
- * stack: two at 0.9 leave 0.81.
+ * stack: two at 0.9 leave 0.81. `part` (engine ≥ 1.43.0, issue #123, farms
+ * only) scales one part of a unit's demand: its crop water requirement
+ * (`crops`) or its demand objects of one category (`domestic`, …), on top
+ * of the unit's own factor; a domestic or municipal object's cut stops at
+ * its basic-needs floor as any cut does.
  */
 export interface DemandScaleOp {
 	op: 'demand.scale';
@@ -913,6 +925,7 @@ export interface DemandScaleOp {
 	nodeIds?: string[];
 	months?: number[];
 	category?: DemandCategory;
+	part?: DemandPart;
 }
 
 export type ScenarioOpName = ScenarioOp['op'];
@@ -1168,7 +1181,7 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 		case 'demand.scale': {
 			const s: DemandScaleOp = { op: 'demand.scale', factor: need('factor', range(0, DEMAND_SCALE_MAX)) as number };
 			// Optional fields are kept only when given, so an op's stored form (and its hash) is what was sent.
-			const opt = (k: 'nodeIds' | 'months' | 'category', c: Check) => {
+			const opt = (k: 'nodeIds' | 'months' | 'category' | 'part', c: Check) => {
 				if (raw[k] === undefined) return;
 				const e = c(raw[k]);
 				if (e) errors.push(`${where}.${k}: ${e}`);
@@ -1177,6 +1190,8 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			opt('nodeIds', nodeIdList);
 			opt('months', demandMonths);
 			opt('category', oneOf(DEMAND_CATEGORIES));
+			opt('part', oneOf(DEMAND_PARTS));
+			if (s.part !== undefined && s.category === 'user') errors.push(`${where}.part: is a part of a hydrological unit's demand; an other water user's demand is scaled whole`);
 			op = s;
 			break;
 		}

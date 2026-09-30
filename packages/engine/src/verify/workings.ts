@@ -5,10 +5,10 @@
 // through these, so the numbers the workbook's formulas start from are the
 // ones the checks hold the run to.
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
+import { demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
 import { seepageReturnOf } from '../network/dam';
 import { abstractionStartDay } from '../network/development';
-import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, ESTIMATED_DAM_DEPTH_M, type ModelInput, type NetworkNode } from '../project';
+import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, ESTIMATED_DAM_DEPTH_M, type DemandPart, type ModelInput, type NetworkNode } from '../project';
 
 /**
  * Open-water evaporation depth (mm) on each run day (audit N2): the lake
@@ -44,16 +44,19 @@ export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; 
  * 0.44.0; an invalid date: every day), × a full allocation's factor
  * `allocation` (engine ≥ 1.18.0, the run's allocation_demand_factor series);
  * 0 before the unit's abstraction date (engine ≥ 1.30.0, abstractionFrom).
- * `scaled` is false when none applies (every day 1).
+ * `scaled` is false when none applies (every day 1). With `part` (engine ≥
+ * 1.43.0) the part's own factor multiplies the unit's: `crops` for F, a demand
+ * object's category for that object.
  */
 export function dailyDemandFactor(
 	settings: ModelInput['settings'],
 	n: NetworkNode,
 	day0: number,
 	days: number,
-	allocation: ArrayLike<number | null> | undefined
+	allocation: ArrayLike<number | null> | undefined,
+	part?: DemandPart
 ): { perDay: Float64Array; scaled: boolean } {
-	const factor = demandFactorOf(n, []);
+	const factor = part ? unitPartFactor(n, part, []) : demandFactorOf(n, []);
 	const dff = settings?.demandFactorFrom;
 	const from = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, days) : 0;
 	const abstractFrom = abstractionStartDay(n, day0, days, []);
