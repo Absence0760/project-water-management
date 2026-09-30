@@ -131,6 +131,40 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		}
 	});
 
+	it('reads River to dam by month across the water year’s turn: 30 September is Sep (index 11), 15 October is Oct (index 0)', async () => {
+		const p = (await owner.call('POST', '/projects', { name: 'Trace, water-year turn' })).body.project.id as string;
+		await owner.call('PATCH', `/projects/${p}`, { settings: { apanMm: monthly(150) } });
+		// Each month's own value, so the index read is the value: Oct = 1 … Sep = 12.
+		const byMonth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+		// Its own ids: node and crop ids are unique across projects.
+		const gauge = node('Outlet', null);
+		const unit = { ...farm, id: crypto.randomUUID(), downstreamNodeId: gauge.id, divertMonthlyM3Day: byMonth };
+		const c = { ...crop, id: crypto.randomUUID() };
+		const model = { nodes: [gauge, unit], crops: [c], cropAreas: [{ nodeId: unit.id, cropId: c.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${p}/model`, model)).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${p}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-09-28', values: new Array(20).fill(1) })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${p}/runs`, { label: 'Turn' });
+		expect(run.status).toBe(201);
+		const at = (date: string, nodeId = unit.id) => owner.call('GET', `/projects/${p}/runs/${run.body.run.id}/day?${new URLSearchParams({ date, nodeId })}`);
+		expect((await at('2020-09-30')).body.params.divertCapacityM3Day).toBe(12);
+		expect((await at('2020-10-01')).body.params.divertCapacityM3Day).toBe(1);
+		expect((await at('2020-10-15')).body.params.divertCapacityM3Day).toBe(1);
+
+		// Only a farm's is replaced: a gauge's stored row (the save refuses one, so it is planted in the run's inputs) keeps its own value.
+		await asOwner(
+			`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}',
+				(SELECT jsonb_agg(CASE WHEN n->>'id' = $2 THEN n || '{"divertMonthlyM3Day": [9,9,9,9,9,9,9,9,9,9,9,9]}'::jsonb ELSE n END) FROM jsonb_array_elements(inputs->'model'->'nodes') n))
+			 WHERE id = $1`,
+			[run.body.run.id, gauge.id]
+		);
+		const atGauge = await at('2020-10-15', gauge.id);
+		expect(atGauge.status).toBe(200);
+		expect(atGauge.body.kind).toBe('gauge');
+		expect(atGauge.body.params.divertCapacityM3Day).toBe(gauge.divertCapacityM3Day);
+		// Positive control: the farm on the same stored run is still read by month.
+		expect((await at('2020-10-15')).body.params.divertCapacityM3Day).toBe(1);
+	});
+
 	it('returns the soil-water store the day started from, so the carried-over rain can be redone (N3)', async () => {
 		// 10 mm on the 6th: 10 000 m² × 0.65 × 10 / 1000 = 65 m³, more than the day's gross demand; the rest is kept.
 		const res = await day(viewer, '2020-01-07');
