@@ -3485,6 +3485,9 @@ which checks every catchment tab).
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
+- **Drought restrictions** (`#set-restrict`, engine ≥ 1.46.0, WP-3.8): the
+  model's restriction rule, off by default; see
+  [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality** (`DataQualitySection.svelte`): three groups.
   *Gauge vs logger*: the lowest and highest ratio in %, shown to one
@@ -3947,7 +3950,8 @@ read it before.
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
   (`#res-assurance`) and, for a run that has any, **Other uses**
-  (`#res-other-uses`, issue #137): the land-cover, groundwater,
+  (`#res-other-uses`, issue #137): the drought restriction (engine ≥ 1.46.0,
+  [§ Drought restrictions](#drought-restrictions)), land-cover, groundwater,
   demand-object and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
@@ -4969,6 +4973,63 @@ re-summarised by hand, a viewer; then on a record up to the current
 season, the trigger table against the stored one, publishing 85 %, a
 linked farmer's *This season* card against the stored per-farm figures,
 axe on both, and withdrawing it).
+
+### Drought restrictions
+
+WP-3.8, engine ≥ 1.46.0 ([model.md §2.7i](./model.md)): the model's
+drought restriction rule, `settings.droughtRestriction`. English, like the
+workspace; nothing of it reaches the farm view or the share page (a shared
+scenario's change reads *A catchment setting changed: droughtRestriction*,
+as every setting does). A model rule, not the restriction notice farmers
+see (WP-2.3); every place it shows says so.
+
+- **Settings → Drought restrictions** (`#set-restrict`, in the model inputs,
+  after Reserve rules; `settings/DroughtRestrictionFields.svelte`, its own
+  chunk, helpers `settings/droughtRestriction.ts`). **Apply drought
+  restrictions in runs** switches it on from a template (reviews on 1 October
+  and 1 January, lifted 1 May, three levels below 60 / 40 / 25 % of
+  capacity cutting crops and irrigation 20 / 40 / 60 % and domestic and
+  municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, the
+  hint says). **Review dates** and **Lift dates**: a month and a day each,
+  **Add a … date** / **Remove**. The levels table: one column per level
+  (mildest first), rows **Name**, **Starts below (% of capacity)** and one
+  **… cut (%)** row per part of demand (crops, then each demand-object
+  category; blank = not cut; domestic and municipal marked *floor kept*),
+  each input labelled "Level 2: cut on …, %"; it scrolls sideways on a
+  phone. **Add a deeper level** (the last level's cuts, half its
+  threshold) / **Remove the deepest level**; **Where the levels come from**;
+  the rule **In words**. A rule the engine refuses (a date twice, a
+  shallower deeper level, a deeper level cutting less) shows its first
+  problem under the table and blocks Save (the save bar links here);
+  switching off saves null, and the rule switched off comes back until
+  saved. Field history under it. A viewer reads it, disabled.
+- **Units & supply → Other uses**, for a run with the rule
+  (`runs/HumanImpactTables.svelte`, view model `runs/restrictions.ts`):
+  **Drought restrictions**, the rule in words and how often it was
+  decided, then the days at each level per water year (with *Days
+  restricted*, and a *Whole run* row), then per hydrological unit its mean
+  demand, demand after the restriction, cut (m³/day and % of demand) and
+  supplied. The note says the cut shows as a shortfall.
+- **River & reserve → Seasonal outlook → Review triggers**: under the
+  trigger table, the table *As a drought restriction rule* in words
+  (`outlook/triggers.ts` `triggerRuleView`, the engine's
+  `restrictionRuleFromTriggers`) and what it couldn't carry; an editor's
+  **Use as the drought restriction rule** (or **Replace the drought
+  restriction rule with this** when one is set) saves it to the settings
+  with the reason "Drought restrictions from the seasonal outlook's review
+  triggers", and says runs from now on follow it.
+- **Scenarios → Add a change → Change a setting → Drought restriction
+  rule**: the same editor (with its on/off switch), starting from the rule
+  the scenario meets; the op replaces the rule whole, or turns it off. The
+  op's line reads *Drought restriction rule: off → reviewed 5 Oct; Level 1
+  (below 70 %): crops 50 %*.
+
+Tests: `settings/droughtRestriction.test.ts`, `runs/restrictions.test.ts`,
+`runs/HumanImpactTables.test.ts` (the tables rendered),
+`runs/humanImpacts.test.ts`, `outlook/triggers.test.ts`
+(`triggerRuleView`), `scenarios/ops.test.ts` and `fields.test.ts` (the
+op), and `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
+blocked save, edits saved whole, off saves null, axe on the section).
 
 ## Compare runs (`?tab=compare`)
 

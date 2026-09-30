@@ -549,6 +549,19 @@ and the switch that lets statistics read filled days ([model.md §2.10i](./model
 Filled values are derived in each run and never written to `time_series`, so
 turning it off undoes it; the run's own columns carry the filled days.
 
+**The drought restriction rule lives in `project.settings`** too
+(`settings.droughtRestriction`, engine ≥ 1.46.0, WP-3.8; no table, column or
+migration): review and lift dates and up to six levels, each a storage
+threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
+One rule per project, not per node, so no node id to keep in step and no
+same-project trigger or RLS policy of its own: it is read and written with
+the project's settings, under the project's policies. A patch replaces it
+whole; `null` or absent is off. A model input: runs snapshot it with their
+settings, and the run comparison and the settings history show changes.
+WP-3.8's design sketched a nullable `node.restriction jsonb` column; with
+the rule on the total farm dam storage it isn't needed (a rule per node is
+a follow-up, followups.md).
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range

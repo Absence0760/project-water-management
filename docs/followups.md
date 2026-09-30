@@ -213,6 +213,21 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
+- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.46.0,
+      [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
+      #46). Built off by default on these choices; confirm or change each:
+      one rule per project on the **total farm dam storage** (every farm dam,
+      Σ storage ÷ Σ capacity, the review triggers' basis) rather than one
+      dam or per node; the level **decided on review dates and held** until
+      the next review or lift date (no daily re-evaluation or hysteresis);
+      the storage read at the **start of the review day**; a fresh run's
+      **first day decided** from its starting storage when the latest date
+      before it is a review; **every unit's demand** cut, the other water
+      users not; the demand kept as the demand, so a cut **counts as a
+      shortfall** in the assurance of supply; the **outlook, its triggers
+      and firm yield run without the rule**; the Settings template's
+      levels (60 / 40 / 25 % of capacity; irrigation 20 / 40 / 60 %,
+      domestic and municipal 10 / 20 / 30 %) as a starting point only.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -3223,9 +3238,10 @@ from the WP:
       summary CSV and the demand-objects table report the days and volume
       below the floor apart from the shortfall, with the l/person/day
       supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
-      stay one % for every category (#53 O4). Still to do when it is built:
-      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
-      same floor; it doesn't exist yet, so there is nothing to wire.
+      stay one % for every category (#53 O4). WP-3.8's drought restriction
+      rule (a cut by dam level) holds the same floor: done (engine 1.46.0,
+      2026-09-30, [model.md §2.7i](./model.md)), through `planObjects`'
+      floor and `dayFloor`, checked by the `droughtRestriction` self-check.
 - [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
       related: issue #73 "Later scenario ops"). `demandObject.add` /
       `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
@@ -3248,6 +3264,46 @@ from the WP:
       stacks on the unit's own and goes through the same basic-needs floor
       (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
       below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
+- [x] **WP-3.8's drought restriction rule** (engine 1.46.0, 2026-09-30,
+      [model.md §2.7i](./model.md)). `settings.droughtRestriction`: review
+      and lift dates and up to six levels, each a storage threshold on the
+      total farm dam storage and a % cut per part of demand (crops, each
+      demand-object category), the basic-needs floor kept; off by default.
+      Series `restriction_level`, `restriction_cut@<part>`,
+      `restricted_demand`; `RunSummary.droughtRestriction` and its summary
+      CSV block; the `droughtRestriction` self-check; Settings → Drought
+      restrictions, the Units & supply tables and the outlook's "Use as the
+      drought restriction rule" (the review triggers, R6); `settings.set`
+      in scenarios and the run comparison's lines. No migration: the rule is
+      part of `project.settings` (jsonb).
+- [ ] **Drought restrictions: a rule on one dam, or per node.** Built as one
+      rule on the total farm dam storage (the review triggers' basis). A WUA
+      whose members hang off one scheme dam would read that dam alone, and
+      the roadmap's first sketch had a rule per node. Durable fix: an
+      optional `damNodeIds` (the storage read) and `nodeIds` (the units cut)
+      on the rule, remapped on a project copy like the EWR sites
+      (`remapSettingNodeIds`), with the editor's checklists. Trigger: a
+      catchment whose restrictions follow one dam, or the hydrologist asking.
+- [ ] **Drought restrictions: an EWR-failure trigger.** The roadmap's rule
+      also cut "when the downstream EWR site failed yesterday"; only storage
+      triggers are built. Durable fix: a level trigger on an EWR site's
+      shortfall on the day before (causal), beside the storage one, with the
+      self-check reading `ewr_shortfall`. Trigger: a WUA or CMA whose
+      restrictions are set by the Reserve's compliance, not by storage.
+- [ ] **Drought restrictions on the other water users.** A user node's
+      demand has no category and no population, so the rule leaves users
+      uncut (a cut could take a town below basic needs with no floor).
+      Durable fix: a restriction category and a population on user nodes
+      (or modelling towns as demand objects), then the rule cuts them with
+      the floor. Trigger: a catchment where a municipal abstractor sits on
+      the river as an other water user and is restricted too.
+- [ ] **Drought restrictions: copy the published notice into a rule.** The
+      roadmap: "a scenario may copy the current notice into the rule as a
+      starting point, never the reverse". Not built: the notice (WP-2.3) is
+      one level and % for the season, the rule a table by storage. Durable
+      fix: a "Start from the published notice" action in the scenario form's
+      rule editor, one level at the notice's % on every part below 100 %.
+      Trigger: a WUA asking to compare its notice with a storage rule.
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.

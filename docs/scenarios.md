@@ -215,7 +215,14 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 (`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`), and
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
 `fullAllocation`: a full-allocation scenario on a base run is the "every
-registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
+and from engine 1.46.0 (WP-3.8) `droughtRestriction`: the drought
+restriction rule, whole (review and lift dates, levels with a threshold and
+a % cut per part of demand), or `null` for off, checked by the engine's
+`droughtRestrictionIssues` as a settings save is ([model.md §2.7i](./model.md));
+a `null` over no rule changes nothing. So a WUA compares restriction
+policies: the same base run with the rule off, with the outlook's triggers,
+and with a harsher table.
 Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
@@ -756,6 +763,13 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   describes the op as "GR4J potential evaporation: pan coefficient × A-pan →
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
+- **The drought restriction rule** (`settings.set droughtRestriction`,
+  engine ≥ 1.46.0) is edited whole in the Settings tab's own editor
+  (`settings/DroughtRestrictionFields.svelte`, loaded when picked),
+  starting from the rule the scenario meets (or off); its first problem
+  blocks Add, in the same words as Settings. Described as "Drought
+  restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %".
+  A baseline assumption, like every `settings.set`.
 - **Scale demand** (`demand.scale`): whose demand (farms' irrigation or
   other water users'), the new demand as a % of what they'd take (0–200 %),
   a checkbox per node of that category and per month, Oct first (none ticked

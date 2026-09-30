@@ -235,6 +235,17 @@ bottom:
    × 1.85 (map: …)" when one side has none (a run saved before 1.13.0 had
    none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
    a changed method and a reworded source.
+   A change of the drought restriction rule (`settings.droughtRestriction`,
+   engine ≥ 1.46.0, [model.md §2.7i](./model.md)) is one settings line per
+   change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;
+   Level 1 (below 70 %): crops 50 %" when one side has none (a run saved
+   before 1.46.0 had none, and one the run couldn't use counts as off),
+   else the review and lift dates, each level's threshold ("level 1 starts
+   below 70 % → 60 %"), name and cut per part ("level 1 cut on municipal
+   (town) demand objects 0 % → 10 %"), levels added or removed, and a
+   reworded source (engine `droughtRestrictionChanges`). A scenario that
+   sets another rule shows here, so comparing two restriction policies
+   lists what differs.
 3. **Headline results.** A **Calibration against observed
    flow** table (KGE, NSE, percent bias, RMSE and the overlapping days) for A
    and B side by side, with the change. Its **Water balance** table
