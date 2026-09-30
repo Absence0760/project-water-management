@@ -555,7 +555,14 @@ gauging with a source) and how automatic calibration treats extrapolated,
 suspect and infilled days; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
-(model.md §2.10j). `settings.fitRecord` is the record of the automatic fit
+(model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the
+uncertainty rule the project declares for its licensing evidence: members,
+bounds, pan-coefficient shift and acceptance thresholds, which an evidence
+report's cited ensemble must match exactly (engine `DeclaredUncertaintyRule`,
+checked by `declaredRuleError`; model.md §2.10e). A patch replaces it whole;
+`null` withdraws it, and absent means not declared. It is not a model input:
+it changes no result, but a run snapshots it, so the settings diff and the
+history show who declared it and when. No migration. `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
 in-sample and validation scores, notes, engine version and time (and, for a
 fit automated calibration picked, `auto`: the rules it ran under and every

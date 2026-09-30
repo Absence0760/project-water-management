@@ -1347,6 +1347,19 @@ In short:
   queue an auto re-run (`POST /jobs` takes a label only), and an auto run
   never publishes itself unless the project opted in to "if no new
   warnings", never for the first publication.
+- **The evidence report is a viewer read, and adds nothing a viewer can't
+  already see** (issue #71, `GET /projects/:id/runs/:runId/evidence-report`,
+  `backend/src/evidence/report.ts`). `requireRole(…, 'viewer')`, so a
+  contributor or farmer gets `403` (the role ladder lists it with the other
+  viewer reads). It runs in one `withUser` transaction opened read-only, so
+  building the report can't write, and RLS decides every row it reads: the
+  named run, the base run it recorded (`404` if the reader can't see it),
+  the scenario, nominations, publications, history and ensembles. What it
+  returns is what `/compare/runs` and the Runs tab already show a viewer
+  (the two runs' summaries and inputs, the input diff with stored values,
+  every farm by name), assembled by the pure engine builder; Step 3 D2's
+  anonymising is for what an applicant holds (ER10), and a contributor gets
+  none of it.
 - **An import report can't be forged or rewritten** (017_project_import). What
   the importer flagged is the audit trail of a workbook's mistakes, so only the
   import that created the project may write it (the insert trigger checks the

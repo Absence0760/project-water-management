@@ -567,7 +567,12 @@ whole: *"Parameters now from a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed
 7)"* when one run has none, *"Fit record: … → …"* for a different fit (time,
 model or seed), and *"Fit record: parameters edited since the fit (x1)"* when
 the same fit's parameters were edited by hand in between (or *"back to the
-fitted values"*). A parameter edit itself still has its own line. Settings keys the engine doesn't know yet still appear as
+fitted values"*). A parameter edit itself still has its own line. The
+project's declared uncertainty rule for evidence (issue #71,
+`settings.evidenceUncertaintyRule`) is one line, **Declared uncertainty rule
+(evidence)**, the whole rule in words either side (`declaredRuleText`, "not
+declared" when absent). It changes no result, so the line only says the two
+runs were made under different declared rules. Settings keys the engine doesn't know yet still appear as
 *Setting "x" changed*.
 
 ## Where the code lives

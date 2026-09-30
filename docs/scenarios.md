@@ -630,6 +630,9 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   only one side has (a river pump, boreholes, a release rule, land cover)
   reads as 0 on the other ([run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has)); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
+  Its head links to the run's **Evidence report** (issue #71,
+  [ui.md § Evidence report](./ui.md#evidence-report)) beside **Open the full
+  comparison**.
 - **Override mode** (`OverrideEditor.svelte`, `overrideDiff.ts`, its own
   chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
   their own `ModelEditor` loaded with the scenario's model (the base run's
