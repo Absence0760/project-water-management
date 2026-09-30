@@ -145,6 +145,13 @@ describe('storing the result', () => {
 		expect(res.body.details.join(' ')).toMatch(/ewrDaysNotMet/);
 	});
 
+	it('refuses a kept member without the evidence measures (engine ≥ 1.33.0): a missing one would thin its band unseen', async () => {
+		const k = members.findIndex((m) => m.accepted && m.index > 0);
+		const { noFlowDays: _drop, ...thin } = members[k]!.metrics!;
+		const res = await owner.call('POST', `${base(runA)}/uncertainty/${uid}/result`, { members: members.map((m, i) => (i === k ? { ...m, metrics: thin } : m)), coverage });
+		expect(res.status).toBe(400);
+	});
+
 	it('refuses a viewer, and an editor who did not start it', async () => {
 		expect((await viewer.call('POST', `${base(runA)}/uncertainty/${uid}/result`, { members, coverage })).status).toBe(403);
 		const other = await editor.call('POST', `${base(runA)}/uncertainty/${uid}/result`, { members, coverage });
@@ -162,6 +169,10 @@ describe('storing the result', () => {
 		expect(e.accepted).toBe(kept);
 		expect(e.summary.accepted).toBe(kept);
 		expect(e.summary.bands.ewrDaysNotMet.p50).not.toBeNull();
+		// The evidence measures (engine ≥ 1.33.0), banded over every kept member.
+		expect(e.summary.bands.noFlowDays.n).toBe(kept);
+		expect(e.summary.bands.ewrSites.map((x: { key: string }) => x.key)).toEqual(['outlet']);
+		expect(e.summary.bands.supply.every((x: { band: { n: number } }) => x.band.n === kept)).toBe(true);
 		expect(e.summary.decisionRule).toMatch(/^A parameter set is kept when it has KGE′ ≥ -10/);
 		expect(e.completedAt).not.toBeNull();
 		const again = await owner.call('POST', `${base(runA)}/uncertainty/${uid}/result`, { members, coverage });
@@ -233,6 +244,10 @@ describe('storing the result', () => {
 			expect(done.body.ensemble.accepted).toBe(pairedMembers(baseline.result).length);
 			expect(done.body.ensemble.summary.marOutflowMm3.max).toBeLessThan(0);
 			expect(done.body.ensemble.summary.decisionRule).toMatch(/other − baseline/);
+			// The paired evidence measures; the applicant's own group is the evidence report's to band (it knows the scenario).
+			expect(done.body.ensemble.summary.noFlowDays.n).toBe(pairedMembers(baseline.result).length);
+			expect(done.body.ensemble.summary.supply.map((x: { name: string }) => x.name)).toContain('Upper');
+			expect(done.body.ensemble.summary.ownSupply).toBeUndefined();
 		});
 
 		it('refuse a baseline of the same run, one not complete, and one from another project', async () => {

@@ -1818,14 +1818,19 @@ the result is stored only after the server has checked it.
 | GET | `/projects/:id/runs/:runId/uncertainty` | – | `{ ensembles: Ensemble[] }`, newest first, **every** ensemble started for the run (abandoned starts included), without `result` | viewer |
 | GET | `/projects/:id/runs/:runId/uncertainty/:uid` | – | `{ ensemble: Ensemble & { result } }`: `result` = `{ engineVersion, header, members, coverage }` (an ensemble) or `{ engineVersion, header, members: { index, metrics }[] }` (paired) | viewer |
 | POST | `/projects/:id/runs/:runId/uncertainty` | `{ request: { members?, bounds?, free?, panOffset?, rainSources?, records?, thresholds?: { objective?, minSkill?, wr2012MaxLevel?, maxLowFlowBiasPct? } } }` or `{ baselineId }` | `201 { ensemble, notes }`, status `started`: the resolved options (`ResolvedEnsembleOptions`, the model is the run's own) with the seed the database drew. `baselineId` (a complete ensemble of **another** run of this project, same runoff model and period) starts a paired band: its options and seed are the baseline's. `400` with the engine's reason for options the run can't use (fewer than 30 members, a rain source it lacks, no observed record, two models, two periods, or from engine 0.31.0 a baseline that varied the pan coefficient paired with a GR4J run on a monthly PE row, which doesn't use it). On a GR4J run with a monthly PE row the pan coefficient isn't varied (`panOffset` 0) and `notes` says so; `409` from `model-input`, or at 50 ensembles for the run | editor |
-| POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }` | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
+| POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }`. From engine 1.33.0 a member's `metrics` must carry `noFlowDays`, `ewrSiteDaysNotMet`, `unitDemandM3Day`, `unitSuppliedM3Day` and `reserveFdc` (`400` without them: a result is stored only on the engine it was started on, which always computes them) | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
 
 - `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
   `summary` is `EnsembleSummary` (`total`, `accepted`, `gated`,
   `referenceAccepted`, `rejected` by reason, `bands`, `coverage`,
   `coverageWarning`, `decisionRule`, `notes`) or, for a paired row,
   `PairedSummary` (difference bands, `ewrDaysNotMetWorse`, `shortfallWorse`,
-  `unpaired`, `decisionRule`); `null` until complete. A band is
+  `unpaired`, `decisionRule`; from engine 1.33.0 also `noFlowDays` with
+  `noFlowDaysWorse`, `ewrSites[]` and `supply[]` each with `worse`,
+  `reserveFdc[]` and `carriesMeasures`, model.md §2.10e); `null` until
+  complete. From engine 1.33.0 an `EnsembleSummary`'s `bands` also has
+  `noFlowDays`, `ewrSites`, `supply` and `reserveFdc`; one stored before
+  lacks them. A band is
   `{ n, p5, p50, p95, min, max }`, the percentiles `null` below 30 members.
 - Nothing about a stored ensemble can change and none can be deleted
   ([data-model.md](./data-model.md), "Uncertainty bands").
@@ -1944,7 +1949,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-3`: § 5 registered water use, `allocations` (evidence-2); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (evidence-3)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-4`: § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -1956,7 +1961,9 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   series hashes, notes), the nomination history, the current and previous
   publications, every ensemble started on the baseline and every paired one on
   the application (a paired band's summary recomputed from both rows' stored
-  members, so `reserve[].worse` is there for bands stored before it existed),
+  members, with the scenario's own units for the applicant's supply band
+  (`ownSupply`), so `reserve[].worse` is there for bands stored before it
+  existed),
   the input diff (`diffInputs` with stored values, as compare), the revisions
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
