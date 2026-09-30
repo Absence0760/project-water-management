@@ -90,7 +90,7 @@ updates:
 
   # The repo's Python lives in subfolders, each with its own pinned
   # requirements.txt; "/" has none, so list the folders (a new Python tool
-  # adds its folder here).
+  # adds its folder here). verify/ is stdlib-only, so it has none to list.
   - package-ecosystem: pip
     directories:
       - "/brand"

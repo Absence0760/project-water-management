@@ -10,7 +10,7 @@
 	./shareThePain.ts. Presentation only: every figure is the engine's.
 -->
 <script lang="ts">
-	import { DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
+	import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
 
 	let {
@@ -139,7 +139,8 @@
 	</p>
 	<p class="muted small note">
 		<em>EWR met</em> starts from the equitable share and removes each hydrological unit's supply cut for its EWR charge; it never goes
-		below 0 % of demand. A hydrological unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
+		below 0 % of demand, or below a hydrological unit's basic-needs floor ({DEMAND_NORMS.basicLitresPerPersonDay} litres a person a
+		day for the people its domestic and municipal demands serve; what the floor keeps of the cut is noted in its row). A hydrological unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
 		noted in its row. A junior user is cut for its charge; a senior one is not, and its charge stands.
 	</p>
 </section>

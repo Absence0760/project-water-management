@@ -9,7 +9,7 @@ import { runModel, runModelChecked } from './run';
 import { applyScenario } from './scenario/overrides';
 import type { ScenarioOp } from './scenario/ops';
 import { randomInput } from './testing/fuzz';
-import { checkAll } from './testing/invariants';
+import { checkAll, floorLift } from './testing/invariants';
 import { Rng } from './random';
 
 const N = 30;
@@ -40,8 +40,11 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 			for (const n of base.model.nodes) {
 				if (n.kind === 'gauge') continue;
 				const [D0, D] = [col(x, n.id, 'demand')!, col(y, n.id, 'demand')!];
+				// The basic-needs floor (engine ≥ 1.44.0): exactly factor × the base's demand plus what the
+				// floor holds on a cut (factor < 1), worked from the model (floorLift); nothing more.
 				for (let t = cut; t < D.length; t++) {
-					expect(Math.abs(D[t]! - factor * D0[t]!), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
+					const want = factor * D0[t]! + floorLift(base, x, n.id, t, factor);
+					expect(Math.abs(D[t]! - want), `seed ${seed} ${n.id} day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, D0[t]!));
 					if (D0[t]! > 0) scaledDays++;
 				}
 			}

@@ -5,9 +5,12 @@
 	// Each is a monthly m³/day or a count × litres per unit per day (grossed up
 	// for losses, × a monthly profile), with a return share, a priority against
 	// the crops, a destination and an on/off schedule by date
-	// (DemandScheduleFields, engine ≥ 1.17.0). The objects are the editor's own, so edits
-	// land in the model directly.
+	// (DemandScheduleFields, engine ≥ 1.17.0). A domestic or municipal one has
+	// a basic-needs floor of 25 l a person a day that a restriction never cuts
+	// through (engine ≥ 1.44.0, issue #123): its people are a per-unit count, or
+	// entered here. The objects are the editor's own, so edits land in the model directly.
 	import {
+		BASIC_NEEDS_CATEGORIES,
 		DEMAND_NORMS,
 		DEMAND_OBJECT_CATEGORIES,
 		DEMAND_OBJECT_CATEGORY_LABEL,
@@ -24,6 +27,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
 	import { monthsOf } from './monthFields';
+	import { floorLine, peopleHint } from './demandObjectFloor';
 
 	let {
 		node,
@@ -131,6 +135,23 @@
 								<NumberInput id="do-loss-{o.id}" min={0} max={99} scale={100} disabled={readonly} value={o.lossPct} onchange={(v) => (o.lossPct = v ?? 0)} />
 							</div>
 						{/if}
+						{#if BASIC_NEEDS_CATEGORIES.includes(o.category)}
+							<div class="field">
+								<span class="lbl"><label for="do-pop-{o.id}">People served</label><HelpTip key="demandObject.population" /></span>
+								<NumberInput
+									id="do-pop-{o.id}"
+									min={0}
+									grouped
+									nullable
+									disabled={readonly}
+									placeholder={o.sizing === 'perUnit' ? fmtNum(o.count ?? 0, 0) : 'none'}
+									value={o.population ?? null}
+									aria-describedby="do-pop-hint-{o.id}"
+									onchange={(v) => (o.population = v)}
+								/>
+								<span class="muted small" id="do-pop-hint-{o.id}">{peopleHint(o)}</span>
+							</div>
+						{/if}
 						<div class="field check">
 							<label><input type="checkbox" disabled={readonly} bind:checked={o.enabled} /> Modelled</label>
 						</div>
@@ -163,6 +184,9 @@
 					<p class="muted small" data-testid="demand-object-mean-{o.id}">
 						{fmtNum(meanOf(o), 0)} m³/day on average{o.enabled ? '' : ' (not modelled)'}.
 					</p>
+					{#if floorLine(o)}
+						<p class="muted small" data-testid="demand-object-floor-{o.id}">{floorLine(o)}</p>
+					{/if}
 					{#if !readonly}
 						<div class="row-actions">
 							{#if onremove}<button type="button" class="btn btn-sm" onclick={() => onremove(o.id)}>Remove demand object {i + 1}</button>{/if}

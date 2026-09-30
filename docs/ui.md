@@ -2066,8 +2066,17 @@ note's link on the Summary, `notes.ts` `noteHref`).
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Where the number comes
   from**. Per unit: **Number of** people / head / units, **Litres per** person
-  / head / unit **a day** and **Distribution losses** (%). The line below gives
-  its mean m³/day as the engine sizes it; **Use October's demand for every
+  / head / unit **a day** and **Distribution losses** (%). A domestic or
+  municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
+  the number of people when it is sized per person, "none" when it is m³/day
+  by month) for its basic-needs floor, with a hint under it saying which
+  number a blank field counts. The line below gives
+  its mean m³/day as the engine sizes it, and for a domestic or municipal
+  object a second line (`demandObjectFloor.ts`) gives its **Basic-needs
+  floor** (m³/day, 25 litres a person a day, and whose people it counts),
+  says "at least its whole demand" when the floor is as large as the most it
+  asks for in any month (the engine's day floor is MIN(floor, demand)), or
+  says it has none until its people are entered; **Use October's demand for every
   month** fills a monthly row. **On/off schedule** (engine ≥ 1.17.0, issue
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
@@ -2086,7 +2095,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   yet and says so. After a run, the human-impact tables show **Demand
   objects**: per object its unit, priority, demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
-  one without) and returned (or "piped out").
+  one without) and returned (or "piped out"). When an object has a
+  basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
+  (l/day supplied at the tap, beside Supplied %: the municipal restriction
+  level, for display), **Basic-needs floor** (m³/day) and **Below the
+  floor** (the days, with the mean m³/day below it on a second line, stacked
+  so the table keeps its width); "–" on an object without one, which the
+  intro says means no floor (`HumanImpactTables.test.ts`,
+  `e2e/tests/demand-objects.spec.ts`).
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -4403,8 +4419,14 @@ read it before.
   "no demand" for a group with no demand (never a negative demand, which the
   client's sketch showed), "—" under 1 m³/day. A note under stage 2 names
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
-  cut beyond its equitable share, a senior user's charge that stands, or a
-  junior user's charge beyond what it takes. The share is the engine's
+  cut beyond its equitable share, a senior user's charge that stands, a
+  junior user's charge beyond what it takes, or what a unit's basic-needs
+  floor keeps of the cut (engine ≥ 1.44.0, issue #123: stage 2 never goes
+  below it, and the paragraph under the board says so; the per-farm table
+  badges the row in the same words, `basicNeedsNote`;
+  `e2e/tests/basic-needs-floor.spec.ts` seeds a unit whose EWR cut goes
+  beyond its share and checks the badge, the board's note and the volume
+  left at the floor). The share is the engine's
   equal one: every category is cut by the same %, which the client
   confirmed (O4, issue #90,
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
@@ -6094,9 +6116,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the band shaded, one neutral hue, a year past 300 % an arrowhead at the
     edge); the whole years above, within and below per unit and source with
     the mean volumes; and every water year's registered volume and modelled
-    use, part years listed but not counted. Units by their unit name, never
-    the holder's. *Not assessed* when the runs carry no volumes, or none on a
-    unit of theirs.
+    use, part years listed but not counted. In a cap run, *What the cap held
+    back* (`evidence-allocation-cap`, `evidence-6`): per unit and source it
+    caps, the days the licence limit held use back by limit and the years
+    the volume was used up, in the Allocations page's words (`capYearsText`),
+    "Not capped" for the run that doesn't cap it. Units by their unit name,
+    never the holder's. *Not assessed* when the runs carry no volumes, or
+    none on a unit of theirs.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
     their class and the input diff; A.3 series and SHA-256; A.4 baseline
     history since the previous publication; A.5 warnings verbatim; A.6 every

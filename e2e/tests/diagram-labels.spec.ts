@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test';
 import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { checkDiagramLabels, waitForMapFit } from '../support/diagrams.ts';
+import { resizeTo } from '../support/reflow.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -181,7 +182,7 @@ test('every help diagram: labels clear of each other, lines and box edges, and n
 		await page.goto(`/help/guides/${guide}`);
 		await expect(page.locator('figure.diagram').first()).toBeVisible();
 		for (const width of [1440, 390]) {
-			await page.setViewportSize({ width, height: width === 390 ? 844 : 960 });
+			await resizeTo(page, { width, height: width === 390 ? 844 : 960 });
 			const figures = page.locator('figure.diagram');
 			for (let i = 0; i < (await figures.count()); i++) {
 				const fig = figures.nth(i);
@@ -203,7 +204,7 @@ test('every help diagram: labels clear of each other, lines and box edges, and n
 	// The help picture's numbered markers never sit on one another.
 	await page.goto('/help');
 	for (const width of [1440, 390]) {
-		await page.setViewportSize({ width, height: width === 390 ? 844 : 960 });
+		await resizeTo(page, { width, height: width === 390 ? 844 : 960 });
 		const markers = page.locator('.tour .picture').first().locator('.marker');
 		await expect(markers.first()).toBeVisible();
 		const boxes = await markers.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom })));
