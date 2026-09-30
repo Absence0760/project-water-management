@@ -2436,11 +2436,21 @@ role and not before it.
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
-  - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
-        last 50 days daily (~200 range requests). Trigger: more than ~20
-        CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
-        once per tick and share it between feeds, or keep a per-day
-        preliminary/final marker so final days aren't re-read.
+  - [x] ~~**Request volume grows with feeds.** Each CHIRPS feed re-reads its
+        last 50 days daily (~200 range requests).~~ **Final days aren't
+        re-read (#69):** the ingest keeps a checked final marker
+        (`last_meta.finalThrough`) and the next window starts after it
+        (architecture.md § Data feeds, the window). On the fixtures a
+        caught-up `rnl` feed's daily fetch goes from 158 range requests to 5,
+        a `sat` one's from 194 to 152, and a backfill of final days moves on
+        120 days a window instead of 70.
+  - [ ] **A `sat` feed still re-reads its preliminary days daily** (~150
+        range requests: each day probes the final file, then re-reads the
+        preliminary one). Trigger: more than ~20 `sat` feeds in production.
+        Durable fix: probe the final file only for the first day after the
+        marker (CHC publishes a month's finals together, in date order) and
+        don't re-read a preliminary day until its final is out; or fetch
+        each (day, grid row) once per tick and share it between feeds.
   - [x] ~~**Ingest doesn't check a result's dates against the window asked
         for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
         records its window on the feed before sending, and the ingest

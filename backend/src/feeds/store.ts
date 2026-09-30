@@ -63,6 +63,8 @@ export interface FeedRow {
 	lastDataDate: string | null;
 	/** The last day the latest successful fetch asked for (last_meta.through): fetchWindow's progress through empty days. */
 	readThrough: string | null;
+	/** CHIRPS: the last day through which the series holds final values (last_meta.finalThrough, ingest.ts): fetchWindow doesn't re-read them. */
+	finalThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
 	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
@@ -188,6 +190,7 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 		`SELECT id, project_id AS "projectId", source, config, target_kind AS "targetKind", target_name AS "targetName", enabled,
 			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
 			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
+			CASE WHEN last_meta->>'finalThrough' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'finalThrough' END AS "finalThrough",
 			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]

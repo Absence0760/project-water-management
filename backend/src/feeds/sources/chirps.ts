@@ -86,6 +86,13 @@ export interface GridDays {
 	values: (number | null)[];
 	/** Days read from the preliminary product (the rest are final). */
 	prelimDays: number;
+	/**
+	 * The last day D such that every day from the first through D was read
+	 * from the final product with a value (a final value is never revised, so
+	 * the next fetch needn't read them again, issue #69). Absent when the first
+	 * day isn't final.
+	 */
+	finalThrough?: string;
 }
 
 /**
@@ -93,7 +100,7 @@ export interface GridDays {
  * final value where it is out, else the preliminary one; for `rnl`, the final
  * value (it has no preliminary product); else null. Trailing days with
  * neither are dropped (not published yet); a day missing between published
- * ones stays null.
+ * ones stays null. `finalThrough` marks the leading run of final days.
  */
 export async function fetchChirps(
 	http: FeedHttp,
@@ -115,7 +122,11 @@ export async function fetchChirps(
 	let last = got.length - 1;
 	while (last >= 0 && got[last]!.v === null) last--;
 	const kept = got.slice(0, last + 1);
-	return { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length };
+	let final = 0;
+	while (final < kept.length && kept[final]!.v !== null && !kept[final]!.prelim) final++;
+	const out: GridDays = { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length };
+	if (final > 0) out.finalThrough = days[final - 1]!;
+	return out;
 }
 
 export interface Forecast {

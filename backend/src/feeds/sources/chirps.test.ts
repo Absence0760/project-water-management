@@ -74,7 +74,7 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('2026-02-03')]: g(5) // 02-02 missing between published days
 		});
 		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 'sat', 2);
-		expect(r).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, null, 5], prelimDays: 2 });
+		expect(r).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, null, 5], prelimDays: 2, finalThrough: '2026-01-31' });
 		expect(http.urls).not.toContain(chirpsPrelimUrl('2026-01-30'));
 	});
 
@@ -86,8 +86,29 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('1998-01-02')]: g(98)
 		});
 		const r = await fetchChirps(http, [cell(0, 0)], '1997-12-31', '1998-01-03', 'rnl');
-		expect(r).toEqual({ startDate: '1997-12-31', values: [1, 2], prelimDays: 0 });
+		expect(r).toEqual({ startDate: '1997-12-31', values: [1, 2], prelimDays: 0, finalThrough: '1998-01-01' });
 		expect(http.urls.every((u) => u.includes('/final/rnl/'))).toBe(true);
+	});
+
+	// Issue #69: the final days lead the window; the next fetch starts after them.
+	it('finalThrough is the leading run of final days with a value: a preliminary or missing day ends it', async () => {
+		const sat = served({
+			[chirpsFinalUrl('2026-01-30')]: g(1),
+			[chirpsFinalUrl('2026-01-31')]: g(2),
+			[chirpsPrelimUrl('2026-02-01')]: g(3),
+			[chirpsFinalUrl('2026-02-02')]: g(4) // final again after a preliminary day: not part of the run
+		});
+		expect(await fetchChirps(sat, [cell(0, 0)], '2026-01-30', '2026-02-03')).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, 4], prelimDays: 1, finalThrough: '2026-01-31' });
+		// The first day preliminary: no marker at all.
+		const prelimFirst = await fetchChirps(sat, [cell(0, 0)], '2026-02-01', '2026-02-03');
+		expect(prelimFirst.values).toEqual([3, 4]);
+		expect(prelimFirst).not.toHaveProperty('finalThrough');
+		// A day missing between published ones ends the run, for rnl too; its days are all final.
+		const rnl = served({ [chirpsRnlUrl('2026-01-01')]: g(1), [chirpsRnlUrl('2026-01-02')]: g(2), [chirpsRnlUrl('2026-01-04')]: g(4) });
+		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-01', '2026-01-06', 'rnl')).toEqual({ startDate: '2026-01-01', values: [1, 2, null, 4], prelimDays: 0, finalThrough: '2026-01-02' });
+		expect(await fetchChirps(rnl, [cell(0, 0)], '2026-01-03', '2026-01-04', 'rnl')).not.toHaveProperty('finalThrough');
+		// Nothing published: no days, no marker.
+		expect(await fetchChirps(served({}), [cell(0, 0)], '2026-01-01', '2026-01-03')).toEqual({ startDate: '2026-01-01', values: [], prelimDays: 0 });
 	});
 
 	it('on the fixtures: rnl from 1981, sat only from 1998, each with its own daily timing', async () => {
@@ -130,7 +151,7 @@ describe('fetchChirps', () => {
 				process.env.TZ = zone;
 				const http = everyDay(['2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02']);
 				const r = await fetchChirps(http, [cell(0, 0)], '2025-12-30', '2026-01-02');
-				expect(r).toEqual({ startDate: '2025-12-30', values: [30, 31, 1, 2], prelimDays: 0 });
+				expect(r).toEqual({ startDate: '2025-12-30', values: [30, 31, 1, 2], prelimDays: 0, finalThrough: '2026-01-02' });
 				expect(chirpsFinalUrl('2026-01-01')).toContain('/final/sat/2026/chirps-v3.0.sat.2026.01.01.tif');
 				expect(chirpsPrelimUrl('2025-12-31')).toContain('/prelim/sat/2025/chirps-v3.0.prelim.2025.12.31.tif');
 			});

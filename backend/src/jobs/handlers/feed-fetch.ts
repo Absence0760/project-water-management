@@ -32,7 +32,7 @@ export const feedFetchHandler = defineHandler({
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
-		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough);
+		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
 		const request = { source: feed.source, config: feed.config, ...window, today };
 		if (feedFetcher() === 'sqs') {
 			await beginFeedFetch(db, feed.id, job.id, window);
