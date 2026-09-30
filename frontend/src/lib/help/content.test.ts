@@ -56,7 +56,7 @@ const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
-	ewrFractionDaysNotMet: true, ewrAgreement: true
+	ewrFractionDaysNotMet: true, ewrAgreement: true, noFlow: true
 };
 const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,

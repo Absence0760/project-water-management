@@ -1462,6 +1462,28 @@
 // 2026-09-30  total 1254 → 1265 KB (PR #229: measured 1262 with main @
 //             da8c6959 merged). #220's hands-off flow now in main; nothing of
 //             the share links changed. Headroom ~3 KB.
+// 2026-09-29  total 1231 → 1233 KB (issue #71, the evidence measures,
+//             engine 1.33.0: measured 1233 against 1231 on its base
+//             e1d60130, +1.97 KB gzipped). The evidence report's lazy chunk
+//             +1.31 KB (§ 4's "served in full while a site fails" tables and
+//             banded Change column, § 2's two new rows, the FDC chart's
+//             bands) and its CSS +0.1 KB; the calibration worker +0.55 KB
+//             (reserve/riverMeasures.ts in every member run, the new member
+//             measures and their bands). Trimmed first: the report named the
+//             engine version that added them by importing it from
+//             uncertainty/ensemble.ts, which (as in the entry above) moved the
+//             worker's engine into a chunk the report page loaded; the
+//             constant now lives in version.ts. No new dependency. Headroom 0.
+// 2026-09-30  total 1238 → 1240 KB (issue #71: measured 1237 with #217's
+//             branch merged, the evidence measures above included). Headroom
+//             ~3 KB.
+// 2026-09-30  total 1241 → 1245 KB (issue #71: measured 1242 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1265 → 1267 KB (issue #71: measured 1264 with main @
+//             b72ba4eb merged). #229's share links and #204's hands-off flow
+//             now in main; nothing of the evidence measures changed, engine
+//             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1472,7 +1494,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1265,
+	totalCodeKb: 1267,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

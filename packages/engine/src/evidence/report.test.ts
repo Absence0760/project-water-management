@@ -18,7 +18,27 @@ import { runModel } from '../run';
 import { resolveEnsembleOptions, runEnsemble, summariseEnsemble } from '../uncertainty/ensemble';
 import type { DeclaredUncertaintyRule } from '../uncertainty/options';
 import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
-import { ALLOCATIONS_NOT_ASSESSED, BASIS_PRAGMATIC, citedEnsemble, CUMULATIVE_BASIS, CUMULATIVE_NO_BAND, CUMULATIVE_NONE, CUMULATIVE_TRUNCATED, driestMonth, evidenceChecks, evidenceReport, NO_BAND } from './report';
+import { band as bandOf } from '../uncertainty/bands';
+import {
+	ALLOCATIONS_NOT_ASSESSED,
+	BASIS_NO_FLOW,
+	BASIS_PRAGMATIC,
+	citedEnsemble,
+	CUMULATIVE_BASIS,
+	CUMULATIVE_NO_BAND,
+	CUMULATIVE_NONE,
+	CUMULATIVE_TRUNCATED,
+	driestMonth,
+	evidenceChecks,
+	evidenceReport,
+	firstSiteBelow,
+	NO_BAND,
+	NOT_ASSESSED_NO_SITE_BELOW,
+	worksNodeIds
+} from './report';
+import type { EnsembleHeader, MemberMetrics, MemberResult } from '../uncertainty/ensemble';
+import { ENSEMBLE_MEASURES_SINCE } from '../version';
+import type { ScenarioOp } from '../scenario/ops';
 import type { EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -67,7 +87,7 @@ function reserveTable() {
 }
 
 /** The baseline: two farms (Farm two is the applicant's) with crops, draining to a gauge; the gauge record is the model's own flow with noise. */
-function baseInput(opts: { rule?: DeclaredUncertaintyRule | null; reserve?: boolean } = {}): ModelInput {
+function baseInput(opts: { rule?: DeclaredUncertaintyRule | null; reserve?: boolean; midGauge?: boolean } = {}): ModelInput {
 	const days = Math.round(5 * 365.25);
 	const r = rain(days, START, 7);
 	const noise = new Rng(11);
@@ -84,7 +104,9 @@ function baseInput(opts: { rule?: DeclaredUncertaintyRule | null; reserve?: bool
 			nodes: [
 				node({ id: 'G', name: 'Gauge', kind: 'gauge' }),
 				node({ id: 'F1', name: 'Farm one', downstreamNodeId: 'G', areaKm2: 25 }),
-				node({ id: 'F2', name: 'Farm two', downstreamNodeId: 'F1', areaKm2: 15 })
+				// With midGauge, an EWR site between Farm two and Farm one.
+				...(opts.midGauge ? [node({ id: 'S', name: 'Weir', kind: 'gauge', downstreamNodeId: 'F1', ewrSite: true })] : []),
+				node({ id: 'F2', name: 'Farm two', downstreamNodeId: opts.midGauge ? 'S' : 'F1', areaKm2: 15 })
 			],
 			crops: [{ id: 'c', name: 'Maize', cropFactor: new Array(12).fill(0.8) }],
 			cropAreas: [
@@ -164,7 +186,8 @@ const ens = (over: Partial<EvidenceEnsembleInput>): EvidenceEnsembleInput => ({
 	paired: null,
 	...over
 });
-const PAIRED = ens({ id: 'p1', runId: 'app', baselineId: 'e1', summary: null, paired: summarisePaired(ensemble, pairedRun) });
+// As the backend recomputes it: with the application's own units (the applicant's supply band).
+const PAIRED = ens({ id: 'p1', runId: 'app', baselineId: 'e1', summary: null, paired: summarisePaired(ensemble, pairedRun, { own: ['F2'] }) });
 
 function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 	const b = stored('base', base, baseOut);
@@ -222,7 +245,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('has the fixed page-1 rows, in order, each measure labelled with its basis', () => {
-		expect(ids(r).slice(0, 6)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar', 'applicantSupply', 'registeredUse']);
+		expect(ids(r).slice(0, 8)).toEqual(['reserve', 'ewrDays', 'shortfall', 'noFlowDays', 'ewrBelowWorks', 'outflowMar', 'applicantSupply', 'registeredUse']);
 		expect(r.rows.find((x) => x.id === 'ewrDays')!.basis).toBe(BASIS_PRAGMATIC);
 		expect(r.rows[0]!.basis).toMatch(/^Reserve rule table \(Invented test table\)/);
 		for (const row of r.rows) expect(row.notAssessed === null || row.notAssessed.length > 10, row.id).toBe(true);
@@ -236,10 +259,10 @@ describe('evidenceReport: an application on the nominated run', () => {
 		const reserve = r.rows.find((x) => x.id === 'reserve')!;
 		expect(reserve.change!.worse?.n).toBe(p.members);
 		expect(reserve.change!.band!.p50).toBeCloseTo(p.reserve[0]!.band.p50! * 100, 9);
-		// The applicant's supply has no band in the ensemble: it says so rather than subtracting two bands.
+		// The applicant's own supply (ER4): the paired band on Σ supplied ÷ Σ demand over its units, in percentage points.
 		const own = r.rows.find((x) => x.id === 'applicantSupply')!;
-		expect(own.change!.band).toBeNull();
-		expect(own.change!.bandNote).toBe(NO_BAND.notCarried);
+		expect(own.change!.band!.p50).toBeCloseTo(p.ownSupply!.band.p50! * 100, 9);
+		expect(own.change!.worse).toEqual({ k: Math.round(p.ownSupply!.worse! * p.members), n: p.members });
 	});
 
 	it('gives page 1 the compare page’s numbers for the same pair (G14 parity)', () => {
@@ -484,7 +507,7 @@ describe('baseline evidence (the nominated run alone)', () => {
 
 	it('has the river, credibility and appendices without change columns', () => {
 		expect(r.mode).toBe('baseline');
-		expect(ids(r)).toEqual(['reserve', 'ewrDays', 'shortfall', 'outflowMar', 'registeredUse']);
+		expect(ids(r)).toEqual(['reserve', 'ewrDays', 'shortfall', 'noFlowDays', 'outflowMar', 'registeredUse']);
 		for (const row of r.rows) {
 			expect(row.application).toBeNull();
 			expect(row.change).toBeNull();
@@ -666,6 +689,191 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(canonicalJson(evidenceReport(withAllocations()))).toBe(canonicalJson(r));
 		const other = allocations.map((x, k) => (k === 1 ? { ...x, volumeM3PerYear: x.volumeM3PerYear * 3 } : x));
 		expect(canonicalJson(evidenceReport(withAllocations(other)))).not.toBe(canonicalJson(r));
+	});
+});
+
+describe('the evidence measures (engine 1.33.0): no-flow days, EWR below the works, supply bands, served while failing, banded FDC', () => {
+	const r = evidenceReport(input());
+	const p = r.uncertainty.paired!;
+
+	it('prints no-flow days at the outlet, both runs, with the paired band and "worse in"', () => {
+		const row = r.rows.find((x) => x.id === 'noFlowDays')!;
+		const q = (out: ModelOutput) => out.series.find((x) => x.key === 'simulated_outflow')!.values.filter((v) => v < 86.4).length;
+		expect(row.basis).toBe(BASIS_NO_FLOW);
+		expect([row.baseline, row.application]).toEqual([q(baseOut), q(appOut)]);
+		expect(row.change!.run).toBe(q(appOut) - q(baseOut));
+		expect(row.change!.band).toEqual(p.noFlowDays);
+		expect(row.change!.worse).toEqual({ k: Math.round(p.noFlowDaysWorse! * p.members), n: p.members });
+		expect(row.note).toMatch(/^Longest spell \d+ days? → \d+$/);
+	});
+
+	it('bands supply on real numbers (positive control): each unit’s share and the applicant’s group, member by member', () => {
+		// Farm two doubles its maize in the application, so its supply moves in every pair.
+		const kept = ensemble.members.filter((m) => m.accepted);
+		const frac = (x: MemberMetrics, id: string) => (x.unitDemandM3Day![id]! > 0 ? x.unitSuppliedM3Day![id]! / x.unitDemandM3Day![id]! : 1);
+		const diffs = pairedRun.members.map((q, i) => frac(q.metrics, 'F2') - frac(kept[i]!.metrics!, 'F2'));
+		expect(diffs.some((d) => d !== 0)).toBe(true);
+		const f2 = p.supply!.find((x) => x.nodeId === 'F2')!;
+		expect(f2.band).toEqual(bandOf(diffs));
+		expect(f2.worse).toBe(diffs.filter((d) => d < 0).length / diffs.length);
+		// The group is F2 alone here: the same band.
+		expect(p.ownSupply!.band).toEqual(f2.band);
+		expect(p.ownSupply!.band.n).toBe(pairedRun.members.length);
+	});
+
+	it('says why the applicant’s supply has no band when all its units are new', () => {
+		const i = input();
+		const got = evidenceReport(input({ application: { ...i.application!, scenario: { ...i.application!.scenario, ownedNodeIds: ['NEW'] } } }));
+		expect(got.rows.find((x) => x.id === 'applicantSupply')!.notAssessed).not.toBeNull();
+		const onlyNew = { ...i.application!.summary, farms: [...i.application!.summary.farms, { ...i.application!.summary.farms[1]!, nodeId: 'NEW', name: 'New farm' }] };
+		const got2 = evidenceReport(input({ application: { ...i.application!, summary: onlyNew, scenario: { ...i.application!.scenario, ownedNodeIds: ['NEW'] } } }));
+		expect(got2.rows.find((x) => x.id === 'applicantSupply')!.change).toMatchObject({ band: null, bandNote: NO_BAND.noOwnInBaseline });
+	});
+
+	it('bands each other user’s supply and § 4’s change column with the paired band on its share supplied (ER4)', () => {
+		const f1 = r.users.find((u) => u.nodeId === 'F1')!;
+		const band = p.supply!.find((x) => x.nodeId === 'F1')!;
+		expect(f1.change!.run).toBeCloseTo((f1.suppliedB! - f1.suppliedA!) * 100, 12);
+		expect(f1.change!.band!.p50).toBeCloseTo(band.band.p50! * 100, 9);
+		expect(f1.change!.worse).toEqual(band.worse === null ? null : { k: Math.round(band.worse * p.members), n: p.members });
+		for (const row of r.rows.filter((x) => x.id === 'userSupply' && x.subject)) expect(row.change!.bandNote).toBeNull();
+		// Baseline evidence has no change column.
+		expect(evidenceReport(input({ application: null, changes: [] })).users.every((u) => u.change === null)).toBe(true);
+	});
+
+	it('says "Not assessed" with a question when no EWR site lies between the works and the outlet', () => {
+		const rows = r.rows.filter((x) => x.id === 'ewrBelowWorks');
+		expect(rows).toHaveLength(1);
+		expect(rows[0]!).toMatchObject({ subject: 'below Farm two', notAssessed: NOT_ASSESSED_NO_SITE_BELOW, baseline: null, change: null });
+		expect(r.questions).toContain(`Days below the EWR, first site below the works at below Farm two: ${NOT_ASSESSED_NO_SITE_BELOW}`);
+	});
+
+	it('reports the first EWR site below the works: its days below the EWR, both runs, and the Reserve when it has a table', () => {
+		const b1 = baseInput({ midGauge: true });
+		const a1 = applicationInput(b1);
+		const o1 = runModel(b1);
+		const o2 = runModel(a1);
+		const i = input();
+		const got = evidenceReport(
+			input({ baseline: stored('base', b1, o1), application: { ...stored('app', a1, o2), scenario: i.application!.scenario }, ensembles: { baseline: [], paired: [] } })
+		);
+		const rows = got.rows.filter((x) => x.id === 'ewrBelowWorks');
+		const site = (o: ModelOutput) => o.summary.servedWhileEwrFails!.find((x) => x.nodeId === 'S')!.daysNotMet;
+		expect(rows).toHaveLength(1);
+		expect(rows[0]!).toMatchObject({ subject: 'Weir, below Farm two', notAssessed: null, baseline: site(o1), application: site(o2) });
+		expect(rows[0]!.change).toMatchObject({ run: site(o2) - site(o1), band: null });
+		expect(rows[0]!.note).toBe('No Reserve rule table at this site: the Reserve itself is not assessed here');
+		// A baseline-assumption op is not the applicant's works: no row. Control: the proposal above has one.
+		const asBaseline = evidenceReport(input({ application: { ...i.application!, scenario: { ...i.application!.scenario, classified: ['baseline', 'baseline'] } } }));
+		expect(asBaseline.rows.filter((x) => x.id === 'ewrBelowWorks')).toEqual([]);
+	});
+
+	it('finds the works of each op and the first site below them', () => {
+		const model = {
+			transfers: [{ id: 't', fromNodeId: 'F1', toNodeId: 'F2' }],
+			nodes: [
+				{ id: 'G', kind: 'gauge' },
+				{ id: 'F1', kind: 'farm' },
+				{ id: 'F2', kind: 'farm' },
+				{ id: 'U', kind: 'user' }
+			]
+		} as never;
+		const ops = [
+			{ op: 'node.set', nodeId: 'F2', field: 'damCapacityM3', value: 1 },
+			{ op: 'node.set', nodeId: 'F2', field: 'name', value: 'x' },
+			{ op: 'node.set', nodeId: 'G', field: 'ewrSite', value: false },
+			{ op: 'transfer.set', transferId: 't', field: 'maxRateM3s', value: 1 },
+			{ op: 'demand.scale', factor: 1.2, nodeIds: ['F1'] },
+			{ op: 'demand.scale', factor: 1.5 },
+			{ op: 'demand.scale', factor: 1.5, category: 'user' },
+			{ op: 'demand.scale', factor: 0.8, nodeIds: ['F1'] },
+			{ op: 'settings.set', path: 'ewrPragmaticM3PerDay', value: [] }
+		] as unknown as ScenarioOp[];
+		// Demand raised without names is every node of its category; a gauge's field and lowered demand are no works.
+		expect(ops.map((o) => worksNodeIds(o, model))).toEqual([['F2'], [], [], ['F1'], ['F1'], ['F1', 'F2'], ['U'], [], []]);
+		const nodes = [
+			{ id: 'O', kind: 'gauge', downstreamNodeId: null },
+			{ id: 'M', kind: 'gauge', downstreamNodeId: 'O', ewrSite: false },
+			{ id: 'S', kind: 'gauge', downstreamNodeId: 'M' },
+			{ id: 'F', kind: 'farm', downstreamNodeId: 'S' },
+			{ id: 'L', kind: 'farm', downstreamNodeId: 'M' }
+		] as never;
+		expect(firstSiteBelow(nodes, 'F')).toBe('S');
+		// A gauge that only measures isn't a site, and the outlet isn't "between".
+		expect(firstSiteBelow(nodes, 'L')).toBeNull();
+	});
+
+	it('lists per EWR site the users served in full while it failed, and flags them as a count', () => {
+		const sv = r.servedWhileFailing;
+		expect(sv.notAssessed).toBeNull();
+		expect(sv.sites.map((x) => x.key)).toEqual(['outlet']);
+		const outlet = sv.sites[0]!;
+		const want = (o: ModelOutput) => Object.fromEntries(o.summary.servedWhileEwrFails![0]!.units.map((u) => [u.nodeId, u.days]));
+		for (const u of outlet.units) expect([u.daysA, u.daysB]).toEqual([want(baseOut)[u.nodeId] ?? null, want(appOut)[u.nodeId] ?? null]);
+		expect(outlet.daysNotMetA).toBe(baseOut.summary.catchment.ewrDaysNotMet);
+		const any = outlet.units.some((u) => (u.daysB ?? 0) > 0);
+		expect(r.flags.some((f) => f.id === 'servedWhileFailing')).toBe(any);
+		// Positive control: a unit served in full on failing days is flagged, named with its days.
+		const i = input();
+		const summary = { ...appOut.summary, servedWhileEwrFails: [{ ...appOut.summary.servedWhileEwrFails![0]!, units: [{ nodeId: 'F1', name: 'Farm one', kind: 'farm' as const, days: 12 }] }] };
+		const flagged = evidenceReport(input({ application: { ...i.application!, summary } }));
+		expect(flagged.flags.find((f) => f.id === 'servedWhileFailing')).toMatchObject({ level: 'count' });
+		expect(flagged.flags.find((f) => f.id === 'servedWhileFailing')!.text).toMatch(/^1 unit got its whole demand on days an EWR site below it was not met in the application: Farm one 12 days at the outlet \(baseline \d+\) \(§ 4\)\.$/);
+	});
+
+	it('bands the FDC check per month and table point: the baseline’s (R1) and the application’s own curve (R2)', () => {
+		const site = r.river[0]!;
+		const b = r.uncertainty.baseline!.bands.reserveFdc!.find((x) => x.key === 'outlet')!;
+		expect(site.fdcBandNote).toBeNull();
+		expect(site.fdcBands!.map((m) => m.month)).toEqual([10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+		expect(site.fdcBands![0]!.a.length).toBe(baseOut.summary.ewrAssurance![0]!.points.length);
+		expect(site.fdcBands![0]!.a[0]).toEqual(b.months[0]![0]);
+		expect(site.fdcBands![0]!.b![0]).toEqual(p.reserveFdc![0]!.months[0]![0]);
+		// The run's own curve sits inside the baseline's band at most points (member 0 is kept).
+		if (r.uncertainty.baseline!.referenceAccepted) {
+			const run = baseOut.summary.ewrAssurance![0]!.byMonth[0]!.fdc[0]!.impacted!;
+			expect(site.fdcBands![0]!.a[0]!.min!).toBeLessThanOrEqual(run + 1e-9);
+			expect(site.fdcBands![0]!.a[0]!.max!).toBeGreaterThanOrEqual(run - 1e-9);
+		}
+	});
+
+	it('an ensemble stored before engine 1.33.0: every new measure says "no band" with the reason, never a zero', () => {
+		const strip = (m: MemberMetrics): MemberMetrics => {
+			const { noFlowDays: _a, ewrSiteDaysNotMet: _b, unitDemandM3Day: _c, unitSuppliedM3Day: _d, reserveFdc: _e, ...old } = m;
+			return old;
+		};
+		const { units: _u, ewrSites: _w, ...oldHeader } = ensemble.header;
+		const oldMembers = ensemble.members.map((m) => (m.metrics ? { ...m, metrics: strip(m.metrics) } : m)) as MemberResult[];
+		const oldEnsemble = { ...ensemble, header: oldHeader as EnsembleHeader, members: oldMembers };
+		const { noFlowDays: _n, ewrSites: _s, supply: _p, reserveFdc: _f, ...oldBands } = summariseEnsemble(oldEnsemble).bands;
+		// The baseline's summary as stored then; the paired one recomputed by the backend from its members (a paired run on today's engine).
+		const got = evidenceReport(
+			input({
+				ensembles: {
+					baseline: [ens({ summary: { ...summariseEnsemble(oldEnsemble), bands: oldBands } })],
+					paired: [{ ...PAIRED, paired: summarisePaired(oldEnsemble, pairedRun, { own: ['F2'] }) }]
+				}
+			})
+		);
+		const note = NO_BAND.olderEnsemble(ENSEMBLE_MEASURES_SINCE);
+		for (const id of ['noFlowDays', 'applicantSupply'] as const) expect(got.rows.find((x) => x.id === id)!.change, id).toMatchObject({ band: null, bandNote: note, worse: null });
+		expect(got.users.find((u) => u.nodeId === 'F1')!.change).toMatchObject({ band: null, bandNote: note });
+		expect(got.river[0]!).toMatchObject({ fdcBands: null, fdcBandNote: note });
+		// The measures the old ensemble has keep their bands.
+		expect(got.rows.find((x) => x.id === 'ewrDays')!.change!.band).not.toBeNull();
+	});
+
+	it('runs made before engine 1.33.0: the no-flow row and § 4’s table say "Not assessed" and why', () => {
+		const old = (o: ModelOutput) => {
+			const { noFlow: _n, ...catchment } = o.summary.catchment;
+			const { servedWhileEwrFails: _s, ...rest } = o.summary;
+			return { ...rest, catchment };
+		};
+		const i = input();
+		const got = evidenceReport(input({ baseline: { ...i.baseline, summary: old(baseOut) }, application: { ...i.application!, summary: old(appOut) } }));
+		expect(got.rows.find((x) => x.id === 'noFlowDays')!.notAssessed).toBe(`Not assessed: the baseline was made before engine ${ENSEMBLE_MEASURES_SINCE}, which added this measure; run the model again.`);
+		expect(got.servedWhileFailing).toEqual({ notAssessed: `Not assessed: the baseline was made before engine ${ENSEMBLE_MEASURES_SINCE}, which added this measure; run the model again.`, sites: [] });
+		expect(got.flags.map((f) => f.id)).not.toContain('servedWhileFailing');
 	});
 });
 
