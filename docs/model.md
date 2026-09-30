@@ -3372,7 +3372,16 @@ flow), what it covers (`total` or `lowFlow`, a label only), a required
 report turn into a confidence line: "Gazetted Reserve", "Desktop estimate,
 low confidence", "Other source, confidence not stated"; absent = not stated,
 and a table stored before it resolves and reports as it did; the site's
-report carries it only when set), a `scale` (default 1; multiplies every value, for a table given for
+report carries it only when set), an optional `category` (ER9, issue #71:
+the recommended ecological category, REC, the determination sets at the
+site, one class `A` … `F` or a band of two neighbouring ones such as `B/C`,
+as a Reserve determination states it (Kleynhans & Louw 2007); absent or null
+= not given. A label only: no result depends on it, so no `ENGINE_VERSION`
+bump (but a malformed one makes the table unusable like any other bad
+field, so the run skips it with a warning; the settings API and
+`ewrRule.set` refuse it first); the licensing evidence report's § 1 site strip prints it, and a
+change to it is listed in run comparison like any other rule-table
+field), a `scale` (default 1; multiplies every value, for a table given for
 a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 
@@ -3449,7 +3458,14 @@ deficit  = MAX(R − A, 0) as m³
 - **Below the table.** Drier than the driest point, the requirement scales
   with the flow (T_last × V / N_last: the table's EWR-to-natural ratio at its
   driest point, applied to the flow), rather than asking a river with less
-  than its driest natural flow for the full drought flow.
+  than its driest natural flow for the full drought flow. The rule is
+  pending the hydrologist: it makes those months easier to meet, so the
+  licensing evidence report counts them per site (the month's `beyond:
+  'drier'`) and flags them as a caution (G16, issue #71). The ratio
+  R ÷ V stays T_last ÷ N_last: the requirement is below T_last, but
+  not relaxed against the flow. With the percentile from the `run`, about
+  (100 − P_last) % of months fall there by construction (1 % at the DRM's
+  99 % point).
 - **Above the table.** Wetter than the wettest point, the requirement stays
   T_1: the rule table does not ask for more than its wettest flow.
 
@@ -3621,7 +3637,9 @@ drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
 2011, WRC K8/881/2 (rule tables in Mm³ or m³/s against the natural curve; FDC
 and monthly compliance; interpolating a requirement between points) ·
 Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
-months, seasonality, magnitude, contiguity).
+months, seasonality, magnitude, contiguity) · Kleynhans & Louw 2007, WRC
+TT 329/08, *River EcoClassification*, Module A (the ecological categories
+A–F a REC is stated in).
 
 ### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.33.0, roadmap WP-3.7)
 

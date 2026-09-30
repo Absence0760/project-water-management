@@ -8,7 +8,7 @@ import type { AllocationNodeComparison, AllocationSourceComparison, AllocationWa
 import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
 import type { EwrAssuranceSite } from '../reserve/assurance';
-import { ewrSourceConfidence } from '../reserve/rules';
+import { ewrSourceConfidence, isEwrCategory } from '../reserve/rules';
 import type { Band } from '../uncertainty/bands';
 import { calendarMonthOf, monthName } from '../uncertainty/ensemble';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
@@ -625,6 +625,24 @@ function monthChanges(b: EvidenceRunInput, a: EvidenceRunInput, bands: readonly 
 // § 1 The river
 // ---------------------------------------------------------------------------
 
+/**
+ * A Reserve site's REC (ER9): its rule table's `category` in the run's
+ * settings, matched by site as the run matches it (the outlet is a table
+ * with no site or the outflow node's id). A label the site's report doesn't
+ * carry; null when not given.
+ */
+function siteCategory(run: EvidenceRunInput, site: EwrAssuranceSite): string | null {
+	const tables = run.inputs?.settings?.ewrRules;
+	if (!Array.isArray(tables)) return null;
+	const outflow = run.inputs?.model?.nodes?.find((n) => n.downstreamNodeId === null)?.id;
+	const key = (id: unknown) => (id === null || id === undefined || id === outflow ? null : id);
+	const t = tables.find((x) => !!x && typeof x === 'object' && key(x.siteNodeId) === site.nodeId);
+	return t && isEwrCategory(t.category) ? t.category : null;
+}
+
+/** Months whose natural flow is drier than the rule table's driest point (G16): the requirement is scaled with the flow there (model.md §2.9c). */
+const belowTable = (site: EwrAssuranceSite | null) => (site ? site.months.filter((m) => m.beyond === 'drier').length : null);
+
 function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] {
 	return (b.summary.ewrAssurance ?? []).map((site) => {
 		const other = a ? matchSite(a.summary.ewrAssurance ?? [], site) : null;
@@ -670,7 +688,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			sourceKind: ewrSourceConfidence(site.sourceKind) ?? 'kind of source not stated',
 			component: site.component === 'lowFlow' ? 'low flows' : 'total flow',
 			unit: site.unit,
-			category: null,
+			category: siteCategory(b, site),
 			ewrPctNmar: site.ewrPctNmar?.pct ?? null,
 			naturalMar: site.naturalMar ? { ...site.naturalMar } : null,
 			months,
@@ -682,6 +700,9 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			rateA: site.overall.rate,
 			rateB: other ? other.overall.rate : null,
 			monthsA: site.overall.months,
+			belowTableA: belowTable(site)!,
+			belowTableB: a ? belowTable(other) : null,
+			belowTableExpectedPct: site.naturalSource === 'run' && site.points.length ? 100 - site.points[site.points.length - 1]! : null,
 			byMonth,
 			fdcMonth
 		};
@@ -963,6 +984,19 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
+		if (below) {
+			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
+			add(
+				`belowTable-${s.key}`,
+				'caution',
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
+				}`,
+				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'
+			);
+		}
 		if (s.naturalMar && Math.abs(s.naturalMar.differencePct) > 10)
 			add(`nmar-${s.key}`, 'caution', `At ${s.name} the run’s natural MAR differs from the determination’s by ${signed(fixed(s.naturalMar.differencePct, 0))} %.`, 'The requirement read off the run’s natural flow shifts with it.');
 	}
@@ -989,7 +1023,9 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	const out: string[] = [];
 	for (const c of checks) if (!c.passed && c.fix) out.push(`${c.label}: ${c.fix}`);
 	for (const r of rows) if (r.notAssessed) out.push(`${r.label}${r.subject ? ` at ${r.subject}` : ''}: ${r.notAssessed}`);
-	if (river.length) out.push('The recommended ecological category (REC) of each EWR site is not given: expect the assessor to ask which Reserve determination applies (ER-D2).');
+	const noRec = river.filter((s) => s.category === null).map((s) => s.name);
+	if (noRec.length)
+		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table in Settings.`);
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');
