@@ -709,7 +709,8 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect((await feedRow(o.feedId)).last_meta).toMatchObject({ through: o.window.end, finalThrough: plus(o.window.start, 4) });
 		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
 		const next = await runFetchJob();
-		expect(next.request).toMatchObject({ start: plus(o.window.start, 5), end: o.window.end });
+		// It says which of those days the feed holds (the newest), so their preliminary values aren't read again.
+		expect(next.request).toEqual(expect.objectContaining({ start: plus(o.window.start, 5), end: o.window.end, heldThrough: plus(o.window.start, 9) }));
 		// That fetch finds nothing final: the marker it started after stands.
 		await acceptIngestResult(msg({ ...o, jobId: next.fetchJobId }, { ok: true, startDate: next.request.start, values: [6, 7], meta: { days: 2 } }));
 		await tick();
@@ -745,8 +746,14 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
 		expect((await tick()).done).toBe(1); // inline, from the fixtures: final up to 40 days back, preliminary to 3
 		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { finalThrough: addDays(-40), prelimDays: 37 } });
+		const before = (await series(owner, pid, 'rain_chirps_mm'))!;
+		// The next inline fetch reads nothing it holds: the preliminary days stay as they are, still counted, and the newest day stands.
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), end: addDays(-1) });
+		expect((await tick()).done).toBe(1);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toEqual(before);
+		expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: addDays(-3), last_meta: { days: 0, prelimDays: 37, finalThrough: addDays(-40) } });
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), end: addDays(-1), heldThrough: addDays(-3) });
 		// Another place: the marker says nothing about it (data_feed_stamp clears last_meta).
 		await owner.call('PATCH', `/projects/${pid}/feeds/${feedId}`, { config: { cells: [cell(), cell()], startDate: addDays(-60) } });
 		expect((await feedRow(feedId)).last_meta).toBeNull();

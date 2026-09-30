@@ -12,7 +12,7 @@
 //     checked against what was asked for and a late answer to an older fetch
 //     is dropped (feed-ingest.ts, issue #31).
 import { z } from 'zod';
-import { fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
+import { fetchWindow, heldThrough, runFetch, utcToday } from '../../feeds/fetch.js';
 import { feedHttp } from '../../feeds/http.js';
 import { ingestResult } from '../../feeds/ingest.js';
 import { beginFeedFetch, feedForJob } from '../../feeds/store.js';
@@ -33,7 +33,9 @@ export const feedFetchHandler = defineHandler({
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
-		const request = { source: feed.source, config: feed.config, ...window, today };
+		// A CHIRPS fetch needn't re-read the preliminary days the feed already holds (fetchChirps).
+		const held = heldThrough(feed.source, feed.lastDataDate, window);
+		const request = { source: feed.source, config: feed.config, ...window, today, ...(held ? { heldThrough: held } : {}) };
 		if (feedFetcher() === 'sqs') {
 			await beginFeedFetch(db, feed.id, job.id, window);
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };

@@ -84,7 +84,10 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
 export interface GridDays {
 	startDate: string;
 	values: (number | null)[];
-	/** Days read from the preliminary product (the rest are final). */
+	/**
+	 * Preliminary days: read from the preliminary product, or already held as
+	 * preliminary and not read again (`heldThrough`, below). The rest are final.
+	 */
 	prelimDays: number;
 	/**
 	 * The last day D such that every day from the first through D was read
@@ -101,6 +104,18 @@ export interface GridDays {
  * value (it has no preliminary product); else null. Trailing days with
  * neither are dropped (not published yet); a day missing between published
  * ones stays null. `finalThrough` marks the leading run of final days.
+ *
+ * `sat` reads as little as the publishing allows (issue #69). CHC publishes
+ * a month's final files together, in date order, so the finals are probed
+ * from the first day, that day alone and then `concurrency` at a time, until
+ * a batch's last day has none: no later day can have one, and each is read
+ * from the preliminary product directly. (A day missing inside a published
+ * month only stops the probing when it ends a batch; the next fetches read
+ * past it once the window starts after it.) A day with no final that the
+ * feed already holds (on or before `heldThrough`, its newest day) is not
+ * read again: a preliminary value is published once and only replaced by
+ * the final, so it comes back null, which the merge leaves as it is
+ * (keepOnNull), and counts in prelimDays.
  */
 export async function fetchChirps(
 	http: FeedHttp,
@@ -108,23 +123,40 @@ export async function fetchChirps(
 	start: string,
 	end: string,
 	product: 'sat' | 'rnl' = 'sat',
-	concurrency = 6
+	concurrency = 6,
+	heldThrough: string | null = null
 ): Promise<GridDays> {
 	const s = toEpochDay(start);
 	const days = Array.from({ length: Math.max(0, toEpochDay(end) - s + 1) }, (_, i) => fromEpochDay(s + i));
-	const got = await mapLimit(days, concurrency, async (day) => {
-		if (product === 'rnl') return { v: await gridMean(http, chirpsRnlUrl(day), cells), prelim: false };
-		const final = await gridMean(http, chirpsFinalUrl(day), cells);
-		if (final !== null) return { v: final, prelim: false };
-		const prelim = await gridMean(http, chirpsPrelimUrl(day), cells);
-		return { v: prelim, prelim: prelim !== null };
-	});
+	let got: { v: number | null; prelim: boolean }[];
+	let held = 0;
+	if (product === 'rnl') {
+		got = await mapLimit(days, concurrency, async (day) => ({ v: await gridMean(http, chirpsRnlUrl(day), cells), prelim: false }));
+	} else {
+		const finals = new Array<number | null>(days.length).fill(null);
+		for (let probed = 0, size = 1; probed < days.length; size = concurrency) {
+			const batch = await mapLimit(days.slice(probed, probed + size), concurrency, (day) => gridMean(http, chirpsFinalUrl(day), cells));
+			batch.forEach((v, i) => (finals[probed + i] = v));
+			probed += batch.length;
+			if (batch.at(-1) === null) break;
+		}
+		got = await mapLimit(days, concurrency, async (day, i) => {
+			const f = finals[i]!;
+			if (f !== null) return { v: f, prelim: false };
+			if (heldThrough !== null && day <= heldThrough) {
+				held++;
+				return { v: null, prelim: false };
+			}
+			const prelim = await gridMean(http, chirpsPrelimUrl(day), cells);
+			return { v: prelim, prelim: prelim !== null };
+		});
+	}
 	let last = got.length - 1;
 	while (last >= 0 && got[last]!.v === null) last--;
 	const kept = got.slice(0, last + 1);
 	let final = 0;
 	while (final < kept.length && kept[final]!.v !== null && !kept[final]!.prelim) final++;
-	const out: GridDays = { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length };
+	const out: GridDays = { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length + held };
 	if (final > 0) out.finalThrough = days[final - 1]!;
 	return out;
 }

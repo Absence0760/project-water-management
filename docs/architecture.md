@@ -937,11 +937,21 @@ merges into:
   (a day of that answer, from the window's first day, with a value on every
   day up to it; the previous marker carries on while it reaches the day
   before the window), and the next window starts the day after it (one day
-  at least, the cap counted from there). On the fixtures that takes a
-  caught-up `sat` feed's daily fetch from 194 range requests to 152 (final
-  lags ~40 days, so most of the 50 re-read days are still preliminary) and
-  an `rnl` one's from 158 to 5 (`fetch.test.ts`). Changing the feed's place,
+  at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
+  A `sat` fetch also reads only what can have changed (`fetchChirps`): CHC
+  publishes a month's finals together, in date order, so it probes the
+  finals from the window's first day (that day alone, then six at a time)
+  and stops after a batch whose last day has none; every later day goes
+  straight to the preliminary product. A preliminary value is published
+  once and only replaced by the final, so a day with no final that the feed
+  already holds (on or before its newest day, sent as the request's
+  `heldThrough`, bounded to the window) isn't read again: it comes back
+  null, which the merge keeps, and still counts in `prelimDays`. On the
+  fixtures a caught-up feed's daily fetch goes from 194 range requests to 3
+  (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`). A final file missing
+  inside a published month stops the probing only when it ends a batch, and
+  then only until the window starts after it.
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
