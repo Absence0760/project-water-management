@@ -526,4 +526,3 @@ function planTriggerTable(base: ModelInput, baseRun: OutlookBaseRun, reviewDate:
 	const excluded: StoredExcluded[] = [...picked.excluded, ...byYear.slice(OUTLOOK_YEARS_MAX).map((a) => ({ waterYear: a.waterYear, reason: 'overLimit' as const }))];
 	return { season: tableSeason, baseRun: tBase, snapshot, plan, analogues: picked.analogues.filter((a) => keep.has(a.waterYear)), pickedExcluded: picked.excluded, excluded };
 }
-
