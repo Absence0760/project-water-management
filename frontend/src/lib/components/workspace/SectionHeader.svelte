@@ -148,7 +148,7 @@
 		.own > :global(.btn) {
 			justify-content: center;
 		}
-		/* A menu's button (Grids ▾, Download ▾) fills its share like the rest. */
+		/* A menu's button (Tables ▾, Download ▾) fills its share like the rest. */
 		.own > :global(:is(details, div)) > :global(:is(summary, .btn):first-child) {
 			width: 100%;
 			justify-content: center;

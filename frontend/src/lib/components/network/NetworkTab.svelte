@@ -167,7 +167,7 @@
 	});
 
 	// The Network is one page, the map (issue #17, option A · A2): the node
-	// table opens as a grid (the Grids menu, `grid=nodes`, this component with
+	// table opens as a grid (the Tables menu, `grid=nodes`, this component with
 	// `only="table"`) and a node's full form in a sheet over the map
 	// (`edit=<nodeId>`). `view` is 'table' only inside the grid modal.
 	type View = 'map' | 'table';
@@ -330,7 +330,7 @@
 	];
 	const GRID_ALL: [GridId, string][] = [['nodes', 'Node table'], ...GRID_LINKS];
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
-	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
+	// The Tables menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
 	// less the page's gutter and the save bar while it shows (--dock-h), so the page itself never
 	// scrolls. The top is measured. (It once measured what sat below it as the page's scroll height
@@ -429,8 +429,8 @@
 	<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
-		<summary class="btn">Grids <span aria-hidden="true">▾</span></summary>
-		<div class="grids-pop" role="group" aria-label="Open as a grid">
+		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
+		<div class="grids-pop" role="group" aria-label="Open as a table">
 			{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
@@ -672,7 +672,7 @@
 {/if}
 {:else}
 	<!-- The map (issue #17, option A · A2): a page of its own. Its summary,
-	     Grids and Add node sit in the workspace's section header (headerParts
+	     Tables and Add node sit in the workspace's section header (headerParts
 	     below, with no nodes yet too); the map card fills the width beside the
 	     picked node and the node list. -->
 	{#if nodes.length === 0}

@@ -622,8 +622,8 @@ role, freshness, Add data) and each tab's own header:
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
-  (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  (below), the section's own (the Network's **Tables** and **+ Add node**,
+  Crops' **Tables** and **+ Add crop**, Transfers' **Show on the map** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
   River & reserve's **Run** menu and **Open in Runs & results**, Units &
@@ -1567,9 +1567,9 @@ wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
 ## Network
 
 One page, the **map** (issue #17, option A's simplicity with nothing lost).
-It used to have three layouts (Map, Table, One node); with the Grids menu
+It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
-the **node table** is a grid (**Grids → Node table**, `grid=nodes`, the
+the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
 node's **full form** opens in a sheet over the map from its card's **Edit**
 (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
@@ -1579,8 +1579,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
-    "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
-    as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
+    as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add node**, which opens the new node's form in
     the sheet. With no nodes the map card is an empty panel with **Add
@@ -1630,7 +1630,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
-  - The **Grids** menu closes through its element (`details.open`), not its
+  - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
   - Beside it (one column below 900 px, the map first), two cards:
@@ -1678,7 +1678,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
     node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.
 
   Every field of the old Table and One node layouts is a click away (Edit,
-  Grids → Node table), so nothing was removed.
+  Tables → Node table), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -2019,7 +2019,7 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
-  a **Grids** menu (Crop factors, Planted areas → the
+  a **Tables** menu (Crop factors, Planted areas → the
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
@@ -2152,7 +2152,7 @@ overlays ever edit the catchment from there.
 ### Load crop factors
 
 **Load crop factors…**, under the crop-factor table of the [crop
-grids](#crop-grids) (editors only: Crops & demand's **Grids › Crop
+grids](#crop-grids) (editors only: Crops & demand's **Tables › Crop
 factors**, the grid modal from any tab, and scenario override mode, where it
 fills the scenario's crops), opens a dialog over it
 that fills the project's crop factors from a source, shows what changes and
@@ -2256,7 +2256,7 @@ but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 
-- **From:** the Network's and Crops & demand's **Grids** menus, and Crops &
+- **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
   (the #17 checklist).
 - **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
@@ -4867,7 +4867,7 @@ them scenarios).
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
   Network is its node table inline (`NetworkTab only="table"`), not the map:
-  the map's Grids menu and farm links open the page's grid modal and farm
+  the map's Tables menu and farm links open the page's grid modal and farm
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
   about unrecorded edits; leaving it does (the leave guard, above), and
@@ -5611,7 +5611,7 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   sections, the Project and Dams pages, where the sections sit in the app
   sidebar under the catchment's name, Projects / Teams / Help at its top, the
   Data badge, the phone bar's Menu and the phone Sections button, the section
-  header and each page's actions in it, the notice line, the Grids menu's grid
+  header and each page's actions in it, the notice line, the Tables menu's grid
   modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to the term's glossary topic page.

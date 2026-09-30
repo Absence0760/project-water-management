@@ -5,7 +5,7 @@
 // per unit as stacked bars (a unit opens the farm drawer; Edit areas the
 // planted-areas grid). From a wide page the list scrolls in its own column and
 // the chart and bars fill the window beside it, however many crops and units
-// there are. The full grids open from the Grids menu; nothing on the old tab
+// there are. The full grids open from the Tables menu; nothing on the old tab
 // is lost.
 import type { Page } from '@playwright/test';
 import { addMember, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -138,7 +138,7 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await expect(page.getByRole('img', { name: 'Lower farm: 12 ha, Orchard 12 ha' })).toBeVisible();
 });
 
-test('the Grids menu and Edit areas open the full grids over the page; a farm opens its drawer', async ({ page, owner }) => {
+test('the Tables menu and Edit areas open the full grids over the page; a farm opens its drawer', async ({ page, owner }) => {
 	void owner;
 	const project = await seed(page, 'Crops page grids');
 	await page.goto(`/projects/${project.id}?tab=crops`);
@@ -154,10 +154,10 @@ test('the Grids menu and Edit areas open the full grids over the page; a farm op
 	// The menu holds the two crop grids only: the demand table is on the page, behind Show table (issue #174).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a grid' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas']);
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas']);
 	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
+	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
 
 	// Edit areas: the planted-areas grid; an edit there shows on the bars.

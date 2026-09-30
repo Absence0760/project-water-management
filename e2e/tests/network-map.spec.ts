@@ -12,11 +12,11 @@ import { closeModal, openNodeTable } from '../support/network.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
-/** Opens the header's Grids menu (a disclosure) and returns one of its links. */
+/** Opens the header's Tables menu (a disclosure) and returns one of its links. */
 async function gridLink(page: Page, name: string) {
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
-	return page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name, exact: true });
+	return page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name, exact: true });
 }
 
 async function savedCropArea(page: Page, projectId: string, farm: string): Promise<number> {
@@ -94,7 +94,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/edit=/);
 
-	// The node table is a grid (Grids → Node table), every column as before.
+	// The node table is a grid (Tables → Node table), every column as before.
 	const table = await openNodeTable(page);
 	await expect(page).toHaveURL(/[?&]grid=nodes/);
 	await expect(table.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -243,9 +243,9 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	// The menu closes on Escape.
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeVisible();
 	await page.keyboard.press('Escape');
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
+	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
 
 	// Transfers too; Back closes a grid as well.

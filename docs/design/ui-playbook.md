@@ -586,7 +586,7 @@ Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
 picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
-`network/NetworkTab.svelte` (map page, Grids menu, node sheet),
+`network/NetworkTab.svelte` (map page, Tables menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart in
 the window's one scroll, the long table folded under "Show all N series"
