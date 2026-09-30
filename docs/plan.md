@@ -727,7 +727,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
       is two demand objects (model.md §2.7f).
     - **Demand sources:** meter records, else the reconciliation strategy's
       AADD, else population × litres per person per day, recording which
-      (model.md §2.7f; a structured field is in followups.md).
+      (model.md §2.7f; the object's `source`, engine 1.56.0).
     - **GIS:** open data only (Copernicus 30 m DEM, WR2012, other openly
       licensed layers), proposed by the app and confirmed by the modeller
       (planned-work.md § Catchment map).

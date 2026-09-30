@@ -3317,7 +3317,8 @@ regression suite is unchanged.
 | Field | Meaning |
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
-| `name`, `note` | a label, and where the number comes from, so reports can say how solid it is (Q11). The rule, decided with the client (issue #90): use meter records where they exist, else the reconciliation strategy's AADD, else population × litres per person per day, and record which one was used. Today that record is the free-text `note`; a structured source field is a follow-up ([followups.md](./followups.md) "Demand objects: a structured demand source") |
+| `name`, `note` | a label, and the detail of where the number comes from (which meter and years, which strategy, which norm) |
+| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 130; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -3348,6 +3349,32 @@ unit (it no longer follows from G alone), and the curtailment report's supply
 cut divides the irrigation part of the charge by the window's
 (Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
 objects included, with the draft; its `demand` shape includes them.
+
+**The source** (engine ≥ 1.56.0, issue #54 Q11, `project.ts`
+`DEMAND_OBJECT_SOURCES`). So a report can say by rule how solid a demand
+is, the client's rule (confirmed in issue #90) is recorded per object: use
+meter records where they exist, else the reconciliation strategy's AADD
+(annual average daily demand), else population × litres per person per day.
+The source fixes how the volume is derived:
+
+| `source` | The number | `sizing` |
+| --- | --- | --- |
+| `meter` | metered abstraction, m³/day per month (a meter record includes losses, so it isn't grossed up) | `monthly` |
+| `aadd` | the strategy's AADD, m³/day, shaped by month if the strategy gives a profile | `monthly` |
+| `perCapita` | `count` (people, or head of stock) × `litresPerUnitDay` (a norm: the Red Book's 230 l, about 45 l per head of cattle) ÷ (1 − losses) × the monthly profile | `perUnit` |
+| `other` | anything else: a licence volume, an estimate, a workbook's typed-over demand (the importers' choice) | either |
+
+A save (and a scenario op) that gives `meter` or `aadd` to a per-unit object,
+or `perCapita` to a monthly one, is refused (modelRules `doSourceSizing`); the
+node form sets the sizing when the source is picked and locks it. Null (every
+object saved before 1.56.0, and a new one until the modeller says) is "not
+recorded". The source is a record, never an input: a run is the same to the
+bit with any source or none (`run.demandSource.test.ts` on random networks).
+The run carries it on the object's summary (`DemandObjectSummary.source`), and
+the demand-objects table and the summary CSV show it with each source's share
+of the objects' demand. Which source a demand *should* have (whether a
+catchment has meter records the modeller skipped) is the modeller's call; the
+app records it and never guesses one.
 
 **Decisions, pending the hydrologist** (the issue #54 research; the
 conservative reading where it didn't settle them):
@@ -3463,7 +3490,8 @@ stages are shown as the supplied l per person per day, never applied.
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
 supplied, return and days short, and, on an object with a schedule, its
-days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
+days off, engine ≥ 1.17.0; a day off is never a day short; and its source
+when it records one, engine ≥ 1.56.0). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so. An
 object with a basic-needs floor (engine ≥ 1.44.0) adds its people and floor
 B_k, the days it got less than b_k(t) and the mean of MAX(b_k − G_k, 0) (the
@@ -3488,7 +3516,7 @@ span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction (and doubles an object's population, so a floor doubles with it). Half the fuzz's monthly objects name people
 (engine ≥ 1.44.0), so domestic and municipal ones have floors below and above
-their demand; `run.basicNeeds.test.ts` restricts every unit of the random
+their demand, and two in three objects a source that fits their sizing (engine ≥ 1.56.0); `run.basicNeeds.test.ts` restricts every unit of the random
 networks (factors 0 to 1) and checks every invariant. Hand examples: `run.basicNeeds.test.ts`, `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
 dates, the year-end wrap, 29 February, overlap order).

@@ -190,6 +190,16 @@ collected as a checklist in issue #46; tick it there as they answer.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Demand sources to confirm** (engine 1.56.0, issue #54 Q11,
+      [model.md §2.7f](./model.md) "The source"). Built on these readings of
+      the client's rule; put each as "confirm or change": a per-head norm
+      for livestock counts as `perCapita` (the rule names people only); a
+      meter record and an AADD are always given as m³/day by month (never a
+      count × a metered litres per head); a new object stays "not recorded"
+      even when it starts at a category's norm (Red Book 230 l, 45 l per head
+      of cattle), until the modeller picks its source; and the workbook
+      importers record a typed-over demand as `other`, not as an AADD even
+      where the workbook's number came from one.
 - [ ] **Flow gap filling defaults to confirm** (engine 1.23.0, issue #66,
       [model.md §2.10i](./model.md)). Built off by default on these
       engineering defaults; put each to the hydrologist as "confirm or
@@ -3344,18 +3354,29 @@ from the WP:
       `planObjects` (a gap runs at the schedule's factor), with the checks
       reading it the same way. Trigger: a client supplying such a record for
       a demand whose pattern windows can't describe.
-- [ ] **Demand objects: a structured demand source.** The rule is decided
-      (issue #54 Q11, confirmed by the client in issue #90): a demand comes
-      from meter records where they exist, else the reconciliation
-      strategy's AADD, else population × litres per person per day, and the
-      model records which. Today that record is the object's free-text
-      `note`, so a report can't say by rule how solid a demand is. Durable
-      fix: a `source` field on the object (`meter` | `aadd` | `perCapita` |
-      `other`, with the note kept for the detail), set by the node form and
-      the importers, shown in the run's object table and the evidence
-      report. Trigger: the evidence report (or a WUA screen) needing to
-      grade demands by source, or the first catchment with objects from
-      more than one source.
+- [x] **Demand objects: a structured demand source** (engine 1.56.0,
+      2026-09-30, migration 130; issue #54 Q11, confirmed in issue #90). A
+      `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
+      not recorded, the note kept for the detail); `meter` and `aadd` must be
+      sized `monthly`, `perCapita` `perUnit` (modelRules `doSourceSizing`).
+      Set by the node form (picking a source sets and locks the sizing), the
+      scenario ops and both workbook importers (`other`, the typed-over
+      demand); a record only, so a run is the same with any source. Shown in
+      the run's demand-objects table (a Source column and each source's
+      share of the demand) and the summary CSV ([model.md §2.7f](./model.md)).
+- [ ] **Demand objects: the source in the evidence report.** Not built: the
+      licensing evidence report doesn't list the applicant's demand objects
+      at all yet, so grading them by source there means a new report section
+      (the application's objects, each with its source and demand, and the
+      share of the added demand that is metered), an `EVIDENCE_REPORT_VERSION`
+      bump so issued packs keep rebuilding to their hash, and its PDF and
+      preview. Durable fix: that section built from the runs'
+      `DemandObjectSummary.source` (engine ≥ 1.56.0) and the same
+      `demandBySource` shares the results table uses (move it to the engine
+      then), with a flag when most of the added demand isn't metered or
+      isn't recorded. Trigger: an assessor or the client asking the report
+      to grade an application's demand by source, or the first application
+      whose change is a demand object.
 - [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
       issue #123, migration 127; agreed in issue #90 Q13). A domestic or
       municipal demand object has a floor of population × 25 l a day (its
