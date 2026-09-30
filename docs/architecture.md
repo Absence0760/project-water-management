@@ -1105,7 +1105,7 @@ rainfall feed", with a count when the feed wrote only some of its days):
 
 The audit event per merge (`series.merged`) and the debounced re-run after new
 data (WP-2.11) are built (see Merging above), and so is CHIRPS over a bounding box
-(`config.bbox`, above), #69's last open item.
+(`config.bbox`, above).
 
 ## Server-side reports
 
