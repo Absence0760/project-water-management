@@ -6059,8 +6059,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     ranks first (the largest drop in months met, else the one met least
     often) and, beside it, of the river's driest month (the lowest mean
     natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
-    both, when they are the same month; `grid.ts` `fdcMonths`), and the
-    compliance table. Then the application's EWR charge.
+    both, when they are the same month; `grid.ts` `fdcMonths`). From
+    `evidence-7` an application report has a small table under each plot
+    (`evidence-fdc-change`): the paired change in the curve at each table
+    point, as the median, the 5 to 95 % range and the runs' own difference,
+    and "lower in k of n sets" (`grid.ts` `fdcChangeRows`). The caption
+    (`fdcCaption`) then reads the shading as each run's own spread; a pack
+    issued before `evidence-7` has no table and keeps the old caption
+    (overlapping ranges don't mean no change). Then the compliance table. Then the application's EWR charge.
   - **2 Uncertainty**: the coverage banner, the declared rule and the cited
     ensemble, the ledger of every ensemble started on the baseline (and how
     each departs from the rule; a start not completed reads *started, not

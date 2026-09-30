@@ -4011,14 +4011,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %
       band (R1) and hatches the application's own curve's (R2), or says why
       there is none.
-- [ ] **The paired change of the FDC check curve** (engine review of ER5).
+- [x] **The paired change of the FDC check curve** (engine review of ER5).
       § 1's chart bands each run's own curve (R1 shaded, R2 hatched); the two
       come from the same parameter sets, so they overlap even when every
-      pair shifts the curve the same way, and the caption says so. Durable
-      fix: band the per-pair difference of the impacted curve at each table
-      point with its worse-share in `summarisePaired`, printed as a small
-      table under the chart. Trigger: an assessor reads the FDC chart for
-      the application's effect, or the next change to § 1.
+      pair shifts the curve the same way, and the caption said so. Built
+      (report format `evidence-7`): `summarisePaired` bands the per-pair
+      difference of the impacted curve at each table point with the share of
+      pairs in which the application's flow is lower
+      (`PairedSummary.reserveFdcChange`); the evidence document carries it
+      per month and point with the runs' own difference and "worse in k of
+      n" (`EvidenceSite.fdcChange`), and § 1 prints it as a table under each
+      FDC plot (screen and the server-rendered PDF alike), the caption no
+      longer apologising for the overlap. A pack issued before `evidence-7`
+      keeps its frozen document, with no table and the old caption. No
+      `ENGINE_VERSION` bump: no run's output changes.
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue

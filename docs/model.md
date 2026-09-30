@@ -5566,7 +5566,16 @@ it never changes a run's results.
   evidence report passes) the change in their group's Σ supplied ÷ Σ demand;
   and the application's own Reserve FDC check curve under the same parameter
   sets (a band on the curve, not a difference, so the chart can draw it
-  beside the baseline's).
+  beside the baseline's). Because both runs' curve bands come from the same
+  sets, they overlap even when every pair shifts the curve the same way, so
+  the summary also bands the **paired change in that curve**
+  (`reserveFdcChange`, evidence report format `evidence-7`): per site in both
+  runs, per water-year month and table point, other − baseline of the
+  impacted flow, with `worse`, the share of the pairs with a flow on both
+  sides in which the other run's is lower (`null` below the 30-member gate).
+  Identical runs give a zero band; a curve moved the same amount in every set
+  gives a zero-width band at that amount, however far the sets spread each curve.
+  The evidence report tables it under § 1's FDC plot (`EvidenceSite.fdcChange`).
 - **The declared rule and the cited ensemble** (issue #71,
   `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
   G4): a project may declare one rule for its evidence,
