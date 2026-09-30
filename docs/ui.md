@@ -5828,8 +5828,10 @@ published.
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers": each month's
-  needed and received, and the **Share received** with the engine's stress
-  class in plain words under it (all or nearly all ≥ 95 %, a little short
+  needed and received, and under the received a line with the share of the
+  need and the engine's stress class in plain words ("99 % · all or nearly
+  all"; a line in the cell, not a fourth column, which didn't fit a 320 px
+  phone in Afrikaans) (all or nearly all ≥ 95 %, a little short
   ≥ 85 %, short ≥ 70 %, very short ≥ 50 %, far too little; `chart.ts`
   `supplyLevel`, `STRESS_THRESHOLDS`, issue #70), and a line under the table
   saying what the words mean; last

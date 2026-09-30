@@ -102,9 +102,10 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	const monthsTable = months.getByRole('table');
 	await expect(monthsTable).toContainText(/\sML/);
 	await expect(monthsTable).not.toContainText('m³');
-	// Each month's share of its need received, with how short it was in words (issue #70), and what the words mean.
-	await expect(monthsTable.getByRole('columnheader', { name: 'Share received' })).toBeVisible();
-	await expect(monthsTable).toContainText(/\d+\s%(all or nearly all|a little short|short|very short|far too little)/);
+	// Under each month's received water, its share of the need and how short it was in words (issue #70), in
+	// the Received column (three columns fit a 320 px phone), and what the words mean.
+	await expect(monthsTable.getByRole('columnheader')).toHaveText(['Month', 'Needed', 'Received']);
+	await expect(monthsTable).toContainText(/\d+\s% · (all or nearly all|a little short|short|very short|far too little)/);
 	await expect(months).toContainText('All or nearly all is 95 % or more of what you needed;');
 	// Back to m³, the seeded farmer's default, for the other specs.
 	await supplyAgain.getByRole('button', { name: 'm³' }).click();

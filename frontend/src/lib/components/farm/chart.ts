@@ -125,7 +125,7 @@ export function supplyLevel(m: MonthTotals): { share: string; level: string } {
 	return cls === null || ratio === null ? { share: '–', level: '' } : { share: fmtPct(ratio), level: t(STRESS_WORDS[cls]) };
 }
 
-/** What each word under "Share received" means, from the engine's thresholds. */
+/** What each word under a month's received water means, from the engine's thresholds. */
 export function supplyLevelKey(): string {
 	const at = (cls: StressClass) => fmtPct(STRESS_THRESHOLDS.find((x) => x.cls === cls)!.min);
 	return t('All or nearly all is {low} or more of what you needed; a little short, {moderate} or more; short, {high} or more; very short, {severe} or more; far too little, less than {severe}.', {

@@ -205,8 +205,6 @@ export const af: Catalogue = {
 	'5cf817d2': 'Ontvang',
 	// Water you needed and received each month
 	'54a6fc83': 'Water wat jy elke maand nodig gehad en ontvang het',
-	// Share received
-	'0faeac53': 'Persentasie ontvang',
 	// Season outlook
 	'874f0827': 'Seisoensvooruitsig',
 	// What is the season outlook?
