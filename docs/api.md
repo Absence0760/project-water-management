@@ -2677,8 +2677,11 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
   left alone because the series held a value the feed didn't write: an
   upload or import, #30), `staged` / `replaced` (a confirmed replacement's
-  days staged so far, or the label of what it replaced once swapped in) and
-  `through` (the last day the fetch asked for).
+  days staged so far, or the label of what it replaced once swapped in),
+  `through` (the last day the fetch asked for) and, for CHIRPS,
+  `finalThrough` (the last day through which the series is final, not read
+  again, #69). A CHIRPS `prelimDays` counts the preliminary days in the
+  window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all

@@ -930,6 +930,41 @@ merges into:
   starting before the station's record, or a gap longer than one window), the
   window starts from there instead, less the re-read, so it moves past days
   with no data rather than asking for the same empty window forever (#29).
+  A final CHIRPS value is never revised, so the re-read skips the days
+  already final (#69): the fetcher reports the last day of the leading run
+  it read from the final product (`finalThrough`; for `rnl`, every day), the
+  ingest keeps it as `last_meta.finalThrough` once it has checked the claim
+  (a day of that answer, from the window's first day, with a value on every
+  day up to it; the previous marker carries on while it reaches the day
+  before the window), and the next window starts the day after it (one day
+  at least, the cap counted from there). Changing the feed's place,
+  product or series clears `last_meta`, so the marker starts again.
+  A `sat` fetch also reads only what can have changed (`fetchChirps`): CHC
+  publishes a month's finals together, about three weeks after it ends, so
+  it probes the finals from the window's first day (that day alone, then
+  six at a time) and stops after a batch whose last day has none in a month
+  whose finals may still be coming (ended less than 45 days ago,
+  `CHIRPS_FINAL_EXPECTED_DAYS`); every later day goes straight to the
+  preliminary product. A final missing from an older month is a gap in the
+  archive, so the probing goes on past it and the later finals are read as
+  finals; the marker stops before the gap, so that day is probed again each
+  fetch. A preliminary value is published once and only replaced by the
+  final, so a day with no final that the feed already holds isn't read
+  again: it comes back null, which the merge keeps, and still counts in
+  `prelimDays`. "Holds" is read from the series the answer merges into, the
+  same choice the ingest makes (the stage while a confirmed replacement
+  backfills and the live series still conflicts, else the live target;
+  store.ts `heldSeries`), as the leading run of the window's days with a
+  value, sent as the request's `heldThrough` (`sat` only: `rnl` has no
+  preliminary days): an empty day inside it (published late,
+  deleted, or a gap the merge kept) ends the run and is read again. On the
+  fixtures a caught-up feed's daily fetch goes from 194 range requests to 3
+  (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
+  **What this gives up:** a day before the final marker is never read
+  again, so a feed day deleted or overwritten there (an upload over it, a
+  restore) is not refilled by the feed; before #69 any day in the last 50
+  was. Changing the feed's place, product or series clears the marker, and
+  re-attaching the feed reads its whole window again.
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
@@ -1023,8 +1058,9 @@ merges into:
   days for CHIRPS) queues the feed's next fetch a minute later
   (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts) instead of waiting for the
   schedule, so a long backfill (a replacement, or an early start date) goes a
-  window at a time rather than a window a day. Each CHIRPS window re-reads
-  the last 50 days, so it moves on 70. "Run now" while that fetch waits makes
+  window at a time rather than a window a day. Each CHIRPS window starts
+  after the final days before it (the window, above), so a backfill of final
+  days moves on the whole 120. "Run now" while that fetch waits makes
   it due now (`app_feed_fetch_now`, 032).
 - **"Run now" is rate-limited per feed** (111, `app_feed_take_run_now`): a
   token bucket of 6 presses, one back every 10 minutes (`RUN_NOW_RATE`,
