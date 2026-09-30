@@ -18,7 +18,7 @@
 // months; without even that, CHIRPS stays raw and the run warns. Factors are
 // clamped to CHIRPS_FACTOR_MIN … CHIRPS_FACTOR_MAX.
 //
-// Quantile map (engine ≥ 1.47.0, CR-23, opt-in settings.chirpsQuantileMap):
+// Quantile map (engine ≥ 1.53.0, CR-23, opt-in settings.chirpsQuantileMap):
 // a monthly factor fixes CHIRPS' level but keeps its own wet-day frequency
 // and intensity, and a 0.05° cell is wet on more days, with fewer heavy
 // days, than a gauge. With the map on, CHIRPS × factor is fitted against the
@@ -151,7 +151,7 @@ export interface ChirpsFitPeriodInfo {
 	segments: ChirpsFitSegment[];
 }
 
-/** One calendar month of the CHIRPS gap map (engine ≥ 1.47.0). */
+/** One calendar month of the CHIRPS gap map (engine ≥ 1.53.0). */
 export interface ChirpsQuantileMonth {
 	/** Calendar month 1–12. */
 	month: number;
@@ -168,7 +168,7 @@ export interface ChirpsQuantileMonth {
 	chirpsWetMm: number;
 }
 
-/** The CHIRPS gap fill's quantile map as fitted and applied (engine ≥ 1.47.0, CR-23, settings.chirpsQuantileMap). */
+/** The CHIRPS gap fill's quantile map as fitted and applied (engine ≥ 1.53.0, CR-23, settings.chirpsQuantileMap). */
 export interface ChirpsQuantileMapInfo {
 	wetDayMm: number;
 	minWetDays: number;
@@ -254,7 +254,7 @@ export interface ChirpsCorrection {
 	/** CHIRPS rain on the fallback days, before and after correction, mm (negatives count as 0). */
 	fallbackRawMm: number;
 	fallbackCorrectedMm: number;
-	/** The quantile map (engine ≥ 1.47.0, settings.chirpsQuantileMap); absent when it is off, so a run without it is unchanged. */
+	/** The quantile map (engine ≥ 1.53.0, settings.chirpsQuantileMap); absent when it is off, so a run without it is unchanged. */
 	quantileMap?: ChirpsQuantileMapInfo;
 }
 
@@ -399,7 +399,7 @@ export interface ChirpsFitOptions {
 	 * without it.
 	 */
 	dq?: DataQualitySettings;
-	/** settings.chirpsQuantileMap (engine ≥ 1.47.0): fit the gap map too; only in mode 'monthly'. */
+	/** settings.chirpsQuantileMap (engine ≥ 1.53.0): fit the gap map too; only in mode 'monthly'. */
 	quantileMap?: ChirpsQuantileMap | null;
 }
 
@@ -610,7 +610,7 @@ export function chirpsBiasFactors(
 }
 
 /**
- * The gap map's tables (engine ≥ 1.47.0): per calendar month, CHIRPS × the
+ * The gap map's tables (engine ≥ 1.53.0): per calendar month, CHIRPS × the
  * factor a gap that day would take against catchment rain, wet days only, on
  * the fit's shared days (`days`, every listed range together).
  */
@@ -638,7 +638,7 @@ function fitChirpsQuantileMap(corr: ChirpsCorrection, days: readonly { day: numb
 }
 
 /**
- * CHIRPS on a day as the gap map gives it (engine ≥ 1.47.0): the day's value
+ * CHIRPS on a day as the gap map gives it (engine ≥ 1.53.0): the day's value
  * once its calendar month (the whole stored month, not only the run's days,
  * so the window never changes a day) is × the factor, mapped with its
  * month's threshold (below it dry, at or above it quantile-mapped) and
@@ -706,7 +706,7 @@ export function chirpsQuantileMapper(corr: ChirpsCorrection | null, chirps: Dail
 }
 
 /**
- * The correction a model-state snapshot pins (run.ts, engine ≥ 1.47.0):
+ * The correction a model-state snapshot pins (run.ts, engine ≥ 1.53.0):
  * with the gap map on and the snapshot day not a 1st, a copy holding the
  * stored CHIRPS of that month before the day (`quantileMap.lead`), so a run
  * resumed from it maps the month from the same days even when its input
@@ -754,7 +754,7 @@ export function applyChirpsCorrection(
 	chirps: readonly (number | null)[],
 	month: Uint8Array,
 	start = 0,
-	/** The stored CHIRPS series, for the gap map's month blocks (engine ≥ 1.47.0); without it the map isn't applied. */
+	/** The stored CHIRPS series, for the gap map's month blocks (engine ≥ 1.53.0); without it the map isn't applied. */
 	stored?: DailySeries
 ): (number | null)[] {
 	const out = chirps.slice();
@@ -779,7 +779,7 @@ export function applyChirpsCorrection(
 		if (corr.mode === 'monthly' && sf.factor !== null) {
 			out[t] = v * sf.factor;
 			if (qm && mapped) {
-				// The gap map (engine ≥ 1.47.0): a mapped month's wet day takes its mapped value; any other day keeps the factor.
+				// The gap map (engine ≥ 1.53.0): a mapped month's wet day takes its mapped value; any other day keeps the factor.
 				qm.factorOnlyMm += Math.max(0, out[t]!);
 				if (!qm.tables?.[month[t]! - 1]) qm.unmappedDays++;
 				else {
@@ -1017,7 +1017,7 @@ function chirpsQuantileMapSentence(c: ChirpsCorrection): string {
 }
 
 /**
- * The warning when the gap map falls back (engine ≥ 1.47.0): corrected gap
+ * The warning when the gap map falls back (engine ≥ 1.53.0): corrected gap
  * days in months it can't map take the monthly factor alone. null when the
  * map is off or maps every gap day's month.
  */

@@ -394,7 +394,7 @@ describe('fit record', () => {
 		expect(fitRecordStatus({ ...base, chirpsFitPeriod: ranges }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
 	});
 
-	it('records the CHIRPS gap map only when it is on, and flags turning it on, off or its threshold (engine ≥ 1.47.0)', () => {
+	it('records the CHIRPS gap map only when it is on, and flags turning it on, off or its threshold (engine ≥ 1.53.0)', () => {
 		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const };
 		const off = fitRecordFromReport(report(), ctx);
 		expect('chirpsQuantileMap' in off.forcing!).toBe(false);

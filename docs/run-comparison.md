@@ -234,7 +234,10 @@ bottom:
    is part of the run's record. A run saved before 0.31.0 has no `pe` and
    compares as pan coefficient × A-pan. A changed pan-coefficient source
    note (`panCoefficientSource`, engine ≥ 0.31.1) is its own line, **Pan
-   coefficient source**, reading "none" where a run has none.
+   coefficient source**, reading "none" where a run has none; likewise the
+   dam evaporation factors' note (`lakeEvapFactorSource`, engine ≥ 1.49.0,
+   a lake-factor preset's name and citation), **Dam evaporation factor
+   source**.
    A change of the areal rainfall correction (`settings.arealRain`, engine
    ≥ 1.13.0, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130))
    is a settings line labelled **Areal rainfall correction (GR4J)**: "none →

@@ -15,7 +15,7 @@ export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: 
 	}
 ];
 
-// The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.47.0, CR-23;
+// The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23;
 // docs/model.md §2.4b *Quantile map*): off (null) by default. Turning it on
 // starts from the threshold it was turned off with, else the default.
 export function withChirpsQuantileMap(on: boolean, last: ChirpsQuantileMap | null): ChirpsQuantileMap | null {

@@ -188,7 +188,7 @@ const r6 = (v: number): number => (Number.isFinite(v) && v !== 0 ? Number(v.toPr
 /**
  * CHIRPS on every run day (bias-corrected by the run's own factors, and with
  * the CHIRPS quantile map on, mapped as the run maps its gap days, engine ≥
- * 1.47.0), without the station rain: the 'chirps' rain source.
+ * 1.53.0), without the station rain: the 'chirps' rain source.
  */
 function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | null; reason: string | null } {
 	const chirps = input.series?.rain_chirps_mm;

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, dataQualityPatchError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -288,6 +288,27 @@ describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
 	});
 });
 
+describe('SettingsPatch.lakeEvapFactorSource (engine ≥ 1.49.0, a lake-factor preset’s note)', () => {
+	const parse = (v: unknown) => SettingsPatch.safeParse({ lakeEvapFactorSource: v });
+
+	it('accepts a preset’s note up to the limit, and empty (none); trims it', () => {
+		const fill = lakeFactorPresetFill('wr90', [180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130]);
+		expect(fill.ok && parse(fill.note).success).toBe(true);
+		expect(parse('').success).toBe(true);
+		expect(parse('x'.repeat(PE_SOURCE_MAX)).success).toBe(true);
+		const r = parse('  site study  ');
+		expect(r.success && r.data.lakeEvapFactorSource).toBe('site study');
+		// A project stored before the setting reads as having none.
+		expect(mergeSettings({}).lakeEvapFactorSource).toBe('');
+	});
+
+	it('rejects a too-long note or a non-string', () => {
+		expect(parse('x'.repeat(PE_SOURCE_MAX + 1)).success).toBe(false);
+		expect(parse(7).success).toBe(false);
+		expect(parse(null).success).toBe(false);
+	});
+});
+
 describe('SettingsPatch.panCoefficientSource (engine ≥ 0.31.1, issue #39)', () => {
 	const parse = (v: unknown) => SettingsPatch.safeParse({ panCoefficientSource: v });
 
@@ -416,7 +437,7 @@ describe('SettingsPatch.arealRain (engine ≥ 1.13.0)', () => {
 	});
 });
 
-describe('SettingsPatch.chirpsQuantileMap (engine ≥ 1.47.0, CR-23)', () => {
+describe('SettingsPatch.chirpsQuantileMap (engine ≥ 1.53.0, CR-23)', () => {
 	const ok = (chirpsQuantileMap: unknown) => SettingsPatch.safeParse({ chirpsQuantileMap }).success;
 
 	it('accepts exactly what the engine runs (a table test holds the two together)', () => {

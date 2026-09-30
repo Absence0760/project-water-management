@@ -100,6 +100,8 @@ const RUN_KEYS = [
 	'landcover_reduction',
 	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
 	'observed_flow_fill', 'observed_flow_filled', 'observed_flow_other_fill', 'observed_flow_other_filled',
+	// The scored record's per-day quality flags (engine 1.48.0, CR-18)
+	'observed_flow_quality',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];

@@ -53,7 +53,7 @@ test('Settings turns the CHIRPS quantile map on with its wet-day threshold, and 
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const map = page.getByTestId('chirps-quantile-map');
 	const on = map.getByRole('checkbox', { name: /Quantile-map the CHIRPS that fills gaps/ });
-	// Off by default (engine ≥ 1.47.0): no threshold until it is turned on.
+	// Off by default (engine ≥ 1.53.0): no threshold until it is turned on.
 	await expect(on).not.toBeChecked();
 	await expect(map.getByLabel(/Wet day from/)).toHaveCount(0);
 	await on.check();

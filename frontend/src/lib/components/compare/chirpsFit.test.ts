@@ -36,7 +36,7 @@ describe('chirpsFitNote', () => {
 		expect(chirpsFitNote(base)).toMatch(/^The CHIRPS bias factors differ between the runs \(pooled factor 2\.00 → 2\.00\), so/);
 	});
 
-	it('names the CHIRPS gap map turned on, off or changed (engine ≥ 1.47.0)', () => {
+	it('names the CHIRPS gap map turned on, off or changed (engine ≥ 1.53.0)', () => {
 		const base = { pooledFactor: { a: 2, b: 2, delta: 0 }, excludedWaterYearsA: [], excludedWaterYearsB: [], changed: true };
 		expect(chirpsFitNote({ ...base, quantileMapA: null, quantileMapB: 'wet days (≥ 1 mm) mapped' })).toMatch(/\(pooled factor 2\.00 → 2\.00; quantile map: off → wet days \(≥ 1 mm\) mapped\)/);
 		expect(chirpsFitNote({ ...base, quantileMapA: 'x', quantileMapB: null })).toMatch(/quantile map: x → off\)/);

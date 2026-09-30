@@ -83,6 +83,11 @@ export interface FlowFlagInput {
 	infilled?: ArrayLike<number> | null;
 	/** The project's data-check limits (settings.dataQuality): which days are outliers or flat stretches. Absent = the defaults. */
 	dataQuality?: DataQualitySettings;
+	/**
+	 * false: leave the suspect class out (no day is suspect). A resumed run whose input lacks the record's history
+	 * (../run.ts) can't judge it: outliers and flat stretches are read over the whole stored record. Default true.
+	 */
+	suspect?: boolean;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */
@@ -91,7 +96,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	const s = x.series;
 	if (!s) return out;
 	const offset = toEpochDay(s.startDate) - x.start;
-	const rows = x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
+	const rows = x.suspect === false ? null : x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
 	const from = Math.max(0, -offset);
@@ -102,7 +107,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
 		out[t] = x.infilled?.[t]
 			? FLOW_FLAG_CODE.infilled
-			: rows.outlier[i] || rows.flatline[i]
+			: rows && (rows.outlier[i] || rows.flatline[i])
 				? FLOW_FLAG_CODE.suspect
 				: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
@@ -115,6 +120,68 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	if (x.infilled) for (let t = 0; t < x.days; t++) if (x.infilled[t]) out[t] = FLOW_FLAG_CODE.infilled;
 	return out;
 }
+
+/**
+ * The gauged ranges that apply at a calibration site (engine ≥ 1.41.0):
+ * settings.qualityFlags.ratings are the outlet records' ratings, so a
+ * gauge's record inside the network has none and no day of it can be
+ * flagged as extrapolated. The treatments stay the project's.
+ */
+export const siteQualityFlags = (q: QualityFlagSettings, siteNodeId: string | null): QualityFlagSettings => (siteNodeId === null ? q : { ...q, ratings: {} });
+
+export interface RecordFlowFlagInput {
+	kind: CalibrationFlowKind;
+	/** The record as stored at the site (the outlet's `kind` series, or the gauge's GaugeSeriesKey series). */
+	series: DailySeries | undefined;
+	start: number;
+	days: number;
+	settings: { qualityFlags: QualityFlagSettings; dataQuality?: DataQualitySettings };
+	/** settings.calibrationSiteNodeId: null = the outlet. */
+	siteNodeId: string | null;
+	/** The run's gap-filled records (PreparedRun.flowFill): only the outlet's records are filled. */
+	flowFill?: Partial<Record<string, { code: ArrayLike<number> }>> | null;
+	/** false: leave the suspect class out (FlowFlagInput.suspect). */
+	suspect?: boolean;
+}
+
+/**
+ * The per-day classes of the record calibration scores, as both the fit
+ * (./calibrate.ts) and the run's `observed_flow_quality` column (../run.ts)
+ * read them, so the two can't drift: at the outlet with its gauged range
+ * and gap filling, at an inner gauge with neither (siteQualityFlags).
+ */
+export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
+	const q = siteQualityFlags(x.settings.qualityFlags, x.siteNodeId);
+	return flowDayFlags({
+		kind: x.kind,
+		series: x.series,
+		start: x.start,
+		days: x.days,
+		rating: ratingOf(q, x.kind),
+		infilled: x.siteNodeId === null ? observedInfillMask(x.flowFill?.[x.kind]) : null,
+		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {}),
+		...(x.suspect === false ? { suspect: false } : {})
+	});
+}
+
+/** A day whose class is neither in the gauged range nor missing: what the run's quality column is stored for. */
+export function hasFlaggedDay(flags: ArrayLike<number>): boolean {
+	for (let t = 0; t < flags.length; t++) if (flags[t] !== FLOW_FLAG_CODE.inRange && flags[t] !== FLOW_FLAG_CODE.missing) return true;
+	return false;
+}
+
+/**
+ * The run column of the scored record's per-day classes (engine ≥ 1.48.0,
+ * docs/model.md §2.10h): each day's FLOW_FLAG_CODE, stored beside the
+ * scored `observed_flow` (the catchment's, or the calibration site's node),
+ * only when some day is flagged (hasFlaggedDay). The label spells the codes
+ * out, so the daily CSV reads without the docs.
+ */
+export const FLOW_QUALITY_COLUMN = {
+	key: 'observed_flow_quality',
+	label: `Observed flow quality flag (${FLOW_DAY_FLAGS.map((f, i) => `${i} = ${FLOW_FLAG_LABEL[f].replace(/^./, (c) => c.toLowerCase())}`).join(', ')})`,
+	unit: ''
+} as const;
 
 /**
  * Each run day's rain class code (RAIN_DAY_FLAGS): observed where the

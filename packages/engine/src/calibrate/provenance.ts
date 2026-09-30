@@ -245,7 +245,7 @@ export interface FitRecord {
 		 */
 		arealRain?: ArealRain | null;
 		/**
-		 * The CHIRPS gap map the fit ran under (engine ≥ 1.47.0, CR-23,
+		 * The CHIRPS gap map the fit ran under (engine ≥ 1.53.0, CR-23,
 		 * settings.chirpsQuantileMap). Recorded only when it was on: absent =
 		 * off, as every fit before it ran, so a map turned on since is a change.
 		 */
@@ -374,7 +374,7 @@ export interface FitContext {
 		pe?: PeInput | null;
 		/** The areal rainfall correction (engine ≥ 1.13.0); absent = none. */
 		arealRain?: ArealRain | null;
-		/** The CHIRPS gap map (engine ≥ 1.47.0); absent = off. */
+		/** The CHIRPS gap map (engine ≥ 1.53.0); absent = off. */
 		chirpsQuantileMap?: ChirpsQuantileMap | null;
 		panCoefficientSource?: string;
 		/** Gap filling of the observed flow records (engine ≥ 1.23.0); absent = none. */
@@ -658,7 +658,7 @@ const peChanged = (a: PeInput, b: PeInput): boolean =>
 const ONES = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 const arealRainChanged = (a: ArealRain | null, b: ArealRain | null): boolean => !closeArray(a?.factors ?? ONES, b?.factors ?? ONES);
 
-/** The CHIRPS gap map a run under these settings applies (engine ≥ 1.47.0): only in mode 'monthly'; null = off. */
+/** The CHIRPS gap map a run under these settings applies (engine ≥ 1.53.0): only in mode 'monthly'; null = off. */
 function gapMapOf(s: { chirpsQuantileMap?: unknown; chirpsBiasCorrection?: ChirpsBiasMode }): ChirpsQuantileMap | null {
 	return (s.chirpsBiasCorrection ?? 'monthly') === 'monthly' ? resolveChirpsQuantileMap(s.chirpsQuantileMap, []) : null;
 }
@@ -705,7 +705,7 @@ function forcingDiff(
 					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns)))),
 		// Engine ≥ 0.29.0; absent on an older forcing, so never flagged there.
 		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod),
-		// Engine ≥ 1.47.0. A forcing without it ran without the gap map, so one turned on since is a change.
+		// Engine ≥ 1.53.0. A forcing without it ran without the gap map, so one turned on since is a change.
 		chirpsQuantileMap: !sameJson(gapMapOf(settings), gapMapOf({ chirpsQuantileMap: record.forcing.chirpsQuantileMap, chirpsBiasCorrection: record.forcing.chirpsBiasCorrection })),
 		// Engine ≥ 0.30.0. A forcing without it predates rain-source periods, so it ran with none.
 		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? []),

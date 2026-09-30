@@ -21,7 +21,7 @@ export function chirpsFitNote(fit: NonNullable<RunComparison['chirpsFit']>): str
 	const wa = fit.fitWindowsA ?? [];
 	const wb = fit.fitWindowsB ?? [];
 	if (wa.length && wb.length && wa.join() !== wb.join()) parts.push(`fitted on: ${wa.join('; ')} → ${wb.join('; ')}`);
-	// Engine ≥ 1.47.0 (CR-23): the gap map, when either run had one.
+	// Engine ≥ 1.53.0 (CR-23): the gap map, when either run had one.
 	const qa = fit.quantileMapA ?? null;
 	const qb = fit.quantileMapB ?? null;
 	if (qa !== qb) parts.push(`quantile map: ${qa ?? 'off'} → ${qb ?? 'off'}`);

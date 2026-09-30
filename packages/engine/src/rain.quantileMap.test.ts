@@ -1,4 +1,4 @@
-// The CHIRPS gap map (engine ≥ 1.47.0, CR-23, settings.chirpsQuantileMap,
+// The CHIRPS gap map (engine ≥ 1.53.0, CR-23, settings.chirpsQuantileMap,
 // docs/model.md §2.4b *Quantile map*). Every record here is synthetic: a
 // catchment series wet on about half the days with exponential falls over
 // water years 1990–2009, dry through the winter (JJA) so that season is too

@@ -2390,7 +2390,8 @@ binds, the transfer brings enough that neither MIN bites.
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
-  not be applied to A-pan directly. 0 turns dam evaporation off.
+  not be applied to A-pan directly; the WR90 presets (item 4 below, engine
+  ≥ 1.49.0) convert them. 0 turns dam evaporation off.
 - `Apan` is `settings.apanMm[month] ÷ days in month`, or on a day the daily
   A-pan series covers (engine ≥ 0.38.0, §2.3a) that day's value. GR4J's own
   PE input (`settings.pe`, §2.4a, engine ≥ 0.31.0) never reaches the dams, so
@@ -2498,8 +2499,95 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
 month: `E = k_lake[month] × Apan[month] / daysInMonth / 1000 × A`. Open water
 lags the pan through the seasons (a deep dam stores heat in autumn and
 evaporates more relative to the pan in winter), which one factor can't show.
-Values are the modeller's; no preset is offered, pending the hydrologist.
-Twelve equal values give exactly the single-factor run.
+Values are the modeller's. Twelve equal values give exactly the
+single-factor run.
+
+*Presets* (engine ≥ 1.49.0, `LAKE_FACTOR_PRESETS`,
+`packages/engine/src/evaporation/lakeFactorPresets.ts`). Settings →
+Demand → **Dam evaporation preset** writes the 12 factors and a source note
+(`settings.lakeEvapFactorSource`, free text up to 600 characters, both
+still editable). Nothing is filled unless the user picks one, so no default
+changes: a project without the note, or with any note, runs bit-identically
+(`lakeFactorPresets.test.ts`).
+
+| Preset | Factors (× A-pan) | Source |
+| --- | --- | --- |
+| Flat 0.75 × A-pan (the default) | 0.75 every month | open water ≈ 0.7–0.8 × Class-A pan (Linsley, Kohler & Paulhus 1982) |
+| WR90 lake factors, WR90 pan conversion | `f_lake[m] × (0.8793 A[m] − 16.2354) ÷ A[m]` | lake factors: WR90 (Midgley, Pitman & Middleton 1994, WRC 298/1/94); pan equation: WR90's general monthly S-pan ← A-pan regression; both as reproduced in Taljaard (2023) Table 2-3 and Table 5-9 / Eq. 16 |
+| WR90 lake factors, Taljaard (2023) pan conversion | `f_lake[m] × (0.8706 A[m] − 11.1745) ÷ A[m]` | the same lake factors; Taljaard's new general monthly equation fitted to ten SA stations' paired pans (Table 5-10 / Eq. 33), which he recommends for monthly values |
+
+`f_lake` is WR90's lake evaporation ÷ **S-pan**, Oct–Sep: 0.81, 0.82,
+0.83, 0.84, 0.88, 0.88, 0.88, 0.87, 0.85, 0.83, 0.81, 0.81 (national
+monthly values, not per evaporation zone). `A[m]` is the project's monthly
+A-pan, `settings.apanMm` (mm/month). The conversion is affine, not a ratio,
+so the A-pan factor depends on the month's A-pan: with the negative
+intercept it falls in the low-evaporation months, which is where issue #46's
+~0.67 × A-pan a year and 0.5–0.6 in winter come from. The
+factors are rounded to 3 decimals. With the dam test's Western Cape-like
+A-pan (180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130 mm) the WR90
+preset gives 0.639, 0.663, 0.680, 0.691, 0.715, 0.706, 0.672, 0.608,
+0.517, 0.523, 0.566, 0.611 (0.659 A-pan weighted over the year) and the
+Taljaard one 0.655, 0.674, 0.688, 0.698, 0.726, 0.719, 0.696, 0.649,
+0.582, 0.580, 0.605, 0.636 (0.678).
+
+**The seasonal shape is the pan conversion's, not the lake lag.** WR90's
+`f_lake` varies only 0.81–0.88 through the year; the S-pan ÷ A-pan ratio
+the regression implies varies far more (0.61 in June to 0.82 in January
+above), so the WR90 presets are *lowest* in winter. That is the opposite of
+the deep-water lag this item's opening paragraph describes (open water
+evaporating more relative to the pan in winter): read the presets as WR90's
+lake factors on an A-pan basis, not as a model of that lag.
+
+**Floor.** A conversion is used only where its intercept is at most a third
+of slope × A (S-pan ÷ A-pan at least ⅔ of the slope): a monthly A-pan of at
+least 3|c| ÷ a, **55.4 mm** for WR90's equation and **38.5 mm** for
+Taljaard's (`panConversionFloorMm`). Below it the factor heads to 0 (0.057
+× A-pan at 20 mm under WR90), a national regression pushed past the pan
+depths it describes rather than open water ceasing to evaporate, so the fill
+is refused, naming the months; the flat preset, or factors typed by hand,
+still work there. The floor is an engineering bound (neither source gives a
+fitted range), pending the hydrologist.
+
+Sources and caveats:
+
+- The WR90 volume itself isn't online. Both tables are quoted from
+  Taljaard, C.M.L. (2023), *A revision of evaporation and pan factors in use
+  in South Africa*, MEng thesis, Stellenbosch University
+  (http://hdl.handle.net/10019.1/127336), which reproduces them
+  ("redrawn from Midgley et al., 1994") and tests them. His dam-balance
+  check at three reservoirs found the lake factors "still accurate enough"
+  (§5.3.5); the WR90 pan equation "can only be used as written and cannot
+  be inverted" (§2.6.1.4), which is how it is used here (A-pan → S-pan).
+  Checked against the thesis PDF on 2026-09-30 (printed page numbers):
+  the 12 lake factors (Table 2-3, p. 45), WR90's equation (Eq. 16, p. 44;
+  Table 5-9, p. 152) and Taljaard's (Eq. 33, p. 158; Table 5-10, p. 152) all
+  match. Each equation is one general monthly equation (not per month),
+  A-pan → S-pan, on monthly totals in mm.
+  WR2012's own lake factors were not found: the thesis doesn't mention
+  WR2012, and the WR2012 resource centre (waterresourceswr2012.co.za) is
+  behind a login, so the manuals (WRC TT 689/690-16) couldn't be read.
+  WR2012 evaporation data are S-pan climatologies with 12 monthly values;
+  whether its lake factors differ from WR90's is unknown.
+- The "0.7–0.8 × Class-A pan" range cites Linsley, Kohler & Paulhus (1982),
+  whose text couldn't be read (borrow-only). USGS SIR 2012-5202, citing
+  Kohler et al. (1959), gives annual US pan coefficients of 0.60–0.80.
+- The lake factors are for large reservoirs; a shallow farm dam heats and
+  cools faster and lags the pan less. The pan equations are national
+  regressions; station-specific ones differ (Taljaard Table 5-8).
+- The factors are computed at the monthly A-pan means. A daily A-pan series
+  (§2.3a) multiplies each day's value by them, so a month whose daily
+  total differs from the mean gets a proportionally scaled loss, not the
+  regression's. After changing the A-pan, fill the preset again: Settings
+  warns when the note names a preset whose values at the current A-pan no
+  longer match (`lakeFactorPresetStale`). A WR90 preset refuses a project
+  with any month's A-pan at 0 (not entered yet) or below its floor (above).
+- Which preset the client's catchment takes is the hydrologist's
+  ([followups.md § Hydrologist](./followups.md#hydrologist)).
+
+The source note is recorded with each run (its settings snapshot), so run
+comparison lists a change of it as its own line ("Dam evaporation factor
+source", [run-comparison.md](./run-comparison.md)) and the report's inputs
+name it beside the dam evaporation factor. The model never reads it.
 
 **5. Seepage destination** (`node.damSeepageReturnPct`, default 1). Seepage
 Sp is split: `Sp × return` joins U the same day, `Sp × (1 − return)` is
@@ -6005,7 +6093,49 @@ With the record-representativeness statement (§2.10b, CR-34), which the
 panel quotes, this is how wet the calibration period is against the
 long-term record. The 20 % and 25 % note thresholds are judgement.
 
-Tested by `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
+**Stored with the run (engine ≥ 1.48.0).** A run stores the flags of the
+record its calibration statistics score as the column
+`observed_flow_quality`: each day's class code, in `FLOW_DAY_FLAGS` order
+(0 in range, 1 human use, 2 below the lowest gauging, 3 above the highest
+gauging, 4 suspect, 5 infilled, 6 missing), spelled out in the column's
+label so the daily CSV reads without this page. It sits beside the scored
+`observed_flow`: the catchment's when the run scores the outlet, the
+calibration site's node when it scores a gauge inside the network
+(`settings.calibrationSiteNodeId`, §2.10k), where no gauged range and no gap
+fill apply (the ratings and the fill are the outlet records'). Like
+`rain_catchment_missing` it is only output when some day is flagged (a class
+other than in range or missing); a record with no gauged range, no suspect
+and no filled day has none. Fit automatically and the column read the same
+function (`recordFlowFlags`), so what the charts show is what the fit read
+under the run's settings. The column records the classes, not the
+treatment: which classes the fit left out, censored or scored is the run's
+`settings.qualityFlags`, which the hydrograph's key reads from the run's own
+settings snapshot. A run resumed from a snapshot (§2.16) whose capture run
+stored the column stores it too, computed for its own days, so the two keep
+the same columns (and an input without the flow record, an outlook member's,
+stores none, never a column of zeros). Its codes equal the uninterrupted
+run's to the bit when the resumed input carries the record's history. The
+suspect class reads the whole stored record (its outlier limit and flat
+stretches), so the engine enforces the rest: the snapshot records whether
+the scored record had readings before its day (`flowRecordHistory`), and a
+resumed input that carries the record without them leaves the suspect class
+out (`recordFlowFlags`' `suspect: false`: those days take their rating class)
+and warns "Resumed from … without the observed flow record's history: its
+quality flags leave out the suspect class …". The gauged-range and missing
+classes need no history and still match. A record that starts after the
+snapshot's day has no history to miss. The infilled class follows the gap
+fill, which is guarded the same way (§2.10i): resumed without the history it
+read, the fill is left out with a warning, so no day is infilled, never
+filled differently from the uninterrupted run. The run's self-checks hold it to its record
+(`checkFlowQuality`, part of `checkBalance`, §6 Verification). The same
+change fixed the self-check failing every run with a gap-filled record: the
+filled values (`observed_flow_filled`, NaN on the days not filled) were
+missing from the check's list of series that may be blank.
+
+Tested by `run.flowQuality.test.ts` (the column at the outlet and at a
+calibration site, equal to the fit's flags, absent with no flagged day,
+infilled days from the fill, a resumed run, the self-check with tampered
+columns), `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
 the settings resolver and rating rules, censoring, the rain classes, the
 summary's counts and notes, run-comparison lines), `calibrate.test.ts`
 (suspect days left out and scored on all days, censoring invariance with a
@@ -6052,12 +6182,25 @@ lead-in and tail are never filled; nothing bounds them. Per record:
 
 Interpolation runs first, on the gaps short enough for it; the donor then
 fills only the longer ones. Everything is fitted and counted over the whole
-stored record, so the Data tab shows exactly what a run would fill. (A run
-resumed from a model-state snapshot, §2.16, fills from the records it is
-given: without the history before the snapshot's day, a gap across that day
-has no reading before it and stays open. The model's state never depends on
-an observed record, so only the fill columns and, with infilled days scored,
-the scores can differ.)
+stored record, so the Data tab shows exactly what a run would fill.
+
+**A resumed run (§2.16, engine ≥ 1.48.0).** The fill reads the whole record:
+a gap's bounding readings, the highest reading it clamps to and the donor's
+ratio over the whole overlap. A run resumed from a model-state snapshot with
+the history before the snapshot's day in its input fills exactly as the
+uninterrupted run, every column to the bit. Without that history it could
+only fill differently (a gap across the snapshot's day would stay open, the
+ratio and the clamp would come from part of the record), so the engine
+never does: the snapshot lists the filled records whose fill read readings,
+the record's or its donor's, before its day (`flowFillHistory`), and a
+resumed input that carries such a record with neither its nor its donor's
+readings before the run's start leaves that record's fill out altogether
+(no fill columns, no infilled day, the stored record scored as it is) and
+warns "Resumed from … without the … record's history: its gap fill is left
+out …". A fill that read nothing before the snapshot's day (the record and
+its donor start after it) is kept. The model's state never depends on an
+observed record, so only the fill columns, the infilled flags and, with
+infilled days scored, the scores are affected.
 
 **What reads a filled day: one control, the quality flags' infilled
 treatment** (`settings.qualityFlags.infilled`, §2.10h). Every filled day is
@@ -6308,6 +6451,9 @@ gauge is in sample and a project whose only record is at the gauge gets
 statistics. The run keeps that record as the gauge node's `observed_flow`
 (and `observed_flow_other` for its other record), beside the node's own
 `outflow`, which the Results tab charts as the calibration site's hydrograph.
+From engine 1.48.0 the record's per-day quality flags follow it: the column
+`observed_flow_quality` (§2.10h) is stored at the gauge node, not the
+catchment, and strips them along the foot of that hydrograph.
 The outlet's own record, when it has one, is still the catchment series
 `observed_flow`: the outlet hydrograph, the recession diagnostics, the
 plausibility checks and the gauge-vs-logger agreement read it as before.
@@ -7845,7 +7991,7 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |

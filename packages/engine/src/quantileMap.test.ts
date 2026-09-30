@@ -82,7 +82,7 @@ describe('heavyDayShare', () => {
 	});
 });
 
-describe('fitMonthlyTables (engine ≥ 1.47.0, shared by rain-source periods and the CHIRPS gap map)', () => {
+describe('fitMonthlyTables (engine ≥ 1.53.0, shared by rain-source periods and the CHIRPS gap map)', () => {
 	const byMonth = (f: (m: number) => number[]) => Array.from({ length: 13 }, (_, m) => (m === 0 ? [] : f(m)));
 	const wet = (n: number, scale = 1) => Array.from({ length: n }, (_, i) => (i + 1) * scale);
 

@@ -4,7 +4,7 @@
 //
 // Pure and self-contained, so the same mapper serves a rain-source period's
 // replacement gauge (rainSourcePeriods.ts, engine ≥ 1.21.0) and CHIRPS where
-// it fills gaps in the catchment rain (rain.ts, engine ≥ 1.47.0, CR-23,
+// it fills gaps in the catchment rain (rain.ts, engine ≥ 1.53.0, CR-23,
 // docs/model.md §2.4b *Quantile map*). Both fit per calendar month with the
 // same month-else-season-else-nothing rule (fitMonthlyTables) and keep each
 // block's total. CHIRPS also has its wet-day frequency matched (a 0.05° cell
@@ -61,7 +61,7 @@ export interface MonthlyFit {
  *
  * Without options the samples are the wet days themselves. With
  * `{ wetDayMm, matchFrequency: true }` (the CHIRPS gap map, engine ≥
- * 1.47.0) they are every day's value, and where the source is wet (≥
+ * 1.53.0) they are every day's value, and where the source is wet (≥
  * wetDayMm) more often than the target, its wet days are only its
  * wettest days at the target's wet-day rate: the source threshold
  * `sourceWetMm` rises until the rates agree (Schmidli et al. 2006's local

@@ -69,7 +69,7 @@ describe('describeZeroRain', () => {
 	});
 });
 
-describe('withChirpsQuantileMap (engine ≥ 1.47.0)', () => {
+describe('withChirpsQuantileMap (engine ≥ 1.53.0)', () => {
 	it('is off by default, turns on at the default threshold, and back on at the one it was turned off with', () => {
 		expect(defaultProjectSettings().chirpsQuantileMap).toBeNull();
 		expect(withChirpsQuantileMap(true, null)).toEqual({ wetDayMm: 1 });

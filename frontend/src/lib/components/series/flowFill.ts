@@ -23,6 +23,8 @@ export interface FlowFillShading {
 	/** The filled days' values (m³/s), NaN on every other day: the chart's second line. */
 	filled: { startDate: string; values: number[] };
 	summary: FlowFillSummary;
+	/** Each record day's fill code (FLOW_FILL_CODE: 0 = not filled), from the record's start: the quality flags' infilled days. */
+	code: ArrayLike<number>;
 	/** What the shading means, for the chart caption. */
 	caption: string;
 }
@@ -58,6 +60,7 @@ export function flowFillShading(kind: GapFillKind, record: DailySeries, settings
 		ranges,
 		filled: { startDate: record.startDate, values: f.values.map((v, i) => (f.code[i] !== FLOW_FILL_CODE.none && v !== null ? v : NaN)) },
 		summary: s,
+		code: f.code,
 		caption: `${parts.length ? `Shaded: ${parts.join('; ')}, in a run only (Settings → Flow gaps); the stored record is unchanged.` : 'No gap is filled (Settings → Flow gaps).'}${refused}${open}`
 	};
 }
