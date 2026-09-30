@@ -111,10 +111,12 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, preferences,
+  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, preferences,
   reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
-  or `[]` if they never saved any. `account` is
+  or `[]` if they never saved any. `packNotices` is the evidence pack emails
+  sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
+  createdAt, sentAt }]` (133). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
@@ -2150,15 +2152,15 @@ reproduction bundle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches | editor |
 | GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
 | POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
-| POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
+| POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded; for a pack that was issued, the "pack withdrawn" emails (with the reason) are queued in the same transaction ([evidence-pack.md § Notices](./evidence-pack.md#notices)). `409` when already withdrawn | editor |
 | GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
 
 - `Pack = { id, title, mode: 'application' | 'baseline', scenarioId,
@@ -2190,9 +2192,46 @@ reproduction bundle).
   engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256 (null
   until the PDF is recorded), bundleSha256,
   successorSha256, withdrawnReason, methodology: { version, sha256 },
-  errata: { id, summary }[], signers: { fullName, registrationBody,
+  errata: { id, summary }[], errataFoundSince: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
-  and nothing else (`app_verify_pack`, security.md § Evidence packs).
+  and nothing else (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
+  `errata` is what the manifest recorded when the pack was drafted, never
+  changed; `errataFoundSince` (132) lists the errata of the current list
+  (engine-errata.md) that apply to either run's engine, or to the engine of
+  the automatic fit its parameters came from, and aren't among `errata`:
+  found since issue ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+### An applicant's packs
+
+An application's parties (its owner, and whoever they shared it with) read
+its packs that were issued, as the database projects them for them
+(131_applicant_packs, D2's default; [evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
+They read no pack row, so the routes above answer them `403`.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/scenarios/:sid/packs` | – | `{ packs: ApplicantPackMeta[] }`, newest version first: its issued, superseded and withdrawn-after-issue packs, never a draft. `404` for a scenario the caller can't read; `[]` to anyone who reads it but isn't a party (an editor reads the packs through `GET …/packs`) | contributor |
+| GET | `/projects/:id/scenarios/:sid/packs/:packId` | – | `ApplicantPack` (below); `Cache-Control: no-store`. `404` alike for a pack that isn't theirs, isn't of this application, is a draft or was never issued | contributor |
+
+- `ApplicantPackMeta = { id, scenarioId, title, mode, version, status:
+  'issued' | 'superseded' | 'withdrawn', issuedAt, manifestSha256,
+  shortCode, verifyPath, supersedesId, supersededById, withdrawnReason,
+  isOwner, canShare }`. `isOwner`: the caller owns the application (they
+  list and revoke the links they made); `canShare`: they may make a link to
+  it now (the owner, while it is issued).
+- `ApplicantPack = { pack: ApplicantPackMeta, verify: PackVerification,
+  figures, units }`. `figures` is exactly a pack link's
+  ([Share](#share), `POST /share/pack`), for every standing. `units` is
+  `{ own: { name, kind, onlyIn: 'application' | null, suppliedA, suppliedB,
+  timeReliabilityA, timeReliabilityB, annualReliabilityA,
+  annualReliabilityB, change: { run, band, worse } | null }[], others: {
+  kind: 'farm' | 'user', n, changePts }[] }`, or `null` when the report
+  changed a baseline assumption. `own`: the application's owned nodes its
+  owner still links and the nodes it adds; `others`: every other unit in
+  both runs as its kind and a number (per kind, ranked by a hash of its id;
+  a rank within the pack, which can shift between versions), `changePts` its change in share of demand
+  supplied in whole percentage points. Never another unit's name or id.
+- No PDF, manifest or bundle: each carries the whole report.
+
 - A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
   can't be deleted or trimmed, and the scenario can't be deleted. A project
   with a pack past draft can't be deleted (`409`, [Projects](#projects)).
@@ -2404,9 +2443,9 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (below editor `403`; a pack of another project or none `404`) | owner; contributor with `scenarioId`; editor with `packId` |
-| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner (`403` below editor), `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands) | owner; contributor for a scenario link; editor for a pack link |
-| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made, an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
+| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (a pack of another project or none `404`); to an applicant (131) the ones they made to a pack of an application of theirs; anyone else below editor `403`, found or not | owner; contributor with `scenarioId` or `packId` |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner, `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands); below editor, the application's owner on their own application's pack (131; `409` unless it is issued), anyone else `403` (someone the applicant shared it with included), found or not | owner; contributor for a scenario or pack link |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made (to their application or its pack), an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
 | POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |

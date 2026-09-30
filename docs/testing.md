@@ -17,7 +17,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 | `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) | seconds; the stress run ~1–5 min |
-| `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes and 12 random networks, and its 24-mutant self-test; Python 3.14, no DB (CI's `verify` job runs 200 networks with `VERIFY_TEST_RANDOM=200`). Run it when you change `packages/engine` or `verify/`, or the model's docs | ~2 min |
+| `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 59-mutant self-test; Python 3.14, no DB (CI's `verify` job runs 200 of each with `VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`). Run it when you change `packages/engine` or `verify/`, or the model's docs | ~2–3 min |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
 ## Performance budgets
@@ -55,7 +55,7 @@ thrash: like the budgets, it runs alone. Run it when you touch
 3. Before the commit: `pnpm check && pnpm test`, plus the DB test files for
    backend or SQL you changed (`pnpm -C backend exec vitest run --project db
    src/<area>`), and `pnpm test:verify` when the engine's behaviour or
-   `verify/` changed (a phase-1 feature that changes on purpose changes
+   `verify/` changed (a phase-1 or phase-2a feature that changes on purpose changes
    `verify/model.py` and docs/model.md with it). Not the whole `test:backend:db`: CI runs it. Don't re-run a
    suite after every small edit: re-run the failing file until it passes.
 4. Don't pipe e2e output into `grep`/`head`/`tail`: the web servers hold the

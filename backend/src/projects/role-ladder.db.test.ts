@@ -157,6 +157,12 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/scenarios/:sid/share-candidates', { min: 'contributor', why: 'who an applicant may share their own application with' }],
 	['POST /projects/:id/scenarios/:sid/members', { min: 'contributor', why: 'an applicant shares their own application' }],
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }],
+	// An applicant's packs (131_applicant_packs): the definer functions answer only the application's parties, for packs that were issued.
+	['GET /projects/:id/scenarios/:sid/packs', { min: 'contributor', why: "an application's issued packs, for its parties only (app_applicant_packs)" }],
+	[
+		'GET /projects/:id/scenarios/:sid/packs/:packId',
+		{ min: 'contributor', why: "one issued pack of an application, D2-anonymised, for its parties only (app_applicant_pack); any other 404s" }
+	],
 	// Yield (WP-3.6, 096_contributor_yield): an applicant on a dam of their own application; RLS shows them only their own jobs and results.
 	['POST /projects/:id/yield', { min: 'contributor', why: "an applicant queues a yield of a dam of their own application (yieldInputFor); a viewer queues none" }],
 	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],

@@ -28,6 +28,7 @@ import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { evidenceReportRoutes } from './evidence/report.js';
+import { applicantPackRoutes } from './evidence/applicantPacks.js';
 import { packRoutes, verifyRoutes } from './evidence/packs.js';
 import { reproduceRoutes } from './runs/reproduce.js';
 import { runRoutes } from './runs/routes.js';
@@ -144,6 +145,7 @@ export function createApp() {
 	projects.route('/', evidenceRoutes);
 	projects.route('/', evidenceReportRoutes);
 	projects.route('/', packRoutes);
+	projects.route('/', applicantPackRoutes);
 	projects.route('/', reproduceRoutes);
 	projects.route('/', scenarioRoutes);
 	projects.route('/', signoffRoutes);

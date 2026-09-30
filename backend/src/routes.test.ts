@@ -89,7 +89,10 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/packs/:packId/bundle',
 			'POST /projects/:id/packs/:packId/withdraw',
 			'GET /projects/:id/packs/:packId/pdf',
-			'POST /projects/:id/packs/:packId/pdf'
+			'POST /projects/:id/packs/:packId/pdf',
+			// An applicant's own application's packs (131_applicant_packs).
+			'GET /projects/:id/scenarios/:sid/packs',
+			'GET /projects/:id/scenarios/:sid/packs/:packId'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);

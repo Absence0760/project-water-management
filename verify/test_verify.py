@@ -1,11 +1,12 @@
 """The cross-check's guard (`pnpm test:verify`, CI job `verify`):
 
-- the engine and verify/model.py agree on the example catchments, the probes
-  and VERIFY_TEST_RANDOM random networks (default 12; CI runs more);
+- the engine and verify/model.py agree on the example catchments, the probes,
+  VERIFY_TEST_RANDOM random networks (default 12; CI runs more) and
+  VERIFY_TEST_DENSE dense ones (every phase-2a feature in most; default 12);
 - the harness can see each rule it claims to check: every mutant below (a
   one-line change to model.py that breaks one documented rule) must disagree
   with the engine somewhere, or the cases don't exercise that rule;
-- the generator stays inside phase 1 and is a pure function of its seed.
+- the generator stays inside phases 1 and 2a and is a pure function of its seed.
 
 Run: python3 -m unittest discover -s verify
 """
@@ -28,12 +29,13 @@ import generate  # noqa: E402
 import model  # noqa: E402
 
 MUTANT_RANDOM = 12
+MUTANT_DENSE = 12
 
 # (what the mutant breaks, text in model.py, replacement), or (what, (text,
 # replacement), …) for a mutant of several edits, applied in order. Each
 # text must occur exactly once when its edit is applied.
 MUTANTS = [
-    ("transfers ignore the receiver's room (N4)", "if tot > room and tot > 0:", "if False:"),
+    ("transfers ignore the receiver's room (N4)", "if tot > rm and tot > 0:", "if False:"),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
         'elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]',
@@ -46,17 +48,17 @@ MUTANTS = [
     ),
     (
         "within a priority the source's bands are shared first and the receiver's room after",
-        ("if tot > room and tot > 0:", "if False:"),
+        ("if tot > rm and tot > 0:", "if False:"),
         (
             '            if any(vol[t["id"]] > 0 for t, _ in group):',
             """            for dst in sorted({t["toNodeId"] for t, _ in group}):
                 area, pd, e_raw, sp_raw = pre[dst]
-                room = max(0.0, by_id[dst]["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw) + fd[dst]["D"][i] - sched[dst])
+                rm2 = max(0.0, by_id[dst]["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw) + draw_bound(dst) - sched[dst])
                 into = [t for t, _ in group if t["toNodeId"] == dst]
                 tot = sum(vol[t["id"]] for t in into)
-                if tot > room and tot > 0:
+                if tot > rm2 and tot > 0:
                     for t in into:
-                        vol[t["id"]] = vol[t["id"]] * room / tot
+                        vol[t["id"]] = vol[t["id"]] * rm2 / tot
             if any(vol[t["id"]] > 0 for t, _ in group):""",
         ),
     ),
@@ -82,12 +84,12 @@ MUTANTS = [
         "            v = c.get(o)\n            if v is not None and v >= 0:\n                return v, 0",
     ),
     ("a tied binding site goes to the most upstream site", "sd < cur[1]", "sd > cur[1]"),
-    ("seepage never returns to the river", "Uo = R + S + T + Sp * ret", "Uo = R + S + T"),
+    ("seepage never returns to the river", "+ T + Sp * ret + X", "+ T + X"),
     ("irrigation ignores the dam's minimum operating level (Q5)", 'dead = cap * (x.get("damMinPct") or 0.0)', "dead = 0.0"),
     (
-        "the attribution counts every transfer as internal (Q17 J_int)",
-        'if t["fromNodeId"] in mset and t["toNodeId"] in mset:',
-        "if True:",
+        "the attribution leaves out the internal transfers (Q17 J_int)",
+        "if a in mset and b in mset:",
+        "if False:",
     ),
     ("rain equal to the threshold offsets demand", "v if v > thr else 0.0", "v if v >= thr else 0.0"),
     ("the warm-up cycles the forecast tail too", "            hist = tail[0]\n", "            pass\n"),
@@ -100,6 +102,112 @@ MUTANTS = [
     ("dam evaporation uses calendar days", "e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area", "e_raw = k_lake[m] * apan[m] / calendar_days_in_month(o) / 1000 * area"),
     ("return flow is the whole loss (β ignored, N1)", "T = beta * (1 - d[\"e\"]) * G", "T = (1 - d[\"e\"]) * G"),
     ("GR4J's routing store gets no exchange", "r = max(0.0, self.r + q9 + f)", "r = max(0.0, self.r + q9)"),
+    # Phase 2a.
+    # Boreholes and stream depletion (§2.7d).
+    ("a borehole's annual cap is ignored", 'room = min(room, u["annual"] - used)', "room = room"),
+    ("stream depletion has no lag", "alpha = 1.0 if k == 0 else 1 - math.exp(-1 / k)", "alpha = 1.0"),
+    ("depletion the river can't pay is forgiven", "dd_owed[xid] = dd_owed[xid] + due - dep", "dd_owed[xid] = 0.0"),
+    (
+        "an emergency borehole ignores the dam's level",
+        'if u_["target"] == "direct" and u_["mode"] == "emergency" and s_prev < u_["level"] * cap:',
+        'if u_["target"] == "direct" and u_["mode"] == "emergency":',
+    ),
+    (
+        "supplemental boreholes pump before the dam",
+        '            if rule_ == "runOfRiver":\n                Gs = max',
+        '            for k_, u_ in enumerate(ulist):\n                if u_["target"] == "direct" and u_["mode"] == "supplemental":\n                    GW += pump(k_, rem - Gr - GW)\n            if rule_ == "runOfRiver":\n                Gs = max',
+    ),
+    (
+        "annual counts (borehole caps, allocations) never reset on 1 October",
+        "if i == 0 or (_dt.date.fromordinal(o).month == 10 and _dt.date.fromordinal(o).day == 1):",
+        "if i == 0:",
+    ),
+    # Allocations and the licence cap (§2.12a).
+    (
+        "the cap's volume isn't prorated by the allocation's dates",
+        'b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)',
+        'b += a["volume"]',
+    ),
+    ("the licence rate ignores its months", 'if a["months"] and m not in a["months"]:\n            continue', "if False:\n            continue"),
+    ("the rate limit is ignored", '        lim += a["rate"] * 86400\n', '        return math.inf\n'),
+    (
+        "every limit-bound day counts as the volume",
+        "if left <= limit + 1e-9 * budget:",
+        "if True:",
+    ),
+    (
+        "a full allocation scales to the surface allocations only",
+        'both = sorted(bysrc.get("surface", []) + bysrc.get("groundwater", []), key=lambda a: a["id"])',
+        'both = sorted(bysrc.get("surface", []), key=lambda a: a["id"])',
+    ),
+    ("the tail-start year's no-demand row keeps its volume", "if tot > 0 or y == tail_y:", "if tot > 0:"),
+    (
+        "a forecast tail's later water years keep the factor of the year it started in",
+        ("if i >= hist and water_year(days[i]) == tail_y:\n                    continue", "if i >= hist:\n                    continue"),
+        ("ks.append(fac_y.get(y, 0.0))", "ks.append(fac_y.get(tail_y if i >= hist else y, 0.0))"),
+    ),
+    # Demand objects and the basic-needs floor (§2.7f).
+    (
+        "a demand factor cuts below the basic-needs floor",
+        "if B is not None and f_ < 1:\n                    if min",
+        "if False:\n                    if min",
+    ),
+    ("a per-unit object's losses aren't added", "/ (1 - loss) for m in range(12)]", "for m in range(12)]"),
+    ("the first schedule window wins, not the last", "    for w in sched:\n", "    for w in reversed(sched):\n"),
+    (
+        "'first' objects share with the crop",
+        (
+            '[("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "first"],',
+            "[],",
+        ),
+        (
+            'if ob.get("priority", "shared") == "shared"]',
+            'if ob.get("priority", "shared") in ("shared", "first")]',
+        ),
+    ),
+    # River off-takes and canal seepage (§2.6a).
+    ("the canal loses nothing on the way", "append((t, v * (1 - lp)))", "append((t, v))"),
+    (
+        "a demand-sized off-take isn't grossed up for its loss",
+        'v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))',
+        'v = min(v, ot_need.get(t["id"], 0.0))',
+    ),
+    (
+        "an off-take ignores its hands-off flow",
+        'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
+        "keep_k = zs",
+    ),
+    ("canal seepage always returns at the source", 'rn = t.get("lossReturnNodeId") or xid', "rn = xid"),
+    ("off-take water left over always tops up the dam", "to_dam = left_off * arr_up / arrives if arrives > 0 else 0.0", "to_dam = left_off"),
+    # Other water users (§2.7c).
+    ("a junior user takes the seniors' water", 'river = H if x.get("userPriority", "senior") != "junior" else max(0.0, H - zs_in)', "river = H"),
+    ("a user returns nothing", 'T = (x.get("userReturnPct") or 0.0) * G', "T = 0.0"),
+    ("farms pass nothing for senior users", "need = min(zs, H + I)", "need = 0.0"),
+    # Supply rules and the river pump (§2.7e).
+    ("the trigger rule has no stop level", "on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap", "on = s_prev < trig * cap"),
+    ("the river pump has no capacity", 'pc = math.inf if pc is None else pc', "pc = math.inf"),
+    ("the river pump takes the water kept for others", "proom = max(0.0, min(pc, S - keep)) if on else 0.0", "proom = max(0.0, min(pc, S)) if on else 0.0"),
+    # Dam survey curves and releases (§2.7a).
+    ("the survey curve is ignored", 'curve = usable_curve(f.get("damCurve"))', "curve = None"),
+    ("a pass-inflow release ignores the outlet", "min(K + M + O, pass_target - S, outlet_c, avail)", "min(K + M + O, pass_target - S, avail)"),
+    ("a fixed release draws dead storage", "min(float(amts[m]), outlet_c, avail - dead)", "min(float(amts[m]), outlet_c, avail)"),
+    (
+        "a fixed release makes no room for transfers",
+        'rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]',
+        'rm = f["damCapacityM3"] - after + draw_bound(dst) - sched[dst]',
+    ),
+    # Hands-off flows and River to dam by month (§2.7h).
+    ("a dam farm diverts through its hands-off flow", "O = min(O, max(0.0, L + N - keep_h))", "pass"),
+    (
+        "the hands-off flow ignores the EWR flag",
+        'keep_h = max(float(ho[m]) if ho else 0.0, z if x.get("handsOffEwr") else 0.0)',
+        "keep_h = float(ho[m]) if ho else 0.0",
+    ),
+    (
+        "River to dam by month is ignored",
+        'dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)',
+        'dcap = x.get("divertCapacityM3Day") or 0.0',
+    ),
 ]
 
 
@@ -125,8 +233,9 @@ class CrossCheck(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory(prefix="verify-test-")
         n = int(os.environ.get("VERIFY_TEST_RANDOM", "12"))
+        nd = int(os.environ.get("VERIFY_TEST_DENSE", "12"))
         cls.seed = int(os.environ.get("VERIFY_SEED", "1"))
-        cls.cases = diff.build_cases(Path(cls.tmp.name), max(n, MUTANT_RANDOM), cls.seed, True)
+        cls.cases = diff.build_cases(Path(cls.tmp.name), max(n, MUTANT_RANDOM), cls.seed, True, max(nd, MUTANT_DENSE))
 
     @classmethod
     def tearDownClass(cls):
@@ -137,27 +246,49 @@ class CrossCheck(unittest.TestCase):
         self.assertEqual(r["failures"], [], "\n".join(r["failures"][:20]))
         # The cases reach the paths the mutants target.
         cov = r["coverage"]
-        for k in ("zero_run_days_set_aside", "accumulation_windows", "chirps_days", "band_split", "room_bound", "multi_site_charge_days", "forecast_tail"):
+        for k in (
+            "zero_run_days_set_aside", "accumulation_windows", "chirps_days", "band_split", "room_bound",
+            "multi_site_charge_days", "forecast_tail",
+            # Phase 2a.
+            "borehole_days", "borehole_to_dam_days", "borehole_annual_cap_days", "depletion_owed_days",
+            "cap_bound_days", "full_allocation_units", "floor_days", "object_shortage_days", "offtake_days",
+            "offtake_return_days", "user_days", "junior_short_days", "senior_pass_days", "river_pump_days",
+            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days",
+        ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
     def test_every_mutant_is_caught(self):
-        # The examples, the probes and the first MUTANT_RANDOM random cases:
-        # a larger VERIFY_TEST_RANDOM widens the agreement test, not this one.
-        cases = [c for c in self.cases if not c[0].startswith("random-") or int(c[0].split("-")[1]) < self.seed + MUTANT_RANDOM]
+        # The examples, the probes and the first MUTANT_RANDOM random and
+        # MUTANT_DENSE dense cases: a larger VERIFY_TEST_RANDOM or
+        # VERIFY_TEST_DENSE widens the agreement test, not this one.
+        def mutant_case(name):
+            if name.startswith("random-"):
+                return int(name.split("-")[1]) < self.seed + MUTANT_RANDOM
+            if name.startswith("dense-"):
+                return int(name.split("-")[1]) < self.seed + MUTANT_DENSE
+            return True
+
+        cases = [c for c in self.cases if mutant_case(c[0])]
         for what, *edits in MUTANTS:
             if isinstance(edits[0], str):
                 edits = [tuple(edits)]
             with self.subTest(what):
-                r = diff.evaluate(cases, mutant(*edits))
+                r = diff.evaluate(cases, mutant(*edits), stop_first=True)
                 self.assertNotEqual(r["failures"], [], f"the cases don't see: {what}")
 
 
 class Generator(unittest.TestCase):
-    def test_phase_one_only_and_seeded(self):
+    def test_in_scope_and_seeded(self):
         for seed in range(1, 200):
-            doc = generate.random_input(seed)
-            self.assertEqual(model.unsupported(doc), [], f"seed {seed}")
+            for dense in (False, True):
+                doc = generate.random_input(seed, dense)
+                self.assertEqual(model.unsupported(doc), [], f"seed {seed}")
         self.assertEqual(json.dumps(generate.random_input(7)), json.dumps(generate.random_input(7)))
+        self.assertEqual(json.dumps(generate.random_input(7, True)), json.dumps(generate.random_input(7, True)))
+
+    def test_known_cases_name_their_followup(self):
+        for key, why in diff.KNOWN_CASES.items():
+            self.assertIn("followups.md", why, key)
 
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():

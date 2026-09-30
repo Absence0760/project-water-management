@@ -6,7 +6,7 @@ import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Pack } from '$lib/api';
-import { checkableAccept, checkableFiles, checkFile, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
+import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
 
 const tz = process.env.TZ;
 afterEach(() => {
@@ -248,5 +248,23 @@ describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
 		expect(a()).toBe(true);
 		const b = latest.begin();
 		expect([a(), b()]).toEqual([false, true]);
+	});
+});
+
+describe('errataFoundSinceNote', () => {
+	it('says "since issue" once a pack was issued, whatever it is now, and that the pack never records them', () => {
+		for (const p of [pack({ status: 'issued', issuedAt: '2026-09-29T10:00:00Z' }), pack({ status: 'withdrawn', issuedAt: '2026-09-29T10:00:00Z' })]) {
+			const n = errataFoundSinceNote(p);
+			expect(n.heading).toBe('Errata found since issue');
+			expect(n.note).toMatch(/never will: its manifest and hash are fixed/);
+		}
+	});
+
+	it('says "since this draft was made" before issue, with the way to record them (a draft again)', () => {
+		const n = errataFoundSinceNote(pack({ status: 'draft', issuedAt: null }));
+		expect(n.heading).toBe('Errata found since this draft was made');
+		expect(n.note).toMatch(/draft the pack again/);
+		// A pack withdrawn before it was issued was never issued either.
+		expect(errataFoundSinceNote(pack({ status: 'withdrawn', issuedAt: null })).heading).toBe('Errata found since this draft was made');
 	});
 });
