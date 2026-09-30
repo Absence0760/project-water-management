@@ -1173,6 +1173,38 @@ the suggested order (the IDs carry the detail):
   FarmTemplate letter order; the results have a Self-checks panel with a
   water balance per water year and "Trace a day" (model.md § Verification,
   ui.md § Self-checks).
+- [x] **A farm's assurance of supply carried another farm's figures**
+      (issue #192, [engine-audit.md V1](./engine-audit.md#findings), engine
+      1.32.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
+      code re-entered on later calls). Worked around by moving the loop into
+      `tallyWindow`, which takes the series as parameters (bit-identical;
+      0 of 88 stressed runs failed, against 34 of 64 before). It is guarded
+      on every saved run by the `assurance` self-check, and in the opt-in
+      stress test `backend/src/model/assurance-jit.perf.test.ts`
+      (`pnpm test:backend:perf`).
+- [ ] **Report the V8 miscompile upstream** (issue #192): reduce it to a
+      standalone script for crbug.com/v8 (the Sandspruit stress reproduces
+      it; a harness calling `supplyAssurance` alone never did, at 51
+      deopt periods) and file it against Node 24's V8. The durable fix is
+      V8's. Trigger: before the next Node major bump, and again after it,
+      run `pnpm test:backend:perf` alone, and the old form of the loop
+      (git show 47e1ddb1^:packages/engine/src/network/reliability.ts)
+      under `node --deopt-every-n-times=2900`, to learn whether the new V8
+      still has the bug. Keep `tallyWindow` either way. If the fault
+      turns up in a saved run's `assurance` check on a new Node version,
+      that is this bug in another place: look for another long per-node
+      loop read through an object argument.
+- [ ] **The water account's EWR rows aren't redone by a per-run check**
+      (issue #192): `assurance` redoes the reliability and the stress grids
+      from the output's series, but `waterAccount.years[].ewr` (required,
+      met, days not met per site) has no per-run check, because the EWR
+      charge's requirement isn't an output series (`checkWaterAccount` in
+      `testing/invariants.ts` checks closure and 0 ≤ met ≤ required, in the
+      tests only). Its loop now has V1's workaround (`ewrOver`). Durable fix:
+      write each site's requirement as a series (or recompute it in the
+      check as the EWR grid does) and hold the account's EWR rows to it in
+      `checkSupplyAssurance`. Trigger: the next change to the water account
+      or the EWR charge, or any sign of V1 elsewhere.
 - ✅ The engine rejects networks with more than one outflow node.
 - [x] **Client catchment regression on real data:** done 2026-09-27: the
       workbook regression in `run.test.ts` passes against the re-extracted

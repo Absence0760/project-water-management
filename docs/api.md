@@ -1704,7 +1704,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
-  with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`, and
+  with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations` and `assurance` (engine ≥ 1.32.0:
+  the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
   one row per water year (Oct–Sep, `waterYear` = its start year) and one for
