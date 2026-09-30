@@ -1,5 +1,5 @@
 // Hydrologist plausibility checks (engine 0.25.0, docs/model.md §2.10d): a run
-// on a synthetic catchment shows the six checks (five before engine 1.50.0, four before 1.19.0) in their own Runs & results
+// on a synthetic catchment shows the six checks (five before engine 1.55.0, four before 1.19.0) in their own Runs & results
 // panel, with the latest run of another runoff model overlaid on the
 // dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
 // API can't make one any more). Names and numbers are invented.
@@ -31,7 +31,7 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByText(/^Six checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });
-	// Six on a run from engine 1.50.0: the recession diagnostics (CR-13) are the fifth, the validation signatures (CR-16) the sixth.
+	// Six on a run from engine 1.55.0: the recession diagnostics (CR-13) are the fifth, the validation signatures (CR-16) the sixth.
 	await expect(results.getByRole('listitem')).toHaveCount(6);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Recessions: / })).toHaveCount(1);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveCount(1);
@@ -68,14 +68,23 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// 5. Recession diagnostics (engine ≥ 1.19.0): the section is there, judged or not.
 	await expect(panel.getByRole('heading', { level: 4, name: /^Recession diagnostics/ })).toBeVisible();
 
-	// 6. Validation signatures (engine ≥ 1.50.0): three years of the outlet's gauge record against the model, one row per signature.
+	// 6. Validation signatures (engine ≥ 1.55.0): three years of the outlet's gauge record against the model, one row per signature.
 	await expect(panel.getByRole('heading', { level: 4, name: /^Validation signatures/ })).toBeVisible();
-	await expect(panel.getByText(/^On the gauge record at the outlet \(the record the calibration statistics score\), 1\u202f096 days, against the simulated outflow/)).toBeVisible();
+	// A regex getByText sees the text as written, source line breaks included: \s+ between words that wrap there.
+	await expect(panel.getByText(/^On the gauge record at the outlet \(the record the calibration statistics score\), 1\u202f096 days, against the simulated\s+outflow/)).toBeVisible();
+	await expect(panel.getByText(/The limits are provisional, for the hydrologist to confirm\./)).toBeVisible();
+	// The verdict line (the synthetic record is deterministic: its low flows fall away faster than the model's
+	// store drains, so the low-flow FDC is outside its limit), which the check list and the run's warnings agree with.
+	await expect(panel.getByRole('status').filter({ hasText: 'A signature is outside its limit: see the run’s warnings.' })).toHaveCount(1);
+	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveText('Validation signatures: see below');
+	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 	const sig = panel.getByRole('table', { name: /^Validation signatures/ });
+	await expect(sig.getByRole('columnheader', { name: 'Provisional limit' })).toBeVisible();
 	await expect(sig.getByRole('row')).toHaveCount(6);
 	await expect(sig.getByRole('row', { name: /^Base-flow index, Hughes et al\. \(2003\) \d\.\d\d \d\.\d\d [+−]\d\.\d\d ±0\.15 (within|outside)$/ })).toBeVisible();
 	await expect(sig.getByRole('row', { name: /^Base-flow index, Eckhardt \(2005\) \d\.\d\d \d\.\d\d / })).toBeVisible();
 	await expect(sig.getByRole('row', { name: /^Low-flow FDC slope, Q70–Q95 [\d.]+ [\d.]+ [+−][\d\u202f]+ % ±50 % (within|outside)$/ })).toBeVisible();
 	await expect(sig.getByRole('row', { name: /^Skill on held-out recessions / })).toBeVisible();
+	await expect(panel.getByText(/^Held-out recessions: /)).toBeVisible();
 	await expectNoViolations(page);
 });

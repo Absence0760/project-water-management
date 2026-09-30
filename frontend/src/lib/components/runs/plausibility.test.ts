@@ -105,7 +105,7 @@ describe('breakHint, signedPct and findings', () => {
 		expect(findings(r(null)).at(-1)!.ok).toBeNull();
 	});
 
-	it('adds a validation signatures line from engine 1.50.0 only (null = not computed)', () => {
+	it('adds a validation signatures line from engine 1.55.0 only (null = not computed)', () => {
 		const none: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null };
 		expect(findings(none)).toHaveLength(5);
 		expect(findings({ ...none, signatures: null }).at(-1)).toEqual({ label: 'Validation signatures', ok: null });

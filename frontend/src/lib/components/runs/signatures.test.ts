@@ -1,4 +1,4 @@
-// The validation signatures' display helpers (engine ≥ 1.50.0, docs/model.md §2.10d, docs/ui.md).
+// The validation signatures' display helpers (engine ≥ 1.55.0, docs/model.md §2.10d, docs/ui.md).
 import { lowFlowFdcSignature, recessionHoldout, type RecessionSegment, type ValidationSignatures } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { holdoutText, scoredRecordText, signatureRows, signaturesOk } from './signatures';

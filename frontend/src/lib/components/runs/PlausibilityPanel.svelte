@@ -4,7 +4,7 @@
 	water year, EWR days by rain source, the double-mass check of observed flow
 	against rain, and the dry-season low-flow duration curves, overlaid with the
 	latest run of each other runoff model; from engine 1.19.0 the recession
-	diagnostics (RecessionDiagnostics.svelte); from engine 1.50.0 the validation
+	diagnostics (RecessionDiagnostics.svelte); from engine 1.55.0 the validation
 	signatures (ValidationSignatures.svelte). Part of the Runs tab's chunk (RunsTab.svelte).
 -->
 <script lang="ts">
@@ -101,7 +101,7 @@
 		const i = lf?.points.indexOf(p) ?? -1;
 		return i >= 0 ? c.flowsM3s[i]! : null;
 	};
-	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth, the validation signatures (engine 1.50.0) the sixth.
+	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth, the validation signatures (engine 1.55.0) the sixth.
 	const checkCount = $derived(checks.recession === undefined ? 'Four' : checks.signatures === undefined ? 'Five' : 'Six');
 </script>
 

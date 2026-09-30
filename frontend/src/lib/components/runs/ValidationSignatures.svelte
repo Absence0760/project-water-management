@@ -1,5 +1,5 @@
 <!--
-	Validation signatures (RunSummary.plausibility.signatures, engine ≥ 1.50.0;
+	Validation signatures (RunSummary.plausibility.signatures, engine ≥ 1.55.0;
 	docs/model.md §2.10d "Validation signatures"): the base-flow index by the
 	Hughes et al. (2003) and Eckhardt (2005) filters, the low-flow FDC's slope
 	and volume bias, and the skill on held-out recession segments, of the
@@ -24,7 +24,7 @@
 {#if signatures}
 	<p class="small">
 		On {scoredRecordText(signatures)} (the record the calibration statistics score){days === null ? '' : `, ${fmtNum(days)} days`}, against the simulated
-		outflow on the same days. Base-flow index and the low-flow curve need a year of scored days; the limits are indicative.
+		outflow on the same days. Base-flow index and the low-flow curve need a year of scored days. The limits are provisional, for the hydrologist to confirm.
 	</p>
 	<p class="flag {ok === null ? 'none' : ok ? 'good' : 'bad'}" role="status">
 		{ok === null ? 'Not judged: too few scored days or recession segments.' : ok ? 'Every signature is within its limit.' : 'A signature is outside its limit: see the run’s warnings.'}
@@ -37,7 +37,7 @@
 					<th scope="col" class="num">Observed</th>
 					<th scope="col" class="num">Simulated</th>
 					<th scope="col" class="num">Difference or bias</th>
-					<th scope="col" class="num">Limit</th>
+					<th scope="col" class="num">Provisional limit</th>
 					<th scope="col">Result</th>
 				</tr>
 			</thead>

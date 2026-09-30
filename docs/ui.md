@@ -4808,7 +4808,7 @@ read it before.
   series with the engine's `recessionPoints`, so the summary holds only the
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
-  those runs; an older run shows neither. From engine 1.50.0, after it,
+  those runs; an older run shows neither. From engine 1.55.0, after it,
   **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
   `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
   signatures*, CR-16): which record is scored (the outlet's gauge or logger
@@ -4818,12 +4818,25 @@ read it before.
   the low-flow volume bias (%BiasFLV) and the skill on held-out recessions
   (observed = the river's own recession curve fitted on the other segments,
   simulated = the model), each with its observed and simulated value, the
-  difference or bias, the indicative limit and *within* / *outside* / *not
-  judged* (a row outside its limit shaded); and a line on how the recessions
-  were held out. The check list gains a *Validation signatures* line and
-  the panel's intro counts six checks on those runs; an older run shows
-  neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  difference or bias, the **Provisional limit** and *within* / *outside* /
+  *not judged* (a row outside its limit shaded); and a line on how the
+  recessions were held out. The intro says the limits are provisional, for
+  the hydrologist to confirm: they are the engine's warning limits (±0.15
+  BFI by either filter, ±50 % on the slope bias and %BiasFLV, a held-out
+  skill of at least 0 with 8 or more segments), which the display reads
+  through one named constant, `PROVISIONAL_SIGNATURE_LIMITS` in
+  `runs/signatures.ts` ([followups.md § Hydrologist](./followups.md#hydrologist)).
+  The check list gains a *Validation signatures* line (so does the run's
+  credibility strip, which counts the check list's findings) and the
+  panel's intro counts six checks on those runs; a run with no observed
+  record shows the heading and "Not computed: needs an observed flow
+  record."; a run made before 1.55.0 shows neither. The help article
+  *Validation signatures* (`plausibility-signatures`) explains BFI, the two
+  filters, the low-flow slope and %BiasFLV and the held-out recession skill
+  in plain words. The Compare page sets the first four checks and the
+  gauges side by side
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
+  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
