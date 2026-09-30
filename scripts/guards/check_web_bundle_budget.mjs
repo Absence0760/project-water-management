@@ -1530,6 +1530,9 @@
 //             later scenario ops beside #71's evidence pack screens and pack
 //             PDF and #234's preview worker, measured 1298; the entries above
 //             were each measured without the others). Headroom ~3 KB.
+// 2026-09-30  total 1301 → 1305 KB (#246's modal fixes and #247's licence-limit
+//             lines, each measured without the other, took main to 1302 on CI
+//             @ 82248f4e; 1300 locally). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1540,7 +1543,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1301,
+	totalCodeKb: 1305,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
