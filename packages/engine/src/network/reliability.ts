@@ -474,17 +474,39 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 	};
 }
 
+/** Adds one node's days into the stress cells: tallyWindow's pattern (issue #192), the series as parameters. */
+function addToCells(d: number[][], g: number[][], demand: ArrayLike<number>, supplied: ArrayLike<number>, row: Int32Array, col: Uint8Array, days: number): void {
+	for (let t = 0; t < days; t++) {
+		d[row[t]!]![col[t]!]! += demand[t]!;
+		g[row[t]!]![col[t]!]! += supplied[t]!;
+	}
+}
+
 function stressGrid(nodeId: string | null, name: string, kind: StressGrid['kind'], parts: DemandNodeInput[], cal: Calendar, days: number): StressGrid {
 	const d = Array.from({ length: cal.rows }, () => new Array<number>(12).fill(0));
 	const g = Array.from({ length: cal.rows }, () => new Array<number>(12).fill(0));
-	for (const p of parts) {
-		for (let t = 0; t < days; t++) {
-			d[cal.row[t]!]![cal.col[t]!]! += p.demand[t]!;
-			g[cal.row[t]!]![cal.col[t]!]! += p.supplied[t]!;
-		}
-	}
+	for (const p of parts) addToCells(d, g, p.demand, p.supplied, cal.row, cal.col, days);
 	const r = d.map((row, i) => row.map((v, j) => ratio(g[i]![j]!, v)));
 	return { nodeId, name, kind, ratio: r, stressClass: r.map((row) => row.map(stressClassOf)) };
+}
+
+/**
+ * One EWR site's requirement, the part met and the days not met over a
+ * period: tallyWindow's pattern (issue #192), the series as parameters, since
+ * it runs once per site and year with a different site's series each time.
+ */
+function ewrOver(required: ArrayLike<number>, shortfall: ArrayLike<number>, from: number, to: number) {
+	let req = 0;
+	let met = 0;
+	let notMet = 0;
+	for (let t = from; t <= to; t++) {
+		const r = required[t]!;
+		const sh = shortfall[t]!;
+		req += r;
+		met += r + Math.min(sh, 0);
+		if (sh < 0) notMet++;
+	}
+	return { req, met, notMet };
 }
 
 /** Days not met at a site: the day's own shortfall is below zero (as the EWR grid, model.md §2.9). */
@@ -560,16 +582,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		residualM3: nz(inM3 - outM3 - (closing - opening)),
 		scaleM3: terms.reduce((a, v) => a + Math.abs(v), 0),
 		ewr: x.sites.map((site) => {
-			let req = 0;
-			let met = 0;
-			let notMet = 0;
-			for (let t = from; t <= to; t++) {
-				const r = site.required[t]!;
-				const sh = site.shortfall[t]!;
-				req += r;
-				met += r + Math.min(sh, 0);
-				if (sh < 0) notMet++;
-			}
+			const { req, met, notMet } = ewrOver(site.required, site.shortfall, from, to);
 			return { nodeId: site.nodeId, name: site.name, requiredM3: nz(req), metM3: nz(met), daysNotMet: notMet, ...(site.ewrSource ? { ewrSource: site.ewrSource } : {}) };
 		})
 	};
