@@ -1,5 +1,5 @@
 // Load crop factors on Crops & demand (issue #54 item 1, docs/ui.md § Crop
-// grids), from the Crop factors grid (Grids › Crop factors, issue #17): map a crop to the reference library, see the diff and the demand
+// grids), from the Crop factors grid (Tables › Crop factors, issue #17): map a crop to the reference library, see the diff and the demand
 // change, apply, save with a reason, reload; and a rejected change leaves
 // the factors as they were.
 import { fileURLToPath } from 'node:url';
