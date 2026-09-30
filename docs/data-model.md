@@ -1012,7 +1012,8 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   `manifest_sha256` (unique hex; its first 12 digits, the short code, are
   unique too: `evidence_pack_short_code_idx`), `report_version`,
   `engine_version`, `pdf_key`/`pdf_sha256`/`pdf_pages` and
-  `bundle_key`/`bundle_sha256` (NULL until built, each set as a set),
+  `bundle_key`/`bundle_sha256` (NULL until built, each set as a set; the
+  bundle is built when the pack is issued, 117),
   `created_by` and `issued_by` (→ `app_user`, `SET NULL`), `created_at`,
   `issued_at`, `superseded_by_pack_id` (→ `evidence_pack`),
   `status_reason` (1–1 000, the withdrawal's). A check ties each status to
@@ -1041,8 +1042,8 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
 - **Grants and RLS**: `water_app` has `SELECT, INSERT, DELETE` and
   `UPDATE` on the lifecycle columns only (`status`, `status_reason`,
   `superseded_by_pack_id`; catalogue `COLUMN_ONLY_UPDATE`). The PDF and
-  bundle columns aren't granted: their hashes are verified publicly, so the
-  renderer will set them through a `SECURITY DEFINER` setter. `SELECT`: editors, and viewers for a baseline pack
+  bundle columns aren't granted: their hashes are verified publicly, so
+  `SECURITY DEFINER` setters write them (the bundle's below). `SELECT`: editors, and viewers for a baseline pack
   or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
   themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
   `DELETE` editor, drafts only.
@@ -1053,12 +1054,20 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   a pack cites.
 - **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
   refuses a project with a pack past draft (`restrict_violation`).
-- **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`): by short code
-  or full hash, the printed fields of a pack that was issued, as `jsonb`, or
-  NULL ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+- **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`; latest body:
+  117_pack_bundle, which adds `bundleSha256`): by short code or full hash,
+  the printed fields of a pack that was issued, as `jsonb`, or NULL
+  ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+- **`app_record_pack_bundle(pack, sha256)`** (117_pack_bundle, `SECURITY
+  DEFINER`, `EXECUTE` for `water_app`): records the reproduction bundle's key
+  (`packs/<project>/<pack>/<sha256>.zip`, derived here) and SHA-256, for an
+  editor of the project, only for a pack the caller issued in the same
+  transaction (`issued_at = now()`), and once (NULL when one is recorded
+  already); returns the key ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **Audit**: `pack.drafted`, `pack.deleted`, `pack.issued`,
   `pack.superseded`, `pack.withdrawn` (ids, version, short code and hash; a
-  withdrawal its reason), and `signoff.created` with `packId`.
+  withdrawal its reason; an issue the bundle's hash), and `signoff.created`
+  with `packId`.
 - Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
   role-ladder, mass-assignment and cross-project sweeps.
 

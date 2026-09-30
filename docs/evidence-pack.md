@@ -9,16 +9,16 @@ An applicant attaches it to a water-use licence application, and anyone
 holding it can check it against the app with its short code.
 
 This page covers what a pack holds, what its hash covers, the short code, the
-lifecycle and verification. The routes are in
+lifecycle, verification and the reproduction bundle. The routes are in
 [api.md § Evidence packs](./api.md#evidence-packs), the table in
 [data-model.md § Evidence packs](./data-model.md#evidence-packs-112_evidence_packsql),
 and the trust boundaries in [security.md § Evidence packs](./security.md#evidence-packs).
 
-**Built so far (2026-09-29):** the table, the manifest and its hash, the pack
-sign-off, drafting, issue, supersede, withdraw, delete of drafts, and the
-public verify lookup. **Not built yet:** the pack's own page and the verify
-page (the next step), the server-rendered PDF, the reproduction bundle and
-`reproduce:pack` (each tracked in
+**Built so far (2026-09-30):** the table, the manifest and its hash, the pack
+sign-off, drafting, issue, supersede, withdraw, delete of drafts, the public
+verify lookup, and the reproduction bundle with `pnpm reproduce:pack`
+([§ Reproduction](#reproduction)). **Not built yet:** the pack's own page and
+the verify page, and the server-rendered PDF (each tracked in
 [followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
 
 ## What a pack holds
@@ -40,8 +40,8 @@ dropped. So the hash taken when the draft is made is the hash of what is
 stored, and the server checks that on the draft and again on issue.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
-successor), the report and engine versions, and room for the PDF and bundle
-hashes (not built yet).
+successor), the report and engine versions, the reproduction bundle's key and
+hash (set at issue), and room for the PDF's (not built yet).
 
 ## What is hashed, and what isn't
 
@@ -57,7 +57,7 @@ WebCrypto, so the engine stays free of Node APIs.
 | the project's id and name at drafting | when it was drafted or issued, and by whom |
 | the engine version (and build, once recorded) | the withdrawal reason and the successor |
 | the whole evidence report: every setting, the model, every input series' hash, the results, the flags and checks, the methodology and errata cited | the sign-offs (each binds the hash in its own statement, below) |
-| | the PDF and the bundle (each will have its own SHA-256) |
+| | the PDF and the reproduction bundle (each has its own SHA-256; the bundle contains the manifest) |
 
 So a pack moves from draft to issued, superseded or withdrawn with the same
 hash, and anything that changes the evidence changes it. A pack that
@@ -110,9 +110,11 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   haven't moved since the draft). Then it stamps the issue (`issued_at`,
   `issued_by`, set by the database, never the caller) and, for a new
   version, marks the predecessor superseded, naming the successor.
-  Re-running both runs to prove they reproduce is not done at issue: it
-  takes as long as the runs; the reproduction bundle will carry it
-  ([followups.md](./followups.md#evidence-report-issue-71)).
+  In the same transaction it builds the pack's reproduction bundle, checks
+  it, stores it and records its hash ([§ Reproduction](#reproduction)); if
+  that fails, nothing is issued. Re-running both runs to prove they
+  reproduce is not done at issue: it takes as long as the runs, and the
+  bundle lets anyone do it (`pnpm reproduce:pack`).
 - **One issued at a time.** An application (or the project's baseline
   evidence) has at most one issued pack: a second is refused at issue
   (`409`), and the database holds it at commit (`evidence_pack_one_issued`).
@@ -149,7 +151,8 @@ the pack prints:
 - `status`, `version`, `issuedAt`;
 - `catchment` (the project's name in the manifest);
 - `engineVersion`, `reportVersion`;
-- `manifestSha256`, `shortCode`, `pdfSha256` (null until the PDF is built);
+- `manifestSha256`, `shortCode`, `pdfSha256` (null until the PDF is built),
+  `bundleSha256` (the reproduction bundle's);
 - `successorSha256` (the hash of the version that superseded it, or null);
 - `withdrawnReason` (for a withdrawn pack, else null);
 - `methodology` `{ version, sha256 }`;
@@ -167,17 +170,99 @@ builds exactly that object; the route adds only `shortCode`.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
-content, hash its manifest (or, once built, its PDF) and compare with the
-hashes verify returns; the verify page will do that in the browser.
+content, hash its manifest, its bundle (or, once built, its PDF) and compare
+with the hashes verify returns; the verify page will do that in the browser.
+Whether the results follow from the inputs is the bundle's job
+([§ Reproduction](#reproduction)).
+
+## Reproduction
+
+An issued pack has a **reproduction bundle**: a ZIP that anyone re-runs with
+only the bundle and this repository at the pack's engine version, with no
+database, account or network, and gets the same results (roadmap WP-3.14
+item 11). The assessor gets it from the applicant (or downloads it from the
+pack, `GET …/packs/:packId/bundle`, [api.md § Evidence packs](./api.md#evidence-packs))
+and checks its SHA-256 against the `bundleSha256` the verify lookup returns.
+
+**What it holds** (engine `packages/engine/src/evidence/bundle.ts`,
+`buildPackBundle`, layout `bundle-1`):
+
+| Entry | What |
+| --- | --- |
+| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, and the SHA-256 of every other entry |
+| `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
+| `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash), `<run>` `baseline` and, for an application, `application` |
+| `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
+| `series/<sha256>.csv` | each input series' values, `date,value` one row a day, a missing day empty, named by the SHA-256 of the values (runs that share a series share its file) |
+| `scenario.json` | the application's scenario as its run recorded it: the ops, their hash, the base run (application packs only) |
+| `README.md` | how to reproduce it, and which engine to check out |
+
+The **results digest** of a run is the SHA-256 of `runResultsText`: RFC 8785
+JSON of the first day, the summary as JSON stores it, and each daily output's
+node, key and values hash, sorted (labels aren't in it). Two runs with the
+same digest have the same summary and the same value on every day of every
+output. The bundle is deterministic: entries sorted, fixed timestamps, so the
+same pack gives the same bytes on the same zlib.
+
+**Built at issue.** The issue route (`backend/src/evidence/bundle.ts`) reads
+both runs as the issuer (their stored inputs through `loadRunInput`, every
+series re-hashed, and their stored daily outputs), builds the bundle, checks
+it as `reproduce:pack --no-run` would, stores it in the packs bucket under
+`packs/<project>/<pack>/<sha256>.zip` with its SHA-256 as the upload's
+checksum, and records it through `app_record_pack_bundle` (117), which only
+the transaction that issues the pack may call. All of it or none: a bundle
+that can't be stored fails the issue. The upload comes before the commit, so
+an issue that fails after it leaves an object nothing records: named by its
+own hash, it never takes the place of a recorded one, and issuing again
+stores the same bytes under the same key (the build is deterministic). It is built then, not on download,
+because it must be what was stored when the pack was issued (a daily output
+follows its node, so a later build could miss one) and its hash is published
+by verify. Locally the store is MinIO (`pnpm dev:s3:up`; the backend creates
+`water-packs` on first use); issuing a pack fails without it.
+
+**Checking it.** From the repository root, at the engine the runs were made
+with (the bundle's README says how to find the commit), with Node 24 and
+pnpm 10:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [--no-run] [--json]
+```
+
+`scripts/reproduce-pack/reproduce-pack.ts` runs the engine's
+`checkPackBundle` and prints each check:
+
+| Check | Passes when |
+| --- | --- |
+| `archive`, `files` | the zip reads, every entry is listed in `bundle.json`, and each matches its SHA-256 there |
+| `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
+| `runs` | the runs are the ones the manifest names, with its engine versions |
+| `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |
+| `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |
+| `results:<run>` | the stored summary is the manifest's, and `results.json` gives the digest `bundle.json` names |
+| `reproduce:<run>` | re-running the run's input with this checkout's engine gives the same results digest (skipped with `--no-run`) |
+
+It exits 0 when every check passes, 1 when any fails (naming what differs:
+the summary's paths, the daily outputs), and 2 on a usage error. A run made
+with another engine version is expected to differ: the output says which
+engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
+(round trip, determinism, and each tampering beside a positive control),
+`packages/engine/src/zip/zip.test.ts`,
+`scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
+MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
+both a baseline and an application pack; the setter's refusals).
 
 ## Guards
 
+- `app_record_pack_bundle` (117) is the only writer of the bundle columns:
+  an editor, in the transaction that issues the pack, once, under the key it
+  derives.
 - `evidence_pack_guard` (112) keeps the manifest, its hash, the runs, the
   scenario, the version and its predecessor frozen from the insert, for every
   role, the schema owner included; the status moves only forward; the issue
   stamp is the database's; the reason, the successor, the PDF and the bundle
-  are each set once (the PDF and bundle only by the future renderer's
-  setter: `water_app` has no grant on them); the manifest must name the
+  are each set once (the PDF and bundle only through their `SECURITY
+  DEFINER` setters: `water_app` has no grant on them); the manifest must name the
   row's own id, version, project and versions; who drafted and issued it clears only when that account
   is deleted.
 - `water_app` may `UPDATE` only the lifecycle columns (column grants), and
@@ -185,7 +270,7 @@ hashes verify returns; the verify page will do that in the browser.
 - `project_pack_guard` refuses deleting a project with a pack past draft.
 - `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft.
 - Tests: `backend/src/evidence/packs.db.test.ts` (each refusal with its
-  positive control), `packages/engine/src/evidence/pack.test.ts` (the
+  positive control, the bundle's setter among them), `packages/engine/src/evidence/pack.test.ts` (the
   manifest is deterministic, key order doesn't matter, a changed setting
   changes the hash, the lifecycle is outside it), the catalogue, role-ladder,
   mass-assignment and cross-project sweeps.

@@ -22,7 +22,8 @@ pnpm setup
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
-(MinIO, for report PDFs, see [Reports](#reports)).
+(MinIO, for report PDFs and evidence packs' reproduction bundles, see
+[Reports](#reports)).
 On first boot of the empty volume, `dev/postgres/00-roles.sql` creates the
 `water_app` login role and the `water_test` database. The migrations then
 create the schema.
@@ -51,6 +52,7 @@ No env files to write. `backend/.env.development` and
 | `RENDER_SITE_URL` / `RENDER_API_URL` | `http://localhost:7777` / `http://localhost:3001` | The site the renderer opens, and the API it signs in to |
 | `STORAGE` | `local` | Where PDFs go: `local` = MinIO from docker-compose; `s3` in production |
 | `REPORTS_BUCKET` / `S3_ENDPOINT` | `water-reports` / `http://127.0.0.1:9002` | The bucket (created on first use) and MinIO's API |
+| `PACKS_BUCKET` | `water-packs` | Issued evidence packs' files: the reproduction bundle, stored when a pack is issued (created on first use; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)) |
 | `REPORT_DOWNLOADS` | `presigned` | How the download route signs a PDF link: `presigned` = a 60 s MinIO GET; production uses `cloudfront` (a CloudFront signed URL on the site's `/reports/*`, with `CLOUDFRONT_KEY_PAIR_ID` / `CLOUDFRONT_PUBLIC_KEY` from Terraform and `CLOUDFRONT_PRIVATE_KEY` from sops; security.md § Reports) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
 | `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
@@ -522,6 +524,11 @@ pnpm build                  # frontend/build (static) + backend/dist/lambda.mjs
   `pnpm dev:s3:up`). "The report could not be rendered (the browser failed)"
   usually means Playwright's Chromium isn't installed
   (`pnpm test:e2e:install`). The worker's console has the details.
+
+**Issuing an evidence pack fails with a server error**
+: Issuing stores the pack's reproduction bundle in MinIO, in the same step:
+  without MinIO nothing is issued (`pnpm dev:s3:status`, then
+  `pnpm dev:s3:up`, and issue again). The backend's console has the details.
 
 **Port 7777 or 3001 already in use**
 : The frontend port is fixed at 7777. The backend respects `PORT`.

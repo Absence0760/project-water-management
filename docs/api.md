@@ -1994,8 +1994,9 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 ## Evidence packs
 
 A licensing evidence report frozen as a hashed, versioned, signed pack
-(roadmap WP-3.14, issue #71, migration 112; [evidence-pack.md](./evidence-pack.md)
-covers the manifest, the hash, the short code and the lifecycle).
+(roadmap WP-3.14, issue #71, migrations 112 and 117; [evidence-pack.md](./evidence-pack.md)
+covers the manifest, the hash, the short code, the lifecycle and the
+reproduction bundle).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -2005,7 +2006,8 @@ covers the manifest, the hash, the short code and the lifecycle).
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and the pack's reproduction bundle is built, checked, stored and recorded in it too (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
 | GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
 
@@ -2017,8 +2019,8 @@ covers the manifest, the hash, the short code and the lifecycle).
   signoffs }`. `title` is the report's (the scenario's name, or the
   project's); `createdBy` and `issuedBy` are display names (null once the
   account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
-  `signoffs` is a count. The PDF and bundle fields stay `null` until they
-  are built.
+  `signoffs` is a count. `bundleSha256` is set when the pack is issued
+  (null on a draft); the PDF fields stay `null` until the PDF is built.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.
@@ -2030,7 +2032,7 @@ covers the manifest, the hash, the short code and the lifecycle).
   run statement's ten and `pack`; `errata` of either run's engine.
 - `PackVerification = { status, version, issuedAt, catchment,
   engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256,
-  successorSha256, withdrawnReason, methodology: { version, sha256 },
+  bundleSha256, successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt }[] }`,
   and nothing else (`app_verify_pack`, security.md § Evidence packs).
@@ -2038,8 +2040,8 @@ covers the manifest, the hash, the short code and the lifecycle).
   can't be deleted or trimmed, and the scenario can't be deleted. A project
   with a pack past draft can't be deleted (`409`, [Projects](#projects)).
 - Each step is in the history: `pack.drafted`, `pack.deleted`,
-  `pack.issued`, `pack.superseded`, `pack.withdrawn`, and `signoff.created`
-  with `packId`.
+  `pack.issued` (with `bundleSha256`), `pack.superseded`, `pack.withdrawn`,
+  and `signoff.created` with `packId`.
 
 ## Sign-offs
 
