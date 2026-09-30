@@ -318,7 +318,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 	// added on a unit (now and then on a user or gauge, or a missing node: a problem), fields set
 	// one or a few at a time on one object (an edit group), and removals. A sizing switched without
 	// its numbers, or a return from an object piped out, breaks a model rule (a problem).
-	const o = new Rng(seed ^ 0x3c6ef372);
+	const o = new Rng(seed ^ 0x7feb352d);
 	if (count === undefined && o.bool(0.3)) {
 		const objects = (input.model.demandObjects ?? []).map((x) => x.id);
 		for (let k = o.int(1, 3); k > 0; k--) {
@@ -360,7 +360,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 																		? o.bool(0.4)
 																			? null
 																			: [{ label: 'Scenario window', span: 'always' as const, from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: o.float(0, 2) }]
-																		: 'Scenario note';
+																		: o.pick(['Scenario note', ' Scenario note ', '']);
 					ops.push({ op: 'demandObject.set', demandObjectId, field, value } as ScenarioOp);
 				}
 				continue;

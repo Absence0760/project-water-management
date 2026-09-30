@@ -279,14 +279,14 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 
 /**
  * A demand object's field as a scenario compares and records it: no
- * schedule, null and an empty one run the same (engine ≥ 1.17.0), and a note
- * left out is empty.
+ * schedule, null and an empty one run the same (engine ≥ 1.17.0), a note
+ * left out is empty, and a name and a note are trimmed as a save trims them.
  */
 function objectField(o: DemandObject, f: DemandObjectSetField): unknown {
 	// Each window in the engine's key order, as a model read back from jsonb or an op rebuilt by the engine has it.
 	if (f === 'schedule')
-		return o.schedule?.length ? o.schedule.map((w) => ({ label: w.label, span: w.span, from: w.from, to: w.to, easterFrom: w.easterFrom, easterTo: w.easterTo, weekdays: w.weekdays, factor: w.factor })) : null;
-	if (f === 'note') return o.note ?? '';
+		return o.schedule?.length ? o.schedule.map((w) => ({ label: w.label.trim(), span: w.span, from: w.from, to: w.to, easterFrom: w.easterFrom, easterTo: w.easterTo, weekdays: w.weekdays, factor: w.factor })) : null;
+	if (f === 'note' || f === 'name') return (o[f] ?? '').trim();
 	return o[f];
 }
 

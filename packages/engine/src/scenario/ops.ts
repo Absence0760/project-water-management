@@ -742,9 +742,11 @@ const demandSchedule: Check = nullable((v) => {
 	}
 	return null;
 });
-/** A checked schedule rebuilt from each window's known fields (null stays null). */
+/** A checked schedule rebuilt from each window's known fields, its label trimmed as a save trims it (null stays null). */
 const scheduleOf = (v: unknown): DemandScheduleWindow[] | null =>
-	Array.isArray(v) ? v.map((w) => Object.fromEntries(DEMAND_WINDOW_KEYS.map((k) => [k, cloneValue((w as Obj)[k])])) as unknown as DemandScheduleWindow) : null;
+	Array.isArray(v)
+		? v.map((w) => Object.fromEntries(DEMAND_WINDOW_KEYS.map((k) => [k, k === 'label' ? String((w as Obj)[k]).trim() : cloneValue((w as Obj)[k])])) as unknown as DemandScheduleWindow)
+		: null;
 
 const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	name: (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 200 ? null : 'must be a name of 1–200 characters'),
@@ -770,9 +772,9 @@ export function demandObjectFieldError(field: string, value: unknown): string | 
 	return c ? c(value) : `"${field}" is not a demand-object field a scenario can set`;
 }
 
-/** A demandObject.set value as applyScenario writes it: a name trimmed, a schedule rebuilt from its windows' known fields. */
+/** A demandObject.set value as applyScenario writes it: a name and a note trimmed, a schedule rebuilt from its windows' known fields. */
 export function demandObjectValue(field: DemandObjectSetField, value: unknown): unknown {
-	return field === 'name' ? (value as string).trim() : field === 'schedule' ? scheduleOf(value) : cloneValue(value);
+	return field === 'name' || field === 'note' ? (value as string).trim() : field === 'schedule' ? scheduleOf(value) : cloneValue(value);
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };

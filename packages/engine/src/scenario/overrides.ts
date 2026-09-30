@@ -600,7 +600,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const n = findNode(d, o!.nodeId);
 			if (n.kind !== 'farm') fail(`a demand object is on a hydrological unit; "${n.name}" is ${n.kind === 'user' ? 'an other water user' : 'a gauge'}`);
 			// How its fields fit together (sizing, destination, schedule) is a model rule, checked after the op.
-			m.demandObjects = [...(m.demandObjects ?? []), { ...o!, name: o!.name.trim() }];
+			// Name and note trimmed, as a save trims them (and as run comparison reads a note).
+			m.demandObjects = [...(m.demandObjects ?? []), { ...o!, name: o!.name.trim(), ...(typeof o!.note === 'string' ? { note: o!.note.trim() } : {}) }];
 			break;
 		}
 		case 'demandObject.set': {

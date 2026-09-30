@@ -1407,7 +1407,7 @@ describe('demand-object ops (engine ≥ 1.41.0)', () => {
 		const r = applyScenario(withObject(), [set('name', '  New town '), set('returnPct', 0.2), set('monthlyM3Day', new Array(12).fill(120))]);
 		expect(r.problems).toEqual([]);
 		expect(r.input.model.demandObjects![0]).toMatchObject({ name: 'New town', returnPct: 0.2, monthlyM3Day: new Array(12).fill(120) });
-		const window = { label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5, extra: 1 };
+		const window = { label: ' Weekends ', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5, extra: 1 };
 		const s = one(set('schedule', [window]), withObject());
 		expect(s.problems).toEqual([]);
 		expect(s.input.model.demandObjects![0]!.schedule).toEqual([{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 }]);

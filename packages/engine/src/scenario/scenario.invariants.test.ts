@@ -95,14 +95,18 @@ function baseFor(seed: number): ModelInput {
 describe('scenarios on random networks', () => {
 	it(`${CASES} random scenarios keep every engine invariant`, () => {
 		const failures: string[] = [];
+		// Demand-object ops (engine ≥ 1.41.0) that applied: the property is only as good as the ops it saw.
+		let objectOps = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
 			const base = baseFor(seed);
 			const ops = randomOps(base, seed);
-			const { input } = applyScenario(base, ops);
+			const { input, applied } = applyScenario(base, ops);
+			objectOps += applied.filter((a) => a.op.op.startsWith('demandObject.')).length;
 			const bad = checkAll(input, seed);
 			if (bad) failures.push(`seed ${seed}: ${bad}\n  ops: ${JSON.stringify(ops)}`);
 		}
 		expect(failures.join('\n\n')).toBe('');
+		expect(objectOps).toBeGreaterThan(0);
 	}, 300_000);
 
 	it(`${Math.max(20, Math.floor(CASES / 5))} random scenarios under a cap or full allocation keep every engine invariant (allocation.set / .remove reach the run)`, () => {
@@ -125,6 +129,7 @@ describe('scenarios on random networks', () => {
 	it(`no silent change over ${CASES * 4} random scenarios: every op that changes the input is an InputChange`, () => {
 		const failures: string[] = [];
 		let changed = 0;
+		let objectChanges = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES * 4 && failures.length < 3; seed++) {
 			const base = baseFor(seed);
 			const empty = applyScenario(base, []);
@@ -135,6 +140,7 @@ describe('scenarios on random networks', () => {
 				const r = applyScenario(cur, [op]);
 				if (resolved(r.input) !== resolved(cur)) {
 					changed++;
+					if (op.op.startsWith('demandObject.')) objectChanges++;
 					if (diffInputs(snapshot(cur), snapshot(r.input)).length === 0) failures.push(`seed ${seed}: silent change from ${JSON.stringify(op)}`);
 				}
 				// A skipped op changes nothing at all.
@@ -145,6 +151,7 @@ describe('scenarios on random networks', () => {
 		expect(failures.join('\n')).toBe('');
 		// The property is only as good as the changes it saw.
 		expect(changed).toBeGreaterThan(CASES * 4);
+		expect(objectChanges).toBeGreaterThan(0);
 	}, 300_000);
 
 	/** The 0-based ops a problem names: `op 3 (…)`, `ops 3–5 (…)` or `ops 3, 5 (…)` (1-based). */
