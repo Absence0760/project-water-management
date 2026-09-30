@@ -4,7 +4,7 @@
 // trips queued for seconds on a busy API). Needs Postgres (pnpm dev:db:up).
 import type { ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser, type Db } from '../db/tx.js';
 import { loadModel, loadSettingsAndModel, saveModel } from './store.js';
 
@@ -166,8 +166,10 @@ describe('model store', () => {
 						{ label: 'Easter', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 1.8 },
 						{ label: 'Works shutdown', span: 'range', from: '2021-07-01', to: '2021-07-14', weekdays: null, easterFrom: null, easterTo: null, factor: 0 }
 					],
+					// The people it serves, for the basic-needs floor (engine 1.44.0, migration 127): more than its 1 200 stands.
+					population: 4100.5,
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -213,6 +215,8 @@ describe('model store', () => {
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
+		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).
+		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});

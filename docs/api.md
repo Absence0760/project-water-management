@@ -1241,11 +1241,19 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, schedule (below, or null), note (≤ 1000 chars) }[]`,
+'external'), enabled, schedule (below, or null), population (≥ 0 or null),
+note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
+internal, true, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
-without a count and litres, and an external one with a return share above 0.
+without a count and litres, an external one with a return share above 0, and
+a negative population.
+
+A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
+[model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
+floor of a domestic or municipal object (population × 25 l a day; read for
+those two categories only). Null = a per-unit object's `count`; a monthly one
+without a population has no floor.
 
 A demand object's `schedule` (engine ≥ 1.17.0, migration 105, issue #90 Q4,
 [model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
@@ -1628,7 +1636,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
-  and the objects' together.
+  and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
+  #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
+  `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
+  `avgBelowBasicNeedsM3Day` (days and mean volume supplied below the day's
+  floor, apart from `daysShort` and the deficit) and
+  `avgSuppliedLitresPerPersonDay` (what it got per person at the tap, the
+  municipal restriction level, for display); its unit has the run series
+  `basic_needs` (Σ each floored object's MIN(floor, demand), m³/day).
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's
@@ -1647,7 +1662,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewrSupplyCutM3Day` (the change in supply), `volumeLeftM3Day` is
   `MAX(target + ewrSupplyCutM3Day, 0)`, `fractionOfDemandLeft` is in 0–1, and
   `ewrCutBeyondShareM3Day` (≥ 0, also in `totals`) is how far the EWR supply
-  cut exceeds the equitable share. `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) and
+  cut exceeds the equitable share. From 1.44.0 (issue #123) a unit with a
+  basic-needs floor adds `basicNeedsM3Day` (the window mean of its
+  `basic_needs`) and `basicNeedsHeldM3Day` (≥ 0, what the floor held back of
+  the cut), both also in `totals` when a farm has them; its
+  `volumeLeftM3Day` is then `MAX(MAX(target + ewrSupplyCutM3Day, 0), floor)`
+  and its `totalChangeM3Day` `MAX(reduce/gain + ewrSupplyCutM3Day, floor −
+  supplied)`. `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) and
   `demandPctNote()` are exported by the engine for clients that show demand
   left %. The summary adds `ewrAttribution: 'netImpactProRata'` and
   `ewrSites` (outlet first, then gauges by node id): `{ nodeId, name,
@@ -2012,7 +2033,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-5`: page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-6`: § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other

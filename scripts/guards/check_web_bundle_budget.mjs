@@ -1543,12 +1543,24 @@
 //             river: the Transfers tab's return share and unit, the inputs
 //             table's losses and return; measured 1305 locally with main @
 //             8266a682, CI runs ~2 KB above that). Headroom ~2 KB.
-// 2026-09-30  total 1309 → 1311 KB (engine 1.49.0, dam evaporation presets:
+// 2026-09-30  total stays 1309 KB (#251, issue #72 follow-up: evidence § 5's
+//             "What the cap held back" table, the cap's water years and the
+//             days each licence limit held use back, per unit and source,
+//             and the engine's capOf copying them from each run's summary).
+//             Measured against main @ 82248f4e: 1,333,296 → 1,333,517 gzip
+//             bytes (+0.22 KB), in the evidence report's own lazy chunk; it
+//             fits the headroom left above, so no raise.
+// 2026-09-30  total 1309 → 1313 KB (engine 1.44.0, issue #123, the basic-needs
+//             floor: People served on a demand object, the floor columns in
+//             the human-impact tables, the curtailment badge and board note;
+//             measured 1308 locally with #248 merged, main @ 564ede95; CI
+//             runs ~2 KB above that). Headroom ~3 KB.
+// 2026-09-30  total 1313 → 1316 KB (engine 1.49.0, dam evaporation presets:
 //             the engine's lake-factor preset table and fill, Settings'
 //             preset picker, source note and stale-preset warning, the help
-//             article's paragraph; +1 976 bytes gzipped, measured 1306 with
-//             main @ 8266a682 and 1308 with the change, before merging #248's
-//             entry above). No headroom added.
+//             article's paragraph; +1 976 bytes gzipped; measured 1311
+//             locally with main @ c7df4af7, CI runs ~2 KB above
+//             that). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1559,7 +1571,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1311,
+	totalCodeKb: 1316,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
