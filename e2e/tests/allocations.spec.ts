@@ -41,6 +41,13 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await wizard.getByLabel('File (CSV, up to 2 MB)').setInputFiles({ name: 'allocations.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
 	const summary = page.getByTestId('allocation-preview-summary');
 	await expect(summary).toHaveText("allocations.csv: 3 rows, 1 matched to a hydrological unit, 1 not matched, 1 with problems (they won't be imported).");
+	// Choose another file drops the preview and goes back to the picker, keeping the kind and the reference.
+	await page.getByRole('button', { name: 'Choose another file' }).click();
+	await expect(summary).toBeHidden();
+	await expect(wizard.getByLabel('What the file is')).toHaveValue('csv');
+	await expect(wizard.getByLabel('Reference (optional)')).toHaveValue('e2e synthetic');
+	await wizard.getByLabel('File (CSV, up to 2 MB)').setInputFiles({ name: 'allocations.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
+	await expect(summary).toHaveText("allocations.csv: 3 rows, 1 matched to a hydrological unit, 1 not matched, 1 with problems (they won't be imported).");
 	// The row with a problem first, then the unmatched one.
 	const previewRows = page.getByTestId('allocation-preview').locator('tbody tr');
 	await expect(previewRows.nth(0)).toContainText('unknown water source “lake”');
