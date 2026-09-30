@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { YieldPoint } from '@water-management/engine';
+import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
-import { assuranceLabel, curveChart, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, type CurveResult } from './yield';
+import { assuranceLabel, curveChart, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -95,5 +95,28 @@ describe('labels', () => {
 		// A forecast run is never offered (issue #51: a yield is judged on history).
 		expect(modelRuns(runs).map((r) => r.id)).toEqual(['b', 'c']);
 		expect(modelRuns(null)).toEqual([]);
+	});
+});
+
+describe('the in-browser preview', () => {
+	it("searches to the job's default tolerance, the engine's", () => {
+		expect(PREVIEW_TOLERANCE).toBe(YIELD_DEFAULT_TOLERANCE);
+	});
+
+	it("runs on the picked run's own input", () => {
+		expect(previewSource(null, 'r1', null)).toEqual({ runId: 'r1', ops: undefined, key: 'r:r1' });
+		expect(previewSource(null, '', null)).toBeNull();
+	});
+
+	it("runs a scenario's saved ops on its base run, and changes key when the ops or the base do", () => {
+		const ops: ScenarioOp[] = [{ op: 'node.remove', nodeId: 'n' }];
+		const a = previewSource('s1', 'ignored', { baseRunId: 'b1', ops, opsSha256: 'h1' });
+		expect(a).toEqual({ runId: 'b1', ops, key: 's:s1:b1:h1' });
+		expect(previewSource('s1', '', { baseRunId: 'b1', ops, opsSha256: 'h2' })!.key).not.toBe(a!.key);
+		expect(previewSource('s1', '', { baseRunId: 'b2', ops, opsSha256: 'h1' })!.key).not.toBe(a!.key);
+	});
+
+	it('offers none for a scenario given no base (an application: the server masks it)', () => {
+		expect(previewSource('s1', 'r1', null)).toBeNull();
 	});
 });

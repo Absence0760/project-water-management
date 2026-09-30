@@ -6,11 +6,32 @@
 	// model (the Network tab) or on a scenario. Viewers see results but have
 	// no run buttons. On open it picks up a job for this dam that is already
 	// pending (another tab, a reload, a colleague) and follows it.
+	//
+	// It also shows an instant preview of the firm yield, worked out in this
+	// browser by the preview worker (lib/preview, WP-1.17) on the same input
+	// the job would use, for the pattern and assurance picked. The preview is
+	// never stored: the job's result, above it, is the one the project keeps.
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type JobMeta, type RunMeta, type YieldResult } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
-	import { ASSURANCE_OPTIONS, assuranceLabel, curveChart, HISTORICAL_NOTE, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel } from './yield';
+	import type { PreviewEngine } from '$lib/preview/runner';
+	import { runInputFor } from '$lib/preview/inputs';
+	import type { YieldPoint } from '@water-management/engine';
+	import {
+		ASSURANCE_OPTIONS,
+		assuranceLabel,
+		curveChart,
+		HISTORICAL_NOTE,
+		jobStatus,
+		jobToFollow,
+		latestResults,
+		modelRuns,
+		patternLabel,
+		PREVIEW_TOLERANCE,
+		previewSource,
+		type PreviewScenario
+	} from './yield';
 
 	let {
 		projectId,
@@ -18,6 +39,7 @@
 		nodeName,
 		runs = null,
 		scenarioId = null,
+		scenario = null,
 		canEdit,
 		hasDam
 	}: {
@@ -28,6 +50,8 @@
 		runs?: RunMeta[] | null;
 		/** Run on this scenario instead of a saved run. */
 		scenarioId?: string | null;
+		/** With scenarioId: its base run and ops, so the browser can preview it (not given for an application). */
+		scenario?: PreviewScenario | null;
 		canEdit: boolean;
 		/** The node has a dam (capacity > 0): a curve needs one. */
 		hasDam: boolean;
@@ -134,7 +158,53 @@
 		}
 	}
 
-	onDestroy(() => clearTimeout(timer));
+	// --- the in-browser preview (never stored) ------------------------------
+	const source = $derived(previewSource(scenarioId, runId, scenario));
+	// A string, so a parent passing an equal scenario object again doesn't start a new preview.
+	const sourceKey = $derived(source?.key ?? '');
+	let preview = $state<{ state: 'computing' } | { state: 'done'; point: YieldPoint; pattern: typeof pattern; assurance: number } | { state: 'error'; message: string } | null>(null);
+	let engine: PreviewEngine | null = null;
+	let previewSeq = 0;
+
+	async function runPreview() {
+		const src = source;
+		const seq = ++previewSeq;
+		engine?.cancel();
+		if (!src) {
+			preview = null;
+			return;
+		}
+		preview = { state: 'computing' };
+		try {
+			const input = await runInputFor(projectId, src.runId, api.uncertainty.runInput);
+			if (seq !== previewSeq) return;
+			engine ??= (await import('$lib/preview/runner')).createPreviewEngine();
+			if (seq !== previewSeq) return;
+			// A plain copy: the scenario's ops come from reactive state, and a proxy can't be posted to a worker.
+			const ops = src.ops ? $state.snapshot(src.ops) : undefined;
+			const asked = { pattern, assurance };
+			const point = await engine.firmYield({ input, ops, nodeId, ...asked, tolerance: PREVIEW_TOLERANCE });
+			if (seq === previewSeq) preview = { state: 'done', point, ...asked };
+		} catch (e) {
+			// A newer preview replaced this one: not an error.
+			if (seq !== previewSeq || (e instanceof Error && e.name === 'PreviewSuperseded')) return;
+			preview = { state: 'error', message: msg(e) };
+		}
+	}
+
+	$effect(() => {
+		void sourceKey;
+		void nodeId;
+		void pattern;
+		void assurance;
+		untrack(runPreview);
+	});
+
+	onDestroy(() => {
+		clearTimeout(timer);
+		previewSeq++;
+		engine?.close();
+	});
 
 	const status = $derived(jobStatus(job));
 	const latest = $derived(latestResults(results));
@@ -164,7 +234,7 @@
 		{/if}
 	{/if}
 
-	{#if canEdit && target}
+	{#if target && (canEdit || source)}
 		<div class="controls">
 			<div class="field">
 				<label for="yield-pattern-{nodeId}">Draft pattern</label>
@@ -181,7 +251,7 @@
 					{/each}
 				</select>
 			</div>
-			<div class="buttons">
+			{#if canEdit}<div class="buttons">
 				<button type="button" class="btn btn-primary" disabled={busy} onclick={() => start('firm')}>Work out the yield</button>
 				<button
 					type="button"
@@ -190,7 +260,31 @@
 					title={hasDam ? undefined : 'A storage–yield curve needs a dam with a capacity above 0'}
 					onclick={() => start('curve')}>Storage–yield curve</button
 				>
+			</div>{/if}
+		</div>
+	{/if}
+
+	{#if source}
+		<div class="preview" data-testid="yield-preview" data-state={preview?.state ?? 'computing'}>
+			<h3>Preview <span class="badge">Not stored</span></h3>
+			<div aria-live="polite">
+				{#if preview?.state === 'done'}
+					{@const p = preview.point}
+					<p data-testid="yield-preview-value">
+						<strong>{fmtNum(p.yieldM3Day)} m³/day</strong> ({fmtNum(p.yieldM3Year)} m³ a year): historical {assuranceLabel(preview.assurance)} yield, {patternLabel(preview.pattern)},
+						with {p.failureDays} failure days in {p.failedYears} water years at that draft.
+					</p>
+				{:else if preview?.state === 'error'}
+					<p class="failed" data-testid="yield-preview-error">The preview couldn't be worked out: {preview.message.replace(/\.$/, '')}.</p>
+				{:else}
+					<p class="muted">Working it out in your browser…</p>
+				{/if}
 			</div>
+			<p class="muted small">
+				Worked out in this browser on the same inputs the stored calculation uses, for the pattern and assurance above. It is not saved{canEdit
+					? ': Work out the yield stores it for everyone.'
+					: '.'}
+			</p>
 		</div>
 	{/if}
 
@@ -293,8 +387,22 @@
 		min-height: 1.5rem;
 		margin: 0.5rem 0;
 	}
-	.status .failed {
+	.status .failed,
+	.preview .failed {
 		color: var(--danger);
+	}
+	.preview {
+		margin: 0.75rem 0;
+		padding: 0.5rem 0.75rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius);
+	}
+	.preview h3 {
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
+	}
+	.preview p {
+		margin: 0.25rem 0;
 	}
 	.firm {
 		display: grid;

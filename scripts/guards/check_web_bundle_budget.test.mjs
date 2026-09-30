@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { BUDGET, WORKSPACE_PAGE, calibrationWorkerViolations, kb, landingChunks, measure, tabChunks, tabModules, violations } from './check_web_bundle_budget.mjs';
+import { BUDGET, WORKSPACE_PAGE, kb, pageBuildWorkerViolations, landingChunks, measure, tabChunks, tabModules, violations } from './check_web_bundle_budget.mjs';
 
 const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6 };
 
@@ -96,19 +96,24 @@ test('a spreadsheet worker has its own ceiling, apart from the calibration worke
 	assert.equal(measure([{ path: '_app/immutable/workers/csvexport.worker-z.js', gzipBytes: 1024 }]).largestSpreadsheetWorker.kb, 0);
 });
 
-test("the calibration worker must share the page build's chunks (issue #9)", () => {
+test("the calibration and preview workers must share the page build's chunks (issue #9, WP-1.17)", () => {
 	const shared = { path: '_app/immutable/workers/autocal.worker-Ab1.js', text: 'import{c as f}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
+	const preview = { path: '_app/immutable/workers/preview.worker-Cd2.js', text: 'import{r}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
 	const spreadsheet = { path: '_app/immutable/workers/export.worker-x.js', text: 'self.onmessage=()=>{}' };
-	assert.deepEqual(calibrationWorkerViolations([shared, spreadsheet]), []);
+	assert.deepEqual(pageBuildWorkerViolations([shared, preview, spreadsheet]), []);
 	// Built on its own (new Worker(new URL(…))): no import from chunks/.
-	const own = calibrationWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }]);
+	const own = pageBuildWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }, preview]);
 	assert.equal(own.length, 1);
-	assert.match(own[0], /imports nothing from the page build's chunks/);
+	assert.match(own[0], /calibration worker .* imports nothing from the page build's chunks/);
+	const ownPreview = pageBuildWorkerViolations([shared, { path: preview.path, text: 'const e=1;self.onmessage=()=>{}' }]);
+	assert.equal(ownPreview.length, 1);
+	assert.match(ownPreview[0], /preview worker .*'virtual:preview-worker-url'/);
 	// Vite's own worker build puts its chunks under workers/chunks/: that is not sharing.
-	assert.equal(calibrationWorkerViolations([{ path: shared.path, text: 'import{c}from"./chunks/x.js"' }]).length, 1);
-	const missing = calibrationWorkerViolations([spreadsheet]);
-	assert.equal(missing.length, 1);
+	assert.equal(pageBuildWorkerViolations([{ path: shared.path, text: 'import{c}from"./chunks/x.js"' }, preview]).length, 1);
+	const missing = pageBuildWorkerViolations([spreadsheet]);
+	assert.equal(missing.length, 2);
 	assert.match(missing[0], /Expected one calibration worker/);
+	assert.match(missing[1], /Expected one preview worker/);
 });
 
 test('the tab modules are the LOAD map of the workspace page, nothing else', () => {

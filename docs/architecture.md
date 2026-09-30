@@ -85,7 +85,11 @@ The same `runModel` runs:
   runs in the same worker: hundreds of full `runModel`s on a run's own input
   (`GET …/runs/:runId/model-input`), with options the server resolved and a
   seed the database drew; the server re-runs a few members before storing
-  the result (`POST …/uncertainty/:uid/result`).
+  the result (`POST …/uncertainty/:uid/result`). The Yield panel's instant
+  preview (issue #73) runs one firm-yield search in the preview worker
+  (`frontend/src/lib/preview/engine.worker.ts`, WP-1.17's worker) on a run's
+  own input, never stored; the `yield` job's result is the stored one
+  ([ui.md § Yield](./ui.md#yield-wp-36)).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series, and the input series themselves, once per
@@ -259,7 +263,7 @@ page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
 the engine (62 KB gzip), most of which the pages load too. Instead,
 `lib/calibration/runner.ts` takes the worker's URL from a virtual module,
-`virtual:autocal-worker-url`, and `autocalWorkerChunk` in
+`virtual:autocal-worker-url`, and `workerChunks` in
 `frontend/vite.config.ts` emits the worker as one more entry of the client
 build (`_app/immutable/workers/autocal.worker-<hash>.js`). Rollup then puts the
 engine code the worker shares with pages in shared chunks, which the worker
@@ -269,6 +273,24 @@ module returns Vite's own worker URL for the source file. The worker's file
 holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
 a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
 the total bundle dropped 919 → 899 KB.
+
+The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17; so far
+the Yield panel's in-browser firm yield, issue #73) is a second entry of the
+page build in the same way (`virtual:preview-worker-url`, one `workerChunks`
+plugin for both, `_app/immutable/workers/preview.worker-<hash>.js`). The
+network run code both workers use then sits in a chunk of its own that only
+the workers load, so the calibration worker's own file is 17 KB and the
+preview worker's 2.6 KB (the yield search). Its runner
+(`lib/preview/runner.ts`) is a dynamic import of the panel, and only the
+worker imports `lib/preview/compute.ts`, the module that calls the engine
+(`compute.test.ts` scans for other importers). One request at a time, latest
+wins: a newer one terminates the worker mid-search, since the engine loop is
+synchronous. The bundle guard checks both workers import from `chunks/`.
+The worker treats its message as untrusted data: `compute.ts` `parseMessage`
+checks it strictly before the engine sees it (known keys only; the yield
+parameters in the backend's `YieldParams` ranges; the input's outline; a
+scenario's ops through `validateScenarioOps`), and answers a malformed
+request with an error carrying its id.
 
 That only pays because a chunk holds whole modules. A module a page and the
 worker both use carries everything either of them calls, with its imports, so

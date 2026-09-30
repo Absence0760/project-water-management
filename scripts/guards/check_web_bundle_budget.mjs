@@ -41,18 +41,21 @@
 //                   still count in totalCodeKb.
 //   largestWorkerKb the largest Web Worker entry under `/workers/` other than
 //                   the spreadsheet workers: the calibration worker
-//                   (lib/calibration/autocal.worker.ts). Since issue #9 it is
-//                   an entry of the page build (frontend/vite.config.ts,
-//                   autocalWorkerChunk), not a bundle of its own: its file
-//                   holds the code only it runs (the run, the fit, the
-//                   ensemble) and imports the engine code it shares with pages
-//                   from chunks/, which count as page chunks. It loads only
-//                   when a fit or an uncertainty ensemble starts, never on
-//                   navigation, so it has its own ceiling instead of the page
-//                   chunks'. It still counts in totalCodeKb. The guard also
-//                   fails if it stops importing from chunks/ (a worker built
-//                   with `new Worker(new URL(…))` would carry a second engine
-//                   copy again).
+//                   (lib/calibration/autocal.worker.ts) and, since WP-1.17,
+//                   the preview worker (lib/preview/engine.worker.ts). Since
+//                   issue #9 each is an entry of the page build
+//                   (frontend/vite.config.ts, workerChunks), not a bundle of
+//                   its own: the calibration worker's file holds the code
+//                   only it runs (the fit, the ensemble), the preview
+//                   worker's the yield search, and both import the engine
+//                   code they share with pages or with each other (the run)
+//                   from chunks/, which count as page chunks. They load only
+//                   when a fit, an ensemble or a preview starts, never on
+//                   navigation, so they have their own ceiling instead of the
+//                   page chunks'. They still count in totalCodeKb. The guard
+//                   also fails if either stops importing from chunks/ (a
+//                   worker built with `new Worker(new URL(…))` would carry a
+//                   second engine copy again).
 //   largestSpreadsheetWorkerKb
 //                   the largest spreadsheet worker: `export.worker.ts` (the
 //                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
@@ -1492,6 +1495,24 @@
 //             badge (~2 KB) and the pack lists on the evidence report and
 //             the Applications tab and panel. No new dependency: the hash is
 //             WebCrypto, the canonical JSON the engine's. Headroom ~3 KB.
+// 2026-09-30  total 1285 → 1295 KB; largestWorkerKb 38 → 21 KB (down). The
+//             preview worker (issue #73, WP-1.17/WP-3.6: the Yield panel's
+//             in-browser firm yield), a second entry of the page build
+//             beside the calibration worker (vite.config.ts workerChunks).
+//             Measured 1292 KB against 1285 on main ad899818 (+7 KB: the
+//             worker, runner and panel ~5 KB, and the worker's strict
+//             message parse, which brings validateScenarioOps into the
+//             workers' chunk, ~1 KB, PR #234's CodeQL fix).
+//             Rolldown now puts the network run code both workers use in a
+//             shared chunk (22 KB, loaded by the workers only), so the
+//             calibration worker's own file drops 37 → 17 KB (its whole
+//             import tree +1.3 KB, the split's overhead) and the preview
+//             worker's own file is 2.6 KB (prepareYield and firmYield; the
+//             rest is shared). The rest: the preview runner 0.5 KB (lazy)
+//             and the Yield panel's preview ~1 KB. No page's cold load grows
+//             by more than 0.35 KB. No new dependency. The worker ceiling
+//             follows the calibration worker down (17 KB + ~4). Headroom
+//             ~3 KB on the total.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1502,19 +1523,22 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1285,
+	totalCodeKb: 1295,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 38,
+	largestWorkerKb: 21,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,
 });
 
-/** A Web Worker bundle (Vite emits them under `workers/`; so does autocalWorkerChunk for the calibration worker). */
+/** A Web Worker bundle (Vite emits them under `workers/`; so does workerChunks for the calibration and preview workers). */
 const WORKER = /(^|\/)workers\//;
-/** The calibration worker's entry. */
-const CALIBRATION_WORKER = /(^|\/)workers\/autocal\.worker-[^/]*\.js$/;
+/** The workers built as entries of the page build (frontend/vite.config.ts, workerChunks): each must import the engine from chunks/. */
+const PAGE_BUILD_WORKERS = [
+	{ label: 'calibration worker', file: 'workers/autocal.worker-*.js', url: 'virtual:autocal-worker-url', re: /(^|\/)workers\/autocal\.worker-[^/]*\.js$/ },
+	{ label: 'preview worker', file: 'workers/preview.worker-*.js', url: 'virtual:preview-worker-url', re: /(^|\/)workers\/preview\.worker-[^/]*\.js$/ },
+];
 /** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
 const SHARED_CHUNK_IMPORT = /(?:\bfrom|\bimport)\s*["']\.\.\/chunks\//;
 /** A spreadsheet worker: lib/spreadsheet's export.worker.ts / import.worker.ts (Vite names the bundle after the source). */
@@ -1706,26 +1730,29 @@ export function violations(m, budget = BUDGET) {
 }
 
 /**
- * The calibration worker must be an entry of the page build (issue #9), so
- * it shares the engine with the pages instead of carrying its own copy: its
- * file imports from ../chunks/. A worker built on its own (Vite's
- * `new Worker(new URL(…))`) imports nothing.
+ * The calibration and preview workers must be entries of the page build
+ * (issue #9, WP-1.17), so they share the engine with the pages and with each
+ * other instead of carrying their own copies: each file imports from
+ * ../chunks/. A worker built on its own (Vite's `new Worker(new URL(…))`)
+ * imports nothing.
  * @param {{ path: string, text: string }[]} workers the files under workers/
  * @returns {string[]}
  */
-export function calibrationWorkerViolations(workers) {
-	const entry = workers.filter((f) => CALIBRATION_WORKER.test(f.path));
-	if (entry.length !== 1) {
-		return [
-			`Expected one calibration worker (workers/autocal.worker-*.js) in the build, found ${entry.length}. frontend/vite.config.ts (autocalWorkerChunk) emits it; check the plugin still runs and names it.`,
-		];
-	}
-	if (!SHARED_CHUNK_IMPORT.test(entry[0].text)) {
-		return [
-			`The calibration worker ${entry[0].path} imports nothing from the page build's chunks/: it carries its own copy of the engine again. Start it with the URL from 'virtual:autocal-worker-url' (frontend/vite.config.ts, autocalWorkerChunk), not new Worker(new URL(…)).`,
-		];
-	}
-	return [];
+export function pageBuildWorkerViolations(workers) {
+	return PAGE_BUILD_WORKERS.flatMap((w) => {
+		const entry = workers.filter((f) => w.re.test(f.path));
+		if (entry.length !== 1) {
+			return [
+				`Expected one ${w.label} (${w.file}) in the build, found ${entry.length}. frontend/vite.config.ts (workerChunks) emits it; check the plugin still runs and names it.`,
+			];
+		}
+		if (!SHARED_CHUNK_IMPORT.test(entry[0].text)) {
+			return [
+				`The ${w.label} ${entry[0].path} imports nothing from the page build's chunks/: it carries its own copy of the engine again. Start it with the URL from '${w.url}' (frontend/vite.config.ts, workerChunks), not new Worker(new URL(…)).`,
+			];
+		}
+		return [];
+	});
 }
 
 /** @param {string} dir */
@@ -1777,7 +1804,7 @@ function main() {
 	const stale = tabs.errors.length === 0 && m.tabCount !== tabs.files.size
 		? [`The chunk map names ${tabs.files.size} tab files, but ${m.tabCount} of them are in ${buildDir}: the map is from another build. Run pnpm build:frontend again.`]
 		: [];
-	const bad = [...tabs.errors, ...landing.errors, ...stale, ...violations(m), ...calibrationWorkerViolations(workers)];
+	const bad = [...tabs.errors, ...landing.errors, ...stale, ...violations(m), ...pageBuildWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

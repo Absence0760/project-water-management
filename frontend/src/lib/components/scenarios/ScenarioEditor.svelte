@@ -556,7 +556,15 @@
 		{#key yieldNode.id}
 			<Lazy load={loadYield}>
 				{#snippet children(YieldPanel)}
-					<YieldPanel {projectId} nodeId={yieldNode.id} nodeName={yieldNode.name} scenarioId={s.id} canEdit={canYield} hasDam={yieldNode.damCapacityM3 > 0} />
+					<YieldPanel
+						{projectId}
+						nodeId={yieldNode.id}
+						nodeName={yieldNode.name}
+						scenarioId={s.id}
+						scenario={isApplication || applicant ? null : { baseRunId: s.baseRunId, ops: s.ops, opsSha256: s.opsSha256 }}
+						canEdit={canYield}
+						hasDam={yieldNode.damCapacityM3 > 0}
+					/>
 				{/snippet}
 			</Lazy>
 		{/key}
