@@ -272,10 +272,14 @@ test('the largest contentful paint is the hero render, never the background text
 		await page.goto('/welcome');
 		await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
 		// Every candidate has loaded by the page's load event (the texture too,
-		// when it was a mask); each is reported on the paint after its load, so
-		// wait two frames past it, then the last entry is the page's LCP.
+		// when it was a mask). An image is reported on the paint after it is
+		// decoded, not after it loads, and the hero's AVIF/WebP decodes off the
+		// main thread, later than its load on a busy machine (CI once read the
+		// H1 as the last entry at 1280 px): so wait for the hero's decode, then
+		// two frames past it, and the last entry is the page's LCP.
 		const lcp = await page.evaluate(async () => {
 			if (document.readyState !== 'complete') await new Promise((r) => addEventListener('load', r, { once: true }));
+			await document.querySelector<HTMLImageElement>('.hero .scene img')!.decode();
 			for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
 			return new Promise<string>((resolve) => {
 				new PerformanceObserver((list) => {

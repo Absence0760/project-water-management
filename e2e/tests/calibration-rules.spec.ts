@@ -31,7 +31,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 
 	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ })).toBeVisible();
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 
 	// 120 days of record: no dry → wet test, so the default rules keep nothing, and say why for each fit.
 	const fits = auto.getByRole('table', { name: 'Fits the rules tried' });
@@ -49,7 +49,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	await expect(auto.getByTestId('auto-rules')).toContainText('Revision 3');
 	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ })).toBeVisible();
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(fits.getByRole('cell', { name: 'Kept', exact: true })).toHaveCount(1);
 
 	// An unsaved edit holds Apply back (applying saves at once).

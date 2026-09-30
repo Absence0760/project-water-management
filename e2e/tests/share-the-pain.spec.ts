@@ -2,7 +2,8 @@
 // synthetic catchment: two farms whose orchards are too big for the water, a
 // farm with a dam but no crops, a senior town and a junior mill, and a
 // Reserve that is short every day. The board leads the curtailment panel with
-// three stages per group (today, the equitable share, EWR met), shows the same
+// two stages per group (today, EWR met) and states the equitable share once,
+// in its intro (issue #177: it is today's total %), shows the same
 // figures as the per-farm and other-users tables under it, never a negative
 // demand, lists the users on their own rows, and follows the reporting-window
 // picker.
@@ -32,7 +33,7 @@ const stage = (cell: string): [pct: string, volume: string] => {
 	return [m[1]!, m[2]!];
 };
 
-test('the curtailment panel leads with the share-the-pain board: three stages, bounded, users as their own rows', async ({ page, owner }) => {
+test('the curtailment panel leads with the share-the-pain board: two stages, the equal share in the intro, bounded, users as their own rows', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Share the pain');
 	const [gauge, upper, lower] = project.model.nodes as { id: string }[];
@@ -93,48 +94,47 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 		'Group',
 		'Demandm³/day',
 		'1. Todaysupplied, % of demand',
-		'2. Equitable sharefairness benchmark, % of demand',
-		'3. EWR metleft after the EWR charge, % of demand'
+		'2. EWR metleft after the EWR charge, % of demand'
 	]);
 	// No figure on the board is negative.
 	for (const r of rows) for (const c of r) expect(c).not.toMatch(/(^|\s)[-−]\d/);
 
-	// The equal share: one % for every farm with demand, the same as the stage card.
-	const shares = ['Upper farm', 'Lower farm', 'All hydrological units'].map((n) => stage(rows.find((r) => r[0] === n)![3]!)[0]);
-	expect(new Set(shares).size).toBe(1);
-	const cards = board.getByRole('list', { name: 'The three stages, all hydrological units' });
-	await expect(cards.getByTestId('stage-share')).toHaveText(shares[0]!);
-	await expect(cards).toContainText('of its demand for every hydrological unit: a fairness benchmark, not an allocation');
-	expect(parseInt(shares[0]!, 10)).toBeGreaterThan(0);
-	expect(parseInt(shares[0]!, 10)).toBeLessThan(100);
-	await expect(cards.getByTestId('stage-today')).toHaveText(stage(rows[4]![2]!)[0]);
-	await expect(cards.getByTestId('stage-ewr')).toHaveText(stage(rows[4]![4]!)[0]);
+	// The equal share is one sentence in the intro, not a stage: its % is today's total for the farms.
+	const todayPct = stage(rows[4]![2]!)[0];
+	expect(parseInt(todayPct, 10)).toBeGreaterThan(0);
+	expect(parseInt(todayPct, 10)).toBeLessThan(100);
+	await expect(board.getByTestId('share-intro')).toContainText(
+		`At the equitable share every hydrological unit would get the same ${todayPct} of its demand*: the same water in total as today, shared equally.`
+	);
+	const cards = board.getByRole('list', { name: 'The two stages, all hydrological units' });
+	await expect(cards.getByRole('listitem')).toHaveCount(2);
+	await expect(cards.getByTestId('stage-today')).toHaveText(todayPct);
+	await expect(cards.getByTestId('stage-ewr')).toHaveText(stage(rows[4]![3]!)[0]);
 
 	// The farm with no demand: "no demand" at every stage, never a negative demand; its charge is to store less.
 	const dry = rows.find((r) => r[0] === 'Dam only')!;
-	expect(dry.slice(1, 4)).toEqual(['0', 'no demand 0 m³/day', 'no demand 0 m³/day']);
-	expect(dry[4]).toMatch(/^no demand 0 m³\/day store less \/ pass inflow [\d\u202f.]+ m³\/day$/);
+	expect(dry.slice(1, 3)).toEqual(['0', 'no demand 0 m³/day']);
+	expect(dry[3]).toMatch(/^no demand 0 m³\/day store less \/ pass inflow [\d\u202f.]+ m³\/day$/);
 
 	// Senior town: not curtailed, all it takes is left and its charge stands. Junior mill: cut for its charge.
 	const townRow = rows.find((r) => r[0]!.startsWith('Town'))!;
-	expect(townRow[3]).toBe('not in the share');
-	expect(stage(townRow[4]!)).toEqual(stage(townRow[2]!));
-	expect(townRow[4]).toMatch(/not curtailed: its EWR charge of [\d\u202f.]+ m³\/day stands$/);
+	expect(townRow).toHaveLength(4);
+	expect(stage(townRow[3]!)).toEqual(stage(townRow[2]!));
+	expect(townRow[3]).toMatch(/not curtailed: its EWR charge of [\d\u202f.]+ m³\/day stands$/);
 	const millRow = rows.find((r) => r[0]!.startsWith('Mill'))!;
-	expect(millRow[3]).toBe('not in the share');
+	expect(millRow).toHaveLength(4);
 
-	// The board's figures are the tables' under it: supplied, equitable share volume, volume left and demand left %.
+	// The board's figures are the tables' under it: supplied, volume left and demand left %.
 	const farms = panel.getByRole('table', { name: /^Curtailment targets per hydrological unit/ });
 	const col = async (header: RegExp) =>
 		farms.locator('thead tr').nth(1).locator('th').evaluateAll((ths, src) => ths.findIndex((th) => new RegExp(src).test((th.textContent ?? '').replace(/[ \t\r\n]+/g, ' '))) + 1, header.source);
-	const [supplied, target, left, leftPct] = await Promise.all([col(/^Supplied\s*m³\/day/), col(/^Equitable share volume/), col(/^Volume left/), col(/^Demand left/)]);
+	const [supplied, left, leftPct] = await Promise.all([col(/^Supplied\s*m³\/day/), col(/^Volume left/), col(/^Demand left/)]);
 	for (const name of ['Upper farm', 'Lower farm', 'Dam only']) {
 		const b = rows.find((r) => r[0] === name)!;
 		const t = await rowOf(farms, name);
 		expect(stage(b[2]!)[1]).toBe(t[supplied]);
-		expect(stage(b[3]!)[1]).toBe(t[target]);
-		expect(stage(b[4]!)[1]).toBe(t[left]);
-		expect(stage(b[4]!)[0]).toBe(t[leftPct]);
+		expect(stage(b[3]!)[1]).toBe(t[left]);
+		expect(stage(b[3]!)[0]).toBe(t[leftPct]);
 	}
 	const users = panel.getByRole('table', { name: 'Other water users' });
 	expect(stage(townRow[2]!)[1]).toBe((await rowOf(users, 'Town'))[3]);

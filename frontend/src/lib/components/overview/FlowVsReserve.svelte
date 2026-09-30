@@ -1,8 +1,10 @@
 <script lang="ts">
 	// River & reserve → the run's outflow against the pragmatic EWR, the Runs
 	// tab's "EWR vs simulated outflow" chart (flowSeries.ts), with a 30 days /
-	// 1 year / All switch and the days below the reserve shaded (the run's
-	// ewr_shortfall series, summaryChart.ts). Its own chunk (it pulls in uPlot),
+	// 1 year / All switch and the days below the pragmatic EWR shaded (the run's
+	// ewr_shortfall series, summaryChart.ts). With the outlet's Reserve rule
+	// table it draws the rule requirement too; with tables only elsewhere it is
+	// headed by what it draws, the pragmatic EWR (summaryChart.ts flowHeading). Its own chunk (it pulls in uPlot),
 	// loaded by RiverTab only once the run's record is in. Series come
 	// through the Runs tab's cache, so opening the run there next draws at once.
 	// The plot's height is the page's to give (`height`, a fixed number: the
@@ -21,7 +23,7 @@
 	import { EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import { fmtNum } from '$lib/format/number';
-	import { belowReserve, FLOW_OPEN_DAYS, FLOW_WINDOWS } from './summaryChart';
+	import { belowReserve, FLOW_OPEN_DAYS, FLOW_WINDOWS, flowHeading, hasRuleLine } from './summaryChart';
 
 	let {
 		projectId,
@@ -30,7 +32,8 @@
 		forecastFrom = null,
 		height = 240,
 		units = false,
-		pannable = false
+		pannable = false,
+		ruleTable = false
 	}: {
 		projectId: string;
 		runId: string;
@@ -44,6 +47,8 @@
 		units?: boolean;
 		/** Earlier / Later through the record, by the window picked, and Shift+drag. */
 		pannable?: boolean;
+		/** The project has a Reserve rule table (ewrAssurance.ts headlineSite): names the heading (flowHeading). */
+		ruleTable?: boolean;
 	} = $props();
 
 	// The outlet's Reserve rule requirement too, when it has a table (issue #51): the headline judges that line.
@@ -104,7 +109,7 @@
 
 <section class="panel flow" aria-labelledby="flow-h" aria-busy={loading}>
 	<div class="head">
-		<h2 id="flow-h">Flow vs reserve</h2>
+		<h2 id="flow-h">{flowHeading(ruleTable, hasRuleLine(refs))}</h2>
 	</div>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}

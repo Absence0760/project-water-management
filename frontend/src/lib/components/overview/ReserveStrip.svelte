@@ -5,31 +5,36 @@
 	// River & reserve, which has the flow chart itself. Built from the run
 	// summary's monthly grid, so it draws with the KPI cards (no series to
 	// fetch, no chart library). The count is always written, so the bar's
-	// height is never the only cue.
+	// height is never the only cue. Beside a rule table it is headed by the
+	// test it counts, the pragmatic EWR, since the headline card's Reserve is
+	// the table's (reserveStrip.ts stripWords, issue #177).
 	import type { EwrCompliance } from '@water-management/engine';
-	import { EWR_NOT_MET } from '$lib/components/ewr/notMet';
-	import { monthText, recentMonths, stripSpan } from './reserveStrip';
+	import { monthText, recentMonths, stripSpan, stripWhat, stripWords } from './reserveStrip';
 
 	let {
 		compliance,
 		forecastFrom = null,
+		ruleTable = false,
 		more
 	}: {
 		/** The run summary's monthly grid; absent on a run older than it. */
 		compliance: EwrCompliance | null | undefined;
 		/** A forecast run's first forecast day: the strip stops before its month. */
 		forecastFrom?: string | null;
+		/** The headline card judges the Reserve by a rule table (ewrAssurance.ts headlineSite). */
+		ruleTable?: boolean;
 		/** River & reserve, for the same run. */
 		more: { href: string; label: string };
 	} = $props();
 
 	const months = $derived(compliance ? recentMonths(compliance, forecastFrom) : []);
 	const span = $derived(stripSpan(months));
+	const words = $derived(stripWords(ruleTable));
 </script>
 
 <section class="panel strip" aria-labelledby="strip-h" data-testid="reserve-strip">
 	<div class="head">
-		<h2 id="strip-h">Days below the reserve</h2>
+		<h2 id="strip-h">{words.heading}</h2>
 		<a class="small" href={more.href}>{more.label}</a>
 	</div>
 	{#if !compliance}
@@ -37,13 +42,11 @@
 	{:else if !months.length}
 		<p class="muted small">The run has no whole month before its forecast to show.</p>
 	{:else}
-		<p class="what" data-testid="reserve-strip-what">
-			Days each month the outflow was below the pragmatic EWR ({EWR_NOT_MET}), the run’s last {months.length === 1 ? 'month' : `${months.length} months`}: {span}
-		</p>
-		<ol class="months" aria-label="Days below the reserve by month, {span}">
+		<p class="what" data-testid="reserve-strip-what">{stripWhat(months, words)}</p>
+		<ol class="months" aria-label="{words.list}, {span}">
 			{#each months as x, i (`${x.year}-${x.month}`)}
-				<li data-month="{x.year}-{String(x.month).padStart(2, '0')}" data-not-met={x.notMet} title={monthText(x)}>
-					<span class="visually-hidden">{monthText(x)}</span>
+				<li data-month="{x.year}-{String(x.month).padStart(2, '0')}" data-not-met={x.notMet} title={monthText(x, words.test)}>
+					<span class="visually-hidden">{monthText(x, words.test)}</span>
 					<span class="n" class:zero={x.notMet === 0} aria-hidden="true">{x.notMet}</span>
 					<span class="track" aria-hidden="true"><span class="fill" style:height="{Math.round(x.fraction * 100)}%"></span></span>
 					<span class="m" aria-hidden="true">{x.label}</span>

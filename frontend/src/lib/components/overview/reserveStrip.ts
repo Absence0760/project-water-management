@@ -2,7 +2,15 @@
 // pragmatic EWR at the outlet in each of the run's last twelve months, from
 // the run summary's monthly grid (RunSummary.ewrCompliance), so it needs no
 // daily series. The full flow chart is River & reserve's; the strip links there.
+//
+// It always counts the pragmatic EWR, the one daily test every run has. With a
+// Reserve rule table the headline card beside it judges the Reserve by the
+// table instead (whole months at a site, latestRun.ts headlines), so there the
+// strip is named for what it counts, not "the reserve" (issue #177): the rule
+// table gives a verdict per month, not a count of days, so it can't be drawn
+// as days below.
 import type { EwrCompliance } from '@water-management/engine';
+import { EWR_NOT_MET, daysBelowTest } from '$lib/components/ewr/notMet';
 import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
 
 export interface StripMonth {
@@ -51,7 +59,41 @@ export function stripSpan(ms: readonly StripMonth[]): string {
 	return ms.length === 1 ? at(ms[0]!) : `${at(ms[0]!)} – ${at(ms[ms.length - 1]!)}`;
 }
 
+/** The strip's heading, its list's name and its line under the heading. */
+export interface StripWords {
+	heading: string;
+	/** The month list's accessible name, before its span. */
+	list: string;
+	/** What it counts, before "the run's last N months: span". */
+	what: string;
+	/** After the span: how it differs from the headline card's test ('' when it doesn't). */
+	note: string;
+	/** The test in a month's words: "the EWR", or "the pragmatic EWR" beside a rule table. */
+	test: string;
+}
+
+/**
+ * The strip's words. `ruleTable`: the headline card judges the Reserve by a
+ * rule table (ewrAssurance.ts headlineSite), so "the reserve" would name a
+ * different test from the one the strip counts.
+ */
+export function stripWords(ruleTable: boolean): StripWords {
+	const what = `Days each month the outflow was below the pragmatic EWR (${EWR_NOT_MET})`;
+	const heading = `Days below ${daysBelowTest(ruleTable)}`;
+	const list = `${heading} by month`;
+	return ruleTable
+		? { heading, list, what, note: 'The Reserve rules card above judges whole months by the rule table instead.', test: 'the pragmatic EWR' }
+		: { heading, list, what, note: '', test: 'the EWR' };
+}
+
+/** The line under the heading: what it counts and the span. */
+export function stripWhat(ms: readonly StripMonth[], words: StripWords): string {
+	const line = `${words.what}, the run’s last ${ms.length === 1 ? 'month' : `${ms.length} months`}: ${stripSpan(ms)}`;
+	return words.note ? `${line}. ${words.note}` : line;
+}
+
 /** One month in words, for screen readers and the tooltip: "Jan 2024: below the EWR on 12 of 31 days". */
-export function monthText(x: StripMonth): string {
-	return x.notMet === 0 ? `${x.label} ${x.year}: EWR met every day (${x.days} days)` : `${x.label} ${x.year}: below the EWR on ${x.notMet} of ${x.days} days`;
+export function monthText(x: StripMonth, test = 'the EWR'): string {
+	const name = test.replace(/^the /, '');
+	return x.notMet === 0 ? `${x.label} ${x.year}: ${name} met every day (${x.days} days)` : `${x.label} ${x.year}: below ${test} on ${x.notMet} of ${x.days} days`;
 }

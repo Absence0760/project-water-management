@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { runModel, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type ModelOutput } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, runModel, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type ModelOutput } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
-import { EQUAL_SHARE, shareThePain, stageCell, userLeftM3Day } from './shareThePain';
+import { shareThePain, stageCell, userLeftM3Day } from './shareThePain';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -83,23 +83,22 @@ describe('shareThePain: farms', () => {
 	const lower = farm({ nodeId: 'b', name: 'Lower', demandM3Day: 100, suppliedM3Day: 50, targetM3Day: 75, volumeLeftM3Day: 75 });
 	const board = shareThePain(summary([upper, lower], 0.75));
 
-	it('reads the three stages from the engine summary', () => {
-		expect(board.rule).toEqual(EQUAL_SHARE);
-		expect(board.farms.map((r) => [r.name, r.today.pct, r.share?.pct, r.ewr.pct])).toEqual([
-			['Upper', '100%', '75%', '60%'],
-			['Lower', '50%', '75%', '75%']
+	it('reads the two stages from the engine summary', () => {
+		expect(board.farms.map((r) => [r.name, r.today.pct, r.ewr.pct])).toEqual([
+			['Upper', '100%', '60%'],
+			['Lower', '50%', '75%']
 		]);
 	});
 
-	it('gives every farm with demand the same share: the equitable fraction', () => {
-		expect(board.shareFraction).toBe(0.75);
-		for (const r of board.farms) expect(r.share!.fraction).toBe(0.75);
+	it('states the equal share once, as the equitable fraction', () => {
+		expect(board.sharePct).toBe('75%');
+		expect(board.farms[0]).not.toHaveProperty('share');
 	});
 
 	it('totals each stage over the farms', () => {
 		expect(board.farmTotals.demand).toBe('200');
 		expect(board.farmTotals.today).toMatchObject({ volumeM3Day: 150, pct: '75%' });
-		expect(board.farmTotals.share).toMatchObject({ volumeM3Day: 150, pct: '75%' });
+		expect(board.farmTotals).not.toHaveProperty('share');
 		expect(board.farmTotals.ewr).toMatchObject({ volumeM3Day: 135, pct: '68%' });
 		expect(board.userTotals).toBeNull();
 		expect(board.users).toEqual([]);
@@ -126,7 +125,7 @@ describe('shareThePain: farms', () => {
 			ewrSupplyCutM3Day: 0
 		});
 		const [row] = shareThePain(summary([dry], 0.75)).farms;
-		expect([row!.today.pct, row!.share!.pct, row!.ewr.pct]).toEqual(['no demand', 'no demand', 'no demand']);
+		expect([row!.today.pct, row!.ewr.pct]).toEqual(['no demand', 'no demand']);
 		expect(row!.ewr.volumeM3Day).toBe(0);
 		expect(row!.ewrNotes).toEqual(['store less / pass inflow 12 m³/day']);
 	});
@@ -141,11 +140,27 @@ describe('shareThePain: farms', () => {
 		expect(row!.ewrNotes).toEqual(['EWR cut exceeds its equitable share by 5 m³/day']);
 	});
 
+	it('has no share, not "no demand", when farm demand is 0 but the engine still gave a fraction', () => {
+		const b = shareThePain(summary([farm({ demandM3Day: 0, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(b.sharePct).toBeNull();
+		expect(b.shareTooSmall).toBe(false);
+	});
+
+	it('flags a share too small to be a % when farm demand is under the floor, and gives one above it', () => {
+		const under = shareThePain(summary([farm({ demandM3Day: DEMAND_PCT_FLOOR_M3_DAY / 2, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(under.sharePct).toBeNull();
+		expect(under.shareTooSmall).toBe(true);
+		const over = shareThePain(summary([farm({ demandM3Day: DEMAND_PCT_FLOOR_M3_DAY * 2, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
+		expect(over.sharePct).toBe('50%');
+		expect(over.shareTooSmall).toBe(false);
+	});
+
 	it('has no share with no farm demand, and zero totals', () => {
 		const b = shareThePain(summary([farm({ demandM3Day: 0, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], null));
-		expect(b.shareFraction).toBeNull();
+		expect(b.sharePct).toBeNull();
+		expect(b.shareTooSmall).toBe(false);
 		expect(b.farmTotals.today.pct).toBe('no demand');
-		expect(b.farmTotals.share!.pct).toBe('no demand');
+		expect(b.farmTotals.ewr.pct).toBe('no demand');
 	});
 });
 
@@ -175,11 +190,6 @@ describe('shareThePain: other water users', () => {
 		]);
 	});
 
-	it('keeps users outside the equal share', () => {
-		for (const r of board.users) expect(r.share).toBeNull();
-		expect(board.userTotals!.share).toBeNull();
-	});
-
 	it('leaves a senior user all it takes and says its charge stands', () => {
 		const [row] = board.users;
 		expect([row!.today.pct, row!.ewr.pct]).toEqual(['75%', '75%']);
@@ -203,7 +213,7 @@ describe('shareThePain: other water users', () => {
 });
 
 describe('shareThePain over seeded engine runs', () => {
-	it('every stage stays in 0–100 %, the share is one fraction for all farms, and the farm totals match the engine', () => {
+	it('every stage stays in 0–100 %, the equal share is today\'s total %, and the farm totals match the engine', () => {
 		let checked = 0;
 		for (let seed = 1; seed < 200 && checked < 20; seed++) {
 			const input = randomInput(seed, { maxDays: 300 });
@@ -218,8 +228,7 @@ describe('shareThePain over seeded engine runs', () => {
 			checked++;
 			const b = shareThePain(c);
 			for (const r of [...b.farms, ...b.users]) {
-				for (const cell of [r.today, r.share, r.ewr]) {
-					if (!cell) continue;
+				for (const cell of [r.today, r.ewr]) {
 					expect(cell.volumeM3Day).toBeGreaterThanOrEqual(0);
 					if (cell.fraction !== null) {
 						expect(cell.fraction).toBeGreaterThanOrEqual(0);
@@ -227,10 +236,12 @@ describe('shareThePain over seeded engine runs', () => {
 					}
 					expect(cell.pct.startsWith('-')).toBe(false);
 				}
-				if (r.demandM3Day > 0 && r.share) expect(r.share.fraction).toBeCloseTo(Math.min(c.equitableFraction, 1), 9);
 			}
+			// The identity that made the equal share one sentence rather than a stage (issue #177): its total is today's.
+			expect(c.totals.targetM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);
+			if (b.shareTooSmall) expect([b.sharePct, b.farmTotals.today.pct]).toEqual([null, '—']);
+			else expect(b.sharePct).toBe(b.farmTotals.today.pct);
 			expect(b.farmTotals.today.volumeM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);
-			expect(b.farmTotals.share!.volumeM3Day).toBeCloseTo(c.totals.targetM3Day, 6);
 			expect(b.farmTotals.ewr.volumeM3Day).toBeCloseTo(c.totals.volumeLeftM3Day, 6);
 		}
 		// Positive control: some seeded runs had farms with demand.

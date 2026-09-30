@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { headlines } from '$lib/components/overview/latestRun';
 import { riverKpis } from '$lib/components/river/river';
-import { EWR_NOT_MET, ewrNotMet } from './notMet';
+import { EWR_NOT_MET, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {
 	it('words the pragmatic EWR test one way: the share not met and the days not met of the record', () => {
@@ -38,5 +38,21 @@ describe('the Summary and River & reserve frame the figure the same way', () => 
 		expect(tile.term).toBe(EWR_NOT_MET);
 		expect([tile.value, tile.unit, tile.sub[0]]).toEqual([card.value, card.unit, card.sub[0]]);
 		expect(tile.spec).toEqual(card.spec);
+	});
+});
+
+describe('daysBelowTest', () => {
+	it('calls the pragmatic count "the reserve" without a rule table, and "the pragmatic EWR" beside one (issue #177)', () => {
+		expect(daysBelowTest(false)).toBe('the reserve');
+		expect(daysBelowTest(true)).toBe('the pragmatic EWR');
+	});
+});
+
+describe('daysBelowTestOf', () => {
+	const site = { isOutlet: true } as NonNullable<RunSummary['ewrAssurance']>[number];
+	it('names the pragmatic EWR once any compared run has a rule table, and the reserve when none has', () => {
+		expect(daysBelowTestOf([{ ewrAssurance: [] }, {}])).toBe('the reserve');
+		expect(daysBelowTestOf([{ ewrAssurance: [] }, { ewrAssurance: [site] }])).toBe('the pragmatic EWR');
+		expect(daysBelowTestOf([])).toBe('the reserve');
 	});
 });

@@ -789,7 +789,7 @@ From the client's four sketched outputs; research and recommendations in
   domestic, industrial and irrigation users by different percentages (as DWS
   gazettes restrictions), and is a town's use domestic or irrigation?
   **Answered in part 2026-09-28 (issue #90):** every category is cut by the
-  same %, the built rule (`ShareRule { kind: 'equal' }`). Still open to the
+  same %, the engine's equal share (the board states it once, issue #177). Still open to the
   client: whether the town's uses count as domestic or irrigation.
 - **O5. Audience.** Is the seasonal outlook for the WUA only, or also for
   farmers on their phones (so in Afrikaans too)?

@@ -17,7 +17,8 @@
 	import { supplyHref } from '$lib/components/supply/links';
 	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
-	import { DAMS_HREF, historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
+	import { historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
+	import { headlineSite } from '$lib/components/runs/ewrAssurance';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import { projectAnchor, projectHref } from '$lib/components/project/links';
 	import NeedsAttention from './NeedsAttention.svelte';
@@ -140,7 +141,6 @@
 	// through the Runs cache, a few at a time. Capacity and the
 	// minimum level come from the run's own model, so a later edit doesn't skew them.
 	let damLevels = $state.raw<DamLevel[]>([]);
-	let damsTotal = $state(0);
 	let damsLoading = $state(false);
 	let damsError = $state<string | null>(null);
 	let damsKey = '';
@@ -153,7 +153,6 @@
 			damLevels = [];
 			damsError = null;
 			if (!run) {
-				damsTotal = 0;
 				damsLoading = false;
 				return;
 			}
@@ -163,7 +162,6 @@
 				editor.model.nodes,
 				detailCache.get(id)?.series ?? []
 			);
-			damsTotal = list.length;
 			// A run from engine ≥ 1.2.0 carries the figures in its summary (issue #55): no series to fetch.
 			// A forecast run's figures are its record's: dated the day before the forecast (issue #51).
 			const forecastFrom = run.summary.forecast?.from ?? null;
@@ -265,12 +263,10 @@
 <!-- Summary (issue #17, option A, board A1): the results first. Before the
      first run there are none, so the setup checklist leads instead. -->
 {#snippet moreLinks()}
-	<!-- Each dam's level lives on the Dams page; the model's facts, the project's details, notes and
-	     who has access on the Project page (issue #17). -->
+	<!-- The model's facts, the project's details, notes and who has access are on the Project page
+	     (issue #17). Each dam's level is on the Dams page, which the Dams today card and the sidebar
+	     open (its link here went in issue #177). -->
 	<ul class="more" aria-label="More about this project">
-		{#if shown && damsTotal}
-			<li><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></li>
-		{/if}
 		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
 	</ul>
 {/snippet}
@@ -306,6 +302,7 @@
 			<ReserveStrip
 				compliance={shown.summary.ewrCompliance}
 				forecastFrom={shown.summary.forecast?.from ?? null}
+				ruleTable={headlineSite(shown.summary) !== null}
 				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
 			/>
 		{/if}

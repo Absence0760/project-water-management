@@ -94,7 +94,6 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
-	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
 	'register.registerUrl': {
 		why: 'SignoffSection, the public verify page: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
 		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte']
@@ -117,8 +116,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`${base}/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`${base}/projects/…`) or absent', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
 	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `${base}/`', in: ['routes/+page.svelte'] },
-	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / supplyHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
-	'it.also.href': { why: 'NeedsAttention: attention.ts, farmDrawerHref', in: ['lib/components/overview/NeedsAttention.svelte'] },
+	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	// Values that come from outside the component, each checked where it enters.
 	'api.packs.pdfUrl': {

@@ -2,9 +2,8 @@
 	// Summary → "Needs attention" (issue #17 A1): what's worth acting on, as
 	// coloured cards (overview/attention.ts). Each card is a title, a one-line
 	// detail and its link to the tab that fixes it; the link covers the whole
-	// card, and a second link (a farm's planted areas) sits above it. The tone
-	// colours the card, but the title always says what's wrong. Not rendered
-	// when empty.
+	// card. The tone colours the card, but the title always says what's wrong.
+	// Not rendered when empty.
 	import type { AttentionItem } from './attention';
 
 	let { items }: { items: AttentionItem[] } = $props();
@@ -21,11 +20,7 @@
 				<li class="card {it.tone}" data-attention={it.id} data-tone={it.tone}>
 					<strong class="title">{it.title}</strong>
 					<span class="detail" title={it.text}>{it.text}</span>
-					<span class="links"
-						><a class="main" href={it.href}>{it.action}</a>{#if it.also}<span class="also"
-								>{' '}· <a href={it.also.href}>{it.also.action}</a></span
-							>{/if}</span
-					>
+					<span class="links"><a class="main" href={it.href}>{it.action}</a></span>
 				</li>
 			{/each}
 		</ul>
@@ -66,16 +61,9 @@
 		outline: 2px solid var(--focus);
 		outline-offset: 2px;
 	}
-	.card.danger {
-		background: var(--danger-soft);
-		border-left-color: var(--danger);
-	}
 	.card.warning {
 		background: var(--warning-soft);
 		border-left-color: var(--warning);
-	}
-	.card.danger .title {
-		color: var(--danger);
 	}
 	.card.warning .title {
 		color: var(--warning);
@@ -105,9 +93,4 @@
 		position: absolute;
 		inset: 0;
 		border-radius: var(--radius);
-	}
-	.also a {
-		position: relative;
-		z-index: 1;
-	}
-</style>
+	}</style>

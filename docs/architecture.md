@@ -656,7 +656,10 @@ alerts plug in as a further kind.
   which imports only `calendar.ts`); the same test asserts it.
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
-  SKIP LOCKED`, a lease) and runs each.
+  SKIP LOCKED`, a lease) and runs each. `runTick({ projectIds })` claims
+  only those projects' jobs: the e2e suite's tick (`worker.ts --once
+  --project <id>`), so parallel tests never run each other's jobs; the
+  worker Lambda and the local loop never pass it.
 - **Each job runs as its acting user**, the member who queued it (an editor,
   or for `report_render` any viewer: `023_reports.sql` widens the job insert
   policy for that one kind): the worker

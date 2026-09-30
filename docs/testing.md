@@ -148,6 +148,12 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   retires them so only the leaking file fails. It runs after the file's own
   `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
   `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
+- **e2e ticks are scoped to the test's own projects.** Playwright's workers
+  share one e2e database and run in parallel, so unlike the DB files an e2e
+  test can't count on nobody else ticking: `runJobsTick` requires the
+  test's `projects` and claims only their jobs (`worker.ts --once --project
+  <id>`, `app_claim_jobs(limit, lease, projects)`, e2e/README.md § Rules for
+  writing specs). Production and the DB tests' `runTick` stay global.
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.

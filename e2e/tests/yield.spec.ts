@@ -42,7 +42,7 @@ test('an editor runs a storage–yield curve for a dam, cancels a queued yield, 
 	await panel.getByLabel('Draft pattern').selectOption('demand');
 	await panel.getByRole('button', { name: 'Storage–yield curve' }).click();
 	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	const table = panel.getByTestId('yield-curve-table');
 	await expect(table.getByRole('row')).toHaveCount(12); // the header and 11 capacities
 	await expect(table.getByRole('rowheader').first()).toHaveText('0');
@@ -85,7 +85,7 @@ test('the panel follows a yield job it did not queue: running after a reload, th
 
 	// The worker finishes it; the panel, still following it, shows the result.
 	await releaseYieldJob(jobId);
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(panel.getByTestId('yield-firm')).toBeVisible();
 	await expect(panel.getByTestId('yield-status')).toHaveCount(0);
 	await expect(panel.getByRole('button', { name: 'Work out the yield' })).toBeEnabled();
@@ -110,7 +110,7 @@ test('the in-browser preview shows the firm yield at once, follows the pattern, 
 	// The job, on the same run, pattern and assurance, stores the same number.
 	await panel.getByRole('button', { name: 'Work out the yield' }).click();
 	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(panel.getByTestId('yield-firm').locator('dd strong')).toHaveText(previewed);
 	// The preview names its engine: here the backend's too, so no note.
 	const worked = (await panel.getByTestId('yield-firm').getByText(/\(engine [\d.]+\)$/).textContent())!;
@@ -168,7 +168,7 @@ test("under a scenario the preview applies the scenario's ops, as the stored job
 
 	await panel.getByRole('button', { name: 'Work out the yield' }).click();
 	await expect(panel.getByTestId('yield-status')).toHaveText('Queued: waiting for the background worker.');
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 	// The stored result is on the raised dam, and the preview's number is its number.
 	await expect(panel.getByTestId('yield-firm')).toContainText('180 000 m³');
 	await expect(panel.getByTestId('yield-firm').locator('dd strong')).toHaveText(previewed);

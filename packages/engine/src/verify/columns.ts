@@ -148,13 +148,13 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'allocation_room_surface',
 		letter: null,
 		formula:
-			'allocation cap (engine ≥ 1.18.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day), at the start of the day, never < 0; off-take water used, the river pump and the dam together give at most this',
+			'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its surface use so far that year (G − GW each day), never < 0, the licence limit today: 0 outside the months of use, else the maximum rates × 86 400, engine ≥ 1.37.0), at the start of the day; off-take water used, the river pump and the dam together give at most this',
 		optional: true
 	},
 	{
 		key: 'allocation_room_groundwater',
 		letter: null,
-		formula: 'allocation cap (engine ≥ 1.18.0): the water year’s registered groundwater volume − GW − GWd so far that year, at the start of the day; the boreholes together pump at most this',
+		formula: 'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered groundwater volume − GW − GWd so far that year, the licence limit today, engine ≥ 1.37.0), at the start of the day; the boreholes together pump at most this',
 		optional: true
 	},
 	{
@@ -193,8 +193,8 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, H − river take + T); U = H − river take + T − Dep', optional: true },
 	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.10.0)', optional: true },
-	{ key: 'allocation_room_surface', letter: null, formula: 'allocation cap (engine ≥ 1.18.0): the water year’s registered surface volume − its river take so far that year; the river gives at most this', optional: true },
-	{ key: 'allocation_room_groundwater', letter: null, formula: 'allocation cap (engine ≥ 1.18.0): the water year’s registered groundwater volume − GW so far that year', optional: true },
+	{ key: 'allocation_room_surface', letter: null, formula: 'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered surface volume − its river take so far that year, the licence limit today, engine ≥ 1.37.0); the river gives at most this', optional: true },
+	{ key: 'allocation_room_groundwater', letter: null, formula: 'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered groundwater volume − GW so far that year, the licence limit today, engine ≥ 1.37.0)', optional: true },
 	{ key: 'allocation_demand_factor', letter: null, formula: 'full allocation (engine ≥ 1.18.0): demand is × this, the registered volume over the run’s days of the water year ÷ demand over them', optional: true }
 ];
 

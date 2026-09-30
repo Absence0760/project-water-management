@@ -87,13 +87,17 @@ export async function listJobs(db: Db, projectId: string, { status, limit = 50 }
 	return rows;
 }
 
-/** Claim up to `limit` due jobs for `leaseSeconds` (app_claim_jobs). */
-export async function claimJobs(db: Db, limit: number, leaseSeconds: number): Promise<ClaimedJob[]> {
+/**
+ * Claim up to `limit` due jobs for `leaseSeconds` (app_claim_jobs). With
+ * `projectIds`, only those projects' jobs (123_scoped_job_claim.sql: the e2e
+ * suite's tick); without, every project's (production).
+ */
+export async function claimJobs(db: Db, limit: number, leaseSeconds: number, projectIds?: readonly string[]): Promise<ClaimedJob[]> {
 	const { rows } = await db.query<ClaimedJob>(
 		`SELECT id, project_id AS "projectId", kind, acting_user_id AS "actingUserId", lease_token AS "leaseToken",
 			attempts, max_attempts AS "maxAttempts"
-		 FROM app_claim_jobs($1, make_interval(secs => $2))`,
-		[limit, leaseSeconds]
+		 FROM app_claim_jobs($1, make_interval(secs => $2), $3::uuid[])`,
+		[limit, leaseSeconds, projectIds ? [...projectIds] : null]
 	);
 	return rows;
 }

@@ -1,33 +1,24 @@
 // View model for the share-the-pain board (issue #53 R3,
 // docs/design/planning-outputs.md §3.3): the curtailment report
-// (RunSummary.curtailment, model.md §2.11) read as three stages per user
+// (RunSummary.curtailment, model.md §2.11) read as two stages per user
 // group, each as a share of the group's demand:
 //
 //   1. Today: what it was supplied (I / H).
-//   2. Equitable share: the fairness benchmark, the same fraction of demand
-//      for every farm (M / H = K_tot). Other water users are outside it.
-//   3. EWR met: what is left once the EWR charge is met as well (U / H for a
+//   2. EWR met: what is left once the EWR charge is met as well (U / H for a
 //      farm, bounded to 0–100 %; for another user, what it takes after its
 //      supply cut, or all of it for a senior user, which is not curtailed).
+//
+// The equitable share (M / H = K_tot) is not a stage: it is the same fraction
+// for every farm and its total is always today's, so the board says it once,
+// in its intro (`sharePct`, issue #177). Other water users are outside it.
 //
 // Presentation only: every figure comes from the engine's summary, nothing is
 // recomputed, and no stage is ever below 0 (the client's sketch charged the
 // EWR to a group with no demand and printed a negative final demand; the
 // engine bounds the volume left and shows that charge as store less / pass
 // inflow, plan.md Q13). Pure, so it is unit-tested without Svelte.
-import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
 import { fmtDemandLeft, fmtVol } from './curtailment';
-
-/**
- * How the middle stage shares the water: the equal share, every farm the
- * same fraction of its demand (the engine's equitable share). The client
- * confirmed one equal % for every category (plan.md O4, issue #90), so no
- * per-category restriction is built; one would be a second member of this
- * union, labelled as a what-if, with its own `shareStage` branch.
- */
-export type ShareRule = { kind: 'equal' };
-
-export const EQUAL_SHARE: ShareRule = { kind: 'equal' };
 
 /** One stage for one row: volume (m³/day) and the share of demand it is. */
 export interface StageCell {
@@ -54,8 +45,6 @@ export interface BoardRow {
 	demandM3Day: number;
 	demand: string;
 	today: StageCell;
-	/** null = outside the share (other water users). */
-	share: StageCell | null;
 	ewr: StageCell;
 	/** What the EWR stage leaves unsaid in the %: a store-less charge, a cut beyond the share, a charge left standing. */
 	ewrNotes: string[];
@@ -64,14 +53,17 @@ export interface BoardRow {
 export interface StageTotals {
 	demand: string;
 	today: StageCell;
-	share: StageCell | null;
 	ewr: StageCell;
 }
 
 export interface Board {
-	rule: ShareRule;
-	/** K_tot: the fraction of demand every farm gets at the equal share; null with no farm demand. */
-	shareFraction: number | null;
+	/**
+	 * K_tot, the share of its demand every farm gets at the equal share, as a % ("75%"); null with no
+	 * farm demand, or with farm demand under DEMAND_PCT_FLOOR_M3_DAY in total (`shareTooSmall`).
+	 */
+	sharePct: string | null;
+	/** Farm demand in total is under DEMAND_PCT_FLOOR_M3_DAY, so a % of it would mean nothing. */
+	shareTooSmall: boolean;
 	farms: BoardRow[];
 	users: BoardRow[];
 	/** Totals per stage over the farms (plain sums, like the curtailment table's totals row). */
@@ -93,15 +85,7 @@ export function stageCell(volumeM3Day: number, demandM3Day: number): StageCell {
 	return { volumeM3Day: v === 0 ? 0 : v, fraction, pct: left.text, pctTitle: left.title, volume: fmtVol(v) };
 }
 
-/** The middle stage's volume for a farm under `rule`. */
-function shareStage(rule: ShareRule, f: CurtailmentFarm): number {
-	switch (rule.kind) {
-		case 'equal':
-			return f.targetM3Day;
-	}
-}
-
-function farmRow(f: CurtailmentFarm, rule: ShareRule, names: Record<string, string>): BoardRow {
+function farmRow(f: CurtailmentFarm, names: Record<string, string>): BoardRow {
 	const notes: string[] = [];
 	const store = -(f.ewrChargeStorageM3Day ?? 0);
 	if (store >= NOTE_FLOOR_M3_DAY) notes.push(`store less / pass inflow ${fmtVol(store)} m³/day`);
@@ -115,7 +99,6 @@ function farmRow(f: CurtailmentFarm, rule: ShareRule, names: Record<string, stri
 		demandM3Day: f.demandM3Day,
 		demand: fmtVol(f.demandM3Day),
 		today: stageCell(f.suppliedM3Day, f.demandM3Day),
-		share: stageCell(shareStage(rule, f), f.demandM3Day),
 		ewr: stageCell(f.volumeLeftM3Day, f.demandM3Day),
 		ewrNotes: notes
 	};
@@ -144,19 +127,17 @@ function userRow(u: CurtailmentUser, names: Record<string, string>): BoardRow {
 		demandM3Day: u.demandM3Day,
 		demand: fmtVol(u.demandM3Day),
 		today: stageCell(u.suppliedM3Day, u.demandM3Day),
-		share: null,
 		ewr: stageCell(userLeftM3Day(u), u.demandM3Day),
 		ewrNotes: notes
 	};
 }
 
-function totals(rows: BoardRow[], withShare: boolean): StageTotals {
+function totals(rows: BoardRow[]): StageTotals {
 	const sum = (pick: (r: BoardRow) => number) => rows.reduce((s, r) => s + pick(r), 0);
 	const demand = sum((r) => r.demandM3Day);
 	return {
 		demand: fmtVol(demand),
 		today: stageCell(sum((r) => r.today.volumeM3Day), demand),
-		share: withShare ? stageCell(sum((r) => r.share?.volumeM3Day ?? 0), demand) : null,
 		ewr: stageCell(sum((r) => r.ewr.volumeM3Day), demand)
 	};
 }
@@ -166,15 +147,18 @@ function totals(rows: BoardRow[], withShare: boolean): StageTotals {
  * order, then the other water users. `names` maps a node id to its current
  * name, for nodes renamed since the run.
  */
-export function shareThePain(c: CurtailmentSummary, names: Record<string, string> = {}, rule: ShareRule = EQUAL_SHARE): Board {
-	const farms = c.farms.map((f) => farmRow(f, rule, names));
+export function shareThePain(c: CurtailmentSummary, names: Record<string, string> = {}): Board {
+	const farms = c.farms.map((f) => farmRow(f, names));
 	const users = (c.otherUsers ?? []).map((u) => userRow(u, names));
+	const farmTotals = totals(farms);
+	const demand = farms.reduce((s, r) => s + r.demandM3Day, 0);
+	const shareTooSmall = c.equitableFraction !== null && demand > 0 && demand < DEMAND_PCT_FLOOR_M3_DAY;
 	return {
-		rule,
-		shareFraction: c.equitableFraction,
+		sharePct: c.equitableFraction === null || !(demand > 0) || shareTooSmall ? null : fmtDemandLeft(demand, c.equitableFraction).text,
+		shareTooSmall,
 		farms,
 		users,
-		farmTotals: totals(farms, true),
-		userTotals: users.length ? totals(users, false) : null
+		farmTotals,
+		userTotals: users.length ? totals(users) : null
 	};
 }

@@ -1,5 +1,5 @@
 // The board's markup (issue #53 R3), rendered to HTML with Svelte's server
-// renderer: the three stages, the footnote, a no-demand farm and the other
+// renderer: the two stages, the equal share in the intro, the footnote, a no-demand farm and the other
 // water users' senior / junior rows. The browser behaviour is pinned by
 // e2e/tests/share-the-pain.spec.ts.
 import { render } from 'svelte/server';
@@ -103,30 +103,53 @@ function row(html: string, name: string): string {
 describe('ShareThePainBoard', () => {
 	const { body } = render(ShareThePainBoard, { props: { curtailment: c, names: { a: 'Upper (renamed)' }, period: 'Project window' } });
 
-	it('shows the three stages with the farm totals', () => {
+	it('shows the two stages with the farm totals, and no equitable share stage', () => {
 		const stages = text(body.match(/<ol[\s\S]*?<\/ol>/)![0]);
-		expect(stages).toContain('Today 75% of hydrological unit demand supplied (150 of 200 m³/day)');
-		expect(stages).toContain('Equitable share * 75% of its demand for every hydrological unit: a fairness benchmark, not an allocation');
-		expect(stages).toContain('EWR met 68% of hydrological unit demand left');
+		expect(stages).toBe(
+			"1 Today 75% of hydrological unit demand supplied (150 of 200 m³/day) 2 EWR met 68% of hydrological unit demand left once each hydrological unit's EWR charge is met (135 m³/day)"
+		);
+		expect(body).not.toContain('stage-share');
+		expect(text(body)).not.toContain('Equitable share');
 	});
 
-	it('shows each farm at the three stages, a renamed farm by its current name', () => {
-		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 75% 75 m³/day 60% 60 m³/day');
-		expect(row(body, 'Lower')).toBe('Lower 100 50% 50 m³/day 75% 75 m³/day 75% 75 m³/day');
-		expect(row(body, 'All hydrological units')).toBe('All hydrological units 200 75% 150 m³/day 75% 150 m³/day 68% 135 m³/day');
+	it('says the equal share once, in the intro', () => {
+		const intro = text(body.match(/<p[^>]*data-testid="share-intro"[\s\S]*?<\/p>/)![0]);
+		expect(intro).toContain('At the equitable share every hydrological unit would get the same 75% of its demand * : the same water in total as today, shared equally.');
+	});
+
+	it('says there is nothing to share with no farm demand', () => {
+		const dry = { ...c, equitableFraction: null, farms: [c.farms[2]!] };
+		const { body: b } = render(ShareThePainBoard, { props: { curtailment: dry } });
+		expect(text(b)).toContain('No hydrological unit had demand, so there is nothing to share.');
+		expect(text(b)).not.toContain('At the equitable share');
+	});
+
+	it('says the share is too small to be a % when farm demand is under the floor', () => {
+		const tiny = { ...c, equitableFraction: 0.5, farms: [{ ...c.farms[0]!, demandM3Day: 0.001 }] };
+		const { body: b } = render(ShareThePainBoard, { props: { curtailment: tiny } });
+		expect(text(b)).toContain('too little for the equitable share');
+		expect(text(b)).not.toContain('At the equitable share');
+		expect(text(b)).not.toContain('the same —');
+	});
+
+	it('shows each farm at the two stages, a renamed farm by its current name', () => {
+		expect(row(body, 'Group')).toBe('Group Demand m³/day 1. Today supplied, % of demand 2. EWR met left after the EWR charge, % of demand');
+		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 60% 60 m³/day');
+		expect(row(body, 'Lower')).toBe('Lower 100 50% 50 m³/day 75% 75 m³/day');
+		expect(row(body, 'All hydrological units')).toBe('All hydrological units 200 75% 150 m³/day 68% 135 m³/day');
 	});
 
 	it('shows a farm with no demand as no demand, with its charge as store less, never a negative demand', () => {
 		const r = row(body, 'Dam only');
-		expect(r).toBe('Dam only 0 no demand 0 m³/day no demand 0 m³/day no demand 0 m³/day store less / pass inflow 12 m³/day');
+		expect(r).toBe('Dam only 0 no demand 0 m³/day no demand 0 m³/day store less / pass inflow 12 m³/day');
 		// No negative figure anywhere (dates aside).
 		expect(text(body)).not.toMatch(/(^|\s)[-−]\d/);
 	});
 
 	it('lists the other water users on their own rows, senior or junior, outside the share', () => {
 		expect(text(body)).toContain('Other water users (outside the equitable share)');
-		expect(row(body, 'Town')).toBe('Town senior, not curtailed 800 75% 600 m³/day not in the share 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
-		expect(row(body, 'Mill')).toBe('Mill junior, curtailed 100 80% 80 m³/day not in the share 50% 50 m³/day');
+		expect(row(body, 'Town')).toBe('Town senior, not curtailed 800 75% 600 m³/day 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
+		expect(row(body, 'Mill')).toBe('Mill junior, curtailed 100 80% 80 m³/day 50% 50 m³/day');
 		expect(row(body, 'All other users')).toBe('All other users 900 76% 680 m³/day 72% 650 m³/day');
 	});
 

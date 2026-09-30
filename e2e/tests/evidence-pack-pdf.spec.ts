@@ -66,7 +66,7 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	expect((await issued.json()).pdf).toEqual({ status: 'rendering', error: null });
 
 	// The background worker's tick: prints the pack's page, stores it, records its hash.
-	await runJobsTick({ schedule: false });
+	await runJobsTick({ projects: [project.id], schedule: false });
 
 	const read = (await (await page.request.get(`${at}/${pack.id}`)).json()) as { pack: { pdfSha256: string | null; pdfPages: number | null }; pdf: { status: string } };
 	expect(read.pdf).toEqual({ status: 'ready', error: null });

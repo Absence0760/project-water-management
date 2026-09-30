@@ -1067,8 +1067,8 @@
 			</div>
 			<span class="hint" id="st-alloc-mode-h">
 				What the Allocations tab’s registered volumes do to a run. Compare only (the default) changes nothing; a cap keeps each unit’s surface and groundwater use per
-				water year within its volumes; a full allocation scales each unit’s demand to its volumes, for “if every registered user took their entitlement”. Licence
-				conditions (months, rates) aren’t applied yet.
+				water year within its volumes, and within its licences’ months and maximum rates; a full allocation scales each unit’s demand to its volumes, for “if every
+				registered user took their entitlement”.
 			</span>
 			<span class="hint" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, pending the hydrologist.</span>
 			<FieldHistoryLine field="settings:allocationMode" />
