@@ -213,6 +213,22 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
+- [ ] **Which dam evaporation preset for the client's catchment** (engine
+      1.49.0, [model.md §2.7a](./model.md) item 4). Built without changing
+      the default (one flat 0.75 × A-pan): Settings → Demand → **Dam
+      evaporation preset** fills the monthly factors from flat 0.75, or from
+      the WR90 monthly lake factors (0.81–0.88 × S-pan, Midgley et al. 1994)
+      converted to A-pan at the project's own monthly A-pan with WR90's
+      monthly S-pan ← A-pan equation or Taljaard's (2023). With a Western
+      Cape-like A-pan these give about 0.52–0.73 × A-pan through the year,
+      0.66–0.68 over it, below the flat 0.75. Put to the hydrologist: keep
+      flat 0.75, or which WR90 conversion (WR90's 1994 regression or
+      Taljaard's refit on ten stations); whether the 55.4 / 38.5 mm A-pan
+      floor below which a WR90 fill is refused is right; whether WR90's large-reservoir lag
+      suits small farm dams; and whether a site study or the quaternary's
+      WR2012 evaporation zone should replace the national monthly factors.
+      Once chosen, fill it on the client project (it is a project setting,
+      not a default).
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -353,8 +369,10 @@ collected as a checklist in issue #46; tick it there as they answer.
       annual assurance threshold; senior users exempt only for basic human
       needs, with an optional restriction %; the dam area exponent 0.6
       (WR2012) instead of 0.7 and the fallback area 7.2·C^0.77 (Sawunyama
-      2013) instead of capacity ÷ 3 m; a WR90 monthly lake-factor preset
-      (0.75 × A-pan is the top of SA practice); plantation classes by
+      2013) instead of capacity ÷ 3 m; which dam evaporation preset (the
+      WR90 monthly presets are built, engine 1.49.0, but 0.75 × A-pan, the
+      top of SA practice, stays the default; see "Which dam evaporation
+      preset" above); plantation classes by
       short/long-lag curve with rotation-average values; rain accumulations
       (tagged ones missing, auto-spread only up to 10 days); the ±15 %
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
@@ -824,8 +842,10 @@ the reports):
   monthly A-pan coefficient (FAO-56 range 0.35–0.85), or from engine 0.31.0
   a monthly PE row entered directly (`settings.pe`, model.md §2.4a). Dams use WR90 lake
   factors, which are **S-pan** based; the roadmap WP-1.21 spec is now
-  corrected. The actual WR90 values for the evaporation zone haven't been
-  read yet.
+  corrected. The WR90 monthly lake factors have been read (engine 1.49.0:
+  national monthly values, not per evaporation zone, as reproduced by
+  Taljaard 2023 Table 2-3) and are offered as presets converted to A-pan
+  (model.md §2.7a item 4); which one the client takes is in § Hydrologist.
 - **Q5: split-sample periods.** Split-sample, dry→wet, and an independent
   instrument. Cross-record validation has landed, and so have stored
   exclusions (whole water years or date ranges, each with a required reason;
@@ -2334,9 +2354,14 @@ role and not before it.
         columns for groundwater, storage set, other use, depletion and
         seepage lost, shown only when a run has them; a release joins the
         outflow, so it needs no column.
-      - *Monthly lake-factor presets*: none offered; values for SA reservoirs
-        (the lag of deep-water evaporation behind the pan) pending the
-        hydrologist.
+      - ~~*Monthly lake-factor presets*~~: done (engine 1.49.0, model.md
+        §2.7a item 4): `LAKE_FACTOR_PRESETS`
+        (`packages/engine/src/evaporation/lakeFactorPresets.ts`), flat 0.75
+        and the WR90 monthly lake factors converted to A-pan at the
+        project's A-pan (WR90's or Taljaard 2023's pan equation), filled from
+        Settings with a recorded source note (`lakeEvapFactorSource`, shown
+        in run comparison and the report). Which one the client's catchment
+        takes is in § Hydrologist.
 
 - [x] **The Sandspruit example fails `catchments.test.ts` on main** (fixed:
       the test passes, 15/15, 2026-09-27) (seen

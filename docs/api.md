@@ -1191,6 +1191,12 @@ on a node that isn't a farm, and one whose volumes don't strictly rise or
 whose level or area falls as the volume rises (the engine's
 `modelRuleProblems`). Settings gain `lakeEvapFactorMonthly` (12 numbers 0–2,
 or `null` = `lakeEvapFactor` every month; `PATCH` refuses anything else).
+Engine ≥ 1.49.0: `lakeEvapFactorSource`, a trimmed string of at most 600
+characters, '' for none (settings stored before it read back as ''): where
+the dam evaporation factors came from, e.g. a lake-factor preset's note
+(the engine's `LAKE_FACTOR_PRESETS` / `lakeFactorPresetFill`, which the
+Settings form uses; there is no preset endpoint). Provenance only, recorded
+with each run.
 Runs of a dam with a release rule store `dam_release`; with a seepage share
 below 1, `dam_seepage_lost`; `summary.waterBalance` rows gain
 `damReleaseM3` and `damSeepageLostM3` when present (the residual subtracts
