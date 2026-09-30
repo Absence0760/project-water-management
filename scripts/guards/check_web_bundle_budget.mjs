@@ -1316,6 +1316,16 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
+//             1200, the branch 1204). The report's publication cover,
+//             "Changes since the previous publication" (ChangesList and the
+//             attribution line in the report's chunk), its Assurance of
+//             supply section (the Runs tab's panel in print mode) and the
+//             @page footer; the compare and scenario views' assurance table
+//             (compare/assurance.ts, AssuranceDeltaTable.svelte); the farm
+//             view's share-received column and its Afrikaans. All in lazy
+//             route or tab chunks; the largest tab chunk stays within 60 KB.
+//             No new dependency. Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1326,7 +1336,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1201,
+	totalCodeKb: 1206,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
