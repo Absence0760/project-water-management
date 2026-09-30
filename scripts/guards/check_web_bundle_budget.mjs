@@ -1343,6 +1343,11 @@
 //             b681786e merged; main grew ~2 KB since the entry above, #206's
 //             CHIRPS final-day marker and #212's Summary readiness signal).
 //             Nothing of the evidence report changed. Headroom ~3 KB.
+// 2026-09-30  total 1231 → 1234 KB (issue #71: measured 1231 with main @
+//             327afa6e and #216's branch merged, against #216's 1228). The
+//             evidence report's registered water use section (§ 5: the
+//             over/under-use chart, its page-1 row and flag). No new
+//             dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1353,7 +1358,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1231,
+	totalCodeKb: 1234,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
