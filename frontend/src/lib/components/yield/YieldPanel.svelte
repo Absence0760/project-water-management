@@ -10,18 +10,23 @@
 	// It also shows an instant preview of the firm yield, worked out in this
 	// browser by the preview worker (lib/preview, WP-1.17) on the same input
 	// the job would use, for the pattern and assurance picked. The preview is
-	// never stored: the job's result, above it, is the one the project keeps.
+	// never stored: the job's result, below it, is the one the project keeps.
+	// The preview runs this web build's engine (ENGINE_VERSION, the worker is
+	// part of the same build) and names it, with a note when the stored
+	// result came from another engine (the backend is released separately).
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type JobMeta, type RunMeta, type YieldResult } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
 	import type { PreviewEngine } from '$lib/preview/runner';
 	import { runInputFor } from '$lib/preview/inputs';
+	import { ENGINE_VERSION } from '@water-management/engine/version';
 	import type { YieldPoint } from '@water-management/engine';
 	import {
 		ASSURANCE_OPTIONS,
 		assuranceLabel,
 		curveChart,
+		engineDiffersNote,
 		HISTORICAL_NOTE,
 		jobStatus,
 		jobToFollow,
@@ -210,6 +215,7 @@
 	const latest = $derived(latestResults(results));
 	const chart = $derived(latest.curve ? curveChart(latest.curve) : null);
 	const busy = $derived(submitting || !!status?.busy);
+	const engineNote = $derived(engineDiffersNote(ENGINE_VERSION, latest.firm));
 </script>
 
 <section class="panel yield" aria-labelledby="yield-h-{nodeId}" data-testid="yield-panel">
@@ -281,10 +287,13 @@
 				{/if}
 			</div>
 			<p class="muted small">
-				Worked out in this browser on the same inputs the stored calculation uses, for the pattern and assurance above. It is not saved{canEdit
+				Worked out in this browser, on <span data-testid="yield-preview-engine">engine {ENGINE_VERSION}</span>, on the same inputs the stored calculation uses, for the pattern and assurance above. It is not saved{canEdit
 					? ': Work out the yield stores it for everyone.'
 					: '.'}
 			</p>
+			{#if engineNote}
+				<p class="note small" data-testid="yield-engine-differs">{engineNote}</p>
+			{/if}
 		</div>
 	{/if}
 

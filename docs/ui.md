@@ -2104,7 +2104,7 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   stops the old one (latest wins). It shows the yield per day and year and
   the failure days and years at it, or the engine's reason it can't
   (`data-state` = `computing`, `done` or `error`, the e2e's signal). It is
-  never saved: the stored results above come only from the job, which
+  never saved: the stored results below it come only from the job, which
   **Work out the yield** queues. Viewers preview too. It runs on the input
   the job uses: the run's own stored input (`GET …/runs/:runId/model-input`,
   the last one fetched kept for the next dam), or under a scenario its saved
@@ -2113,13 +2113,21 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   number is the job's (e2e `yield.spec.ts` checks both). Where it can
   differ: the browser runs the web build's engine and the job the backend's,
   released separately (`web@` / `backend@`), so after a release of one and
-  not the other the two may disagree by that engine change (the stored
-  result names its engine version); and a run from before migration 021 has
+  not the other the two may disagree by that engine change. So the preview
+  names its engine ("on engine 1.34.0", `ENGINE_VERSION` from the engine's
+  `version` module, the same build as the worker) beside the stored result's
+  "(engine …)", and when the newest stored firm yield came from another
+  engine it adds a note naming both (`engineDiffersNote` in `yield.ts`,
+  `data-testid="yield-engine-differs"`). And a run from before migration 021 has
   no stored series, so the job refuses it (409) while the preview reads the
-  project's current series when they are unchanged. Not offered for an
-  application (an applicant's scenario): the job applies it under the
-  applicant mask, which only the server builds. Only the firm yield, not the
-  curve (eleven searches).
+  project's current series when they are unchanged. Deliberately not offered
+  for an application (an applicant's scenario, on the Applicant view or the
+  owner's): the job applies it under the applicant mask, which only the
+  server builds, and the input would include the farms the mask hides from
+  the applicant (a contributor can't read the base run's input either);
+  a preview there would need a server-side endpoint returning only the yield
+  number, pending the client's D2 answer (issue #90, followups.md § Firm yield).
+  Only the firm yield, not the curve (eleven searches).
 - The status line (a polite live region) follows the job on
   `GET /jobs` every 1.5 s: Queued, Running with its % (and a progress bar),
   then the results; Failed with the server's reason (never database text);
