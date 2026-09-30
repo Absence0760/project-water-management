@@ -228,6 +228,27 @@ collected as a checklist in issue #46; tick it there as they answer.
       and firm yield run without the rule**; the Settings template's
       levels (60 / 40 / 25 % of capacity; irrigation 20 / 40 / 60 %,
       domestic and municipal 10 / 20 / 30 %) as a starting point only.
+      From engine 1.52.0 also: under the **own-dam basis** a unit without a
+      dam isn't restricted by storage (only by the EWR trigger); the **EWR
+      trigger** reads the site's pragmatic EWR shortfall on the **day
+      before** a review only (not a count of recent days, not the Reserve
+      rule tables' monthly compliance) and raises the level to at least its
+      own; a rule **from the published notice** is one level in force below
+      100 % from the publication date to the next expected one.
+- [ ] **Drought restrictions on the other water users: decide whether and
+      how** (engine 1.52.0, [model.md §2.7i](./model.md)). The rule cuts
+      only hydrological units: an other water user's demand has no category
+      and no population, so a cut on it could take a town below basic needs
+      with nothing to stop it. Options, for the hydrologist and the client:
+      (a) leave users uncut (today; a municipal abstractor's own restriction
+      stages are outside the model); (b) give user nodes a restriction
+      category (domestic / municipal / industrial / other) and a population,
+      then cut them by their category's share with the 25 l floor, as a
+      demand object is; (c) model towns and industry as demand objects on a
+      unit instead of user nodes, so the rule, the categories and the floor
+      already apply; (d) one % cut for every user with no floor, marked as
+      unprotected. Trigger: a catchment where a municipal abstractor sits on
+      the river as an other water user and is restricted in practice.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -3307,35 +3328,15 @@ from the WP:
       restrictions, the Units & supply tables and the outlook's "Use as the
       drought restriction rule" (the review triggers, R6); `settings.set`
       in scenarios and the run comparison's lines. No migration: the rule is
-      part of `project.settings` (jsonb).
-- [ ] **Drought restrictions: a rule on one dam, or per node.** Built as one
-      rule on the total farm dam storage (the review triggers' basis). A WUA
-      whose members hang off one scheme dam would read that dam alone, and
-      the roadmap's first sketch had a rule per node. Durable fix: an
-      optional `damNodeIds` (the storage read) and `nodeIds` (the units cut)
-      on the rule, remapped on a project copy like the EWR sites
-      (`remapSettingNodeIds`), with the editor's checklists. Trigger: a
-      catchment whose restrictions follow one dam, or the hydrologist asking.
-- [ ] **Drought restrictions: an EWR-failure trigger.** The roadmap's rule
-      also cut "when the downstream EWR site failed yesterday"; only storage
-      triggers are built. Durable fix: a level trigger on an EWR site's
-      shortfall on the day before (causal), beside the storage one, with the
-      self-check reading `ewr_shortfall`. Trigger: a WUA or CMA whose
-      restrictions are set by the Reserve's compliance, not by storage.
-- [ ] **Drought restrictions on the other water users.** A user node's
-      demand has no category and no population, so the rule leaves users
-      uncut (a cut could take a town below basic needs with no floor).
-      Durable fix: a restriction category and a population on user nodes
-      (or modelling towns as demand objects), then the rule cuts them with
-      the floor. Trigger: a catchment where a municipal abstractor sits on
-      the river as an other water user and is restricted too.
-- [ ] **Drought restrictions: copy the published notice into a rule.** The
-      roadmap: "a scenario may copy the current notice into the rule as a
-      starting point, never the reverse". Not built: the notice (WP-2.3) is
-      one level and % for the season, the rule a table by storage. Durable
-      fix: a "Start from the published notice" action in the scenario form's
-      rule editor, one level at the notice's % on every part below 100 %.
-      Trigger: a WUA asking to compare its notice with a storage rule.
+      part of `project.settings` (jsonb). Also built (engine 1.52.0, the
+      same PR): the rule on some dams or each unit's own dam (`basis`,
+      `damNodeIds`) and on some units (`nodeIds`), moved with a project
+      copy; the EWR-failure trigger (`ewrTrigger`, the site's EWR not met
+      the day before a review); a rule started from the WUA's published
+      notice (`restrictionRuleFromNotice`, in Settings and the scenario
+      form); and resumed runs, bit-identical to the uninterrupted one and
+      self-checked. Cutting the other water users is a question for the
+      hydrologist (§ Hydrologist), not built.
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.

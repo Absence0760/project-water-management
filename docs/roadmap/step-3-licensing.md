@@ -1069,11 +1069,14 @@ must build WP-2.15 Phase B.
 > comparison's lines; Settings → Drought restrictions, the Units & supply
 > tables and the outlook's "Use as the drought restriction rule"
 > (`restrictionRuleFromTriggers`). The outlook, its triggers and firm yield
-> run without the rule. Not built: the EWR-failure trigger, a rule on one
-> dam or per node, cutting other water users, and copying the published
-> notice into a rule ([model.md §2.7i](../model.md),
-> [followups.md § Demand objects](../followups.md)). Answers the WP-3.8
-> half of issue #123's floor note.
+> run without the rule. Also built: the EWR-failure trigger (the site's EWR
+> not met the day before a review), a rule on some dams or on each unit's
+> own dam (the per-node rule) and on some units, a rule started from the
+> published notice (never the reverse), and resumed runs checked. Not built:
+> cutting other water users, a policy question for the hydrologist
+> ([model.md §2.7i](../model.md),
+> [followups.md § Hydrologist](../followups.md#hydrologist)). Answers the
+> WP-3.8 half of issue #123's floor note.
 >
 > **Hands-off flow and River to dam by month: engine, backend and UI built
 > 2026-09-29 (engine 1.32.0, issue #204), off by default; pending the
@@ -1139,8 +1142,8 @@ must build WP-2.15 Phase B.
   - **Pump capacity** m³/day (pumps × m³/h × 24).
   - **Hands-off flow**: river abstraction only above a threshold at the
     node (a fixed m³/day by month, or its EWR share).
-  - **Drought restrictions** (built for storage, engine 1.52.0; the EWR
-    trigger is a follow-up): cut demand by *x* % when storage < *y* % or
+  - **Drought restrictions** (built, both triggers, engine 1.52.0): cut
+    demand by *x* % when storage < *y* % or
     when the downstream EWR site failed yesterday. This is a **model
     rule**, distinct from WP-2.3's published `restriction_level` /
     `restriction_pct`, which is a notice to farmers. A scenario may copy

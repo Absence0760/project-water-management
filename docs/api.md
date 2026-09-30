@@ -372,13 +372,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (1–12), liftDates?: ['MM-DD', …] (0–12, none a review date), levels: [{
   label?, belowPct (0 < x ≤ 1), cuts: { crops?, domestic?, municipal?,
   industrial?, livestock?, irrigation?, external?, other? } (each 0–1) }]
-  (1–6, mildest first), source? (≤ 500 characters) }`, or `null` / absent
+  (1–6, mildest first), source? (≤ 500 characters), basis?: 'total' |
+  'dams' | 'own', damNodeIds? (with 'dams' only, 1–500 farm dam ids),
+  nodeIds? (1–500 farm ids, the units cut), ewrTrigger?: { siteNodeId: a
+  gauge id or null for the outlet, level: 1…levels } }`, or `null` / absent
   for off (the default). Replaced whole, never merged; the engine's
   `droughtRestrictionIssues` checks it (`400 drought restriction rule: …`:
   real month-days, not 29 February, no date twice, thresholds strictly
   falling, a deeper level cutting each part at least as much and every part
-  a milder one cuts, no other field). A model input: runs record it, and
-  changing it moves `updatedAt`.
+  a milder one cuts, the trigger's level one of the rule's, no other
+  field). Ids that aren't in the model are saved and left out by the run
+  with a warning (the Settings form refuses them). A project copy moves its
+  ids to the copy's nodes. A model input: runs record it, and changing it
+  moves `updatedAt`.
   `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
   ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
   evidence report's cited ensemble must follow: `{ members, bounds:
@@ -1592,7 +1598,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   whole run), reviews (days the level was decided), units: [{ nodeId, name,
   avgDemandM3Day, avgRestrictedDemandM3Day, avgSuppliedM3Day,
   avgCutOnRestrictedDaysM3Day (the mean cut over the days a level was in
-  force, null when none was) }] (farms, id order) }`. The run has the catchment series `restriction_level` (0 =
+  force, null when none was), daysByLevel }] (the units the rule cuts, id
+  order), ewrReviews? (with an EWR trigger: reviews after a day its site
+  failed), start? (a resumed run: { levelsBefore: { nodeId: level } | null,
+  ewrFailedBefore, damStorageBeforeM3: { nodeId: m³ } }) }`. Under the
+  'own' basis the catchment `restriction_level` is the deepest any unit is
+  at, each cut unit has its own `restriction_level`, and there is no
+  `restriction_cut@<part>`. The run has the catchment series `restriction_level` (0 =
   none) and `restriction_cut@<part>` (the day's cut, 0–1, for each part a
   level cuts), and every farm `restricted_demand` (m³/day, what its sources
   are asked for; `demand` and `deficit` stay the unrestricted demand's).

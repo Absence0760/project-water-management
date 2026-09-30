@@ -5039,6 +5039,18 @@ see (WP-2.3); every place it shows says so.
   save bar links here); switching off saves null, and the rule switched off
   comes back until saved. Field history under it. A viewer reads it,
   disabled, and *Drought restrictions: off.* when there is none.
+  From engine 1.52.0: **Start from the published notice** (editors) reads
+  the project's current publication and, after asking when a rule is set,
+  fills the rule from its notice (one level below 100 % at the notice's %,
+  from the day it was published to the next expected one), or says why it
+  can't (nothing published, no % cut); **Storage the level reads** (*Every
+  farm dam (their total)*, the default; *Some dams (their total)* with a
+  checkbox per farm dam; *Each unit's own dam*, with a note that a unit
+  without one isn't restricted by storage); **Units it cuts** (*Every
+  hydrological unit*, or a checkbox per unit); and the **EWR trigger**
+  (*Also restrict when the EWR wasn't met the day before a review*, the
+  site: the outlet or a gauge, and the level: at least which). An id the
+  model hasn't got blocks Save with its name.
 - **Units & supply → Drought restrictions** (`#res-restrictions`, its own
   panel and menu entry, before Other uses, for a run with the rule;
   `runs/RestrictionTables.svelte`, its own chunk, view model
@@ -5047,7 +5059,9 @@ see (WP-2.3); every place it shows says so.
   at each level per water year (with *Days restricted*, and a bold *Whole
   run* row), then per hydrological unit, the most cut first, its demand,
   demand after the restriction, cut (m³/day and % of demand) and supplied
-  as run means, and the mean cut on the restricted days alone. Both lists
+  as run means, the mean cut on the restricted days alone and its days
+  restricted (its own under *Each unit's own dam*); the rule line counts
+  the reviews after a day the EWR trigger's site failed. Both lists
   fold after ten (*Show all N water years* / *hydrological units*). The
   note says the cut shows as a shortfall.
 - **River & reserve → Seasonal outlook → Review triggers**: under the
@@ -5067,15 +5081,18 @@ see (WP-2.3); every place it shows says so.
   op's line reads *Drought restriction rule: off → reviewed 5 Oct; Level 1
   (below 70 %): crops 50 %*.
 
-Tests: `settings/droughtRestriction.test.ts`, `runs/restrictions.test.ts`,
+Tests: `settings/droughtRestriction.test.ts`, `settings/DroughtRestrictionFields.test.ts`
+(the storage, units and trigger choices rendered), `runs/restrictions.test.ts`,
 `runs/RestrictionTables.test.ts` (the tables rendered, sorted and folded),
 `supply/supply.test.ts` (the menu), `outlook/triggers.test.ts`
 (`triggerRuleView`), `scenarios/ops.test.ts` and `fields.test.ts` (the
 op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
 blocked save, edits saved whole, a viewer, off saves null, axe and the
 cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
-(the scenario's "Change a setting", the outlook's triggers saved as the
-rule, a run's tables on Units & supply with axe and no sideways scroll).
+(the scenario's "Change a setting", a rule from the published notice on
+each unit's own dam with an EWR trigger, the outlook's triggers replacing
+it after the question, a run's tables on Units & supply with axe and no
+sideways scroll).
 
 ## Compare runs (`?tab=compare`)
 

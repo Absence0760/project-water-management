@@ -3490,6 +3490,10 @@ notice says what the WUA asked for; the rule is what the model assumes.
 | `liftDates` | 0–12 month-days on which any restriction ends until the next review (e.g. the day after the season); none of them a review date |
 | `levels` | 1–6 levels, mildest first: `belowPct` (a share of capacity, 0 < x ≤ 1, strictly falling level by level) and `cuts` (per part of demand, a share 0–1). A deeper level cuts each part at least as much as the one above, and every part a milder level cuts |
 | `source` | where the levels come from (≤ 500 characters), optional |
+| `basis` | engine ≥ 1.52.0: which storage the level reads. `total` (the default, absent): every farm dam's, one level for every unit; `dams`: the farm dams in `damNodeIds` only, one level for every unit; `own`: each unit its own dam, a level per unit |
+| `damNodeIds` | the farm dams `dams` reads (with that basis only) |
+| `nodeIds` | the units the rule cuts (farm ids); absent = every unit |
+| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge) wasn't met the day before, the level is at least `level` |
 
 The parts are the ones `demand.scale` cuts on their own (#252): `crops` (a
 unit's crop water requirement F) and each demand-object category
@@ -3500,12 +3504,15 @@ unit's crop water requirement F) and each demand-object category
 
 ```
 review day (or a fresh run's first day when the latest date before it is a review):
-  share = Σ Q_start(d) ÷ Σ capacity(d, t)      over every farm dam d with capacity > 0 today, in node-id order
+  share = Σ Q_start(d) ÷ Σ capacity(d, t)      over the dams read (every farm dam, the listed ones, or the
+                                               unit's own) with capacity > 0 today, in node-id order
           Q_start = the storage at the start of the day (the day before's, after any storage reset that day)
-  level = the deepest level with share < belowPct; 0 when none (or no dam)
-lift day:   level = 0
-other days: level = the day before's
-per unit, with c_p = the level's cut on part p:
+  storage level = the deepest level with share < belowPct; 0 when none (or no dam)
+  failed = the EWR trigger's site had ewr_shortfall < 0 the day before (false on a fresh run's first day)
+  level(unit) = MAX(storage level, failed ? trigger level : 0)    units the rule cuts; 0 for the rest
+lift day:   every level = 0
+other days: each level = the day before's
+per unit, with c_p = its level's cut on part p:
   F′ = F × (1 − c_crops)
   d′_k = MAX(d_k × (1 − c_cat(k)), MIN(floor_k, d_k))   floored objects (§2.7f)
   d′_k = d_k × (1 − c_cat(k))                            the rest
@@ -3525,14 +3532,19 @@ dam or the river.
 each **pending the hydrologist**, listed in
 [followups.md § Hydrologist](./followups.md#hydrologist)):
 
-- *One rule per project, on the total farm dam storage.* The review
-  triggers read the total storage of the farm dams, shared pro rata to
-  capacity (§2.15a), and the rule takes their steps, so it reads the same
-  total: `Σ storage ÷ Σ capacity`, every farm dam in the project, the day's
-  capacity where it changes (§2.7g). WP-3.8's design sketched a rule per
-  node (`NetworkNode.restriction`); one per WUA is what the triggers need
-  and what a WUA decides. A rule on one dam (a scheme dam), or per node, is
-  a follow-up.
+- *One rule per project, on the total farm dam storage by default.* The
+  review triggers read the total storage of the farm dams, shared pro rata
+  to capacity (§2.15a), and the rule takes their steps, so by default it
+  reads the same total: `Σ storage ÷ Σ capacity`, every farm dam in the
+  project, the day's capacity where it changes (§2.7g). From engine 1.52.0
+  a WUA whose members hang off one scheme dam reads it alone (`dams`), and
+  one where each member's own dam decides reads each (`own`, the per-node
+  rule WP-3.8's design sketched as `NetworkNode.restriction`), and a rule
+  may cut some units only (`nodeIds`). Under `own` a unit without a dam
+  isn't restricted by storage (there is none to read; the run warns), only
+  by the EWR trigger. Ids that don't fit the network (a "dam" without one,
+  a unit that isn't a farm, a site that isn't a gauge) are left out with a
+  warning; a rule left with no unit isn't applied.
 - *Decided on review dates, held between them.* The triggers are read on a
   review date and applied to the season's end (§2.15a), and DWS
   restrictions are reviewed at set points, not daily, so the level is a
@@ -3548,12 +3560,16 @@ each **pending the hydrologist**, listed in
 - *A run's first day.* A fresh run that starts between a review and the
   next lift decides its first day from its starting storage (a restriction
   in force when the record starts); one that starts after a lift starts
-  unrestricted. A run resumed from a snapshot (§2.16) keeps the level held
-  on the day before it.
+  unrestricted. A run resumed from a snapshot (§2.16) keeps each unit's
+  level held on the day before it and whether the trigger's site failed
+  that day, so it is the uninterrupted run to the bit (`checkResume` on
+  random networks), and records that state in its summary (`start`) so the
+  self-check redoes it.
 - *Every farm's demand; not the other water users.* A user node's demand
   has no category and no population, so a cut on it could take a town's
   water below basic needs with no floor to stop it. Users keep taking their
-  demand; a cut on them is a follow-up.
+  demand; whether to cut them, and how, is a policy question for the
+  hydrologist ([followups.md § Hydrologist](./followups.md#hydrologist)).
 - *The floor.* A domestic or municipal object never goes below MIN(its
   basic-needs floor, its demand before the restriction) (#250, §2.7f): the
   rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
@@ -3572,17 +3588,35 @@ each **pending the hydrologist**, listed in
   and a base run made with the rule passed to the outlook or its triggers is
   refused (`assertUnrestrictedBase`), since its history is the restricted
   one.
-- *Only storage triggers.* The roadmap also named "when the downstream EWR
-  site failed yesterday"; that trigger is a follow-up.
+- *The EWR trigger* (engine ≥ 1.52.0; the roadmap's "when the downstream EWR
+  site failed yesterday"). It raises the level only on a review day, as
+  the storage does, from the site's pragmatic EWR shortfall (`ewr_shortfall`
+  of the outlet or the gauge, §2.7) on the day before, known at the start of
+  the review day, so it stays causal and holds with the rest until the next
+  review or lift. A fresh run's first day has no day before and isn't
+  raised. Only the day before is read, not a count of recent days, and not
+  the Reserve rule tables' monthly compliance.
 
 **Outputs.** On the catchment, `restriction_level` (the level in force each
-day, 0 = none) and `restriction_cut@<part>` (that day's cut, 0–1, for each
-part some level cuts); on every unit, `restricted_demand` (m³/day). The
-summary's `droughtRestriction`: the rule, the days at each level per water
-year and over the run, the reviews in the run, and per unit its mean demand,
-mean restricted demand and mean supply over the run and its mean cut over
-the restricted days alone; also a block of the summary CSV.
-A model-state snapshot carries the level held (`restrictionLevel`).
+day, 0 = none; under `own` the deepest any unit is at) and, under a shared
+basis, `restriction_cut@<part>` (that day's cut, 0–1, for each part some
+level cuts); on every unit the rule cuts, `restricted_demand` (m³/day) and,
+under `own`, its own `restriction_level`. The summary's
+`droughtRestriction`: the rule, the days at each level per water year and
+over the run, the reviews in the run (with a trigger, `ewrReviews`: those
+after a day its site failed), and per unit its mean demand, mean restricted
+demand and mean supply over the run, its mean cut over the restricted days
+alone and its days at each level; on a resumed run, `start`. Also a block
+of the summary CSV. A model-state snapshot carries each unit's level held
+(`restrictionLevels`) and the trigger's state (`restrictionEwrFailed`).
+
+**From the published notice** (engine ≥ 1.52.0). `restrictionRuleFromNotice`
+turns the WUA's published restriction notice (WP-2.3) into a starting rule,
+never the reverse: one level in force whenever the dams aren't full (below
+100 %), cutting every part by the notice's %, reviewed on the day it was
+published and lifted on the day the WUA expects to publish next (29
+February read as 1 March). A notice with no restriction, or none with a %,
+gives no rule, with the reason. Settings and the scenario form offer it.
 
 **From the review triggers.** `restrictionRuleFromTriggers(table, levels)`
 (`outlook/triggers.ts`, §2.15a) makes a rule from a trigger table: the
@@ -3608,9 +3642,11 @@ off, the dates, each level's threshold, name and cuts, levels added or
 removed, the source ([run-comparison.md](./run-comparison.md)).
 
 **Checks.** The self-check `droughtRestriction` (`checkDroughtRestriction`)
-recomputes the level every day from the stored storage, capacity and reset
-columns and the rule (the review and lift days worked out in the check
-itself, not by the engine's planner), each part's cut column, and each unit's restricted
+recomputes each unit's level every day from the stored storage, capacity,
+reset and EWR-shortfall columns and the rule (the review and lift days, the
+dams read, the units cut and the trigger's site worked out in the check
+itself, not by the engine's planner; a resumed run from the state its
+summary records), each part's cut column, and each unit's restricted
 demand from its crop requirement, efficiency and object demands with the
 floor; it holds supplied ≤ restricted demand ≤ demand (a restriction never
 raises supply) and the summary's days and means to the columns; without
@@ -7634,10 +7670,12 @@ can store one per base run. The state holds:
   use so far this water year (`allocationUsedM3`) and a full allocation's
   demand factor for the water year in progress (`allocationFactor`), each
   left out without one;
-- from engine 1.52.0 (§2.7i), the drought restriction level held the day
-  before (`restrictionLevel`), left out without the rule; a run resumed
-  part-way keeps it until its next review or lift date, one resumed on the
-  capture run's first day decides that day as the capture run did;
+- from engine 1.52.0 (§2.7i), the drought restriction level each node held
+  the day before (`restrictionLevels`, model order) and whether the rule's
+  EWR trigger site failed that day (`restrictionEwrFailed`), left out
+  without the rule; a run resumed part-way keeps the levels until its next
+  review or lift date, one resumed on the capture run's first day decides
+  that day as the capture run did;
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
   split by the snapshot is still assessed whole (§2.9c); with low flows on

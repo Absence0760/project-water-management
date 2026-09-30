@@ -563,9 +563,11 @@ same-project trigger or RLS policy of its own: it is read and written with
 the project's settings, under the project's policies. A patch replaces it
 whole; `null` or absent is off. A model input: runs snapshot it with their
 settings, and the run comparison and the settings history show changes.
-WP-3.8's design sketched a nullable `node.restriction jsonb` column; with
-the rule on the total farm dam storage it isn't needed (a rule per node is
-a follow-up, followups.md).
+WP-3.8's design sketched a nullable `node.restriction jsonb` column; the
+rule's node ids (`damNodeIds`, `nodeIds`, the EWR trigger's site, engine ≥
+1.52.0) live in the one rule instead, so a per-node rule needs no column:
+a project copy moves them to the copy's node ids (`remapSettingNodeIds`),
+and ids a model change removed are left out by the run with a warning.
 
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods

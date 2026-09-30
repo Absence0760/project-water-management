@@ -243,7 +243,9 @@ bottom:
    else the review and lift dates, each level's threshold ("level 1 starts
    below 70 % → 60 %"), name and cut per part ("level 1 cut on municipal
    (town) demand objects 0 % → 10 %"), levels added or removed, and a
-   reworded source (engine `droughtRestrictionChanges`). A scenario that
+   reworded source, and (engine ≥ 1.52.0) the storage read ("storage read
+   every farm dam → the storage of Upper farm"), the units cut and the EWR
+   trigger, nodes by name (engine `droughtRestrictionChanges`). A scenario that
    sets another rule shows here, so comparing two restriction policies
    lists what differs.
 3. **Headline results.** A **Calibration against observed
