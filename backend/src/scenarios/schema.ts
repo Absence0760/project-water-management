@@ -64,6 +64,14 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			];
 		case 'borehole.remove':
 			return [['boreholeId', op.boreholeId]];
+		case 'demandObject.add':
+			return [
+				['demandObject.id', op.demandObject.id],
+				['demandObject.nodeId', op.demandObject.nodeId]
+			];
+		case 'demandObject.set':
+		case 'demandObject.remove':
+			return [['demandObjectId', op.demandObjectId]];
 		case 'demand.scale':
 			return (op.nodeIds ?? []).map((id, i) => [`nodeIds[${i}]`, id] as [string, unknown]);
 		case 'ewrRule.set':

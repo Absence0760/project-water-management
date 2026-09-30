@@ -120,12 +120,21 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('A new borehole on {unit}', { unit: unit(op.borehole.nodeId) });
 		case 'borehole.remove':
 			return t('A borehole removed');
+		case 'demandObject.add':
+			return t('A new water use that isn’t a crop on {unit}', { unit: unit(op.demandObject.nodeId) });
+		case 'demandObject.set':
+			return t('A water use that isn’t a crop changed: {field}', { field: op.field });
+		case 'demandObject.remove':
+			return t('A water use that isn’t a crop removed');
 		case 'settings.set':
 			return t('A catchment setting changed: {path}', { path: op.path });
 		case 'series.scale':
 			return t('The {kind} record scaled by {factor}', { kind: op.kind, factor: fmtNumber(op.factor, 2, true) });
 		case 'demand.scale':
-			return t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });
+			// One part of a unit's demand (engine ≥ 1.45.0): the crops or one category of demand object, by its technical name.
+			return op.part
+				? t('Demand of {part} scaled by {factor}', { part: op.part, factor: fmtNumber(op.factor, 2, true) })
+				: t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });
 		case 'ewrRule.set':
 			return t('The Reserve’s rule table replaced at {site}', { site: op.table.siteNodeId ? unit(op.table.siteNodeId) : t('the catchment outlet') });
 		case 'ewrRule.remove':
