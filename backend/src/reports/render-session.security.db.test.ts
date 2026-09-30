@@ -227,4 +227,30 @@ describe('a session’s scope claim', () => {
 			}
 		}
 	});
+
+	it('a pack claim (116_pack_render) is a project and a pack and nothing else; a well-formed one gets no further than its pack (positive control)', async () => {
+		const owner = await signUp('RsPackClaim');
+		const { projectId, runId } = await withRun(owner, 'Pack claim');
+		const packId = crypto.randomUUID();
+		const good = `wm_session=${await sign(owner.id, { scope: { p: projectId, k: packId } })}`;
+		expect((await as(good, 'GET', '/auth/me')).status).toBe(200);
+		// No such pack: past the scope to the route, which answers 404 as it would to anyone.
+		expect((await as(good, 'GET', `/projects/${projectId}/packs/${packId}`)).status).toBe(404);
+		for (const path of ['/projects', `/projects/${projectId}`, `/projects/${projectId}/runs/${runId}`, `/projects/${projectId}/packs`, `/projects/${projectId}/packs/${packId}/pdf`]) {
+			expect((await as(good, 'GET', path)).status, path).toBe(403);
+		}
+		for (const scope of [
+			{ k: packId },
+			{ p: projectId, k: 'all' },
+			{ p: projectId, k: [packId] },
+			{ p: projectId, k: packId, r: runId },
+			{ p: projectId, k: packId, a: { p: projectId, r: runId } },
+			{ p: projectId, k: null }
+		]) {
+			const cookie = `wm_session=${await sign(owner.id, { scope })}`;
+			for (const path of ['/auth/me', '/projects', `/projects/${projectId}`, `/projects/${projectId}/packs/${packId}`]) {
+				expect((await as(cookie, 'GET', path)).status, `${JSON.stringify(scope)} ${path}`).toBe(401);
+			}
+		}
+	});
 });

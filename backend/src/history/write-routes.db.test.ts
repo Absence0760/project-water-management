@@ -525,7 +525,11 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/sweeps`, exempt: 'queues a sweep job; the scenario_sweep row keeps who asked, its base run, its members’ ops and the engine version, and no input changes (062_scenario_sweeps.sql)' },
 	{ route: `POST ${P}/outlooks`, exempt: 'queues an outlook job; the seasonal_outlook row keeps who asked, its base run, season, levels and share and the engine version, and no input changes (063_seasonal_outlook.sql)' },
-	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
+	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' },
+	{
+		route: `POST ${P}/packs/:packId/pdf`,
+		exempt: 'asks again for an issued pack’s PDF; its pack_render job keeps who asked, and the PDF, once recorded, is fixed on the pack (116_pack_render)'
+	}
 ];
 
 /** Every write route (not GET) under /projects/:id, as Hono lists them. */

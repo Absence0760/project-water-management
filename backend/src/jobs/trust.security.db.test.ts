@@ -10,12 +10,14 @@
 //   2. A job queued in project A whose payload names project B's object (a
 //      feed, report, sweep, outlook or run), by someone who can edit both,
 //      touches nothing of B; B's own job with the same payload does (positive
-//      control). Every kind whose payload names an id is in the sweep.
+//      control). Every kind whose payload names an id is in the sweep (an
+//      evidence pack's render included).
 //
 // FEED_FETCHER and REPORT_RENDERER are `sqs` here, with the queue send
 // captured: a fetch or render is then visible as the message it would send,
 // with no network and no Chromium.
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sent } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[] }));
@@ -182,6 +184,33 @@ async function feedOf(owner: User, projectId: string) {
 	return res.body.feed.id as string;
 }
 
+/**
+ * An issued evidence pack of a project's run, planted past evidence_pack_guard
+ * (replica role, as cross-project-refs.security.db.test.ts arranges its
+ * packs): issuing one through the API needs an issuable report, which these
+ * catchments lack, and the sweep needs only the row.
+ */
+async function issuedPack(projectId: string, runId: string, userId: string): Promise<string> {
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('SET LOCAL session_replication_role = replica');
+		const { rows } = await client.query<{ id: string }>(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by)
+			 VALUES (gen_random_uuid(), $1, $2, 1, 'issued', '{}', md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $3, now(), $3) RETURNING id::text`,
+			[projectId, runId, userId]
+		);
+		await client.query('COMMIT');
+		return rows[0]!.id;
+	} catch (err) {
+		await client.query('ROLLBACK');
+		throw err;
+	} finally {
+		await client.end();
+	}
+}
+
 const CROSS: Partial<Record<JobKind, CrossCase>> = {
 	feed_fetch: {
 		async queue(owner, b) {
@@ -211,6 +240,18 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: res.body.jobId, ref: r.id };
 		},
 		effect: async (id) => ({ status: (await asOwner('SELECT status FROM report WHERE id = $1', [id]))[0].status, sent: sentFor('reportId', id) })
+	},
+	pack_render: {
+		// B's issued pack, and B's render of it: with REPORT_RENDERER=sqs the render is a render token and a render_pack message.
+		async queue(owner, b) {
+			const packId = await issuedPack(b.projectId, b.runId, owner.id);
+			const { job } = await enqueue(owner, b.projectId, 'pack_render', { packId });
+			return { jobId: job.id, ref: packId };
+		},
+		effect: async (id) => ({
+			tokens: (await asOwner('SELECT count(*)::int AS n FROM render_token WHERE pack_id = $1', [id]))[0].n,
+			sent: sentFor('packId', id)
+		})
 	},
 	sweep: {
 		async queue(owner, b) {
