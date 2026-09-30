@@ -154,6 +154,12 @@ export class ModelEditor {
 		m.nodes = m.nodes.filter((n) => n.id !== id);
 		m.cropAreas = m.cropAreas.filter((a) => a.nodeId !== id);
 		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
+		// An off-take whose seepage rejoined below it returns none now, as a scenario's node.remove leaves it (engine ≥ 1.42.0).
+		for (const t of m.transfers) {
+			if (t.lossReturnNodeId !== id) continue;
+			t.lossReturnNodeId = null;
+			t.lossReturnPct = 0;
+		}
 		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
 		if (m.boreholes) m.boreholes = m.boreholes.filter((b) => b.nodeId !== id);
 		if (m.demandObjects) m.demandObjects = m.demandObjects.filter((o) => o.nodeId !== id);

@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { DemandObject, ModelInput, NetworkNode, RunSeries, Transfer } from './project';
 import { runModelWith, withVerification } from './run';
-import { checkInvariants, checkTransferLimits } from './verify/checks';
+import { checkEwrAttribution, checkInvariants, checkTransferLimits } from './verify/checks';
+import { modelRuleProblems } from './modelRules';
 
 const flat = (v: number) => new Array(12).fill(v);
 
@@ -285,5 +286,100 @@ describe('river off-takes (engine 1.14.0)', () => {
 		const none = run(model([]));
 		const off = run(model([offtake({ enabled: false })]));
 		expect(off.series).toEqual(none.series);
+	});
+});
+
+// Canal seepage back to the river (engine 1.42.0, docs/model.md §2.6a): a share of an off-take's conveyance
+// losses rejoins the river below its source, or below a farm downstream of it, the same day.
+describe('canal seepage back to the river (engine 1.42.0)', () => {
+	// S drains through L (no runoff, no demand) to the gauge; the canal C → T as above.
+	const below = () => [
+		node('G', { kind: 'gauge', downstreamNodeId: null, sortOrder: 9 }),
+		node('S', { areaKm2: 1, sortOrder: 1, downstreamNodeId: 'L' }),
+		node('L', { sortOrder: 2 }),
+		node('C', { downstreamNodeId: 'T', sortOrder: 3 }),
+		node('T', { sortOrder: 4, supplyRule: 'runOfRiver', pumpCapacityM3Day: null })
+	];
+
+	it('by default none returns: the losses leave the catchment as before', () => {
+		const out = run(model([offtake({ lossPct: 0.25 })]));
+		const same = run(model([offtake({ lossPct: 0.25, lossReturnPct: 0, lossReturnNodeId: null })]));
+		expect(same.series).toEqual(out.series);
+		expect(out.series.some((s) => s.key === 'offtake_loss_return')).toBe(false);
+	});
+
+	it('returns its share of the losses below the source, after the off-take took', () => {
+		// 100 taken, 25 lost, 40 % of them (10) seep back into the river below S.
+		const input = model([offtake({ lossPct: 0.25, lossReturnPct: 0.4 })]);
+		const out = run(input);
+		expect(get(out, 'S', 'offtake_out')).toEqual([100, 100]);
+		expect(get(out, 'C', 'offtake_in')).toEqual([75, 75]);
+		near(get(out, 'S', 'offtake_loss_return'), [10, 10]);
+		near(get(out, 'S', 'outflow'), [910, 910]);
+		// The town uses 60 of the 75; 15 flows on to the gauge beside S's 910.
+		near(get(out, 'G', 'outflow'), [925, 925]);
+		expect(out.summary.waterBalance?.total.conveyanceLossM3).toBeCloseTo(30, 9);
+		expect(out.summary.supplyAssurance?.waterAccount.total.conveyanceLossM3).toBeCloseTo(30, 9);
+		expect(out.summary.waterBalance?.total.residualM3).toBeCloseTo(0, 6);
+		passes(input, out);
+	});
+
+	it('returns it below a farm downstream of the source, and all of it at 100 %', () => {
+		const input = model([offtake({ lossPct: 0.25, lossReturnPct: 1, lossReturnNodeId: 'L' })], { nodes: below() });
+		const out = run(input);
+		expect(get(out, 'S', 'outflow')).toEqual([900, 900]);
+		expect(out.series.some((s) => s.nodeId === 'S' && s.key === 'offtake_loss_return')).toBe(false);
+		near(get(out, 'L', 'offtake_loss_return'), [25, 25]);
+		near(get(out, 'L', 'outflow'), [925, 925]);
+		near(get(out, 'G', 'outflow'), [940, 940]);
+		expect(out.summary.waterBalance?.total.conveyanceLossM3).toBeCloseTo(0, 9);
+		expect(out.summary.waterBalance?.total.residualM3).toBeCloseTo(0, 6);
+		passes(input, out);
+	});
+
+	it('credits the return in the EWR attribution where the losses were charged', () => {
+		// A large EWR at the gauge: every day short. The destination C carries the losses; returned, it carries less.
+		const lost = model([offtake({ lossPct: 0.25 })], { ewr: 5000 });
+		const back = model([offtake({ lossPct: 0.25, lossReturnPct: 1, lossReturnNodeId: 'L' })], { ewr: 5000, nodes: below() });
+		const a = run(lost);
+		const b = run(back);
+		passes(back, b);
+		expect(checkEwrAttribution(back, b)).toBeNull();
+		// The canal head C receives the off-take's 100 as a transfer and passes on 75: without the return it is
+		// charged the 25 lost; with all of it back below L, nothing, and L (whose outflow carries it) nothing either.
+		near(get(a, 'C', 'ewr_charge'), [-25, -25]);
+		near(get(b, 'C', 'ewr_charge'), [0, 0]);
+		near(get(b, 'L', 'ewr_charge'), [0, 0]);
+		// The town's unit is charged the 60 it used either way.
+		near(get(a, 'T', 'ewr_charge'), [-60, -60]);
+		near(get(b, 'T', 'ewr_charge'), [-60, -60]);
+	});
+
+	it('returns none below a unit that is not the source or a farm below it, saying so, and a save refuses it', () => {
+		// T is not below S (S drains straight to the gauge).
+		const input = model([offtake({ lossPct: 0.25, lossReturnPct: 0.5, lossReturnNodeId: 'T' })]);
+		const out = run(input);
+		expect(out.summary.warnings.some((w) => /river off-take S → C: its seepage return unit is not S or a farm below it/.test(w))).toBe(true);
+		expect(out.series.some((s) => s.key === 'offtake_loss_return')).toBe(false);
+		near(get(out, 'G', 'outflow'), [915, 915]);
+		passes(input, out);
+		expect(modelRuleProblems(input.model).some((p) => /its seepage can rejoin the river only below "S" or a farm downstream of it/.test(p))).toBe(true);
+		expect(modelRuleProblems(model([offtake({ lossReturnPct: 1.5 })]).model).some((p) => /seeping back must be between 0 % and 100 %/.test(p))).toBe(true);
+		expect(modelRuleProblems(model([offtake({ lossPct: 0.25, lossReturnPct: 0.5, lossReturnNodeId: 'L' })], { nodes: below() }).model)).toEqual([]);
+	});
+
+	it('the self-checks catch seepage returned that the losses did not make', () => {
+		const input = model([offtake({ lossPct: 0.25, lossReturnPct: 0.4, lossReturnNodeId: 'L' })], { nodes: below() });
+		const out = run(input);
+		const o = structuredClone(out);
+		const back = o.series.find((x) => x.nodeId === 'L' && x.key === 'offtake_loss_return')!.values;
+		const flow = o.series.find((x) => x.nodeId === 'L' && x.key === 'outflow')!.values;
+		back[0] = back[0]! + 5;
+		flow[0] = flow[0]! + 5;
+		expect(checkTransferLimits(input, o)).toMatch(/offtake_loss_return .* ≠ the river off-takes' losses seeping back there/);
+		// Joining the outflow without the column: the unit no longer balances.
+		const p = structuredClone(out);
+		p.series.find((x) => x.nodeId === 'L' && x.key === 'offtake_loss_return')!.values[1] = 0;
+		expect(checkInvariants(input, p)).toMatch(/balance|outflow/);
 	});
 });

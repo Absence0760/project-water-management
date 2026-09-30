@@ -34,7 +34,7 @@ import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './network/transferRates';
-import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, planOfftakes } from './network/offtake';
+import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf } from './network/supply';
@@ -480,6 +480,8 @@ function runNetwork(
 		// A river off-take (engine ≥ 1.14.0) counts like a transfer, with what it took at both ends: its conveyance
 		// losses are charged to its destination, for which the water was taken.
 		transfers: [...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })), ...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! }))],
+		// The share of its losses that seeps back (engine ≥ 1.42.0) is credited where the losses were charged.
+		...(plan.offtakes?.some((o) => o.lossReturn > 0) ? { returns: offtakeReturns(plan.offtakes, sim.offtakes!) } : {}),
 		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
 	});
 	const posInOrder = new Int32Array(nodes.length);
@@ -516,7 +518,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -597,6 +599,8 @@ function runNetwork(
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
+		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
+		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
 		const po = plan.nodes[i]!.objects;
 		if (po) {
@@ -914,6 +918,7 @@ function runNetwork(
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
+				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),

@@ -124,6 +124,13 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{
+		key: 'offtake_loss_return',
+		letter: null,
+		formula:
+			'Σ over the river off-takes whose seepage rejoins below this unit of what each took × its conveyance loss × its return share (engine ≥ 1.42.0): the canal seepage back to the river; it joins U after the unit’s own off-takes, and the rest of the losses leave the catchment',
+		optional: true
+	},
+	{
 		key: 'offtake_used',
 		letter: null,
 		formula: 'MIN(off-take water in, D): used first, before the dam, the river pump and the boreholes, which supply D − this; part of G (engine ≥ 1.14.0)',

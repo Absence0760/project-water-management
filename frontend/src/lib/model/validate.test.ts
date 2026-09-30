@@ -121,6 +121,18 @@ describe('validateModel', () => {
 		expect(messages(model([g, f, h], { transfers: [{ ...t, handsOffM3Day: -1 }] }))).toContain("Transfer 1: the hands-off flow can't be negative.");
 	});
 
+	it('checks canal seepage back to the river: a share 0–100 %, rejoining below the source or a unit below it (engine 1.42.0)', () => {
+		const g = node('g', 'G', null);
+		const l = node('l', 'L', 'g');
+		const f = node('f', 'F', 'l');
+		const h = node('h', 'H', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const, lossPct: 0.2 };
+		for (const at of [null, 'f', 'l']) expect(messages(model([g, l, f, h], { transfers: [{ ...t, lossReturnPct: 0.5, lossReturnNodeId: at }] })), String(at)).toEqual([]);
+		expect(messages(model([g, l, f, h], { transfers: [{ ...t, lossReturnPct: 1.5 }] }))).toContain('Transfer 1: the share of the losses seeping back is 0–100%.');
+		for (const at of ['h', 'g'])
+			expect(messages(model([g, l, f, h], { transfers: [{ ...t, lossReturnPct: 0.5, lossReturnNodeId: at }] }))).toContain('Transfer 1: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.');
+	});
+
 	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {
 		const a = node('a', 'A', null);
 		a.damAreaFullM2 = null;

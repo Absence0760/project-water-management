@@ -2504,8 +2504,13 @@ The card's body holds three top-aligned groups:
   off-take)* ([model.md §2.6a](./model.md)), whose fields replace the minimum:
   how much it takes (*What the destination needs* or *Up to capacity*, like a
   canal that runs full), a hands-off flow (m³/day, blank = none), the losses on
-  the way (%), and switches for leaving the EWR in the river and topping up
-  the destination’s dam. The fields sit two to a row, not one tall column.
+  the way (%), the share of those losses seeping back to the river (%, engine
+  ≥ 1.42.0; 0 = none, the default) and, once that share is above 0, where it
+  rejoins the river (*The source* or a hydrological unit downstream of the
+  source along the river; a saved unit that no longer qualifies shows as *not
+  below the source*, and the model check refuses it), and switches for leaving
+  the EWR in the river and topping up the destination’s dam. The fields sit
+  two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip. The groups sit side by
 side where the card is 70rem wide (1280 and 1440 windows), beside the head
@@ -5789,6 +5794,10 @@ baseline card links to the published run's report (**Report**, beside
   on one page, none across a page edge), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
+  The transfers table gives a river off-take's **Losses on the way** (%) and
+  what of them is **Seeping back to the river** ("40.0% of them, below Upper
+  farm", the source when no unit is named; "none" by default; engine ≥
+  1.42.0, [model.md §2.6a](./model.md)); a dam transfer shows "–" in both.
   The **Runoff model** row reads "GR4J", or for a run whose settings don't
   name GR4J (a stored run from before engine 1.0.0) "Legacy (b023 workbook,
   removed in engine 1.0.0): workbook comparison only", never today's default.

@@ -202,7 +202,7 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 	for (const n of m.nodes) old.add(n.id), n.downstreamNodeId && old.add(n.downstreamNodeId);
 	for (const c of m.crops) old.add(c.id);
 	for (const a of m.cropAreas) old.add(a.nodeId), old.add(a.cropId);
-	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), old.add(t.toNodeId);
+	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), old.add(t.toNodeId), t.lossReturnNodeId && old.add(t.lossReturnNodeId);
 	for (const p of m.landCover ?? []) old.add(p.id), old.add(p.nodeId);
 	for (const b of m.boreholes ?? []) old.add(b.id), old.add(b.nodeId);
 	for (const o of m.demandObjects ?? []) old.add(o.id), old.add(o.nodeId);
@@ -217,7 +217,8 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 			nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
 			crops: m.crops.map((c) => ({ ...c, id: id(c.id) })),
 			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
-			transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) })),
+			// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0) moves with the nodes; absent stays absent.
+			transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId), ...(t.lossReturnNodeId ? { lossReturnNodeId: id(t.lossReturnNodeId) } : {}) })),
 			landCover: (m.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) })),
 			...(m.boreholes?.length ? { boreholes: m.boreholes.map((b) => ({ ...b, id: id(b.id), nodeId: id(b.nodeId) })) } : {}),
 			...(m.demandObjects?.length ? { demandObjects: m.demandObjects.map((o) => ({ ...o, id: id(o.id), nodeId: id(o.nodeId) })) } : {})

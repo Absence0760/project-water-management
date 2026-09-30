@@ -41,7 +41,8 @@ const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: tru
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
 const TRANSFER: Record<keyof Transfer, true> = {
 	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true,
-	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true
+	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true,
+	lossReturnPct: true, lossReturnNodeId: true
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,

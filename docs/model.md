@@ -1994,6 +1994,8 @@ the destination is simulated after its source.
 | `lossPct` | conveyance losses, 0 ≤ l < 1 of what is taken, lost from the catchment on the way (seepage and evaporation from the canal); default 0 |
 | `sizing` | `demand` (default): take only what the destination needs today, its abstraction demand (crops and demand objects) plus, with `topUpDam`, its dam's room, grossed up for the losses. `capacity`: up to capacity whatever the destination needs, like a weir-fed canal that runs full |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
+| `lossReturnPct` | engine ≥ 1.42.0, migration 126: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to the river the same day, like a dam's seepage return (§2.7b, WP-3.5); default 0: all the losses leave the catchment |
+| `lossReturnNodeId` | engine ≥ 1.42.0: the unit whose outflow the returned seepage joins; null (the default) = the source itself, just below the off-take; otherwise a farm downstream of the source along the river (the API refuses any other; a run given one returns none, with a warning) |
 | `minStoragePct` | inert (there is no source dam to keep) |
 
 **Each day.** At the source unit, after its own use (dam, river pump,
@@ -2011,7 +2013,14 @@ need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (s
 v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), scaled down pro rata when Σ v > MAX free
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
 arrives = Σ v_k × (1 − l_k) at each destination
+back    = Σ v_k × l_k × r_k at each return unit             engine ≥ 1.42.0: canal seepage back to the river
+lost    = Σ v_k × l_k × (1 − r_k)                           leaves the catchment
 ```
+
+The seepage back joins the return unit's outflow after that unit's own
+off-takes (`U += back`), so an off-take never takes back its own losses, and
+a return unit below the source is simulated after it, so the day's losses
+are known when they arrive there (same day, no lag, as the canal itself).
 
 At the destination: `used = MIN(arrives, D)` meets the demand first (before
 its own dam, pump and boreholes, which supply the rest `D − used`, so a unit
@@ -2045,19 +2054,33 @@ question 20):
   into its source, along the river or through other off-takes, would need
   tomorrow's water today, so the run skips it with a warning and the API
   refuses it on save (`modelRuleIssues`).
-- *Losses leave the catchment.* A canal's seepage may reach the river lower
-  down; how much is not known, so none is returned (the conservative side for
-  the EWR). The water account and the balance carry them as
-  `conveyanceLossM3`.
+- *Losses leave the catchment unless a share is set to return.* A canal's
+  seepage may reach the river lower down; how much is rarely known, so by
+  default none is returned (the conservative side for the EWR). Engine ≥
+  1.42.0 lets a model return a share `lossReturnPct` of the losses, below the
+  source or a farm downstream of it along the river (`lossReturnNodeId`), as
+  a dam's seepage return does (WP-3.5): a hydrologist with a measured loss
+  split credits the part that comes back. Only the source's own river
+  qualifies: the canal runs beside it, and a unit below the source is
+  simulated after it. The water account and the balance carry what is lost
+  (taken − delivered − returned) as `conveyanceLossM3`.
 - *Who is charged.* The EWR attribution (§2.7b) counts an off-take like a
   transfer, with what it took at both ends: inside a site's catchment it moves
   impact from the source to the destination, which carries the losses; one
-  leaving the catchment is charged to its source.
+  leaving the catchment is charged to its source. The seepage back (engine ≥
+  1.42.0) counts, at a site with its return unit upstream, as a transfer
+  into that unit from the destination (which the losses were charged to)
+  when the destination is upstream of the site too, and from the source
+  otherwise (its export is then net of what came back); at a site above
+  which it doesn't return, nothing changes (the losses left that site's
+  catchment). The return unit is never charged for water it merely carries.
 
 **Outputs.** On the source `offtake_out` and, per rule, `transfer_rule@<id>`
 (what it took, before losses); on the destination `offtake_in` (what arrived),
-`offtake_used` and `offtake_to_dam` (the workings). `WaterBalanceRow` and the
-water account gain `conveyanceLossM3`.
+`offtake_used` and `offtake_to_dam` (the workings); on each unit seepage
+rejoins below, `offtake_loss_return` (engine ≥ 1.42.0, part of its outflow).
+`WaterBalanceRow` and the water account gain `conveyanceLossM3`, net of the
+seepage returned.
 
 **Checks.** `checkBalance` closes every unit with its off-take water in and
 out and the catchment with the losses; `checkWorkings` replays the
@@ -2067,10 +2090,16 @@ off-takes taken out; `checkTransferLimits` holds each rule to its capacity,
 to the flow above what it must leave at its source (never more than the
 river there), Σ v to `offtake_out`, `offtake_in` to Σ v × (1 − l), and a
 source whose rules are all sized to capacity to taking MIN(Σ capacity, the
-flow above the largest keep). The fuzz generator adds off-takes to a quarter
+flow above the largest keep), and (engine ≥ 1.42.0) `offtake_loss_return` at
+each return unit to Σ v × l × r, the source's flow before its off-takes being
+its outflow less the seepage rejoining there; the balance and the outflow
+replay carry `offtake_loss_return` in, and the attribution check rebuilds
+the return legs as above. The fuzz generator adds off-takes to a quarter
 of the random networks (both sizings, hands-off flows, the EWR kept or not,
-losses, top-ups, monthly rates, gauge ends and loops the run skips). Hand
-examples: `run.offtake.test.ts`, `network/offtake.test.ts`.
+losses, top-ups, monthly rates, gauge ends and loops the run skips), and
+seepage returns to half of the lossy ones (below the source, a unit below
+it, or now and then a unit that doesn't qualify). Hand examples:
+`run.offtake.test.ts`, `network/offtake.test.ts`, `network/attribution.test.ts`.
 
 **Not changed by default:** no stored rule is a river off-take. The b023
 importers turn a workbook transfer into one only where the workbook fakes it:
@@ -3074,7 +3103,7 @@ regression suite is unchanged.
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
 | `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 105; below); null or empty = every day at its month's demand |
-| `population` | the people it serves, for the basic-needs floor of a domestic or municipal object (engine ≥ 1.44.0, migration 124; below); null = a `perUnit` object's `count`, and a `monthly` one without it has no floor |
+| `population` | the people it serves, for the basic-needs floor of a domestic or municipal object (engine ≥ 1.44.0, migration 127; below); null = a `perUnit` object's `count`, and a `monthly` one without it has no floor |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,

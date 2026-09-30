@@ -19,6 +19,13 @@
 // cut upstream raises the flow at every site below it), and the site that
 // sets it is its binding site (on a tie, the most downstream one).
 //
+// A river off-take counts as a transfer from its source to its destination
+// with what it took, so its conveyance losses are charged to the destination;
+// the share that seeps back (engine ≥ 1.42.0) joins the outflow of a farm at
+// or below the source, and at a site above which it rejoins counts as a
+// transfer into that farm from the destination (from the source when the
+// destination is outside the site's catchment, so the export is net of it).
+//
 // Each farm's charge splits by what the farm can change: c = G − T (its
 // consumptive irrigation, G·k with k = 1 − β(1 − e)), o = e − c (storage
 // gain and net export), A_irr = A · c / (c + MAX(o, 0)), A_store = A − A_irr.
@@ -65,6 +72,14 @@ export interface AttributionInput {
 	consumptive?: readonly (ArrayLike<number> | undefined)[];
 	/** Each transfer rule's daily volume. */
 	transfers: readonly { from: number; to: number; volume: ArrayLike<number> }[];
+	/**
+	 * River off-takes' conveyance losses seeping back to the river (engine ≥
+	 * 1.42.0), each joining the outflow of farm `at`. At a site with `at`
+	 * upstream it counts as a transfer into `at`: from the destination, which
+	 * the losses are charged to, when the destination is upstream too, else
+	 * from the source, whose export it reduces. Omitted = none.
+	 */
+	returns?: readonly { source: number; destination: number; at: number; volume: ArrayLike<number> }[];
 	/** The EWR sites, the outlet first by convention (any order gives the same result). */
 	sites: readonly AttributionSite[];
 }
@@ -148,6 +163,7 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 	const sites = input.sites.map((site) => {
 		const inF = upstreamMask(upstream, site.node);
 		const internal = transfers.filter((tr) => inF[tr.from] && inF[tr.to]);
+		for (const r of input.returns ?? []) if (inF[r.at] && r.at !== (inF[r.destination] ? r.destination : r.source)) internal.push({ from: inF[r.destination] ? r.destination : r.source, to: r.at, volume: r.volume });
 		return { site, farms: siteUnits(kind, upstream, order, site.node, inF), internal };
 	});
 
