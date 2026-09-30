@@ -2,6 +2,7 @@
 // first, the baseline beside the application; a baseline assumption named as
 // one; volumes only when the API sends them; the link's kind from the fragment.
 import { describe, expect, it } from 'vitest';
+import type { NetworkNode, ScenarioOp } from '@water-management/engine';
 import type { SharedRun, ShareScenario } from '$lib/api/types';
 import { changeRows, daysLine, ewrRows, readShareKind, resultsNote, statusLine, volumeRows } from './scenario';
 
@@ -81,6 +82,29 @@ describe('changeRows', () => {
 		expect(rows[0]!.text).toBe('Rooikloof: damCapacityM3 set to 120000');
 		expect(rows[1]!.text).toBe('another hydrological unit: damCapacityM3 set to 1');
 		expect(rows[1]!.label).toBe('Baseline assumption');
+	});
+
+	it('words the later ops (engine ≥ 1.35.0), naming only the applicant’s own unit', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'node.move', nodeId: OWN, downstreamNodeId: 'n-other' },
+			{ op: 'node.insert', node: { id: 'n-new', name: 'New weir', kind: 'gauge', downstreamNodeId: OWN } as NetworkNode, upstreamNodeIds: ['n-other'] },
+			{ op: 'crop.set', cropId: 'c', field: 'cropFactor', value: new Array(12).fill(0.5) },
+			{ op: 'crop.remove', cropId: 'c' },
+			{ op: 'landCover.set', patchId: 'p', field: 'densityPct', value: 0 },
+			{ op: 'ewrRule.remove', siteNodeId: null },
+			{ op: 'allocation.set', allocation: { id: 'a', nodeId: OWN, waterSource: 'surface', volumeM3PerYear: 200000 } },
+			{ op: 'allocation.remove', allocationId: 'a' }
+		];
+		expect(changeRows(scenario({ ops, classified: null })).map((r) => sp(r.text))).toEqual([
+			'Rooikloof moved to drain into another hydrological unit',
+			'A new hydrological unit or site, “New weir”, placed on the river above Rooikloof',
+			'A crop changed: cropFactor',
+			'A crop removed',
+			'Land cover changed: densityPct',
+			'The Reserve’s rule table removed at the catchment outlet',
+			'A registered volume set on Rooikloof',
+			'A registered volume removed'
+		]);
 	});
 
 	it('takes the class its run applied when it has one for every op', () => {

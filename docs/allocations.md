@@ -160,6 +160,14 @@ decides what the volumes do to a run
   assessment (WP-3.11). A scenario can switch it on for one run
   (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
 
+A scenario can also set, replace or remove a volume for one run
+(`allocation.set` / `allocation.remove`, engine ≥ 1.35.0, [scenarios.md §
+Registered volumes](./scenarios.md)): "what if this licence were for 200 000
+m³ a year" under the cap, or the applicant's requested volume in a
+full-allocation background. The op carries only what a run reads (no
+holder, registration number or property); a volume on the applicant's own
+unit is their proposal, one on another's a baseline assumption.
+
 Since every run's input carries the volumes (never the names), a stored run
 replays with the volumes it ran on, a change to a volume makes the latest run
 out of date, and comparing two runs lists the volumes that changed.

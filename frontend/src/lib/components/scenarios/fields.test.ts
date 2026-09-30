@@ -1,6 +1,20 @@
-import { NODE_SET_FIELDS, PE_SOURCE_MAX, SETTINGS_PATHS, TRANSFER_SET_FIELDS, nodeFieldError, settingsValueError, transferFieldError } from '@water-management/engine';
+import {
+	CROP_SET_FIELDS,
+	LAND_COVER_SET_FIELDS,
+	NODE_SET_FIELDS,
+	PE_SOURCE_MAX,
+	SETTINGS_PATHS,
+	TRANSFER_SET_FIELDS,
+	cropFieldError,
+	landCoverFieldError,
+	nodeFieldError,
+	settingsValueError,
+	transferFieldError
+} from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
+	CROP_FIELD_SPECS,
+	LAND_COVER_FIELD_SPECS,
 	NODE_FIELD_SPECS,
 	SETTINGS_SPECS,
 	TRANSFER_FIELD_SPECS,
@@ -298,5 +312,41 @@ describe('the hands-off flow and River to dam by month (engine 1.32.0, issue #20
 		expect(parseValue(ewr, valueText(ewr, true))).toEqual({ ok: true, value: true });
 		expect(parseValue(ewr, valueText(ewr, false))).toEqual({ ok: true, value: false });
 		expect(parseValue(ewr, 'maybe')).toEqual({ ok: false, error: 'pick yes or no' });
+	});
+});
+
+describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.35.0)', () => {
+	it('has a spec for every crop and land-cover field the engine lets a scenario set, and no others', () => {
+		expect(Object.keys(CROP_FIELD_SPECS).sort()).toEqual([...CROP_SET_FIELDS].sort());
+		expect(Object.keys(LAND_COVER_FIELD_SPECS).sort()).toEqual([...LAND_COVER_SET_FIELDS].sort());
+	});
+
+	it('reads back what it shows, each value one the engine accepts', () => {
+		const cases: [ValueSpec, unknown, (v: unknown) => string | null][] = [
+			[CROP_FIELD_SPECS.name.spec, 'Stone fruit', (v) => cropFieldError('name', v)],
+			[CROP_FIELD_SPECS.cropFactor.spec, [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 0.5, 0.4], (v) => cropFieldError('cropFactor', v)],
+			[CROP_FIELD_SPECS.irrigationEfficiency.spec, 0.85, (v) => cropFieldError('irrigationEfficiency', v)],
+			[CROP_FIELD_SPECS.irrigationEfficiency.spec, null, (v) => cropFieldError('irrigationEfficiency', v)],
+			[LAND_COVER_FIELD_SPECS.coverClass.spec, 'invasive', (v) => landCoverFieldError('coverClass', v)],
+			[LAND_COVER_FIELD_SPECS.areaKm2.spec, 1.25, (v) => landCoverFieldError('areaKm2', v)],
+			[LAND_COVER_FIELD_SPECS.densityPct.spec, 0.35, (v) => landCoverFieldError('densityPct', v)],
+			[LAND_COVER_FIELD_SPECS.factors.spec, { mar: 0.2, lowFlow: 0.35 }, (v) => landCoverFieldError('factors', v)],
+			[LAND_COVER_FIELD_SPECS.factors.spec, null, (v) => landCoverFieldError('factors', v)]
+		];
+		for (const [spec, v, check] of cases) {
+			const back = parseValue(spec, valueText(spec, v));
+			expect(back, JSON.stringify(v)).toEqual({ ok: true, value: v });
+			expect(check(v)).toBeNull();
+		}
+	});
+
+	it('shows reductions as percentages, the class’s when none, and refuses anything but two numbers', () => {
+		const s = LAND_COVER_FIELD_SPECS.factors.spec;
+		expect(formatValue(s, null)).toBe("the class's");
+		expect(formatValue(s, { mar: 0.2, lowFlow: 0.35 })).toBe('MAR −20 %, low flow −35 %');
+		expect(parseValue(s, '20 %, 35 %')).toEqual({ ok: true, value: { mar: 0.2, lowFlow: 0.35 } });
+		expect(parseValue(s, '20')).toMatchObject({ ok: false });
+		expect(parseValue(s, 'a; b')).toMatchObject({ ok: false });
+		expect(formatValue(CROP_FIELD_SPECS.irrigationEfficiency.spec, null)).toBe("the hydrological unit's");
 	});
 });

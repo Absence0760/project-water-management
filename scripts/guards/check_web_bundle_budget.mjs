@@ -1518,6 +1518,18 @@
 //             server PDF on its page (the state, the download link and an
 //             editor's "Try again") and the packs API client's two PDF calls.
 //             Headroom ~3 KB.
+// 2026-09-30  total 1267 → 1275 KB (issue #73, the later scenario ops:
+//             measured 1272 with main @ ff62bc2d merged). Eight new ops in the
+//             engine's scenario code (node.move, node.insert, crop.set,
+//             crop.remove, landCover.set, ewrRule.remove, allocation.set,
+//             allocation.remove: their validator, apply and classification),
+//             their "Add a change" forms and descriptions, override mode
+//             recording moves, inserts and crop edits, and eight share-page
+//             lines in both catalogues. Headroom ~3 KB.
+// 2026-09-30  total 1295 → 1301 KB (#237 merged with main @ 43d14e62: the
+//             later scenario ops beside #71's evidence pack screens and pack
+//             PDF and #234's preview worker, measured 1298; the entries above
+//             were each measured without the others). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1528,7 +1540,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1295,
+	totalCodeKb: 1301,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
