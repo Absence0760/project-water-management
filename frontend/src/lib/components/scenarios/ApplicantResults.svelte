@@ -60,13 +60,14 @@
 	const signedPct = (p: number) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p)} %`;
 	const showDeficit = $derived(!!results?.ewrSites.some((s) => s.base?.deficitM3 != null || s.application?.deficitM3 != null));
 
-	/** What ran on each of their units: its crops and boreholes, by the names (and ids) they gave. */
+	/** What ran on each of their units: its crops, boreholes and demand objects, by the names (and ids) they gave. */
 	function ranOn(nodeId: string): string {
 		if (!results) return '';
 		const crops = new Map(results.model.crops.map((c) => [c.id, c.name]));
 		const planted = results.model.cropAreas.filter((a) => a.nodeId === nodeId && a.areaM2 > 0).map((a) => `${crops.get(a.cropId) ?? 'a crop'} ${ha(a.areaM2)}`);
 		const holes = (results.model.boreholes ?? []).filter((b) => b.nodeId === nodeId).map((b) => b.name);
-		const parts = [planted.length ? planted.join(', ') : 'no crops', holes.length ? `boreholes: ${holes.join(', ')}` : ''];
+		const objects = (results.model.demandObjects ?? []).filter((o) => o.nodeId === nodeId).map((o) => o.name);
+		const parts = [planted.length ? planted.join(', ') : 'no crops', holes.length ? `boreholes: ${holes.join(', ')}` : '', objects.length ? `demand objects: ${objects.join(', ')}` : ''];
 		return parts.filter(Boolean).join('; ');
 	}
 

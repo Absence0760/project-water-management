@@ -25,7 +25,7 @@ import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, flowDayFlags, observedInfillMask, ratingOf } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -1337,8 +1337,9 @@ export function buildNetworkPlan(
 	const wyOfDay = objectsBy.size ? waterYearMonths(month, days) : null;
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
-		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one),
+		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, (o) => unitPartFactor(n, o.category, []), factorFrom, warnings, start) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
 		if (po && s > 0) {
@@ -2394,7 +2395,8 @@ function buildDemand(
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
 		// requirement F after the store, so the rain used, the store and the gross demand stay as they were;
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
-		const factor = demandFactorOf(node, warnings);
+		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
+		const factor = unitPartFactor(node, 'crops', warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);

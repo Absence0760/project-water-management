@@ -269,6 +269,19 @@ describe('buildOp', () => {
 		expect(classifyOp(built[11]!, [UP, LO, G])).toBe('baseline');
 	});
 
+	it('builds and describes a demand scaling of one part (engine 1.45.0, issue #123): the crops or one category of demand object', () => {
+		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
+		expect(b({ demandPct: '90', demandPart: 'domestic', demandNodeIds: [UP] })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.9, nodeIds: [UP], part: 'domestic' } });
+		expect(b({ demandPct: '70', demandPart: 'crops' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.7, part: 'crops' } });
+		// An other water user's demand has no parts: the part is dropped with the category.
+		expect(b({ demandPct: '90', demandCategory: 'user', demandPart: 'domestic' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.9, category: 'user' } });
+		expect(describeOp({ op: 'demand.scale', factor: 0.9, nodeIds: [UP], part: 'domestic' }, base())).toBe("Domestic demand objects demand of Upper farm: 90 % of what they'd take (× 0.9)");
+		expect(describeOp({ op: 'demand.scale', factor: 0.7, part: 'crops' }, base())).toBe("Crops (irrigation of the crop areas) demand of every hydrological unit: 70 % of what they'd take (× 0.7)");
+		const r = applyScenario(base(), [(b({ demandPct: '70', demandPart: 'crops', demandNodeIds: [UP] }) as { op: ScenarioOp }).op]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.nodes.find((n) => n.id === UP)!.partDemandFactor).toEqual({ crops: new Array(12).fill(0.7) });
+	});
+
 	it('builds a demand scaling (issue #53 R1): none ticked is all, every month is none, farms are the default', () => {
 		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
 		expect(b({ demandPct: '85' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });
@@ -300,6 +313,60 @@ describe('buildOp', () => {
 		expect(remove).toEqual({ ok: true, op: { op: 'borehole.remove', boreholeId } });
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the borehole “BH new”');
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
+	});
+
+	it('builds and describes a demand object to add, change and remove (engine 1.45.0)', () => {
+		const add = buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: ' Village ', doCategory: 'municipal', doSizing: 'monthly', doMonthlyM3Day: '300' }), m, id);
+		expect(add.ok, JSON.stringify(add)).toBe(true);
+		const op = (add as { op: ScenarioOp }).op;
+		// The category's defaults, as the Network tab's Add demand gives them (municipal: half returns, supplied first).
+		expect(op).toMatchObject({
+			op: 'demandObject.add',
+			demandObject: { nodeId: UP, name: 'Village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		});
+		expect(describeOp(op, base())).toBe('Upper farm: add the demand object “Village”, Municipal (town), 300 m³/day on average');
+		const after = applyScenario(base(), [op]);
+		expect(after.problems).toEqual([]);
+		const demandObjectId = (op as { demandObject: { id: string } }).demandObject.id;
+		// A per-unit one needs its count and litres.
+		const stock = buildOp(draft({ kind: 'demandObject.add', nodeId: LO, doName: 'Cattle', doCategory: 'livestock', doSizing: 'perUnit', doCount: '400', doLitres: '45' }), m, id);
+		expect((stock as { op: ScenarioOp }).op).toMatchObject({ demandObject: { sizing: 'perUnit', count: 400, litresPerUnitDay: 45, monthlyM3Day: null } });
+		expect(describeOp((stock as { op: ScenarioOp }).op, base())).toBe('Lower farm: add the demand object “Cattle”, Livestock, 400 × 45 l a day');
+		expect(buildOp(draft({ kind: 'demandObject.add', nodeId: LO, doName: 'Cattle', doSizing: 'perUnit', doCount: '' }), m, id)).toEqual({ ok: false, error: 'Enter the count' });
+		expect(buildOp(draft({ kind: 'demandObject.add', nodeId: UP, doName: '' }), m, id)).toEqual({ ok: false, error: 'Enter a name for the demand object' });
+		// Change one field: typed as the form shows it (a share as %), described with what it was.
+		const set = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'returnPct', value: '20' }), after.input.model, id);
+		expect(set).toEqual({ ok: true, op: { op: 'demandObject.set', demandObjectId, field: 'returnPct', value: 0.2 } });
+		expect(describeOp((set as { op: ScenarioOp }).op, after.input)).toBe('Upper farm, demand object “Village”: Share returned 50 % → 20 %');
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'returnPct', value: '150' }), after.input.model, id)).toEqual({ ok: false, error: 'Must be at most 100 %' });
+		// A note may be empty; a name may not.
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'note', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: '' } });
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'name', value: ' ' }), after.input.model, id)).toMatchObject({ ok: false });
+		expect(describeOp({ op: 'demandObject.set', demandObjectId, field: 'schedule', value: null }, after.input)).toBe('Upper farm, demand object “Village”: On/off schedule none → none');
+		// The schedule, through the Network form's editor on a copy of the object (engine 1.45.0 in the form).
+		const weekends = { label: 'Weekends', span: 'always' as const, from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 };
+		const village = after.input.model.demandObjects![0]!;
+		const sched = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule', doScheduleObject: { ...village, schedule: [weekends] } }), after.input.model, id);
+		expect(sched).toEqual({ ok: true, op: { op: 'demandObject.set', demandObjectId, field: 'schedule', value: [weekends] } });
+		expect(describeOp((sched as { op: ScenarioOp }).op, after.input)).toBe('Upper farm, demand object “Village”: On/off schedule none → 1 window (Weekends × 0.5)');
+		expect(applyScenario(after.input, [(sched as { op: ScenarioOp }).op]).problems).toEqual([]);
+		// No windows is no schedule; a window the run can't read is refused in the form.
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule', doScheduleObject: { ...village, schedule: [] } }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule', doScheduleObject: { ...village, schedule: [{ ...weekends, span: 'yearly' }] } }), after.input.model, id)).toMatchObject({
+			ok: false,
+			error: expect.stringMatching(/^Window 1 \(“Weekends”\): /)
+		});
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'schedule' }), after.input.model, id)).toEqual({ ok: false, error: 'Pick a demand object' });
+		// People served (the basic-needs floor, engine 1.44.0): empty is its count.
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '1500' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: 1500 } });
+		const remove = buildOp(draft({ kind: 'demandObject.remove', demandObjectId }), after.input.model, id);
+		expect(remove).toEqual({ ok: true, op: { op: 'demandObject.remove', demandObjectId } });
+		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the demand object “Village” (Municipal (town), 300 m³/day on average)');
+		expect(describeOp((remove as { op: ScenarioOp }).op, null)).toBe('Remove a demand object');
+		// Its class is its unit's.
+		expect(classifyOp(op, [UP])).toBe('proposal');
+		expect(classifyOp(op, [LO])).toBe('baseline');
 	});
 });
 

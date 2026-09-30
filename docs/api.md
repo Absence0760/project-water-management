@@ -1935,7 +1935,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   hidden farms and crops given a suffixed name in its runs because the
   applicant gave one of theirs that name (049, [scenarios.md §
   Applications](./scenarios.md#applications-wp-33)); always `[]` for a team
-  scenario. `reIds: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole',
+  scenario. `reIds: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole' | 'allocation' | 'demandObject',
   id, as }[]` (the same readers) lists the items an application added under
   the id of one its applicant can't see, and the fresh id each has in its
   runs; always `[]` for a team scenario.

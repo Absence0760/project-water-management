@@ -24,7 +24,7 @@ import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSup
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -69,11 +69,13 @@ interface ObjectColumns {
 	schedule: (Float64Array | null)[];
 	/** Each object's basic-needs floor (engine ≥ 1.44.0), recomputed from the model; null without one. */
 	floor: (number | null)[];
+	/** Each object's category, for its part's demand factor (engine ≥ 1.45.0). */
+	category: DemandObject['category'][];
 }
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
 	const list = demandObjectsByNode(input.model, []).get(n.id);
 	if (!list) return null;
-	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [] };
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [], category: [] };
 	for (const o of list) {
 		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
 		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
@@ -85,6 +87,7 @@ function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: P
 		out.monthly.push(objectMonthlyM3Day(o, []));
 		out.schedule.push(scheduleFactors(o.schedule, toEpochDay(run.startDate), run.days, [], ''));
 		out.floor.push(basicNeedsM3Day(o));
+		out.category.push(o.category);
 	}
 	return out;
 }
@@ -1051,13 +1054,18 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
-		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF);
+		// On F, the crops' own factor too (engine ≥ 1.45.0, demand.scale with part 'crops').
+		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF, 'crops');
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		// The basic-needs floor (engine ≥ 1.44.0): the scenario's restriction alone (a floor holds against it), and
 		// the unit's basic_needs column, Σ MIN(floor, demand) over its floored objects, exactly when it has one.
 		const SC = objs && objs.floor.some((f) => f !== null) ? dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay : null;
+		// Each object's own factor (engine ≥ 1.45.0): the unit's × its category's, with and without a full allocation's.
+		const objFactors = objs
+			? objs.category.map((c) => ({ df: dailyDemandFactor(input.settings, n, day0, out.days, KF, c).perDay, sc: dailyDemandFactor(input.settings, n, day0, out.days, undefined, c).perDay }))
+			: null;
 		const abstractFrom = SC ? abstractionStartDay(n, day0, out.days, []) : 0;
 		const BN = g(BASIC_NEEDS_SERIES.key);
 		if (!!BN !== !!SC) return `${n.id}: ${BN ? 'a basic_needs column without a domestic or municipal object with people' : 'no basic_needs column for its basic-needs floor'}`;
@@ -1107,7 +1115,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${scaled ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${scaled ? ')' : ''}`;
 			if (objs) {
-				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom);
+				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom, objFactors);
 				if (bad) return bad;
 				let od = 0;
 				for (const x of objs.demand) od += x[t]!;
@@ -1292,7 +1300,19 @@ function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volum
  * only once every earlier one is met), and within a class every member
  * (the crops, demand `crop`, in class 1) gets the same share of its demand.
  */
-function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number, crop: number, G: number, where: string, sc = df, alloc = 1, abstracts = true): string | null {
+function checkObjectsDay(
+	objs: ObjectColumns,
+	t: number,
+	wy: number,
+	unitDf: number,
+	crop: number,
+	G: number,
+	where: string,
+	unitSc = unitDf,
+	alloc = 1,
+	abstracts = true,
+	factors: { df: Float64Array; sc: Float64Array }[] | null = null
+): string | null {
 	const n = objs.demand.length;
 	let got = 0;
 	let scale = Math.max(G, crop);
@@ -1306,6 +1326,9 @@ function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number,
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
 		const fl = objs.floor[k];
+		// Its own factor (engine ≥ 1.45.0): the unit's × its category's.
+		const df = factors ? factors[k]!.df[t]! : unitDf;
+		const sc = factors ? factors[k]!.sc[t]! : unitSc;
 		const floored = fl !== null && abstracts && sc < 1;
 		// Restricted: MAX(demand × sc, MIN(floor, demand)); a full allocation's factor then scales it, holding that floor too.
 		const pre = floored ? Math.max(objs.monthly[k]![wy]! * sc * sf, dayFloor(fl!, objs.monthly[k]![wy]! * sf)) : 0;
