@@ -182,7 +182,7 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: 'm³/day',
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `River to dam capacity of ${n}, m³/day`,
+		aria: (n) => `River to dam at ${n}, m³/day`,
 		help: 'Most water per day taken from the river below the dam into the dam, by a weir, furrow or pump. It runs on every day the river has water, in any season. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{

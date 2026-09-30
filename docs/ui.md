@@ -1642,8 +1642,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here.
 
-  - **Node sheet** (`edit=<id>`, the `Dialog` `side wide` variant, 640 px,
-    the whole width on a phone): "Edit *name*" ("*name*: details" for a
+  - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
+    three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
@@ -1776,7 +1776,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
   last card. The ⓘ tips sat in the column headers, so the intro sends a
   phone to the field guide instead (`node-table.spec.ts`).
 - **The one-node form** (the node sheet): the picker (‹ select ›) stays in
-  reach above the scrolling form in the sheet's fixed sub-header.
+  reach above the scrolling form in the sheet's fixed sub-header. Each
+  section (Catchment area, Dam, Routing, …, Supply, Individual boreholes,
+  Land cover) is a bordered card with its title in a tinted header band, so
+  one section's fields don't run into the next's; the card itself stays
+  `--surface`, since read-only inputs are `--surface-2`.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets the system's SABI 2021 efficiency

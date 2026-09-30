@@ -737,7 +737,7 @@
 
 	<!-- A node's full form, over the map (`edit=<id>`): every field, with its help. -->
 	{#if editing}
-		<Dialog bind:open={sheetOpen} title={readonly ? `${editing.name || '(unnamed)'}: details` : `Edit ${editing.name || '(unnamed)'}`} side wide>
+		<Dialog bind:open={sheetOpen} title={readonly ? `${editing.name || '(unnamed)'}: details` : `Edit ${editing.name || '(unnamed)'}`} side extraWide>
 			{#snippet subhead()}
 				<div class="picker sheet-picker">
 					<label for="node-pick" class="visually-hidden">Node to edit</label>
