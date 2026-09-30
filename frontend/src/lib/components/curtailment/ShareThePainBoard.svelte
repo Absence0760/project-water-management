@@ -1,14 +1,16 @@
 <!--
 	The share-the-pain board (issue #53 R3, docs/design/planning-outputs.md
-	§3.3, docs/ui.md § Share the pain): the curtailment report read as three
-	stages side by side, each as a share of the group's demand: today, the
-	equitable share (the fairness benchmark, with its footnote) and once the
-	EWR is met (bounded 0–100 %, never a negative demand). Other water users
-	are their own rows, marked senior or junior, outside the share. View model:
+	§3.3, docs/ui.md § Share the pain): the curtailment report read as two
+	stages side by side, each as a share of the group's demand: today and once
+	the EWR is met (bounded 0–100 %, never a negative demand). The equitable
+	share is one sentence in the intro, with its footnote, not a stage: every
+	hydrological unit gets the same %, and its total is always today's (issue
+	#177). Other water users are their own rows, marked senior or junior,
+	outside the share. View model:
 	./shareThePain.ts. Presentation only: every figure is the engine's.
 -->
 <script lang="ts">
-	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
+	import { DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
 
 	let {
@@ -37,12 +39,24 @@
 
 <section class="share-board" aria-labelledby="share-board-heading" data-testid="share-the-pain">
 	<h4 id="share-board-heading">Share the pain</h4>
-	<p class="muted small">
-		Each group's supply as a share of its own demand over the same days, in three steps: what it got, an equal share for
-		every hydrological unit, and what is left once the EWR is met too. The table per hydrological unit below has the volumes behind it.
+	<p class="muted small" data-testid="share-intro">
+		Each group's supply as a share of its own demand over the same days, in two steps: what it got, and what is left once the
+		EWR is met too.
+		{#if board.shareTooSmall}
+			Farm demand is under {DEMAND_PCT_FLOOR_M3_DAY} m³/day in total, too little for the equitable share's % to mean anything.
+		{:else if board.sharePct === null}
+			No hydrological unit had demand, so there is nothing to share.
+		{:else}
+			At the equitable share every hydrological unit would get the same <strong>{board.sharePct}</strong> of its demand<a
+				href="#share-board-footnote"
+				class="fn-ref"
+				aria-label="see the footnote">*</a
+			>: the same water in total as today, shared equally.
+		{/if}
+		The table per hydrological unit below has the volumes behind it.
 	</p>
 
-	<ol class="stages" aria-label="The three stages, all hydrological units">
+	<ol class="stages" aria-label="The two stages, all hydrological units">
 		<li>
 			<span class="step" aria-hidden="true">1</span>
 			<span class="stage-name">Today</span>
@@ -51,18 +65,6 @@
 		</li>
 		<li>
 			<span class="step" aria-hidden="true">2</span>
-			<span class="stage-name">Equitable share<a href="#share-board-footnote" class="fn-ref" aria-label="see the footnote">*</a></span>
-			<span class="stage-big" data-testid="stage-share">{t.share?.pct ?? '–'}</span>
-			<span class="muted small">
-				{#if board.shareFraction === null}
-					No hydrological unit had demand, so there is nothing to share.
-				{:else}
-					of its demand for every hydrological unit: a fairness benchmark, not an allocation
-				{/if}
-			</span>
-		</li>
-		<li>
-			<span class="step" aria-hidden="true">3</span>
 			<span class="stage-name">EWR met</span>
 			<span class="stage-big" data-testid="stage-ewr">{t.ewr.pct}</span>
 			<span class="muted small">of hydrological unit demand left once each hydrological unit's EWR charge is met ({t.ewr.volume} m³/day)</span>
@@ -73,15 +75,14 @@
 		<table class="data">
 			<caption class="visually-hidden">
 				Share the pain, {period ? `${period}, ` : ''}{curtailment.reportStart} to {curtailment.reportEnd}: each group's supply as a share of
-				its demand today, at the equitable share, and once the EWR is met.
+				its demand today and once the EWR is met.
 			</caption>
 			<thead>
 				<tr>
 					<th scope="col">Group</th>
 					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
 					<th scope="col">1. Today<br /><span class="u">supplied, % of demand</span></th>
-					<th scope="col">2. Equitable share<br /><span class="u">fairness benchmark, % of demand</span></th>
-					<th scope="col">3. EWR met<br /><span class="u">left after the EWR charge, % of demand</span></th>
+					<th scope="col">2. EWR met<br /><span class="u">left after the EWR charge, % of demand</span></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -90,7 +91,6 @@
 						<th scope="row">{r.name}</th>
 						<td class="num">{r.demand}</td>
 						<td>{@render cell(r.today)}</td>
-						<td>{#if r.share}{@render cell(r.share)}{/if}</td>
 						<td>
 							{@render cell(r.ewr)}
 							{#each r.ewrNotes as n (n)}<span class="note-line">{n}</span>{/each}
@@ -101,14 +101,13 @@
 					<th scope="row">All hydrological units</th>
 					<td class="num">{t.demand}</td>
 					<td>{@render cell(t.today)}</td>
-					<td>{#if t.share}{@render cell(t.share)}{/if}</td>
 					<td>{@render cell(t.ewr)}</td>
 				</tr>
 			</tbody>
 			{#if board.users.length && board.userTotals}
 				<tbody>
 					<tr class="section">
-						<th scope="colgroup" colspan="5">Other water users <span class="u">(outside the equitable share)</span></th>
+						<th scope="colgroup" colspan="4">Other water users <span class="u">(outside the equitable share)</span></th>
 					</tr>
 					{#each board.users as r (r.nodeId)}
 						<tr>
@@ -118,7 +117,6 @@
 							</th>
 							<td class="num">{r.demand}</td>
 							<td>{@render cell(r.today)}</td>
-							<td class="muted small">not in the share</td>
 							<td>
 								{@render cell(r.ewr)}
 								{#each r.ewrNotes as n (n)}<span class="note-line">{n}</span>{/each}
@@ -129,7 +127,6 @@
 						<th scope="row">All other users</th>
 						<td class="num">{board.userTotals.demand}</td>
 						<td>{@render cell(board.userTotals.today)}</td>
-						<td></td>
 						<td>{@render cell(board.userTotals.ewr)}</td>
 					</tr>
 				</tbody>

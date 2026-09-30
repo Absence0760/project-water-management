@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FarmSummary, NetworkNode, ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { fmtPct } from '$lib/format/number';
-import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
-import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { attention, nameList, runHref, type AttentionInput } from './attention';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', name = id): NetworkNode =>
@@ -57,47 +54,15 @@ const base = (over: Partial<AttentionInput> = {}): AttentionInput => ({
 	...over
 });
 
-const target = fmtPct(SUPPLY_TARGET, 0);
-
 describe('attention', () => {
 	it('is empty for a healthy project (the panel hides)', () => {
 		expect(attention(base())).toEqual([]);
 	});
 
-	it('names the worst-supplied farm and links to the run', () => {
-		const one = attention(base({ summary: summary([farm('Upper', 1), farm('Lower', 0.6)]) }));
-		expect(one).toEqual([
-			{
-				id: 'short-farms',
-				title: `1 of 2 hydrological units below ${target}`,
-				tone: 'danger',
-				text: `Lower got 60% of its demand in the latest run, below the ${target} target.`,
-				action: 'See the hydrological unit results',
-				href: '?tab=supply&run=r%2F1&unit=Lower'
-			}
-		]);
-		const two = attention(base({ summary: summary([farm('Upper', 0.9), farm('Lower', 0.5), farm('Mid', 1)]) }));
-		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 hydrological units below ${target} (of 3).`);
-		expect(two[0]!.title).toBe(`2 of 3 hydrological units below ${target}`);
-	});
-
-	it('colours the short-farms card red when the worst farm is in the lowest supply band, amber above it', () => {
-		expect(attention(base({ summary: summary([farm('Upper', LOW_SUPPLY - 0.01)]) }))[0]!.tone).toBe('danger');
-		expect(attention(base({ summary: summary([farm('Upper', LOW_SUPPLY)]) }))[0]!.tone).toBe('warning');
-	});
-
-	it("adds the short farm's planted areas when it is still a farm in the model", () => {
-		const f = (nodeId: string, fraction: number) => ({ ...farm(nodeId, fraction), name: nodeId === 'f2' ? 'Lower' : 'Upper' });
-		const [item] = attention(base({ summary: summary([f('f1', 1), f('f2', 0.6)]) }));
-		expect(item).toMatchObject({ id: 'short-farms', href: '?tab=supply&run=r%2F1&unit=f2', also: { action: 'Its planted areas', href: '?farm=f2' } });
-		// Removed from the model since the run: no link to a farm that isn't there.
-		const gone = attention(base({ model: model({ nodes: [node('f1', 'farm', 'Upper'), node('g', 'gauge')] }), summary: summary([f('f1', 1), f('f2', 0.6)]) }));
-		expect(gone[0]!.also).toBeUndefined();
-	});
-
-	it('uses the supply target, not a fixed figure: a farm just under it is flagged, one at it is not', () => {
-		expect(attention(base({ summary: summary([farm('Upper', SUPPLY_TARGET)]) }))).toEqual([]);
-		expect(attention(base({ summary: summary([farm('Upper', SUPPLY_TARGET - 0.001)]) }))[0]?.id).toBe('short-farms');
+	it('has no card for hydrological units short of water: the Irrigation supplied card and Supply by unit say so (issue #177)', () => {
+		expect(attention(base({ summary: summary([farm('Upper', 1), farm('Lower', 0.1)]) }))).toEqual([]);
+		// Positive control: the same short run's warning is still a card.
+		expect(attention(base({ summary: summary([farm('Upper', 1), farm('Lower', 0.1)], ['w']) })).map((i) => i.id)).toEqual(['run-warnings']);
 	});
 
 	it('flags the latest run’s warnings', () => {
@@ -191,7 +156,7 @@ describe('attention', () => {
 			summary: summary([farm('Upper', 0.5)], ['w']),
 			today: '2026-09-23'
 		});
-		expect(items.map((i) => i.id)).toEqual(['short-farms', 'run-warnings', 'new-data', 'stale-data', 'unplanted']);
+		expect(items.map((i) => i.id)).toEqual(['run-warnings', 'new-data', 'stale-data', 'unplanted']);
 	});
 });
 

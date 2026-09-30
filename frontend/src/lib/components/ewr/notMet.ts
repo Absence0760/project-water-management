@@ -7,6 +7,7 @@
 // EWR by month grid and the projects list already use.
 import type { RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
+import { headlineSite } from '$lib/components/runs/ewrAssurance';
 
 /** The term, on every card, tile and label that counts days below the pragmatic EWR. */
 export const EWR_NOT_MET = 'EWR not met';
@@ -42,4 +43,26 @@ export function ewrNotMet(c: Pick<RunSummary['catchment'], 'ewrDaysNotMet' | 'ew
 		count: `${fmtNum(c.ewrDaysNotMet)} of ${fmtNum(days)} days at the outflow gauge`,
 		flagged: c.ewrFractionDaysNotMet > EWR_FLAG_FRACTION
 	};
+}
+
+/**
+ * What a count of days below the pragmatic EWR is called on a heading: "the
+ * reserve", or, when the project has a Reserve rule table (ewrAssurance.ts
+ * headlineSite is not null), "the pragmatic EWR". With a table the Reserve is
+ * judged by the table, whole months at a site, so calling the daily pragmatic
+ * count "the reserve" would name a different test (issue #177). The Summary's
+ * strip (overview/reserveStrip.ts) and River & reserve's water-year panel
+ * (river/river.ts) name their counts here.
+ */
+export function daysBelowTest(ruleTable: boolean): 'the reserve' | 'the pragmatic EWR' {
+	return ruleTable ? 'the pragmatic EWR' : 'the reserve';
+}
+
+/**
+ * The same for a chart of several runs (Compare runs' water-year bars): the
+ * bars always count the pragmatic EWR, so "the pragmatic EWR" is true for any
+ * mix and is used as soon as one run has a rule table.
+ */
+export function daysBelowTestOf(summaries: readonly Pick<RunSummary, 'ewrAssurance'>[]): 'the reserve' | 'the pragmatic EWR' {
+	return daysBelowTest(summaries.some((s) => headlineSite(s) !== null));
 }

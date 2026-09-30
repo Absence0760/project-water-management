@@ -32,3 +32,25 @@ export function belowReserve(shortfall: { startDate: string; values: readonly (n
 	}
 	return out;
 }
+
+/**
+ * The run stored the outlet's Reserve rule requirement (`ewr_rule`, node
+ * null), so the flow chart draws it beside the pragmatic EWR (flowSeries.ts
+ * ewrChartSeries). Only the outlet's table has that series.
+ */
+export function hasRuleLine(refs: readonly { key: string; nodeId: string | null }[]): boolean {
+	return refs.some((r) => r.key === 'ewr_rule' && r.nodeId === null);
+}
+
+/**
+ * The flow chart's heading (and River & reserve's menu entry for it). It is
+ * "Flow vs reserve" when the reserve it names is on the chart: the pragmatic
+ * EWR without a rule table, or the rule requirement line when the outlet has
+ * the table. With rule tables only at other sites (`ruleTable` without
+ * `ruleLine`), the Reserve is judged there and the chart draws only the
+ * pragmatic EWR, so it says so (issue #177). The shading is always the
+ * pragmatic EWR's, and its caption says that.
+ */
+export function flowHeading(ruleTable: boolean, ruleLine: boolean): string {
+	return ruleTable && !ruleLine ? 'Flow vs pragmatic EWR' : 'Flow vs reserve';
+}

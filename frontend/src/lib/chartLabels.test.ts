@@ -105,7 +105,7 @@ const CHARTS: Record<string, { prop: string } | { heading: true } | { svgName: R
 	'overview/ReserveStrip.svelte': { heading: true },
 	'uncertainty/BandFdcChart.svelte': { svgName: /<title id="\{uid\}-t">/ },
 	'uncertainty/TornadoChart.svelte': { prop: 'title' },
-	'compare/ReserveYearsChart.svelte': { svgName: /aria-label="Days below the reserve per water year\./ },
+	'compare/ReserveYearsChart.svelte': { svgName: /aria-label="Days below \{below\} per water year\./ },
 	'runs/RunChart.svelte': { delegates: true },
 	'runs/RunCharts.svelte': { delegates: true }
 };

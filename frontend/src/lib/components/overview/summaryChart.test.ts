@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { belowReserve } from './summaryChart';
+import { belowReserve, flowHeading, hasRuleLine } from './summaryChart';
 
 describe('belowReserve', () => {
 	it('turns each run of short days into one inclusive range', () => {
@@ -17,5 +17,22 @@ describe('belowReserve', () => {
 		]);
 		expect(belowReserve({ startDate: '2021-10-01', values: [0, 0, 1] })).toEqual([]);
 		expect(belowReserve({ startDate: '2021-10-01', values: [] })).toEqual([]);
+	});
+});
+
+describe('flowHeading and hasRuleLine (issue #177: name the reserve only when the chart draws it)', () => {
+	it('draws the rule line only when the run stored the outlet’s rule requirement', () => {
+		expect(hasRuleLine([{ key: 'simulated_outflow', nodeId: null }, { key: 'ewr_rule', nodeId: null }])).toBe(true);
+		expect(hasRuleLine([{ key: 'simulated_outflow', nodeId: null }, { key: 'ewr_rule', nodeId: 'n1' }])).toBe(false);
+		expect(hasRuleLine([])).toBe(false);
+	});
+
+	it('is "Flow vs reserve" without a rule table (the pragmatic EWR is the reserve) and with the outlet’s table (its line is drawn)', () => {
+		expect(flowHeading(false, false)).toBe('Flow vs reserve');
+		expect(flowHeading(true, true)).toBe('Flow vs reserve');
+	});
+
+	it('is "Flow vs pragmatic EWR" when the rule tables are at other sites, so the chart draws only the pragmatic EWR', () => {
+		expect(flowHeading(true, false)).toBe('Flow vs pragmatic EWR');
 	});
 });
