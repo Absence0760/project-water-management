@@ -1731,7 +1731,7 @@ In short:
   read by byte range, which shows only which grid rows, i.e. latitude bands,
   a feed reads.)
   - Only fixed hosts are fetched: the URL is built from the source and a
-    validated config (cells as numbers in range, a station matching
+    validated config (cells or a bounding box as numbers in range, a station matching
     `^[A-Z]\d[A-Z]\d{3}$`), never from user text, so a feed can't be pointed
     at an arbitrary URL (no SSRF). The live client enforces it too: it asks
     only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
