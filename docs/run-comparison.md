@@ -568,7 +568,16 @@ their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
 (capacity ÷ 3 m)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
-one-day range.
+one-day range. A registered volume's line (engine ≥ 1.34.0, issue #73)
+covers its storage, months of use and maximum rate as well as its source,
+volume and validity, so a licence condition changed on its own is listed
+(*"Rooikloof: registered volume surface 120 000 m³/a → surface 120 000
+m³/a, at most 0.02 m³/s"*); before, only the volume, source and validity
+were compared. Land cover is compared per farm and class on its condensed
+area, and from engine 1.34.0 on its area and each patch's cover too, so a
+patch at no cover that grows, or one whose cover changes on no area, is
+listed (*"… 0 km² → 0 km² condensed (area 1 km² → 2 km²)"*, *"…, its
+patches’ cover changed"*).
 
 **Calibration provenance.** Calibration exclusions are matched by their
 period (a water year, or a start–end range): one added or removed is listed

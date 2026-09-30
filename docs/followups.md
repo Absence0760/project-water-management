@@ -2350,8 +2350,9 @@ role and not before it.
         crops, transfers, land cover and boreholes → their ops, each through
         the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
         list re-applied to prove it gives back the edited model. Edits no op
-        can express are named and block recording: they wait on the later
-        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        can express are named and block recording (a node's kind, the outlet
+        moved, demand objects); crop edits and removals, moves and inserts
+        record since the later ops below (engine 1.34.0).
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -2373,10 +2374,20 @@ role and not before it.
         included: shown in red, not refused), in the scenario form with the
         Settings tab's table editor and described with its confidence line
         ([scenarios.md § Reserve rule tables](./scenarios.md)).
-  - [ ] **Later ops**: `allocation.set`, removing a site's EWR rule table,
-        moving a node or inserting one mid-river, `crop.set`, `landCover.set`
-        ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
-        Trigger: the scenario editor needing them.
+  - [x] **Later ops** (engine 1.34.0, issue #73): `allocation.set` and
+        `allocation.remove` (a registered volume set, replaced or removed by
+        id; the proposal on the applicant's own unit), `ewrRule.remove`
+        (always a baseline assumption), `node.move` and `node.insert` (the
+        network stays one tree with one outlet: the model rules refuse a
+        loop, an insert only re-points nodes draining where it drains),
+        `crop.set` and `crop.remove` (the proposal only on a crop the
+        scenario added), `landCover.set`. In the "Add a change" form, and
+        override mode records crop edits and removals, moves, inserts and
+        land cover edited in place instead of blocking them. Hidden
+        registered volumes answer as free ids in an application (the mask),
+        and run comparison now lists a volume's storage, months and maximum
+        rate, and a land-cover patch's area and cover on their own
+        ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)).
 
 - **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
   [ui.md § Report](./ui.md#report)). Built: the print route

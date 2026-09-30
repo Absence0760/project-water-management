@@ -1484,6 +1484,14 @@
 //             b72ba4eb merged). #229's share links and #204's hands-off flow
 //             now in main; nothing of the evidence measures changed, engine
 //             renumbered 1.32.0 → 1.33.0 (#204 took 1.32.0). Headroom ~3 KB.
+// 2026-09-30  total 1267 → 1272 KB (issue #73, the later scenario ops:
+//             measured 1269 on 6045472a + the change). Eight new ops in the
+//             engine's scenario code (node.move, node.insert, crop.set,
+//             crop.remove, landCover.set, ewrRule.remove, allocation.set,
+//             allocation.remove: their validator, apply and classification),
+//             their "Add a change" forms and descriptions, override mode
+//             recording moves, inserts and crop edits, and eight share-page
+//             lines in both catalogues. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1494,7 +1502,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1267,
+	totalCodeKb: 1272,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

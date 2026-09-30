@@ -4938,7 +4938,13 @@ them scenarios).
   site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
   gauge marked as an EWR site, then the Settings tab's own table editor,
   starting from the site's table; always a baseline assumption,
-  [scenarios.md § Reserve rule tables](./scenarios.md)). A setting's value is typed as
+  [scenarios.md § Reserve rule tables](./scenarios.md)), and from engine
+  1.34.0 (issue #73) move a node (what it drains into), insert a node on a
+  reach (ticking the nodes draining there that will drain into it), change
+  or remove a crop, change a land-cover patch (its reductions typed as
+  "MAR %; low-flow %"), remove an EWR site's rule table, and set (new, or an
+  existing one filled in) or remove a registered volume
+  ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules
@@ -4982,8 +4988,9 @@ them scenarios).
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
-  change can express (a crop's factors, a node's kind or what it drains
-  into…) is listed there and disables Record until it is undone; the
+  change can express (a node's kind, the outlet moved, a demand object…) is
+  listed there and disables Record until it is undone (a crop's factors, a
+  crop removed and what a node drains into record from engine 1.34.0); the
   tables' own problems ("Fix before saving") block it too. While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an

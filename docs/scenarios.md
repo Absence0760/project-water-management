@@ -22,7 +22,8 @@ applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { mask?: ScenarioMa
 ```
 
 `mask` (the hidden nodes, id → the anonymous name the ops meet them by, and
-the ids of the hidden crops, transfers, land-cover patches and boreholes) is
+the ids of the hidden crops, transfers, land-cover patches, boreholes and,
+from engine 1.34.0, registered volumes) is
 how an application is judged in its applicant's namespace
 ([§ Applications](#applications-wp-33)); without it `renamed` and `reIds`
 are empty and nothing below changes.
@@ -95,23 +96,31 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `node.set` | `nodeId, field, value` | Sets one whitelisted field (below). Typed per field. |
 | `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. It may also carry the GN 538 property area and Table 2 rate (`gaPropertyAreaHa`, `gaRateM3HaYear`, engine ≥ 1.12.0, [model.md §2.7d](./model.md)), context for its groundwater; there is no `node.set` for them. |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. The outflow node can't be removed. |
+| `node.move` | `nodeId, downstreamNodeId` | Makes a node drain into another (engine ≥ 1.34.0). What drains into it moves with it. The outflow node can't be moved, and a node can't drain into itself; a move that makes a loop (the new downstream node drains into this one), or makes a river off-take's destination drain into its source, is refused by the model rules, so the network stays one tree with one outlet. § Moving and inserting nodes. |
+| `node.insert` | `node, upstreamNodeIds` | A new node placed on a reach (engine ≥ 1.34.0): `node` as `node.add` takes it, and each node in `upstreamNodeIds`, which must drain into `node.downstreamNodeId` now, drains into the new node instead. So an on-channel dam or a weir goes in between existing nodes without moving anything else. § Moving and inserting nodes. |
 | `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
 | `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
+| `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.34.0): `name` (1–100 characters, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationEfficiency` (above 0 to 1, or null for the farm's). It changes the crop on every farm that grows it. |
+| `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.34.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
 | `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
 | `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem). `transfer.add` takes the same fields, each optional. |
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
 | `landCover.add` | `patch` | Adds a land-cover patch on a farm (WP-1.35). |
 | `landCover.remove` | `patchId` | Removes a patch, e.g. clearing invasive aliens. |
+| `landCover.set` | `patchId, field, value` | Changes one field of a patch in place (engine ≥ 1.34.0): `coverClass`, `areaKm2` (≥ 0), `densityPct` (0–1) or `factors` (`{ mar, lowFlow }`, each 0–1, or null for the class's). Not `nodeId`: a patch on another farm is `landCover.remove` and `landCover.add`. "Clear half the wattle" is `densityPct` → half. |
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 | `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
+| `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.34.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
+| `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.34.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
+| `allocation.remove` | `allocationId` | Removes one registered volume (engine ≥ 1.34.0). |
 | `demand.scale` | `factor, nodeIds?, months?, category?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month). It multiplies each target's `demandFactor`, so ops stack (0.9 twice is 0.81). Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
-`downstreamNodeId` (the network's shape: use `node.add` / `node.remove`) or
-`sortOrder` (display only).
+`downstreamNodeId` (the network's shape: use `node.add`, `node.insert`,
+`node.move` or `node.remove`) or `sortOrder` (display only).
 
 - farm: `name`; land `areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`;
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
@@ -260,8 +269,13 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   gets it. The outlet is one site whether a table names it `null` (as
   Settings saves it) or by the outlet node's id (as the run also reads it),
   and a replaced table keeps the key its site had, so run comparison sees
-  that site's table changed rather than one removed and one added. There is
-  no op to remove a table yet.
+  that site's table changed rather than one removed and one added.
+  `ewrRule.remove` (engine ≥ 1.34.0) takes a site's table away, keyed the
+  same way ("what if the site had no determination yet": its EWR then
+  falls back to the pragmatic EWR where the charge follows the tables); a
+  site with no table is a problem (`there is no EWR rule table at the
+  outlet`, or `at node <id>`: named by id, as a site is always one every
+  caller sees).
 - **Checked as Settings checks it.** The validator rebuilds the table from
   its known fields (a high-flow component's too) and runs the engine's
   `ewrRuleTableIssues`, the checks the Settings form and the settings API
@@ -277,8 +291,9 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   (`"Weir" is not marked as an EWR site: set its EWR site flag first`, so a
   scenario that flags a gauge and gives it a table puts `node.set ewrSite`
   first); a 21st table (`At most 20 rule tables.`).
-- **Always a baseline assumption**, whoever owns the site's gauge: the
-  Reserve is the authority's, never part of a proposal. An application may
+- **Always a baseline assumption**, whoever owns the site's gauge, and so
+  is `ewrRule.remove`: the Reserve is the authority's, never part of a
+  proposal. An application may
   make one (§ Applications): like every baseline op it is shown to the
   assessor in red, not refused.
 - The input diff reports it per field (source, kind of source, EWR values
@@ -286,6 +301,60 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   confidence line: "Reserve rule table at the outlet (Outflow gauge): “GN …”
   (Gazetted Reserve) → “…” (Desktop estimate, low confidence), total flow,
   10 % points".
+
+**Moving and inserting nodes (`node.move`, `node.insert`, engine ≥
+1.34.0).** "What if this farm drained into the dam below it" and "an
+on-channel dam on the main stem above the weir".
+
+- **One tree, one outlet.** The outflow node never moves and no op makes a
+  second one. A move is refused when it would make a loop, which the model
+  rules (`modelRuleIssues`) already refuse for a save; a river off-take
+  whose destination would then drain into its source is refused too, as a
+  save refuses it. An insert can't make a loop at all (every node it
+  re-points drained into the new node's downstream node already), and its
+  own checks refuse an `upstreamNodeIds` entry that doesn't drain there
+  (`"Lower farm" doesn't drain into the node the new one drains into, so the
+  new node can't sit between them`), an empty or repeating list, and
+  whatever `node.add` refuses. Both are covered by the scenario fuzz below.
+- **What moves.** `node.move` moves the node with everything upstream of it;
+  its crop areas, transfers, land cover, boreholes and EWR table stay with
+  it. `node.insert` re-points only the nodes it names: a sibling left out
+  keeps draining where it did. A gauge with no land inserted mid-river
+  changes no other node's water (an invariant test, below); only the reach
+  shortfall diagnostic (workbook AB, measured against the elements directly
+  upstream) moves with the shape.
+- **Run comparison** lists a move as the node's "drains into" change, and
+  an insert as the new node plus each re-pointed node's change.
+- **In an application** a hidden node moves, and is named, like any node
+  (by its anonymous name): the network's shape is the applicant's to see,
+  so a loop through a hidden node keeps its words.
+
+**Registered volumes (`allocation.set`, `allocation.remove`, engine ≥
+1.34.0).** An allocation is a volume a year, per water source, held under an
+authorisation for a farm or other water user ([allocations.md](./allocations.md));
+a run's input carries them (no names) and `settings.allocationMode` decides
+whether they only compare with the run's use, cap it, or scale it (a full
+allocation). So a volume is a scenario input like a dam: "what if this
+licence were for 200 000 m³ a year" under `cap`, or the applicant's
+requested volume in a full-allocation background, is one op.
+
+- **The op carries the whole entry** the engine reads: `id`, `nodeId` (a
+  farm or other water user, never null: an unmatched volume compares with
+  nothing), `waterSource` (`surface` | `groundwater`), `volumeM3PerYear`
+  (0 to below 10¹² m³, the API's limit), and optionally `storageM3`,
+  `validFrom` / `validTo` (ISO dates, from ≤ to), `months` (1–12, no
+  repeats; stored as a sorted set) and `maxRateM3s` (0 to below 10⁶).
+  Unknown keys are dropped, so a holder's name or a registration number never
+  enters an op. An id the input has replaces that volume in place; a new id
+  adds one.
+- **Problems**: a node that doesn't exist, a gauge (`a registered volume is
+  held for a farm or other water user; "Weir" is a gauge`), an entry the
+  validator refuses, and for `allocation.remove` a volume that doesn't exist.
+- **Run comparison** lists a volume added, removed or changed, and from
+  engine 1.34.0 a change to its storage, months or maximum rate too
+  ([run-comparison.md](./run-comparison.md)).
+- The volumes aren't in the model editor's tables, so override mode never
+  records one; the form's **Set a registered volume** does.
 
 **Which series scale.** The rain drivers, `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, and the daily A-pan evaporation
@@ -301,25 +370,31 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
 
 ## Classification: proposal or baseline assumption
 
-`classifyOp(op, ownedNodeIds, input?)` returns `'proposal'` or `'baseline'`;
+`classifyOp(op, ownedNodeIds, input?, addedCropIds?)` returns `'proposal'` or `'baseline'`;
 `classifyScenario(base, ops, ownedNodeIds)` classifies a whole list against
-the input each op meets, counting nodes the scenario added as owned. The UI's
+the input each op meets, counting nodes the scenario added or inserted as
+owned and passing the crops it added. The UI's
 red **Baseline assumptions changed** callout shows whenever any op is
 `baseline`. The rules are conservative: what can't be placed is `baseline`.
 
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
-| `settings.set`, `series.scale`, `ewrRule.set` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
+| `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
 | `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, or a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, and a dam's survey and sediment (the dam as it is) |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
+| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own | baseline. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
+| `node.move` | owned, no land or manual flow share, not a gauge, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
 | `crop.add` | always | |
+| `crop.set`, `crop.remove` | the crop is one the scenario itself added (`classifyScenario` passes them; `classifyOp`'s fourth argument) | baseline: a crop's factors and efficiency are agronomic data that apply on every farm growing it, farms the applicant may not see among them, so a change to one isn't theirs to propose (and classing by who grows it would tell an applicant whether a hidden farm does). Stopping a crop on their own farm is `cropArea.set` to 0, a proposal |
 | `transfer.add` | both ends owned | baseline |
 | `transfer.set`, `transfer.remove` | both ends owned, and a new end owned too (needs `input`) | baseline |
-| `landCover.remove` | the patch is on an owned node (needs `input`) | baseline |
+| `landCover.remove`, `landCover.set` | the patch is on an owned node (needs `input`) | baseline |
 | `borehole.add` | on an owned node | baseline |
 | `borehole.remove` | the borehole is on an owned node (needs `input`) | baseline |
+| `allocation.set` | the volume is on an owned node and, when it replaces one, that one was on an owned node too (needs `input`) | baseline: the volume the applicant asks for on their own unit is the proposal, like their own dam; one on another's unit, or taking over another's volume, changes the baseline |
+| `allocation.remove` | the volume was on an owned node (needs `input`) | baseline |
 | `demand.scale` | `nodeIds` given, and every one owned | baseline: without `nodeIds` it scales every farm (or user) in the catchment, and a named node that isn't the author's is another party's |
 
 ## Validation: `validateScenarioOps`
@@ -368,22 +443,35 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
   table, the problems, always baseline (masked too), the input diff, and the
   validator's Settings-form errors. The fuzz generator (`randomOps`) adds
   `ewrRule.set` ops from a stream of their own, so the no-silent-change
-  property covers them.
+  property covers them. The later ops (engine ≥ 1.34.0: `node.move`,
+  `node.insert`, `crop.set`, `crop.remove`, `landCover.set`,
+  `ewrRule.remove`, `allocation.set`, `allocation.remove`) come from a
+  stream of their own too, so `checkAll`, no silent change and "a scenario
+  applied to a valid model leaves a model the backend would save"
+  (`modelRules.test.ts`) all cover them. `scenario.invariants.test.ts` adds:
+  random moves and inserts on 250 networks keep one tree with one outlet and
+  add no broken save rule, each insert leaving the nodes it names draining
+  into the new node and the new node where they drained (both paths run:
+  moves and inserts that apply and ones refused); and a land-free gauge
+  inserted mid-river on 50 networks leaves every other node's series as they
+  were (1e-9 relative), the reach shortfall aside, with every invariant
+  holding. `overrides.test.ts` has each later op's cases: what it does, its
+  problems, the base untouched, its run-comparison lines, its class
+  (masked too), a cap run under a scenario's volume, and hidden volumes
+  answering exactly as free ids.
 
   Soak: `SCENARIO_FUZZ_CASES=5000 pnpm -C packages/engine exec vitest run src/scenario/scenario.invariants.test.ts`.
 
 ## Not yet supported
 
-Each of these is a follow-up, not a gap in what's listed above:
-- **Allocations**: `allocation.set` (roadmap WP-3.2's later ops). The EWR
-  rule table op is built (`ewrRule.set`, engine ≥ 1.6.0, § Reserve rule
-  tables); removing a site's table is not an op yet.
-- **Moving a node** (`downstreamNodeId`) and **inserting a node mid-river**
-  (re-pointing existing nodes into a new one): `node.add` adds leaves only.
-- **Editing a crop** (`crop.set` on crop factors) and **removing a crop**;
-  "replace a crop" is `cropArea.set` to 0 on the old one plus
-  `cropArea.set` on the new one.
-- **Editing a land-cover patch** in place (`landCover.set`): remove and add.
+Each of these is a follow-up, not a gap in what's listed above. The later
+ops (roadmap WP-3.2: `allocation.set`, removing a site's EWR rule table,
+moving a node or inserting one mid-river, `crop.set` and removing a crop,
+`landCover.set`) are built, engine ≥ 1.34.0 (issue #73).
+- **Demand objects** (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): no op
+  adds, changes or removes one, and `demand.scale` doesn't reach one alone
+  ([followups.md](./followups.md)).
+- **Changing a node's kind**: remove it and add a new node.
 - **Scaling observed flow** (see above: deliberately not a scenario).
 - **Climate and stochastic transforms** (WP-4.11) will sit beside
   `overrides.ts` in `scenario/`.
@@ -500,8 +588,9 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 `ScenarioWithCheck`, `CompareScenario`, `RunCitation`).
 
 `schema.ts` `opIds` names each id an op holds; a `demand.scale`'s are
-`nodeIds[i]`, so each must be a UUID and each node's name goes into
-`op_names`.
+`nodeIds[i]`, and a `node.insert`'s `upstreamNodeIds[i]`, so each must be a
+UUID and each node's name goes into `op_names`. `allocation.set`'s are the
+volume's id and its node, `ewrRule.remove`'s its site (none for the outlet).
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
@@ -625,6 +714,26 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (Gazetted Reserve), total flow, 10 % points", so the compare page's
   Scenario overrides show the changed table, in red, with both confidence
   lines.
+- **The later ops in the form** (engine ≥ 1.34.0). **Move a node (what it
+  drains into)**: the node (not the outlet) and the node it will drain
+  into, with "Now: drains into …"; it reads "Move “Lower farm”: drains into
+  Outflow gauge → Upper farm". **Insert a node on a reach**: as **Add a
+  node** (kind, name, dam or demand), the node it drains into (only nodes
+  something drains into), and a checkbox per node draining there now, at
+  least one ticked; "Insert the hydrological unit “Weir dam” above Outflow
+  gauge, taking what Upper farm drains, dam 50 000 m³". **Change a crop**:
+  the crop, the field (name, crop factors, irrigation efficiency), the value
+  with "Now: …", and a note that a crop the scenario didn't add is a
+  baseline assumption. **Remove a crop** (its areas on every unit go too).
+  **Change land cover**: the patch, the field (class, area, condensed cover,
+  reductions typed as "MAR %; low-flow %", empty for the class's).
+  **Remove an EWR site's rule table**: the sites that have one, with its
+  table as "Now: …", always a baseline assumption. **Set a registered
+  volume**: a new one or an existing one (its fields then filled in), the
+  unit, water source, volume, storage, validity, months of use and maximum
+  rate; "Upper farm: add a registered volume, surface 100 000 m³/a".
+  **Remove a registered volume**. Each form refuses what the engine's
+  validator refuses, in its own words.
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. On a team scenario
@@ -652,16 +761,25 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   overlays over the Scenarios tab at all, even when the URL names one
   (`grid=`, `farm=`). **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
-  that applies: `crop.add`, `node.remove` (re-linking as the editor does),
+  that applies: `crop.remove`, `crop.set` per changed field of a crop and
+  `crop.add` (engine ≥ 1.34.0; a removal first, so a new crop may take its
+  name), `node.remove` (re-linking as the editor does),
   `node.set` per changed field the engine lets a scenario set (one node's
   fields next to each other, in the node's own key order: they are one
   edit group, so a `trigger` farm moved straight to run of river with its
   dam emptied records as it is; a node's edit that still breaks a save rule,
   such as `trigger` with the dam emptied, is reported), `node.add`
-  (each after the node it drains into), `cropArea.set` with the farm's new
+  (each after the node it drains into), or `node.insert` when existing
+  nodes that drained where the new node drains now drain into it (engine ≥
+  1.34.0), then `node.move` for every other node that drains somewhere else
+  now, nearest the outlet first, so each lands on a reach already where it
+  ends up and no move makes a loop on the way (two farms swapped round is
+  two moves that apply), `cropArea.set` with the farm's new
   total of a crop, `transfer.remove` / `.add` / `.set` per field,
-  `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
-  borehole edited in place is removed and added again). Each op goes
+  `landCover.remove` / `.add` / `.set` (a patch edited in place is
+  `landCover.set` per field, engine ≥ 1.34.0; one moved to another farm is
+  removed and added again) and `borehole.remove` / `.add` (a borehole edited
+  in place is removed and added again). Each op goes
   through the form's own check (`ops.ts` `checkOp`, which `buildOp` also
   ends with: the engine's `validateScenarioOps`, worded in the form's
   units), and the whole list is applied to the loaded model
@@ -669,10 +787,10 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (ignoring display order), or nothing is recorded. The ops are appended
   with one `PATCH`, so one **Undo** takes them all back.
 - **What override mode can't record**, named in its record panel and
-  holding the rest back until undone (the engine has no op for them yet;
-  [§ Not yet supported](#not-yet-supported)): editing or removing an
-  existing crop, changing a node's kind, moving a node (what it drains
-  into), a new node that drains nowhere, the capacity of a dam with a
+  holding the rest back until undone (the engine has no op for them;
+  [§ Not yet supported](#not-yet-supported)): changing a node's kind, the
+  outflow node moved (or another node made to drain nowhere), a new node
+  that drains nowhere, a demand object added, changed or removed, the capacity of a dam with a
   survey curve when the curve is left as it was (the op would resize the
   curve, which the table can't show; paste the enlarged dam's survey with
   it, or add it as a change instead, engine ≥ 1.10.0), and a field the
@@ -729,7 +847,17 @@ and the other farm's unchanged) and `e2e/tests/scenario-ewr-rule.spec.ts`
 no source refused in the Settings form's words, a desktop estimate added,
 described with its confidence line and a baseline assumption even with every
 node the proposer's, run, and the compare page's overrides and What changed
-showing it; the catchment's settings untouched; axe).
+showing it; the catchment's settings untouched; axe) and
+`e2e/tests/scenario-later-ops.spec.ts` (engine ≥ 1.34.0: Lower farm moved
+to drain into Upper farm, a weir dam inserted above the gauge taking Upper
+farm, a crop's irrigation efficiency, and a new registered volume on Upper
+farm, each through the form with its wording and class, one refused in the
+form's words, kept over a reload and run; the run's model has the new
+shape and the volume, and the catchment's own model is untouched; axe).
+`scenarios/ops.test.ts` builds and describes each later op, and
+`overrideDiff.test.ts` records crop edits and removals, moves (two farms
+swapped round), inserts and land cover edited in place, the fuzz round
+trip covering the later ops too.
 
 ## Applications (WP-3.3)
 
@@ -759,7 +887,8 @@ scenario is `'team'`, and behaves exactly as above).
 - **The applicant's namespace** (049, `applicationMask` in `applicant.ts`,
   the engine's `applyScenario(…, { mask })`). An application's ops meet
   every node the projection anonymises under its anonymous name, and every
-  crop, transfer, land-cover patch and borehole it leaves out under an
+  crop, transfer, land-cover patch, borehole and registered volume (engine ≥
+  1.34.0) it leaves out under an
   opaque id (and, for a crop or borehole, name) that none of the ops holds,
   whoever checks or runs it. So:
   - the engine's notes and problems quote only names and ids the applicant
@@ -773,6 +902,9 @@ scenario is `'team'`, and behaves exactly as above).
   - `node.remove` counts only what the applicant sees of what it drops
     (removing a hidden farm reports no crop areas, transfers, patches or
     boreholes; the EWR tables sited there are settings, which they see);
+  - `crop.remove` (engine ≥ 1.34.0) likewise counts only the areas on nodes
+    they see, and a change to a crop is classed a baseline assumption
+    whoever grows it, so neither says whether a hidden farm grows it;
   - a rule the op breaks because of hidden data (a rule about a hidden
     item, a hidden farm's drought borehole rule or supply rule (both read
     its hidden dam or levels), and, while any farm is
