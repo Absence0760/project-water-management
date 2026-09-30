@@ -790,6 +790,21 @@ Interaction details that bit:
   1440×960, lists scroll inside their card; a new tab or page joins the
   list in `no-pointless-scroll.spec.ts` (see `network-map.spec.ts`,
   `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
+- **Measure layout only after the page's own data-ready.** A card that is
+  visible while its data loads (its Loading… state) is not at its final size,
+  and the sections around it fill in after it, so the page keeps growing. A
+  spec that read `scrollHeight` or a `boundingBox` right after one region
+  became visible flaked on CI (the Summary: 1792 px against 1035 px measured
+  before the run record, Supply by farm, alerts and baseline landed). Wait on
+  a readiness attribute backed by the real load states: the Summary body's
+  `data-ready` (`summaryReady` in `overview.spec.ts`), a section's
+  `data-notes-ready`, a chart's `data-ready`, the projects list's
+  `data-outcomes-ready`. A page with something that loads after the
+  measured element and no such attribute gets one in the component (a
+  bindable `ready` on each child that loads, as `AlertsPanel` and
+  `PublishedBaseline` have), never a sleep or a looser bound. Checks that
+  can only fail for a real reason when the page grows (`scrollWidth <=
+  width`) or that poll (`expect.poll`) don't need it.
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
   names across page and modal cause strict-mode errors.
