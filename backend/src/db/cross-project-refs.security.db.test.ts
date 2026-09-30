@@ -429,6 +429,11 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [`INSERT INTO render_token (token_hash, user_id, project_id, run_id, expires_at) VALUES ($1, $2, $3, $4, now())`, [nonce(), u(), h.projectId, ref]]
 	},
+	// A pack token (119_pack_render): render_token_issue refuses another project's pack before render_token_same_project does.
+	'render_token.pack_id': {
+		ref: (w) => w.issuedPackId,
+		insert: (h, ref) => [`INSERT INTO render_token (token_hash, user_id, project_id, pack_id, expires_at) VALUES ($1, $2, $3, $4, now())`, [nonce(), u(), h.projectId, ref]]
+	},
 	'report.job_id': { ref: (w) => w.reportJobId, insert: (h, ref) => ['INSERT INTO report (project_id, requested_by, job_id) VALUES ($1, $2, $3)', [h.projectId, u(), ref]] },
 	'report.run_id': { ref: (w) => w.runId, insert: (h, ref) => ['INSERT INTO report (project_id, requested_by, run_id) VALUES ($1, $2, $3)', [h.projectId, u(), ref]] },
 	'report.schedule_id': { ref: (w) => w.scheduleId, insert: (h, ref) => ['INSERT INTO report (project_id, requested_by, schedule_id) VALUES ($1, $2, $3)', [h.projectId, u(), ref]] },
@@ -833,9 +838,11 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/feed-ingest.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',
+	'jobs/transport.ts:packId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:projectId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:runId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',

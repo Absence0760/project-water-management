@@ -63,6 +63,11 @@ migrate_reserved_concurrency = 1
 # fetcher_reserved_concurrency  = 2
 # renderer_reserved_concurrency = 2
 
+# Issued evidence packs' PDFs (packs.tf): Object Lock default retention in
+# GOVERNANCE mode, in days (default shown: 10 years; operator decision,
+# docs/deployment.md § Evidence packs). Raising it applies to new PDFs only.
+# pack_retention_days = 3650
+
 # Database sizing (defaults shown).
 # db_instance_class           = "db.t4g.micro"
 # db_allocated_storage_gb     = 20

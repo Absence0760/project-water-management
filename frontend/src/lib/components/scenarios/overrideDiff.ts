@@ -2,13 +2,17 @@
 // the Network, Crops and Transfers editors edit a copy of the scenario's model
 // (its base run's snapshot with the scenario's ops applied), and this turns
 // the edited copy back into ScenarioOps: node fields → node.set, a crop area →
-// cropArea.set, a new node → node.add, a borehole → borehole.add, and so on. Each op is checked with the
+// cropArea.set, a new node → node.add (or node.insert, when existing nodes now
+// drain into it), what a node drains into → node.move, a crop's factors →
+// crop.set, a borehole → borehole.add, and so on. Each op is checked with the
 // "Add a change" form's own check (ops.ts checkOp: the engine's
 // validateScenarioOps), and the whole list is then applied to the model it
 // was diffed from (the engine's applyScenario): it must apply cleanly and give
 // back the edited model, so an edit is never recorded as something else, and
 // an edit no op can express is named rather than dropped. No Svelte, no API.
 import {
+	CROP_SET_FIELDS,
+	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
 	TRANSFER_SET_FIELDS,
 	applyScenario,
@@ -16,17 +20,19 @@ import {
 	type ModelInput,
 	type NetworkNode,
 	type NodeSetField,
+	type CropSetField,
+	type LandCoverSetField,
 	type ProjectModel,
 	type ScenarioOp,
 	type TransferSetField
 } from '@water-management/engine';
-import { NODE_FIELD_SPECS, TRANSFER_FIELD_SPECS } from './fields';
+import { CROP_FIELD_SPECS, LAND_COVER_FIELD_SPECS, NODE_FIELD_SPECS, TRANSFER_FIELD_SPECS } from './fields';
 import { checkOp, nameIds, namesOf } from './ops';
 
 export interface OverrideDiff {
 	/** The edits as ops, in an order that applies (new crops and nodes before what refers to them). */
 	ops: ScenarioOp[];
-	/** Edits no op can express (a node moved, a crop's factors…), in words. Nothing is recorded while there are any. */
+	/** Edits no op can express (a node's kind, the outflow moved, a demand object…), in words. Nothing is recorded while there are any. */
 	unsupported: string[];
 	/** An op the engine refuses, or a list that doesn't apply or doesn't give back the edited model. */
 	problems: string[];
@@ -60,15 +66,20 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	const bCrops = new Map(b.crops.map((c) => [c.id, c]));
 	const aCrops = new Map(after.crops.map((c) => [c.id, c]));
 
-	// --- crops: new ones are crop.add; an existing crop can't be edited or removed by an op yet
+	// --- crops (engine ≥ 1.35.0): removed ones are crop.remove (which drops their areas), an edited one crop.set
+	// per changed field (before any crop.add, so a rename frees its old name for a new crop), new ones crop.add
 	const removedCrops = new Set(b.crops.filter((c) => !aCrops.has(c.id)).map((c) => c.id));
+	for (const id of removedCrops) ops.push({ op: 'crop.remove', cropId: id });
 	for (const c of b.crops) {
 		const now = aCrops.get(c.id);
-		if (!now) unsupported.push(`Removing the crop ${cropLabel(c)}: a scenario can't remove a crop yet. Set its areas to 0 instead.`);
-		else if (now.name !== c.name || !same(now.cropFactor, c.cropFactor))
-			unsupported.push(`Editing the crop ${cropLabel(c)} (its name or crop factors): a scenario can't change a crop yet. Add a new crop and move the areas to it.`);
+		if (!now) continue;
+		for (const f of CROP_SET_FIELDS) {
+			const was = f === 'irrigationEfficiency' ? (c[f] ?? null) : c[f];
+			const v = f === 'irrigationEfficiency' ? (now[f] ?? null) : now[f];
+			if (!same(was, v)) ops.push({ op: 'crop.set', cropId: c.id, field: f, value: plain(v) } as ScenarioOp);
+		}
 	}
-	for (const c of after.crops) if (!bCrops.has(c.id)) ops.push({ op: 'crop.add', crop: { id: c.id, name: c.name, cropFactor: [...c.cropFactor] } });
+	for (const c of after.crops) if (!bCrops.has(c.id)) ops.push({ op: 'crop.add', crop: { id: c.id, name: c.name, cropFactor: [...c.cropFactor], ...(c.irrigationEfficiency != null ? { irrigationEfficiency: c.irrigationEfficiency } : {}) } });
 
 	// --- nodes removed: node.remove (the engine re-links what drained into them, as the editor does)
 	const removed = new Set(b.nodes.filter((n) => !aNodes.has(n.id)).map((n) => n.id));
@@ -87,7 +98,10 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	// --- kept nodes: each field a scenario may set is node.set (before any node.add, so a rename frees
 	// its old name for a new node), a node's next to each other in its own key order: consecutive node.set
 	// ops on one node are one edit group, checked against the save rules once after the last (so a trigger
-	// farm can go straight to run of river, its dam emptied, in either order); the network's shape can't change
+	// farm can go straight to run of river, its dam emptied, in either order); what it drains into is
+	// node.insert or node.move, after the new nodes (below)
+	/** Kept nodes that drain somewhere else now: id → where they drained once the removed nodes were gone. */
+	const moved = new Map<string, string | null>();
 	for (const n of after.nodes) {
 		const was = bNodes.get(n.id);
 		if (!was) continue;
@@ -95,8 +109,11 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			unsupported.push(`Changing ${label(was)} from a ${was.kind} to a ${n.kind}: a scenario can't change a node's kind. Remove it and add a new node.`);
 			continue;
 		}
-		if (n.downstreamNodeId !== relinked(was.downstreamNodeId))
-			unsupported.push(`Moving ${label(n)} (what it drains into): a scenario can't move a node yet. Remove it and add a new one where it should drain.`);
+		if (n.downstreamNodeId !== relinked(was.downstreamNodeId)) {
+			if (n.downstreamNodeId === null || relinked(was.downstreamNodeId) === null)
+				unsupported.push(`Making ${label(n)} ${n.downstreamNodeId === null ? 'drain nowhere' : 'drain into another node'}: the catchment keeps its outflow node, which a scenario can't move.`);
+			else moved.set(n.id, relinked(was.downstreamNodeId));
+		}
 		const settable = new Set<string>(NODE_SET_FIELDS[n.kind]);
 		const keys = new Set([...Object.keys(was), ...Object.keys(n)]);
 		// A damCapacityM3 op resizes an existing dam's area (or survey curve) along its own relation (engine
@@ -123,7 +140,8 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		if (resized && curveEdited) ops.push({ op: 'node.set', nodeId: n.id, field: 'damCurve', value: plain(n.damCurve ?? null) } as ScenarioOp);
 	}
 
-	// --- nodes added: node.add, each after the node it drains into
+	// --- nodes added: node.add, each after the node it drains into; a new node that kept nodes now drain
+	// into, from the node it drains into, is node.insert (engine ≥ 1.35.0) with them
 	const pending = after.nodes.filter((n) => !bNodes.has(n.id));
 	const placed = new Set(b.nodes.filter((n) => !removed.has(n.id)).map((n) => n.id));
 	for (let progress = true; pending.length && progress; ) {
@@ -131,7 +149,11 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		for (let i = 0; i < pending.length; i++) {
 			const n = pending[i]!;
 			if (n.downstreamNodeId !== null && placed.has(n.downstreamNodeId)) {
-				ops.push({ op: 'node.add', node: (plain(n)) });
+				const ups = [...moved].filter(([id, from]) => from === n.downstreamNodeId && aNodes.get(id)!.downstreamNodeId === n.id).map(([id]) => id);
+				if (ups.length) {
+					ops.push({ op: 'node.insert', node: plain(n), upstreamNodeIds: ups });
+					for (const id of ups) moved.delete(id);
+				} else ops.push({ op: 'node.add', node: plain(n) });
 				placed.add(n.id);
 				pending.splice(i--, 1);
 				progress = true;
@@ -144,6 +166,15 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 				? `The new node ${label(n)} drains nowhere: a scenario's new node drains into an existing one (the catchment keeps its outflow gauge).`
 				: `The new node ${label(n)} drains into a node that isn't in the network.`
 		);
+
+	// --- the other moves: node.move, nearest the outlet first, so each lands on a reach already where it
+	// ends up and no move makes a loop on the way (the edited network is one tree)
+	const depth = (id: string): number => {
+		let k = 0;
+		for (let cur = aNodes.get(id)?.downstreamNodeId ?? null; cur !== null && k <= after.nodes.length; k++) cur = aNodes.get(cur)?.downstreamNodeId ?? null;
+		return k;
+	};
+	for (const id of [...moved.keys()].sort((x, y) => depth(x) - depth(y))) ops.push({ op: 'node.move', nodeId: id, downstreamNodeId: aNodes.get(id)!.downstreamNodeId! });
 
 	// --- crop areas: cropArea.set with the farm's new total of that crop
 	const gone = (a: CropArea) => removed.has(a.nodeId) || removedCrops.has(a.cropId);
@@ -179,12 +210,18 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		}
 	}
 
-	// --- land cover: remove, add; a patch changed in place is removed and added again
+	// --- land cover: remove, add; a patch changed in place is landCover.set per field (engine ≥ 1.35.0), or,
+	// moved to another unit, removed and added again
 	const bCover = new Map((b.landCover ?? []).filter((p) => !removed.has(p.nodeId)).map((p) => [p.id, p]));
 	const aCover = new Map((after.landCover ?? []).map((p) => [p.id, p]));
-	const changedCover = [...aCover.values()].filter((p) => bCover.has(p.id) && !same(bCover.get(p.id), p));
-	for (const id of bCover.keys()) if (!aCover.has(id) || changedCover.some((p) => p.id === id)) ops.push({ op: 'landCover.remove', patchId: id });
-	for (const p of aCover.values()) if (!bCover.has(p.id) || changedCover.includes(p)) ops.push({ op: 'landCover.add', patch: (plain(p)) });
+	const movedCover = [...aCover.values()].filter((p) => bCover.has(p.id) && bCover.get(p.id)!.nodeId !== p.nodeId);
+	for (const id of bCover.keys()) if (!aCover.has(id) || movedCover.some((p) => p.id === id)) ops.push({ op: 'landCover.remove', patchId: id });
+	for (const p of aCover.values()) if (!bCover.has(p.id) || movedCover.includes(p)) ops.push({ op: 'landCover.add', patch: plain(p) });
+	for (const p of aCover.values()) {
+		const was = bCover.get(p.id);
+		if (!was || movedCover.includes(p)) continue;
+		for (const f of LAND_COVER_SET_FIELDS) if (!same(was[f], p[f])) ops.push({ op: 'landCover.set', patchId: p.id, field: f, value: plain(p[f] ?? null) } as ScenarioOp);
+	}
 
 	// --- individual boreholes (WP-3.9): as land cover, a borehole edited in place is removed and added again
 	const bBores = new Map((b.boreholes ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => [x.id, x]));
@@ -204,7 +241,16 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	// The name before the edit wins (an edit may be the name being cleared).
 	const names = namesOf([after, b]);
 	for (const op of ops) {
-		const spec = op.op === 'node.set' ? NODE_FIELD_SPECS[op.field as NodeSetField]?.spec : op.op === 'transfer.set' ? TRANSFER_FIELD_SPECS[op.field as TransferSetField]?.spec : null;
+		const spec =
+			op.op === 'node.set'
+				? NODE_FIELD_SPECS[op.field as NodeSetField]?.spec
+				: op.op === 'transfer.set'
+					? TRANSFER_FIELD_SPECS[op.field as TransferSetField]?.spec
+					: op.op === 'crop.set'
+						? CROP_FIELD_SPECS[op.field as CropSetField]?.spec
+						: op.op === 'landCover.set'
+							? LAND_COVER_FIELD_SPECS[op.field as LandCoverSetField]?.spec
+							: null;
 		const c = checkOp(op, spec ?? null);
 		if (!c.ok) problems.push(`${whereOf(op, names)}: ${c.error}`);
 	}
@@ -228,16 +274,23 @@ function whereOf(op: ScenarioOp, names: ReadonlyMap<string, string>): string {
 		case 'node.set':
 			return `${nm(op.nodeId)}, ${NODE_FIELD_SPECS[op.field as NodeSetField]?.label ?? op.field}`;
 		case 'node.add':
+		case 'node.insert':
 			return `The new node ${nm(op.node.id)}`;
+		case 'node.move':
+			return `${nm(op.nodeId)}, what it drains into`;
 		case 'cropArea.set':
 			return `${nm(op.nodeId)}, ${nm(op.cropId)}`;
 		case 'crop.add':
 			return `The new crop ${nm(op.crop.id)}`;
+		case 'crop.set':
+			return `The crop ${nm(op.cropId)}, ${CROP_FIELD_SPECS[op.field as CropSetField]?.label ?? op.field}`;
 		case 'transfer.add':
 		case 'transfer.set':
 			return `A transfer${op.op === 'transfer.set' ? `, ${TRANSFER_FIELD_SPECS[op.field as TransferSetField]?.label ?? op.field}` : ''}`;
 		case 'landCover.add':
 			return `Land cover on ${nm(op.patch.nodeId)}`;
+		case 'landCover.set':
+			return `A land-cover patch, ${LAND_COVER_FIELD_SPECS[op.field as LandCoverSetField]?.label ?? op.field}`;
 		case 'borehole.add':
 			return `The borehole “${op.borehole.name || 'unnamed'}” on ${nm(op.borehole.nodeId)}`;
 		default:
@@ -262,7 +315,7 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 		};
 		return JSON.stringify({
 			nodes: byId(m.nodes, node),
-			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor]),
+			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationEfficiency ?? null]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
 			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),

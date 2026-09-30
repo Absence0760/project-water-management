@@ -120,6 +120,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'it.also.href': { why: 'NeedsAttention: attention.ts, farmDrawerHref', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	// Values that come from outside the component, each checked where it enters.
+	'api.packs.pdfUrl': {
+		why: 'an issued evidence pack’s PDF download: PUBLIC_API_URL + an encoded path of the project and pack ids (lib/api/client.ts packs.pdfUrl); the API answers 302 to a signed URL of its own (119_pack_render)',
+		in: ['routes/projects/[id]/packs/[packId]/+page.svelte']
+	},
 	'current.url': { why: 'the report PDF link: serverPdf.ts reportsApi.get sets it from api.reports.pdfUrl (PUBLIC_API_URL + an encoded path), never from the response (serverPdf.test.ts)', in: ['lib/components/report/ServerPdf.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'api.farm.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/farm/[projectId]/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },

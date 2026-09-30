@@ -63,9 +63,9 @@ data "aws_iam_policy_document" "frontend_bucket_policy" {
   # bucket root, and spa_rewrite sends every path ending in "/" (the root
   # included) to /index.html and refuses dot segments, and the default
   # behaviour forwards no query string (CachingOptimized, no origin request
-  # policy), so no list-type/prefix parameter reaches S3. The reports bucket
-  # keeps GetObject only (reports.tf): its misses stay 403, which leaks
-  # nothing about which reports exist.
+  # policy), so no list-type/prefix parameter reaches S3. The reports and
+  # packs buckets keep GetObject only (reports.tf, packs.tf): their misses
+  # stay 403, which leaks nothing about which reports or packs exist.
   statement {
     sid       = "AllowCloudFrontServicePrincipalList"
     actions   = ["s3:ListBucket"]
@@ -262,6 +262,8 @@ resource "aws_cloudfront_function" "api_strip_prefix" {
 #   - /api/*     → Lambda Function URL (custom origin + shared secret header)
 #   - /reports/* → S3 reports bucket via its own OAC, CloudFront signed URLs
 #                  only (reports.tf)
+#   - /packs/*   → S3 packs bucket (issued evidence packs' PDFs) via its own
+#                  OAC, the same signed URLs only (packs.tf)
 #
 # The browser never calls the Function URL. CloudFront stamps every /api/*
 # request with X-CloudFront-Shared-Secret (random_password below, also in
@@ -316,6 +318,14 @@ resource "aws_cloudfront_distribution" "frontend" {
     domain_name              = aws_s3_bucket.reports.bucket_regional_domain_name
     origin_id                = "s3-reports"
     origin_access_control_id = aws_cloudfront_origin_access_control.reports.id
+  }
+
+  # Evidence pack PDFs (packs.tf): the private, Object Lock packs bucket, read
+  # only through this OAC, for requests carrying a CloudFront signed URL.
+  origin {
+    domain_name              = aws_s3_bucket.packs.bucket_regional_domain_name
+    origin_id                = "s3-packs"
+    origin_access_control_id = aws_cloudfront_origin_access_control.packs.id
   }
 
   origin {
@@ -389,6 +399,24 @@ resource "aws_cloudfront_distribution" "frontend" {
   ordered_cache_behavior {
     path_pattern               = "/reports/*"
     target_origin_id           = "s3-reports"
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = false                                  # PDFs are compressed already
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.report_downloads.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
+    trusted_key_groups         = [aws_cloudfront_key_group.report_downloads.id]
+  }
+
+  # /packs/* -> the packs bucket, exactly as /reports/* (signed URLs from the
+  # same key group, uncached, GET/HEAD, the file name the only thing
+  # forwarded). The keys are packs/<project>/<pack>/<sha256>.pdf, so no
+  # rewrite; the SPA must never own a URL under /packs (the pack pages live
+  # under /projects/:id/packs/): check_reports_path.mjs reserves it too.
+  ordered_cache_behavior {
+    path_pattern               = "/packs/*"
+    target_origin_id           = "s3-packs"
     viewer_protocol_policy     = "https-only"
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]

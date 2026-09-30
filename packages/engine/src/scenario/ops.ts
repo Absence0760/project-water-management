@@ -4,6 +4,7 @@
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
+import type { AllocationEntry } from '../allocations/compare';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
 	ACCUMULATION_MODES,
@@ -190,8 +191,8 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
- * `downstreamNodeId` (the network's shape: `node.add` / `node.remove` change
- * it) or `sortOrder` (display only). A gauge only measures, so only its name
+ * `downstreamNodeId` (the network's shape: `node.add`, `node.insert`,
+ * `node.move` and `node.remove` change it) or `sortOrder` (display only). A gauge only measures, so only its name
  * and whether it is an EWR site (engine ≥ 1.5.0; the outlet always is one, a
  * model rule).
  */
@@ -575,12 +576,126 @@ export function ewrRuleTableOpIssues(raw: unknown): { table: EwrRuleTable | null
 }
 
 // ---------------------------------------------------------------------------
+// crop.set, landCover.set (engine ≥ 1.35.0)
+// ---------------------------------------------------------------------------
+
+/**
+ * The fields `crop.set` may change: the name, the 12 crop factors and the
+ * crop's own irrigation efficiency (null = the farm's). Never `id`, and not
+ * `sortOrder` (display only).
+ */
+export const CROP_SET_FIELDS = ['name', 'cropFactor', 'irrigationEfficiency'] as const;
+export type CropSetField = (typeof CROP_SET_FIELDS)[number];
+
+const cropFactors: Check = (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0');
+const CROP_FIELD_CHECKS: Record<CropSetField, Check> = {
+	name,
+	cropFactor: cropFactors,
+	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
+	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
+};
+
+const CROP_FIELD_CHECK = checksOf(CROP_FIELD_CHECKS);
+
+export function cropFieldError(field: string, value: unknown): string | null {
+	const c = checkFor(CROP_FIELD_CHECK, field);
+	return c ? c(value) : `"${field}" is not a crop field a scenario can set`;
+}
+
+/**
+ * The fields `landCover.set` may change: the class, area, condensed cover
+ * and the reductions overriding the class's. Never `id`, nor `nodeId` (a
+ * patch on another farm is removing it and adding one there).
+ */
+export const LAND_COVER_SET_FIELDS = ['coverClass', 'areaKm2', 'densityPct', 'factors'] as const;
+export type LandCoverSetField = (typeof LAND_COVER_SET_FIELDS)[number];
+
+const LAND_COVER_FIELD_CHECKS: Record<LandCoverSetField, Check> = {
+	coverClass: oneOf(LAND_COVER_CLASSES.map((c) => c.id)),
+	areaKm2: nonNeg,
+	densityPct: frac,
+	// Other keys are dropped when the op is rebuilt (validateScenarioOps, applyScenario), as everywhere else.
+	factors: nullable((v) => (isObj(v) && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
+};
+
+/** A patch's reductions rebuilt from their two known keys (null stays null). */
+export const reductions = (v: unknown): { mar: number; lowFlow: number } | null => (isObj(v) ? { mar: v.mar as number, lowFlow: v.lowFlow as number } : null);
+
+const LAND_COVER_FIELD_CHECK = checksOf(LAND_COVER_FIELD_CHECKS);
+
+export function landCoverFieldError(field: string, value: unknown): string | null {
+	const c = checkFor(LAND_COVER_FIELD_CHECK, field);
+	return c ? c(value) : `"${field}" is not a land-cover field a scenario can set`;
+}
+
+// ---------------------------------------------------------------------------
+// allocation.set (engine ≥ 1.35.0)
+// ---------------------------------------------------------------------------
+
+export const ALLOCATION_WATER_SOURCES = ['surface', 'groundwater'] as const;
+/** The backend's limits (backend/src/allocations/routes.ts): volumes below 10¹² m³, a rate below 10⁶ m³/s. */
+const allocVolume: Check = (v) => (isNum(v) && v >= 0 && v < 1e12 ? null : 'must be a number of m³ from 0 to below 10¹²');
+const allocMonths: Check = (v) => {
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one calendar month (null for none stated)';
+	const e = months(v);
+	if (e) return e;
+	return new Set(v).size === v.length ? null : 'names a month more than once';
+};
+const ALLOCATION_FIELDS: Record<string, Check> = {
+	id,
+	// The farm or other water user it is held for: a scenario's volume is always on a unit (an unmatched one compares with nothing).
+	nodeId: id,
+	waterSource: oneOf(ALLOCATION_WATER_SOURCES),
+	volumeM3PerYear: allocVolume,
+	storageM3: nullable(allocVolume),
+	validFrom: nullable(isoDate),
+	validTo: nullable(isoDate),
+	months: nullable(allocMonths),
+	maxRateM3s: nullable((v) => (isNum(v) && v >= 0 && v < 1e6 ? null : 'must be a rate in m³/s from 0 to below 10⁶'))
+};
+/** Left out = not stated (no storage, open validity, no licence conditions), as a volume entered by hand. */
+const ALLOCATION_OPTIONAL = new Set(['storageM3', 'validFrom', 'validTo', 'months', 'maxRateM3s']);
+
+/**
+ * An `allocation.set` op's entry rebuilt from its known fields, with every
+ * problem as `[field, message]` (the validator's and applyScenario's one check).
+ */
+export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry | null; issues: [string, string][] } {
+	if (!isObj(raw)) return { allocation: null, issues: [['', 'must be a registered volume']] };
+	const errs: string[] = [];
+	const a = pickFields(raw, ALLOCATION_FIELDS, ALLOCATION_OPTIONAL, '', errs) as Obj;
+	const issues: [string, string][] = errs.map((e) => {
+		const [k, ...rest] = e.slice(1).split(': ');
+		return [k!, rest.join(': ')];
+	});
+	if (typeof a.validFrom === 'string' && typeof a.validTo === 'string' && a.validFrom > a.validTo) issues.push(['validTo', `is before valid from (${a.validFrom})`]);
+	return { allocation: issues.length ? null : (a as unknown as AllocationEntry), issues };
+}
+
+// ---------------------------------------------------------------------------
+// node.insert (engine ≥ 1.35.0)
+// ---------------------------------------------------------------------------
+
+/** node.insert's nodes re-pointed into the new one: at least one, no repeats. */
+const upstreamList: Check = (v) => {
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one node id (the nodes that will drain into the new one; with none, add the node instead)';
+	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} node ids`;
+	for (const x of v) {
+		const e = id(x);
+		if (e) return `each ${e}`;
+	}
+	return new Set(v).size === v.length ? null : 'names a node more than once';
+};
+
+// ---------------------------------------------------------------------------
 // The ops
 // ---------------------------------------------------------------------------
 
 export type NodeSetOp = { [F in NodeSetField]: { op: 'node.set'; nodeId: string; field: F; value: NodeSetValue<F> } }[NodeSetField];
 export type TransferSetOp = { [F in TransferSetField]: { op: 'transfer.set'; transferId: string; field: F; value: Transfer[F] } }[TransferSetField];
 export type SettingsSetOp = { [P in SettingsPath]: { op: 'settings.set'; path: P; value: SettingsPathValues[P] } }[SettingsPath];
+export type CropSetOp = { [F in CropSetField]: { op: 'crop.set'; cropId: string; field: F; value: Exclude<CropDef[F], undefined> } }[CropSetField];
+export type LandCoverSetOp = { [F in LandCoverSetField]: { op: 'landCover.set'; patchId: string; field: F; value: LandCoverPatch[F] } }[LandCoverSetField];
 
 /**
  * One override. A closed union: every op targets an existing element by id
@@ -593,14 +708,24 @@ export type ScenarioOp =
 	| { op: 'node.add'; node: NetworkNode }
 	/** Remove a node; its upstream nodes drain into its downstream node instead. */
 	| { op: 'node.remove'; nodeId: string }
+	/** Make a node drain into another (engine ≥ 1.35.0): it takes its upstream nodes with it; the network stays one tree. */
+	| { op: 'node.move'; nodeId: string; downstreamNodeId: string }
+	/** A new node on a reach (engine ≥ 1.35.0): `upstreamNodeIds`, each draining into the new node's downstream node, drain into it instead. */
+	| NodeInsertOp
 	/** Set a farm's area of one crop; 0 removes the row. */
 	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number }
 	| { op: 'crop.add'; crop: CropDef }
+	/** Change one field of a crop definition (engine ≥ 1.35.0): its name, crop factors or own irrigation efficiency. */
+	| CropSetOp
+	/** Remove a crop and every farm's area of it (engine ≥ 1.35.0). */
+	| { op: 'crop.remove'; cropId: string }
 	| { op: 'transfer.add'; transfer: Transfer }
 	| TransferSetOp
 	| { op: 'transfer.remove'; transferId: string }
 	| { op: 'landCover.add'; patch: LandCoverPatch }
 	| { op: 'landCover.remove'; patchId: string }
+	/** Change one field of a land-cover patch in place (engine ≥ 1.35.0). */
+	| LandCoverSetOp
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
 	| { op: 'borehole.remove'; boreholeId: string }
@@ -608,7 +733,24 @@ export type ScenarioOp =
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
 	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
 	| DemandScaleOp
-	| EwrRuleSetOp;
+	| EwrRuleSetOp
+	/** Remove the Reserve rule table of one EWR site (engine ≥ 1.35.0): null = the outlet. Always a baseline assumption. */
+	| { op: 'ewrRule.remove'; siteNodeId: string | null }
+	/** Set or replace one registered volume by id (engine ≥ 1.35.0, docs/allocations.md): what allocationMode caps or scales a run to. */
+	| { op: 'allocation.set'; allocation: AllocationEntry }
+	| { op: 'allocation.remove'; allocationId: string };
+
+/**
+ * A new node placed on a reach (engine ≥ 1.35.0): `node` as `node.add` takes
+ * it, and the existing nodes in `upstreamNodeIds`, each draining into
+ * `node.downstreamNodeId` now, drain into the new node instead. The order of
+ * everything along the river is kept; the new node sits between.
+ */
+export interface NodeInsertOp {
+	op: 'node.insert';
+	node: NetworkNode;
+	upstreamNodeIds: string[];
+}
 
 /**
  * Set or replace the Reserve rule table of one EWR site (engine ≥ 1.6.0,
@@ -643,19 +785,27 @@ export const SCENARIO_OP_NAMES = [
 	'node.set',
 	'node.add',
 	'node.remove',
+	'node.move',
+	'node.insert',
 	'cropArea.set',
 	'crop.add',
+	'crop.set',
+	'crop.remove',
 	'transfer.add',
 	'transfer.set',
 	'transfer.remove',
 	'landCover.add',
 	'landCover.remove',
+	'landCover.set',
 	'borehole.add',
 	'borehole.remove',
 	'settings.set',
 	'series.scale',
 	'demand.scale',
-	'ewrRule.set'
+	'ewrRule.set',
+	'ewrRule.remove',
+	'allocation.set',
+	'allocation.remove'
 ] as const satisfies readonly ScenarioOpName[];
 
 /** Most ops one scenario may hold (the backend's body limit mirrors it). */
@@ -722,9 +872,8 @@ const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
-	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0'),
-	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
-	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
+	cropFactor: CROP_FIELD_CHECKS.cropFactor,
+	irrigationEfficiency: CROP_FIELD_CHECKS.irrigationEfficiency
 };
 const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
 const LAND_COVER_FIELDS: Record<string, Check> = {
@@ -733,7 +882,7 @@ const LAND_COVER_FIELDS: Record<string, Check> = {
 	coverClass: oneOf(LAND_COVER_CLASSES.map((c) => c.id)),
 	areaKm2: nonNeg,
 	densityPct: frac,
-	factors: nullable((v) => (isObj(v) && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
+	factors: LAND_COVER_FIELD_CHECKS.factors
 };
 const BOREHOLE_FIELDS: Record<string, Check> = {
 	id,
@@ -782,11 +931,30 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 		case 'node.remove':
 			op = { op: 'node.remove', nodeId: need('nodeId', id) as string };
 			break;
+		case 'node.move':
+			op = { op: 'node.move', nodeId: need('nodeId', id) as string, downstreamNodeId: need('downstreamNodeId', id) as string };
+			break;
+		case 'node.insert': {
+			const node = sub('node', NODE_FIELDS, NODE_OPTIONAL) as unknown as NetworkNode;
+			const ups = need('upstreamNodeIds', upstreamList);
+			op = { op: 'node.insert', node, upstreamNodeIds: Array.isArray(ups) ? (cloneValue(ups) as string[]) : [] };
+			break;
+		}
 		case 'cropArea.set':
 			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
 			break;
 		case 'crop.add':
 			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationEfficiency'])) as unknown as CropDef };
+			break;
+		case 'crop.set': {
+			const cropId = need('cropId', id);
+			const field = need('field', (v) => (typeof v === 'string' && CROP_FIELD_CHECK.byName.has(v) ? null : 'is not a crop field a scenario can set'));
+			if (typeof field === 'string' && CROP_FIELD_CHECK.byName.has(field)) need('value', (v) => cropFieldError(field, v));
+			op = { op: 'crop.set', cropId, field, value: cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
+		case 'crop.remove':
+			op = { op: 'crop.remove', cropId: need('cropId', id) as string };
 			break;
 		case 'transfer.add':
 			op = { op: 'transfer.add', transfer: sub('transfer', TRANSFER_FIELDS, TRANSFER_OPTIONAL) as unknown as Transfer };
@@ -807,6 +975,13 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 		case 'landCover.remove':
 			op = { op: 'landCover.remove', patchId: need('patchId', id) as string };
 			break;
+		case 'landCover.set': {
+			const patchId = need('patchId', id);
+			const field = need('field', (v) => (typeof v === 'string' && LAND_COVER_FIELD_CHECK.byName.has(v) ? null : 'is not a land-cover field a scenario can set'));
+			if (typeof field === 'string' && LAND_COVER_FIELD_CHECK.byName.has(field)) need('value', (v) => landCoverFieldError(field, v));
+			op = { op: 'landCover.set', patchId, field, value: field === 'factors' ? reductions(raw.value) : cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
 		case 'borehole.add':
 			op = { op: 'borehole.add', borehole: sub('borehole', BOREHOLE_FIELDS) as unknown as Borehole };
 			break;
@@ -855,6 +1030,19 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			op = { op: 'ewrRule.set', table: table as EwrRuleTable };
 			break;
 		}
+		case 'ewrRule.remove':
+			// null = the outlet; present either way, so the stored op says which site.
+			op = { op: 'ewrRule.remove', siteNodeId: need('siteNodeId', nullable(id)) as string | null };
+			break;
+		case 'allocation.set': {
+			const { allocation, issues } = allocationOpIssues(raw.allocation);
+			for (const [k, m] of issues) errors.push(`${where}.allocation${k ? `.${k}` : ''}: ${m}`);
+			op = { op: 'allocation.set', allocation: allocation as AllocationEntry };
+			break;
+		}
+		case 'allocation.remove':
+			op = { op: 'allocation.remove', allocationId: need('allocationId', id) as string };
+			break;
 		default:
 			errors.push(`${where}.op: must be one of ${SCENARIO_OP_NAMES.join(', ')}`);
 	}

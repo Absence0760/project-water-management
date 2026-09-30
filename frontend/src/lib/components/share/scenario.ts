@@ -128,6 +128,22 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('Demand scaled by {factor}', { factor: fmtNumber(op.factor, 2, true) });
 		case 'ewrRule.set':
 			return t('The Reserve’s rule table replaced at {site}', { site: op.table.siteNodeId ? unit(op.table.siteNodeId) : t('the catchment outlet') });
+		case 'ewrRule.remove':
+			return t('The Reserve’s rule table removed at {site}', { site: op.siteNodeId ? unit(op.siteNodeId) : t('the catchment outlet') });
+		case 'node.move':
+			return t('{unit} moved to drain into {to}', { unit: unit(op.nodeId), to: unit(op.downstreamNodeId) });
+		case 'node.insert':
+			return t('A new hydrological unit or site, “{name}”, placed on the river above {unit}', { name: op.node.name, unit: unit(op.node.downstreamNodeId) });
+		case 'crop.set':
+			return t('A crop changed: {field}', { field: op.field });
+		case 'crop.remove':
+			return t('A crop removed');
+		case 'landCover.set':
+			return t('Land cover changed: {field}', { field: op.field });
+		case 'allocation.set':
+			return t('A registered volume set on {unit}', { unit: unit(op.allocation.nodeId) });
+		case 'allocation.remove':
+			return t('A registered volume removed');
 	}
 }
 

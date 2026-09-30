@@ -2393,8 +2393,9 @@ role and not before it.
         crops, transfers, land cover and boreholes → their ops, each through
         the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
         list re-applied to prove it gives back the edited model. Edits no op
-        can express are named and block recording: they wait on the later
-        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        can express are named and block recording (a node's kind, the outlet
+        moved, demand objects); crop edits and removals, moves and inserts
+        record since the later ops below (engine 1.35.0).
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -2416,10 +2417,38 @@ role and not before it.
         included: shown in red, not refused), in the scenario form with the
         Settings tab's table editor and described with its confidence line
         ([scenarios.md § Reserve rule tables](./scenarios.md)).
-  - [ ] **Later ops**: `allocation.set`, removing a site's EWR rule table,
-        moving a node or inserting one mid-river, `crop.set`, `landCover.set`
-        ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
-        Trigger: the scenario editor needing them.
+  - [x] **Later ops** (engine 1.35.0, issue #73): `allocation.set` and
+        `allocation.remove` (a registered volume set, replaced or removed by
+        id; the proposal on the applicant's own unit), `ewrRule.remove`
+        (always a baseline assumption), `node.move` and `node.insert` (the
+        network stays one tree with one outlet: the model rules refuse a
+        loop, an insert only re-points nodes draining where it drains),
+        `crop.set` and `crop.remove` (the proposal only on a crop the
+        scenario added), `landCover.set`. In the "Add a change" form, and
+        override mode records crop edits and removals, moves, inserts and
+        land cover edited in place instead of blocking them. Hidden
+        registered volumes answer as free ids in an application (the mask),
+        and run comparison now lists a volume's storage, months and maximum
+        rate, and a land-cover patch's area and cover on their own
+        ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)).
+        Left open:
+        - [ ] **A transfer rule that moves nothing relaxes its siblings'
+              reserve** (found reviewing #73; `network/simulate.ts` ~726,
+              `freeBy[tr.from]`): a rule active in a month at max rate 0 (a
+              listed month at rate 0), or any rule with a lower reserve at
+              the same priority, counts in the free water above each rule's
+              reserve, so two 50 %-reserve rules from a full 1000 m³ dam move
+              800 m³ with a 0 %-reserve rate-0 rule beside them (the dam ends
+              at 200 m³, below both reserves) and 500 m³ without it. Durable
+              fix: free water per rule from its own reserve, and a rule with
+              no rate this month not active; an engine-audit entry, a
+              version bump and an invariant. Trigger: the hydrologist's
+              review of transfers, or any project with two rules from one
+              dam at different reserves.
+        - [x] **Scenario fuzz with allocation modes** (done in #73):
+              `scenario.invariants.test.ts` runs `checkAll` on random
+              scenarios over bases under a cap or a full allocation, so a
+              scenario's volumes reach the allocation self-check.
 
 - **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
   [ui.md § Report](./ui.md#report)). Built: the print route
@@ -3902,19 +3931,25 @@ Left, from the design and the persona review (§11), each with its trigger.
       manifest. Tracked under *The server-rendered evidence PDF* below
       (WP-3.14). Until then the pack's page leaves the board out and says
       it isn't part of the pack (ui.md § Evidence pack).
-- [ ] **The server-rendered evidence PDF.** Browser print only: no running
-      footer, no "page x of y". Durable fix: `POST …/reports { runId,
-      evidence: true }` and a render scope that reads the baseline (ER1),
-      with the pack; the pack's manifest also carries page 1's licence
-      impact board, built in the engine from the two runs' series (today the
-      browser builds it). Trigger: WP-3.14.
+- [ ] **The server-rendered evidence PDF.** An *issued pack* is printed on
+      the server now (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)),
+      from its frozen manifest; the *draft* evidence report on the report
+      route still prints from the browser only. Left: page 1's licence
+      impact board isn't in the manifest (the browser builds it from three
+      daily series, and a pack's render session reads no run), so a pack's
+      page and PDF print without it. Durable fix: build the board in the
+      engine's `evidenceReport` from the two runs' series, so the manifest
+      carries it; a server render of the draft report (`POST …/reports
+      { runId, evidence: true }`, a render scope over the baseline, ER1) is
+      only worth it if someone asks for a draft PDF by email. Trigger: before
+      a pack goes to a real authority (the board is part of page 1).
 - [ ] **`ENGINE_BUILD` from CI**, which the evidence report's B.1 needs:
       tracked in [§ Liability and sign-off](#liability-and-sign-off-wp-313).
       Trigger: before the first evidence pack (WP-3.14).
 
 **Evidence packs** (WP-3.14; built 2026-09-29: the table, the manifest and
 its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
-verify lookup, [evidence-pack.md](./evidence-pack.md)). Left:
+verify lookup; 2026-09-30: the server-rendered PDF, [evidence-pack.md](./evidence-pack.md)). Left:
 
 - [x] **The pack view and the verify page.** Built 2026-09-30
       ([ui.md § Evidence pack](./ui.md#evidence-pack),
@@ -3926,13 +3961,25 @@ verify lookup, [evidence-pack.md](./evidence-pack.md)). Left:
       evidence report and the Applications tab and panel; the sign-off dialog
       says the signer's name and registration are public. Axe on both
       (`e2e/tests/evidence-pack.spec.ts`).
-- [ ] **The server-rendered pack PDF and its hash** (`pdf_key`,
-      `pdf_sha256`, `pdf_pages` exist, unset): render the pack route with
-      WP-2.15 Phase B's renderer (a render scope over the pack's two runs,
-      ER1), store it under a `packs/` prefix with no expiry, versioning and
-      object lock (D12, deployment.md), and record its hash before issue so
-      verify returns it, through a `SECURITY DEFINER` setter the renderer
-      calls (`water_app` has no grant on the PDF and bundle columns). Trigger: before a pack goes to a real authority.
+- [x] **The server-rendered pack PDF and its hash.** Built 2026-09-30
+      (119_pack_render, [evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)):
+      issuing queues a `pack_render` job that prints the pack's own page with
+      WP-2.15 Phase B's renderer (a render scope over the pack alone: the
+      manifest holds the report, so no run is read), stores it in its own
+      bucket under its SHA-256 (versioned, Object Lock GOVERNANCE for 10
+      years, no lifecycle: operator decision, 2026-09-30,
+      [deployment.md § Evidence packs](./deployment.md#evidence-packs)), and
+      records the hash once through `app_record_pack_pdf`; verify returns
+      it. Recorded *after* issue, not before: only an issued pack's page
+      prints its issued stamp, so for the seconds of the render verify
+      answers `pdfSha256: null` (the pack view shows the PDF as rendering).
+- [ ] **The deployed pack render, end to end** (#92's check, for packs):
+      the renderer's put into the Object Lock bucket (its checksum header,
+      the default retention applied) is checked only by plan tests and
+      MinIO locally. Durable fix: after the first deploy, issue a pack on
+      the staging project and confirm the object's retention
+      (`aws s3api get-object-retention`) and that the download's SHA-256
+      equals verify's. Trigger: the first production deploy.
 - [ ] **The reproduction bundle and `pnpm reproduce:pack`** (`bundle_key`,
       `bundle_sha256` exist, unset): `manifest.json`, the project's
       `export.json`, the scenario, the series CSVs and a README; a script
