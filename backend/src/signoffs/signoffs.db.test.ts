@@ -1,7 +1,7 @@
 // Sign-offs on a run (036_signoff.sql, WP-3.13): who may sign, what binds a
 // signature to the statement shown, and that a sign-off can't be changed,
 // removed or forged, at the route and at RLS.
-import { DISCLAIMER, signoffStatement, signoffStatementText } from '@water-management/engine';
+import { DISCLAIMER, SIGNOFF_STATEMENT_VERSION, signoffStatement, signoffStatementText } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -121,7 +121,7 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 			registrationCategory: 'pr_sci_nat',
 			registrationField: 'water_resources',
 			registrationNo: '400999/20',
-			statementVersion: 'signoff-3',
+			statementVersion: SIGNOFF_STATEMENT_VERSION,
 			statementSha256: hash,
 			mine: true
 		});
@@ -161,12 +161,12 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 			)
 		);
 		const res = await viewer.call('GET', path());
-		expect(res.body.statement.version).toBe('signoff-3');
+		expect(res.body.statement.version).toBe(SIGNOFF_STATEMENT_VERSION);
 		expect(res.body.statementSha256).toBe(hash);
 		expect(res.body.signoffs.map((s: { fullName: string; statementVersion: string; statementSha256: string }) => [s.fullName, s.statementVersion, s.statementSha256])).toEqual([
 			['Dr C. Earlier', 'signoff-1', oldHash],
-			['Dr A. Hydrologist', 'signoff-3', hash],
-			['Ms B. Reviewer', 'signoff-3', hash]
+			['Dr A. Hydrologist', SIGNOFF_STATEMENT_VERSION, hash],
+			['Ms B. Reviewer', SIGNOFF_STATEMENT_VERSION, hash]
 		]);
 		// Category and field not recorded on the earlier row; its free-text body as typed.
 		expect(res.body.signoffs[0]).toMatchObject({ registrationBody: 'SACNASP', registrationCategory: null, registrationField: null });
@@ -218,7 +218,7 @@ describe('the signer’s registration (092_signoff_registration, issue #47)', ()
 	it('records a warn-level registration (Pr Cert Eng, Mining) as chosen: a warning is not an error', async () => {
 		const res = await editor.call('POST', path(rid), body(hash, { registrationBody: 'ecsa', registrationCategory: 'pr_cert_eng', registrationField: 'mining', registrationNo: '20051234' }));
 		expect(res.status).toBe(201);
-		expect(res.body.signoff).toMatchObject({ registrationBody: 'ecsa', registrationCategory: 'pr_cert_eng', registrationField: 'mining', statementVersion: 'signoff-3' });
+		expect(res.body.signoff).toMatchObject({ registrationBody: 'ecsa', registrationCategory: 'pr_cert_eng', registrationField: 'mining', statementVersion: SIGNOFF_STATEMENT_VERSION });
 	});
 
 	it('binds a new row to its choices in the database; an older version’s row may leave them empty', async () => {

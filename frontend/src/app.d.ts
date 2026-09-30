@@ -7,6 +7,8 @@ declare global {
 		// interface PageData {}
 		// interface Platform {}
 	}
+	/** The engine build record as JSON, or '' (vite.config.ts `define`; lib/components/liability/engineBuild.ts). */
+	const __ENGINE_BUILD__: string;
 }
 
 export {};

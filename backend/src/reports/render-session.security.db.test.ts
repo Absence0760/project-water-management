@@ -38,7 +38,8 @@ const READS: Record<string, { why: string; query?: string }> = {
 	'GET /projects/:id/runs/:runId': { why: 'the run: summary, model, settings' },
 	'GET /projects/:id/runs/:runId/series': { why: 'the hydrograph and EWR charts', query: '?key=natural_flow' },
 	'GET /projects/:id/runs/:runId/day': { why: 'the self-checks panel’s day trace', query: '?date=2020-01-05' },
-	'GET /projects/:id/runs/:runId/signoffs': { why: 'the sign-off section' }
+	'GET /projects/:id/runs/:runId/signoffs': { why: 'the sign-off section' },
+	'GET /projects/:id/runs/:runId/publication': { why: 'the cover’s published-by line and notice, and the changes since the previous publication' }
 };
 
 const routes = [
@@ -149,8 +150,8 @@ describe('a render session, over every route', () => {
 		// The sweep reached the API, not a handful of routes.
 		expect(refused.length).toBeGreaterThan(100);
 		expect(refused).toEqual(expect.arrayContaining(['DELETE /projects/:id', 'GET /projects/:id/runs', 'GET /projects/:id/runs/:runId/export/daily.csv', 'GET /projects/:id/runs/:runId/allocations', 'POST /auth/logout-everywhere', 'GET /auth/me/export']));
-		// What was skipped as public is only the sign-in and token flows.
-		for (const r of publicRoutes) expect(r).toMatch(/^(GET \/health|POST \/auth\/|POST \/share\/|POST \/alerts\/unsubscribe)/);
+		// What was skipped as public is only the sign-in and token flows, and a pack's public verify (its printed fields only).
+		for (const r of publicRoutes) expect(r).toMatch(/^(GET \/health|POST \/auth\/|POST \/share\/|POST \/alerts\/unsubscribe|GET \/verify\/:code$)/);
 
 		// The project the session could have harmed is untouched (the refused DELETE and PATCH did nothing).
 		const after = await owner.call('GET', `/projects/${projectId}`);

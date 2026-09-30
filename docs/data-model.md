@@ -555,7 +555,14 @@ gauging with a source) and how automatic calibration treats extrapolated,
 suspect and infilled days; still no migration (model.md §2.10h). `settings.calibrationRules` (engine ≥ 1.25.0,
 issue #153) is automated calibration's pre-declared rule set with its
 server-kept revision and the hydrologist's sign-off; no migration either
-(model.md §2.10j). `settings.fitRecord` is the record of the automatic fit
+(model.md §2.10j). `settings.evidenceUncertaintyRule` (issue #71) is the
+uncertainty rule the project declares for its licensing evidence: members,
+bounds, pan-coefficient shift and acceptance thresholds, which an evidence
+report's cited ensemble must match exactly (engine `DeclaredUncertaintyRule`,
+checked by `declaredRuleError`; model.md §2.10e). A patch replaces it whole;
+`null` withdraws it, and absent means not declared. It is not a model input:
+it changes no result, but a run snapshots it, so the settings diff and the
+history show who declared it and when. No migration. `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
 in-sample and validation scores, notes, engine version and time (and, for a
 fit automated calibration picked, `auto`: the rules it ran under and every
@@ -837,7 +844,7 @@ clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest body
 same signature, `SECURITY DEFINER` and `search_path`, alongside a `NO ACTION`
 foreign key to `model_run`, and adds its kind to `CITED_BY_SQL`
 (`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication`,
-`scenario` and `signoff` (036) today). The latest body is 036_signoff's. `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
+`scenario`, `signoff` (036) and `pack` (112) today). The latest body is 112_evidence_pack's. `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
 `SECURITY DEFINER` so a citation the caller can't see still keeps the run. A
 cited run's pin doesn't count against the 10-pin ceiling, and unpinning one
 is `409`. **The publication-history cap (keep the newest 12) skips a
@@ -943,7 +950,7 @@ results for plausibility; and that they read its known limitations
   `signoff-1` and `-2` rows), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-3` today; rows made earlier keep `signoff-1` or `signoff-2`, and
+  (`signoff-4` today; rows made earlier keep `signoff-1` to `signoff-3`, and
   every row keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
@@ -965,17 +972,92 @@ results for plausibility; and that they read its known limitations
   (engine version, scenario or not, the generated limitations, the
   disclaimer version) and refuses a hash that isn't that statement's, so a
   signature can't be carried over to wording the signer never saw.
-- **Cites its run**: `model_run_cited` (latest body here) is true for a
+- **Cites its run**: `model_run_cited` (036; latest body now 112) is true for a
   signed run, so `trimRuns` and the run `DELETE` route keep it, and
   `citedBy` lists `{ kind: 'signoff', name: <signer> }`.
 - **RLS**: `SELECT` viewer; `INSERT` editor, with `user_id =
   app_current_user_id()` (no one signs as someone else). Farmers read
   nothing. Each sign-off writes `audit_event` `signoff.created` in the same
   transaction.
-- **Not yet**: the WP's `target = 'pack'` (WP-3.14 adds it with packs), MFA
-  on signing (Step 4). A signer's sign-offs are in their data export
-  (`app_subject_export`, 054; the registration columns since 092). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
+- **A pack target (112).** `pack_id` (→ `evidence_pack`, `NO ACTION`,
+  indexed) signs an evidence pack; `run_id` is nullable since, and
+  `signoff_one_target` holds exactly one of them set.
+  `signoff_statement_target`: a `pack-` statement version (`pack-signoff-1`)
+  goes with a pack and any other with a run. `signoff_pack_draft` refuses a
+  sign-off of a pack that isn't a draft. `signoff_same_project` checks both
+  targets. `signoff_select` (from 045) shows a pack's sign-off to whoever
+  reads the pack. [§ Evidence packs](#evidence-packs-112_evidence_packsql).
+- **Not yet**: MFA on signing (Step 4). A signer's sign-offs are in their
+  data export (`app_subject_export`, 054; the registration columns since
+  092; `packId` since 112). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
+
+### Evidence packs (112_evidence_pack.sql)
+
+Roadmap WP-3.14, [evidence-pack.md](./evidence-pack.md). One version of a
+licensing evidence pack: its frozen manifest and hash, and its lifecycle.
+
+- **`evidence_pack`**: `id` (set by the server: it is in the manifest),
+  `project_id` (→ `project`, cascade), `scenario_id` (→ `scenario`, `NO
+  ACTION`; NULL for baseline evidence), `baseline_run_id` (→ `model_run`,
+  `NO ACTION`, not a scenario run), `scenario_run_id` (→ `model_run`, `NO
+  ACTION`, a run of `scenario_id`; set exactly when `scenario_id` is),
+  `version` (≥ 1; 1 exactly when `supersedes_pack_id` is NULL),
+  `supersedes_pack_id` (→ `evidence_pack`: the issued pack it replaces, as
+  its version + 1), `status` (`draft`, `issued`, `superseded`, `withdrawn`),
+  `manifest` (`jsonb` object: engine `buildPackManifest`, `pack-1`),
+  `manifest_sha256` (unique hex; its first 12 digits, the short code, are
+  unique too: `evidence_pack_short_code_idx`), `report_version`,
+  `engine_version`, `pdf_key`/`pdf_sha256`/`pdf_pages` and
+  `bundle_key`/`bundle_sha256` (NULL until built, each set as a set),
+  `created_by` and `issued_by` (→ `app_user`, `SET NULL`), `created_at`,
+  `issued_at`, `superseded_by_pack_id` (→ `evidence_pack`),
+  `status_reason` (1–1 000, the withdrawal's). A check ties each status to
+  its columns (a draft has no issue date, successor or reason; issued and
+  superseded have an issue date; superseded names its successor; withdrawn
+  has a reason). Every foreign key has a covering index.
+  `evidence_pack_one_issued` (an exclusion constraint on the project and
+  `coalesce(scenario_id, project_id)` where `status = 'issued'`, deferred to
+  commit): one issued pack per application, and one for baseline evidence.
+- **Same project**: `evidence_pack_same_project`
+  (`assert_same_project`, extended from 022 with `%pack_id` → `evidence_pack`
+  and `%scenario_id` → `scenario`) on the scenario, both runs, the
+  predecessor and the successor.
+- **Immutable** (`evidence_pack_guard`, BEFORE INSERT OR UPDATE): inserted
+  as a draft only, its manifest naming the row's own id, version, project,
+  engine and report versions (the hash is the backend's to check), and a new
+  version of the same application (or baseline evidence) as its
+  predecessor; every column but the lifecycle frozen from then on; the
+  status moves draft → issued | withdrawn, issued → superseded | withdrawn,
+  superseded → withdrawn; issuing needs a sign-off of the pack and stamps
+  `issued_at` and `issued_by` from the session; `status_reason` is set once
+  with the move to withdrawn, `superseded_by_pack_id` once with the move to
+  superseded (naming an issued pack that supersedes this one), the PDF and
+  the bundle once; `created_by` and `issued_by` go to NULL only when their
+  account is gone (the foreign key's SET NULL).
+- **Grants and RLS**: `water_app` has `SELECT, INSERT, DELETE` and
+  `UPDATE` on the lifecycle columns only (`status`, `status_reason`,
+  `superseded_by_pack_id`; catalogue `COLUMN_ONLY_UPDATE`). The PDF and
+  bundle columns aren't granted: their hashes are verified publicly, so the
+  renderer will set them through a `SECURITY DEFINER` setter. `SELECT`: editors, and viewers for a baseline pack
+  or when `app_scenario_readable(scenario_id)` (045); `INSERT` editor as
+  themselves (`created_by = app_current_user_id()`); `UPDATE` editor;
+  `DELETE` editor, drafts only.
+- **Cites both runs**: `model_run_cited` (latest body here) has a clause for
+  each, so `trimRuns`, the unpin and the run `DELETE` keep them, and
+  `citedBy` lists `{ kind: 'pack', name: 'version N' }`.
+  `scenario_signed_run_guard` (latest body here) refuses deleting a scenario
+  a pack cites.
+- **Keeps its project**: `project_pack_guard` (BEFORE DELETE on `project`)
+  refuses a project with a pack past draft (`restrict_violation`).
+- **`app_verify_pack(code)`** (`SECURITY DEFINER`, `STABLE`): by short code
+  or full hash, the printed fields of a pack that was issued, as `jsonb`, or
+  NULL ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
+- **Audit**: `pack.drafted`, `pack.deleted`, `pack.issued`,
+  `pack.superseded`, `pack.withdrawn` (ids, version, short code and hash; a
+  withdrawal its reason), and `signoff.created` with `packId`.
+- Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
+  role-ladder, mass-assignment and cross-project sweeps.
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -2230,20 +2312,20 @@ functions and changes no table, policy or grant:
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 | Column | Holds |
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
-| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
+| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
-| `enabled`, `schedule` | `daily` or `hourly` |
+| `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69) |
 | `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
@@ -2266,11 +2348,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
     from the enqueues.
   - Due (`app_feed_is_due`, 027, a plain function only the two above call):
-    never scheduled; or not scheduled within a day (or an hour, for hourly),
-    with a minute's slack; or, for a **daily `chirps_gefs`** feed, scheduled
-    before the latest 08:45 UTC (after CHC publishes the day's issue, #33);
-    or, while failing, after 15 min × 2^(failures − 1), capped at the
-    interval. UTC whatever the session time zone.
+    never scheduled; or not scheduled within a day, with a minute's slack;
+    or, for a **`chirps_gefs`** feed, scheduled before the latest 08:45 UTC
+    (after CHC publishes the day's issue, #33); or, while failing, after
+    15 min × 2^(failures − 1), capped at the day. UTC whatever the session
+    time zone. 111 dropped the hourly interval; the `schedule` argument
+    stays so the callers are unchanged.
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.
@@ -2297,6 +2380,16 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     pending but waiting (a backfill's next window, a retry): makes that job
     due now, as an editor, and says whether it moved one (`water_app` can't
     UPDATE `job`).
+  - `app_feed_take_run_now(feed, capacity, refill_seconds)` (111): takes one
+    "Run now" press from the feed's token bucket, as an editor of its
+    project; returns 0, or the seconds until a press is back (taking
+    nothing). The route passes `RUN_NOW_RATE` (6, one back every 600 s) and
+    calls it only for a press that queued or pulled a fetch, in the press's
+    transaction, so a refusal rolls the enqueue back. The bucket is
+    **`data_feed_run_now (feed_id PK → data_feed CASCADE, tokens,
+    refilled_at)`**, the `api_key_throttle` pattern: RLS on with a policy
+    that matches no row, so `water_app` neither reads nor refills it; only
+    this function does. No personal information.
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.

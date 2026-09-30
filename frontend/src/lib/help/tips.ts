@@ -399,8 +399,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'diversion',
-		term: 'Diversion back to dam',
-		short: 'Daily capacity to pump or channel water from the river below the dam back into it, in m³/day.',
+		term: 'River to dam (diversion)',
+		short: 'Daily capacity to pump or channel water from the river below the dam into it, in m³/day. Separate from the river pump that irrigates.',
 		units: 'm³/day',
 		category: 'farm',
 		fields: ['node.divertCapacityM3Day']
@@ -692,6 +692,13 @@ export const TIPS: HelpTipText[] = [
 		term: 'Uncertainty bands (behavioural ensemble)',
 		short: 'How far a run’s results move across every parameter set and forcing the data can’t rule out: 5–95 % bands, never below 30 kept sets.',
 		category: 'fit'
+	},
+	{
+		id: 'evidence-uncertainty-rule',
+		term: 'Declared uncertainty rule (evidence)',
+		short: 'The ensemble an evidence report may cite: its size, bounds, pan shift and the tests a set must pass, declared before any band is seen.',
+		category: 'fit',
+		fields: ['settings.evidenceUncertaintyRule']
 	},
 	{
 		id: 'calibration-bounds',

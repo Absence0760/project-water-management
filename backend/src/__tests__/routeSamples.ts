@@ -5,7 +5,7 @@
 // A route whose validation refuses an empty body needs a SAMPLE here; both
 // sweeps fail until it has one.
 import { expect } from 'vitest';
-import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, signUp } from './helpers.js';
+import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, retirePendingJobs, signUp } from './helpers.js';
 
 export type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -53,6 +53,20 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
+		body: {
+			fullName: 'Ladder Signer',
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationField: 'water_resources',
+			registrationNo: '1',
+			scope: 'ladder',
+			confirmed: [],
+			statementSha256: '0'.repeat(64)
+		}
+	}),
+	'POST /projects/:id/packs': (c) => ({ body: { runId: c.runId } }),
+	'POST /projects/:id/packs/:packId/withdraw': () => ({ body: { reason: 'superseded by the revised application' } }),
+	'POST /projects/:id/packs/:packId/signoffs': () => ({
 		body: {
 			fullName: 'Ladder Signer',
 			registrationBody: 'sacnasp',
@@ -185,3 +199,11 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 		}
 	};
 }
+
+/**
+ * Retire the jobs the ladder left pending: buildLadder's yield job, and
+ * whatever the routes a file sends queued (re-runs, yields, sweeps …). Call it
+ * in the file's afterAll: the job queue is shared by every DB test file, and a
+ * later file's tick would claim them (src/__tests__/db-setup.ts).
+ */
+export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);

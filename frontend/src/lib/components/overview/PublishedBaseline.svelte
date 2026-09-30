@@ -4,10 +4,12 @@
 	WUA's notice and the next expected update. Read-only for everyone; an
 	editor changes the notice or publishes another run in the Runs tab's
 	Publication panel, which this card links to (one notice editor, not two).
+	Report opens the published run's printable report (WP-2.15, issue #70).
 	A newer automatic run (WP-2.11) asks the editor "New auto run: publish?",
 	with the comparison against the published run.
 -->
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { onMount } from 'svelte';
 	import { autoRunToPublish } from '$lib/components/autorun/autoRun';
@@ -20,12 +22,15 @@
 	let {
 		projectId,
 		runs,
-		canEdit
+		canEdit,
+		ready = $bindable(false)
 	}: {
 		projectId: string;
 		/** The page's runs list, for the published run's label and period (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		canEdit: boolean;
+		/** True once the publication has loaded or failed (the card has its final height); for the Summary's data-ready. */
+		ready?: boolean;
 	} = $props();
 
 	let current = $state<Publication | null>(null);
@@ -44,6 +49,9 @@
 		}
 	}
 	onMount(load);
+	$effect(() => {
+		ready = !loading;
+	});
 
 	const run = $derived(current ? (runs?.find((r) => r.id === current!.runId) ?? null) : null);
 	// The Runs tab on the published run, at its Publication panel.
@@ -58,7 +66,12 @@
 <section class="panel baseline" aria-labelledby="baseline-h" aria-busy={loading}>
 	<div class="panel-head">
 		<h2 id="baseline-h">Published baseline</h2>
-		{#if current}<a href={runHref(current.runId)}>Open in Runs</a>{/if}
+		{#if current}
+			<span class="links">
+				<a href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(current.runId)}">Report</a>
+				<a href={runHref(current.runId)}>Open in Runs</a>
+			</span>
+		{/if}
 	</div>
 	<LoadState {loading} {error} retry={load}>
 		{#if current}
@@ -116,6 +129,11 @@
 	.text {
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
+	}
+	.links {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1rem;
 	}
 	.small {
 		font-size: 0.85rem;

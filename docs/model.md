@@ -1053,7 +1053,8 @@ change, and compares a stored run without the setting as the default.
 **Where the CHIRPS and forecast series come from.** Uploaded, or from a data
 feed (Settings → Data feeds, [architecture.md § Data feeds](./architecture.md#data-feeds)):
 a CHIRPS feed writes CHIRPS v3 **as published**, the weighted mean of the
-configured 0.05° cells, into `rain_chirps_mm` (preliminary days first, then
+configured 0.05° cells (or the area-weighted mean of the cells a bounding box
+overlaps), into `rain_chirps_mm` (preliminary days first, then
 their final values once published), and a CHIRPS-GEFS feed writes the 16-day
 forecast into `rain_forecast_mm`. Neither changes the priority above: rain
 used is catchment rain, else CHIRPS (bias-corrected here, unless the mode is
@@ -1873,6 +1874,29 @@ The workbook has two blocks of columns:
   nothing, though it would release water that day. A *pass-inflow* release
   isn't counted: it is at most the day's inflow, which the room doesn't
   count either (transfers are settled before the day's flows are known).
+  **Engine ≥ 1.31.0 ([issue #200](https://github.com/Absence0760/project-water-management/issues/200))**
+  replaces `D[dst][t]` in the room with the most the dam can be drawn for
+  it that day:
+
+  `draw = MIN( D − MIN(Σ primary direct units' room, groundwater allocation room)  [≥ 0],  surface allocation room )`
+
+  Primary direct boreholes (§2.7d) pump before the dam, each up to
+  `MIN(capacity, annual cap − pumped since 1 October)`, and under an
+  allocation cap (§2.12a) the dam and river together give at most the
+  surface room: both are known from the start of the day, so they are taken
+  off (the water-year reset of those volumes now runs before the
+  transfers). Before, the room counted the whole `D`, and a transfer into a
+  full dam brought water the borehole had already supplied, or that the cap
+  stopped the farm from using, and it spilled the same day. Two sources are
+  still **not** taken off, because they depend on today's river flow, which
+  is only known after the transfers are settled: river off-take water used
+  first (§2.6a) and a river-first pump (§2.7e). Counting them as nothing is
+  the choice that never leaves a destination short of what its dam will be
+  asked for; where they do meet part of `D`, a transfer into a full dam can
+  still bring that part and it spills (the known limitation is pinned in
+  `network/dam.test.ts` › "river off-take water is still counted as
+  unknown"). The bound never undercounts the draw, whatever those two
+  sources supply.
   Rules run by `priority` (integer, lower
   first). Within one priority, rules into one destination share its room and
   rules from one source share its free water, each pro rata to its own limit
@@ -3041,7 +3065,7 @@ T   = β(1 − e) × G_crops + Σ r_k × G_k      (r_k = returnPct, 0 when exter
 
 Everything else in §2.7 is unchanged: the balance keeps its form, since G and
 T carry the objects in and out. A transfer's room into a unit counts the whole
-D (§2.6). The EWR attribution's consumptive use is G − T day by day on such a
+D (§2.6), less what its primary boreholes supply first, within an allocation cap. The EWR attribution's consumptive use is G − T day by day on such a
 unit (it no longer follows from G alone), and the curtailment report's supply
 cut divides the irrigation part of the charge by the window's
 (Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
@@ -3348,7 +3372,16 @@ flow), what it covers (`total` or `lowFlow`, a label only), a required
 report turn into a confidence line: "Gazetted Reserve", "Desktop estimate,
 low confidence", "Other source, confidence not stated"; absent = not stated,
 and a table stored before it resolves and reports as it did; the site's
-report carries it only when set), a `scale` (default 1; multiplies every value, for a table given for
+report carries it only when set), an optional `category` (ER9, issue #71:
+the recommended ecological category, REC, the determination sets at the
+site, one class `A` … `F` or a band of two neighbouring ones such as `B/C`,
+as a Reserve determination states it (Kleynhans & Louw 2007); absent or null
+= not given. A label only: no result depends on it, so no `ENGINE_VERSION`
+bump (but a malformed one makes the table unusable like any other bad
+field, so the run skips it with a warning; the settings API and
+`ewrRule.set` refuse it first); the licensing evidence report's § 1 site strip prints it, and a
+change to it is listed in run comparison like any other rule-table
+field), a `scale` (default 1; multiplies every value, for a table given for
 a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 
@@ -3425,7 +3458,14 @@ deficit  = MAX(R − A, 0) as m³
 - **Below the table.** Drier than the driest point, the requirement scales
   with the flow (T_last × V / N_last: the table's EWR-to-natural ratio at its
   driest point, applied to the flow), rather than asking a river with less
-  than its driest natural flow for the full drought flow.
+  than its driest natural flow for the full drought flow. The rule is
+  pending the hydrologist: it makes those months easier to meet, so the
+  licensing evidence report counts them per site (the month's `beyond:
+  'drier'`) and flags them as a caution (G16, issue #71). The ratio
+  R ÷ V stays T_last ÷ N_last: the requirement is below T_last, but
+  not relaxed against the flow. With the percentile from the `run`, about
+  (100 − P_last) % of months fall there by construction (1 % at the DRM's
+  99 % point).
 - **Above the table.** Wetter than the wettest point, the requirement stays
   T_1: the rule table does not ask for more than its wettest flow.
 
@@ -3584,7 +3624,10 @@ from the client's hydrologist: which table applies at which site (and
 whether total or low-flow), whether the percentile should come from the run
 or the gazette's natural curve, linear or log interpolation, whether the
 requirement below the driest point should scale or hold, and whether the
-daily charge should follow the rule table (`ewrChargeSource`).
+daily charge should follow the rule table (`ewrChargeSource`). Each open
+choice is a row of the engine audit (A1–A4,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so it is printed in
+the known limitations on every validation statement and sign-off.
 
 **Sources.** Full references are in
 [calibration-research.md § References](./calibration-research.md#references).
@@ -3597,7 +3640,9 @@ drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
 2011, WRC K8/881/2 (rule tables in Mm³ or m³/s against the natural curve; FDC
 and monthly compliance; interpolating a requirement between points) ·
 Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
-months, seasonality, magnitude, contiguity).
+months, seasonality, magnitude, contiguity) · Kleynhans & Louw 2007, WRC
+TT 329/08, *River EcoClassification*, Module A (the ecological categories
+A–F a REC is stated in).
 
 ### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.33.0, roadmap WP-3.7)
 
@@ -3881,7 +3926,9 @@ how an event is found in daily flow (engine 1.9.0: at least half the
 duration at or above half the peak, above) and whether the level should
 sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
-this is signed off.
+this is signed off; each is a row of the engine audit (A5–A7,
+[engine-audit.md § Findings](./engine-audit.md#findings)), so the known
+limitations list it.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
@@ -5222,6 +5269,24 @@ it never changes a run's results.
   paired band is refused when the baseline's ensemble varied the pan
   coefficient and the other run is GR4J on a monthly PE row, which doesn't
   use it: the pairs would not be the same members.
+  Each Reserve site's band also carries `worse` (issue #71): the share of
+  pairs in which the other run meets fewer months at that site, counted over
+  the pairs with a rate on both sides; `null` below the 30-member gate. A
+  summary stored before it has no `worse`, and the evidence report then
+  prints no "worse in" for the row.
+- **The declared rule and the cited ensemble** (issue #71,
+  `uncertainty/options.ts`, [design/evidence-report.md](./design/evidence-report.md)
+  G4): a project may declare one rule for its evidence,
+  `settings.evidenceUncertaintyRule` (members, bounds, pan shift and the
+  four thresholds). An evidence report cites the **first** complete, unpaired
+  ensemble on its baseline whose resolved options match that rule exactly
+  (`declaredRuleMismatches` empty; seed, records and rain sources are not
+  part of the rule), and the first complete paired ensemble on it. First,
+  not newest or kindest: the database draws each seed, so once one ensemble
+  on the rule has completed, starting more changes nothing the report cites,
+  and there is nothing to re-roll. Every other start is listed with how it
+  departs from the rule. No rule declared: nothing is cited, and no change
+  carries a band.
 - **Reproducible and checked.** The same input and options give an identical
   ensemble (tested); metrics are rounded to 6 significant figures. The server
   assigns the seed and stores the resolved options before the browser runs
@@ -5258,23 +5323,40 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
   fit scores lower for the same skill (calibration research CR-6): a guide,
   not a pass mark.
 - **Flagged data-quality years**: the water years whose catchment rain reads
-  far below CHIRPS (`lowvschirps`, §2.10a; up to the check's example cap),
+  far below CHIRPS (`lowvschirps`, §2.10a; every one: engine ≥ 1.31.1 lists
+  them all, where it stopped at the check's example cap of 5 before, issue
+  #70; a stored run from before 1.31.1 that hit the cap says its list may
+  be cut short, `flaggedYearsMayBeCut`, and the data-quality line names every
+  year),
   and the one-line text of every other data-quality check that fired.
 - **Runoff coefficient (audit W1)**: natural flow ÷ rain on the catchment,
   marked implausible above 1.
 - **Engine version, and the build's test results** (`EngineBuild`: version,
-  git SHA, invariant suite passed, soak cases). CI does not inject the build
-  record yet ([followups.md](./followups.md#liability-and-sign-off-wp-313)),
-  so the statement says the results were not recorded; a record is only
+  git SHA, invariant suite passed, soak cases). The web release makes it
+  (issue #70): `deploy-frontend.yml` runs `scripts/release/engine-build.mjs
+  --soak-cases 1600`, which runs the engine's unit suite (the invariant
+  tests and the random-network soak at `FUZZ_CASES` = 1600) and writes the
+  record to `ENGINE_BUILD`; a failing suite fails the release. The frontend
+  build injects it (`vite.config.ts` `__ENGINE_BUILD__`), read through
+  `parseEngineBuild`, which drops anything malformed. A build without one
+  (local dev, e2e) says the results were not recorded; a record is only
   ever shown for the version it was made for.
 - **Self-checks**: the run's own verification (`summary.verification`).
 - **Known limitations**, generated from [engine-audit.md](./engine-audit.md):
   every finding or workbook quirk whose decision is still open (it says
   *pending* the hydrologist or assessor, *Needs hydrologist*, or it is only
-  *Warned* or *Built* off by default). `pnpm gen:limitations` rewrites
+  *Warned* or *Built* off by default). `pnpm gen:liability` rewrites
   `liability/limitations.generated.ts` from the doc, and
   `limitations.test.ts` parses the doc again and fails when the two differ,
   so an audit item's status can't change without the list following it.
+- **Errata** (issue #71): the known bugs of the run's engine version, from
+  [engine-errata.md](./engine-errata.md) (`errataFor(engineVersion)`: first
+  affected ≤ the version < fixed in). Generated the same way
+  (`errata.generated.ts`, `errata.test.ts`). A fixed bug keeps its row, since
+  runs made by the affected versions stay stored.
+- **Methodology**: the current methodology statement's version and SHA-256
+  ([methodology/](./methodology/README.md)); `methodology.test.ts` pins every
+  published version's hash.
 
 The same module holds the disclaimer (`DISCLAIMER`, versioned; version
 `2026-09-28`, status `agreed`: accepted by the operator after a pre-counsel
@@ -5282,11 +5364,12 @@ review, Step 2 D10; a later edit may mark it `draft` again, and every surface
 then shows `DISCLAIMER_DRAFT_NOTE`), the forecast-rain line a forecast run's
 report prints (`FORECAST_RAIN_NOTE(from, source)`, naming CHIRPS-GEFS and its DOI
 only for source `chirps_gefs`, a plain line otherwise) and the sign-off
-statement (`signoffStatement(run)`, `signoff-3`): the ten confirmations (the
+statement (`signoffStatement(run)`, `signoff-4`): the ten confirmations (the
 signer's identity and registration, with its category and field, competence, conflicts of interest, the
 input data, then WP-3.13's calibration, EWR tables, works, assurance levels,
-plus plausibility and the limitations), the
-limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
+plus plausibility and the limitations, errata and methodology), the
+limitations, the errata of the run's engine (or its fit's), the methodology
+statement's version and hash, and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
 The registration choices themselves, and which categories may sign or only
 warn, are `liability/registration.ts` (issue #47).
@@ -7180,7 +7263,7 @@ text:
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
-| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |

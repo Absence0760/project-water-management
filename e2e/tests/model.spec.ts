@@ -185,6 +185,26 @@ test('leaving with unsaved model changes asks first, in the app’s dialog', asy
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 });
 
+test('the one-node sheet is wide enough for three fields a row, each section in its own card', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Roomy sheet');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	expect((await sheet.boundingBox())!.width).toBeGreaterThan(900);
+
+	// Three dam fields share a row.
+	const ys = await Promise.all(['Capacity (m³)', 'Initial (%)', 'Minimum level (%)'].map(async (l) => (await sheet.getByLabel(l).boundingBox())!.y));
+	expect(new Set(ys.map(Math.round)).size).toBe(1);
+
+	// Sections are boxed apart: Dam's card ends before Routing's starts, with a gap between.
+	const dam = (await sheet.getByRole('group', { name: 'Dam', exact: true }).boundingBox())!;
+	const routing = (await sheet.getByRole('group', { name: 'Routing', exact: true }).boundingBox())!;
+	expect(routing.y - (dam.y + dam.height)).toBeGreaterThanOrEqual(12);
+	await expect(sheet.getByRole('group', { name: 'Dam', exact: true })).toHaveCSS('border-top-style', 'solid');
+});
+
 test('large values show thousands separators in the one-node form and the view-only table', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Separators');

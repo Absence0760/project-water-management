@@ -3,25 +3,32 @@
 	// engine's validationStatement() over the stored summary, so it needs no
 	// request. Printed in the report, and on screen in ValidationPanel (the
 	// run's Record group, the scenario view); the known limitations are
-	// generated from docs/engine-audit.md.
+	// generated from docs/engine-audit.md, the errata from
+	// docs/engine-errata.md, and the methodology statement is cited by version
+	// and hash (docs/methodology).
 	import { validationStatement, type RunSummary } from '@water-management/engine';
 	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { ENGINE_BUILD } from './engineBuild';
 
 	let {
 		summary,
 		engineVersion,
 		legacy,
+		fitEngineVersion = null,
 		headingLevel = 3
 	}: {
 		summary: RunSummary;
 		engineVersion: string;
 		legacy: boolean;
+		/** The engine of the automatic fit the run's parameters came from (settings.fitRecord); null for entered parameters. */
+		fitEngineVersion?: string | null;
 		/** The level of its own headings (Calibration, Data quality, Known limitations): one below the heading it sits under. */
 		headingLevel?: 3 | 4;
 	} = $props();
 	const h = $derived(`h${headingLevel}`);
 
-	const v = $derived(validationStatement({ summary, engineVersion, legacy }));
+	// The site build's record (release builds only); validationStatement shows it only for its own engine version.
+	const v = $derived(validationStatement({ summary, engineVersion, legacy, fitEngineVersion }, ENGINE_BUILD));
 	const uid = `vs-${Math.random().toString(36).slice(2, 9)}`;
 	const metric = (x: number | null, id: string) => (x == null ? '–' : id === 'pbias' ? `${fmtNum(x, 1)} %` : fmtNum(x, 2));
 </script>
@@ -38,6 +45,10 @@
 					Not recorded for this build
 				{/if}
 			</dd>
+		</div>
+		<div>
+			<dt>Methodology statement</dt>
+			<dd>{v.methodology.version} <span class="muted small">(SHA-256 {v.methodology.sha256.slice(0, 12)}…)</span></dd>
 		</div>
 		<div>
 			<dt>Self-checks on this run</dt>
@@ -83,8 +94,14 @@
 	{#if v.flaggedYears.length}
 		<p>Water years whose catchment rain reads far below CHIRPS:</p>
 		<ul>
-			{#each v.flaggedYears as y (y.start)}<li>{fmtDay(y.start)} – {y.end ? fmtDay(y.end) : '…'}: {fmtNum(y.ratio * 100)} % of CHIRPS</li>{/each}
+			{#each v.flaggedYears as y (`${y.seriesKind}:${y.start}`)}<li>{fmtDay(y.start)} – {y.end ? fmtDay(y.end) : '…'}: {fmtNum(y.ratio * 100)} % of CHIRPS</li>{/each}
 		</ul>
+		{#if v.flaggedYearsMayBeCut}
+			<p class="muted small" data-testid="flagged-years-cut">
+				This run was made on engine {v.engineVersion}, which kept only the first {v.flaggedYears.length} flagged years here; the data-quality line
+				below names every one. Re-run it on the current engine for the full list.
+			</p>
+		{/if}
 	{/if}
 	{#if v.dataQuality.length}
 		<ul>
@@ -92,6 +109,24 @@
 		</ul>
 	{:else}
 		<p>No data-quality check fired on this run’s inputs.</p>
+	{/if}
+
+	<svelte:element this={h} id="{uid}-err">Errata of engine {v.engineVersion}</svelte:element>
+	{#if v.errata.length}
+		<p class="muted small">
+			Known bugs recorded for this engine version, or for the engine of the fit its parameters came from (docs/engine-errata.md): each changes
+			results only under the conditions given.
+		</p>
+		<div class="table-wrap">
+			<table class="data compact" aria-labelledby="{uid}-err">
+				<thead><tr><th scope="col">Erratum</th><th scope="col">What goes wrong</th><th scope="col">Applies when</th><th scope="col">Fixed in</th></tr></thead>
+				<tbody>
+					{#each v.errata as e (e.id)}<tr><th scope="row">{e.id}</th><td>{e.summary}</td><td>{e.appliesWhen}</td><td>{e.fixedIn ? `engine ${e.fixedIn}` : 'not yet'}</td></tr>{/each}
+				</tbody>
+			</table>
+		</div>
+	{:else}
+		<p>None recorded for this engine version in docs/engine-errata.md.</p>
 	{/if}
 
 	<svelte:element this={h} id="{uid}-lim">Known limitations</svelte:element>

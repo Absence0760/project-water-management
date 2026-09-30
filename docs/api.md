@@ -262,7 +262,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
-| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
+| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { packs } }` for a project with an evidence pack past draft (issued, superseded or withdrawn: its verify link must keep answering; 112, [Evidence packs](#evidence-packs)), checked first; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
@@ -364,6 +364,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
+  `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
+  ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
+  evidence report's cited ensemble must follow: `{ members, bounds:
+  'wide' | 'typical', panOffset, thresholds: { objective, minSkill,
+  wr2012MaxLevel: 'ok' | 'note' | 'query' | 'unusable', maxLowFlowBiasPct:
+  number | null } }`, or `null` / absent for none declared (then a report
+  cites no ensemble). It is replaced whole, never merged, and `null`
+  withdraws it; the engine's `declaredRuleError` checks it (`400 evidence
+  uncertainty rule: …`: members a whole number 30–1000, `panOffset` 0–0.3,
+  `minSkill` −10 to 1, the bias above 0 and at most 1000 %, no other field).
+  Runs record it with their settings, and the History tab shows who
+  declared or changed it and when. It changes no result, but unlike
+  `autoRun` it is part of the run's recorded settings (a report reads the
+  rule from the baseline run itself), so saving it moves `updatedAt`: the
+  latest run shows as stale and, with automatic runs on, a re-run is queued.
   `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
@@ -439,7 +454,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
   outlet, else a gauge's node id; checked by the run, not here), `source`
   1–500 chars, optional `sourceKind` (engine ≥ 1.5.0: `gazetted` | `desktop`
-  | `other` | `null`, absent = not stated), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
+  | `other` | `null`, absent = not stated), optional `category` (ER9, issue
+  #71: the REC, `A` … `F` or a band of two neighbouring classes like `B/C`,
+  `null`/absent = not given; a label, no result depends on it), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
@@ -1260,7 +1277,7 @@ naming `startDate`, not a server error).
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }`, and/or `{ source }` (a string, or `null` to clear; 107) | `SeriesMeta`: says what an existing series holds, where its values came from (`source`), or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding, feed }` —
 `source` is where the values came from (a station id, agency, file or data feed; `null` = not recorded) and `sourceUnit` /
 `sourceUnitFactor` the unit the upload gave and the factor that converted it to `unit` (both `null` = not recorded; 107,
 [data-model.md § Series source and unit](./data-model.md#series-source-and-unit-107_series_sourcesql)). A PUT records exactly what it
@@ -1271,6 +1288,9 @@ counts the blank days a merge stores (the Data page's freshness, "Data now runs 
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
+`feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs` or `dws`;
+`days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
+or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 
@@ -1371,7 +1391,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day: initial % × that day's capacity, engine ≥ 1.30.0; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (on the run's first day, each store after the warm-up from `summary.runoff.storesStartMm`, engine ≥ 1.20.0; each `null` there on a run from before, which recorded only their total) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model (a stored run from before engine 1.0.0): `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
-| DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run; `409 { error: "this run can't be deleted" }` when row-level security refuses the delete of a run you can read (never a `404`); `404` only for a run that isn't there (already deleted or trimmed). The check and the delete see one locked row | editor |
+| DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base, a sign-off, or an [evidence pack](#evidence-packs): `this run is cited by the evidence pack version 2, so it is kept`), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run; `409 { error: "this run can't be deleted" }` when row-level security refuses the delete of a run you can read (never a `404`); `404` only for a run that isn't there (already deleted or trimmed). The check and the delete see one locked row | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, unless it is a withdrawal (then no run is the evidence); `[]` when none. `Nomination = { id, withdrawn, runId, runLabel, runCreatedAt, runoffModel, engineVersion, reason, nominatedAt, nominatedBy }`; a withdrawal has `withdrawn: true` and every run field `null` | viewer |
 | POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (a stored run from before engine 1.0.0; workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, a forecast run (WP-2.12: evidence is judged on the record, and a forecast run's last days are modelled on forecast rain), or a project at its limit of 50 nominations | editor |
 | POST | `/projects/:id/evidence/withdraw` | `{ reason }` | `201 { nomination, nominations }`: withdraws the current nomination (098): a history row with no run, stamped like a nomination, the reason required (as above). Nothing is the evidence until a run is nominated again; the withdrawn run shows as past evidence and stays kept, and the project stays undeletable. `409` when no run is nominated (nothing yet, or the last row is already a withdrawal) or at the limit of 50 rows (withdrawals count) | editor |
@@ -1905,6 +1925,104 @@ below work on it too, for an editor.
 - A contributor linked to a farm also reads its farm view
   (`GET /projects/:id/farm…`) as a farmer would.
 
+## Evidence report
+
+The licensing evidence report of a run (issue #71, WP-2.15 Phase C "evidence
+mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
+[ui.md § Evidence report](./ui.md#evidence-report)).
+
+| Method | Path | Body | Returns | Role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-3`: § 5 registered water use, `allocations` (evidence-2); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (evidence-3)) | viewer |
+
+- **Which report.** An application run (a scenario run) is reported against
+  the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
+  run is reported alone (baseline evidence, `mode: 'baseline'`). `404` when
+  the reader can't see the run or its base; contributors and farmers get `403`
+  (the report names every farm; an applicant's view is Step 3 D2's).
+- **Built by the engine** (`evidenceReport`), from what the backend reads in
+  one read-only `withUser` transaction: both runs (summary, settings, model,
+  series hashes, notes), the nomination history, the current and previous
+  publications, every ensemble started on the baseline and every paired one on
+  the application (a paired band's summary recomputed from both rows' stored
+  members, so `reserve[].worse` is there for bands stored before it existed),
+  the input diff (`diffInputs` with stored values, as compare), the revisions
+  since the previous publication, up to 50 other scenario runs on the same
+  baseline, the other applications on the baseline (below), and the engine's
+  methodology, limitations and errata.
+- **Other applications on the baseline** (`cumulative`, § 4 and page 1's
+  *Other applications on this baseline, summed*): every other scenario that is
+  submitted, or decided `approved` / `approved_with_conditions`, with its
+  newest run of its current ops (`inputs.scenario.opsSha256` equal to the
+  scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
+  viewer's report lists no submitted application (editors read those) and
+  nobody's lists a draft. Only `summary.catchment.ewrDaysNotMet` and the
+  outlet's Reserve `overall` leave the database, not the runs. The engine
+  lists each one's own change against the baseline and sums those of the same
+  engine, period and runoff model (any other difference is the application's own ops): a sum of separate runs, not one combined
+  run (WP-3.11).
+- **Always answers.** A run that isn't evidence still gets `200` with
+  `refused: true` and the failed checks (`checks[]`: nominated, legacy,
+  forecast, base, engine, period, runoff model refuse; baseline assumptions,
+  declared rule, cited ensemble and paired band block issue only; coverage is
+  printed and blocks nothing). `issuable` is true when no issue-blocking check
+  failed.
+- **The cited ensemble** is the first complete unpaired ensemble on the
+  baseline whose options match `settings.evidenceUncertaintyRule` (members,
+  bounds, pan shift, thresholds); the paired band is the first complete paired
+  row on the application against it. Every other start is in
+  `uncertainty.ledger` with how it departs from the declared rule.
+
+## Evidence packs
+
+A licensing evidence report frozen as a hashed, versioned, signed pack
+(roadmap WP-3.14, issue #71, migration 112; [evidence-pack.md](./evidence-pack.md)
+covers the manifest, the hash, the short code and the lifecycle).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
+| GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], issue }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
+| GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
+| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack }`, issued; a new version's predecessor becomes `superseded` in the same transaction. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued. `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/withdraw` | `{ reason }` (1–1 000) | `200 { pack }`, withdrawn, from draft, issued or superseded. `409` when already withdrawn | editor |
+| GET | `/verify/:code` | – | **Public.** `{ pack: PackVerification }` for the short code (`xxxx-xxxx-xxxx`, any case, dashes optional) or full manifest hash of a pack that was issued. `404` alike for a malformed or unknown code, a draft, and a pack withdrawn before it was issued. `Cache-Control: no-store` | none |
+
+- `Pack = { id, title, mode: 'application' | 'baseline', scenarioId,
+  baselineRunId, scenarioRunId, version, supersedesId, supersededById,
+  status: 'draft' | 'issued' | 'superseded' | 'withdrawn', manifestSha256,
+  shortCode, verifyPath, reportVersion, engineVersion, pdfSha256, pdfPages,
+  bundleSha256, createdAt, createdBy, issuedAt, issuedBy, statusReason,
+  signoffs }`. `title` is the report's (the scenario's name, or the
+  project's); `createdBy` and `issuedBy` are display names (null once the
+  account is deleted); `verifyPath` is the web page's `/verify/<shortCode>`;
+  `signoffs` is a count. The PDF and bundle fields stay `null` until they
+  are built.
+- `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
+  pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
+  { id, name }, engine: { version, build }, report: EvidenceReport }`.
+  `manifestSha256` is the SHA-256 of `packManifestText(manifest)` (RFC 8785).
+- `PackSignoffStatement` (`pack-signoff-1`, `packSignoffStatement`): the run
+  statement's fields less `runId` and `engineVersion`, plus `packId`,
+  `packVersion`, `manifestSha256`, `baseline: { runId, engineVersion }` and
+  `application: { runId, engineVersion } | null`; eleven confirmations, the
+  run statement's ten and `pack`; `errata` of either run's engine.
+- `PackVerification = { status, version, issuedAt, catchment,
+  engineVersion, reportVersion, manifestSha256, shortCode, pdfSha256,
+  successorSha256, withdrawnReason, methodology: { version, sha256 },
+  errata: { id, summary }[], signers: { fullName, registrationBody,
+  registrationCategory, registrationField, registrationNo, signedAt }[] }`,
+  and nothing else (`app_verify_pack`, security.md § Evidence packs).
+- A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
+  can't be deleted or trimmed, and the scenario can't be deleted. A project
+  with a pack past draft can't be deleted (`409`, [Projects](#projects)).
+- Each step is in the history: `pack.drafted`, `pack.deleted`,
+  `pack.issued`, `pack.superseded`, `pack.withdrawn`, and `signoff.created`
+  with `packId`.
+
 ## Sign-offs
 
 A registered professional signs a run (roadmap WP-3.13, migration 036;
@@ -1917,10 +2035,14 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
-  Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
+  Limitation[], errata: Erratum[], methodology: { version, sha256 }, notes:
+  string[], disclaimerVersion }` (`errata`: the known bugs of the run's
+  engine version, `docs/engine-errata.md`; `methodology`: the current
+  methodology statement, `docs/methodology/`). `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
   sends it back and the server recomputes it. The current version is
-  `signoff-3` (issue #47), with ten confirmation ids, in order: `identity`,
+  `signoff-4` (issue #71: `signoff-3`, issue #47, plus the errata and the
+  methodology citation), with ten confirmation ids, in order: `identity`,
   `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
   `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
   one. The signer's details are `fullName`, the registration as codes of
@@ -1935,7 +2057,9 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   sign-off keeps the `statementVersion` and `statementSha256` it recorded
   (earlier ones say `signoff-1` or `signoff-2`), and is listed beside newer
   ones unchanged.
-- `Signoff = { id, runId, fullName, registrationBody, registrationCategory,
+- A sign-off of an evidence pack goes through [Evidence packs](#evidence-packs)
+  (`…/packs/:packId/signoffs`), with the pack statement (`pack-signoff-1`).
+- `Signoff = { id, runId, packId, fullName, registrationBody, registrationCategory,
   registrationField, registrationNo, scope, statementVersion,
   statementSha256, disclaimerVersion, signedAt, mine }`. On a `signoff-1` or
   `-2` sign-off `registrationBody` is the signer's free text and category
@@ -2029,6 +2153,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
 | POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
+| GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
   A change replaces the whole notice. `pct` is stored to two decimals and is
@@ -2058,6 +2183,17 @@ received. For a **forecast run** (WP-2.12) it is the day before
   and 30 days to `dataUntil`, for the [portfolio](#portfolio). A farmer's
   response leaves it out, since with few farms a count says which neighbour
   went short, and the share link's allowlist never copies it.
+- `RunPublication = { publication, previous }` (`publish/runPublication.ts`).
+  `publication` is the run's newest publication, `{ id, publishedAt,
+  publishedBy, supersededAt, restriction: { level, pct, notice } }`, or `null`
+  when it was never published (or its publication aged out of the kept 12).
+  `previous` is the publication to compare with: for a published run, the
+  newest earlier publication of another run; for a run never published, the
+  current one; `null` when there is none. It carries `{ id, runId,
+  runLabel, publishedAt, publishedBy, changes, attribution }`, where
+  `changes` and `attribution` are the input changes from that run to this
+  one and who made them, as `GET /compare/runs` gives them. A farmer gets
+  `403`, as for the run itself.
 - A project keeps its newest **12** publications; an older one is deleted
   with its farm projections, and its run becomes trimmable again.
 - Nothing here is audited yet beyond the `updatedAt` / `updatedBy` stamp:
@@ -2621,13 +2757,22 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
-| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. `409` for a switched-off feed | editor |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
-  - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
-    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
+  - `config` for `chirps` / `chirps_gefs`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
+    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1), or
+    `{ bbox: { south, west, north, east } }` in degrees (south < north, west <
+    east, no crossing of 180°, the same ranges), read as the area-weighted mean
+    of every 0.05° cell the box overlaps and at most 100 cells in 25 rows
+    (about 0.5° × 0.5°; a bigger box is `400`, the issue at `config.bbox`,
+    architecture.md § Data feeds). A box may add `skipNoData: true`: its
+    no-data (sea) cells are left out and the rest renormalised, and each fetch's
+    `lastMeta` carries `cellsUsed`; a fetch with another count than the last
+    one's is refused as failed until the box is saved again (with `cells` it
+    is a `400`); for `dws`:
     `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
     three digits; upper-cased; a reservoir `R`, weather `E` or other station
     is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,
@@ -2638,8 +2783,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
-    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
-    `hourly`; `enabled` (default true);
+    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (the default and
+    the only value: no source publishes more often, 111_feed_daily_only;
+    `hourly` is a `400`); `enabled` (default true);
   - `replaceSeries` (default false): the owner confirms the feed may replace
     its target series, which holds values of another product or version, or
     an unrecorded one. Without it, attaching (or re-targeting, or switching
@@ -2673,8 +2819,11 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
   left alone because the series held a value the feed didn't write: an
   upload or import, #30), `staged` / `replaced` (a confirmed replacement's
-  days staged so far, or the label of what it replaced once swapped in) and
-  `through` (the last day the fetch asked for).
+  days staged so far, or the label of what it replaced once swapped in),
+  `through` (the last day the fetch asked for) and, for CHIRPS,
+  `finalThrough` (the last day through which the series is final, not read
+  again, #69). A CHIRPS `prelimDays` counts the preliminary days in the
+  window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all
@@ -2759,8 +2908,8 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   not people: it exchanges a single-use, 5-minute render token (issued by the
   worker as the requester) for a 10-minute session that may only `GET`
   `/auth/me`, `/projects/:id`, `/projects/:id/series`,
-  `/projects/:id/runs/:runId` and its `/series`, `/day` and `/signoffs` (the
-  report page's reads) of the one project and run, and for an impact report
+  `/projects/:id/runs/:runId` and its `/series`, `/day`, `/signoffs` and
+  `/publication` (the report page's reads) of the one project and run, and for an impact report
   `GET /compare/runs?a=<baseline>&b=<project>:<run>` with exactly that pair
   (never the baseline's own project or run); everything else, the
   run's CSV exports, reproduction and allocation comparison included,

@@ -37,6 +37,11 @@ describe('the data-feed messages (fetch-requests / ingest-results)', () => {
 	it('parses a fetch request, and refuses a malformed or mismatched one', () => {
 		const m = { v: 1, type: 'fetch', ...ids, request };
 		expect(parseFetchRequest(JSON.stringify(m))).toEqual(m);
+		// A CHIRPS request may carry the feed's newest day in its window (feeds/fetch.ts heldThrough), nothing else.
+		const chirps = { ...m, request: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: '2026-08-01', end: '2026-09-24', today: '2026-09-25', heldThrough: '2026-09-22' } };
+		expect(parseFetchRequest(JSON.stringify(chirps))).toEqual(chirps);
+		expect(parseFetchRequest(JSON.stringify({ ...chirps, request: { ...chirps.request, heldThrough: '2026-09-25' } }))).toBeNull();
+		expect(parseFetchRequest(JSON.stringify({ ...m, request: { ...request, heldThrough: '2026-09-01' } }))).toBeNull();
 		for (const bad of [
 			{ ...m, v: 2 },
 			{ ...m, fetchJobId: 'x' },

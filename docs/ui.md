@@ -250,7 +250,7 @@ generated `KNOWN_LIMITATIONS` (the list every report prints), and a
 departure's *Pending a hydrologist's confirmation* mark is read from it too.
 The departures' own words are `lib/methods/departures.ts`; its test checks
 that every id is a row of the audit. After changing an audit decision, run
-`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+`pnpm gen:liability` as usual and the page follows; when the audit adds or
 closes a finding a reader would care about, update `departures.ts`. The
 **Effective** line shows the engine version instead. English only.
 
@@ -622,8 +622,8 @@ role, freshness, Add data) and each tab's own header:
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
-  (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  (below), the section's own (the Network's **Tables** and **+ Add node**,
+  Crops' **Tables** and **+ Add crop**, Transfers' **Show on the map** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
   River & reserve's **Run** menu and **Open in Runs & results**, Units &
@@ -862,6 +862,14 @@ put the results first; its first screen follows board A1 of the redesign
    inside the window at any width. Until 2026-09-29 the complete checklist
    was a one-line `<details>` at the foot of the page that grew it by 125 px
    when opened.
+
+- **Ready.** The Summary's body (`data-testid="summary-body"`, in `overview/OverviewTab.svelte`)
+  sets `data-ready="true"` once every section that loads its own data has settled, loaded or
+  failed: the latest run's record and the previous run's, the dams' levels, the Supply by farm
+  chunk, the alerts (`AlertsPanel`'s `ready`) and the published baseline (`PublishedBaseline`'s
+  `ready`). The Latest run card is on the page while its record loads and the rest fill in after
+  it, so the page grows until then: an e2e spec that measures layout (page height, box positions)
+  waits on it first (`summaryReady` in `e2e/tests/overview.spec.ts`), never on a sleep.
 
 - **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
   `overview/reserveStrip.ts`), once the latest run's record is in: the days
@@ -1567,9 +1575,9 @@ wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
 ## Network
 
 One page, the **map** (issue #17, option A's simplicity with nothing lost).
-It used to have three layouts (Map, Table, One node); with the Grids menu
+It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
-the **node table** is a grid (**Grids → Node table**, `grid=nodes`, the
+the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
 node's **full form** opens in a sheet over the map from its card's **Edit**
 (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
@@ -1579,15 +1587,25 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
-    "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
-    as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
+    as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add node**, which opens the new node's form in
     the sheet. With no nodes the map card is an empty panel with **Add
     outflow gauge**.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
-    filling the card, and one legend line under it. Colouring by supply is
+    filling the card, and the map key under it. Colouring by supply is
     **on by default** once the project has a run.
+  - **Map key** (`mapKey` in `NetworkSchematic.svelte`, also under the
+    report's drawing): headed groups, **Nodes** (the shapes), **Lines** (the
+    river, drawn thickening, "thicker with more area upstream", and
+    transfers) and **Colour: supply** / **Colour: dam level** (the bands),
+    then the run caption and the drag hint. Each swatch uses the map's own
+    shapes and classes (the dam square with its wave), and a colour band shows
+    a unit and a unit with a dam side by side, since the colour fills either
+    shape. It lists only what the drawing has (no Gauge entry without a
+    gauge, no Transfer without one). The drawing's colour tokens sit on the
+    box around map and key, so the key follows light and dark as the map does.
   - **Screen use:** from 900 px the layout is exactly the height left in the
     window below its top edge, less the page's 1rem gutter and the save bar
     while it shows (`--dock-h`; at least 520 px), the top measured on load and
@@ -1620,7 +1638,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
-  - The **Grids** menu closes through its element (`details.open`), not its
+  - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
   - Beside it (one column below 900 px, the map first), two cards:
@@ -1653,8 +1671,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here.
 
-  - **Node sheet** (`edit=<id>`, the `Dialog` `side wide` variant, 640 px,
-    the whole width on a phone): "Edit *name*" ("*name*: details" for a
+  - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
+    three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
@@ -1668,7 +1686,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
     node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.
 
   Every field of the old Table and One node layouts is a click away (Edit,
-  Grids → Node table), so nothing was removed.
+  Tables → Node table), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -1787,7 +1805,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
   last card. The ⓘ tips sat in the column headers, so the intro sends a
   phone to the field guide instead (`node-table.spec.ts`).
 - **The one-node form** (the node sheet): the picker (‹ select ›) stays in
-  reach above the scrolling form in the sheet's fixed sub-header.
+  reach above the scrolling form in the sheet's fixed sub-header. Each
+  section (Catchment area, Dam, Routing, …, Supply, Individual boreholes,
+  Land cover) is a bordered card with its title in a tinted header band, so
+  one section's fields don't run into the next's; the card itself stays
+  `--surface`, since read-only inputs are `--surface-2`.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets the system's SABI 2021 efficiency
@@ -1888,7 +1910,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   switch-back level must be at least the switch-to-river level. A farm with no
   dam on dam only that has anything routed to its dam gets the run's hint: it
   irrigates straight from the river with no limit; pick run of river with a
-  pump capacity. A farm turned into a gauge or other user keeps the section
+  pump capacity. A farm on river first or dam, river when low that also has
+  **River to dam** (the diversion into the dam, under Routing) gets a note that
+  the run counts the two as separate pumps, so one pump doing both jobs needs
+  its capacity split between them (`sharedPumpHint`). A farm turned into a gauge or other user keeps the section
   while it still has supply settings, so they can be reset. Read-only for
   viewers (no calculator).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
@@ -2002,7 +2027,7 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
-  a **Grids** menu (Crop factors, Planted areas → the
+  a **Tables** menu (Crop factors, Planted areas → the
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
@@ -2135,7 +2160,7 @@ overlays ever edit the catchment from there.
 ### Load crop factors
 
 **Load crop factors…**, under the crop-factor table of the [crop
-grids](#crop-grids) (editors only: Crops & demand's **Grids › Crop
+grids](#crop-grids) (editors only: Crops & demand's **Tables › Crop
 factors**, the grid modal from any tab, and scenario override mode, where it
 fills the scenario's crops), opens a dialog over it
 that fills the project's crop factors from a source, shows what changes and
@@ -2239,7 +2264,7 @@ but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 
-- **From:** the Network's and Crops & demand's **Grids** menus, and Crops &
+- **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
   (the #17 checklist).
 - **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
@@ -2517,7 +2542,15 @@ so, until it is moved. **Source and unit** (issue #66, 107,
 a row whose series records a source, or was converted at upload (uploaded in
 l/s, ML/day …), says so under its name ("DWS X1H001 · given in l/s (× 0.001
 to m³/s)"); a series uploaded in the stored unit with no source adds nothing,
-so the table stays one line a row. Under the chart, the charted series shows
+so the table stays one line a row. **Fed series**: a row a data feed wrote
+days of (`SeriesMeta.feed`, `time_series.feed_id`, 031) says so under its
+name, *Written by the CHIRPS daily rainfall feed* (the source's label), or
+how many days when the feed wrote only some of the days with a value (*312
+days written by the CHIRPS daily rainfall feed*: the rest were uploaded or
+imported, and the feed keeps them). Unlike the source, which records where a
+new series first came from, the mark is live: it goes once a user's upload
+has written over every day the feed wrote, or the feed is removed or
+re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). Under the chart, the charted series shows
 its source and the unit it was uploaded in; editors edit the source there
 (*Source*, saved on change, `PATCH …/series/:id { source }`), viewers read
 it. The **Add data** form has an optional **Source** field (up to 200
@@ -2749,14 +2782,14 @@ section header, which it fills (`fillHeader`) like the other sections.
 - **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
+  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-evidence`, `#set-auto`, then after the
   form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
   listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
   named for screen readers only, its links evenly spaced (the names on the
   bar would push links into More at 1280 px, issue #162): **Model inputs**
   (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
   results, issue #173), **How results are read** (Outcome matrix, Seasonal
-  outlook: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
+  outlook, Evidence: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links
@@ -3232,7 +3265,9 @@ which checks every catchment tab).
   table (a group headed "Rule table at …") has the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
   desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
-  line), what **the table covers** (total flow, or low flows
+  line), the optional **Recommended ecological category (REC)** (ER9: A to
+  F or a band like B/C, upper-cased as typed, blank = not given; a label for
+  the evidence report, no result depends on it), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -3347,6 +3382,26 @@ which checks every catchment tab).
   (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`, `defaultReviewDate`),
   confirmed by the client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
+- **Evidence** (`#set-evidence`, issue #71, `settings.evidenceUncertaintyRule`;
+  `settings/EvidenceRuleFields.svelte`, its own chunk, part of the form;
+  [design/evidence-report.md](./design/evidence-report.md) ER3 and G4): the
+  uncertainty rule the project declares for its licensing evidence. Off by
+  default: **Declare an uncertainty rule for evidence** fills the form with
+  the ensemble's defaults (`ENSEMBLE_DEFAULTS`: 300 members, typical bounds,
+  pan ±0.1, KGE′ at least 0.5, WR2012 flags up to “query”, low-flow bias
+  within ±50 %); unticking it saves `null` (the hint then says an evidence
+  report cites no ensemble). Fields: **Members** (30–1000), **Bounds**
+  (typical or wide), **Pan-coefficient shift** (± 0–0.3), and under *A
+  parameter set is kept when it passes*: **Skill score**, **Lowest skill
+  kept**, **Worst WR2012 flag kept** (*No check* switches it off) and
+  **Largest low-flow bias kept** (± %, blank = no check). The hint says why
+  it is declared first: an evidence report's bands come only from an
+  ensemble run to this rule (the first complete one whose options match it
+  exactly), and a later change is recorded in the History tab and needs a
+  new ensemble run to it. The rule shows in one line under the form
+  (`declaredRuleText`), with its field-history line. An invalid rule blocks
+  Save (the engine's `declaredRuleError`, as the API checks it). Viewers see
+  it read-only.
 
 ### Data feeds
 
@@ -3383,14 +3438,30 @@ part of the Settings tab's chunk; WP-2.10,
   ("1 feed needs attention: …", `role="alert"`).
 - **Run now** (editors) queues a fetch at once and says so; the status
   updates once the background worker has run it (**Refresh status**).
+  Pressed too often (6 fetches, then one every 10 minutes per feed), the
+  section's error line shows the server's words, with the wait in whole
+  minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
-  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either **Grid cells**
-  (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
+  east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
+  area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
+  rows, the server's limits mirrored so a box too big is explained before
+  anything is sent), with **Leave out sea cells** under it (`skipNoData`, for
+  a box on the coast; its hint says a land cell losing its data, or a box with
+  no land, still fails; the card then adds "· 3 of 4 cells with data",
+  `cellsUsedNote`). The card says where a feed reads: "cell -20.12, 25.17",
+  "3 cells" or "box -20.20, 25.10 to -20.10, 25.20" (", sea cells left out"
+  with the option; `describePlace`). The panel is its own lazy chunk inside
+  the Settings tab (`Lazy`, with the standard loading state); its
+  `#set-feeds` anchor sits on the wrapper, so the section menu and a link
+  find it while the chunk loads.
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
   days*, the default, or *rnl: from 1981, final days only*: one product end
   to end, never one spliced onto the other) and an optional **Start date**,
@@ -3423,14 +3494,14 @@ part of the Settings tab's chunk; WP-2.10,
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by
-  the message and focuses it; busy buttons are `aria-disabled` so they keep
+  the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
   focus; after **Remove**, focus goes to the section heading. Messages land
   in a live region that is always in the page. A failed action re-reads the
   list (it was usually changed elsewhere), and a failed refresh keeps the
   list shown.
 - When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
-  default in dev and CI), a **Sample data** badge says so, and the cells hint
-  names the sample grid's extent.
+  default in dev and CI), a **Sample data** badge says so, and the cells and box hints
+  name the sample grid's extent (the box hint with a sample box inside it).
 - Viewers see the list and the health, with no buttons. Tested by
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
@@ -4850,7 +4921,7 @@ them scenarios).
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
   Network is its node table inline (`NetworkTab only="table"`), not the map:
-  the map's Grids menu and farm links open the page's grid modal and farm
+  the map's Tables menu and farm links open the page's grid modal and farm
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
   about unrecorded edits; leaving it does (the leave guard, above), and
@@ -5002,7 +5073,33 @@ scrolling in its box. Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
 
-**Every hydrological unit and water year**: the whole comparison as one table (one row
+**Every hydrological unit and water year**: first the **over/under-use
+chart** (`allocations/UsePlot.svelte`, the evidence report's § 5 chart, shared
+since 2026-09-29, issue #71 follow-up): one row per unit and water source with a
+registered volume, in the list's order (`comparisonUseRows`), one hollow mark
+per whole water year at modelled use ÷ the registered volume, a line at
+100 % and the project's band shaded behind it; a year past the axis (at most
+300 %) is an arrowhead at its edge. One neutral hue: the side of the band is
+read from position, never colour. Part years, years with nothing registered
+and units with no registered volume aren't drawn (the table lists them). On
+screen the chart is drawn px for px at its box's width (`fit`, 11 px text, at
+most 900 px wide); below 480 px (a phone) each row's label takes its own line
+above its marks, and the band and the 100 % line are drawn in each row's strip
+only, so nothing runs through a label (each has a halo on screen). A name cut
+to fit keeps the source whole and stays distinct from the others
+(`distinctShortNames`); the full label is its tooltip, and each mark's is its
+water year and share. A one-line lead above it names the quantity. The
+report's fixed drawing never draws its 9 px text under 9.5 px (a 549 px
+minimum), scrolling sideways in a focusable box on a phone. Its SVG is named by its title and described by a sentence
+counting the whole years above the band and in how many units
+(`useSummary`, which the report's chart carries too, per run), from the
+engine's own status for each year so it agrees with the table's "Above
+registered", counting every row even while the chart is folded (and saying
+how many it draws); the caption says what
+a mark, the line, the band and an arrowhead are, "modelled, not metered". It
+shows the first ten rows until **Show all N in the chart** / **Show the first
+10 in the chart** (`aria-controls="alloc-use-plot"`); the axis is the whole
+chart's, so opening it doesn't move the marks shown. Then the whole comparison as one table (one row
 per unit, source and water year, in the list's order so the units to look
 into first come first, each unit's years together, `rowsInListOrder`; a
 source with neither use nor a volume is left out), the WUA manager's
@@ -5292,11 +5389,17 @@ March") is kept against what it is about.
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
 WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
 anyone who can view the project. Without `?run=` it reports the latest run. It
-uses only existing API routes (the project, the run with its settings and model
-snapshot, the series list, four catchment series) and is its own lazy route
-chunk. A non-member gets the workspace's "This project doesn't exist or you
-don't have access to it"; a project with no runs, or a run that no longer
-exists, says so with a link to Runs & results.
+reads the project, the run with its settings and model snapshot, the series
+list, four catchment series, the run's sign-offs and its place in the
+project's publications (`GET …/runs/:runId/publication`, issue #70), and is
+its own lazy route chunk. A non-member gets the workspace's "This project
+doesn't exist or you don't have access to it"; a farmer (403 on the project)
+is sent to their farm page, as the workspace sends them; any other role
+below viewer (an applicant) reads "The catchment report isn’t part of your
+role in this project."; a project with no runs, or a run that no longer
+exists, says so with a link to Runs & results. The Overview's published
+baseline card links to the published run's report (**Report**, beside
+**Open in Runs**).
 
 - **Impact report** (`&against=<projectId>:<runId>`, Compare runs' **Export
   impact report**, issue #17 A4): the same report with the cover's eyebrow
@@ -5363,7 +5466,12 @@ exists, says so with a link to Runs & results.
   signed the run, "Signed off by <name> (<body> <number>)", or "Not signed
   off by a registered professional."; an unsigned run nominated as evidence,
   or any unsigned impact report, adds **Not signed off: not for use as
-  evidence in a licence application.** in bold; then the contents), then numbered
+  evidence in a licence application.** in bold; then the contents; for a
+  published run, or one that was, **Published** with the date, by whom, and
+  "; the run stakeholders see now" or "; replaced <date>", and the
+  publication's restriction notice as a note, "Restriction notice: Restricted
+  · 20 %…" (or "(on the publication since replaced)"), then the WUA's text in
+  each language it wrote, each marked with its `lang`), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -5385,22 +5493,39 @@ exists, says so with a link to Runs & results.
   chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
-  for the outlet and every farm), **Hydrological units, warnings and checks** (the run
+  for the outlet and every farm), **Assurance of supply** (when the run has
+  it, engine ≥ 0.32.0: the Runs tab's Assurance panel in print mode, every
+  stress grid printed, the system's then each unit's, each under its own
+  "Stress classes by month: <name>" heading, with no picker; issue #70),
+  **Hydrological units, warnings and checks** (the run
   summary: warnings, headline cards, the farm table; the self-checks and the
-  water balance by water year, without Trace a day) and **Notes** (the run's
-  notes, when it has any). A section appears only when the run has its data;
+  water balance by water year, without Trace a day), **Notes** (the run's
+  notes, when it has any) and **Changes since the previous publication**
+  (issue #70: against the publication before this run's own, or, for a run
+  never published, against the current publication, named with its label,
+  date and publisher; who made the saved changes, then the input changes,
+  `ChangesList`, as Compare runs lists them). A section appears only when the run has its data;
   nothing is printed as a placeholder. Every report then closes with three
   sections (WP-3.13, `components/liability/`):
   - **Validation statement** (`ValidationStatement.svelte`, the engine's
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
-    engine version, the build's invariant and soak results (*Not recorded
-    for this build* until CI injects them), the run's self-checks, the
+    engine version, the build's invariant and soak results (the web
+    release's build record, `ENGINE_BUILD`, injected at build time; *Not
+    recorded for this build* in a build without one, such as local dev), the
+    methodology statement it cites (version and a 12-digit hash prefix,
+    `docs/methodology/`), the run's self-checks, the
     runoff coefficient (flagged above 1, audit W1), a legacy-model warning
     ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
-    caveat, the flagged data-quality years and checks, and the **known
-    limitations** table (ID, limitation, where it stands) generated from
-    engine-audit.md. The same component is on screen, folded shut, in a
+    caveat, the flagged data-quality years (every one, engine ≥ 1.31.1; an
+    older run that hit the old cap of 5 says its list may be cut short) and
+    checks, the **errata** of
+    the run's engine version or its fit's (ID, what goes wrong, when it
+    applies, fixed in; "None recorded for this engine version in
+    docs/engine-errata.md" without one), and the **known limitations** table
+    (ID, limitation, where it stands) generated from engine-audit.md. The
+    sign-off dialog shows the same methodology line, and lists the errata
+    after the limitations in the box that must be scrolled to its end. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, date, the self-declared registration as "Pr.Sci.Nat.
@@ -5411,7 +5536,7 @@ exists, says so with a link to Runs & results.
     "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the ten
-    statements a signer of the current version confirms (`signoff-3`). When
+    statements a signer of the current version confirms (`signoff-4`). When
     a listed sign-off was made under an earlier version, a line says it
     confirmed that version's wording, recorded by its hash, not the
     statements below. An editor or owner gets **Sign off this
@@ -5427,8 +5552,6 @@ exists, says so with a link to Runs & results.
     `draft`, a bold *Draft wording, pending the client's legal review
     (decision D10)* line stands above it.
 
-  Not yet: the published-by line and restriction notice (WP-2.3), changes
-  since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
   opened): full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
@@ -5475,7 +5598,14 @@ exists, says so with a link to Runs & results.
   the bar says "Preparing the report…" and **Download PDF** is disabled. The
   signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
-  PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
+  PDF**. Print CSS: A4 (`@page`, added while the page is open,
+  `report/printPage.ts`), a running footer on every page in the bottom
+  margin from CSS page-margin boxes (`@bottom-center`, Chromium 131+): the
+  page's `data-report-footer` (the engine's `REPORT_FOOTER`: project · run ·
+  "Model estimates; see the Disclaimer (section N, version …). The operator
+  of this software accepts no responsibility to anyone who relies on this
+  report.") and "Page X of Y." (a browser without margin boxes, Firefox,
+  prints the pages without it), a page break
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
@@ -5498,12 +5628,9 @@ exists, says so with a link to Runs & results.
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
   pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)),
-  plus a running footer on every page: the page's `data-report-footer`
-  (the engine's `REPORT_FOOTER`: project · run · "Model estimates; see the
-  Disclaimer (section N, version …). The operator of this software accepts
-  no responsibility to anyone who relies on this report.") and "Page X of
-  Y" (`reports/render.ts` `footerTemplate`). The browser's own print
-  (Download PDF) has no running footer.
+  the running footer included: it comes from the page's own CSS, so the
+  renderer adds none of its own (issue #70; it used `footerTemplate` until
+  then, which the browser's print didn't have).
   The bar then follows the job's status (`role="status"`: "PDF queued: waiting
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
@@ -5532,6 +5659,130 @@ exists, says so with a link to Runs & results.
   `e2e/tests/report-pages.spec.ts` (queued and failed states planted with
   `support/db.ts` `holdReportJob` / `failReport`, a viewer, not found, axe in
   both themes at desktop and phone).
+
+### Evidence report
+
+`/projects/:id/report?run=<runId>&evidence` (issue #71, WP-2.15 Phase C;
+`report/evidence/EvidencePage.svelte`, the report itself
+`EvidenceReport.svelte` in its own chunk;
+[design/evidence-report.md](./design/evidence-report.md)): the licensing
+evidence report of one run. `&evidence` swaps the catchment report for this
+page; the rest of the route is unchanged. The server builds the whole
+document (`GET …/runs/:runId/evidence-report`,
+[api.md § Evidence report](./api.md#evidence-report)); the page only draws it.
+Viewer role and up; a contributor or farmer is told it needs the viewer role.
+
+- **Two modes**, from the run named. An **application** report: a scenario
+  run, reported against the base run it recorded. A **baseline** report: the
+  nominated run on its own (no change column, no Appendix C).
+- **Entry links.** **Evidence report** on the Runs tab, beside **Report**,
+  for the current nominated run or a scenario run; and in the head of a
+  scenario's comparison (`ScenarioCompare`), for the scenario's last run.
+- **Board 1, the checks** (screen only, open by default): every check the
+  engine makes (`evidenceChecks`), failures first, each marked *stops
+  issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Then **Expect questions about:** what an assessor will ask for, with the
+  way out (failed checks, "Not assessed" rows, a site without a REC, no stored
+  fit, a flagged WR2012 check).
+- **Board 2, the refusal.** When a refusing check fails (not the current
+  nominated run, a legacy runoff model, a forecast run, another base run,
+  another engine version, period or runoff model), the page shows only
+  *This run can't be reported as evidence*, the failed checks with their
+  ways out, and a link to the ordinary catchment report. Print is disabled.
+  A changed baseline assumption doesn't refuse: the report shows as a
+  preview under a red banner.
+- **Sections**, fixed (`report/evidence/sections.ts`); a section with nothing
+  to show prints *Not assessed* and why, never disappears:
+  - **Summary** (page 1, `EvidenceSummary.svelte`): identity (the runs, the
+    baseline's nomination and whether it is the published run, signers,
+    verify), the banner (red when a baseline assumption changed, else "No
+    baseline assumption changed"), **Read these first** (the flags, red
+    before caution before counts, each saying which way it pushes the
+    numbers), the change table (fixed rows, each with its basis: Reserve
+    months met per rule-table site, days below the pragmatic EWR, shortfall
+    volume, outflow MAR with % of natural MAR, the applicant's own supply,
+    *Registered vs modelled use* (unit-years above a registered volume,
+    summed, no band; *Not assessed* without volumes), other users' supply,
+    and *Other applications on this baseline, summed* (the other submitted
+    or approved applications' own changes in days below the pragmatic EWR,
+    added up, no band, its basis saying it is a sum of separate runs and not
+    one combined run, WP-3.11; *None* when there are none the reader can
+    see)), with the paired band and "worse in k of n"; then **Impact by year
+    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    background, the application beside it, from the three daily series
+    `loadImpactSeries` fetches before ready; the year-class method and the
+    Reserve site are the project's `settings.outcomes`, as the impact report
+    reads them; *Not enough years* per class on a short record, and the
+    note when only one run is at full allocation); *Where
+    the river loses most* (the three worst months by paired median, the
+    longest run of Reserve months missed, the worst month-year) and *This
+    report does not decide*.
+  - **1 The river**: per rule-table site, the site strip (source, component,
+    unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
+    against the determination's, and, when there are any, the months whose
+    natural flow is drier than the table's driest point, where the
+    requirement is scaled with the flow: G16, also a caution flag on page 1),
+    the two heat maps (`grid.ts`, month × water year,
+    shaded by the share of the requirement delivered, failures the heavier
+    mark, lost and gained months outlined, the number in each cell), the
+    paired extra days below the EWR by month (`IntervalPlot`, outlet only),
+    the FDC check against the EWR curve (`FdcPlot`) of the month the report
+    ranks first (the largest drop in months met, else the one met least
+    often) and, beside it, of the river's driest month (the lowest mean
+    natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
+    both, when they are the same month; `grid.ts` `fdcMonths`), and the
+    compliance table. Then the application's EWR charge.
+  - **2 Uncertainty**: the coverage banner, the declared rule and the cited
+    ensemble, the ledger of every ensemble started on the baseline (and how
+    each departs from the rule; a start not completed reads *started, not
+    completed: no result stored*, with a note that the app keeps nothing of
+    it but who, when and its rule, since the browser stores an ensemble only
+    when every set has run), the baseline's bands (R1), the paired bands
+    (R2) and the printed rules.
+  - **3 Model and data**: calibration record, validation (`FitProvenance`, or
+    *Not assessed* without a stored fit), WR2012, the validation statement,
+    and the nomination history.
+  - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
+    days and years fully met, baseline and application. Then **Other
+    applications on this baseline** (`evidence-cumulative`): each other
+    submitted or approved application, its status and its own change in days
+    below the pragmatic EWR and in Reserve months met at the outlet, the sum
+    of those counted (same engine, period and runoff model; any other says
+    why it isn't) and the sum with this application; the words say it is a
+    sum of separate runs, not a combined run (WP-3.11), listed as the reader
+    can see them; past 50 the newest 50 are listed and nothing is summed
+    (page 1's row then *Not assessed*).
+  - **5 Registered water use** (WP-3.10,
+    [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
+    the allocation mode each run ran with, the band, volumes on no unit; the
+    over/under-use chart (`UsePlot`, `registeredUse.ts`: a row per unit and
+    water source, a mark per whole water year at modelled ÷ registered,
+    hollow for the baseline, filled for the application, the 100 % line and
+    the band shaded, one neutral hue, a year past 300 % an arrowhead at the
+    edge); the whole years above, within and below per unit and source with
+    the mean volumes; and every water year's registered volume and modelled
+    use, part years listed but not counted. Units by their unit name, never
+    the holder's. *Not assessed* when the runs carry no volumes, or none on a
+    unit of theirs.
+  - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with
+    their class and the input diff; A.3 series and SHA-256; A.4 baseline
+    history since the previous publication; A.5 warnings verbatim; A.6 every
+    application run on the baseline), **Appendix B** (B.1 methodology,
+    limitations and errata; B.2 sign-off; B.3 disclaimer; B.4 verify, *Not
+    issued* for a draft), **Appendix C** (application only): the scenario's
+    description and the run's notes, verbatim, the only free text.
+- **Draft stamp.** Every section head and the footer (`data-report-footer`)
+  read *Draft · not issued* until an evidence pack issues it (WP-3.14), and
+  in print a diagonal *Draft · not issued* watermark crosses every page
+  (`position: fixed` in `@media print`, which Chromium repeats on each page;
+  `aria-hidden`, the text stamps being the accessible ones), so a cropped
+  page still says it.
+- **Ready and print.** `data-report-ready` follows the catchment report's
+  contract (every fetch in, every chart drawn). **Download draft PDF** is the
+  browser's print (always light, A4). There is no server-rendered evidence
+  PDF yet: it comes with the issued pack (WP-3.14).
+- Tested by `e2e/tests/evidence-report.spec.ts` and, for § 5 with volumes,
+  `e2e/tests/evidence-allocations.spec.ts`.
 
 ## Help (`/help`)
 
@@ -5594,7 +5845,7 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   sections, the Project and Dams pages, where the sections sit in the app
   sidebar under the catchment's name, Projects / Teams / Help at its top, the
   Data badge, the phone bar's Menu and the phone Sections button, the section
-  header and each page's actions in it, the notice line, the Grids menu's grid
+  header and each page's actions in it, the notice line, the Tables menu's grid
   modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to the term's glossary topic page.
@@ -5748,7 +5999,14 @@ published.
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
-  summary sentence and a full table behind "Show the numbers"); last
+  summary sentence and a full table behind "Show the numbers": each month's
+  needed and received, and under the received a line with the share of the
+  need and the engine's stress class in plain words ("99 % · all or nearly
+  all"; a line in the cell, not a fourth column, which didn't fit a 320 px
+  phone in Afrikaans) (all or nearly all ≥ 95 %, a little short
+  ≥ 85 %, short ≥ 70 %, very short ≥ 50 %, far too little; `chart.ts`
+  `supplyLevel`, `STRESS_THRESHOLDS`, issue #70), and a line under the table
+  saying what the words mean; last
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles

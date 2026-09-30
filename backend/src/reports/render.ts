@@ -10,10 +10,12 @@
 //      requesting user, under RLS (reports/scope.ts);
 //   2. open the report, wait for main[data-report-ready] (every section
 //      loaded, every chart drawn), or stop at the page's own error message;
-//   3. page.pdf({ format: 'A4', printBackground: true }), with a running
-//      footer on every page: the page's own data-report-footer text (the
-//      project, the run and the disclaimer's key point, engine
-//      REPORT_FOOTER) and the page numbers (footerTemplate).
+//   3. page.pdf({ format: 'A4', printBackground: true }). The running footer
+//      on every page (the project, the run and the disclaimer's key point,
+//      engine REPORT_FOOTER, and "Page X of Y") is the page's own: CSS
+//      page-margin boxes (frontend report/printPage.ts), so a browser's print
+//      and this PDF carry the same one. Chromium's footerTemplate would draw a
+//      second on top of it.
 // The whole thing has a hard timeout, and the browser is closed in `finally`
 // whatever happens.
 //
@@ -104,20 +106,7 @@ export function countPdfPages(pdf: Uint8Array): number {
 	return Buffer.from(pdf).toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length ?? 0;
 }
 
-/** Escape text for Chromium's footer template (HTML). */
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-/**
- * The PDF's running footer (delict review §5.2): `text` (the report page's
- * data-report-footer, engine REPORT_FOOTER) and "Page X of Y". Chromium draws
- * it in the page's bottom margin at its own tiny default size, so the size is
- * set here.
- */
-export function footerTemplate(text: string): string {
-	return `<div style="box-sizing:border-box;width:100%;padding:0 12mm;font-family:sans-serif;font-size:7pt;line-height:1.3;color:#444;">${escapeHtml(text)} Page <span class="pageNumber"></span> of <span class="totalPages"></span>.</div>`;
-}
-
-/** The page margins; the bottom one fits the footer. Same as the report page's own @page rule. */
+/** The page margins; the bottom one holds the page's footer. Same as the report page's own @page rule (report/printPage.ts PAGE_MARGIN). */
 export const PDF_MARGIN = { top: '14mm', right: '12mm', bottom: '18mm', left: '12mm' } as const;
 
 /** Chromium flags for AWS Lambda (no sandbox, one process, /dev/shm is tiny). */
@@ -255,15 +244,8 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 		}
 		// Whatever happened on the way, print only a page of the configured site.
 		if (originOf(page.url()) !== originOf(o.siteUrl)) throw new RenderError('the report page left the site', { retry: false });
-		const footer = (await page.locator('main[data-report-ready="true"]').getAttribute('data-report-footer')) ?? '';
-		const pdf = await page.pdf({
-			format: 'A4',
-			printBackground: true,
-			margin: PDF_MARGIN,
-			displayHeaderFooter: true,
-			headerTemplate: '<span></span>',
-			footerTemplate: footerTemplate(footer)
-		});
+		// The footer is the page's (its @page margin boxes), as in a browser's print.
+		const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: PDF_MARGIN });
 		return { pdf, pages: countPdfPages(pdf), ms: Date.now() - started };
 	};
 

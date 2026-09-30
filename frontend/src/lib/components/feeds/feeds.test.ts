@@ -3,6 +3,7 @@ import { ApiError } from '$lib/api/client';
 import {
 	targetHint,
 	conflictMessage,
+	cellsUsedNote,
 	describePlace,
 	describeWrites,
 	feedWrites,
@@ -20,6 +21,7 @@ import {
 	healthMessage,
 	keptNote,
 	needsAttention,
+	parseBbox,
 	parseCells,
 	separateName,
 	takeoverOf
@@ -56,7 +58,69 @@ describe('parseCells', () => {
 	});
 });
 
+describe('cellsUsedNote', () => {
+	const box = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+	it('says how many of a coastal box’s cells had data, from the last fetch', () => {
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: { cellsUsed: 3 } })).toBe('3 of 4 cells');
+		expect(cellsUsedNote({ config: { bbox: { south: -20.5, west: 25, north: -20, east: 25.5 }, skipNoData: true }, lastMeta: { cellsUsed: 97 } })).toBe('97 of 100 cells');
+	});
+	it('is null without the option, before a fetch, or for cells', () => {
+		expect(cellsUsedNote({ config: { bbox: box }, lastMeta: { cellsUsed: 3 } })).toBeNull();
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: null })).toBeNull();
+		expect(cellsUsedNote({ config: { bbox: box, skipNoData: true }, lastMeta: { cellsUsed: '3' } })).toBeNull();
+		expect(cellsUsedNote({ config: { cells: [{ lat: 1, lon: 2 }] }, lastMeta: { cellsUsed: 3 } })).toBeNull();
+	});
+});
+
+describe('parseBbox', () => {
+	it('reads “south, west, north, east”, with commas or spaces, and a typeset minus', () => {
+		const box = { south: -20.3, west: 25, north: -20.1, east: 25.2 };
+		expect(parseBbox('-20.3, 25, -20.1, 25.2')).toEqual({ bbox: box });
+		expect(parseBbox(' \u221220.3 25 \u221220.1   25.2 ')).toEqual({ bbox: box });
+	});
+
+	it.each([
+		['', /Enter the bounding box/],
+		['-20.3, 25, -20.1', /four numbers/],
+		['-20.3, 25, -20.1, 25.2, 1', /four numbers/],
+		['-20.3, 25, north, 25.2', /four numbers/],
+		['-61, 25, -20.1, 25.2', /latitudes must be between -60 and 60/],
+		['-20.3, 181, -20.1, 25.2', /longitudes must be between -180 and 180/],
+		['-20.1, 25, -20.3, 25.2', /south edge must be below the north edge/],
+		['-20.3, 25.2, -20.1, 25.2', /can’t cross 180°/],
+		['-20.3, 179.9, -20.1, -179.9', /can’t cross 180°/]
+	])('explains “%s”', (text, message) => {
+		expect(parseBbox(text)).toEqual({ error: expect.stringMatching(message) });
+	});
+
+	it('mirrors the server’s limits: 100 cells, 25 rows; an edge on a grid line adds no cell', () => {
+		// 10 × 10 cells on grid lines (−20.5 / 0.05 isn’t exact in floating point): allowed.
+		expect(parseBbox('-20.5, 25, -20, 25.5')).toHaveProperty('bbox');
+		// 25 rows × 4 columns: allowed; 26 rows: refused.
+		expect(parseBbox('-21.25, 25, -20, 25.2')).toHaveProperty('bbox');
+		expect(parseBbox('-21.3, 25, -20, 25.05')).toEqual({ error: expect.stringMatching(/covers 26 grid cells in 26 rows; at most 100 cells in 25 rows/) });
+		expect(parseBbox('-21, 25, -20, 26')).toEqual({ error: expect.stringMatching(/covers 400 grid cells in 20 rows.*about 0\.5° × 0\.5°.*list cells instead/) });
+		// Inside one cell.
+		expect(parseBbox('-20.14, 25.16, -20.11, 25.19')).toHaveProperty('bbox');
+	});
+});
+
 describe('draftToBody', () => {
+	it('a grid source with a bounding box sends { bbox } (and CHIRPS its product and start date); a bad box points at its field', () => {
+		const box = { ...emptyDraft('chirps', ['rain_chirps_mm']), area: 'bbox' as const, bbox: '-20.3, 25, -20.1, 25.2', cells: 'ignored' };
+		expect(draftToBody(box)).toEqual({
+			body: { source: 'chirps', config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } }, targetKind: 'rain_chirps_mm', targetName: '', schedule: 'daily' }
+		});
+		expect(draftToBody({ ...box, product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { bbox: { south: -20.3 }, product: 'rnl', startDate: '1985-01-01' } } });
+		expect(draftToBody({ ...box, source: 'chirps_gefs' })).toMatchObject({ body: { config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } } } });
+		expect(draftToBody({ ...box, bbox: '-20.1, 25, -20.3, 25.2' })).toEqual({ error: expect.stringMatching(/south edge/), field: 'bbox' });
+		// Leaving out sea cells: sent only when ticked, and only with a box (listed cells stay strict).
+		expect(draftToBody({ ...box, skipNoData: true })).toMatchObject({ body: { config: { bbox: { south: -20.3 }, skipNoData: true } } });
+		expect((draftToBody(box) as { body: { config: object } }).body.config).not.toHaveProperty('skipNoData');
+		expect((draftToBody({ ...box, area: 'cells', cells: '-20.12, 25.17', skipNoData: true }) as { body: { config: object } }).body.config).not.toHaveProperty('skipNoData');
+	});
+
+
 	it('grid sources send cells; DWS sends an upper-cased station', () => {
 		expect(draftToBody({ ...emptyDraft('chirps', ['rain_chirps_mm']), cells: '-20.12, 25.17', targetName: ' Upper ' })).toEqual({
 			body: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] }, targetKind: 'rain_chirps_mm', targetName: 'Upper', schedule: 'daily' }
@@ -131,6 +195,9 @@ describe('descriptions', () => {
 		expect(describePlace({ source: 'dws', config: { station: 'X0H000' } })).toBe('station X0H000');
 		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] } })).toBe('cell -20.12, 25.17');
 		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: 1, lon: 2 }, { lat: 3, lon: 4 }] } })).toBe('2 cells');
+		expect(describePlace({ source: 'chirps', config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } } })).toBe('box -20.30, 25.00 to -20.10, 25.20');
+		expect(describePlace({ source: 'chirps_gefs', config: { bbox: { south: -20.125, west: 25.1, north: -20.1, east: 25.175 } } })).toBe('box -20.125, 25.10 to -20.10, 25.175');
+		expect(describePlace({ source: 'chirps', config: { bbox: { south: -20.3, west: 25.3, north: -20.2, east: 25.4 }, skipNoData: true } })).toBe('box -20.30, 25.30 to -20.20, 25.40, sea cells left out');
 		expect(describeTarget({ targetKind: 'rain_forecast_mm', targetName: '' })).toBe('Rainfall — forecast');
 		expect(describeTarget({ targetKind: 'flow_observed_m3s', targetName: 'Weir' })).toBe('Flow — observed gauge · Weir');
 	});
@@ -243,6 +310,9 @@ describe('errorText', () => {
 	it('shows the server’s message with a capital, and never a raw script error', () => {
 		expect(errorText(new ApiError(409, 'another feed already writes that series'))).toBe('Another feed already writes that series');
 		expect(errorText(new ApiError(0, 'Could not reach the server'))).toBe('Could not reach the server');
+		// "Run now" pressed too often (429): the server's wait, as it wrote it.
+		const busy = '“Run now” was used too often for this feed (6 fetches, then one every 10 minutes): try again in 7 minutes, or let it run on its daily schedule';
+		expect(errorText(new ApiError(429, busy, { retryAfter: 400 }))).toBe(busy);
 		expect(errorText(new TypeError("Cannot read properties of undefined (reading 'feeds')"))).toBe('Something went wrong. Try again, or reload the page.');
 		expect(errorText('boom')).toBe('Something went wrong. Try again, or reload the page.');
 	});

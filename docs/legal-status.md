@@ -202,3 +202,8 @@ Tracked in issue #103.
   Privacy §2 names the s21 agreement. `LEGAL_VERSION` 2026-09-28, with the
   re-acceptance step and the sign-up summary and checkbox. Counsel list
   replaced by the research positions and Gates A–D.
+- 2026-09-29: Privacy (retention) says a project that has put a run
+  forward as evidence or issued a licensing evidence pack can't be deleted
+  and is kept as that licence record (035, 112; operator decision on packs).
+  It states what was already the case for nominations: a clarification, not
+  a material change, so no `LEGAL_VERSION` bump.

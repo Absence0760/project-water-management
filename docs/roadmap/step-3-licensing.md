@@ -1515,13 +1515,14 @@ must build WP-2.15 Phase B.
   (`/projects/:id/report`): the disclaimer (draft then; agreed by the
   operator on 2026-09-28 after a pre-counsel review, version `2026-09-28`),
   `validationStatement` with the
-  limitations generated from engine-audit.md (`pnpm gen:limitations`, a
+  limitations generated from engine-audit.md (`pnpm gen:liability`, a
   doc-parsing test), and the immutable sign-off on a **run**
   (`036_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound
   to the statement's SHA-256, `signoff.created` in the audit log, the run
   cited so kept), with the dialog. Engine 0.31.2. Left
   ([followups.md § Liability and sign-off](../followups.md#liability-and-sign-off-wp-313)):
-  `ENGINE_BUILD` from CI, the methodology statement and errata docs, the
+  the methodology statement and errata docs (`ENGINE_BUILD` from the web
+  release is done, issue #70, [model.md §2.10f](../model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)), the
   pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
   sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
   scenario is signed through its run, which is what a pack cites.
@@ -1611,6 +1612,20 @@ must build WP-2.15 Phase B.
 > route, "Draft · not issued"), and this WP's pack route renders the same
 > components from the frozen manifest instead of a second layout. The spec's
 > §10 lists what it adds to the contents below.
+>
+> **Report content built (issue #71, 2026-09-29):** WP-2.15 Phase C, the
+> evidence mode ([ui.md § Evidence report](../ui.md#evidence-report)),
+> with its engine builder (`packages/engine/src/evidence/`) and
+> `GET …/runs/:runId/evidence-report`. What this WP still adds: issue and
+> status, the frozen manifest and its hash, the server-rendered PDF, the
+> pack route and `/verify`.
+>
+> **Packs built (issue #71, 2026-09-29):** `evidence_pack` (112), the
+> manifest and its hash (`packages/engine/src/evidence/pack.ts`), the pack
+> sign-off, draft, issue, supersede, withdraw and the public
+> `GET /verify/:code` ([evidence-pack.md](../evidence-pack.md)). Still to
+> come: the pack route and verify page, the server-rendered PDF, the
+> reproduction bundle ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 - **Goal.** A versioned, reproducible, **immutable once issued** report to
   attach to a WULA, with a verification hash and link.
@@ -1783,6 +1798,13 @@ must build WP-2.15 Phase B.
 > started for the run and what differed in their rules, and refuse a pack
 > whose bands use thresholds other than the project's declared ones (the
 > pre-declared rule set in [followups.md](../followups.md)).
+>
+> **Partly built (issue #71):** the declared rule (`settings.evidenceUncertaintyRule`),
+> the first cited ensemble on it and the ledger of every start are in the
+> evidence report, as are the refusal checks and gaming measures G1–G6, G8–G10,
+> G13–G15, and G7 and G16 in part ([design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)).
+> Assessor and NGO access, comments on a pack and refusing an *issued* pack
+> remain with this WP.
 
 > **Gaming rules designed** (issue #15): [design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)
 > keeps items 1–8 below and adds G1, G4–G9 and G13–G16 (nomination-only

@@ -1,7 +1,7 @@
 // Data feeds (WP-2.10, docs/ui.md § Data feeds): an owner attaches a
 // CHIRPS-GEFS forecast feed on the synthetic fixtures (FEED_SOURCE=fixtures,
 // no network), runs it, and the status panel shows it healthy with its newest
-// day; the forecast series appears on the Data tab. A feed pointed at the
+// day; the forecast series appears on the Data tab, marked as the feed's. A feed pointed at the
 // fixture grid's sea cell shows as failing, with the warning above the list,
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 // Automatic runs (WP-2.11, docs/ui.md § Automatic runs) live here too: new
@@ -91,9 +91,75 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	// The forecast landed in the project's series.
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const inputs = page.getByRole('region', { name: 'Input time series' });
-	await expect(inputs.getByRole('rowheader', { name: /^Rainfall — forecast/ })).toBeVisible();
+	const forecast = inputs.getByRole('rowheader', { name: /^Rainfall — forecast/ });
+	await expect(forecast).toBeVisible();
+	// Marked as the feed's (SeriesMeta.feed): every day of it came from the feed, so no count.
+	await expect(forecast.getByTestId('series-feed')).toHaveText('Written by the CHIRPS-GEFS rainfall forecast feed');
 	// The count is the section header's since the list's own summary line went (issue #174).
 	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
+});
+
+test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area’s rainfall', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Box feed');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Area').selectOption({ label: 'Bounding box' });
+	await expect(panel.getByLabel('Grid cells')).toHaveCount(0);
+	const box = panel.getByLabel('Bounding box');
+	await expect(box).toHaveAccessibleDescription(/“south, west, north, east” in degrees.*try −20\.20, 25\.10, −20\.10, 25\.20\./);
+	// A box over the limit is caught before anything is sent, on its field.
+	await box.fill('-21, 25, -20, 26');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	await expect(panel.getByRole('alert')).toContainText('The box covers 400 grid cells in 20 rows; at most 100 cells in 25 rows');
+	await expect(box).toBeFocused();
+	await expect(box).toHaveAttribute('aria-invalid', 'true');
+	// The sample box as the hint writes it, typeset minus signs and all.
+	await box.fill('−20.20, 25.10, −20.10, 25.20');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(feed).toContainText('CHIRPS daily rainfall → Rainfall — CHIRPS');
+	await expect(feed).toContainText('box -20.20, 25.10 to -20.10, 25.20 · CHIRPS sat v3.0 · daily');
+	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await runJobsTick();
+
+	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	// Preliminary days reach three days back on the fixtures (chirps-sample.json prelimLagDays).
+	await expect(feed).toContainText(`OK; newest data ${day(-3)}, checked ${projectToday()}.`);
+});
+
+test('a coastal box leaves out its sea cells when asked, and fetches the land’s rainfall', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Coastal box');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'CHIRPS-GEFS rainfall forecast' });
+	await panel.getByLabel('Area').selectOption({ label: 'Bounding box' });
+	// The sample grid's corner, whose south-east cell is sea (chirps-sample.json `sea`).
+	await panel.getByLabel('Bounding box').fill('-20.30, 25.30, -20.20, 25.40');
+	const skip = panel.getByRole('checkbox', { name: 'Leave out sea cells' });
+	await expect(skip).toHaveAccessibleDescription(/cells with no data \(the sea\) are left out and the rest averaged/);
+	await skip.check();
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toContainText('box -20.30, 25.30 to -20.20, 25.40, sea cells left out · daily');
+	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await runJobsTick();
+	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(feed).toHaveAttribute('data-state', 'ok');
+	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
+	// Three of its four cells are land (the ingest refuses a later fetch whose count changes).
+	await expect(feed).toContainText('· 3 of 4 cells with data');
 });
 
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {

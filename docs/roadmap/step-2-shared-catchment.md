@@ -1381,7 +1381,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Fixtures** are JSON (`chirps-sample.json`, `gefs-sample.json`) encoded
 >   into real LZW GeoTIFFs at request time, plus `dws-sample.html`, all
 >   re-dated to today, so a dev feed shows healthy.
-> - **Config**: cells only (1–25, weighted), no `bbox` yet. Optional
+> - **Config**: cells (1–25, weighted) or, since issue #69, a `bbox`
+>   (`{ south, west, north, east }`, the area-weighted mean of the 0.05° cells
+>   it overlaps, at most 100 cells in 25 rows). Optional
 >   `startDate` and `staleAfterDays`. One feed per series (unique target).
 > - **RLS**: as designed (viewer reads, owner writes), plus: the health
 >   columns can't be written directly (a trigger keeps them; a `SECURITY
@@ -1390,6 +1392,9 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Scheduling**: the tick claims due feeds with `app_claim_due_feeds`
 >   (stamping `last_scheduled_at`) instead of a per-day dedupe key, so a
 >   running fetch isn't queued twice; failing feeds retry on a backoff.
+>   Daily only since issue #69 (`111_feed_daily_only.sql`): no source
+>   publishes more often, so the design's `hourly` below was dropped, and
+>   "Run now" is capped per feed (6 presses, then one per 10 minutes).
 > - **API**: `PATCH` merges the fields sent; `run-now` as designed.
 > - **Merging** adds `keepOnNull` to the shared merge: a day the source has no
 >   value for never erases an existing one.
@@ -2057,9 +2062,15 @@ for alert counts.
 > pre-signed URL (which lasts an hour); `POST /reports` also takes `email`,
 > and viewers may ask for a PDF (the job table's insert policy is widened for
 > `report_render` only); farmers get `403` on all of it (WP-2.1 landed
-> first). Not deployed: plan only. **Phase C, evidence mode: designed, not
-> built** ([design/evidence-report.md](../design/evidence-report.md), issue
-> #15; plan below).
+> first). Not deployed: plan only. **Phase C, evidence mode: built
+> (issue #71, 2026-09-29)** ([ui.md § Evidence report](../ui.md#evidence-report),
+> [design/evidence-report.md §12](../design/evidence-report.md#12-changes-to-the-roadmap-the-wp-215-build-plan)).
+> It is one run-scoped endpoint (`GET …/runs/:runId/evidence-report`) drawn
+> by the route's `&evidence` mode, printed from the browser only. Left: the
+> server-rendered evidence PDF and `POST …/reports { evidence: true }` (with
+> the pack, WP-3.14, so ER1 isn't needed yet), per-unit supply bands (ER4
+> rest), the REC (ER9), the banded FDC (ER5) and page x of y footers
+> ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
 consultant copy-pasting from Excel.
@@ -2108,8 +2119,9 @@ consultant copy-pasting from Excel.
     a PDF library. That's two chart implementations to keep in step, against
     the "one implementation" principle behind the engine.
 
-- **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).**
-  The licensing evidence report on the same route:
+- **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).
+  Built (issue #71), except item 4 and the parts of 1–3 the status note
+  above lists.** The licensing evidence report on the same route:
   `/projects/:id/report?run=<applicationRun>&evidence`, built only from
   the project's current nominated evidence run and a scenario run on it
   (or the nominated run alone, for baseline evidence), refused otherwise.
@@ -2136,7 +2148,10 @@ consultant copy-pasting from Excel.
 Phase B: `POST /projects/:id/reports { runId? }` → `202 { jobId }`, and
 `GET /projects/:id/reports/:jobId` → `{ status, url? }` (viewer).
 Phase C: `POST /projects/:id/reports { runId, evidence: true }`, refused
-with `409` and the failed checks when the run isn't evidence.
+with `409` and the failed checks when the run isn't evidence. As built:
+`GET /projects/:id/runs/:runId/evidence-report` (viewer) returns the whole
+document, a refused one included (`refused: true` with its checks); the
+`POST` waits for the pack.
 
 **UI**
 - A "Report" button in the Runs tab and on the Overview published card.

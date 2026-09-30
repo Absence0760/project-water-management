@@ -199,6 +199,12 @@ export type AuditKind =
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): ids, version, short code and hash; a withdrawal its reason.
+	| 'pack.drafted'
+	| 'pack.deleted'
+	| 'pack.issued'
+	| 'pack.superseded'
+	| 'pack.withdrawn'
 	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
 	| 'calibration_rules.signed_off'
 	| 'calibration_rules.sign_off_withdrawn'

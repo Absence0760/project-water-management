@@ -85,6 +85,21 @@ describe('buildLicenceImpactBoard', () => {
 		expect(v.notes).toEqual(['Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.']);
 	});
 
+	it('names the compared run as the caller asks (the evidence report’s “the application”), with the same numbers', () => {
+		const input = { data: { a: side('Baseline', 100), b: side('More orchard', 160) }, series: series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : 0)), method: 'auto' as const };
+		const v = buildLicenceImpactBoard({ ...input, applicationName: 'the application' });
+		const control = buildLicenceImpactBoard(input);
+		if (v.status !== 'ok' || control.status !== 'ok') throw new Error('unavailable');
+		expect(v.application).toBe('the application');
+		expect(control.application).toBe('this run');
+		expect(v.columns[0]!.waterfall![2]!.label).toBe('Proposed use (the application − baseline)');
+		expect(v.columns[0]!.text).toBe('The pragmatic EWR was not met on 12 more days over 3 dry years (15 in the baseline “Baseline”, 27 in the application).');
+		expect(v.columns.map((c) => c.below)).toEqual(control.columns.map((c) => c.below));
+		// Only the run and the start day are read: the evidence report passes no project.
+		const bare = buildLicenceImpactBoard({ ...input, data: { a: { run: input.data.a.run }, b: { run: input.data.b.run } } });
+		expect(bare.status).toBe('ok');
+	});
+
 	it('calls the baseline’s use existing authorised use when it is a full-allocation run, and says so when only one run is', () => {
 		const full = (r: RunCompareResponse['a']) => ({ ...r, run: { ...r.run, summary: { ...r.run.summary, allocations: { mode: 'fullAllocation', tolerance: 0.1, used: 2, notMatched: 0, nodes: [] } } } }) as RunCompareResponse['a'];
 		const board = (a: RunCompareResponse['a'], b: RunCompareResponse['a']) => {

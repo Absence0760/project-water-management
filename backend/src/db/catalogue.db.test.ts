@@ -51,6 +51,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'updated_at',
 		'updated_by'
 	],
+	// An evidence pack's manifest, hash, runs and version are frozen; only its lifecycle, set once each, moves (112_evidence_pack.sql, evidence_pack_guard).
+	// The PDF and bundle hashes aren't granted: they are verified publicly, so only a SECURITY DEFINER setter will write them.
+	evidence_pack: ['status', 'status_reason', 'superseded_by_pack_id'],
 	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
 	share_link: ['revoked_at', 'revoked_by'],
 	// An API key likewise: never its hash, scopes or series, only its revocation (039_api_keys.sql).
@@ -180,6 +183,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
+	// An evidence pack is the project's evidence; it stays with who drafted or issued it cleared (112_evidence_pack.sql).
+	'evidence_pack.created_by': 'set null',
+	'evidence_pack.issued_by': 'set null',
 	'farm_link.added_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
@@ -534,12 +540,13 @@ describe('schema catalogue', () => {
 			{ proname: 'app_feed_is_due', pinned: true, secdef: false },
 			{ proname: 'app_feed_replace_done', pinned: true, secdef: true },
 			{ proname: 'app_feed_schedule_failed', pinned: true, secdef: true },
+			{ proname: 'app_feed_take_run_now', pinned: true, secdef: true },
 			{ proname: 'app_record_feed_checked', pinned: true, secdef: true },
 			{ proname: 'app_record_feed_result', pinned: true, secdef: true },
 			{ proname: 'app_take_feed_fetch', pinned: true, secdef: true },
 			{ proname: 'data_feed_stamp', pinned: true, secdef: false }
 		]);
-		// And only water_app may call the SECURITY DEFINER ones (018, 027, 029 and 032 revoke PUBLIC).
+		// And only water_app may call the SECURITY DEFINER ones (018, 027, 029, 032 and 111 revoke PUBLIC).
 		for (const f of fns.filter((f) => f.secdef)) {
 			const { rows } = await db.query<{ pub: boolean; app: boolean }>(
 				`SELECT has_function_privilege('public', p.oid, 'EXECUTE') AS pub, has_function_privilege('water_app', p.oid, 'EXECUTE') AS app

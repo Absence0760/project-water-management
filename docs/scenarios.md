@@ -262,8 +262,8 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   use, so a table a scenario sets is one Settings would save; its errors are
   the Settings form's sentences (`ops[0].table.source: Say where the table
   comes from …`). Applied, the table is kept as the run reads it: the source
-  trimmed, no natural grid unless it is the natural source, `sourceKind`
-  and `naturalMarMcm` (engine ≥ 1.11.0, the determination's natural MAR)
+  trimmed, no natural grid unless it is the natural source, `sourceKind`,
+  `category` (the REC, ER9) and `naturalMarMcm` (engine ≥ 1.11.0, the determination's natural MAR)
   only when stated.
 - **Problems** (the op is skipped): a table that fails those checks; a site
   that isn't the outlet or a gauge (`an EWR site is the outlet or a gauge;
@@ -626,16 +626,20 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
-  headline, farm and daily-overlay components (issue #8), where a feature
+  headline, farm, assurance-of-supply (issue #70) and daily-overlay
+  components (issue #8), where a feature
   only one side has (a river pump, boreholes, a release rule, land cover)
   reads as 0 on the other ([run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has)); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
+  Its head links to the run's **Evidence report** (issue #71,
+  [ui.md § Evidence report](./ui.md#evidence-report)) beside **Open the full
+  comparison**.
 - **Override mode** (`OverrideEditor.svelte`, `overrideDiff.ts`, its own
   chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
   their own `ModelEditor` loaded with the scenario's model (the base run's
   snapshot with the listed ops applied, `stepInputs(...).after`). The live
   model is never loaded or saved there. The Network shows its node table
-  inline (`only="table"`), not the map: the map's Grids menu and a farm
+  inline (`only="table"`), not the map: the map's Tables menu and a farm
   card's planted-areas link open the page's grid modal and farm drawer,
   which edit and save the catchment's own model (issue #17), so override
   mode must never offer them. The workspace page doesn't open those
@@ -704,7 +708,7 @@ read only; a `trigger` farm taken to run of river one change at a time
 through the form, both ops of the half-made edit saying why until the dam
 change completes it; override mode recording one edit in each table as changes
 (the node table inline, showing the scenario's model with the raise applied,
-no Grids menu; a stray `grid=` / `farm=` on the tab opening nothing),
+no Tables menu; a stray `grid=` / `farm=` on the tab opening nothing),
 refusing a kind change, the catchment's model read back through the API
 unchanged before and after recording, undone as one edit, with axe; submit,
 withdraw, delete releasing the base; axe in light,

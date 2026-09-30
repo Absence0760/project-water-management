@@ -567,7 +567,7 @@ section it belongs to, with the example that taught it.
 | Page title, context, actions | `workspace/SectionHeader.svelte` via `fillHeader` |
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`) |
-| Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide`, body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
+| Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
@@ -586,7 +586,7 @@ Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
 picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
-`network/NetworkTab.svelte` (map page, Grids menu, node sheet),
+`network/NetworkTab.svelte` (map page, Tables menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart in
 the window's one scroll, the long table folded under "Show all N series"
@@ -790,6 +790,21 @@ Interaction details that bit:
   1440×960, lists scroll inside their card; a new tab or page joins the
   list in `no-pointless-scroll.spec.ts` (see `network-map.spec.ts`,
   `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
+- **Measure layout only after the page's own data-ready.** A card that is
+  visible while its data loads (its Loading… state) is not at its final size,
+  and the sections around it fill in after it, so the page keeps growing. A
+  spec that read `scrollHeight` or a `boundingBox` right after one region
+  became visible flaked on CI (the Summary: 1792 px against 1035 px measured
+  before the run record, Supply by farm, alerts and baseline landed). Wait on
+  a readiness attribute backed by the real load states: the Summary body's
+  `data-ready` (`summaryReady` in `overview.spec.ts`), a section's
+  `data-notes-ready`, a chart's `data-ready`, the projects list's
+  `data-outcomes-ready`. A page with something that loads after the
+  measured element and no such attribute gets one in the component (a
+  bindable `ready` on each child that loads, as `AlertsPanel` and
+  `PublishedBaseline` have), never a sleep or a looser bound. Checks that
+  can only fail for a real reason when the page grows (`scrollWidth <=
+  width`) or that poll (`expect.poll`) don't need it.
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
   names across page and modal cause strict-mode errors.

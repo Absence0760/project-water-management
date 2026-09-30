@@ -13,6 +13,9 @@
 		// A sheet down the right edge, full height, for editing one thing beside the page
 		// (the per-farm planted areas, crops/FarmCropsDrawer.svelte). Full width on a phone.
 		side = false,
+		// A side sheet wide enough for a long form in sections, three fields to a row
+		// (a node's form, network/NetworkTab.svelte). Full width on a phone, like any side sheet.
+		extraWide = false,
 		// Leave the body's inputs at their own widths: a grid shown as it is (model/GridModal.svelte).
 		keepInputs = false,
 		// Fixed under the title, above the scrolling body (a side sheet's picker), so nothing scrolls under it.
@@ -35,6 +38,7 @@
 		wide?: boolean;
 		full?: boolean;
 		side?: boolean;
+		extraWide?: boolean;
 		keepInputs?: boolean;
 		subhead?: Snippet;
 		anchor?: HTMLElement;
@@ -120,6 +124,7 @@
 	class:wide
 	class:full
 	class:side
+	class:extra-wide={extraWide}
 	class:anchored
 	class:keep-inputs={keepInputs}
 	aria-labelledby={titleId}
@@ -194,6 +199,9 @@
 	}
 	dialog.side.wide {
 		width: min(640px, 100%);
+	}
+	dialog.side.extra-wide {
+		width: min(920px, 100%);
 	}
 	dialog.side[open] {
 		display: flex;

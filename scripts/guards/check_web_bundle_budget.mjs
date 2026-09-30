@@ -1316,6 +1316,109 @@
 //             are inlined rather than loading FARM_COLUMNS' formula texts,
 //             and the evaporation defaults are two constants rather than
 //             defaultProjectSettings. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #71: measured 1202 with main @
+//             e8cd5bc9 merged, against main's 1200). The errata section of
+//             the validation statement (liability/ValidationStatement: the
+//             errata table, keyed on the run's engine and its fit's) and the
+//             generated errata list it reads (engine liability/errata). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, CHIRPS bounding box: the Data
+//             feeds panel's box fields took the Settings tab chunk to 61 KB,
+//             over its 60 KB ceiling). API keys render for owners only, so
+//             ApiKeysPanel is now a lazy chunk of its own: the Settings tab
+//             measures 58 KB.
+// 2026-09-29  total 1201 → 1205 KB (issue #69: measured 1202 with main @
+//             7b0d2a73 merged, against main's 1200). The CHIRPS feed's
+//             bounding-box fields in the Data feeds panel (south, west,
+//             north, east, the cell count they cover) and their checks in
+//             feeds/feeds.ts; the lazy API keys chunk above adds its
+//             loader. No new dependency. Headroom ~3 KB.
+// 2026-09-29  no ceiling changed (issue #69, bounding box: measured with
+//             main @ 675277da and the branch's API-keys split merged). The box
+//             fields and "Leave out sea cells" grew the Data feeds panel
+//             again, so it is a lazy chunk of its own too (DataFeedsPanel
+//             via Lazy in SettingsTab, 9.6 KB), and the Settings tab
+//             measures 50,314 bytes (50 KB of 60, from 58). The total stays
+//             1202 KB of 1205. No new dependency. Headroom ~10 KB tab chunk.
+// 2026-09-29  total 1205 → 1208 KB (issue #69: measured 1205 with main @
+//             b681786e merged, at the ceiling; main grew since the entry
+//             above). Nothing of the bounding box changed; the usual
+//             headroom back. Headroom ~3 KB.
+// 2026-09-29  total 1208 → 1210 KB (issue #69: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the bounding box changed. Headroom ~3 KB.
+// 2026-09-29  total 1201 → 1226 KB (issue #71, the licensing evidence
+//             report: measured 1226 against 1201 on its base 84fb2a6b). The
+//             report is a lazy chunk of its own (report/evidence/
+//             EvidenceReport.svelte with its summary, grids and SVG plots,
+//             15.6 KB + 1.8 KB CSS), loaded only in the report page's
+//             `&evidence` mode; its shell (EvidencePage) adds ~3 KB to the
+//             report page, where Disclaimer / SignoffSection / inputs.ts now
+//             sit in a chunk the two share; Settings' Evidence rule fields
+//             are another lazy chunk (2.8 KB); the declared-rule text and
+//             check (engine uncertainty/options.ts, which the settings diff
+//             in compare.ts reads) ~1.3 KB in the shared engine chunk; help
+//             text ~0.5 KB. Trimmed first: EvidenceReport imported the
+//             engine's monthName from uncertainty/ensemble.ts, so the
+//             calibration worker's whole engine (37 → 3 KB worker, a 34 KB
+//             chunk) became a shared chunk the report page loaded
+//             statically; it now uses $lib/format/months' identical helper.
+//             No new dependency. Headroom 0 KB: the next change is measured.
+// 2026-09-29  total 1226 → 1231 KB (issue #71: measured 1228 with main @
+//             b681786e merged; main grew ~2 KB since the entry above, #206's
+//             CHIRPS final-day marker and #212's Summary readiness signal).
+//             Nothing of the evidence report changed. Headroom ~3 KB.
+// 2026-09-30  total 1231 → 1235 KB (issue #71: measured 1232 with main @
+//             3f9b4c17 merged, #205's bounding box included). Nothing of the
+//             evidence report changed. Headroom ~3 KB.
+// 2026-09-30  total 1231 → 1234 KB (issue #71: measured 1231 with main @
+//             327afa6e and #216's branch merged, against #216's 1228). The
+//             evidence report's registered water use section (§ 5: the
+//             over/under-use chart, its page-1 row and flag). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-30  total 1235 → 1238 KB (issue #71: measured 1235 with #216's
+//             branch and main @ 3f9b4c17 merged, against #216's 1232): the
+//             registered water use section above. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1241 KB (issue #71: measured 1238 with #217's
+//             branch merged, against its 1235). The Allocations tab's
+//             over/under-use chart. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1238 → 1241 KB (issue #71 follow-ups: measured 1238 against
+//             1235 on its base 0ba47067). The evidence report's chunk
+//             18.6 → 20.2 KB: § 4's other applications on the baseline, § 1's
+//             second FDC (the driest month), the ledger's note on starts not
+//             completed, the print-only diagonal draft stamp, and page 1's
+//             licence impact by year class. That board (LicenceImpactBoard,
+//             licenceImpact.ts, 4.8 KB) left the impact report's chunk
+//             (5.7 → 1.5 KB) for a chunk the two reports share, lazy in both:
+//             +0.6 KB of split overhead, but no second copy. The evidence
+//             page +0.1 KB (it fetches the board's three series). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1246 KB (issue #71: measured 1243 with main @
+// 2026-09-30  total 1201 → 1206 KB (issue #70: main @ 7b0d2a7 measured
+//             1200, the branch 1204). The report's publication cover,
+//             "Changes since the previous publication" (ChangesList and the
+//             attribution line in the report's chunk), its Assurance of
+//             supply section (the Runs tab's panel in print mode) and the
+//             @page footer; the compare and scenario views' assurance table
+//             (compare/assurance.ts, AssuranceDeltaTable.svelte); the farm
+//             view's share-received column and its Afrikaans. All in lazy
+//             route or tab chunks; the largest tab chunk stays within 60 KB.
+//             No new dependency. Headroom ~2 KB.
+// 2026-09-30  total 1206 → 1210 KB (issue #70: measured 1207 with main @
+//             327afa6e merged, #211's errata entry above included). Nothing
+//             of the report changed. Headroom ~3 KB.
+// 2026-09-30  total 1210 → 1214 KB (issue #70: measured 1211 with main @
+//             3f9b4c17 merged, #205's bounding box included). Nothing of the
+//             report changed. Headroom ~3 KB.
+// 2026-09-30  total 1238 → 1244 KB (issue #70: measured 1241 with main @
+//             848000ac merged). The report's publication, assurance and build
+//             record on top of main's evidence report. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1246 KB (issue #70: measured 1243 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1246 → 1250 KB (issue #70: measured 1247 with main @
+//             5502d0a6 merged). #225's evidence-report follow-ups now in
+//             main. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1326,7 +1429,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1201,
+	totalCodeKb: 1250,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,

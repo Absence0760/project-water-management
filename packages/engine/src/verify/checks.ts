@@ -267,7 +267,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * dam-target unit fills only for the demand the river leaves. Under an
  * allocation cap (engine ≥ 1.18.0) the surface gives at most `sRoom` and the
  * units together pump at most `gRoom` (the day's allocation_room columns;
- * Infinity without a cap). Call it once per day, in order.
+ * Infinity without a cap). Call it once per day, in order. It assumes a fresh
+ * run: each unit starts at 0, not a resumed run's saved volumes.
  */
 function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const used = b ? b.units.map(() => 0) : [];
@@ -389,8 +390,10 @@ interface Rule {
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
  * - room at the destination (audit N4): a farm that sends nothing receives
  *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
- *   evaporation − seepage) + today's demand D + a fixed release's floor,
- *   engine ≥ 1.29.0);
+ *   evaporation − seepage) + the most its dam is drawn today + a fixed
+ *   release's floor, engine ≥ 1.29.0), the draw being today's demand D less
+ *   its primary direct boreholes' room, within its allocation rooms
+ *   (engine ≥ 1.31.0, issue #200; transferDrawBound);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ over its destinations
  *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
@@ -431,10 +434,15 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farmD = farms.map((f) => get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
 	const farmRelease = farms.map((f) => resolveRelease(f, []));
+	// The most each destination's dam is drawn each day (engine ≥ 1.31.0, issue #200).
+	const bores = boreholesByNode(input.model, []);
+	const dests = new Set(rules.map((r) => r.to));
+	const farmDraw = farms.map((f, fi) => (dests.has(f.id) ? transferDrawBound(f, bores.get(f.id) ?? [], get, d0, out.days, farmD[fi]!) : null));
 	/**
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
-	 * + rain on the dam − evaporation − seepage) + today's demand D (engine ≥
-	 * 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
+	 * + rain on the dam − evaporation − seepage) + the most its dam is drawn
+	 * today (engine ≥ 1.31.0: D less its primary boreholes, within its
+	 * allocation rooms; engine ≥ 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
 	 * (engine ≥ 1.29.0: the release with no inflow and nothing transferred
 	 * in, fixedReleaseFloor). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
@@ -448,7 +456,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const cap = capOn(f.id, t);
 		const held = storage(f.id, t) + pd! - e! - sp!;
 		const rel = farmRelease[fi] ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
-		return cap - held + farmD[fi]![t]! + rel;
+		return cap - held + (farmDraw[fi]?.[t] ?? farmD[fi]![t]!) + rel;
 	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
@@ -471,7 +479,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			if (-J > outCap + tol(outCap)) return `${where}: sent ${-J} > MIN(limit ${outMax}, storage ${prev} − reserve) = ${outCap}`;
 			if (outs.length === 0 && J > 0) {
 				const room = roomOf(fi, t);
-				if (J > Math.max(0, room) + tol(Math.max(Math.abs(room), J))) return `${where}: received ${J} > its room ${room} (capacity − storage after the dam's gains and losses + demand)`;
+				if (J > Math.max(0, room) + tol(Math.max(Math.abs(room), J))) return `${where}: received ${J} > its room ${room} (capacity − storage after the dam's gains and losses + the demand its dam meets)`;
 			}
 		}
 		// Identifiable sources: every destination is fed by this source alone and sends nothing.
@@ -499,6 +507,48 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		}
 	}
 	return checkOfftakes(input, out, get);
+}
+
+/**
+ * The checks' own reading of the most a transfer's destination draws from its
+ * dam each day (engine ≥ 1.31.0, issue #200; the engine's damDrawBound): the
+ * demand D less its primary direct boreholes' room (each unit's MIN(capacity,
+ * annual cap − pumped since 1 October), together within the day's
+ * allocation_room_groundwater), capped at allocation_room_surface. The
+ * primary direct units pump first, for the demand the off-take water left
+ * (D − offtake_used), so replaying them from those columns gives each unit's
+ * volume so far this water year. Like boreholeReplay it assumes a fresh run:
+ * each unit starts at 0, not a resumed run's saved volumes.
+ */
+function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model']['boreholes']>, get: SeriesMap, day0: number, days: number, D: readonly number[]): Float64Array {
+	const g = (k: string) => get.get(`${n.id}|${k}`);
+	const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+	const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
+	const XUSED = g('offtake_used');
+	const units = (boreholeOf(n, own, []).borehole?.units ?? []).filter((u) => !u.toDam && u.mode === 1);
+	const used = units.map(() => 0);
+	const out = new Float64Array(days);
+	for (let t = 0; t < days; t++) {
+		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
+		const d = D[t]!;
+		const gRoom = RG?.[t] ?? Infinity;
+		let room = 0;
+		for (let k = 0; k < units.length; k++) room += Math.max(0, Math.min(units[k]!.capacityM3Day, units[k]!.annualCapM3 - used[k]!));
+		const primary = Math.min(room, gRoom);
+		out[t] = Math.min(Math.max(0, d - primary), RS?.[t] ?? Infinity);
+		// Today's pumping, as groundwaterDay's first step: in order, each for what the others left.
+		let gLeft = gRoom;
+		let got = 0;
+		const want = d - (XUSED?.[t] ?? 0);
+		for (let k = 0; k < units.length; k++) {
+			const u = units[k]!;
+			const v = Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - used[k]!, want - got, gLeft));
+			used[k]! += v;
+			gLeft -= v;
+			got += v;
+		}
+	}
+	return out;
 }
 
 /**

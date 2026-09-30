@@ -38,6 +38,7 @@ async function withOwnerClient<T>(fn: (db: pg.Client) => Promise<T>): Promise<T>
  */
 const NOT_A_CREDENTIAL: Record<string, string> = {
 	'api_key_throttle.tokens': 'the token bucket’s fill level (a number), not a secret',
+	'data_feed_run_now.tokens': 'the “Run now” bucket’s fill level (a number), not a secret',
 	'job.lease_token': 'a worker’s lease on a claimed job (uuid); it authorises nothing outside the worker',
 	'app_user.password_hash': 'bcrypt, not SHA-256: checked on its own below'
 };

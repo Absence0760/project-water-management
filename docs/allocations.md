@@ -164,6 +164,50 @@ Since every run's input carries the volumes (never the names), a stored run
 replays with the volumes it ran on, a change to a volume makes the latest run
 out of date, and comparing two runs lists the volumes that changed.
 
+### In the evidence report
+
+The licensing evidence report ([ui.md § Evidence report](./ui.md#evidence-report),
+[design/evidence-report.md](./design/evidence-report.md)) carries the
+comparison as **§ 5 Registered water use** and one fixed page-1 row,
+*Registered vs modelled use* (issue #71; `EvidenceReport.allocations`,
+report version `evidence-2`). The persona licence applicant asked for
+existing lawful use beside the application's numbers.
+
+- **Each run's own volumes, not today's.** The backend
+  (`backend/src/allocations/runUse.ts`, `runAllocationComparison`) runs
+  `compareAllocations` over the run's stored series, the allocations stored
+  in its input and the run's own `allocationTolerance`, record days only. A
+  volume added after a run doesn't reach its report; the Allocations tab
+  (the project's volumes and band now) can differ for an older run. Both
+  read the same series through `runUseNodes`, so a run's figures agree.
+- **What § 5 shows**: per farm or water user with a volume in either run and
+  per water source with one, every water year of both runs (registered
+  volume, modelled use, how they compare), the whole years above, within
+  and below the band, the mean volumes, the allocation mode each run ran
+  with (`RunSummary.allocations.mode`) and the volumes on no unit (counted,
+  not compared). Units are matched across the runs by node id, as § 4
+  matches them; a unit only one run has is marked. A part year is marked
+  per run and counted only in a run it is whole in; when the runs used
+  different bands, the row, the flag and § 5 name both. The over/under-use
+  chart plots each whole year at modelled ÷ registered, with a screen-reader
+  description counting the whole years above the band per run. The
+  Allocations tab draws the same chart (`allocations/UsePlot.svelte`) for the
+  run it compares, with the project's band now ([ui.md § Allocations](./ui.md#allocations-taballocations)).
+- **The page-1 row** sums the whole unit-years above the band over units and
+  sources, baseline and application, with the run's own difference and no
+  band (the ensemble doesn't carry it). It is a fixed row (G6): when the
+  runs carry no volumes, or none on a unit of theirs, or cover no whole
+  water year, it prints *Not assessed* and why, and the "expect questions"
+  list names it.
+- **A flag** under *Read these first* (caution) when the reported run (the
+  application, or the baseline for baseline evidence) is above a volume in a
+  whole year: each unit and source, with the baseline's count beside the
+  application's, at most five, then a count.
+- **No names.** A run's stored allocations never carry the holder's name or
+  the registration number, so neither does the report, whoever reads it
+  (viewers and up). An issued evidence pack (WP-3.14) freezes this document,
+  so the pack an applicant later holds carries volumes by unit only.
+
 ### What the comparison is not
 
 - Not a finding. The model's supply is what the calibrated model would take
@@ -206,4 +250,4 @@ Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
   registered volume beside their modelled use (waits on D3).
 - Dam filling vs registered storage (s21b), and how the cap counts water
   drawn from a dam that boreholes filled (pending the hydrologist, issue #90).
-- An over/under-use chart; in the evidence pack.
+- The issued pack (WP-3.14) freezes § 5 once it lands.

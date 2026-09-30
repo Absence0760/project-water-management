@@ -121,7 +121,7 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
  * whole-series hash that any date change breaks. Runs from before stored
  * inputs have none; the diff says their shared days weren't checked.
  */
-async function storedValues(db: Db, runId: string, kinds: string[]): Promise<StoredSeriesValues> {
+export async function storedValues(db: Db, runId: string, kinds: string[]): Promise<StoredSeriesValues> {
 	if (!kinds.length) return {};
 	const { rows } = await db.query<{ kind: string; values: (number | null)[] | null }>(
 		`SELECT i.kind, b."values"
@@ -133,7 +133,7 @@ async function storedValues(db: Db, runId: string, kinds: string[]): Promise<Sto
 }
 
 /** Series kinds both runs used whose dates or content hash differ: the only ones worth fetching. */
-function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
+export function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
 	const sa = a?.series ?? {};
 	const sb = b?.series ?? {};
 	return Object.keys(sa).filter((k) => {
@@ -174,6 +174,23 @@ async function attribution(
 	if (!rows[0]?.forward) return null;
 	const { revisions, truncated } = await revisionsBetween(db, a.project.id, a.run.id, b.run.id);
 	return { revisions, truncated, changedBy: attributeChanges(changes, revisions) };
+}
+
+/**
+ * What changed in the inputs from run A to run B, and who changed it: the
+ * compare route's `changes` and `attribution`, for a caller that needs only
+ * those (the report's changes since the previous publication, publish/runPublication.ts).
+ */
+export async function compareInputs(
+	db: Db,
+	refA: { projectId: string; runId: string },
+	refB: { projectId: string; runId: string }
+): Promise<{ changes: InputChange[]; attribution: CompareAttribution | null }> {
+	const a = await loadSide(db, refA);
+	const b = await loadSide(db, refB);
+	const kinds = differingKinds(a.run.inputs, b.run.inputs);
+	const changes = diffInputs(a.run.inputs, b.run.inputs, { a: await storedValues(db, a.run.id, kinds), b: await storedValues(db, b.run.id, kinds) });
+	return { changes, attribution: await attribution(db, a, b, changes) };
 }
 
 export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {

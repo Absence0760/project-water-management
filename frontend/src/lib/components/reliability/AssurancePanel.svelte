@@ -4,9 +4,13 @@
 	the stress classes per water-year month as a heat map in the EwrHeatmap
 	grid pattern. The class name is in every cell, so colour is never the only
 	cue. Input: RunSummary.supplyAssurance; absent on older runs.
+	`print` (the printable report, docs/ui.md § Report): no heading of its own
+	(the report's section names it) and every stress grid, the whole network's
+	then each unit's and user's, each under its own heading, with no picker and
+	no keyboard navigation.
 -->
 <script lang="ts">
-	import { STRESS_LABEL, type SupplyAssurance } from '@water-management/engine';
+	import { STRESS_LABEL, type StressGrid, type SupplyAssurance } from '@water-management/engine';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
@@ -15,11 +19,14 @@
 
 	let {
 		assurance,
-		engineVersion = null
+		engineVersion = null,
+		print = false
 	}: {
 		assurance: SupplyAssurance | undefined | null;
 		/** The run's engine version, for the "not computed" note on older runs. */
 		engineVersion?: string | null;
+		/** The report's print mode: every grid, no heading, picker or keyboard read-out. */
+		print?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -29,19 +36,19 @@
 	const grids = $derived(assurance ? [assurance.stress.system, ...assurance.stress.nodes] : []);
 	const grid = $derived(grids.find((g) => (g.nodeId ?? 'system') === gridId) ?? grids[0]);
 	const legend = $derived(assurance ? stressLegend(assurance.stress) : []);
-	const counts = $derived(grid ? classCounts(grid) : null);
+	const gridName = (g: StressGrid) => (g.kind === 'system' ? 'All hydrological units and users' : g.name);
 	const partYears = $derived(assurance ? partWaterYears(assurance) : null);
 
 	/** Calendar year of a water-year row + month column (Oct–Dec belong to the start year). */
 	const calYear = (r: number, m: number) => (assurance?.stress.waterYears[r] ?? 0) + (m < 3 ? 0 : 1);
 
-	function describe(r: number, m: number): string {
+	function describe(g: StressGrid, r: number, m: number): string {
 		const when = `${WATER_YEAR_MONTHS[m]} ${calYear(r, m)}`;
-		if (!assurance || !grid) return when;
+		if (!assurance) return when;
 		if ((assurance.stress.days[r]?.[m] ?? 0) === 0) return `${when}: not simulated`;
-		const c = grid.stressClass[r]?.[m];
+		const c = g.stressClass[r]?.[m];
 		if (!c) return `${when}: no demand`;
-		return `${when}: ${STRESS_LABEL[c]} stress, ${pctText(grid.ratio[r]?.[m], 1)} of demand supplied`;
+		return `${when}: ${STRESS_LABEL[c]} stress, ${pctText(g.ratio[r]?.[m], 1)} of demand supplied`;
 	}
 
 	function onKey(e: KeyboardEvent) {
@@ -61,8 +68,8 @@
 	}
 </script>
 
-<section class="assurance" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Assurance of supply</h3>
+<section class="assurance" aria-labelledby={print ? undefined : `${uid}-h`}>
+	{#if !print}<h3 id="{uid}-h">Assurance of supply</h3>{/if}
 	{#if !assurance}
 		<p class="muted" data-testid="assurance-not-computed">{notComputedText(engineVersion)}</p>
 	{:else}
@@ -117,68 +124,112 @@
 		{/if}
 
 		{#if grid && assurance.stress.waterYears.length}
-			<div class="head">
-				<h4 id="{uid}-sh">Stress classes by month</h4>
-				<div class="field inline">
-					<label for="{uid}-grid">Show</label>
-					<select id="{uid}-grid" bind:value={gridId}>
-						{#each grids as g (g.nodeId ?? 'system')}
-							<option value={g.nodeId ?? 'system'}>{g.kind === 'system' ? 'All hydrological units and users' : g.name}</option>
-						{/each}
-					</select>
+			{#if print}
+				<!-- Paper: every grid, the network's first, each under its own heading. -->
+				{#each grids as g, gi (g.nodeId ?? 'system')}
+					<!-- h3: the report's section heading is the h2 above it. -->
+					<h3 id="{uid}-sh-{gi}">Stress classes by month: {gridName(g)}</h3>
+					{@render stressGrid(g, `${uid}-sh-${gi}`, gi === 0)}
+				{/each}
+				<p class="note muted">
+					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (pending the hydrologist's review). The whole run
+					is shown, not only the reporting window.
+				</p>
+			{:else}
+				<div class="head">
+					<h4 id="{uid}-sh">Stress classes by month</h4>
+					<div class="field inline">
+						<label for="{uid}-grid">Show</label>
+						<select id="{uid}-grid" bind:value={gridId}>
+							{#each grids as g (g.nodeId ?? 'system')}
+								<option value={g.nodeId ?? 'system'}>{gridName(g)}</option>
+							{/each}
+						</select>
+					</div>
 				</div>
-			</div>
-			{#if counts}
-				<p class="summary">
-					Over the whole run: {STRESS_ORDER.filter((c) => counts[c] > 0)
-						.map((c) => `${fmtNum(counts[c])} ${STRESS_LABEL[c]}`)
-						.join(', ') || 'no month with demand'}.
+				{@render stressGrid(grid, `${uid}-sh`, true)}
+				<p class="note muted">
+					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (pending the hydrologist's review). The whole run
+					is shown, not only the reporting window. Use the arrow keys to move between months.
 				</p>
 			{/if}
-			<ul class="legend" aria-label="Stress classes">
-				{#each legend as k (k.cls)}
-					<li><span class="swatch b{STRESS_BIN[k.cls]}" aria-hidden="true"></span><strong>{STRESS_SHORT[k.cls]}</strong>&nbsp;{k.label}: {k.range} supplied</li>
-				{/each}
-				<li><span class="swatch none" aria-hidden="true"></span>No demand or not simulated</li>
-			</ul>
-			<div class="table-wrap scroll">
-				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-				<table class="heat" role="grid" aria-labelledby="{uid}-sh" onkeydown={onKey} data-testid="stress-grid">
-					<caption class="visually-hidden">Stress class per month for {grid.kind === 'system' ? 'all hydrological units and users' : grid.name}, water years October to September.</caption>
-					<thead>
-						<tr>
-							<th scope="col">Water year</th>
-							{#each WATER_YEAR_MONTHS as mo (mo)}<th scope="col">{mo}</th>{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each assurance.stress.waterYears as wy, r (wy)}
-							<tr>
-								<th scope="row">{waterYearLabel(wy)}</th>
-								{#each WATER_YEAR_MONTHS as _mo, m (m)}
-									{@const c = grid.stressClass[r]?.[m] ?? null}
-									<td
-										id="{uid}-c-{r}-{m}"
-										class={c ? `b${STRESS_BIN[c]}` : 'none'}
-										tabindex={focus.r === r && focus.m === m ? 0 : -1}
-										onfocus={() => (focus = { r, m })}
-										title={describe(r, m)}
-									>
-										<span aria-hidden="true">{c ? STRESS_SHORT[c] : ''}</span><span class="visually-hidden">{describe(r, m)}</span>
-									</td>
-								{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<p class="note muted">
-				The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (pending the hydrologist's review). The whole run
-				is shown, not only the reporting window. Use the arrow keys to move between months.
-			</p>
 		{/if}
 	{/if}
 </section>
+
+<!-- One grid: its whole-run counts, the legend (once, with the first grid) and the table. On screen the table is a keyboard grid. -->
+{#snippet stressGrid(g: StressGrid, labelId: string, legendToo: boolean)}
+	{@const counts = classCounts(g)}
+	<p class="summary">
+		Over the whole run: {STRESS_ORDER.filter((c) => counts[c] > 0)
+			.map((c) => `${fmtNum(counts[c])} ${STRESS_LABEL[c]}`)
+			.join(', ') || 'no month with demand'}.
+	</p>
+	{#if legendToo}
+		<ul class="legend" aria-label="Stress classes">
+			{#each legend as k (k.cls)}
+				<li><span class="swatch b{STRESS_BIN[k.cls]}" aria-hidden="true"></span><strong>{STRESS_SHORT[k.cls]}</strong>&nbsp;{k.label}: {k.range} supplied</li>
+			{/each}
+			<li><span class="swatch none" aria-hidden="true"></span>No demand or not simulated</li>
+		</ul>
+	{/if}
+	<div class="table-wrap scroll">
+		{#if print}
+			<table class="heat" aria-labelledby={labelId} data-testid="stress-grid">
+				<caption class="visually-hidden">Stress class per month for {g.kind === 'system' ? 'all hydrological units and users' : g.name}, water years October to September.</caption>
+				<thead>
+					<tr>
+						<th scope="col">Water year</th>
+						{#each WATER_YEAR_MONTHS as mo (mo)}<th scope="col">{mo}</th>{/each}
+					</tr>
+				</thead>
+				<tbody>
+					{#each assurance!.stress.waterYears as wy, r (wy)}
+						<tr>
+							<th scope="row">{waterYearLabel(wy)}</th>
+							{#each WATER_YEAR_MONTHS as _mo, m (m)}
+								{@const c = g.stressClass[r]?.[m] ?? null}
+								<td class={c ? `b${STRESS_BIN[c]}` : 'none'}>
+									<span aria-hidden="true">{c ? STRESS_SHORT[c] : ''}</span><span class="visually-hidden">{describe(g, r, m)}</span>
+								</td>
+							{/each}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{:else}
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<table class="heat" role="grid" aria-labelledby={labelId} onkeydown={onKey} data-testid="stress-grid">
+				<caption class="visually-hidden">Stress class per month for {g.kind === 'system' ? 'all hydrological units and users' : g.name}, water years October to September.</caption>
+				<thead>
+					<tr>
+						<th scope="col">Water year</th>
+						{#each WATER_YEAR_MONTHS as mo (mo)}<th scope="col">{mo}</th>{/each}
+					</tr>
+				</thead>
+				<tbody>
+					{#each assurance!.stress.waterYears as wy, r (wy)}
+						<tr>
+							<th scope="row">{waterYearLabel(wy)}</th>
+							{#each WATER_YEAR_MONTHS as _mo, m (m)}
+								{@const c = g.stressClass[r]?.[m] ?? null}
+								<td
+									id="{uid}-c-{r}-{m}"
+									class={c ? `b${STRESS_BIN[c]}` : 'none'}
+									tabindex={focus.r === r && focus.m === m ? 0 : -1}
+									onfocus={() => (focus = { r, m })}
+									title={describe(g, r, m)}
+								>
+									<span aria-hidden="true">{c ? STRESS_SHORT[c] : ''}</span><span class="visually-hidden">{describe(g, r, m)}</span>
+								</td>
+							{/each}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
+	</div>
+{/snippet}
 
 <style>
 	/* The EwrHeatmap's sequential ramp: light = Low stress, dark = Critical. */

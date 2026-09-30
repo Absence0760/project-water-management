@@ -8,11 +8,14 @@
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
 	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
+	// The head links to the run's evidence report (issue #71).
+	import { base } from '$app/paths';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { untrack } from 'svelte';
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import AssuranceDeltaTable from '$lib/components/compare/AssuranceDeltaTable.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
@@ -68,7 +71,13 @@
 <section class="panel" aria-labelledby="sc-compare-h">
 	<div class="panel-head">
 		<h2 id="sc-compare-h">Scenario against its base</h2>
-		{#if data}<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>{/if}
+		{#if data}
+			<span class="acts">
+				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>
+				<!-- The licensing evidence report of this run on its base (issue #71, docs/ui.md § Evidence report). -->
+				<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(data.b.run.id)}&evidence" data-testid="scenario-evidence-link">Evidence report</a>
+			</span>
+		{/if}
 	</div>
 	{#if !scenario.lastRun}
 		<p class="muted" data-testid="scenario-not-run">Not run yet. Run the scenario to compare it with its base run.</p>
@@ -97,6 +106,12 @@
 					<h3 id="sc-farms-h">Hydrological units</h3>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
+				{#if data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance}
+					<section aria-labelledby="sc-assurance-h">
+						<h3 id="sc-assurance-h">Assurance of supply</h3>
+						<AssuranceDeltaTable a={data.a.run.summary.supplyAssurance} b={data.b.run.summary.supplyAssurance} />
+					</section>
+				{/if}
 				<section aria-labelledby="sc-chart-h">
 					<h3 id="sc-chart-h">Daily series</h3>
 					<Lazy load={loadOverlay}>
@@ -104,7 +119,7 @@
 					</Lazy>
 				</section>
 				<div class="validation">
-					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} />
+					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} fitEngineVersion={data.b.run.settings?.fitRecord?.engineVersion ?? null} />
 				</div>
 			{/if}
 		</LoadState>
@@ -112,6 +127,11 @@
 </section>
 
 <style>
+	.acts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
 	.sides {
 		margin: 0 0 0.75rem;
 		overflow-wrap: anywhere;

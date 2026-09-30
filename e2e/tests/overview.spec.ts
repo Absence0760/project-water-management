@@ -8,6 +8,8 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
+/** The Summary's sections have all loaded (or failed), so the page is at its final height: measure layout only after this. */
+const summaryReady = (page: Page) => expect(page.getByTestId('summary-body')).toHaveAttribute('data-ready', 'true');
 /** A run's daily dam_storage series (the Dam levels' fallback for a run older than engine 1.2.0). */
 const DAM_SERIES = /\/runs\/[^/]+\/series\?key=dam_storage/;
 
@@ -36,6 +38,8 @@ test('setup complete: the checklist leaves the page for a header pill whose popo
 		await page.setViewportSize(viewport);
 		await page.goto(`/projects/${project.id}`);
 		await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
+		// The page grows as the run's record, Supply by farm, the alerts and the baseline load: wait for all of them.
+		await summaryReady(page);
 		// No checklist panel on the page; the pill sits in the section header's status, before the rain pill.
 		await expect(setup(page)).toHaveCount(0);
 		const status = page.getByTestId('header-status');
@@ -175,6 +179,7 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	// First screen (issue #17 A1, #162): the KPI row, the reserve strip across the page under it, then Needs
 	// attention with the active alerts under it, beside Supply by unit (the flow chart that was here is River &
 	// reserve's alone).
+	await summaryReady(page);
 	const kpis = await box('Latest run');
 	const strip = await box('Days below the reserve');
 	const attention = await box('Needs attention');
@@ -296,6 +301,7 @@ test('a catchment with many units: Supply by unit shows the eight emptiest and o
 	const supply = page.getByRole('region', { name: 'Supply by hydrological unit' });
 	const rows = supply.getByRole('listitem');
 	await expect(rows).toHaveCount(8);
+	await summaryReady(page);
 	// The emptiest lead: the eight shown are no fuller than any hidden one.
 	const shownPcts = await rows.evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.pct')!.textContent!)));
 	expect([...shownPcts].sort((a, b) => a - b)).toEqual(shownPcts);
@@ -371,7 +377,8 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(link).toHaveAttribute('href', '?tab=dams');
-	// Below the reserve strip, under the published baseline.
+	// Below the reserve strip, under the published baseline (measured once the page has stopped growing).
+	await summaryReady(page);
 	const strip = (await page.getByRole('region', { name: 'Days below the reserve' }).boundingBox())!;
 	expect((await link.boundingBox())!.y).toBeGreaterThan(strip.y);
 	const baseline = (await page.getByRole('region', { name: 'Published baseline' }).boundingBox())!;

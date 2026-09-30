@@ -90,7 +90,11 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   `fuzz/shard.ts`); the pinned regression seeds stay in
   `run.invariants.test.ts`. Soak with
   `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
-  (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`). The
+  (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`).
+  The web release runs it at 1 600 cases (`scripts/release/engine-build.mjs`,
+  `deploy-frontend.yml`), under the shards' time budget of about 0.2 s a
+  case (`fuzz/shard.ts`): raise that budget before raising the release's
+  count. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
@@ -108,6 +112,22 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   policies were re-planning them for every row) and passwords were hashed at
   bcrypt's minimum cost under vitest (`auth/password.ts`; the e2e API server
   too, with `PASSWORD_HASH_COST=4`, e2e/README.md; 12 elsewhere).
+- **DB test files share the job queue, so each cleans up the jobs it
+  queues.** Claim, tick and purge are global on purpose, and the files run
+  one after another on one database, so a job one file leaves pending is
+  claimed by the next file's `runTick` and shows up in its counts (a
+  leftover yield, outlook, sweep and alert job made feeds.db.test.ts's
+  "Run now" tick finish 5 jobs, not 1, whenever the file that left them
+  happened to run first). A file that queues a job (a re-run, yield,
+  outlook, sweep, calibration, report …) runs it (`runTick`) or retires it
+  (`retirePendingJobs(projectId)` in `__tests__/helpers.ts`;
+  `clearLadderJobs(ctx)` after `buildLadder`) before it ends. The guard is
+  `backend/src/__tests__/db-setup.ts`, a per-file setup of the `db` and
+  `perf-db` projects: after every file it fails that file if any job is
+  still queued, retrying or running, naming each kind and project, then
+  retires them so only the leaking file fails. It runs after the file's own
+  `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
+  `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.

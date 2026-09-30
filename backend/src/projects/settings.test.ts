@@ -1074,6 +1074,11 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues([table({ sourceKind: 'guess' })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.sourceKind');
 	});
 
+	it('accepts a REC (ER9), absent or null, and refuses a malformed one', () => {
+		for (const category of ['A', 'B/C', 'E/F', null]) expect(issues([table({ category })])).toEqual([]);
+		for (const category of ['G', 'b', 'B/D', 'B-C', 'Class B', 3]) expect(issues([table({ category })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.category');
+	});
+
 	it('accepts the determination’s natural MAR, absent or null, and refuses one that isn’t above 0 (engine ≥ 1.11.0)', () => {
 		for (const naturalMarMcm of [12.5, null]) expect(issues([table({ naturalMarMcm })])).toEqual([]);
 		for (const naturalMarMcm of [0, -2, '12']) expect(issues([table({ naturalMarMcm })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.naturalMarMcm');

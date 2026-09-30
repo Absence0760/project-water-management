@@ -26,6 +26,7 @@ import type { AllocationEntry, AllocationWaterSource } from './allocations/compa
 import type { AllocationMode } from './allocations/mode';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
 import { defaultCalibrationRules, type CalibrationRules } from './calibrate/rulesSettings';
+import type { DeclaredUncertaintyRule } from './uncertainty/options';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -475,6 +476,13 @@ export interface ProjectSettings {
 	 * changes model results; a fit record made under them keeps a copy.
 	 */
 	calibrationRules: CalibrationRules;
+	/**
+	 * The uncertainty rule an evidence report's cited ensemble must follow
+	 * (issue #71, docs/design/evidence-report.md ER3, ./uncertainty/options.ts
+	 * DeclaredUncertaintyRule). Never changes model results. Absent or null =
+	 * not declared.
+	 */
+	evidenceUncertaintyRule?: DeclaredUncertaintyRule | null;
 	/**
 	 * The automatic fit whose parameters "Apply to form" wrote, with its
 	 * validation (./calibrate/provenance.ts). null = none: the parameters were
@@ -1823,6 +1831,13 @@ export interface SeriesMeta {
 	sourceUnitFactor?: number | null;
 	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
 	rebuilding?: boolean;
+	/**
+	 * The data feed that wrote days of this series (time_series.feed_id,
+	 * 031_feed_days.sql): its source ('chirps', 'chirps_gefs', 'dws') and how
+	 * many of the series' days are still the feed's own; null = none (or the
+	 * reader can't see the project's feeds), absent = not known here.
+	 */
+	feed?: { source: string; days: number } | null;
 	/**
 	 * A flow record's site (084_gauge_records, engine ≥ 1.4.0): the gauge node
 	 * it was measured at; null / absent = the outlet. Only the plausibility

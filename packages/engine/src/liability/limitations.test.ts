@@ -13,7 +13,7 @@ const GENERATED = fileURLToPath(new URL('./limitations.generated.ts', import.met
 const doc = readFileSync(AUDIT, 'utf8');
 
 describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
-	it('is current: regenerate with `pnpm gen:limitations` after changing an audit item', () => {
+	it('is current: regenerate with `pnpm gen:liability` after changing an audit item', () => {
 		const parsed = parseAuditLimitations(doc);
 		expect(KNOWN_LIMITATIONS).toEqual(parsed);
 		// The file itself, byte for byte, so a hand edit fails too.
@@ -24,6 +24,9 @@ describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
 		const ids = KNOWN_LIMITATIONS.map((l) => l.id);
 		// Open today: a decided-but-pending finding, a warned one, a pending quirk.
 		for (const id of ['N1', 'B3', 'Q17']) expect(ids).toContain(id);
+		// The Reserve method's open choices (model.md §2.9c–§2.9d; issue #71): below the driest
+		// point, interpolation, the percentile's source, the charge, low flows, high-flow events.
+		for (const id of ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7']) expect(ids).toContain(id);
 		// Fixed or removed: never a limitation (H1: the legacy runoff model, removed in engine 1.0.0).
 		for (const id of ['H1', 'E1', 'E2', 'R1', 'G1', 'P1', 'T1', 'Q1', 'Q7', 'Q14']) expect(ids).not.toContain(id);
 		for (const l of KNOWN_LIMITATIONS) {
