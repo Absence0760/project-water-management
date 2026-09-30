@@ -376,8 +376,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
 	// Canal seepage back to the river (engine ≥ 1.42.0), from its own stream, last of all.
 	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
-	// The drought restriction rule (engine ≥ 1.46.0, WP-3.8), from its own stream, last of all.
-	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings);
+	// The drought restriction rule (engine ≥ 1.52.0, WP-3.8), from its own stream, last of all.
+	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
 	return {
 		settings,
 		model: {
@@ -395,20 +395,20 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.46.0, WP-3.8, docs/model.md §2.7i)
+ * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md §2.7i)
  * in 25 % of seeds: one to twelve review dates (now and then every month's
  * first), lift dates half the time, one to four levels from 100 % down (a
  * level at 100 % is in force whenever a dam isn't full), each cutting a
  * random set of parts, deeper levels at least as much, up to a whole part
  * (100 %), so the basic-needs floor is what keeps a town's water.
  */
-function addDroughtRestriction(g: Rng, settings: Partial<ProjectSettings>): void {
+function addDroughtRestriction(g: Rng, settings: Partial<ProjectSettings>, nodes: readonly NetworkNode[]): void {
 	if (!g.bool(0.25)) return;
-	settings.droughtRestriction = randomDroughtRestriction(g);
+	settings.droughtRestriction = randomDroughtRestriction(g, nodes);
 }
 
 /** One random valid drought restriction rule (addDroughtRestriction's), for the rule's own fuzz tests. */
-export function randomDroughtRestriction(g: Rng): DroughtRestrictionRule {
+export function randomDroughtRestriction(g: Rng, nodes?: readonly NetworkNode[]): DroughtRestrictionRule {
 	const md = () => {
 		const m = g.int(1, 12);
 		const d = g.int(1, [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]!);
@@ -429,7 +429,30 @@ export function randomDroughtRestriction(g: Rng): DroughtRestrictionRule {
 		below = below * g.float(0.2, 0.95);
 		return level;
 	});
-	return { reviewDates: reviews, ...(lifts.length ? { liftDates: lifts } : {}), levels };
+	const rule: DroughtRestrictionRule = { reviewDates: reviews, ...(lifts.length ? { liftDates: lifts } : {}), levels };
+	if (!nodes) return rule;
+	// Engine ≥ 1.52.0, drawn after the rest so a rule's dates and levels are what they were: the storage read
+	// (every dam, some dams, or each unit's own), the units cut, and an EWR trigger; now and then an id the
+	// network hasn't got (the run leaves it out with a warning).
+	const farms = nodes.filter((n) => n.kind === 'farm');
+	const dams = farms.filter((n) => n.damCapacityM3 > 0);
+	const some = <T>(xs: readonly T[]) => xs.filter(() => g.bool(0.5));
+	const basis = g.pick(['total', 'total', 'dams', 'own'] as const);
+	if (basis === 'own') rule.basis = 'own';
+	if (basis === 'dams') {
+		const picked = some(dams).map((n) => n.id);
+		rule.basis = 'dams';
+		rule.damNodeIds = picked.length ? picked : [dams[0]?.id ?? 'missing-dam'];
+	}
+	if (g.bool(0.3)) {
+		const picked = some(farms).map((n) => n.id);
+		rule.nodeIds = picked.length ? picked : [farms[0]?.id ?? 'missing-unit'];
+	}
+	if (g.bool(0.35)) {
+		const gauges = nodes.filter((n) => n.kind === 'gauge');
+		rule.ewrTrigger = { siteNodeId: gauges.length && g.bool(0.5) ? g.pick(gauges).id : g.bool(0.1) ? 'missing-site' : null, level: g.int(1, levels.length) };
+	}
+	return rule;
 }
 
 /**

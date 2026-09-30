@@ -1,4 +1,4 @@
-// The drought restriction rule (engine 1.46.0, WP-3.8, docs/model.md §2.7i):
+// The drought restriction rule (engine 1.52.0, WP-3.8, docs/model.md §2.7i):
 // on each review date the level is decided from the farm dams' storage at the
 // start of the day, as a share of their capacity, and each part of every
 // unit's demand is cut by the level's share until the next review or lift
@@ -8,12 +8,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import { diffInputs, type RunInputsSnapshot } from './compare';
-import { droughtRestrictionIssues, levelCut, restrictedObjectDemand, restrictionLevelFor, RESTRICTION_SERIES } from './network/restriction';
+import { droughtRestrictionIssues, droughtRestrictionNodeIssues, levelCut, restrictedObjectDemand, restrictionLevelFor, restrictionRuleFromNotice, RESTRICTION_SERIES } from './network/restriction';
 import type { CropArea, CropDef, DemandObject, DroughtRestrictionRule, ModelInput, ModelOutput, NetworkNode, RunSeries } from './project';
 import { captureModelState, runModel, runModelFrom, runModelWith, runModelWithoutChecks, withVerification } from './run';
 import { applyScenario, classifyOp, validateScenarioOps } from './scenario';
 import { cloneInput, randomDroughtRestriction, randomInput, Rng } from './testing/fuzz';
 import { checkForecastPrefix, withForecastTail } from './testing/forecastInvariants';
+import { checkResume } from './testing/warmstartInvariants';
 import { checkAll, sameOutput } from './testing/invariants';
 import { checkDroughtRestriction, checkInvariants } from './verify/checks';
 import { ENGINE_VERSION } from './version';
@@ -105,10 +106,10 @@ const passed = (out: ModelOutput) => expect(out.summary.verification?.passed, JS
 // Reviewed on 5 October: below 70 % of capacity the crops are cut by half.
 const halfBelow70: DroughtRestrictionRule = { reviewDates: ['10-05'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
 
-describe('the drought restriction rule (engine 1.46.0)', () => {
-	it('is engine 1.46.0 or later', () => {
+describe('the drought restriction rule (engine 1.52.0)', () => {
+	it('is engine 1.52.0 or later', () => {
 		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
-		expect(maj! > 1 || (maj === 1 && min! >= 46)).toBe(true);
+		expect(maj! > 1 || (maj === 1 && min! >= 52)).toBe(true);
 	});
 
 	it('picks the deepest level whose threshold the storage share is below', () => {
@@ -143,7 +144,7 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			expect(s.years).toEqual([{ waterYear: 2020, days: 10, daysByLevel: [4, 6] }]);
 			expect(s.reviews).toBe(2);
 			// The cut on restricted days only: 50 a day, where the run mean (100 − 70) dilutes it to 30.
-			expect(s.units).toEqual([{ nodeId: 'A', name: 'A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 70, avgSuppliedM3Day: 70, avgCutOnRestrictedDaysM3Day: 50 }]);
+			expect(s.units).toEqual([{ nodeId: 'A', name: 'A', avgDemandM3Day: 100, avgRestrictedDemandM3Day: 70, avgSuppliedM3Day: 70, avgCutOnRestrictedDaysM3Day: 50, daysByLevel: [4, 6] }]);
 			expect(s.rule).toEqual(halfBelow70);
 		});
 		it('adds no column for a part no level cuts, and none on the gauge', () => {
@@ -245,7 +246,7 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 	describe('random networks with a rule', () => {
 		const withRule = (seed: number) => {
 			const x = randomInput(seed);
-			x.settings.droughtRestriction = randomDroughtRestriction(new Rng(seed ^ 0x2a));
+			x.settings.droughtRestriction = randomDroughtRestriction(new Rng(seed ^ 0x2a), x.model.nodes);
 			return x;
 		};
 		it('every invariant holds: the balance, the self-checks (the level, the cuts, the floor, supply within the restricted demand), order invariance, determinism', () => {
@@ -305,7 +306,37 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			// From the run's first day: no level held yet, so the resumed run decides it as the capture run did.
 			const first = runModelFrom(captureModelState(input, '2020-10-01'), input);
 			expect(get(first, null, RESTRICTION_SERIES.level.key)).toEqual(get(full, null, RESTRICTION_SERIES.level.key));
+			// The self-check holds on both (engine 1.52.0): it starts from the state the summary records.
+			expect(tail.summary.droughtRestriction!.start).toEqual({ levelsBefore: { A: 1 }, ewrFailedBefore: false, damStorageBeforeM3: { A: get(full, 'A', 'dam_storage')[5] } });
+			expect(first.summary.droughtRestriction!.start!.levelsBefore).toBeNull();
+			expect(checkDroughtRestriction(input, tail)).toBeNull();
+			expect(checkDroughtRestriction(input, first)).toBeNull();
+			// A resumed run that forgot the held level fails it.
+			const forgot = { ...tail, summary: { ...tail.summary, droughtRestriction: { ...tail.summary.droughtRestriction!, start: { ...tail.summary.droughtRestriction!.start!, levelsBefore: { A: 0 } } } } };
+			expect(checkDroughtRestriction(input, forgot)).toMatch(/day 0: drought restriction level 1 ≠ 0/);
 		});
+		it('a resumed run is the uninterrupted run to the bit, and passes the self-check, on random networks', () => {
+			let checked = 0;
+			for (let seed = 1; seed <= 14; seed++) {
+				const x = withRule(seed);
+				let full: ModelOutput;
+				try {
+					full = runModelWithoutChecks(x);
+				} catch {
+					continue;
+				}
+				if (!full.summary.droughtRestriction || full.days < 4) continue;
+				const rng = new Rng(seed * 7);
+				for (const k of [0, rng.int(1, full.days - 1), full.days - 1]) {
+					expect(checkResume(x, k, full), `seed ${seed} day ${k}`).toBeNull();
+					const at = new Date(Date.parse(`${full.startDate}T00:00:00Z`) + k * 86_400_000).toISOString().slice(0, 10);
+					const tail = runModelFrom(captureModelState(x, at), x);
+					expect(checkDroughtRestriction(x, tail), `seed ${seed} day ${k}`).toBeNull();
+					checked++;
+				}
+			}
+			expect(checked).toBeGreaterThan(10);
+		}, 300_000);
 	});
 
 	describe('the self-check', () => {
@@ -399,5 +430,134 @@ describe('the drought restriction rule (engine 1.46.0)', () => {
 			]);
 			expect(text(deeper, null)[0]).toMatch(/^Drought restriction rule: reviewed 5 Oct, 1 Jan, lifted 1 May; .* → off$/);
 		});
+	});
+});
+
+/**
+ * Two units A and B, each 1 000 m³ of dam and 100 m³/day of crop demand in
+ * October (as `model`), draining to gauge G: A full, B half full on 1 October.
+ * Every farm dam's total is 75 %; B's alone 50 %.
+ */
+function twoUnits(rule: DroughtRestrictionRule, ewr = 0): ModelInput {
+	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: flat(1) }];
+	return {
+		settings: { ewrPragmaticM3PerDay: flat(ewr) as unknown as Monthly, apanMm: flat(3100) as unknown as Monthly, lakeEvapFactor: 0, effectiveRainStoreMm: 0, droughtRestriction: rule },
+		model: {
+			nodes: [
+				node('A', { downstreamNodeId: 'G', damCapacityM3: 1000, damInitialPct: 1 }),
+				node('B', { downstreamNodeId: 'G', damCapacityM3: 1000, damInitialPct: 0.5, sortOrder: 1 }),
+				node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
+			],
+			crops,
+			cropAreas: [
+				{ nodeId: 'A', cropId: 'c', areaM2: 1000 },
+				{ nodeId: 'B', cropId: 'c', areaM2: 1000 }
+			],
+			transfers: []
+		},
+		series: { rain_catchment_mm: { startDate: '2020-10-01', values: new Array(10).fill(0) } }
+	};
+}
+
+describe('which storage, which units, and the EWR trigger (engine 1.52.0)', () => {
+	const base: DroughtRestrictionRule = { reviewDates: ['10-01'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
+	const level = (out: ModelOutput, id: string | null) => get(out, id, RESTRICTION_SERIES.level.key);
+
+	it('every farm dam’s total by default: 75 % is above 70 %, so no level', () => {
+		const out = run(twoUnits(base));
+		expect(level(out, null)).toEqual(new Array(10).fill(0));
+		passed(out);
+	});
+
+	it('the listed dams only: B at 50 % restricts both units', () => {
+		const out = run(twoUnits({ ...base, basis: 'dams', damNodeIds: ['B'] }));
+		expect(level(out, null)[0]).toBe(1);
+		expect(get(out, 'A', 'supplied')[0]).toBe(50);
+		expect(get(out, 'B', 'supplied')[0]).toBe(50);
+		passed(out);
+	});
+
+	it('each unit its own dam: A full is not restricted, B half full is; the catchment column is the deepest', () => {
+		const out = run(twoUnits({ ...base, basis: 'own' }));
+		expect(level(out, 'A')).toEqual(new Array(10).fill(0));
+		expect(level(out, 'B')).toEqual(new Array(10).fill(1));
+		expect(level(out, null)).toEqual(new Array(10).fill(1));
+		expect(get(out, 'A', 'supplied')[0]).toBe(100);
+		expect(get(out, 'B', 'supplied')[0]).toBe(50);
+		// No per-part cut column: each unit's level says it.
+		expect(out.series.some((x) => x.key.startsWith(RESTRICTION_SERIES.cutPrefix))).toBe(false);
+		expect(out.summary.droughtRestriction!.units.map((u) => [u.nodeId, u.daysByLevel])).toEqual([
+			['A', [10, 0]],
+			['B', [0, 10]]
+		]);
+		passed(out);
+	});
+
+	it('only the listed units are cut: A under B’s storage, B left alone', () => {
+		const out = run(twoUnits({ ...base, basis: 'dams', damNodeIds: ['B'], nodeIds: ['A'] }));
+		expect(get(out, 'A', 'supplied')[0]).toBe(50);
+		expect(get(out, 'B', 'supplied')[0]).toBe(100);
+		expect(out.series.some((x) => x.nodeId === 'B' && x.key === RESTRICTION_SERIES.restricted.key)).toBe(false);
+		expect(out.summary.droughtRestriction!.units.map((u) => u.nodeId)).toEqual(['A']);
+		passed(out);
+	});
+
+	it('ids that don’t fit the network are left out with a warning; with no unit left the rule isn’t applied', () => {
+		const odd = run(twoUnits({ ...base, basis: 'dams', damNodeIds: ['B', 'G'], nodeIds: ['A', 'nope'] }));
+		expect(odd.summary.warnings.join('\n')).toMatch(/“G” has no dam; left out[\s\S]*the unit nope isn't in the model; left out/);
+		passed(odd);
+		const none = run(twoUnits({ ...base, nodeIds: ['nope'] }));
+		expect(none.summary.warnings.join('\n')).toMatch(/cuts no hydrological unit/);
+		expect(none.summary.droughtRestriction).toBeUndefined();
+		passed(none);
+		expect(droughtRestrictionNodeIssues({ ...base, ewrTrigger: { siteNodeId: 'A', level: 1 } }, twoUnits(base).model.nodes).map((i) => i.message)).toEqual(['“A” isn\'t a gauge']);
+	});
+
+	it('the EWR trigger: a review after a day the outlet’s EWR wasn’t met is at least its level, known at the start of the day', () => {
+		// 50 m³/day of EWR and no inflow: never met. Storage alone (below 10 %) never restricts. The run's first day
+		// can't know the day before, so only the review on 5 October (day 4) sees it.
+		const rule: DroughtRestrictionRule = { reviewDates: ['10-01', '10-05'], levels: [{ belowPct: 0.1, cuts: { crops: 0.5 } }], ewrTrigger: { siteNodeId: null, level: 1 } };
+		const input = twoUnits(rule, 50);
+		const out = run(input);
+		expect(level(out, null)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+		expect(out.summary.droughtRestriction!.ewrReviews).toBe(1);
+		passed(out);
+		// A shortfall column the trigger didn't follow fails the self-check.
+		const tampered = { ...out, series: out.series.map((x) => (x.nodeId === 'G' && x.key === 'ewr_shortfall' ? { ...x, values: x.values.map((v, t) => (t === 3 ? 0 : v)) } : x)) };
+		expect(checkDroughtRestriction(input, tampered)).toMatch(/day 4: drought restriction level 1 ≠ 0/);
+	});
+
+	it('the comparison names each change', () => {
+		const snap = (rule: DroughtRestrictionRule): RunInputsSnapshot => ({ settings: { droughtRestriction: rule }, model: twoUnits(base).model, series: {} });
+		const lines = diffInputs(snap(base), snap({ ...base, basis: 'dams', damNodeIds: ['B'], nodeIds: ['A'], ewrTrigger: { siteNodeId: 'G', level: 1 } }))
+			.filter((c) => c.subject === 'Drought restriction rule')
+			.map((c) => c.text);
+		expect(lines).toEqual([
+			'Drought restriction rule: storage read every farm dam → the storage of B',
+			'Drought restriction rule: units cut every unit → A',
+			"Drought restriction rule: no EWR trigger → at least level 1 when the EWR at G wasn't met the day before a review"
+		]);
+	});
+});
+
+describe('a rule from the published restriction notice (engine 1.52.0)', () => {
+	it('one level in force below 100 %, every part cut by the notice’s %, from the day it was published to the next', () => {
+		const { rule, reason } = restrictionRuleFromNotice({ level: 'restricted', pct: 30, publishedAt: '2026-11-03T08:00:00Z', nextExpectedOn: '2027-01-15' });
+		expect(reason).toBeNull();
+		expect(droughtRestrictionIssues(rule)).toEqual([]);
+		expect(rule!.reviewDates).toEqual(['11-03']);
+		expect(rule!.liftDates).toEqual(['01-15']);
+		expect(rule!.levels).toHaveLength(1);
+		expect(rule!.levels[0]!.belowPct).toBe(1);
+		expect(Object.values(rule!.levels[0]!.cuts)).toEqual(new Array(8).fill(0.3));
+		expect(rule!.source).toMatch(/published restriction notice of 2026-11-03 \(30 %\)/);
+	});
+	it('no rule for a notice that cuts nothing; 29 February becomes 1 March', () => {
+		expect(restrictionRuleFromNotice({ level: 'none', pct: null, publishedAt: '2026-11-03', nextExpectedOn: null }).rule).toBeNull();
+		expect(restrictionRuleFromNotice({ level: 'advisory', pct: null, publishedAt: '2026-11-03', nextExpectedOn: null }).reason).toMatch(/no % cut/);
+		const leap = restrictionRuleFromNotice({ level: 'advisory', pct: 10, publishedAt: '2028-02-29', nextExpectedOn: null });
+		expect(leap.rule!.reviewDates).toEqual(['03-01']);
+		expect(leap.rule!.liftDates).toBeUndefined();
+		expect(leap.rule!.levels[0]!.label).toBe('Advisory notice');
 	});
 });

@@ -273,7 +273,7 @@ export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency' || (b.mode === 'primary' && b.target === 'dam')) b.mode = 'supplemental';
 	for (const n of x.model.nodes) if (n.supplyRule === 'trigger') n.supplyRule = 'riverFirst';
 	for (const b of x.model.boreholes ?? []) b.annualCapM3 = null;
-	// The drought restriction rule (engine ≥ 1.46.0) is taken off too: more demand empties the dams sooner, so a
+	// The drought restriction rule (engine ≥ 1.52.0) is taken off too: more demand empties the dams sooner, so a
 	// review restricts every unit earlier, and a unit upstream that takes less leaves more for one below it (the
 	// trigger rule's reason again). The rule itself is checked by its self-check (checkDroughtRestriction).
 	x.settings.droughtRestriction = null;

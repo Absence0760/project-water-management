@@ -445,7 +445,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
-	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.46.0).
+	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.52.0).
 	const farmD = farms.map((f) => get.get(`${f.id}|${RESTRICTION_SERIES.restricted.key}`) ?? get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
 	const farmRelease = farms.map((f) => resolveRelease(f, []));
@@ -1102,11 +1102,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (!!XIN !== !!XUSED || !!XIN !== !!XDAM) return `${n.id}: river off-take working columns (offtake_used, offtake_to_dam) ${XIN ? 'missing' : 'without an off-take in'}`;
 		const topUps = XIN ? offtakeInto(input, n.id, get) : null;
 		if (typeof topUps === 'string') return topUps;
-		// The drought restriction (engine ≥ 1.46.0): the unit's sources supply its demand after the day's cut, and
+		// The drought restriction (engine ≥ 1.52.0): the unit's sources supply its demand after the day's cut, and
 		// its objects and crops share by their cut demands (checkDroughtRestriction checks the cut itself).
 		const DR = g(RESTRICTION_SERIES.restricted.key);
 		const rule = DR ? resolveDroughtRestriction(input.settings.droughtRestriction, []) : null;
-		const LV = get.get(`null|${RESTRICTION_SERIES.level.key}`);
+		// The unit's own level under the 'own' basis (engine ≥ 1.52.0), else the catchment's.
+		const LV = g(RESTRICTION_SERIES.level.key) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
 		if (DR && (!rule || !LV)) return `${n.id}: a restricted_demand column without a drought restriction rule and its level column`;
 		for (let t = 0; t < out.days; t++) {
 			if (SET) qPrev += SET[t]!;
@@ -1323,7 +1324,7 @@ function checkObjectsDay(
 	alloc = 1,
 	abstracts = true,
 	factors: { df: Float64Array; sc: Float64Array }[] | null = null,
-	/** The drought restriction's cut today (engine ≥ 1.46.0): each object shares by its cut demand, the crops by theirs. */
+	/** The drought restriction's cut today (engine ≥ 1.52.0): each object shares by its cut demand, the crops by theirs. */
 	restriction: { cut: (c: DemandObject['category']) => number; crop: number } | null = null
 ): string | null {
 	const n = objs.demand.length;
@@ -1336,7 +1337,7 @@ function checkObjectsDay(
 	const want = [0, crop, 0];
 	const gotBy = [0, 0, 0];
 	for (let k = 0; k < n; k++) {
-		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.46.0).
+		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.52.0).
 		const d = restriction ? restrictedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
 		const g = objs.supplied[k]![t]!;
 		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
@@ -1933,31 +1934,40 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 }
 
 /**
- * The drought restriction rule (engine ≥ 1.46.0, WP-3.8, ../network/restriction.ts,
+ * The drought restriction rule (engine ≥ 1.52.0, WP-3.8, ../network/restriction.ts,
  * docs/model.md §2.7i), from the run's own columns and the input's rule:
  * - without the rule (or with one it can't use) no restriction column and no
  *   summary block;
- * - with it, the level each day is the one its review decided: on a review
- *   date (and a fresh run's first day, when the latest date before it is a
- *   review) the deepest level whose threshold the farm dams' storage at the
- *   start of the day (the day before's storage plus any storage reset) is
- *   below, as a share of their capacity that day; 0 from a lift date; else
- *   the day before's. So it reads nothing later than the start of its day;
- * - each part's cut column is its level's cut, only for a part some level cuts;
+ * - with it, each unit's level each day is the one its review decided: on a
+ *   review date (and a fresh run's first day, when the latest date before it
+ *   is a review) the deepest level whose threshold the storage it reads at
+ *   the start of the day (the day before's storage plus any storage reset;
+ *   every farm dam, the listed dams, or its own) is below, as a share of
+ *   capacity that day, raised to the EWR trigger's level when the trigger's
+ *   site wasn't met the day before; 0 from a lift date; else the day
+ *   before's. So it reads nothing later than the start of its day. The dates
+ *   are worked out here, not by the engine's planner;
+ * - a unit outside the rule's units has no restricted demand;
+ * - each part's cut column is its level's cut, only for a part some level
+ *   cuts, under a shared basis; under 'own' each unit has its level column
+ *   and the catchment's is the deepest;
  * - each unit's restricted demand is its crop requirement × (1 − the crops'
  *   cut) ÷ e plus each demand object's demand × (1 − its category's cut),
  *   never below MIN(its basic-needs floor, its demand); it never exceeds the
  *   demand, and the unit is never supplied more than it (a restriction never
  *   raises supply);
  * - the summary's days per level add up to the level column, per water year
- *   and over the run, and its units' means to their columns.
- * It checks a fresh run (level 0 before its first day, the storage from
- * damInitialPct), as every self-check does: a run resumed from a snapshot
- * (runModelFrom) holds the level of the day before and isn't verified.
+ *   and over the run, and its units' means and days to their columns.
+ * A run resumed from a snapshot (runModelFrom) starts from the state its
+ * summary records (`start`: the levels held the day before, whether the
+ * trigger's site failed, each dam's storage); a fresh run from level 0 and
+ * damInitialPct.
  */
 export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
-	const rule = resolveDroughtRestriction(input.settings.droughtRestriction, []);
+	const resolved = resolveDroughtRestriction(input.settings.droughtRestriction, []);
+	// A rule none of whose units is in the model isn't applied, as one it can't use (planRestriction).
+	const rule = resolved && input.model.nodes.some((n) => n.kind === 'farm' && (!resolved.nodeIds || resolved.nodeIds.includes(n.id))) ? resolved : null;
 	const LV = get.get(`null|${RESTRICTION_SERIES.level.key}`);
 	const sum = out.summary.droughtRestriction;
 	if (!rule) {
@@ -1969,9 +1979,10 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	if (!sum) return 'no drought restriction summary for the rule';
 	const day0 = toEpochDay(out.startDate);
 	const nodes = input.model.nodes;
-	// The dates and the first day worked out here, not by the engine's planRestriction, so a slip in the
-	// run's date mapping can't pass its own check: a review or lift on a day's month and day; a fresh run's
-	// first day decided when the latest such date before it (within a year) is a review.
+	const resumed = sum.start;
+	// The dates and the first day worked out here, not by the engine's planner, so a slip in the run's date
+	// mapping can't pass its own check: a review or lift on a day's month and day; a fresh run's first day
+	// decided when the latest such date before it (within a year) is a review.
 	const reviews = new Set(rule.reviewDates);
 	const lifts = new Set(rule.liftDates ?? []);
 	const eventOf = (day: number): 0 | 1 | 2 => {
@@ -1979,58 +1990,99 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		return reviews.has(md) ? 1 : lifts.has(md) ? 2 : 0;
 	};
 	let startDecides = false;
-	for (let back = 1; back <= 366; back++) {
-		const e = eventOf(day0 - back);
-		if (e) {
-			startDecides = e === 1;
-			break;
+	if (!resumed?.levelsBefore)
+		for (let back = 1; back <= 366; back++) {
+			const e = eventOf(day0 - back);
+			if (e) {
+				startDecides = e === 1;
+				break;
+			}
 		}
-	}
 	const thresholds = rule.levels.map((l) => l.belowPct);
-	// Each farm dam's storage at the start of each day and its capacity that day, as the run resolves them.
-	const damIds = nodes.flatMap((n, i) => (n.kind === 'farm' && n.damCapacityM3 > 0 ? [i] : [])).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-	const dams = damIds.map((i) => {
-		const n = nodes[i]!;
+	const isDam = (n: NetworkNode) => n.kind === 'farm' && n.damCapacityM3 > 0;
+	const basis = rule.basis ?? 'total';
+	const listed = basis === 'dams' ? new Set(rule.damNodeIds ?? []) : null;
+	const scope = rule.nodeIds ? new Set(rule.nodeIds) : null;
+	const units = nodes.filter((n) => n.kind === 'farm' && (!scope || scope.has(n.id)));
+	// Each dam's storage at the start of each day and its capacity that day, as the run resolves them.
+	const damOf = (n: NetworkNode) => {
 		const Q = get.get(`${n.id}|dam_storage`);
 		const SET = get.get(`${n.id}|dam_storage_set`);
 		const ks = capacityScaleOf(n, day0, out.days, []);
-		return { n, Q, SET, ks };
-	});
-	const missing = dams.find((x) => !x.Q);
-	if (missing) return `${missing.n.id}: dam_storage column missing`;
-	let level = 0;
+		const before0 = resumed ? resumed.damStorageBeforeM3[n.id] : n.damInitialPct * n.damCapacityM3 * (ks ? ks[0]! : 1);
+		return { n, Q, SET, ks, before0 };
+	};
+	const shared = basis === 'own' ? [] : nodes.filter((n) => isDam(n) && (!listed || listed.has(n.id))).sort((a, b) => cmpStr(a.id, b.id)).map(damOf);
+	const missing = shared.find((x) => !x.Q || x.before0 === undefined);
+	if (missing) return `${missing.n.id}: dam_storage column or starting storage missing`;
+	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number => {
+		let q = 0;
+		let c = 0;
+		for (const { n, Q, SET, ks, before0 } of dams) {
+			const cap = n.damCapacityM3 * (ks ? ks[t]! : 1);
+			if (!(cap > 0)) continue;
+			q += (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
+			c += cap;
+		}
+		return c > 0 ? restrictionLevelFor(q / c, thresholds) : 0;
+	};
+	// The EWR trigger's site: null = the outlet (the node nothing drains into), else a gauge.
+	const trig = rule.ewrTrigger;
+	const siteId = trig ? (trig.siteNodeId === null ? (nodes.find((n) => n.downstreamNodeId === null)?.id ?? null) : nodes.some((n) => n.id === trig.siteNodeId && n.kind === 'gauge') ? trig.siteNodeId : null) : null;
+	const siteShort = siteId ? get.get(`${siteId}|ewr_shortfall`) : undefined;
+	if (siteId && !siteShort) return `${siteId}: ewr_shortfall column missing for the drought restriction rule's EWR trigger`;
+	const failedBefore = (t: number) => (!siteShort ? false : t === 0 ? resumed?.ewrFailedBefore === true : siteShort[t - 1]! < 0);
+	// Each unit's levels, day by day.
+	const own = new Map(units.map((u) => [u.id, isDam(u) ? damOf(u) : null]));
+	const held = new Map(units.map((u) => [u.id, resumed?.levelsBefore?.[u.id] ?? 0]));
+	const unitLevels = new Map(units.map((u) => [u.id, new Array<number>(out.days).fill(0)]));
+	let ewrReviews = 0;
 	for (let t = 0; t < out.days; t++) {
 		const e = eventOf(day0 + t);
 		if (e === 1 || (t === 0 && e === 0 && startDecides)) {
-			let q = 0;
-			let c = 0;
-			for (const { n, Q, SET, ks } of dams) {
-				const k = ks ? ks[t]! : 1;
-				const cap = n.damCapacityM3 * k;
-				if (!(cap > 0)) continue;
-				const before = t === 0 ? n.damInitialPct * n.damCapacityM3 * (ks ? ks[0]! : 1) : Q![t - 1]!;
-				q += before + (SET ? SET[t]! : 0);
-				c += cap;
+			const failed = failedBefore(t);
+			if (failed) ewrReviews++;
+			const ewr = failed && trig ? trig.level : 0;
+			const sharedLevel = basis === 'own' ? 0 : levelOf(shared, t);
+			for (const u of units) {
+				const d = own.get(u.id);
+				held.set(u.id, basis === 'own' ? Math.max(d ? levelOf([d], t) : 0, ewr) : Math.max(sharedLevel, ewr));
 			}
-			level = c > 0 ? restrictionLevelFor(q / c, thresholds) : 0;
-		} else if (e === 2) level = 0;
-		if (LV[t] !== level) return `day ${t}: drought restriction level ${LV[t]} ≠ ${level} (${e === 1 ? 'a review: the level for the storage at the start of the day' : e === 2 ? 'a lift date' : 'held from the last review or lift'})`;
+		} else if (e === 2) for (const u of units) held.set(u.id, 0);
+		for (const u of units) unitLevels.get(u.id)![t] = held.get(u.id)!;
 	}
-	// Each part's cut column.
+	// The level columns.
+	for (let t = 0; t < out.days; t++) {
+		let want = 0;
+		for (const u of units) want = Math.max(want, unitLevels.get(u.id)![t]!);
+		if (LV[t] !== want) return `day ${t}: drought restriction level ${LV[t]} ≠ ${want} (${eventOf(day0 + t) === 1 ? 'a review: the level for the storage at the start of the day' : eventOf(day0 + t) === 2 ? 'a lift date' : 'held from the last review or lift'})`;
+	}
+	for (const u of units) {
+		const col = get.get(`${u.id}|${RESTRICTION_SERIES.level.key}`);
+		if (basis !== 'own') {
+			if (col) return `${u.id}: a unit restriction_level column under a shared basis`;
+			continue;
+		}
+		if (!col) return `${u.id}: no restriction_level column under the 'own' basis`;
+		const lv = unitLevels.get(u.id)!;
+		for (let t = 0; t < out.days; t++) if (col[t] !== lv[t]) return `${u.id} day ${t}: drought restriction level ${col[t]} ≠ ${lv[t]} (its own dam)`;
+	}
+	// Each part's cut column: a shared basis only.
 	for (const part of DEMAND_PARTS) {
 		const col = get.get(`null|${restrictionCutKey(part)}`);
-		const cuts = rule.levels.some((_, i) => levelCut(rule, i + 1, part) > 0);
-		if (!!col !== cuts) return `${restrictionCutKey(part)}: ${col ? 'a column for a part no level cuts' : 'no column for a part a level cuts'}`;
+		const cuts = basis !== 'own' && rule.levels.some((_, i) => levelCut(rule, i + 1, part) > 0);
+		if (!!col !== cuts) return `${restrictionCutKey(part)}: ${col ? 'a column for a part no level cuts, or under the own basis' : 'no column for a part a level cuts'}`;
 		if (col) for (let t = 0; t < out.days; t++) if (col[t] !== levelCut(rule, LV[t]!, part)) return `day ${t}: ${restrictionCutKey(part)} ${col[t]} ≠ level ${LV[t]}'s cut ${levelCut(rule, LV[t]!, part)}`;
 	}
 	// Each unit's demand after the cut.
+	const inScope = new Set(units.map((u) => u.id));
 	for (const n of nodes) {
 		const DR = get.get(`${n.id}|${RESTRICTION_SERIES.restricted.key}`);
-		if (n.kind !== 'farm') {
-			if (DR) return `${n.id}: restricted_demand on a ${n.kind}`;
+		if (!inScope.has(n.id)) {
+			if (DR) return `${n.id}: restricted_demand on a ${n.kind === 'farm' ? 'unit the rule doesn’t cut' : n.kind}`;
 			continue;
 		}
-		if (!DR) return `${n.id}: no restricted_demand column while the drought restriction rule is on`;
+		if (!DR) return `${n.id}: no restricted_demand column while the drought restriction rule cuts it`;
 		const F = get.get(`${n.id}|crop_requirement`);
 		const D = get.get(`${n.id}|demand`);
 		const G = get.get(`${n.id}|supplied`);
@@ -2038,9 +2090,10 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		const e = runEfficiency(input, n);
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
+		const lvs = unitLevels.get(n.id)!;
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
-			const lv = LV[t]!;
+			const lv = lvs[t]!;
 			let want = (F[t]! * (1 - levelCut(rule, lv, 'crops'))) / e;
 			let scale = Math.max(F[t]! / e, D[t]!);
 			if (objs)
@@ -2059,24 +2112,26 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		}
 	}
 	// The summary adds up to the columns.
-	const n = rule.levels.length + 1;
-	const total = new Array<number>(n).fill(0);
+	const nl = rule.levels.length + 1;
+	const total = new Array<number>(nl).fill(0);
 	const years = new Map<number, number[]>();
 	for (let t = 0; t < out.days; t++) {
 		const lv = LV[t]!;
 		total[lv]!++;
 		const wy = waterYearOf(day0 + t);
-		const y = years.get(wy) ?? new Array<number>(n + 1).fill(0);
+		const y = years.get(wy) ?? new Array<number>(nl + 1).fill(0);
 		y[0]!++;
 		y[lv + 1]!++;
 		years.set(wy, y);
 	}
-	if (sum.daysByLevel.length !== n || sum.daysByLevel.some((v, i) => v !== total[i])) return `the drought restriction summary's days by level ${sum.daysByLevel.join('/')} ≠ the level column's ${total.join('/')}`;
+	if (sum.daysByLevel.length !== nl || sum.daysByLevel.some((v, i) => v !== total[i])) return `the drought restriction summary's days by level ${sum.daysByLevel.join('/')} ≠ the level column's ${total.join('/')}`;
 	if (sum.years.length !== years.size) return `the drought restriction summary has ${sum.years.length} water years, the run ${years.size}`;
 	for (const y of sum.years) {
 		const c = years.get(y.waterYear);
 		if (!c || c[0] !== y.days || y.daysByLevel.some((v, i) => v !== c[i + 1])) return `water year ${y.waterYear}: the drought restriction summary's days don't match the level column`;
 	}
+	if (trig && siteId && sum.ewrReviews !== ewrReviews) return `the drought restriction summary's EWR-triggered reviews ${sum.ewrReviews} ≠ ${ewrReviews}`;
+	if (sum.units.length !== units.length) return `the drought restriction summary lists ${sum.units.length} units, the rule cuts ${units.length}`;
 	for (const u of sum.units) {
 		const mean = (k: string) => {
 			const v = get.get(`${u.nodeId}|${k}`) ?? [];
@@ -2090,16 +2145,21 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 			return `${u.nodeId}: the drought restriction summary's mean demands or supply don't match its columns`;
 		const D = get.get(`${u.nodeId}|demand`) ?? [];
 		const R = get.get(`${u.nodeId}|${RESTRICTION_SERIES.restricted.key}`) ?? [];
+		const lvs = unitLevels.get(u.nodeId);
+		if (!lvs) return `${u.nodeId}: in the drought restriction summary but not cut by the rule`;
 		let cut = 0;
 		let days = 0;
+		const byLevel = new Array<number>(nl).fill(0);
 		for (let t = 0; t < out.days; t++) {
-			if (LV[t] === 0) continue;
+			byLevel[lvs[t]!]!++;
+			if (lvs[t] === 0) continue;
 			cut += D[t]! - R[t]!;
 			days++;
 		}
 		const want = days ? cut / days : null;
 		if (want === null ? u.avgCutOnRestrictedDaysM3Day !== null : u.avgCutOnRestrictedDaysM3Day === null || Math.abs(u.avgCutOnRestrictedDaysM3Day - want) > tol(want))
 			return `${u.nodeId}: the drought restriction summary's cut on restricted days ${u.avgCutOnRestrictedDaysM3Day} ≠ ${want}`;
+		if (u.daysByLevel.length !== nl || u.daysByLevel.some((v, i) => v !== byLevel[i])) return `${u.nodeId}: the drought restriction summary's days by level don't match its levels`;
 	}
 	return null;
 }

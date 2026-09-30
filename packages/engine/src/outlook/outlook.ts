@@ -722,7 +722,7 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
 }
 
 /**
- * The input without its drought restriction rule (engine ≥ 1.46.0, WP-3.8,
+ * The input without its drought restriction rule (engine ≥ 1.52.0, WP-3.8,
  * docs/model.md §2.15 and §2.7i): the seasonal outlook and its review
  * triggers run without it. The rule is what the triggers are turned into,
  * and a member's demand level on top of it would cut twice. The history the
@@ -731,7 +731,7 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
  */
 /**
  * Refuses a base run made with the drought restriction rule (engine ≥
- * 1.46.0): its history is the restricted one, and the outlook and its
+ * 1.52.0): its history is the restricted one, and the outlook and its
  * triggers read the unrestricted history (withoutDroughtRestriction). A
  * caller that passes its own base run passes one of the input without the
  * rule; a snapshot captured with the rule is refused by its fingerprint.

@@ -331,9 +331,12 @@ function runNetwork(
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
-		// The drought restriction level held the day before (engine ≥ 1.46.0): only part-way through the capture run;
+		// The drought restriction level held the day before (engine ≥ 1.52.0): only part-way through the capture run;
 		// a snapshot of its first day holds none, so the resumed run decides that day as the capture run did.
-		if (plan.restriction && warm.continued) plan.restriction.initialLevel = resume.restrictionLevel ?? 0;
+		if (plan.restriction && warm.continued) {
+			plan.restriction.initialLevels = Uint8Array.from(nodes, (_, i) => resume.restrictionLevels?.[i] ?? 0);
+			plan.restriction.initialEwrFailed = resume.restrictionEwrFailed === true;
+		}
 	}
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
@@ -419,12 +422,13 @@ function runNetwork(
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
-	// The drought restriction (engine ≥ 1.46.0, docs/model.md §2.7i): the level in force each day and, per part a
+	// The drought restriction (engine ≥ 1.52.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
 	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
 	if (plan.restriction && sim.restrictionLevel) {
-		push(null, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.level.label, RESTRICTION_SERIES.level.unit, sim.restrictionLevel);
-		DEMAND_PARTS.forEach((part, p) => {
+		push(null, RESTRICTION_SERIES.level.key, plan.restriction.shared ? RESTRICTION_SERIES.level.label : RESTRICTION_SERIES.deepestLabel, RESTRICTION_SERIES.level.unit, sim.restrictionLevel);
+		// The day's cut per part: one level for every unit (a shared basis) only; under 'own' each unit's level says it.
+		if (plan.restriction.shared) DEMAND_PARTS.forEach((part, p) => {
 			if (!plan.restriction!.cut.some((c) => c[p]! > 0)) return;
 			push(null, restrictionCutKey(part), RESTRICTION_SERIES.cutLabel(part), RESTRICTION_SERIES.cutUnit, Float64Array.from(sim.restrictionLevel!, (l) => plan.restriction!.cut[l]![p]!));
 		});
@@ -611,8 +615,11 @@ function runNetwork(
 		if (r.allocationLeft?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterLeft.key, ALLOCATION_SERIES.groundwaterLeft.label, 'm³', r.allocationLeft.groundwater);
 		const scaledBy = built.allocation.scaled.get(i);
 		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
-		// The unit's demand after the drought restriction (engine ≥ 1.46.0): on every unit while the rule is on.
+		// The unit's demand after the drought restriction (engine ≥ 1.52.0): on every unit while the rule is on.
 		if (r.restrictedDemand) push(node.id, RESTRICTION_SERIES.restricted.key, RESTRICTION_SERIES.restricted.label, RESTRICTION_SERIES.restricted.unit, r.restrictedDemand);
+		// Under the 'own' basis (engine ≥ 1.52.0) each unit's own level, beside its restricted demand.
+		const ul = sim.restrictionUnitLevel?.[i];
+		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
@@ -980,7 +987,7 @@ function runNetwork(
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
-			...(plan.restriction ? { restrictionLevel: net.restrictionLevel } : {})
+			...(plan.restriction ? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}) } : {})
 		};
 	}
 
@@ -996,7 +1003,7 @@ function runNetwork(
 			...(users.length ? { users } : {}),
 			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, historyDays) } : {}),
 			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
-			...(restrictionRule && sim.restrictionLevel ? { droughtRestriction: restrictionSummary(restrictionRule, plan, sim, nodes, start, days) } : {}),
+			...(restrictionRule && sim.restrictionLevel ? { droughtRestriction: restrictionSummary(restrictionRule, plan, sim, nodes, start, days, !!resume) } : {}),
 			...(allocations ? { allocations } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
@@ -1351,11 +1358,12 @@ export function buildNetworkPlan(
 		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
-	// The drought restriction rule (engine ≥ 1.46.0, ./network/restriction.ts): its review and lift days need the run start.
+	// The drought restriction rule (engine ≥ 1.52.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
 	if (restrictionRule && start === undefined) throw new Error('buildNetworkPlan: settings.droughtRestriction needs the run start');
-	const restriction = restrictionRule ? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0 })), start!, days) : null;
-	if (restriction && !restriction.dams.length) warnings.push('the drought restriction rule reads the farm dams’ storage, and no farm has a dam: no level is ever in force');
+	const restriction = restrictionRule
+		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0 })), start!, days, warnings, topo.outflow)
+		: null;
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
@@ -1433,12 +1441,12 @@ export function buildNetworkPlan(
 }
 
 /**
- * RunSummary.droughtRestriction (engine ≥ 1.46.0, docs/model.md §2.7i): the
+ * RunSummary.droughtRestriction (engine ≥ 1.52.0, docs/model.md §2.7i): the
  * days at each level per water year and over the run, the days the level was
  * decided, and per unit (node-id order) its mean demand before and after the
  * cut and its mean supply.
  */
-function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number): DroughtRestrictionSummary {
+function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number, resumed: boolean): DroughtRestrictionSummary {
 	const lv = sim.restrictionLevel!;
 	const n = rule.levels.length + 1;
 	const byYear = new Map<number, { waterYear: number; days: number; daysByLevel: number[] }>();
@@ -1453,24 +1461,27 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 	}
 	const rp = plan.restriction!;
 	let reviews = 0;
-	for (let t = 0; t < days; t++) if (rp.event[t] === 1 || (t === 0 && rp.event[0] === 0 && rp.initialLevel === undefined && rp.startDecides)) reviews++;
+	for (let t = 0; t < days; t++) if (rp.event[t] === 1 || (t === 0 && rp.event[0] === 0 && rp.initialLevels === undefined && rp.startDecides)) reviews++;
+	const ewrReviews = sim.restrictionEwrFailed ? sim.restrictionEwrFailed.reduce((a, v) => a + v, 0) : undefined;
 	const mean = (a: ArrayLike<number>) => {
 		let s = 0;
 		for (let t = 0; t < a.length; t++) s += a[t]!;
 		return a.length ? s / a.length : 0;
 	};
 	const units = nodes
-		.map((node, i) => ({ node, r: sim.nodes[i]! }))
+		.map((node, i) => ({ node, r: sim.nodes[i]!, ul: sim.restrictionUnitLevel?.[i] ?? lv }))
 		.filter((x) => x.r.restrictedDemand)
 		.sort((a, b) => cmpStr(a.node.id, b.node.id))
-		.map(({ node, r }) => {
+		.map(({ node, r, ul }) => {
 			// The cut on the days a level was in force only: the run means dilute it with every unrestricted day.
 			let cut = 0;
-			let n = 0;
+			let k = 0;
+			const byLevel = new Array<number>(n).fill(0);
 			for (let t = 0; t < days; t++) {
-				if (lv[t] === 0) continue;
+				byLevel[ul[t]!]!++;
+				if (ul[t] === 0) continue;
 				cut += r.demand[t]! - r.restrictedDemand![t]!;
-				n++;
+				k++;
 			}
 			return {
 				nodeId: node.id,
@@ -1478,10 +1489,29 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 				avgDemandM3Day: mean(r.demand),
 				avgRestrictedDemandM3Day: mean(r.restrictedDemand!),
 				avgSuppliedM3Day: mean(r.supplied),
-				avgCutOnRestrictedDaysM3Day: n ? cut / n : null
+				avgCutOnRestrictedDaysM3Day: k ? cut / k : null,
+				daysByLevel: byLevel
 			};
 		});
-	return { rule, years: [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear), daysByLevel: total, reviews, units };
+	// A resumed run (engine ≥ 1.52.0): the state its first day starts from, for the self-check.
+	const startState = resumed
+		? {
+				start: {
+					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
+					ewrFailedBefore: rp.initialEwrFailed === true,
+					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
+				}
+			}
+		: {};
+	return {
+		rule,
+		years: [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear),
+		daysByLevel: total,
+		reviews,
+		...(ewrReviews !== undefined ? { ewrReviews } : {}),
+		units,
+		...startState
+	};
 }
 
 /**

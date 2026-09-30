@@ -1,4 +1,4 @@
-// The drought restriction rule (engine ≥ 1.46.0, WP-3.8, docs/model.md
+// The drought restriction rule (engine ≥ 1.52.0, WP-3.8, docs/model.md
 // §2.7i): "cut demand by x % when storage falls below y %". On each review
 // date the level is chosen from the total farm dam storage at the start of
 // the day, as a share of the total capacity (the review triggers' basis,
@@ -10,7 +10,7 @@
 // summary (../run.ts), the self-check (../verify/checks.ts), the settings
 // save and the scenario op all read the rule through these functions.
 import { fromEpochDay } from '../calendar';
-import { DEMAND_OBJECT_CATEGORY_LABEL, DEMAND_PARTS, type DemandPart, type DroughtRestrictionLevel, type DroughtRestrictionRule } from '../project';
+import { DEMAND_OBJECT_CATEGORY_LABEL, DEMAND_PARTS, DROUGHT_RESTRICTION_BASES, type DemandPart, type DroughtRestrictionLevel, type DroughtRestrictionRule } from '../project';
 import { cmpStr } from '../order';
 import { dayFloor } from './demandObjects';
 
@@ -20,6 +20,8 @@ export const RESTRICTION_LEVELS_MAX = 6;
 export const RESTRICTION_DATES_MAX = 12;
 export const RESTRICTION_LABEL_MAX = 60;
 export const RESTRICTION_SOURCE_MAX = 500;
+/** Most node ids in a rule's dam or unit list. */
+export const RESTRICTION_NODES_MAX = 500;
 
 /**
  * The run series the rule adds (only when it is on): the level in force each
@@ -28,6 +30,9 @@ export const RESTRICTION_SOURCE_MAX = 500;
  */
 export const RESTRICTION_SERIES = {
 	level: { key: 'restriction_level', label: 'Drought restriction level in force (the model rule; 0 = none)', unit: '' },
+	/** The catchment column under the 'own' basis, and each unit's (engine ≥ 1.52.0). */
+	deepestLabel: 'Deepest drought restriction level any unit is at (the model rule, each unit by its own dam; 0 = none)',
+	unitLabel: 'Drought restriction level of this unit (the model rule, by its own dam; 0 = none)',
 	cutPrefix: 'restriction_cut@',
 	cutLabel: (part: DemandPart) => `Drought restriction cut on ${DEMAND_PART_WORDS[part]} (share of demand, 0–1)`,
 	cutUnit: '',
@@ -92,7 +97,7 @@ function dateListIssues(v: unknown, field: string, min: number, out: Restriction
 export function droughtRestrictionIssues(raw: unknown): RestrictionIssue[] {
 	const out: RestrictionIssue[] = [];
 	if (!isObj(raw)) return [{ field: '', message: 'must be a rule ({ reviewDates, levels }) or null' }];
-	const extra = Object.keys(raw).filter((k) => !['reviewDates', 'liftDates', 'levels', 'source'].includes(k));
+	const extra = Object.keys(raw).filter((k) => !['reviewDates', 'liftDates', 'levels', 'source', 'basis', 'damNodeIds', 'nodeIds', 'ewrTrigger'].includes(k));
 	if (extra.length) out.push({ field: '', message: `unknown field(s) ${extra.join(', ')}` });
 	const reviews = dateListIssues(raw.reviewDates, 'reviewDates', 1, out);
 	if (raw.liftDates !== undefined) {
@@ -101,7 +106,29 @@ export function droughtRestrictionIssues(raw: unknown): RestrictionIssue[] {
 	}
 	if (raw.source !== undefined && (typeof raw.source !== 'string' || raw.source.length > RESTRICTION_SOURCE_MAX))
 		out.push({ field: 'source', message: `must be a text of at most ${RESTRICTION_SOURCE_MAX} characters` });
+	// Which storage, which units, and the EWR trigger (engine ≥ 1.52.0); the ids are checked against the model by
+	// droughtRestrictionNodeIssues (the run and the form), since the rule alone doesn't know the network.
+	if (raw.basis !== undefined && !(DROUGHT_RESTRICTION_BASES as readonly unknown[]).includes(raw.basis))
+		out.push({ field: 'basis', message: `must be one of ${DROUGHT_RESTRICTION_BASES.join(', ')}` });
+	const ids = (v: unknown, field: string, what: string) => {
+		if (!Array.isArray(v) || !v.length) return out.push({ field, message: `must list at least one ${what}` });
+		if (v.length > RESTRICTION_NODES_MAX) out.push({ field, message: `at most ${RESTRICTION_NODES_MAX} ${what}s` });
+		if (v.some((x) => typeof x !== 'string' || !x || x.length > 100)) out.push({ field, message: `must be ${what} ids` });
+		else if (new Set(v).size !== v.length) out.push({ field, message: `lists a ${what} twice` });
+	};
+	if (raw.basis === 'dams') ids(raw.damNodeIds, 'damNodeIds', 'dam');
+	else if (raw.damNodeIds !== undefined) out.push({ field: 'damNodeIds', message: "only with the basis 'dams'" });
+	if (raw.nodeIds !== undefined) ids(raw.nodeIds, 'nodeIds', 'hydrological unit');
 	const levels = raw.levels;
+	if (raw.ewrTrigger !== undefined) {
+		const e = raw.ewrTrigger;
+		if (!isObj(e) || Object.keys(e).some((k) => k !== 'siteNodeId' && k !== 'level')) out.push({ field: 'ewrTrigger', message: 'must be { siteNodeId, level }' });
+		else {
+			if (!(e.siteNodeId === null || (typeof e.siteNodeId === 'string' && e.siteNodeId && e.siteNodeId.length <= 100))) out.push({ field: 'ewrTrigger.siteNodeId', message: 'must be an EWR site (a gauge id, or null for the outlet)' });
+			const n = Array.isArray(levels) ? levels.length : 0;
+			if (!(Number.isInteger(e.level) && (e.level as number) >= 1 && (e.level as number) <= Math.max(n, 1))) out.push({ field: 'ewrTrigger.level', message: `must be a level of the rule (1–${Math.max(n, 1)})` });
+		}
+	}
 	if (!Array.isArray(levels) || levels.length < 1) {
 		out.push({ field: 'levels', message: 'needs at least one level' });
 		return out;
@@ -174,6 +201,61 @@ export function levelCut(rule: Pick<DroughtRestrictionRule, 'levels'>, level: nu
 }
 
 /**
+ * Why a rule's node ids don't fit the network (engine ≥ 1.52.0), one issue
+ * per problem: a dam in `damNodeIds` that isn't a farm with a dam, a unit in
+ * `nodeIds` that isn't a farm, an EWR site that isn't a gauge. The run warns
+ * and leaves each out; the Settings form blocks Save.
+ */
+export function droughtRestrictionNodeIssues(rule: DroughtRestrictionRule, nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string }[]): RestrictionIssue[] {
+	const out: RestrictionIssue[] = [];
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	const name = (id: string) => byId.get(id)?.name ?? id;
+	if (rule.basis === 'dams')
+		for (const id of rule.damNodeIds ?? []) {
+			const n = byId.get(id);
+			if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) out.push({ field: 'damNodeIds', message: n ? `“${name(id)}” has no dam` : `the dam ${id} isn't in the model` });
+		}
+	for (const id of rule.nodeIds ?? []) {
+		const n = byId.get(id);
+		if (!n || n.kind !== 'farm') out.push({ field: 'nodeIds', message: n ? `“${name(id)}” isn't a hydrological unit` : `the unit ${id} isn't in the model` });
+	}
+	const site = rule.ewrTrigger?.siteNodeId;
+	if (typeof site === 'string') {
+		const n = byId.get(site);
+		if (!n || n.kind !== 'gauge') out.push({ field: 'ewrTrigger.siteNodeId', message: n ? `“${name(site)}” isn't a gauge` : `the EWR site ${site} isn't in the model` });
+	}
+	return out;
+}
+
+/**
+ * A rule from the WUA's published restriction notice (engine ≥ 1.52.0, WP-2.3,
+ * a starting point: "a scenario may copy the current notice into the rule,
+ * never the reverse"). A notice is one cut for the season, not a table by
+ * storage, so the rule has one level in force whenever the dams aren't full
+ * (below 100 %), cutting every part by the notice's %, reviewed on the day it
+ * was published and lifted on the day the WUA expects to publish next. null
+ * (with the reason) for a notice that cuts nothing: no restriction, or an
+ * advisory or restriction without a %.
+ */
+export function restrictionRuleFromNotice(notice: { level: string; pct: number | null; publishedAt: string; nextExpectedOn: string | null }): { rule: DroughtRestrictionRule | null; reason: string | null } {
+	if (notice.level === 'none') return { rule: null, reason: 'The published notice has no restriction.' };
+	if (!(typeof notice.pct === 'number' && notice.pct > 0)) return { rule: null, reason: 'The published notice gives no % cut to copy.' };
+	const md = (iso: string) => (iso.slice(5, 10) === '02-29' ? '03-01' : iso.slice(5, 10));
+	const review = md(notice.publishedAt);
+	const lift = notice.nextExpectedOn ? md(notice.nextExpectedOn) : null;
+	const cut = Math.min(1, notice.pct / 100);
+	return {
+		rule: {
+			reviewDates: [review],
+			...(lift && lift !== review ? { liftDates: [lift] } : {}),
+			levels: [{ label: notice.level === 'advisory' ? 'Advisory notice' : 'Published notice', belowPct: 1, cuts: Object.fromEntries(DEMAND_PARTS.map((p) => [p, cut])) }],
+			source: `The WUA's published restriction notice of ${notice.publishedAt.slice(0, 10)} (${notice.pct} %)`
+		},
+		reason: null
+	};
+}
+
+/**
  * A demand object's demand after a cut `cut`: d × (1 − cut), never below
  * MIN(its basic-needs floor, d) when it has one (engine ≥ 1.44.0's floor, as
  * against any restriction). With no cut it is d, to the bit.
@@ -194,18 +276,25 @@ export interface PlanRestriction {
 	thresholds: Float64Array;
 	/** cut[level][part index in DEMAND_PARTS]; level 0 is all zeros. */
 	cut: Float64Array[];
-	/** The farm dams the storage is read from (node indices, in node-id order so the sum doesn't depend on the listing). */
+	/** One level for every unit ('total', 'dams') or one per unit ('own'). */
+	shared: boolean;
+	/** Shared: the farm dams the storage is read from (node indices, in node-id order so the sum doesn't depend on the listing). */
 	dams: Int32Array;
-	/** The level held on the day before the first day (a run resumed from a snapshot, engine ≥ 1.46.0); absent = a fresh start. */
-	initialLevel?: number;
+	/** 'own': each unit's dam (its own index), -1 for a unit without one. */
+	ownDam: Int32Array;
+	/** 1 for each unit the rule cuts (farms only). */
+	inScope: Uint8Array;
+	/** The EWR trigger's site (a node index) and its level; -1 = none. */
+	ewrSite: number;
+	ewrLevel: number;
+	/** The level each unit held on the day before the first day (a resumed run, engine ≥ 1.52.0); absent = a fresh start. */
+	initialLevels?: Uint8Array;
+	/** Whether the EWR trigger's site failed on the day before the first day (a resumed run); absent = no. */
+	initialEwrFailed?: boolean;
 }
 
-/**
- * A rule resolved against a run: its events per day from `start` (epoch
- * day), and the farm dams its storage reads (every farm with a dam, as the
- * review triggers' total farm dam storage).
- */
-export function planRestriction(rule: DroughtRestrictionRule, nodes: readonly { id: string; kind: string; damCapacityM3: number }[], start: number, days: number): PlanRestriction {
+/** The review and lift day of each run day from `start`, and whether a fresh run decides its first day. */
+export function restrictionEvents(rule: Pick<DroughtRestrictionRule, 'reviewDates' | 'liftDates'>, start: number, days: number): { event: Uint8Array; startDecides: boolean } {
 	const reviews = new Set(rule.reviewDates);
 	const lifts = new Set(rule.liftDates ?? []);
 	const eventOn = (day: number): number => {
@@ -223,9 +312,64 @@ export function planRestriction(rule: DroughtRestrictionRule, nodes: readonly { 
 			break;
 		}
 	}
+	return { event, startDecides };
+}
+
+/**
+ * A rule resolved against a run: its events per day from `start` (epoch
+ * day), the dams its storage reads (every farm dam for 'total', the listed
+ * ones for 'dams', each unit's own for 'own'), the units it cuts, and the EWR
+ * trigger's site (`outlet` = the outflow node's index). Ids that don't fit
+ * the network are left out with a warning (droughtRestrictionNodeIssues);
+ * null, with a warning, when no unit is left to cut.
+ */
+export function planRestriction(
+	rule: DroughtRestrictionRule,
+	nodes: readonly { id: string; kind: string; damCapacityM3: number; name?: string }[],
+	start: number,
+	days: number,
+	warnings: string[] = [],
+	outlet = -1
+): PlanRestriction | null {
+	for (const i of droughtRestrictionNodeIssues(rule, nodes)) warnings.push(`drought restriction rule: ${i.message}; left out`);
+	const { event, startDecides } = restrictionEvents(rule, start, days);
 	const cut = [new Float64Array(DEMAND_PARTS.length), ...rule.levels.map((l) => Float64Array.from(DEMAND_PARTS, (p) => (finite(l.cuts[p]) ? l.cuts[p]! : 0)))];
-	const dams = nodes.flatMap((n, i) => (n.kind === 'farm' && n.damCapacityM3 > 0 ? [i] : [])).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-	return { event, startDecides, thresholds: Float64Array.from(rule.levels, (l) => l.belowPct), cut, dams: Int32Array.from(dams) };
+	const isDam = (n: (typeof nodes)[number]) => n.kind === 'farm' && n.damCapacityM3 > 0;
+	const basis = rule.basis ?? 'total';
+	const listed = basis === 'dams' ? new Set(rule.damNodeIds ?? []) : null;
+	const dams = basis === 'own' ? [] : nodes.flatMap((n, i) => (isDam(n) && (!listed || listed.has(n.id)) ? [i] : [])).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	const scope = rule.nodeIds ? new Set(rule.nodeIds) : null;
+	const inScope = Uint8Array.from(nodes, (n) => (n.kind === 'farm' && (!scope || scope.has(n.id)) ? 1 : 0));
+	if (!inScope.some((x) => x)) {
+		warnings.push('the drought restriction rule cuts no hydrological unit (none of its units is in the model): not applied');
+		return null;
+	}
+	const ownDam = Int32Array.from(nodes, (n, i) => (basis === 'own' && inScope[i] && isDam(n) ? i : -1));
+	if (basis !== 'own' && !dams.length) warnings.push('the drought restriction rule reads the farm dams’ storage, and no dam it reads is in the model: no level is ever in force from storage');
+	if (basis === 'own') {
+		// In node-id order, so the warning doesn't depend on how the nodes are listed.
+		const without = nodes.filter((n, i) => inScope[i] && !isDam(n)).sort((a, b) => cmpStr(a.id, b.id));
+		if (without.length) warnings.push(`the drought restriction rule reads each unit's own dam, and ${without.map((n) => n.name ?? n.id).join(', ')} ${without.length === 1 ? 'has' : 'have'} none: never restricted by storage`);
+	}
+	let ewrSite = -1;
+	if (rule.ewrTrigger) {
+		const id = rule.ewrTrigger.siteNodeId;
+		const i = id === null ? outlet : nodes.findIndex((n) => n.id === id && n.kind === 'gauge');
+		if (i < 0) warnings.push('the drought restriction rule’s EWR trigger has no site in the model: left out');
+		else ewrSite = i;
+	}
+	return {
+		event,
+		startDecides,
+		thresholds: Float64Array.from(rule.levels, (l) => l.belowPct),
+		cut,
+		shared: basis !== 'own',
+		dams: Int32Array.from(dams),
+		ownDam,
+		inScope,
+		ewrSite,
+		ewrLevel: ewrSite >= 0 ? rule.ewrTrigger!.level : 0
+	};
 }
 
 /** Index of each part in DEMAND_PARTS (the cut arrays' order). */
@@ -239,10 +383,23 @@ export function describeRestrictionLevel(l: DroughtRestrictionLevel, i: number):
 }
 
 /** The rule in words, for the run comparison and the scenario list: "off", or its dates and levels. */
-export function describeDroughtRestriction(rule: DroughtRestrictionRule | null | undefined): string {
+export function describeDroughtRestriction(rule: DroughtRestrictionRule | null | undefined, name: (id: string) => string = (id) => id): string {
 	if (!rule) return 'off';
 	const lifts = rule.liftDates?.length ? `, lifted ${rule.liftDates.map(monthDayText).join(', ')}` : '';
-	return `reviewed ${rule.reviewDates.map(monthDayText).join(', ')}${lifts}; ${rule.levels.map(describeRestrictionLevel).join('; ')}`;
+	const extra = [basisText(rule, name), rule.nodeIds ? `cutting ${rule.nodeIds.map(name).join(', ')} only` : null, ewrText(rule, name)].filter(Boolean);
+	return `reviewed ${rule.reviewDates.map(monthDayText).join(', ')}${lifts}; ${rule.levels.map(describeRestrictionLevel).join('; ')}${extra.length ? `; ${extra.join('; ')}` : ''}`;
+}
+
+/** Which storage in words, or null for the default (every farm dam's total). */
+function basisText(rule: DroughtRestrictionRule, name: (id: string) => string): string | null {
+	if (rule.basis === 'own') return "each unit's own dam";
+	if (rule.basis === 'dams') return `the storage of ${(rule.damNodeIds ?? []).map(name).join(', ')}`;
+	return null;
+}
+function ewrText(rule: DroughtRestrictionRule, name: (id: string) => string): string | null {
+	const e = rule.ewrTrigger;
+	if (!e) return null;
+	return `at least level ${e.level} when the EWR at ${e.siteNodeId === null ? 'the outlet' : name(e.siteNodeId)} wasn't met the day before a review`;
 }
 
 /**
@@ -251,11 +408,11 @@ export function describeDroughtRestriction(rule: DroughtRestrictionRule | null |
  * lift dates, each level's threshold, name and cuts, levels added or removed,
  * and the source note. A rule a run couldn't use counts as off.
  */
-export function droughtRestrictionChanges(ra: unknown, rb: unknown): string[] {
+export function droughtRestrictionChanges(ra: unknown, rb: unknown, name: (id: string) => string = (id) => id): string[] {
 	const a = resolveDroughtRestriction(ra ?? null, []);
 	const b = resolveDroughtRestriction(rb ?? null, []);
 	if (!a && !b) return [];
-	if (!a || !b) return [`${describeDroughtRestriction(a)} → ${describeDroughtRestriction(b)}`];
+	if (!a || !b) return [`${describeDroughtRestriction(a, name)} → ${describeDroughtRestriction(b, name)}`];
 	const out: string[] = [];
 	const dates = (x: readonly string[] | undefined) => (x?.length ? [...x].sort().map(monthDayText).join(', ') : 'none');
 	if (dates(a.reviewDates) !== dates(b.reviewDates)) out.push(`review dates ${dates(a.reviewDates)} → ${dates(b.reviewDates)}`);
@@ -278,5 +435,13 @@ export function droughtRestrictionChanges(ra: unknown, rb: unknown): string[] {
 		}
 	}
 	if ((a.source ?? '').trim() !== (b.source ?? '').trim()) out.push(`source "${a.source?.trim() ?? ''}" → "${b.source?.trim() ?? ''}"`);
+	const basisA = basisText(a, name) ?? 'every farm dam';
+	const basisB = basisText(b, name) ?? 'every farm dam';
+	if (basisA !== basisB) out.push(`storage read ${basisA} → ${basisB}`);
+	const scope = (r: DroughtRestrictionRule) => (r.nodeIds ? r.nodeIds.map(name).sort().join(', ') : 'every unit');
+	if (scope(a) !== scope(b)) out.push(`units cut ${scope(a)} → ${scope(b)}`);
+	const ewrA = ewrText(a, name) ?? 'no EWR trigger';
+	const ewrB = ewrText(b, name) ?? 'no EWR trigger';
+	if (ewrA !== ewrB) out.push(`${ewrA} → ${ewrB}`);
 	return out;
 }
