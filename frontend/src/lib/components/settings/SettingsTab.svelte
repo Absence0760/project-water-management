@@ -79,7 +79,7 @@
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
-	import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
+	import { saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
@@ -405,11 +405,15 @@
 			root.style.scrollPaddingBottom = '';
 		};
 	});
-	const navLabel = (id: string) => SETTINGS_SECTIONS.find((sec) => sec.id === id)?.label ?? AFTER_FORM_LABELS[id] ?? id;
+	const navLabel = (id: string) => SETTINGS_SECTIONS.find((sec) => sec.id === id)?.label ?? id;
+	// A link that stands for several panels ("Automation & access") takes the group's name and shows a problem on any of them.
 	const navGroups = $derived(
 		settingsNavGroups(project.role === 'owner').map((g) => ({
 			label: g.label,
-			sections: g.ids.map((id) => ({ id, label: navLabel(id), problem: blockers.some((b) => b.id === id) }))
+			sections: g.ids.map((id) => {
+				const covers = g.covers?.[id];
+				return { id, label: covers ? g.label : navLabel(id), problem: blockers.some((b) => (covers ?? [id]).includes(b.id)) };
+			})
 		}))
 	);
 
@@ -444,7 +448,7 @@
      Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
      the header's context says where the parameters came from. Outside the form, so it stays stuck
      down the panels after it too (inside, it scrolled away at Data feeds). -->
-<!-- No visible group names: with them its seventeen links no longer fit two rows at 1280 px, so its
+<!-- No visible group names: with them its links no longer fit two rows at 1280 px, so its
      links are evenly spaced instead (common/SectionNav, issue #162). -->
 <SectionNav groups={navGroups} label="Settings sections" />
 

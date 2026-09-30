@@ -2561,7 +2561,7 @@ counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
 Hydrological units and Data show their names. Settings & calibration, Runs
 & results and River & reserve don't, and space their links evenly: with the
-names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
+names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
 Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
@@ -2966,15 +2966,25 @@ section header, which it fills (`fillHeader`) like the other sections.
   at the top.
 - **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
-  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-evidence`, `#set-auto`, then after the
-  form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
-  listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
-  named for screen readers only, its links evenly spaced (the names on the
-  bar would push links into More at 1280 px, issue #162): **Model inputs**
-  (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
-  results, issue #173), **How results are read** (Outcome matrix, Seasonal
-  outlook, Evidence: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`,
+  `#set-restrict`, `#set-period`, `#set-quality`, `#set-outcomes`,
+  `#set-outlook`, `#set-evidence`, then one **Automation & access** link to
+  `#set-auto`; listed by `settings/sections.ts`, `settingsNavGroups`), in
+  three groups named for screen readers only, its links evenly spaced (the
+  names on the bar would push links into More at 1280 px, issue #162):
+  **Model inputs** (Demand … Data quality: its zero-rain and low-vs-CHIRPS
+  limits change results, issue #173), **How results are read** (Outcome
+  matrix, Seasonal outlook, Evidence: they change no result) and
+  **Automation & access**. That last link stands for the four panels that
+  run or connect by themselves: Automatic runs (`#set-auto`, last in the
+  form), then after the form Data feeds (`#set-feeds`), API keys
+  (`#set-api-keys`, owners only) and Scheduled reports
+  (`#set-report-schedules`). They keep their own headings and ids, so a link
+  to any of them still lands, and the group's link is marked while any of
+  them is read; a Save blocker on any of them puts its dot on that link. One
+  link for four keeps the bar's sixteen links in two rows at 1280 px in CI's
+  fonts, which the drought restrictions link's nineteenth did not (2026-09-30,
+  `section-nav.spec.ts`). It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links

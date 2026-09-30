@@ -33,13 +33,14 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	for (const [name, first, last] of [
 		['Model inputs', 'Demand', 'Data quality'],
 		['How results are read', 'Outcome matrix', 'Evidence'],
-		['Runs, feeds and reports', 'Automatic runs', 'Scheduled reports']
+		['Automation & access', 'Automation & access', 'Automation & access']
 	] as const) {
 		const links = menu.getByRole('list', { name, exact: true }).getByRole('link');
 		await expect(links.first()).toHaveText(first);
 		await expect(links.last()).toHaveText(last);
 	}
-	await expect(menu.getByRole('list', { name: 'Runs, feeds and reports' }).getByRole('link')).toHaveText(['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']);
+	// Automatic runs, Data feeds, API keys and Scheduled reports behind one link, so the bar fits two rows at 1280 px.
+	await expect(menu.getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automation & access']);
 
 	// The jump lands on the fit panel, below the sticky menu, and the menu marks it.
 	await jump.click();
@@ -49,23 +50,30 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	expect((await fit.boundingBox())!.y).toBeGreaterThanOrEqual((await menu.boundingBox())!.y + (await menu.boundingBox())!.height - 1);
 	await expect(menu.getByRole('link', { name: 'Fit automatically' })).toHaveAttribute('aria-current', 'location');
 
-	// The panels after the form: the line says they save on their own; the menu reaches them.
+	// The panels after the form: the line says they save on their own; the menu's group link lands on the first of them.
 	await expect(page.getByText(AFTER_FORM, { exact: true })).toBeVisible();
-	await menu.getByRole('link', { name: 'Scheduled reports' }).click();
-	await expect(page).toHaveURL(/#set-report-schedules$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Scheduled reports' })).toBeInViewport();
-	await menu.getByRole('link', { name: 'API keys' }).click();
-	await expect(page.getByRole('heading', { level: 2, name: 'API keys' })).toBeInViewport();
+	const automation = menu.getByRole('link', { name: 'Automation & access' });
+	await automation.click();
+	await expect(page).toHaveURL(/#set-auto$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
+	await expect(automation).toHaveAttribute('aria-current', 'location');
 
 	// Back returns to the fragment before, on the same page.
 	await page.goBack();
-	await expect(page).toHaveURL(/#set-report-schedules$/);
+	await expect(page).toHaveURL(/#set-fit$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
 
-	// Data feeds is a lazy chunk: its anchor is on a wrapper that is always there, and the link lands on the panel.
-	await menu.getByRole('link', { name: 'Data feeds', exact: true }).click();
-	await expect(page).toHaveURL(/#set-feeds$/);
-	await expect(page.locator('#set-feeds').getByRole('heading', { level: 2, name: 'Data feeds' })).toBeInViewport();
+	// Each panel keeps its own anchor, so a link to it still lands, with the group's link marked. Data feeds is a
+	// lazy chunk: its anchor is on a wrapper that is always there.
+	for (const [id, name] of [
+		['set-report-schedules', 'Scheduled reports'],
+		['set-api-keys', 'API keys'],
+		['set-feeds', 'Data feeds']
+	] as const) {
+		await page.goto(`/projects/${project.id}?tab=settings#${id}`);
+		await expect(page.locator(`#${id}`).getByRole('heading', { level: 2, name, exact: true })).toBeInViewport();
+		await expect(automation).toHaveAttribute('aria-current', 'location');
+	}
 });
 
 test('a link into a group (?tab=calibration, a note’s #set- link) opens the page on that group, below the menu', async ({ page, owner }) => {
@@ -173,8 +181,9 @@ test('a viewer reads where the parameters came from, with nothing to fit and no 
 	// No fit record to show and nothing to fit: the header has no jump.
 	await expect(header(v).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(v.getByText(/save as you change them/)).toHaveCount(0);
-	// API keys is an owner's panel, so the menu doesn't link it.
-	await expect(settingsMenu(v).getByRole('list', { name: 'Runs, feeds and reports' }).getByRole('link')).toHaveText(['Automatic runs', 'Data feeds', 'Scheduled reports']);
+	// The same one group link (API keys, an owner's panel, isn't on the page for a viewer).
+	await expect(settingsMenu(v).getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automation & access']);
+	await expect(v.locator('#set-api-keys')).toHaveCount(0);
 	await expect(v.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
 });
 
