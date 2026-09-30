@@ -100,6 +100,30 @@ describe('GET /projects/:id/history/fields', () => {
 		expect((await fields(editor, pid)).body.fields[key]).toMatchObject({ count: 2, change: '5 ha → 0 ha' });
 	});
 
+	it('keys the supply rule, the river pump and the operating rules (engine 1.31.0), the monthly rows included', async () => {
+		const pid = (await editor.call('POST', '/projects', { name: 'Operating rules' })).body.project.id;
+		const w = node('Weir', null);
+		const f4 = node('Vlei', w.id, { damCapacityM3: 50_000, divertCapacityM3Day: 400 });
+		const put = async (o: Record<string, unknown>) =>
+			expect((await editor.call('PUT', `/projects/${pid}/model`, { nodes: [w, { ...f4, ...o }], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const winter = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
+		await put({});
+		await put({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200, handsOffM3Day: monthly(300), handsOffEwr: true, divertMonthlyM3Day: winter });
+		const f = (await fields(editor, pid)).body.fields;
+		const key = (k: string) => `node:${f4.id}:${k}`;
+		expect(f[key('supplyRule')]).toMatchObject({ count: 1, change: 'dam only → river first', filter: 'Vlei: supply rule' });
+		expect(f[key('pumpCapacityM3Day')]).toMatchObject({ count: 1, change: 'no limit → 1\u202f200 m³/day' });
+		expect(f[key('handsOffEwr')]).toMatchObject({ count: 1, change: 'no → yes', filter: 'Vlei: hands-off keeps the EWR' });
+		// The monthly rows are keyed by their own labels, never as the one River to dam value (diversion capacity).
+		expect(f[key('handsOffM3Day')]).toMatchObject({ count: 1, change: `none → ${new Array(12).fill('300').join(', ')} m³/day (Oct–Sep)`, filter: 'Vlei: hands-off flow' });
+		expect(f[key('divertMonthlyM3Day')]).toMatchObject({
+			count: 1,
+			change: `the one diversion capacity → ${winter.join(', ')} m³/day (Oct–Sep)`,
+			filter: 'Vlei: River to dam by month'
+		});
+		expect(f[key('divertCapacityM3Day')]).toBeUndefined();
+	});
+
 	it('is for members who see History: a farmer is refused, a stranger finds nothing', async () => {
 		expect((await fields(owner)).status).toBe(200);
 		expect((await fields(farmer)).status).toBe(403);

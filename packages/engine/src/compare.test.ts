@@ -1514,6 +1514,24 @@ describe('field history tables (settingsChangePaths, nodeChangeFields)', () => {
 		expect(diffInputs(a, b).map((c) => keyOf(c.text))).toEqual(['damCapacityM3', 'irrigationEfficiency']);
 		expect(new Set(labels.map(([l]) => l)).size).toBe(labels.length);
 	});
+
+	it('names the operating rules and supply fields (engine 1.31.0), the monthly rows included', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, {
+			supplyRule: 'riverFirst',
+			pumpCapacityM3Day: 1200,
+			handsOffM3Day: new Array(12).fill(300),
+			handsOffEwr: true,
+			divertMonthlyM3Day: new Array(12).fill(500)
+		});
+		const labels = nodeChangeFields();
+		const keyOf = (text: string) => {
+			const rest = text.slice('Rooikloof: '.length);
+			return labels.filter(([l]) => rest.startsWith(`${l} `)).sort((x, y) => y[0].length - x[0].length)[0]?.[1];
+		};
+		expect(diffInputs(a, b).map((c) => keyOf(c.text)).sort()).toEqual(['divertMonthlyM3Day', 'handsOffEwr', 'handsOffM3Day', 'pumpCapacityM3Day', 'supplyRule']);
+	});
 });
 
 describe('describeFitRecord', () => {

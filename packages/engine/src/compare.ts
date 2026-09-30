@@ -1714,6 +1714,9 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
 		['dam release', 'damReleaseM3Day'],
+		// Operating rules (engine ≥ 1.31.0): the monthly rows diffModel words itself.
+		['hands-off flow', 'handsOffM3Day'],
+		['River to dam by month', 'divertMonthlyM3Day'],
 		['dam survey curve', 'damCurve'],
 		['drains into', 'downstreamNodeId']
 	];
