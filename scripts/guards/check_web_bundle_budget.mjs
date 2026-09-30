@@ -1603,6 +1603,12 @@
 //             share calls, the privacy notice's longer §5 bullet). Measured
 //             locally: main @ 5604071e 1326, this branch merged with it 1332
 //             (+6 KB); CI ~2 KB above. Headroom ~4 KB.
+// 2026-09-30  total 1336 → 1338 KB (Appendix C's fixed prompts, report format
+//             evidence-8: the scenario's Applicant's statement panel
+//             (ScenarioStatement.svelte, statement.ts, its leave guard) and
+//             Appendix C's prompt rows; +1 KB). Measured 1333 locally on the
+//             combined branch with both issue #71 pieces, main @ 5604071e;
+//             CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1613,7 +1619,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1336,
+	totalCodeKb: 1338,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
