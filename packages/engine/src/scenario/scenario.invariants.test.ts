@@ -12,7 +12,8 @@
 import { describe, expect, it } from 'vitest';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
 import { buildTopology } from '../network/topology';
-import { defaultProjectSettings, upgradeLegacyModel, type ModelInput, type ModelOutput } from '../project';
+import { transferRatesM3s } from '../network/transferRates';
+import { defaultProjectSettings, upgradeLegacyModel, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { randomInput } from '../testing/fuzz';
 import { checkAll, sameOutput } from '../testing/invariants';
 import { randomOps } from '../testing/scenarioFuzz';
@@ -20,6 +21,7 @@ import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { Rng } from '../random';
 import { runModel } from '../run';
 import { applyScenario } from './overrides';
+import { structureIssues } from './structure';
 import type { ScenarioOp } from './ops';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
@@ -63,10 +65,24 @@ function canonical(v: unknown): string {
 	return JSON.stringify(v);
 }
 
-/** The input as the engine and compare resolve it: settings merged, older node fields at their defaults, no land cover = []. */
+/**
+ * The input as the engine and compare resolve it: settings merged, older node fields at their defaults, no land cover = [],
+ * a crop's own irrigation efficiency null or absent alike (both are the farm's, engine ≥ 0.43.0), and a transfer's
+ * months, max rate and monthly rates as the rate each month gets (engine ≥ 1.14.0): run comparison reads a rule written
+ * as its one rate per month, or as twelve zeros, as no change (compare.test.ts), since a run does nothing differently.
+ */
 const resolved = (x: ModelInput) => {
 	const s = snapshot(x);
-	return canonical({ ...s, settings: resolveSettings(s.settings), model: upgradeLegacyModel({ landCover: [], ...s.model }) });
+	const model = upgradeLegacyModel({ landCover: [], ...s.model });
+	return canonical({
+		...s,
+		settings: resolveSettings(s.settings),
+		model: {
+			...model,
+			crops: model.crops.map((c) => ({ ...c, irrigationEfficiency: c.irrigationEfficiency ?? undefined })),
+			transfers: model.transfers.map((t) => ({ ...t, months: undefined, maxRateM3s: undefined, monthlyRateM3s: undefined, rates: transferRatesM3s(t) }))
+		}
+	});
 };
 
 function baseFor(seed: number): ModelInput {
@@ -206,5 +222,97 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 				}
 			}
 		}
+	}, 300_000);
+});
+
+describe('node.move and node.insert on random networks (engine ≥ 1.34.0)', () => {
+	/** A gauge with no land: it only measures what passes. */
+	const gauge = (id: string, name: string, downstreamNodeId: string, ewrSite: boolean): NetworkNode =>
+		upgradeLegacyModel({
+			nodes: [
+				{ id, name, kind: 'gauge' as const, downstreamNodeId, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0, ewrSite }
+			]
+		}).nodes[0]!;
+	/** Random moves and inserts: a move to any node (loops included, which the rules refuse), an insert above some of a node's upstream nodes. */
+	function reshapes(base: ModelInput, g: Rng, count: number): ScenarioOp[] {
+		const nodes = [...base.model.nodes];
+		const ops: ScenarioOp[] = [];
+		for (let k = 0; k < count; k++) {
+			if (g.bool(0.5)) {
+				ops.push({ op: 'node.move', nodeId: g.pick(nodes).id, downstreamNodeId: g.pick(nodes).id });
+				continue;
+			}
+			const into = g.pick(nodes);
+			const kids = base.model.nodes.filter((x) => x.downstreamNodeId === into.id);
+			const ups = kids.filter(() => g.bool(0.6));
+			const node = gauge(`ins${k}`, `Inserted ${k}`, into.id, g.bool());
+			ops.push({ op: 'node.insert', node, upstreamNodeIds: ups.length ? ups.map((x) => x.id) : [g.pick(nodes).id] });
+			nodes.push(node);
+		}
+		return ops;
+	}
+
+	it(`keep one tree with one outlet and add no broken save rule, over ${CASES} networks`, () => {
+		let moved = 0;
+		let inserted = 0;
+		let refused = 0;
+		for (let seed = SEED0; seed < SEED0 + CASES; seed++) {
+			const base = baseFor(seed);
+			const ops = reshapes(base, new Rng(seed ^ 0x1b873593), 10);
+			const r = applyScenario(base, ops);
+			// One op at a time gives the same input (no edit groups here), so each insert is checked against the network it met.
+			let cur = base;
+			for (const op of ops) {
+				const one = applyScenario(cur, [op]);
+				if (op.op === 'node.insert' && !one.problems.length) {
+					inserted++;
+					const at = (id: string) => one.input.model.nodes.find((n) => n.id === id)!;
+					for (const id of op.upstreamNodeIds) expect(at(id).downstreamNodeId, `seed ${seed}`).toBe(op.node.id);
+					expect(at(op.node.id).downstreamNodeId).toBe(op.node.downstreamNodeId);
+				}
+				cur = one.input;
+			}
+			expect(resolved(cur), `seed ${seed}`).toBe(resolved(r.input));
+			expect(() => buildTopology(r.input.model.nodes), `seed ${seed}`).not.toThrow();
+			expect(r.input.model.nodes.filter((n) => n.downstreamNodeId === null), `seed ${seed}`).toHaveLength(1);
+			const was = structureIssues(base);
+			expect([...structureIssues(r.input).keys()].filter((k) => !was.has(k)), `seed ${seed}`).toEqual([]);
+			moved += r.applied.filter((a) => a.op.op === 'node.move').length;
+			refused += r.problems.length;
+		}
+		// Both paths run: moves and inserts that apply, and ones refused (a loop, a node that doesn't drain there).
+		expect(moved).toBeGreaterThan(CASES / 2);
+		expect(inserted).toBeGreaterThan(CASES / 2);
+		expect(refused).toBeGreaterThan(CASES / 2);
+	});
+
+	it(`a gauge with no land inserted mid-river leaves every other node's water as it was, on ${Math.max(20, Math.floor(CASES / 5))} networks`, () => {
+		const N = Math.max(20, Math.floor(CASES / 5));
+		let checked = 0;
+		for (let seed = SEED0; seed < SEED0 + N; seed++) {
+			const base = baseFor(seed);
+			const g = new Rng(seed ^ 0x85ebca6b);
+			const withKids = base.model.nodes.filter((d) => base.model.nodes.some((x) => x.downstreamNodeId === d.id));
+			if (!withKids.length) continue;
+			const into = g.pick(withKids);
+			const ups = base.model.nodes.filter((x) => x.downstreamNodeId === into.id);
+			const node = gauge('pass', 'Pass-through weir', into.id, false);
+			const r = applyScenario(base, [{ op: 'node.insert', node, upstreamNodeIds: ups.filter(() => g.bool(0.7)).map((x) => x.id).concat(ups[0]!.id).filter((id, i, xs) => xs.indexOf(id) === i) }]);
+			expect(r.problems, `seed ${seed}`).toEqual([]);
+			const [x, y] = [runModel(base), runModel(r.input)];
+			for (const s of x.series) {
+				// The reach shortfall (workbook AB) is measured against the elements directly upstream, which the insert changes by design (model.md §2.7).
+				if (!s.nodeId || s.key === 'ewr_shortfall_incremental') continue;
+				const t = y.series.find((z) => z.nodeId === s.nodeId && z.key === s.key)!.values;
+				for (let i = 0; i < s.values.length; i++) {
+					const a = s.values[i]!;
+					const b = t[i]!;
+					expect(Number.isNaN(a) ? Number.isNaN(b) : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)), `seed ${seed} ${s.nodeId} ${s.key} day ${i}: ${a} vs ${b}`).toBe(true);
+				}
+			}
+			expect(checkAll(r.input, seed), `seed ${seed}`).toBeNull();
+			checked++;
+		}
+		expect(checked).toBeGreaterThan(N / 2);
 	}, 300_000);
 });

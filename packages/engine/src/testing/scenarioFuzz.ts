@@ -7,7 +7,7 @@
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { BOREHOLE_RULES, DAM_RELEASE_RULES, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
-import { NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
+import { CROP_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
 const monthly = (g: Rng, f: () => number) => Array.from({ length: 12 }, f);
 
@@ -362,6 +362,120 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					highFlows: r.bool(0.4) ? [{ label: 'Scenario freshet', months: [11, 12], peakM3s: r.logFloat(1e-3, 10), durationDays: r.int(1, 5), perYear: r.int(1, 2) }] : []
 				}
 			});
+		}
+	}
+	// The later ops (engine ≥ 1.34.0): node.move, node.insert, crop.set, crop.remove, landCover.set,
+	// ewrRule.remove, allocation.set and allocation.remove, from a stream of their own for the same
+	// reason. Moves often make a loop and now and then name a missing node (problems); an insert
+	// re-points some of the nodes that drain into its downstream node, now and then one that doesn't.
+	const v = new Rng(seed ^ 0x27d4eb2f);
+	if (count === undefined && v.bool(0.45)) {
+		const crops2 = [...crops];
+		const patches2 = [...patches];
+		const allocs = (input.model.allocations ?? []).map((a) => a.id);
+		const pickNode = () => (nodes.length && !v.bool(0.05) ? v.pick(nodes) : null);
+		for (let k = v.int(1, 3); k > 0; k--) {
+			const kind = v.pick(['node.move', 'node.move', 'node.insert', 'node.insert', 'crop.set', 'crop.set', 'crop.remove', 'landCover.set', 'landCover.set', 'ewrRule.remove', 'allocation.set', 'allocation.set', 'allocation.remove'] as const);
+			switch (kind) {
+				case 'node.move': {
+					const x = pickNode();
+					const to = pickNode();
+					ops.push({ op: 'node.move', nodeId: x?.id ?? missing(), downstreamNodeId: to?.id ?? missing() });
+					break;
+				}
+				case 'node.insert': {
+					const into = pickNode();
+					const kids = nodes.filter((x) => x.downstreamNodeId === into?.id);
+					const ups = kids.filter(() => v.bool(0.6));
+					if (!ups.length) ups.push(kids.length ? kids[0]! : (pickNode() ?? nodes[0]!));
+					if (v.bool(0.05) && nodes.length) ups.push(v.pick(nodes));
+					const id = `si${k}`;
+					const kindOf = v.pick(['farm', 'farm', 'user', 'gauge'] as const);
+					const added: NetworkNode = {
+						id,
+						name: v.bool(0.05) && nodes.length ? v.pick(nodes).name : `Inserted node ${k}`,
+						kind: kindOf,
+						downstreamNodeId: into?.id ?? missing(),
+						sortOrder: v.int(0, 100),
+						areaKm2: kindOf === 'farm' && v.bool(0.3) ? v.logFloat(0.1, 20) : 0,
+						areaHiKm2: 0,
+						areaLoKm2: 0,
+						flowShareManual: null,
+						pctUpstreamToDam: kindOf === 'farm' ? v.frac() : 0,
+						pctRunoffToDam: kindOf === 'farm' ? v.frac() : 0,
+						damCapacityM3: kindOf === 'farm' && v.bool(0.7) ? v.logFloat(100, 1e6) : 0,
+						damInitialPct: v.frac(),
+						damMinPct: v.frac(0.5, 0),
+						divertCapacityM3Day: kindOf === 'farm' ? v.logFloat(1, 1e5) : 0,
+						irrigationEfficiency: v.float(0.5, 1),
+						lossReturnFraction: v.frac(),
+						damAreaFullM2: null,
+						damAreaExponent: 0.7,
+						damSeepagePerDay: 0,
+						...(kindOf === 'user' ? { userDemandM3Day: monthly(v, () => v.float(0, 1e4)), userReturnPct: v.frac(), userPriority: v.pick(USER_PRIORITIES) } : {})
+					};
+					ops.push({ op: 'node.insert', node: added, upstreamNodeIds: [...new Set(ups.map((x) => x.id))] });
+					nodes.push(added);
+					break;
+				}
+				case 'crop.set': {
+					const cropId = crops2.length && !v.bool(0.05) ? v.pick(crops2) : missing();
+					const field = v.pick(CROP_SET_FIELDS);
+					const value = field === 'name' ? (v.bool(0.1) ? 'Crop 0' : `Renamed crop ${k}`) : field === 'cropFactor' ? monthly(v, () => v.float(0, 1.3)) : v.bool(0.3) ? null : v.float(0.5, 1);
+					ops.push({ op: 'crop.set', cropId, field, value } as ScenarioOp);
+					break;
+				}
+				case 'crop.remove':
+					ops.push({ op: 'crop.remove', cropId: crops2.length && !v.bool(0.05) ? v.pick(crops2) : missing() });
+					break;
+				case 'landCover.set': {
+					const patchId = patches2.length && !v.bool(0.05) ? v.pick(patches2) : missing();
+					const field = v.pick(LAND_COVER_SET_FIELDS);
+					const value =
+						field === 'coverClass'
+							? v.pick(LAND_COVER_CLASSES.map((c) => c.id))
+							: field === 'areaKm2'
+								? v.float(0, 5)
+								: field === 'densityPct'
+									? v.frac()
+									: v.bool(0.4)
+										? null
+										: { mar: v.frac(), lowFlow: v.frac() };
+					ops.push({ op: 'landCover.set', patchId, field, value } as ScenarioOp);
+					break;
+				}
+				case 'ewrRule.remove': {
+					const sited = (Array.isArray(input.settings.ewrRules) ? input.settings.ewrRules : []).map((t) => t?.siteNodeId ?? null);
+					ops.push({ op: 'ewrRule.remove', siteNodeId: sited.length && !v.bool(0.1) ? v.pick(sited) : v.bool(0.5) ? null : missing() });
+					break;
+				}
+				case 'allocation.set': {
+					const x = pickNode();
+					const replace = allocs.length && v.bool(0.5);
+					const id = replace ? v.pick(allocs) : `sa${k}`;
+					const from = v.bool(0.6) ? null : fromEpochDay(v.int(16000, 20000));
+					const to = v.bool(0.6) ? null : fromEpochDay(v.int(16000, 20000));
+					ops.push({
+						op: 'allocation.set',
+						allocation: {
+							id,
+							nodeId: x?.id ?? missing(),
+							waterSource: v.pick(['surface', 'groundwater'] as const),
+							volumeM3PerYear: v.pick([0, v.logFloat(1, 1e7)]),
+							...(v.bool(0.3) ? { storageM3: v.bool(0.3) ? null : v.logFloat(1, 1e6) } : {}),
+							...(from ? { validFrom: from } : {}),
+							...(to ? { validTo: to } : {}),
+							...(v.bool(0.2) ? { months: [...new Set(Array.from({ length: v.int(1, 6) }, () => v.int(1, 12)))] } : {}),
+							...(v.bool(0.2) ? { maxRateM3s: v.logFloat(1e-4, 2) } : {})
+						}
+					});
+					if (!replace) allocs.push(id);
+					break;
+				}
+				case 'allocation.remove':
+					ops.push({ op: 'allocation.remove', allocationId: allocs.length && !v.bool(0.05) ? v.pick(allocs) : missing() });
+					break;
+			}
 		}
 	}
 	return ops;

@@ -1336,12 +1336,13 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
 		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
 		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
-			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string }>();
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string; patches: string }>();
 			for (const p of m.landCover ?? []) {
 				const farm = farmOf(p.nodeId);
 				const k = key(farm, p.coverClass);
-				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '' };
+				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '', patches: '' };
 				cur.km2 += p.areaKm2;
+				cur.patches += `${p.areaKm2}@${p.densityPct};`;
 				cur.condensed += p.areaKm2 * p.densityPct;
 				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
 				g.set(k, cur);
@@ -1355,8 +1356,18 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [k, y] of gb) {
 			const x = ga.get(k);
 			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
-			else if (!same(x.condensed, y.condensed) || x.factors !== y.factors)
-				out.push({ area: 'network', kind: 'changed', subject: y.farm, text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${x.factors !== y.factors ? ', reductions changed' : ''}` });
+			// The area on its own too (engine ≥ 1.34.0, landCover.set): a patch at no cover can grow without its condensed area moving.
+			// Also a patch's cover on its own (a patch of no area, or two patches that cancel out): the patches changed.
+			else if (!same(x.condensed, y.condensed) || !same(x.km2, y.km2) || x.factors !== y.factors || x.patches !== y.patches) {
+				const area = !same(x.km2, y.km2) ? ` (area ${km2(x.km2)} → ${km2(y.km2)})` : '';
+				const cover = !area && same(x.condensed, y.condensed) && x.patches !== y.patches ? ', its patches’ cover changed' : '';
+				out.push({
+					area: 'network',
+					kind: 'changed',
+					subject: y.farm,
+					text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${area}${cover}${x.factors !== y.factors ? ', reductions changed' : ''}`
+				});
+			}
 		}
 	}
 
@@ -1413,14 +1424,16 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const ownerA = (x: AllocationEntry) => (x.nodeId ? (nodeRenameAl.get(x.nodeId) ?? na.node(x.nodeId) ?? 'a unit not in the run') : 'no unit');
 		const ownerB = (x: AllocationEntry) => (x.nodeId ? (nb.node(x.nodeId) ?? 'a unit not in the run') : 'no unit');
 		const allocs = matchByIdThenName(a.allocations ?? [], b.allocations ?? [], (x) => x.id, (x) => `${(b.allocations ?? []).includes(x) ? ownerB(x) : ownerA(x)}\u0000${x.waterSource}`);
+		// Registered storage and the licence conditions (months, the maximum rate) are part of it: a run stores them, so a change is listed.
 		const describe = (x: AllocationEntry) =>
-			`${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}`;
+			`${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}${x.storageM3 != null ? `, storage ${fmtValue(x.storageM3, 0)} m³` : ''}${x.months?.length ? `, months ${[...x.months].sort((p, q) => p - q).join(' ')}` : ''}${x.maxRateM3s != null ? `, at most ${fmtValue(x.maxRateM3s, 4)} m³/s` : ''}`;
 		for (const x of allocs.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Registered volume removed from ${ownerA(x)} (was ${describe(x)})` });
 		for (const y of allocs.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Registered volume added to ${ownerB(y)} (${describe(y)})` });
 		for (const [x, y] of allocs.pairs) {
 			const moved = ownerA(x) !== ownerB(y);
-			const fields = ['waterSource', 'volumeM3PerYear', 'validFrom', 'validTo'] as const;
-			if (moved || fields.some((f) => !same(x[f] ?? null, y[f] ?? null)))
+			const fields = ['waterSource', 'volumeM3PerYear', 'validFrom', 'validTo', 'storageM3', 'maxRateM3s'] as const;
+			const months = (v: AllocationEntry) => (v.months?.length ? [...v.months].sort((p, q) => p - q) : null);
+			if (moved || fields.some((f) => !same(x[f] ?? null, y[f] ?? null)) || !same(months(x), months(y)))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: registered volume ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}` });
 		}
 	}
