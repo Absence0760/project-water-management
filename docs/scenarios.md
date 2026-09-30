@@ -23,7 +23,7 @@ applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { mask?: ScenarioMa
 
 `mask` (the hidden nodes, id → the anonymous name the ops meet them by, and
 the ids of the hidden crops, transfers, land-cover patches, boreholes and,
-from engine 1.34.0, registered volumes) is
+from engine 1.35.0, registered volumes) is
 how an application is judged in its applicant's namespace
 ([§ Applications](#applications-wp-33)); without it `renamed` and `reIds`
 are empty and nothing below changes.
@@ -96,26 +96,26 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `node.set` | `nodeId, field, value` | Sets one whitelisted field (below). Typed per field. |
 | `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. It may also carry the GN 538 property area and Table 2 rate (`gaPropertyAreaHa`, `gaRateM3HaYear`, engine ≥ 1.12.0, [model.md §2.7d](./model.md)), context for its groundwater; there is no `node.set` for them. |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. The outflow node can't be removed. |
-| `node.move` | `nodeId, downstreamNodeId` | Makes a node drain into another (engine ≥ 1.34.0). What drains into it moves with it. The outflow node can't be moved, and a node can't drain into itself; a move that makes a loop (the new downstream node drains into this one), or makes a river off-take's destination drain into its source, is refused by the model rules, so the network stays one tree with one outlet. § Moving and inserting nodes. |
-| `node.insert` | `node, upstreamNodeIds` | A new node placed on a reach (engine ≥ 1.34.0): `node` as `node.add` takes it, and each node in `upstreamNodeIds`, which must drain into `node.downstreamNodeId` now, drains into the new node instead. So an on-channel dam or a weir goes in between existing nodes without moving anything else. § Moving and inserting nodes. |
+| `node.move` | `nodeId, downstreamNodeId` | Makes a node drain into another (engine ≥ 1.35.0). What drains into it moves with it. The outflow node can't be moved, and a node can't drain into itself; a move that makes a loop (the new downstream node drains into this one), or makes a river off-take's destination drain into its source, is refused by the model rules, so the network stays one tree with one outlet. § Moving and inserting nodes. |
+| `node.insert` | `node, upstreamNodeIds` | A new node placed on a reach (engine ≥ 1.35.0): `node` as `node.add` takes it, and each node in `upstreamNodeIds`, which must drain into `node.downstreamNodeId` now, drains into the new node instead. So an on-channel dam or a weir goes in between existing nodes without moving anything else. § Moving and inserting nodes. |
 | `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
 | `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
-| `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.34.0): `name` (1–100 characters, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationEfficiency` (above 0 to 1, or null for the farm's). It changes the crop on every farm that grows it. |
-| `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.34.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
+| `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.35.0): `name` (1–100 characters, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationEfficiency` (above 0 to 1, or null for the farm's). It changes the crop on every farm that grows it. |
+| `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.35.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
 | `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
 | `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem). `transfer.add` takes the same fields, each optional. |
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
 | `landCover.add` | `patch` | Adds a land-cover patch on a farm (WP-1.35). |
 | `landCover.remove` | `patchId` | Removes a patch, e.g. clearing invasive aliens. |
-| `landCover.set` | `patchId, field, value` | Changes one field of a patch in place (engine ≥ 1.34.0): `coverClass`, `areaKm2` (≥ 0), `densityPct` (0–1) or `factors` (`{ mar, lowFlow }`, each 0–1, or null for the class's). Not `nodeId`: a patch on another farm is `landCover.remove` and `landCover.add`. "Clear half the wattle" is `densityPct` → half. |
+| `landCover.set` | `patchId, field, value` | Changes one field of a patch in place (engine ≥ 1.35.0): `coverClass`, `areaKm2` (≥ 0), `densityPct` (0–1) or `factors` (`{ mar, lowFlow }`, each 0–1, or null for the class's). Not `nodeId`: a patch on another farm is `landCover.remove` and `landCover.add`. "Clear half the wattle" is `densityPct` → half. |
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 | `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
-| `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.34.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
-| `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.34.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
-| `allocation.remove` | `allocationId` | Removes one registered volume (engine ≥ 1.34.0). |
+| `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.35.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
+| `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.35.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
+| `allocation.remove` | `allocationId` | Removes one registered volume (engine ≥ 1.35.0). |
 | `demand.scale` | `factor, nodeIds?, months?, category?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month). It multiplies each target's `demandFactor`, so ops stack (0.9 twice is 0.81). Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
@@ -270,7 +270,7 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   Settings saves it) or by the outlet node's id (as the run also reads it),
   and a replaced table keeps the key its site had, so run comparison sees
   that site's table changed rather than one removed and one added.
-  `ewrRule.remove` (engine ≥ 1.34.0) takes a site's table away, keyed the
+  `ewrRule.remove` (engine ≥ 1.35.0) takes a site's table away, keyed the
   same way ("what if the site had no determination yet": its EWR then
   falls back to the pragmatic EWR where the charge follows the tables); a
   site with no table is a problem (`there is no EWR rule table at the
@@ -303,7 +303,7 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   10 % points".
 
 **Moving and inserting nodes (`node.move`, `node.insert`, engine ≥
-1.34.0).** "What if this farm drained into the dam below it" and "an
+1.35.0).** "What if this farm drained into the dam below it" and "an
 on-channel dam on the main stem above the weir".
 
 - **One tree, one outlet.** The outflow node never moves and no op makes a
@@ -330,7 +330,7 @@ on-channel dam on the main stem above the weir".
   so a loop through a hidden node keeps its words.
 
 **Registered volumes (`allocation.set`, `allocation.remove`, engine ≥
-1.34.0).** An allocation is a volume a year, per water source, held under an
+1.35.0).** An allocation is a volume a year, per water source, held under an
 authorisation for a farm or other water user ([allocations.md](./allocations.md));
 a run's input carries them (no names) and `settings.allocationMode` decides
 whether they only compare with the run's use, cap it, or scale it (a full
@@ -351,7 +351,7 @@ requested volume in a full-allocation background, is one op.
   held for a farm or other water user; "Weir" is a gauge`), an entry the
   validator refuses, and for `allocation.remove` a volume that doesn't exist.
 - **Run comparison** lists a volume added, removed or changed, and from
-  engine 1.34.0 a change to its storage, months or maximum rate too
+  engine 1.35.0 a change to its storage, months or maximum rate too
   ([run-comparison.md](./run-comparison.md)).
 - The volumes aren't in the model editor's tables, so override mode never
   records one; the form's **Set a registered volume** does.
@@ -443,7 +443,7 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
   table, the problems, always baseline (masked too), the input diff, and the
   validator's Settings-form errors. The fuzz generator (`randomOps`) adds
   `ewrRule.set` ops from a stream of their own, so the no-silent-change
-  property covers them. The later ops (engine ≥ 1.34.0: `node.move`,
+  property covers them. The later ops (engine ≥ 1.35.0: `node.move`,
   `node.insert`, `crop.set`, `crop.remove`, `landCover.set`,
   `ewrRule.remove`, `allocation.set`, `allocation.remove`) come from a
   stream of their own too, so `checkAll`, no silent change and "a scenario
@@ -467,7 +467,7 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
 Each of these is a follow-up, not a gap in what's listed above. The later
 ops (roadmap WP-3.2: `allocation.set`, removing a site's EWR rule table,
 moving a node or inserting one mid-river, `crop.set` and removing a crop,
-`landCover.set`) are built, engine ≥ 1.34.0 (issue #73).
+`landCover.set`) are built, engine ≥ 1.35.0 (issue #73).
 - **Demand objects** (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): no op
   adds, changes or removes one, and `demand.scale` doesn't reach one alone
   ([followups.md](./followups.md)).
@@ -714,7 +714,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (Gazetted Reserve), total flow, 10 % points", so the compare page's
   Scenario overrides show the changed table, in red, with both confidence
   lines.
-- **The later ops in the form** (engine ≥ 1.34.0). **Move a node (what it
+- **The later ops in the form** (engine ≥ 1.35.0). **Move a node (what it
   drains into)**: the node (not the outlet) and the node it will drain
   into, with "Now: drains into …"; it reads "Move “Lower farm”: drains into
   Outflow gauge → Upper farm". **Insert a node on a reach**: as **Add a
@@ -762,7 +762,7 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (`grid=`, `farm=`). **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.remove`, `crop.set` per changed field of a crop and
-  `crop.add` (engine ≥ 1.34.0; a removal first, so a new crop may take its
+  `crop.add` (engine ≥ 1.35.0; a removal first, so a new crop may take its
   name), `node.remove` (re-linking as the editor does),
   `node.set` per changed field the engine lets a scenario set (one node's
   fields next to each other, in the node's own key order: they are one
@@ -771,13 +771,13 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   such as `trigger` with the dam emptied, is reported), `node.add`
   (each after the node it drains into), or `node.insert` when existing
   nodes that drained where the new node drains now drain into it (engine ≥
-  1.34.0), then `node.move` for every other node that drains somewhere else
+  1.35.0), then `node.move` for every other node that drains somewhere else
   now, nearest the outlet first, so each lands on a reach already where it
   ends up and no move makes a loop on the way (two farms swapped round is
   two moves that apply), `cropArea.set` with the farm's new
   total of a crop, `transfer.remove` / `.add` / `.set` per field,
   `landCover.remove` / `.add` / `.set` (a patch edited in place is
-  `landCover.set` per field, engine ≥ 1.34.0; one moved to another farm is
+  `landCover.set` per field, engine ≥ 1.35.0; one moved to another farm is
   removed and added again) and `borehole.remove` / `.add` (a borehole edited
   in place is removed and added again). Each op goes
   through the form's own check (`ops.ts` `checkOp`, which `buildOp` also
@@ -848,7 +848,7 @@ no source refused in the Settings form's words, a desktop estimate added,
 described with its confidence line and a baseline assumption even with every
 node the proposer's, run, and the compare page's overrides and What changed
 showing it; the catchment's settings untouched; axe) and
-`e2e/tests/scenario-later-ops.spec.ts` (engine ≥ 1.34.0: Lower farm moved
+`e2e/tests/scenario-later-ops.spec.ts` (engine ≥ 1.35.0: Lower farm moved
 to drain into Upper farm, a weir dam inserted above the gauge taking Upper
 farm, a crop's irrigation efficiency, and a new registered volume on Upper
 farm, each through the form with its wording and class, one refused in the
@@ -888,7 +888,7 @@ scenario is `'team'`, and behaves exactly as above).
   the engine's `applyScenario(…, { mask })`). An application's ops meet
   every node the projection anonymises under its anonymous name, and every
   crop, transfer, land-cover patch, borehole and registered volume (engine ≥
-  1.34.0) it leaves out under an
+  1.35.0) it leaves out under an
   opaque id (and, for a crop or borehole, name) that none of the ops holds,
   whoever checks or runs it. So:
   - the engine's notes and problems quote only names and ids the applicant
@@ -902,7 +902,7 @@ scenario is `'team'`, and behaves exactly as above).
   - `node.remove` counts only what the applicant sees of what it drops
     (removing a hidden farm reports no crop areas, transfers, patches or
     boreholes; the EWR tables sited there are settings, which they see);
-  - `crop.remove` (engine ≥ 1.34.0) likewise counts only the areas on nodes
+  - `crop.remove` (engine ≥ 1.35.0) likewise counts only the areas on nodes
     they see, and a change to a crop is classed a baseline assumption
     whoever grows it, so neither says whether a hidden farm grows it;
   - a rule the op breaks because of hidden data (a rule about a hidden

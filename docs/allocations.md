@@ -161,7 +161,7 @@ decides what the volumes do to a run
   (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
 
 A scenario can also set, replace or remove a volume for one run
-(`allocation.set` / `allocation.remove`, engine ≥ 1.34.0, [scenarios.md §
+(`allocation.set` / `allocation.remove`, engine ≥ 1.35.0, [scenarios.md §
 Registered volumes](./scenarios.md)): "what if this licence were for 200 000
 m³ a year" under the cap, or the applicant's requested volume in a
 full-allocation background. The op carries only what a run reads (no

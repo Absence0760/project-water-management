@@ -225,7 +225,7 @@ describe('demand.scale on random networks (issue #53 R1)', () => {
 	}, 300_000);
 });
 
-describe('node.move and node.insert on random networks (engine ≥ 1.34.0)', () => {
+describe('node.move and node.insert on random networks (engine ≥ 1.35.0)', () => {
 	/** A gauge with no land: it only measures what passes. */
 	const gauge = (id: string, name: string, downstreamNodeId: string, ewrSite: boolean): NetworkNode =>
 		upgradeLegacyModel({

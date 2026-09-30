@@ -84,7 +84,7 @@ describe('changeRows', () => {
 		expect(rows[1]!.label).toBe('Baseline assumption');
 	});
 
-	it('words the later ops (engine ≥ 1.34.0), naming only the applicant’s own unit', () => {
+	it('words the later ops (engine ≥ 1.35.0), naming only the applicant’s own unit', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'node.move', nodeId: OWN, downstreamNodeId: 'n-other' },
 			{ op: 'node.insert', node: { id: 'n-new', name: 'New weir', kind: 'gauge', downstreamNodeId: OWN } as NetworkNode, upstreamNodeIds: ['n-other'] },

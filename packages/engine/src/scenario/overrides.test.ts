@@ -923,7 +923,7 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 	});
 });
 
-describe('later ops (engine ≥ 1.34.0): moving and inserting nodes', () => {
+describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 	const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
 	const texts = (a: ModelInput, b: ModelInput) => diffInputs(snap(a), snap(b)).map((c) => c.text);
 
@@ -1024,7 +1024,7 @@ describe('later ops (engine ≥ 1.34.0): moving and inserting nodes', () => {
 	});
 });
 
-describe('later ops (engine ≥ 1.34.0): crops, land cover, rule tables, registered volumes', () => {
+describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registered volumes', () => {
 	const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
 	const texts = (a: ModelInput, b: ModelInput) => diffInputs(snap(a), snap(b)).map((c) => c.text);
 	const alloc = (over: Partial<AllocationEntry> = {}): AllocationEntry => ({ id: 'al1', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 120_000, ...over });
@@ -1307,7 +1307,7 @@ describe('validateScenarioOps', () => {
 		expect(ops[14]).toEqual({ op: 'ewrRule.set', table: { ...blankEwrRuleTable(null), source: 'Invented study', highFlows: [{ label: 'Freshet', months: [11], peakM3s: 2, durationDays: 3, perYear: 1 }] } });
 	});
 
-	it('takes the later ops (engine ≥ 1.34.0), rebuilt from known fields, and names each error by path', () => {
+	it('takes the later ops (engine ≥ 1.35.0), rebuilt from known fields, and names each error by path', () => {
 		const n = node('N', { downstreamNodeId: 'G' });
 		const raw = [
 			{ op: 'node.move', nodeId: 'A', downstreamNodeId: 'B', junk: 1 },

@@ -95,7 +95,7 @@ export interface ScenarioMask {
 	transfers?: readonly string[];
 	landCover?: readonly string[];
 	boreholes?: readonly string[];
-	/** Registered volumes (engine ≥ 1.34.0, allocation.set): those on units the applicant can't see. */
+	/** Registered volumes (engine ≥ 1.35.0, allocation.set): those on units the applicant can't see. */
 	allocations?: readonly string[];
 }
 

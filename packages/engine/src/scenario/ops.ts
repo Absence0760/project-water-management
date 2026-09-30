@@ -542,7 +542,7 @@ export function ewrRuleTableOpIssues(raw: unknown): { table: EwrRuleTable | null
 }
 
 // ---------------------------------------------------------------------------
-// crop.set, landCover.set (engine ≥ 1.34.0)
+// crop.set, landCover.set (engine ≥ 1.35.0)
 // ---------------------------------------------------------------------------
 
 /**
@@ -587,7 +587,7 @@ export function landCoverFieldError(field: string, value: unknown): string | nul
 }
 
 // ---------------------------------------------------------------------------
-// allocation.set (engine ≥ 1.34.0)
+// allocation.set (engine ≥ 1.35.0)
 // ---------------------------------------------------------------------------
 
 export const ALLOCATION_WATER_SOURCES = ['surface', 'groundwater'] as const;
@@ -631,7 +631,7 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 }
 
 // ---------------------------------------------------------------------------
-// node.insert (engine ≥ 1.34.0)
+// node.insert (engine ≥ 1.35.0)
 // ---------------------------------------------------------------------------
 
 /** node.insert's nodes re-pointed into the new one: at least one, no repeats. */
@@ -666,23 +666,23 @@ export type ScenarioOp =
 	| { op: 'node.add'; node: NetworkNode }
 	/** Remove a node; its upstream nodes drain into its downstream node instead. */
 	| { op: 'node.remove'; nodeId: string }
-	/** Make a node drain into another (engine ≥ 1.34.0): it takes its upstream nodes with it; the network stays one tree. */
+	/** Make a node drain into another (engine ≥ 1.35.0): it takes its upstream nodes with it; the network stays one tree. */
 	| { op: 'node.move'; nodeId: string; downstreamNodeId: string }
-	/** A new node on a reach (engine ≥ 1.34.0): `upstreamNodeIds`, each draining into the new node's downstream node, drain into it instead. */
+	/** A new node on a reach (engine ≥ 1.35.0): `upstreamNodeIds`, each draining into the new node's downstream node, drain into it instead. */
 	| NodeInsertOp
 	/** Set a farm's area of one crop; 0 removes the row. */
 	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number }
 	| { op: 'crop.add'; crop: CropDef }
-	/** Change one field of a crop definition (engine ≥ 1.34.0): its name, crop factors or own irrigation efficiency. */
+	/** Change one field of a crop definition (engine ≥ 1.35.0): its name, crop factors or own irrigation efficiency. */
 	| CropSetOp
-	/** Remove a crop and every farm's area of it (engine ≥ 1.34.0). */
+	/** Remove a crop and every farm's area of it (engine ≥ 1.35.0). */
 	| { op: 'crop.remove'; cropId: string }
 	| { op: 'transfer.add'; transfer: Transfer }
 	| TransferSetOp
 	| { op: 'transfer.remove'; transferId: string }
 	| { op: 'landCover.add'; patch: LandCoverPatch }
 	| { op: 'landCover.remove'; patchId: string }
-	/** Change one field of a land-cover patch in place (engine ≥ 1.34.0). */
+	/** Change one field of a land-cover patch in place (engine ≥ 1.35.0). */
 	| LandCoverSetOp
 	/** A new borehole on a farm or other user (WP-3.9). */
 	| { op: 'borehole.add'; borehole: Borehole }
@@ -692,14 +692,14 @@ export type ScenarioOp =
 	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
 	| DemandScaleOp
 	| EwrRuleSetOp
-	/** Remove the Reserve rule table of one EWR site (engine ≥ 1.34.0): null = the outlet. Always a baseline assumption. */
+	/** Remove the Reserve rule table of one EWR site (engine ≥ 1.35.0): null = the outlet. Always a baseline assumption. */
 	| { op: 'ewrRule.remove'; siteNodeId: string | null }
-	/** Set or replace one registered volume by id (engine ≥ 1.34.0, docs/allocations.md): what allocationMode caps or scales a run to. */
+	/** Set or replace one registered volume by id (engine ≥ 1.35.0, docs/allocations.md): what allocationMode caps or scales a run to. */
 	| { op: 'allocation.set'; allocation: AllocationEntry }
 	| { op: 'allocation.remove'; allocationId: string };
 
 /**
- * A new node placed on a reach (engine ≥ 1.34.0): `node` as `node.add` takes
+ * A new node placed on a reach (engine ≥ 1.35.0): `node` as `node.add` takes
  * it, and the existing nodes in `upstreamNodeIds`, each draining into
  * `node.downstreamNodeId` now, drain into the new node instead. The order of
  * everything along the river is kept; the new node sits between.

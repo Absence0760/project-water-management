@@ -44,7 +44,7 @@ describe('checkOps', () => {
 		expect(checkOps([{ op: 'ewrRule.set', table }, { op: 'ewrRule.set', table: { ...table, siteNodeId: a } }]).errors).toEqual([]);
 	});
 
-	it('names the ids of the later ops (engine ≥ 1.34.0): a move, an insert and its upstream nodes, a crop, a patch, a site, a volume', () => {
+	it('names the ids of the later ops (engine ≥ 1.35.0): a move, an insert and its upstream nodes, a crop, a patch, a site, a volume', () => {
 		const n = { id: 'n', name: 'New dam', kind: 'farm', downstreamNodeId: a, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 1, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0 };
 		const al = { id: 'al', nodeId: 'farm', waterSource: 'surface', volumeM3PerYear: 1 };
 		expect(

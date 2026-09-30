@@ -1356,7 +1356,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [k, y] of gb) {
 			const x = ga.get(k);
 			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
-			// The area on its own too (engine ≥ 1.34.0, landCover.set): a patch at no cover can grow without its condensed area moving.
+			// The area on its own too (engine ≥ 1.35.0, landCover.set): a patch at no cover can grow without its condensed area moving.
 			// Also a patch's cover on its own (a patch of no area, or two patches that cancel out): the patches changed.
 			// Patches as a set (sorted), so the same patches in another order are no change.
 			const px = [...x?.patches ?? []].sort().join(';');

@@ -2381,7 +2381,7 @@ role and not before it.
         list re-applied to prove it gives back the edited model. Edits no op
         can express are named and block recording (a node's kind, the outlet
         moved, demand objects); crop edits and removals, moves and inserts
-        record since the later ops below (engine 1.34.0).
+        record since the later ops below (engine 1.35.0).
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
@@ -2403,7 +2403,7 @@ role and not before it.
         included: shown in red, not refused), in the scenario form with the
         Settings tab's table editor and described with its confidence line
         ([scenarios.md § Reserve rule tables](./scenarios.md)).
-  - [x] **Later ops** (engine 1.34.0, issue #73): `allocation.set` and
+  - [x] **Later ops** (engine 1.35.0, issue #73): `allocation.set` and
         `allocation.remove` (a registered volume set, replaced or removed by
         id; the proposal on the applicant's own unit), `ewrRule.remove`
         (always a baseline assumption), `node.move` and `node.insert` (the

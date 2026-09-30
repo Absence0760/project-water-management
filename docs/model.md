@@ -6413,7 +6413,7 @@ off-take and boreholes) read the room columns and the factor. The
 with the mode off: a full allocation holds allocated demand fixed and a cap
 ties supply to the volume, so neither keeps it.
 
-**In a scenario** (engine ≥ 1.34.0, issue #73): the volumes are input like
+**In a scenario** (engine ≥ 1.35.0, issue #73): the volumes are input like
 any other, so `allocation.set` / `allocation.remove` change one for a
 scenario run and the mode then caps or scales to it; nothing in this section
 changes ([scenarios.md § Registered volumes](./scenarios.md)).

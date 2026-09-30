@@ -109,7 +109,7 @@ export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>)
 		transfers: outside(m.transfers, shown.transfers),
 		landCover: outside(m.landCover, shown.landCover),
 		boreholes: outside(m.boreholes, shown.boreholes),
-		// Registered volumes on units they can't see (engine ≥ 1.34.0, allocation.set / .remove).
+		// Registered volumes on units they can't see (engine ≥ 1.35.0, allocation.set / .remove).
 		allocations: outside(m.allocations, shown.allocations)
 	};
 }

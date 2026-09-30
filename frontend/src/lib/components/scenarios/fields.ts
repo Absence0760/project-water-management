@@ -74,7 +74,7 @@ export type ValueSpec =
 	 */
 	| { t: 'curve' }
 	/**
-	 * A land-cover patch's reductions overriding its class's (engine ≥ 1.34.0,
+	 * A land-cover patch's reductions overriding its class's (engine ≥ 1.35.0,
 	 * landCover.set): "MAR %, low-flow %", typed as two numbers; empty is the
 	 * class's defaults.
 	 */
@@ -191,7 +191,7 @@ export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
 
 // ---------------------------------------------------------------------------
-// crop.set, landCover.set (engine ≥ 1.34.0)
+// crop.set, landCover.set (engine ≥ 1.35.0)
 // ---------------------------------------------------------------------------
 
 export const CROP_FIELD_SPECS: Record<CropSetField, FieldSpec> = {

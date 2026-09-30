@@ -269,7 +269,7 @@ describe('scenario ops', () => {
 		for (const id of [c.farm.id, c.other.id]) expect(stored[0]!.inputs.model.nodes.find((n) => n.id === id)!.demandFactor).toEqual(new Array(12).fill(0.85));
 	});
 
-	it('runs the later ops (engine ≥ 1.34.0): a move, an inserted weir dam, a crop edit, a registered volume, each classed, stored and run as the engine applies them', async () => {
+	it('runs the later ops (engine ≥ 1.35.0): a move, an inserted weir dam, a crop edit, a registered volume, each classed, stored and run as the engine applies them', async () => {
 		const u = await signUp('Reshaper');
 		const c = await catchment(u);
 		const base = await run(u, c.projectId, 'Baseline');

@@ -299,7 +299,7 @@ describe('diffModel', () => {
 		expect(ops).toEqual([{ op: 'transfer.set', transferId: T, field: 'monthlyRateM3s', value: [0, 0.03, 0.01, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]);
 	});
 
-	it('turns land cover into landCover.add and .remove, a patch edited in place into landCover.set (engine ≥ 1.34.0), one moved to another unit removed and added', () => {
+	it('turns land cover into landCover.add and .remove, a patch edited in place into landCover.set (engine ≥ 1.35.0), one moved to another unit removed and added', () => {
 		const b = base();
 		const e = editing(b);
 		e.model.landCover![0]!.areaKm2 = 2;
@@ -316,7 +316,7 @@ describe('diffModel', () => {
 		expect(roundTrips(b, e2.snapshot()).map((o) => o.op)).toEqual(['landCover.remove', 'landCover.add']);
 	});
 
-	it('turns a crop edited in the Crops tab into crop.set per field, and a removed crop into crop.remove (engine ≥ 1.34.0)', () => {
+	it('turns a crop edited in the Crops tab into crop.set per field, and a removed crop into crop.remove (engine ≥ 1.35.0)', () => {
 		const b = base();
 		const e = editing(b);
 		e.model.crops[0]!.cropFactor[0] = 0.9;
@@ -338,7 +338,7 @@ describe('diffModel', () => {
 		expect(roundTrips(b, e3.snapshot()).map((o) => o.op)).toEqual(['crop.remove', 'crop.add']);
 	});
 
-	it('turns what a node drains into into node.move, and a new node existing nodes now drain into into node.insert (engine ≥ 1.34.0)', () => {
+	it('turns what a node drains into into node.move, and a new node existing nodes now drain into into node.insert (engine ≥ 1.35.0)', () => {
 		const b = base();
 		// Lower farm drains into Upper farm: move it to drain into the gauge.
 		const e = editing(b);

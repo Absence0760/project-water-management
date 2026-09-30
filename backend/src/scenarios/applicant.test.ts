@@ -150,7 +150,7 @@ describe('applicationMask', () => {
 		expect(mask.transfers).toEqual(['t2']);
 		expect(mask.landCover).toEqual(['p2']);
 		expect(mask.boreholes).toEqual(['b2']);
-		// Registered volumes (engine ≥ 1.34.0): a neighbour's, and one on no unit, are hidden too.
+		// Registered volumes (engine ≥ 1.35.0): a neighbour's, and one on no unit, are hidden too.
 		expect(mask.allocations).toEqual(['a2', 'a3']);
 	});
 

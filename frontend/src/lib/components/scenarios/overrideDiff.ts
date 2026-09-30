@@ -66,7 +66,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	const bCrops = new Map(b.crops.map((c) => [c.id, c]));
 	const aCrops = new Map(after.crops.map((c) => [c.id, c]));
 
-	// --- crops (engine ≥ 1.34.0): removed ones are crop.remove (which drops their areas), an edited one crop.set
+	// --- crops (engine ≥ 1.35.0): removed ones are crop.remove (which drops their areas), an edited one crop.set
 	// per changed field (before any crop.add, so a rename frees its old name for a new crop), new ones crop.add
 	const removedCrops = new Set(b.crops.filter((c) => !aCrops.has(c.id)).map((c) => c.id));
 	for (const id of removedCrops) ops.push({ op: 'crop.remove', cropId: id });
@@ -141,7 +141,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	}
 
 	// --- nodes added: node.add, each after the node it drains into; a new node that kept nodes now drain
-	// into, from the node it drains into, is node.insert (engine ≥ 1.34.0) with them
+	// into, from the node it drains into, is node.insert (engine ≥ 1.35.0) with them
 	const pending = after.nodes.filter((n) => !bNodes.has(n.id));
 	const placed = new Set(b.nodes.filter((n) => !removed.has(n.id)).map((n) => n.id));
 	for (let progress = true; pending.length && progress; ) {
@@ -210,7 +210,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		}
 	}
 
-	// --- land cover: remove, add; a patch changed in place is landCover.set per field (engine ≥ 1.34.0), or,
+	// --- land cover: remove, add; a patch changed in place is landCover.set per field (engine ≥ 1.35.0), or,
 	// moved to another unit, removed and added again
 	const bCover = new Map((b.landCover ?? []).filter((p) => !removed.has(p.nodeId)).map((p) => [p.id, p]));
 	const aCover = new Map((after.landCover ?? []).map((p) => [p.id, p]));

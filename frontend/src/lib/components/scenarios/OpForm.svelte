@@ -44,7 +44,7 @@
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
-	// ewrRule.remove (engine ≥ 1.34.0): only the sites that have a table.
+	// ewrRule.remove (engine ≥ 1.35.0): only the sites that have a table.
 	const ewrSitesWithTable = $derived(ewrSites.filter((o) => siteTable(input, o.id ?? null)));
 	const node = $derived(nodes.find((n) => n.id === d.nodeId));
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));

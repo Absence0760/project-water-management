@@ -437,9 +437,9 @@ export interface OpDraft {
 	/** ewrRule.set (engine ≥ 1.6.0): the site (OUTLET_SITE or a gauge's id), and its table as the Settings editor holds it (one table). */
 	ewrSite: string;
 	ewrTables: EwrRuleTable[];
-	/** node.insert (engine ≥ 1.34.0): the nodes draining into the new node's downstream node that drain into it instead. */
+	/** node.insert (engine ≥ 1.35.0): the nodes draining into the new node's downstream node that drain into it instead. */
 	upstreamNodeIds: string[];
-	/** allocation.set / .remove (engine ≥ 1.34.0): the volume replaced or removed (NEW_ALLOCATION for a new one), and the entry's fields. */
+	/** allocation.set / .remove (engine ≥ 1.35.0): the volume replaced or removed (NEW_ALLOCATION for a new one), and the entry's fields. */
 	allocationId: string;
 	alSource: 'surface' | 'groundwater';
 	alVolume: string;

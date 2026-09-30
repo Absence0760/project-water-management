@@ -364,7 +364,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			});
 		}
 	}
-	// The later ops (engine ≥ 1.34.0): node.move, node.insert, crop.set, crop.remove, landCover.set,
+	// The later ops (engine ≥ 1.35.0): node.move, node.insert, crop.set, crop.remove, landCover.set,
 	// ewrRule.remove, allocation.set and allocation.remove, from a stream of their own for the same
 	// reason. Moves often make a loop and now and then name a missing node (problems); an insert
 	// re-points some of the nodes that drain into its downstream node, now and then one that doesn't.

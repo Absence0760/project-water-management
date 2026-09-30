@@ -315,7 +315,7 @@ describe('the hands-off flow and River to dam by month (engine 1.32.0, issue #20
 	});
 });
 
-describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.34.0)', () => {
+describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.35.0)', () => {
 	it('has a spec for every crop and land-cover field the engine lets a scenario set, and no others', () => {
 		expect(Object.keys(CROP_FIELD_SPECS).sort()).toEqual([...CROP_SET_FIELDS].sort());
 		expect(Object.keys(LAND_COVER_FIELD_SPECS).sort()).toEqual([...LAND_COVER_SET_FIELDS].sort());

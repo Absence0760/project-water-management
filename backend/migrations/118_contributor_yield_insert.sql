@@ -1,5 +1,5 @@
 -- An applicant's yield on a dam their application inserts on a reach (issue
--- #73, engine 1.34.0 `node.insert`): 096 let a contributor calculate the
+-- #73, engine 1.35.0 `node.insert`): 096 let a contributor calculate the
 -- yield of their own farm links and of the nodes their application's
 -- `node.add` ops add. A `node.insert` op adds a node the same way (a new
 -- structure on the reach, the proposal's own), so it counts too. Only the
