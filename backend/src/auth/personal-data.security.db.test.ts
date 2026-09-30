@@ -202,6 +202,9 @@ beforeAll(async () => {
 	// share the subject made is arranged as the schema owner: the foreign key's SET NULL is what's under test.
 	await asOwner('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3)', [sid, projectId, consultant.id]);
 	await asOwner('UPDATE scenario_member SET added_by = $2 WHERE scenario_id = $1', [sid, subject.id]);
+	// A comment on the application, then edited by them (113): the text before the edit is a note_revision (edited_by).
+	const comment = await call(subject, 'POST', `/projects/${projectId}/notes`, { body: `application comment ${tag}`, scenarioId: sid });
+	await call(subject, 'PATCH', `/projects/${projectId}/notes/${comment.note.id}`, { body: `application comment ${tag}, edited` });
 	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'refused', note: 'Too little left in dry years.' });
 	// A sweep, an outlook and a yield result they asked for; the workers aren't under test.
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
@@ -272,8 +275,10 @@ describe('the data-subject export carries every row USER_FK_COVERAGE files under
 		// The fixture reaches every sectioned key, so an empty section can't pass for a complete one.
 		expect(stored, `the fixture writes no ${table} row for the subject: add one`).toBeGreaterThan(0);
 		expect(Array.isArray(doc[section]), `export has no "${section}" array`).toBe(true);
-		// The audit section also carries the events *about* them (subject.userId); every other section is exactly their rows.
+		// The audit section also carries the events *about* them (subject.userId); a note's revisions are inside it (only its
+		// author edits a note, 113); every other section is exactly their rows.
 		if (fk === 'audit_event.actor_user_id') expect(doc[section].length).toBeGreaterThanOrEqual(stored);
+		else if (fk === 'note_revision.edited_by') expect(doc[section].flatMap((n: { revisions: unknown[] }) => n.revisions)).toHaveLength(stored);
 		else expect(doc[section]).toHaveLength(stored);
 	});
 
