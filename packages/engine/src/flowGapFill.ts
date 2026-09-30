@@ -363,6 +363,20 @@ export const FLOW_FILL_COLUMNS = {
 	}
 } as const;
 
+/**
+ * A reading (a finite value ≥ 0) in `s` on an epoch day before `day`: whether an input carries a record's history
+ * before a resumed run's start (the gap fill here, the quality flags in ../calibrate/dayFlags.ts, ../run.ts).
+ */
+export function hasReadingBefore(s: DailySeries | null | undefined, day: number): boolean {
+	if (!s) return false;
+	const n = Math.min(s.values.length, day - toEpochDay(s.startDate));
+	for (let i = 0; i < n; i++) {
+		const v = s.values[i];
+		if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return true;
+	}
+	return false;
+}
+
 /** The donor kinds a record may name (every flow record but itself). */
 export const donorOptions = (kind: GapFillKind): GapFillDonor[] => GAP_FILL_DONORS.filter((k) => k !== kind);
 

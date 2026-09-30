@@ -1050,8 +1050,22 @@ the suggested order (the IDs carry the detail):
       `qualityFlags.infilled` is the one control for scoring them (the run's
       statistics, the EWR test and the plausibility checks follow it). The
       defaults are open questions on issue #66.
-- [ ] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
-      The flags exist per day in the engine (`flowDayFlags`) and drive the
+- [x] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
+      **Done (engine 1.48.0, model.md §2.10h):** a run stores the scored
+      record's classes as `observed_flow_quality` (`FLOW_QUALITY_COLUMN`,
+      codes as `FLOW_DAY_FLAGS`, only when a day is flagged), beside the
+      scored `observed_flow`, so at the calibration site's node when the run
+      scores a gauge inside the network; the fit and the column read one
+      function (`recordFlowFlags`), `verify/columns.ts`
+      `OBSERVED_FLOW_COLUMNS` describes it for the summary CSV's column
+      guide, and the self-checks hold it to its record (`checkFlowQuality`).
+      The Runs hydrograph (and the calibration site's) draws each flagged
+      class as a strip along the foot of the plot with a key in words naming
+      its days and what Fit automatically does with them under the run's
+      settings; the Data tab's flow chart shows the same classes under the
+      current settings; the daily CSV carries the column. The same change
+      fixed the self-check failing every run with a gap-filled record
+      (`observed_flow_filled` was not allowed blank days). The flags exist per day in the engine (`flowDayFlags`) and drive the
       fit and its panel, but a run doesn't store them, so the hydrograph and
       the Data tab can't shade the days above the gauged range or those the
       fit left out. Durable fix: a run column (`observed_flow_quality`,

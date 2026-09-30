@@ -1564,12 +1564,18 @@
 //             specs and descriptions, override mode recording object edits,
 //             and four share-page lines in both catalogues; measured 1314
 //             locally with #250 merged, main @ c7df4af7; CI runs ~2 KB
+// 2026-09-30  total 1319 → 1322 KB (engine 1.48.0, the observed flow's per-day
+//             quality flags as strips with a key on the Runs hydrograph and
+//             the Data tab's flow chart, calibration/flowFlags.ts and
+//             LineChart's lanes: +2 KB (1306 → 1308 with main @ 8266a682);
+//             measured 1317 locally with #252 merged, main @ 17c4a590;
+//             CI runs ~2 KB above that). Headroom ~3 KB.
 //             above that). Headroom ~3 KB.
-// 2026-09-30  total 1319 → 1321 KB (engine 1.49.0, dam evaporation presets:
+// 2026-09-30  total 1322 → 1324 KB (engine 1.49.0, dam evaporation presets:
 //             the engine's lake-factor preset table and fill, Settings'
 //             preset picker, source note and stale-preset warning, the help
-//             article's paragraph; +1 976 bytes gzipped; measured 1316
-//             locally with #252 merged, main @ 17c4a590; CI runs ~2 KB
+//             article's paragraph; +1 976 bytes gzipped; measured 1319
+//             locally with #257 merged, main @ ede070dc; CI runs ~2 KB
 //             above that). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -1581,7 +1587,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1321,
+	totalCodeKb: 1324,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
