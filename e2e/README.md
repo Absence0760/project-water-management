@@ -150,16 +150,38 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 
 ### Fonts: the same on every machine
 
-The browser sees only the DejaVu fonts in `e2e/fonts/` (`fonts.conf`, passed
-to Chromium as `FONTCONFIG_FILE` in `playwright.config.ts`), so a laptop lays
-text out exactly as CI does. The body text is `system-ui`, which is a
-different font on each machine (Noto Sans on Fedora, DejaVu Sans on the
-Ubuntu runner, which sets text wider), and layout checks such as "one row",
-"the bar has no More" or "the page doesn't scroll" used to pass locally and
-fail in CI (issue #162). `tests/fonts.spec.ts` fails if the pin stops reaching
-the browser. Nothing to install: the font files are committed (DejaVu's
-licence is `fonts/LICENSE-DejaVu`). The display face, Outfit, is a web font
-and the same everywhere anyway. When a layout check fails, fix the layout or
+Body text is the app's own web font, Inter (`frontend/static/fonts`,
+`brand/build.py`), so a Mac, a Fedora laptop and the Ubuntu runner lay it out
+alike. It used to be `system-ui`, a different font on each machine (SF Pro,
+Noto Sans, DejaVu Sans, which sets text wider), and layout checks such as "one
+row", "the bar has no More" or "the page doesn't scroll" passed locally and
+failed in CI (issues #162, #258). Everything else (monospace, and any fallback)
+comes from the DejaVu fonts in `e2e/fonts/` (`fonts.conf`, passed to Chromium
+as `FONTCONFIG_FILE` in `playwright.config.ts`); macOS Chromium doesn't read
+fontconfig, so there monospace is the Mac's own. `tests/fonts.spec.ts` fails if
+body text isn't Inter, or (on Linux) the pin stops reaching the browser.
+
+The same font still renders a little differently per platform: Linux Chromium
+rounds each glyph's advance to whole pixels, macOS doesn't, so a width that
+fits to the pixel can pass on a Mac and fail in CI (#264). To see CI's
+rendering from a Mac, run the browser in the pinned Linux image and point the
+tests at it (the site, the API and the fonts stay on the Mac; `exposeNetwork`
+tunnels its localhost):
+
+```bash
+docker run -d --rm --name pw-linux -p 3333:3333 --init \
+  -v "$PWD/e2e/fonts:/e2efonts:ro" -e FONTCONFIG_FILE=/e2efonts/fonts.conf \
+  mcr.microsoft.com/playwright:v1.63.0-noble \
+  sh -c 'cd /tmp && npx -y playwright@1.63.0 run-server --port 3333 --host 0.0.0.0'
+PW_TEST_CONNECT_WS_ENDPOINT=ws://localhost:3333/ PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>' \
+  pnpm test:e2e tests/section-nav.spec.ts > e2e.log 2>&1
+```
+
+Keep the image tag on the pinned Playwright version. A spec that sets its own
+`launchOptions` (`auth-layout.spec.ts`'s classic scrollbar) can't apply them
+to a remote browser, so it fails there; run it natively.
+Nothing to install: the font files are committed (DejaVu's licence is
+`fonts/LICENSE-DejaVu`). The display face, Outfit, is a web font too. When a layout check fails, fix the layout or
 measure what fits; don't widen a margin until it passes on one machine.
 
 ## Layout
@@ -179,6 +201,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
 | `tests/golden-path.spec.ts` | The new-user journey, in four tests ([The golden path](#the-golden-path)): register, create "Catchment D", build the network, upload two years of rain, flow and daily A-pan, run the model and read the results, all through the UI; then, on that catchment arranged through the API, crops and a transfer into a run and each unit's results; monthly A-pan and EWR into the run's summary, and a reload; two more catchments beside one with a run |
 | `tests/landing.spec.ts` | The public landing page (issue #57): a signed-out `/` shows it and its buttons lead to sign-in and sign-up; a signed-in `/` is still the project list; other signed-out routes still go to `/login?next=`; `/welcome` is prerendered HTML with its description, Open Graph and canonical tags and the social card; the what-if answers from the generated grid in words and figures; the hero moves only with motion allowed, pauses off screen and rests on its still frame otherwise; axe at desktop and phone in light and dark, no sideways scroll; Afrikaans |
+| `tests/landing-language.spec.ts` | The landing page once per language (issue #137): `/welcome` is English HTML with `hreflang` alternates for every language; `/welcome/<code>` is prerendered in that language with its `lang`, title, canonical and `og:url`, and reads so without script, its English link leading to `/welcome`; once the app runs it keeps the address's language, the switch's links move between the addresses and keep the choice, and the sign-in page carries on in it; `/welcome` sends a visitor who chose the language, or whose browser asks for it, on to its address, and an English visitor stays; axe and no sideways scroll at 360 px, light and dark |
 | `tests/legal.spec.ts` | The legal pages (`/privacy`, `/terms`): prerendered HTML naming the operator and contact (and, for privacy, the Information Regulator and the hosting region); open signed out and in; axe and no sideways scroll at desktop and phone; linked from the landing footer, the sign-in pages' Legal nav and the sign-up form's sentence; the methods page (`/methods`): prerendered with the engine version, the known limitations and the full audit's link, linked from the trust strip and footer, axe light and dark at desktop and phone |
 | `art/landing-screens.spec.ts` | Not part of the suite: `pnpm gen:landing-art` runs it (`art/playwright.config.ts`, the e2e servers) to capture the app screens the landing page shows, from the seeded example catchments, light and dark |
 | `tests/auth.spec.ts` | Register, sign out and in, wrong password, deep link → login → back, open-redirect guard; "Forgot password?" → request acknowledged; reset link → new password works (also opened while signed in; spent link); confirm-email banner cleared by the link, and the link working signed out |

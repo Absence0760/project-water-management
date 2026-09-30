@@ -6,8 +6,10 @@ import {
 	bodyProblem,
 	countFor,
 	createBody,
+	hasAudiences,
 	normaliseBody,
 	noteAbout,
+	packAudiences,
 	noteHref,
 	notesButtonLabel,
 	scenarioAudiences,
@@ -111,5 +113,31 @@ describe('a scenario’s comments (WP-3.15)', () => {
 			expect(AUDIENCE_BADGE[v]).toBeTruthy();
 		}
 		expect(AUDIENCE_LABEL.public_participation).toMatch(/your name/);
+	});
+});
+
+describe('an evidence pack’s notes and comments (128_pack_share_notes)', () => {
+	const pack = (audiences = packAudiences(true)): NoteTarget => ({ kind: 'pack', packId: 'p1', name: 'evidence pack v2', audiences });
+
+	it('offers the team first, and public participation only while the pack is issued', () => {
+		expect(packAudiences(true)).toEqual(['team', 'public_participation']);
+		expect(packAudiences(false)).toEqual(['team']);
+		expect(hasAudiences(pack())).toBe(true);
+		expect(hasAudiences({ kind: 'project' })).toBe(false);
+	});
+
+	it('asks for, counts, titles and describes the pack’s notes', () => {
+		expect(targetQuery(pack())).toEqual({ packId: 'p1' });
+		expect(countFor({ project: 0, nodes: {}, runs: {}, settings: {}, scenarios: {}, packs: { p1: 3 } }, pack())).toBe(3);
+		// An API from before packs sends no `packs`.
+		expect(countFor({ project: 0, nodes: {}, runs: {}, settings: {}, scenarios: {} }, pack())).toBe(0);
+		expect(targetTitle(pack())).toBe('Notes and comments on evidence pack v2');
+		expect(noteAbout({ target: 'pack', nodeName: null, settingKey: null })).toBe('An evidence pack');
+		expect(noteHref({ target: 'pack', nodeId: null, runId: null, settingKey: null })).toBeNull();
+	});
+
+	it('posts with the audience asked for when it is offered, else the first', () => {
+		expect(createBody(pack(), ' x ', 'public_participation')).toEqual({ body: 'x', packId: 'p1', visibility: 'public_participation' });
+		expect(createBody(pack(packAudiences(false)), 'x', 'public_participation')).toEqual({ body: 'x', packId: 'p1', visibility: 'team' });
 	});
 });

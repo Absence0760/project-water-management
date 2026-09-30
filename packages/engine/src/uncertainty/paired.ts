@@ -145,6 +145,20 @@ export interface PairedSummary {
 	ownSupply?: { band: Band; worse: number | null };
 	/** The other run's own Reserve FDC check (ER5; not a difference): per site in both runs, 12 water-year months × the table's points. */
 	reserveFdc?: { key: string; name: string; months: Band[][] }[];
+	/**
+	 * The paired change in that curve (evidence-7, the engine review of ER5):
+	 * per site in both runs, 12 water-year months × the table's points, the
+	 * band on other − baseline of the impacted flow at the point, and `worse`,
+	 * the share of the pairs with a flow on both sides in which the other
+	 * run's is lower; null below minMembers such pairs. Unlike two bands on
+	 * each run's own curve, which overlap whenever the sets disagree more
+	 * than the change moves the curve, this is the change itself. Pairs index
+	 * j of both curves: meaningful only where both runs' rule tables read the
+	 * site at the same points, in the same unit and component, which this
+	 * summary can't see (the evidence report checks it and tables nothing
+	 * otherwise). Absent from a summary computed before it.
+	 */
+	reserveFdcChange?: { key: string; name: string; months: { band: Band; worse: number | null }[][] }[];
 }
 
 /** Bands on other − baseline, member by member. */
@@ -221,6 +235,17 @@ export function summarisePaired(
 			.map((u) => ({ ...u, band: d((x) => memberSupplyFraction(x, u.nodeId)), worse: lowerShare((x) => memberSupplyFraction(x, u.nodeId)) })),
 		...(own ? { ownSupply: { band: d((x) => memberGroupSupply(x, own)), worse: lowerShare((x) => memberGroupSupply(x, own)) } } : {}),
 		reserveFdc: fdcSites.map((s) => ({ ...s, months: reserveFdcBands(otherMembers, s.key, (f) => band(otherMembers.map(f), min)) })),
+		reserveFdcChange: fdcSites.map((s) => ({
+			...s,
+			months: Array.from({ length: 12 }, (_, i) => {
+				let points = 0;
+				for (const { a, b } of pairs) points = Math.max(points, a.reserveFdc?.[s.key]?.[i]?.length ?? 0, b.reserveFdc?.[s.key]?.[i]?.length ?? 0);
+				return Array.from({ length: points }, (_, j) => {
+					const at = (x: MemberMetrics) => x.reserveFdc?.[s.key]?.[i]?.[j];
+					return { band: d(at), worse: lowerShare(at) };
+				});
+			})
+		})),
 		decisionRule:
 			`Each of the baseline's ${pairs.length} kept parameter sets (kept by its rule: seed ${o.seed}, ${o.members} sampled) is run on both runs' inputs with the same forcing; ` +
 			`the bands are the ${o.percentiles[0]}th to ${o.percentiles[2]}th percentiles of the difference (other − baseline), shown only with at least ${min} pairs.`

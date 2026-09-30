@@ -30,6 +30,7 @@ import {
 	blankMasked,
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
+	chirpsQuantileMapFallbackWarning,
 	finishZeroRainInfill,
 	keepDryDoubtWarnings,
 	resolveChirpsFitPeriod,
@@ -55,6 +56,7 @@ import {
 	panCoefficientOutOfRange,
 	resolvePe,
 	resolveArealRain,
+	resolveChirpsQuantileMap,
 	AREAL_RAIN_FITTED_WARNING,
 	PE_SOURCE_MAX,
 	PAN_COEFFICIENT_TYPICAL_MAX,
@@ -323,7 +325,11 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsCorrection =
 		pinned?.chirpsCorrection && series.rain_chirps_mm
 			? clonePlain(pinned.chirpsCorrection)
-			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), fitOpts);
+			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), {
+					...fitOpts,
+					// The gap map (engine ≥ 1.53.0, CR-23): fitted with the factors, on the same days.
+					...(settings.chirpsQuantileMap ? { quantileMap: settings.chirpsQuantileMap } : {})
+				});
 	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
@@ -340,7 +346,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
-	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
+	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start, series.rain_chirps_mm) : null;
 	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
 	const flowFill = flowFillsFor(settings, series, start, days, warnings, options.resumedFill);
 	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
@@ -357,6 +363,8 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 						: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
+	const qmNote = chirpsQuantileMapFallbackWarning(chirpsCorrection);
+	if (qmNote) warnings.push(qmNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
 	// A double-mass break: does CHIRPS fill days in an era whose ratio differs from the fit's?
 	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), start);
@@ -593,6 +601,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
+	// Engine ≥ 1.49.0: where the dam evaporation factors came from (a lake-factor preset's note), provenance only.
+	s.lakeEvapFactorSource = typeof raw?.lakeEvapFactorSource === 'string' ? raw.lakeEvapFactorSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
 	if (s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);
@@ -608,6 +618,12 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
+	}
+	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23): maps the factor-corrected CHIRPS, so it needs the monthly correction.
+	s.chirpsQuantileMap = resolveChirpsQuantileMap(raw?.chirpsQuantileMap, warnings);
+	if (s.chirpsQuantileMap && s.chirpsBiasCorrection !== 'monthly') {
+		warnings.push('CHIRPS quantile map ignored: it maps bias-corrected CHIRPS, and CHIRPS bias correction is off (Settings → CHIRPS bias correction)');
+		s.chirpsQuantileMap = null;
 	}
 	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {
 		warnings.push(`annual assurance threshold "${String(s.assuranceAnnualThreshold)}" is not a fraction in (0, 1]; using ${DEFAULT_ANNUAL_THRESHOLD}`);

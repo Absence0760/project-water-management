@@ -127,8 +127,10 @@
 			the project’s history; a farmer sees only their own farm, and never a neighbour’s name.
 		</li>
 		<li>
-			<strong>Anyone with a share link</strong> an owner creates sees that catchment’s published results only: never a farm’s
-			figures, a name or a note.
+			<strong>Anyone with a share link</strong> sees only what that link opens: a catchment’s published results, a submitted
+			licence application, or an issued evidence pack, never a farm’s figures, a name or a private note. Two things on those pages
+			do name people: a comment you post for public participation shows with your display name, and an evidence pack shows the
+			names and registrations of the professionals who signed it, as its public verify page does.
 		</li>
 		<li>
 			<strong>Our service providers</strong>, who process information only on our instructions: Amazon Web Services (hosting, the

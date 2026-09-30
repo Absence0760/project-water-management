@@ -173,6 +173,9 @@ describe('what an item says', () => {
 		expect(eventLine({ kind: 'share_link.created', subject: { linkId: 'l', label: 'Forum', expiresInDays: 30 } })).toBe('Created a share link');
 		expect(eventLine({ kind: 'share_link.created', subject: { linkId: 'l', label: 'Forum', targetKind: 'scenario', targetId: 's' } })).toBe('Created a share link to a scenario');
 		expect(eventLine({ kind: 'share_link.revoked', subject: { linkId: 'l', targetKind: 'scenario' } })).toBe('Revoked a share link to a scenario');
+		// An evidence pack's link (128_pack_share_notes).
+		expect(eventLine({ kind: 'share_link.created', subject: { linkId: 'l', label: 'Forum', targetKind: 'pack', targetId: 'p' } })).toBe('Created a share link to an evidence pack');
+		expect(eventLine({ kind: 'share_link.revoked', subject: { linkId: 'l', targetKind: 'pack' } })).toBe('Revoked a share link to an evidence pack');
 	});
 
 	it('writes the allocation events (WP-3.10) without holder names', () => {

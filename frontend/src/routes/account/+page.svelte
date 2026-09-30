@@ -7,6 +7,7 @@
 	// until the person turns them back on), and "download my data" (POPIA,
 	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
+	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, ApiError } from '$lib/api';
@@ -65,23 +66,41 @@
 	}
 
 	// ---- Volume unit (the farm view's) ----
+	// The radios show `unit`, not the session's value directly: a radio the
+	// person picked stays picked in the DOM whatever the markup says, so a
+	// failed save has to put the choice back itself. The radios stay live while
+	// a choice saves (disabling one drops the keyboard's focus). Saves go to the
+	// server one after another, in the order they were made, so the session
+	// always holds the server's latest answer; only the last choice's answer
+	// moves the radios or says Saved, so a quick m³ → ML → m³ can't end on ML.
+	let unit = $state<'m3' | 'ML'>(session.user?.volumeUnit ?? 'm3');
 	let unitSaved = $state(false);
 	let unitError = $state<string | null>(null);
-	async function chooseUnit(volumeUnit: 'm3' | 'ML') {
+	let unitSeq = 0;
+	let unitQueue: Promise<void> = Promise.resolve();
+	function chooseUnit(volumeUnit: 'm3' | 'ML'): Promise<void> {
+		const seq = ++unitSeq;
 		unitSaved = false;
 		unitError = null;
-		try {
-			session.user = await api.auth.updateMe({ volumeUnit });
-			unitSaved = true;
-		} catch (err) {
-			unitError = msg(err);
-		}
+		unitQueue = unitQueue.then(async () => {
+			try {
+				session.user = await api.auth.updateMe({ volumeUnit });
+				if (seq !== unitSeq) return;
+				unitSaved = true;
+			} catch (err) {
+				if (seq !== unitSeq) return;
+				unitError = msg(err);
+			}
+			unit = session.user?.volumeUnit ?? 'm3';
+		});
+		return unitQueue;
 	}
 
 	// ---- Alert emails paused (SES suppressed the address) ----
 	let resuming = $state(false);
 	let resumed = $state(false);
 	let resumeError = $state<string | null>(null);
+	let alertsHeading: HTMLHeadingElement | undefined = $state();
 	async function resumeMail() {
 		resuming = true;
 		resumeError = null;
@@ -89,6 +108,10 @@
 			await api.alerts.resume();
 			if (session.user) session.user = { ...session.user, mailSuppressed: null };
 			resumed = true;
+			// The banner, and the button just pressed, are gone: focus the section's
+			// title, just above the "back on" status, not the top of the page (WCAG 2.4.3).
+			await tick();
+			alertsHeading?.focus();
 		} catch (err) {
 			resumeError = resumeProblem(err);
 		} finally {
@@ -301,11 +324,11 @@
 						{#if unitError}<div class="alert alert-error" role="alert">{unitError}</div>{/if}
 						<div class="radios">
 							<label class="radio">
-								<input type="radio" name="volume-unit" value="m3" checked={(session.user.volumeUnit ?? 'm3') === 'm3'} onchange={() => chooseUnit('m3')} />
+								<input type="radio" name="volume-unit" value="m3" bind:group={unit} onchange={() => chooseUnit('m3')} />
 								{t('Cubic metres (m³)')}
 							</label>
 							<label class="radio">
-								<input type="radio" name="volume-unit" value="ML" checked={session.user.volumeUnit === 'ML'} onchange={() => chooseUnit('ML')} />
+								<input type="radio" name="volume-unit" value="ML" bind:group={unit} onchange={() => chooseUnit('ML')} />
 								{t('Megalitres (ML)')}
 							</label>
 						</div>
@@ -314,7 +337,7 @@
 				</section>
 
 				<section class="panel" aria-labelledby="alerts-h">
-					<h2 id="alerts-h">{t('Alert emails')}</h2>
+					<h2 id="alerts-h" tabindex="-1" bind:this={alertsHeading}>{t('Alert emails')}</h2>
 					{#if session.user.mailSuppressed}
 						<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
 							<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>

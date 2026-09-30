@@ -502,6 +502,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   two ranges overlapping), replaced whole by a `PATCH`. Anything else is a
   `400`; settings stored before it read back as `all`.
   [model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40).
+  `chirpsQuantileMap` (engine ≥ 1.53.0, CR-23) is `null` (the default: the
+  CHIRPS that fills a gap takes the monthly factor alone) or `{ wetDayMm }`
+  (0.1–10 mm; no other key), replaced whole by a `PATCH`. It only acts with
+  `chirpsBiasCorrection: monthly` (a run under `none` ignores it and warns).
+  Anything else is a `400` (the engine's `chirpsQuantileMapError`, which a
+  table test holds to the schema); settings stored before it read back as
+  `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
   `rainSource` (engine ≥ 0.30.0, issue #40 (b)) is a list (0–100, default
   `[]`) of periods whose catchment rain comes from another series, replaced
   whole by a `PATCH`: `{ start, end, series, factors, provenance?,
@@ -647,7 +654,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   and `fittedOn` the reference window in words: the factors per fit range the
   fit's rain used; from engine 0.30.0 optional `rainSource`, validated like
   the setting, absent = none; from engine 0.31.0 optional `pe`, validated like
-  the setting, absent = `{ kind: 'pan' }`) is the
+  the setting, absent = `{ kind: 'pan' }`; from engine 1.53.0 optional
+  `chirpsQuantileMap`, validated like the setting, present only when the fit
+  ran with the CHIRPS gap map on, absent = off) is the
   pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
@@ -962,8 +971,10 @@ email show them by the project role they give, viewer / editor / owner
 ### Portfolio
 
 `GET /teams/:id/portfolio` (roadmap WP-2.14, `backend/src/portfolio/`): every
-catchment of the team you can see, with its latest figures, for the WUA's
-dashboard. Any team member; a team you aren't in is `404`, and so is every
+catchment of the team you can see, with its latest figures, for the teams
+list's cards and the team page (the portfolio page that first read it became
+the project list's team filter, issue #176, which reads the same figures from
+`GET /projects/outcomes`). Any team member; a team you aren't in is `404`, and so is every
 farmer (a farmer has no team membership). The rows come from **one query**
 run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is
@@ -1191,6 +1202,12 @@ on a node that isn't a farm, and one whose volumes don't strictly rise or
 whose level or area falls as the volume rises (the engine's
 `modelRuleProblems`). Settings gain `lakeEvapFactorMonthly` (12 numbers 0–2,
 or `null` = `lakeEvapFactor` every month; `PATCH` refuses anything else).
+Engine ≥ 1.49.0: `lakeEvapFactorSource`, a trimmed string of at most 600
+characters, '' for none (settings stored before it read back as ''): where
+the dam evaporation factors came from, e.g. a lake-factor preset's note
+(the engine's `LAKE_FACTOR_PRESETS` / `lakeFactorPresetFill`, which the
+Settings form uses; there is no preset endpoint). Provenance only, recorded
+with each run.
 Runs of a dam with a release rule store `dam_release`; with a seepage share
 below 1, `dam_seepage_lost`; `summary.waterBalance` rows gain
 `damReleaseM3` and `damSeepageLostM3` when present (the residual subtracts
@@ -1904,7 +1921,9 @@ the result is stored only after the server has checked it.
   `PairedSummary` (difference bands, `ewrDaysNotMetWorse`, `shortfallWorse`,
   `unpaired`, `decisionRule`; from engine 1.33.0 also `noFlowDays` with
   `noFlowDaysWorse`, `ewrSites[]` and `supply[]` each with `worse`,
-  `reserveFdc[]` and `carriesMeasures`, model.md §2.10e); `null` until
+  `reserveFdc[]` and `carriesMeasures`, and `reserveFdcChange[]`: per site,
+  12 water-year months × the table's points of `{ band, worse }`, the paired
+  change in the Reserve FDC check curve, model.md §2.10e); `null` until
   complete. From engine 1.33.0 an `EnsembleSummary`'s `bands` also has
   `noFlowDays`, `ewrSites`, `supply` and `reserveFdc`; one stored before
   lacks them. A band is
@@ -1924,17 +1943,22 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | `{ scenarios: Scenario[] }`, newest first | viewer |
-| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, purposeAndNeed?, mitigation?, monitoring?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
-| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
+| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, purposeAndNeed?, mitigation?, monitoring?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. The three answers to the evidence report's Appendix C prompts change on the description's terms, in any status (a submission doesn't freeze them; an issued pack keeps what it printed). `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario, and for one with a signed-off run (the signed run keeps its scenario; 072) | editor |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `409 this scenario changed while it ran (its ops or base run); run it again` when its ops, base run or owned nodes changed while the engine ran, and `404` when it was deleted (nothing is stored in either case; a rename doesn't count); `400 model run failed: …` as for any run | editor |
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`), or once for an edit group of `node.set` ops on one node that breaks a rule (`ops 2–4 (node.set, "Upper farm"): …`, [scenarios.md § Engine](./scenarios.md#engine-applyscenario)). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
-- `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
-  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, opNames, ownerUserId,
-  owner, status, createdAt, updatedAt, runCount, lastRun: { id, label,
-  createdAt } | null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785
+- `Scenario = { id, name, description, purposeAndNeed, mitigation, monitoring,
+  baseRunId, baseRun: { id, label, createdAt }, ops: ScenarioOp[], opsSha256,
+  ownedNodeIds, opNames, ownerUserId, owner, status, createdAt, updatedAt,
+  runCount, lastRun: { id, label, createdAt } | null }`. `purposeAndNeed`,
+  `mitigation` and `monitoring` (129_scenario_statement) are the answers to the
+  evidence report's fixed Appendix C prompts (engine `APPLICANT_PROMPTS`), `''`
+  until answered; the API trims each (whitespace alone is `''`) and holds it to
+  4 000 characters (`400`) without NUL. Whoever may change the scenario writes
+  them; whoever reads it reads them. `opsSha256` is the SHA-256 hex of the ops as RFC 8785
   canonical JSON (engine `canonicalJson`); a run of the scenario records the
   same hash. `owner` is a display name. `ownedNodeIds` are the proposer's own
   nodes: ops on them are proposals, everything else a baseline assumption.
@@ -1991,8 +2015,8 @@ below work on it too, for an editor.
 | Method | Path | Body | Response | Who |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | as above; a contributor gets their own applications and those shared with them | contributor |
-| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops? }` | as above. A contributor's `baseRunId` must be a published run (current or in the history): `404 published run not found` otherwise, as if it didn't exist; `409` when that published run is a forecast run (as for a team scenario). `ownedNodeIds` are their farm links (sending any is `403`) | contributor (a viewer: `403`) |
-| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, purposeAndNeed?, mitigation?, monitoring?, ops? }` | as above. A contributor's `baseRunId` must be a published run (current or in the history): `404 published run not found` otherwise, as if it didn't exist; `409` when that published run is a forecast run (as for a team scenario). `ownedNodeIds` are their farm links (sending any is `403`) | contributor (a viewer: `403`) |
+| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, purposeAndNeed?, mitigation?, monitoring?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
 | POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
@@ -2050,7 +2074,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-6`: § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-8`: Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2357,21 +2381,26 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | `?scenarioId=` (optional) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. Without `scenarioId`: the baseline links (owner). With it: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404` | owner; contributor with `scenarioId` |
-| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided | owner; contributor for a scenario link |
-| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made; anyone else `403`. A link is never deleted | contributor (RLS decides) |
+| GET | `/projects/:id/share-links` | `?scenarioId=`, `?packId=` or `?scope=all` (optional, at most one: `400`) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. With none: the baseline links (owner). `scope=all`: the owner's inventory of every link in the project, the baseline's and every scenario and pack link whoever made it (the Project page's Share links list; below owner `403`). With `scenarioId`: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404`. With `packId` (128): every link to that evidence pack, to an editor or the owner (below editor `403`; a pack of another project or none `404`) | owner; contributor with `scenarioId`; editor with `packId` |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario' \| 'pack', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`, a pack link `&k=pack`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided. A pack link (WP-3.15, 128): an editor or the owner (`403` below editor), `404` for a pack not in the project, `409` unless the pack is `issued` (a draft is still changing; a superseded or withdrawn pack no longer stands) | owner; contributor for a scenario link; editor for a pack link |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made, an editor any pack link; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
 | POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |
+| POST | `/share/pack` *(public)* | `{ token }` | `SharePack` (below), `Cache-Control: no-store` | – |
 
 - `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt, targetKind, targetId, mine }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
   gone; `targetKind` `null` = the baseline, `'scenario'` with `targetId` its
-  scenario; `mine` = the caller made it). `lastUsedAt` moves at most once an
-  hour, on a `/share/view` or `/share/scenario`.
-- A link opens **only its own target**: a scenario link answers `404` on
-  `/share/view` and `/share/series`, a baseline link `404` on
-  `/share/scenario`.
+  scenario, `'pack'` with `targetId` its evidence pack; `target` = `{ name, status }` of that scenario as the caller
+  reads it under RLS (a pack's: `{ name: its report's title, status, version }`), `null` for the baseline and for a target they can't
+  read now (an application reopened as a draft, or deleted), whose link
+  opens nothing; `mine` = the caller made it). `lastUsedAt` moves at most once an
+  hour, on a `/share/view`, `/share/scenario` or `/share/pack`.
+- A link opens **only its own target**: a scenario or pack link answers
+  `404` on `/share/view` and `/share/series`, a baseline or pack link `404`
+  on `/share/scenario`, and a baseline or scenario link `404` on
+  `/share/pack`.
 - `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, notice }, nextExpectedOn } }`.
   `catchmentView = { runStart, dataUntil, runDays, season, last30, farmCount, sites }`,
   the publication's [`catchmentView`](#publication) cut to an allowlist
@@ -2414,6 +2443,30 @@ never a farm's row, name or id.
   visibility (the newest 500), oldest first, `{ body, author, createdAt, editedAt }` (the
   author's display name: posting a public comment says so). No other farm's
   name, id or figures, no member list, no e-mail, no allocation holder.
+- `SharePack` (WP-3.15, 128, `app_share_pack`, a redacted projection of
+  the pack's own frozen report,
+  [evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)):
+  `{ project: { id }, pack: { id, title, mode, version, shortCode }, verify, figures, comments }`.
+  `verify` is exactly [`GET /verify/:code`](#evidence-packs)'s `pack` for
+  it. `figures`, only while the pack is `issued` (`null` once superseded or
+  withdrawn: `verify.status`, `withdrawnReason` and `successorSha256` say
+  why):
+  `{ identity: { title, mode, baseline: { startDate, endDate, engineVersion, runoffModel }, application: { engineVersion, proposals, assumptions } | null }, volumes, rows, river, byMonth, disclaimerVersion }`,
+  where `rows` are page 1's river rows (`reserve` per site, `ewrDays`,
+  `noFlowDays`; `shortfall` and `outflowMar` only when `volumes`, i.e. 5 or
+  more farm holders and no changed baseline assumption), each
+  `{ id, subject, unit, higherIsWorse, baseline, application, change: { run, band: { n, p5, p50, p95 }, bandNote, worse: { k, n } }, notAssessed, note }`
+  (`subject` a gauge's name on a reserve row, else `null`; no label or
+  basis: a client words the row by its `id`, and a reserve row's basis
+  quotes the rule table's free-text source); `river` each EWR
+  site `{ name, isOutlet, category, monthsA, rateA, rateB, longestA, longestB, lost, gained }`
+  (the outlet's `name` `null`); `byMonth` `{ month, run, band }[]` or
+  `null`. It answers for a pack that was issued (issued, superseded or
+  withdrawn); a draft, or a pack withdrawn before it was issued, is `404`.
+  `comments` as a scenario link's (its `public_participation` notes). No
+  user, farm or allocation row, no other application, no settings, model or
+  input diff, no applicant statement, no person but the signers verify
+  names.
 - No session and no rate limit of its own: the WAF's per-IP limit on `/api/*`
   covers the reads, and a 256-bit token can't be guessed.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
@@ -2423,24 +2476,26 @@ never a farm's row, name or id.
 ## Notes
 
 Plain-text notes and comments on a node, a run, a settings group, a
-scenario or the project (WP-2.7, WP-3.15;
+scenario, an evidence pack or the project (WP-2.7, WP-3.15;
 [data-model.md § Notes](./data-model.md#notes-037_notessql)). The min role is
 **farmer** on every route, and RLS does the scoping: a farmer reads and
 writes only `farm` notes on their linked farms, and never sees a `team`
 note. A scenario's notes have three more audiences, `assessors`, `parties`
 and `public_participation`; who reads and writes each is the matrix in
-data-model.md.
+data-model.md. A pack's notes (128) are `team` (whoever reads the pack) or
+`public_participation` (any member contributor and up while the pack is
+issued with a live pack link).
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&scenarioId=&target=project\|node\|run\|setting\|scenario&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
-| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n }, scenarios: { [scenarioId]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
-| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey? \| scenarioId?, visibility?: 'team' \| 'farm' \| 'assessors' \| 'parties' \| 'public_participation' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node, the last three a scenario (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404`. On a scenario (contributor and above): its default is the caller's natural audience (an assessor: `assessors`; one of its parties: `parties`; anyone else: `public_participation`); a scenario the caller can neither read nor comment on is `404`, an audience they may not post to `403` (`public_participation` needs the scenario open for comment, for everyone: a live scenario link, or decided after it was ever shared; codes `note_comment_closed` and `note_audience_denied`) | farmer |
+| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&scenarioId=&packId=&target=project\|node\|run\|setting\|scenario\|pack&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
+| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n }, scenarios: { [scenarioId]: n }, packs: { [packId]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
+| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey? \| scenarioId? \| packId?, visibility?: 'team' \| 'farm' \| 'assessors' \| 'parties' \| 'public_participation' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node, `assessors` and `parties` a scenario, `public_participation` a scenario or a pack (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404`. On a scenario (contributor and above): its default is the caller's natural audience (an assessor: `assessors`; one of its parties: `parties`; anyone else: `public_participation`); a scenario the caller can neither read nor comment on is `404`, an audience they may not post to `403` (`public_participation` needs the scenario open for comment, for everyone: a live scenario link, or decided after it was ever shared; codes `note_comment_closed` and `note_audience_denied`). On a pack (128; contributor and above): `team` (the default for a reader of the pack) or `public_participation` (the default for anyone else); a pack the caller can neither read nor comment on is `404` (a member who could once comment on a withdrawn or superseded one gets the `403 note_comment_closed`), `public_participation` while no pack link is live `403 note_comment_closed`, a scenario audience `400` | farmer |
 | PATCH | `/projects/:id/notes/:noteId` | `{ body }` | `{ note }` with `editedAt` set. Author only (`403`) | farmer |
 | DELETE | `/projects/:id/notes/:noteId` | – | `204`: a soft delete, recorded as `note.deleted`. The author or an editor (`403`); a deleted or unknown note is `404` | farmer |
-| GET | `/projects/:id/notes/:noteId/revisions` | – | `{ note, revisions: { body, writtenAt, editedAt }[] }`: each earlier text of a scenario note, oldest first (what it said from `writtenAt` until an edit replaced it at `editedAt`); read as the note is, so a note the caller can't read (or a deleted one) is `404`. Other notes keep no history (`[]`) | farmer |
+| GET | `/projects/:id/notes/:noteId/revisions` | – | `{ note, revisions: { body, writtenAt, editedAt }[] }`: each earlier text of a scenario or pack note, oldest first (what it said from `writtenAt` until an edit replaced it at `editedAt`); read as the note is, so a note the caller can't read (or a deleted one) is `404`. Other notes keep no history (`[]`) | farmer |
 
-- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting' | 'scenario', nodeId, nodeName, runId, settingKey, scenarioId, visibility, mine, canDelete }`.
+- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting' | 'scenario' | 'pack', nodeId, nodeName, runId, settingKey, scenarioId, packId, visibility, mine, canDelete }`.
   `author` is a display name (`null` once that account is gone); `nodeName`
   is the node's name when the caller can see it; `mine` = the caller wrote
   it (and may edit it); `canDelete` = the author or an editor.

@@ -88,17 +88,18 @@
 		const copy = measureEl;
 		const measure = () => {
 			const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
-			const pills = [...copy.querySelectorAll<HTMLElement>('[data-m]')];
+			const marked = [...copy.querySelectorAll<HTMLElement>('[data-m]')];
+			const plain = [...copy.querySelectorAll<HTMLElement>('[data-p]')];
 			const width = (el: Element | null | undefined) => el?.getBoundingClientRect().width ?? 0;
 			const lead = width(copy.querySelector('.nav-h'));
 			kept = navFitCount(
-				items.map((it, i) => ({ width: width(pills[i]), groupStart: it.groupStart })),
+				items.map((it, i) => ({ width: Math.max(width(marked[i]), width(plain[i])), groupStart: it.groupStart })),
 				{
 					avail: flow.clientWidth,
 					lead: lead ? lead + GAP_REM * rem : 0,
 					gap: GAP_REM * rem,
 					groupGap: GROUP_GAP_REM * rem,
-					more: width(copy.querySelector('[data-more]')),
+					more: Math.max(width(copy.querySelector('[data-more]')), width(copy.querySelector('[data-more-p]'))),
 					rows: ROWS
 				}
 			);
@@ -252,18 +253,25 @@
 			</div>
 		{/if}
 	</div>
-	<!-- Every link's width, for the fit: a hidden copy, laid out apart from the bar, each in its
-	     widest state (marked as the one being read, so bold), the More button as the real one. -->
+	<!-- Every link's width, for the fit: a hidden copy, laid out apart from the bar, each link
+	     twice, plain and marked as the one being read (bold), and the More button both ways too.
+	     The fit takes the wider of each pair: bold is not always the wider, since a renderer that
+	     rounds each glyph's advance to whole pixels (Chromium on Linux) can set the regular weight
+	     a few pixels wider than the semibold, and a fit from the bold widths alone kept a link too
+	     many there, so More wrapped to a third row. -->
 	<div class="measure" aria-hidden="true" inert bind:this={measureEl}>
 		<span class="nav-h">On this page</span>
 		{#each flat as sec (sec.id)}
 			{#if sec.groupName}
 				<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
+				<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec)}</span></span>
 			{:else}
 				<span class="pill marked" data-m>{@render linkText(sec)}</span>
+				<span class="pill" data-p>{@render linkText(sec)}</span>
 			{/if}
 		{/each}
 		<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>
+		<button type="button" class="pill more-btn" tabindex="-1" data-more-p>{@render moreText(false)}</button>
 	</div>
 </nav>
 

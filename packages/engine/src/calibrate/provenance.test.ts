@@ -250,7 +250,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods or zero-rain run handling has changed since the fit/);
 	});
 
 	it('keeps how automated calibration chose the fit, and says when its rules are drafts or have changed since (issue #153)', () => {
@@ -392,6 +392,25 @@ describe('fit record', () => {
 		// A forcing recorded before it: nothing to compare, so it alone never flags.
 		const { chirpsFitPeriod: _p, chirpsFactors: _f, ...pre029 } = rec.forcing!;
 		expect(fitRecordStatus({ ...base, chirpsFitPeriod: ranges }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
+	});
+
+	it('records the CHIRPS gap map only when it is on, and flags turning it on, off or its threshold (engine ≥ 1.53.0)', () => {
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const };
+		const off = fitRecordFromReport(report(), ctx);
+		expect('chirpsQuantileMap' in off.forcing!).toBe(false);
+		// Positive control: off stays no change, null or absent alike.
+		expect(fitRecordStatus({ ...base, chirpsQuantileMap: null }, off).forcingChanged).toBe(false);
+		expect(fitRecordStatus(base, off).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, chirpsQuantileMap: { wetDayMm: 1 } }, off).forcingChanged).toBe(true);
+		const on = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, chirpsQuantileMap: { wetDayMm: 1 } } });
+		expect(on.forcing!.chirpsQuantileMap).toEqual({ wetDayMm: 1 });
+		expect(fitRecordStatus({ ...base, chirpsQuantileMap: { wetDayMm: 1 } }, on).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, chirpsQuantileMap: { wetDayMm: 2 } }, on).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, chirpsQuantileMap: null }, on).forcingChanged).toBe(true);
+		expect(fitRecordCaveats(fitRecordStatus({ ...base, chirpsQuantileMap: null }, on)).at(-1)).toMatch(/CHIRPS quantile map/);
+		// Under raw CHIRPS the map never applies, so it isn't recorded.
+		const raw = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: { wetDayMm: 1 } } });
+		expect('chirpsQuantileMap' in raw.forcing!).toBe(false);
 	});
 
 	it('records the rain-source periods and flags "forcing changed since fit" when they change (engine ≥ 0.30.0)', () => {

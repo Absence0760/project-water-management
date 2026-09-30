@@ -730,6 +730,28 @@ describe('CHIRPS bias factors block', () => {
 		]);
 	});
 
+	it('lists the CHIRPS gap map, month by month, when it was on (engine ≥ 1.53.0)', () => {
+		const months = Array.from({ length: 12 }, (_, i) => ({
+			month: i + 1,
+			basis: [6, 7, 8].includes(i + 1) ? null : i + 1 === 9 ? ('season' as const) : ('month' as const),
+			catchmentWetDays: 40,
+			chirpsWetDays: 41,
+			chirpsWetMm: 2.5
+		}));
+		const quantileMap = { wetDayMm: 1, minWetDays: 30, months, mappedDays: 25, unmappedDays: 6, partialMonthDays: 2, factorOnlyMm: 17, mappedMm: 16.5 };
+		const lines = [...chirpsFactorLines({ ...corr, quantileMap })];
+		const at = lines.findIndex((l) => l.startsWith('CHIRPS quantile map,'));
+		expect(lines[at]).toMatch(/^CHIRPS quantile map,"wet days \(≥ 1 mm\) quantile-mapped onto the catchment rain's wet days over the fit period, CHIRPS' wet-day threshold raised/);
+		expect(lines[at + 1]).toBe('Month,Mapped on,Catchment wet days,CHIRPS wet days,CHIRPS wet-day threshold (mm)');
+		expect(lines[at + 2]).toBe('Oct,own month,40,41,2.5');
+		expect(lines[at + 10]).toBe('Jun,not mapped (monthly factor alone),40,41,2.5');
+		expect(lines[at + 13]).toBe('Sep,3-month season,40,41,2.5');
+		expect(lines[at + 14]).toBe('Gap days the map changed,25,gap days left to the monthly factor alone,6,in a month CHIRPS does not yet cover whole,2');
+		expect(lines[at + 15]).toBe('Gap rain by the monthly factor alone (mm),17,after the map (mm),16.5');
+		// Positive control: off, no block.
+		expect([...chirpsFactorLines(corr)].some((l) => l.startsWith('CHIRPS quantile map'))).toBe(false);
+	});
+
 	it('adds the fit period, its reference window and each listed range’s factors (engine ≥ 0.29.0)', () => {
 		const seg = (from: number, fillFrom: number | null, fillTo: number | null, reason: string) => ({
 			fromWaterYear: from, toWaterYear: from + 9, reason, fillFrom, fillTo, fitWindow: { fromWaterYear: from, toWaterYear: from + 8 },

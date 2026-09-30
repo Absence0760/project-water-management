@@ -7,8 +7,10 @@ import {
 	matchesQuery,
 	ownerKey,
 	ownerOptions,
+	parseDir,
 	parseOwner,
 	parseSort,
+	portfolioListHref,
 	sortProjects
 } from './grouping';
 
@@ -97,6 +99,10 @@ describe('sortProjects', () => {
 		]);
 		expect(all.map((p) => p.name)).toEqual(before);
 	});
+	it('turns round with desc: Z–A, oldest edit first', () => {
+		expect(sortProjects(all, 'name', undefined, 'desc').map((p) => p.name)).toEqual(['Witklip', 'Sandspruit', 'Outside', 'Kleinberg', 'Droëvlei']);
+		expect(sortProjects(all, 'updated', undefined, 'desc').map((p) => p.name)).toEqual(['Droëvlei', 'Outside', 'Sandspruit', 'Witklip', 'Kleinberg']);
+	});
 });
 
 describe('groupProjects', () => {
@@ -133,5 +139,17 @@ describe('URL params', () => {
 		expect(parseOwner(null)).toBe('all');
 		expect(parseSort('name')).toBe('name');
 		expect(parseSort('bogus')).toBe('updated');
+		expect(parseDir('desc')).toBe('desc');
+		expect(parseDir('sideways')).toBe('asc');
+		expect(parseDir(null)).toBe('asc');
+	});
+	it('sends an old team portfolio address to the list filtered to the team, worst EWR first by default (issue #176)', () => {
+		const at = (href: string) => Object.fromEntries(new URLSearchParams(href.slice(1)));
+		expect(at(portfolioListHref('7d93'))).toEqual({ owner: 'team:7d93', sort: 'status' });
+		// The portfolio's own sort keys and direction carry over.
+		for (const k of ['status', 'name', 'age', 'farms', 'dam']) expect(at(portfolioListHref('7d93', k)).sort).toBe(k);
+		expect(at(portfolioListHref('7d93', 'name', 'desc'))).toEqual({ owner: 'team:7d93', sort: 'name', dir: 'desc' });
+		expect(at(portfolioListHref('7d93', 'toString', 'sideways'))).toEqual({ owner: 'team:7d93', sort: 'status' });
+		expect(portfolioListHref('7d93').startsWith('?')).toBe(true);
 	});
 });

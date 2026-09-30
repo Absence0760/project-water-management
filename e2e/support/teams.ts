@@ -1,4 +1,4 @@
-// The team page keeps its name, the portfolio thresholds and leave/delete in a
+// The team page keeps its name, the EWR traffic lights and leave/delete in a
 // settings sheet (`?settings=1`, issue #17). These open and close it the way a
 // person does.
 import type { Page } from '@playwright/test';

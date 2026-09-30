@@ -776,7 +776,9 @@ rather than add a dependency:
 - **Accessibility across scripts:**
   - `lang` goes on `<html>` and on any fallback block in another language, so
     screen readers switch voice.
-  - Font stack: `system-ui` covers Latin. Arabic needs a system or Noto
+  - Font stack: the self-hosted Inter (`--font-sans`) covers Latin, Greek and
+    the UI's symbols; Cyrillic is in upstream Inter but not in the subset
+    (`brand/build.py` `BODY_UNICODES`). Arabic needs a system or Noto
     fallback declared before any Arabic ship.
   - Text expansion: Portuguese and Spanish often run longer than English. The
     Playwright layout smoke checks for no overflow on the workspace tabs, the

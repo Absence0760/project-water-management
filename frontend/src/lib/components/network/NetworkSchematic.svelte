@@ -5,6 +5,7 @@
 	// edit it, or (editors) drag it onto another node to change what it drains
 	// into. The "Drains into" selects are the keyboard path to the same edit;
 	// the list below the drawing is its text equivalent.
+	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
 	import { MediaQuery } from 'svelte/reactivity';
 	import type { NetworkNode, Transfer } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
@@ -100,12 +101,17 @@
 	});
 	const short = (n: NetworkNode) => shortNames.get(n.id) ?? name(n);
 
-	// The labels' widths in the font they are drawn in (the system's sans, which
-	// varies: DejaVu Sans draws ~15 % wider than the estimate), so the column
-	// spacing and the transfers' routing keep clear of the text actually drawn.
-	// Measured on a canvas in the drawing's font (.label / .meta below); the
-	// meta line's digits are tabular there, so they're measured as zeros.
-	const widths = (() => {
+	// The labels' widths in the font they are drawn in (--font-sans), so the
+	// column spacing and the transfers' routing keep clear of the text actually
+	// drawn. Measured on a canvas in the drawing's font (.label / .meta below);
+	// the meta line's digits are tabular there, so they're measured as zeros.
+	// A canvas measures in whatever face has loaded, so they are measured again
+	// once the page's fonts finish loading (onFontsLoaded: the web font may land
+	// after the drawing, and the fallback's widths would stand otherwise).
+	let fontsLoaded = $state(0);
+	$effect(() => onFontsLoaded(() => fontsLoaded++));
+	const widths = $derived.by(() => {
+		void fontsLoaded;
 		const ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
 		if (!ctx) return undefined;
 		const family = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim() || 'sans-serif';
@@ -122,7 +128,7 @@
 			}
 			return w;
 		});
-	})();
+	});
 	const isOutlet = (n: NetworkNode) => n.downstreamNodeId === null;
 	const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
 

@@ -6,6 +6,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { layoutSettled } from '../support/reflow.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
@@ -33,6 +34,8 @@ const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More se
 
 /** How many rows the bar's links (and More) take: their distinct tops. */
 async function barRows(menu: Locator): Promise<number> {
+	// Read once: wait for the final fonts and the fit that follows them.
+	await layoutSettled(menu.page());
 	const boxes = await Promise.all([...(await menu.getByRole('link').all()), ...(await moreButton(menu).all())].map((l) => l.boundingBox()));
 	return new Set(boxes.map((b) => Math.round(b!.y))).size;
 }
