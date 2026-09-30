@@ -208,10 +208,11 @@ collected as a checklist in issue #46; tick it there as they answer.
       the WR90 monthly lake factors (0.81–0.88 × S-pan, Midgley et al. 1994)
       converted to A-pan at the project's own monthly A-pan with WR90's
       monthly S-pan ← A-pan equation or Taljaard's (2023). With a Western
-      Cape-like A-pan these give about 0.52–0.72 × A-pan through the year,
+      Cape-like A-pan these give about 0.52–0.73 × A-pan through the year,
       0.66–0.68 over it, below the flat 0.75. Put to the hydrologist: keep
       flat 0.75, or which WR90 conversion (WR90's 1994 regression or
-      Taljaard's refit on ten stations); whether WR90's large-reservoir lag
+      Taljaard's refit on ten stations); whether the 55.4 / 38.5 mm A-pan
+      floor below which a WR90 fill is refused is right; whether WR90's large-reservoir lag
       suits small farm dams; and whether a site study or the quaternary's
       WR2012 evaporation zone should replace the national monthly factors.
       Once chosen, fill it on the client project (it is a project setting,

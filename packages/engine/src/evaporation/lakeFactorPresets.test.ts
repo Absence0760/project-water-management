@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, DEFAULT_LAKE_EVAP_FACTOR, PE_SOURCE_MAX, type ModelInput, type NetworkNode } from '../project';
 import { runModelWith } from '../run';
+import { prepareRun } from '../prepare';
 import { sameOutput } from '../testing/invariants';
 import { diffInputs } from '../compare';
 import {
@@ -8,6 +9,7 @@ import {
 	lakeFactorPresetFill,
 	lakeFactorPresetNamed,
 	lakeFactorPresetStale,
+	panConversionFloorMm,
 	SPAN_FROM_APAN,
 	WR90_LAKE_FACTORS_SPAN
 } from './lakeFactorPresets';
@@ -41,7 +43,7 @@ describe('LAKE_FACTOR_PRESETS', () => {
 	});
 
 	it('fills 12 values within physical bounds and a source note under the length cap, for every preset', () => {
-		for (const apan of [APAN, new Array(12).fill(20), new Array(12).fill(400)]) {
+		for (const apan of [APAN, new Array(12).fill(56), new Array(12).fill(400)]) {
 			for (const p of LAKE_FACTOR_PRESETS) {
 				const f = lakeFactorPresetFill(p.id, apan);
 				expect(f.ok, p.id).toBe(true);
@@ -92,11 +94,18 @@ describe('LAKE_FACTOR_PRESETS', () => {
 		expect(f.note).toContain('0.8706');
 	});
 
-	it('gives 0 where the regression has no S-pan (an A-pan at or below −c ÷ a), and refuses a month without A-pan', () => {
-		const tiny = [...APAN];
-		tiny[8] = 18; // 0.8793 × 18 − 16.2354 < 0
-		const f = lakeFactorPresetFill('wr90', tiny);
-		expect(f.ok && f.values[8]).toBe(0);
+	it('refuses a month below the conversion’s floor (intercept over a third of slope × A), naming it, and a month without A-pan', () => {
+		expect(panConversionFloorMm(SPAN_FROM_APAN.wr90)).toBeCloseTo(55.39, 2);
+		expect(panConversionFloorMm(SPAN_FROM_APAN.taljaard2023)).toBeCloseTo(38.51, 2);
+		const low = [...APAN];
+		low[8] = 50; // Jun: under WR90's 55.4 mm floor, over Taljaard's 38.5 mm
+		expect(lakeFactorPresetFill('wr90', low)).toMatchObject({ ok: false, reason: /A-pan in Jun is below 55\.4 mm/ });
+		expect(lakeFactorPresetFill('wr90-taljaard2023', low).ok).toBe(true);
+		// The flat preset needs no conversion, so no floor.
+		expect(lakeFactorPresetFill('flat-0.75', low).ok).toBe(true);
+		// At the floor the factor is f_lake × ⅔ × slope, well above 0.
+		const atFloor = lakeFactorPresetFill('wr90', new Array(12).fill(panConversionFloorMm(SPAN_FROM_APAN.wr90)));
+		expect(atFloor.ok && Math.min(...atFloor.values)).toBeGreaterThan(0.45);
 		expect(lakeFactorPresetFill('wr90', new Array(12).fill(0))).toMatchObject({ ok: false, reason: /A-pan first/ });
 		const gap = [...APAN];
 		gap[5] = Number.NaN;
@@ -185,6 +194,17 @@ describe('runs (no default changes)', () => {
 		const noted = run(input({ lakeEvapFactorSource: 'WR90 lake factors, WR90 pan conversion preset: …' }));
 		expect(sameOutput(base, noted)).toBe(true);
 		expect(evap(base).some((v) => v > 0)).toBe(true);
+	});
+
+	it('the note is kept as text, capped at the source limit, and anything else reads as none, with no warning', () => {
+		const prep = (v: unknown) => prepareRun(input({ lakeEvapFactorSource: v as never }));
+		expect(prep('site study').settings.lakeEvapFactorSource).toBe('site study');
+		expect(prep('x'.repeat(PE_SOURCE_MAX + 50)).settings.lakeEvapFactorSource).toBe('x'.repeat(PE_SOURCE_MAX));
+		expect(prep(42).settings.lakeEvapFactorSource).toBe('');
+		expect(prep(undefined).settings.lakeEvapFactorSource).toBe('');
+		expect(prep(42).warnings).toEqual(prep(undefined).warnings);
+		// A long note still changes no result.
+		expect(sameOutput(run(input()), run(input({ lakeEvapFactorSource: 'x'.repeat(PE_SOURCE_MAX + 50) })))).toBe(true);
 	});
 
 	it('the default settings keep one factor of 0.75 and no monthly row or note', () => {

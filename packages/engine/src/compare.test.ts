@@ -1018,6 +1018,13 @@ describe('diffInputs', () => {
 		expect(texts(old, { ...a, settings: { ...a.settings, runoffModel: 'gr4j' } })).toEqual(['Runoff model: legacy (b023 recession) → GR4J']);
 		// Provenance only, but a changed note is still a difference between the two runs' records (engine ≥ 0.31.1).
 		expect(texts(a, { ...a, settings: { ...a.settings, panCoefficientSource: 'FAO-56 Table 5' } })).toEqual(['Pan coefficient source: none → "FAO-56 Table 5"']);
+		// Likewise the dam evaporation factors' note (engine ≥ 1.49.0); a run saved before it compares as none.
+		expect(texts(a, { ...a, settings: { ...a.settings, lakeEvapFactorSource: 'Flat 0.75 × A-pan (the default) preset: …' } })).toEqual([
+			'Dam evaporation factor source: none → "Flat 0.75 × A-pan (the default) preset: …"'
+		]);
+		const beforeNote = structuredClone(a);
+		delete (beforeNote.settings as Record<string, unknown>).lakeEvapFactorSource;
+		expect(diffInputs(beforeNote, { ...a, settings: { ...a.settings, lakeEvapFactorSource: '' } })).toEqual([]);
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

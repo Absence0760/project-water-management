@@ -2387,12 +2387,30 @@ A-pan, `settings.apanMm` (mm/month). The conversion is affine, not a ratio,
 so the A-pan factor depends on the month's A-pan: with the negative
 intercept it falls in the low-evaporation months, which is where issue #46's
 ~0.67 × A-pan a year and 0.5–0.6 in winter come from. The
-factors are rounded to 3 decimals; a month whose A-pan is at or below
-−intercept ÷ slope (18.5 mm or 12.8 mm) has no S-pan and gets 0. With the
-dam test's Western Cape-like A-pan (180, 230, 270, 285, 245, 210, 140, 90,
-60, 65, 90, 130 mm) the WR90 preset gives 0.639, 0.663, 0.680, 0.691,
-0.715, 0.706, 0.672, 0.608, 0.517, 0.523, 0.566, 0.611 (0.659 A-pan
-weighted over the year) and the Taljaard one 0.655 … 0.726 (0.678).
+factors are rounded to 3 decimals. With the dam test's Western Cape-like
+A-pan (180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130 mm) the WR90
+preset gives 0.639, 0.663, 0.680, 0.691, 0.715, 0.706, 0.672, 0.608,
+0.517, 0.523, 0.566, 0.611 (0.659 A-pan weighted over the year) and the
+Taljaard one 0.655, 0.674, 0.688, 0.698, 0.726, 0.719, 0.696, 0.649,
+0.582, 0.580, 0.605, 0.636 (0.678).
+
+**The seasonal shape is the pan conversion's, not the lake lag.** WR90's
+`f_lake` varies only 0.81–0.88 through the year; the S-pan ÷ A-pan ratio
+the regression implies varies far more (0.61 in June to 0.82 in January
+above), so the WR90 presets are *lowest* in winter. That is the opposite of
+the deep-water lag this item's opening paragraph describes (open water
+evaporating more relative to the pan in winter): read the presets as WR90's
+lake factors on an A-pan basis, not as a model of that lag.
+
+**Floor.** A conversion is used only where its intercept is at most a third
+of slope × A (S-pan ÷ A-pan at least ⅔ of the slope): a monthly A-pan of at
+least 3|c| ÷ a, **55.4 mm** for WR90's equation and **38.5 mm** for
+Taljaard's (`panConversionFloorMm`). Below it the factor heads to 0 (0.057
+× A-pan at 20 mm under WR90), a national regression pushed past the pan
+depths it describes rather than open water ceasing to evaporate, so the fill
+is refused, naming the months; the flat preset, or factors typed by hand,
+still work there. The floor is an engineering bound (neither source gives a
+fitted range), pending the hydrologist.
 
 Sources and caveats:
 
@@ -2415,7 +2433,7 @@ Sources and caveats:
   regression's. After changing the A-pan, fill the preset again: Settings
   warns when the note names a preset whose values at the current A-pan no
   longer match (`lakeFactorPresetStale`). A WR90 preset refuses a project
-  with any month's A-pan at 0 (not entered yet).
+  with any month's A-pan at 0 (not entered yet) or below its floor (above).
 - Which preset the client's catchment takes is the hydrologist's
   ([followups.md § Hydrologist](./followups.md#hydrologist)).
 

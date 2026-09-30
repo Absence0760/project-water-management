@@ -3006,7 +3006,9 @@ which checks every catchment tab).
   (`settings.lakeEvapFactorSource`, up to 600 characters, with a
   field-history line), then goes back to "Fill from a preset…"; all stay
   editable and nothing is saved until Save. A WR90 preset with any month's
-  A-pan at 0 fills nothing and says "enter the monthly A-pan first". When
+  A-pan at 0 fills nothing and says "enter the monthly A-pan first"; one
+  with a month below the conversion's floor (55.4 mm WR90, 38.5 mm
+  Taljaard) fills nothing and names the months. When
   the note names a preset whose values at the current A-pan no longer
   match the row (the A-pan or a factor changed since), an amber note says
   so ("fill it again, or update the note"). The Pan-coefficient preset

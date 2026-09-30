@@ -118,17 +118,30 @@ const round = (x: number) => {
 	return Math.round(x * p) / p;
 };
 
-/** The A-pan factor for one month: f_lake × S(A) ÷ A, 0 where the regression gives no S-pan. */
-function convertedFactor(fLake: number, apan: number, c: PanConversion): number {
-	const s = c.slope * apan + c.interceptMm;
-	return s > 0 ? round((fLake * s) / apan) : 0;
+/**
+ * The lowest monthly A-pan (mm) a conversion is used at: where its intercept is
+ * at most a third of slope × A, i.e. S-pan ÷ A-pan at least ⅔ of the slope
+ * (WR90 55.4 mm, Taljaard 38.5 mm). Below it the negative intercept dominates
+ * and the factor heads to 0 (0.057 at 20 mm under WR90), a national regression
+ * pushed past the pan depths it describes, not open water ceasing to
+ * evaporate. An engineering bound, pending the hydrologist (docs/model.md §2.7a).
+ */
+export function panConversionFloorMm(c: PanConversion): number {
+	return (3 * -c.interceptMm) / c.slope;
 }
+
+/** The A-pan factor for one month: f_lake × S(A) ÷ A (A at or above the floor, so S > 0). */
+function convertedFactor(fLake: number, apan: number, c: PanConversion): number {
+	return round((fLake * (c.slope * apan + c.interceptMm)) / apan);
+}
+
+const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 
 /**
  * The 12 monthly factors (× A-pan, water-year order) and the source note a
  * preset fills, at the project's monthly A-pan (mm/month, Oct–Sep). A WR90
- * preset needs every month's A-pan above 0: the conversion depends on it, and
- * a project whose A-pan isn't entered yet (all 0) would get meaningless values.
+ * preset needs every month's A-pan entered (above 0: the conversion depends
+ * on it) and at or above the conversion's floor (`panConversionFloorMm`).
  */
 export function lakeFactorPresetFill(id: string, apanMm: readonly number[]): LakeFactorPresetFill {
 	const preset = LAKE_FACTOR_PRESETS.find((p) => p.id === id);
@@ -140,6 +153,14 @@ export function lakeFactorPresetFill(id: string, apanMm: readonly number[]): Lak
 	const bad = Array.from({ length: 12 }, (_, m) => m).filter((m) => !(Number.isFinite(apanMm[m]) && apanMm[m]! > 0));
 	if (apanMm.length !== 12 || bad.length) {
 		return { ok: false, reason: 'enter the monthly A-pan first: the WR90 factors are converted to an A-pan basis at each month’s A-pan' };
+	}
+	const floor = panConversionFloorMm(c);
+	const low = bad.length ? [] : Array.from({ length: 12 }, (_, m) => m).filter((m) => apanMm[m]! < floor);
+	if (low.length) {
+		return {
+			ok: false,
+			reason: `the A-pan in ${low.map((m) => MONTHS[m]).join(', ')} is below ${Math.round(floor * 10) / 10} mm, where this pan conversion no longer holds (its intercept would dominate); use the flat preset or enter the factors by hand`
+		};
 	}
 	const values = WR90_LAKE_FACTORS_SPAN.map((f, m) => convertedFactor(f, apanMm[m]!, c));
 	const apanText = apanMm.map((a) => String(Math.round(a * 10) / 10)).join(' ');
