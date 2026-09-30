@@ -189,7 +189,10 @@ existing lawful use beside the application's numbers.
   matches them; a unit only one run has is marked. A part year is marked
   per run and counted only in a run it is whole in; when the runs used
   different bands, the row, the flag and § 5 name both. The over/under-use
-  chart plots each whole year at modelled ÷ registered.
+  chart plots each whole year at modelled ÷ registered, with a screen-reader
+  description counting the whole years above the band per run. The
+  Allocations tab draws the same chart (`allocations/UsePlot.svelte`) for the
+  run it compares, with the project's band now ([ui.md § Allocations](./ui.md#allocations-taballocations)).
 - **The page-1 row** sums the whole unit-years above the band over units and
   sources, baseline and application, with the run's own difference and no
   band (the ensemble doesn't carry it). It is a fixed row (G6): when the
@@ -247,6 +250,4 @@ Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
   registered volume beside their modelled use (waits on D3).
 - Dam filling vs registered storage (s21b), and how the cap counts water
   drawn from a dam that boreholes filled (pending the hydrologist, issue #90).
-- An over/under-use chart on the Allocations tab itself (the evidence
-  report's § 5 has one, `UsePlot`); the issued pack freezes § 5 once WP-3.14
-  lands.
+- The issued pack (WP-3.14) freezes § 5 once it lands.
