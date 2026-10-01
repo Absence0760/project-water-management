@@ -742,6 +742,14 @@ the result change?", and put back any earlier version.
   (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
   joined `app_user` on these columns left-join it, and the API answers
   `null` for the maker's name.
+- **Deleting your own account (143, issue #112).** `app_delete_my_account()`
+  (`SECURITY DEFINER`, `search_path` pinned, `EXECUTE` for `water_app`
+  only, no arguments) deletes the `app_user` row of `app_current_user_id()`
+  and nobody else's, and refuses a transaction with no user (`42501`).
+  `DELETE /auth/me` calls it under `withUser`, after recording the audit
+  events, so everything above (the keys, `app_user_pseudonymise`, the
+  owner and admin checks) runs exactly as for the operator's deletion.
+  water_app still has no `DELETE` on `app_user` (068).
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to

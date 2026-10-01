@@ -11,7 +11,8 @@
 //      to the person (the fixture must reach each one, so a new sectioned
 //      key without a fixture fails too), and every APP_USER_EXPORTED column
 //      comes out with the stored value.
-//   2. Deletion: after the operator deletes the account, no column of any
+//   2. Deletion: after the person deletes the account (DELETE /auth/me, the
+//      self-service path, issue #112), no column of any
 //      table (every text, citext, varchar, json, jsonb, uuid and array
 //      column in information_schema) still holds the person's email or
 //      display name, and their id survives only where the table in
@@ -398,7 +399,14 @@ describe('deleting the account leaves no copy of the person outside the document
 		}
 		before = {};
 		for (const [k, v] of Object.entries(needles())) before[k] = await whereIs(v);
-		await asOwner('DELETE FROM app_user WHERE id = $1', [subject.id]);
+		// Through "Delete my account" (DELETE /auth/me, issue #112), as the person under RLS: the operator's path
+		// (the schema owner deleting the row) runs the same keys and triggers, checked end to end in account-deletion.db.test.ts.
+		const res = await app.request('/auth/me', {
+			method: 'DELETE',
+			headers: { cookie: subject.cookie, origin: ORIGIN, 'content-type': 'application/json' },
+			body: JSON.stringify({ password: 'correct horse' })
+		});
+		expect(res.status).toBe(204);
 	});
 
 	it('had a row behind every cascade and set-null key to app_user before the deletion (the fixture reaches each)', () => {

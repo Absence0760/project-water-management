@@ -397,6 +397,7 @@ const INNER_JOINS = new Map<string, string>([
 	['history/record.ts JOIN app_user u ON u.id = fl.user_id', 'a linked farmer is a current member'],
 	['history/record.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['teams/routes.ts JOIN app_user u ON u.id = m.user_id', 'current team members'],
+	['auth/deleteAccount.ts JOIN app_user u ON u.id = m.user_id', 'the caller’s own memberships (m.user_id is the person deleting their account)'],
 	['scenarios/execute.ts JOIN app_user mu ON mu.id = m.user_id', 'scenario_member.user_id is in app_user_visible'],
 	['reports/routes.ts JOIN app_user ru ON ru.id = r.user_id', 'a schedule recipient is a current member'],
 	['reports/store.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],

@@ -33,6 +33,18 @@ describe('createApi', () => {
 		expect(init.method).toBe('POST');
 	});
 
+	it('DELETEs /auth/me with the password (204), and keeps a refusal’s code and details', async () => {
+		const f = mockFetch(204);
+		await expect(createApi('http://x', f).auth.deleteMe('pw')).resolves.toBeUndefined();
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/me');
+		expect(init.method).toBe('DELETE');
+		expect(JSON.parse(init.body as string)).toEqual({ password: 'pw' });
+		const details = { projects: [{ id: 'p1', name: 'Kloof' }], teams: [] };
+		const refused = mockFetch(409, { error: 'x', code: 'account_sole_holder', details });
+		await expect(createApi('http://x', refused).auth.deleteMe('pw')).rejects.toMatchObject({ status: 409, code: 'account_sole_holder', details });
+	});
+
 	it('PATCHes /auth/me with the display name and returns the user', async () => {
 		const user = { id: '1', email: 'a@b.c', displayName: 'New name', emailVerified: true };
 		const f = mockFetch(200, { user });

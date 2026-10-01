@@ -331,7 +331,8 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
 [deployment.md § Runbooks](./deployment.md#runbooks), Credential stuffing).
 
 - *Reasons:* `unknown_account` and `bad_password` (sign-in; change-password's
-  current password is `bad_password` on `/auth/change-password`), `locked`
+  current password is `bad_password` on `/auth/change-password`, and "Delete
+  my account"'s password on `/auth/me`, issue #112), `locked`
   (refused by the lockout before the password is checked), and `invalid_link`
   (a malformed, used, expired or unknown reset or verification token).
 - *No personal data:* the line holds the route's pattern and the reason only,
@@ -2287,19 +2288,42 @@ PDF someone else asked for kept the person as a recipient
   audit events. The project exports (`export.json`, CSV, the farm CSV)
   remain project data, not a data-subject export
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
-- **Deletion: an operator act.** There is no self-service deletion yet
-  (issue #112). On an emailed request (POPIA s24 and Regulation 3's Form 2,
-  which may come in any expedient way) the operator deletes the `app_user`
-  row as the schema owner ([deployment.md § Runbooks](./deployment.md#runbooks),
-  item 7), as soon as reasonably practicable, and tells the person what was
-  done (s24(4)): the table above is what happens. The rule for evidence
+- **Deletion: self-service, or on request.** Account → **Delete my
+  account** (`DELETE /auth/me`, issue #112, [api.md § Auth](./api.md#auth))
+  says what goes, what stays without the name and what keeps it, asks for
+  the password again (through the sign-in lockout, as a password change
+  does), and deletes the account straight away. It runs as the person under
+  RLS: the up-front refusal reads their own memberships, the audit events
+  (one per project and team they belonged to, `accountDeleted: true`) are
+  written as them while they are still a member, and the row goes through
+  `app_delete_my_account()` (143), a `SECURITY DEFINER` function with **no
+  user argument** that deletes only `app_current_user_id()`'s row and
+  refuses a transaction with no user; water_app still has no `DELETE` on
+  `app_user` (068). The keys and triggers that act on the deletion are the
+  same as the operator's, so the table above holds for both paths
+  (`personal-data.security.db.test.ts` sweeps the schema after a deletion
+  through this route; `account-deletion.db.test.ts` checks the operator's).
+  The person gets an email of what was done (s24(4)): what was deleted,
+  the projects and teams they left, what stays without the name and what
+  keeps it. A request may also come by email or any other expedient way
+  (POPIA s24 and Regulation 3's Form 2): the operator then deletes the
+  `app_user` row as the schema owner ([deployment.md §
+  Runbooks](./deployment.md#runbooks), item 7), as soon as reasonably
+  practicable, and tells the person what was done. The rule for evidence
   (138): **keep the evidence, remove the name**. The one refusal is an
-  account that is the only owner of a project or the only admin of a team
-  (checked at commit): ownership is handed to someone else first, by the
-  person or the project's other members. A responsible party that is DWS or
-  a CMA may need the name kept under the National Archives Act; that waits
-  on counsel and on D1 (#50), and would be a per-team setting in its own
-  migration ([followups.md § POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
+  account that is the only owner of a project or the only admin of a team:
+  ownership is handed to someone else first, by the person or the project's
+  other members. Self-service answers `409 account_sole_holder` naming them:
+  read up front with the project's owner rows and the team's admin rows
+  locked (`FOR UPDATE`, since the deferred checks take no lock and two
+  co-owners deleting at once would otherwise each see the other and both
+  pass), and fired again inside the request by `SET CONSTRAINTS ALL
+  IMMEDIATE` (`delete-me.db.test.ts` runs two at once). The operator's path
+  is refused at commit. A responsible party
+  that is DWS or a CMA may need the name kept under the National Archives
+  Act; that waits on counsel and on D1 (#50), and would be a per-team
+  setting in its own migration ([followups.md §
+  POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
 
@@ -2980,8 +3004,9 @@ nothing else.
   should be invite-only (plan question 11).
 - Any editor may sign off the calibration rules; restricting it to a role
   waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
-- POPIA: no self-service account deletion yet (the operator deletes on an
-  emailed request, issue #112); what exists today and the open items are in
+- POPIA: self-service deletion keeps the evidence and removes the name
+  (issue #112); the rule, a deleted note's body, backups after an erasure,
+  D12 and the lawful bases wait on the information officer's answers (#90),
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook

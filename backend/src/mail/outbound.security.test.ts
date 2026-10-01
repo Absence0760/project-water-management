@@ -88,7 +88,9 @@ const builders: Record<string, () => Mail[]> = {
 					)
 				)
 			)
-		)
+		),
+	accountDeletedMail: () =>
+		templates.LOCALES.map((l) => templates.accountDeletedMail(TO, { projects: [EVIL, EVIL], teams: [EVIL] }, l))
 };
 
 const exportedBuilders = [...Object.entries(templates), ...Object.entries(alertTemplates)]
@@ -112,7 +114,8 @@ describe('every email template, against hostile names', () => {
 			reportReadyMail: 'report_ready',
 			alertMail: 'alert',
 			digestMail: 'alert_digest',
-			packNoticeMail: 'pack_notice'
+			packNoticeMail: 'pack_notice',
+			accountDeletedMail: 'account_deleted'
 		};
 		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
 		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);

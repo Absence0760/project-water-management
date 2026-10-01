@@ -192,7 +192,7 @@
 	</p>
 	<p>
 		If you are the only owner of a project or the only admin of a team, someone else needs to take that role before the account
-		is deleted; we will tell you if that applies, and you or the project’s other members can hand it over.
+		is deleted; the account page (or we) will tell you if that applies, and you or the project’s other members can hand it over.
 	</p>
 
 	<h2 id="cookies">8. Cookies and your browser</h2>
@@ -229,8 +229,9 @@
 		</li>
 		<li><strong>Correct it.</strong> You can change your name and settings on your account page; ask the project’s owner, or us, for anything else.</li>
 		<li>
-			<strong>Have it deleted.</strong> Email us from your account’s address (or ask in any other way that suits you) and we will
-			delete the account as soon as we reasonably can, as described in section 7, and tell you what we did.
+			<strong>Have it deleted.</strong> Signed in, go to Account → <strong>Delete my account</strong> to delete it yourself, straight
+			away. Or email us from your account’s address (or ask in any other way that suits you) and we will delete the account as soon
+			as we reasonably can. Either way it is deleted as described in section 7, and we email you what we did.
 		</li>
 		<li><strong>Object</strong> to our using it for a legitimate interest, or <strong>stop alert emails</strong> at any time from any alert email or your alert settings.</li>
 	</ul>

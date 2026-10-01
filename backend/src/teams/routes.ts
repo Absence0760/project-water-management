@@ -37,7 +37,7 @@ async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 const PROJECT_ROLE: Record<TeamRole, string> = { viewer: 'viewer', member: 'editor', admin: 'owner' };
 
 /** A team member as a team_member.* audit subject names them: the team, the person, their team role and what it makes them here. */
-async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
+export async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
 	const { rows } = await db.query<{ team: string; display_name: string; role: TeamRole }>(
 		`SELECT t.name AS team, u.display_name, m.role FROM team_member m JOIN team t ON t.id = m.team_id JOIN app_user u ON u.id = m.user_id
 		 WHERE m.team_id = $1 AND m.user_id = $2`,
