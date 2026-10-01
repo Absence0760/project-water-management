@@ -149,6 +149,27 @@ describe('POST /projects/:id/assessments', () => {
 		await expect(asOwner(`UPDATE assessment SET status = 'failed', problems = '["x"]' WHERE id = $1`, [assessment.id])).rejects.toThrow(/completed once/);
 	});
 
+	it('the 30-day job clean-up clears a complete assessment\'s job and keeps the assessment (148_job_purge_clears_links)', async () => {
+		const res = await assessor.call('POST', `${P()}/assessments`, { name: 'Purged job', scenarioIds: [appA, appB] });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const { assessment, jobId } = res.body;
+		await tick();
+		const cols = 'id, status, problems, report, combined_summary, start_date, end_date, engine_version, completed_at';
+		const before = await asOwner(`SELECT ${cols} FROM assessment WHERE id = $1`, [assessment.id]);
+		expect(before[0]).toMatchObject({ status: 'complete' });
+
+		await asOwner(`UPDATE job SET finished_at = now() - interval '31 days' WHERE id = $1`, [jobId]);
+		expect((await tick()).purged).toBeGreaterThanOrEqual(1);
+		expect(await asOwner('SELECT id FROM job WHERE id = $1', [jobId])).toEqual([]);
+		expect(await asOwner(`SELECT ${cols}, job_id FROM assessment WHERE id = $1`, [assessment.id])).toEqual(before.map((r) => ({ ...r, job_id: null })));
+		const got = await assessor.call('GET', `${P()}/assessments/${assessment.id}`);
+		expect(got.status).toBe(200);
+		expect(got.body.assessment).toMatchObject({ status: 'complete', job: null });
+
+		// Positive control: the guard still refuses a real change, even by the schema owner.
+		await expect(asOwner(`UPDATE assessment SET status = 'failed', problems = '["x"]' WHERE id = $1`, [assessment.id])).rejects.toThrow(/completed once/);
+	});
+
 	it('refuses a conflicting pair with a readable reason, and writes nothing', async () => {
 		// The assessor's own team scenario sets the same dam as application A.
 		const team = await assessor.call('POST', `${P()}/scenarios`, { name: 'Smaller Rooikloof', baseRunId: published, ops: [{ op: 'node.set', nodeId: rooikloof.id, field: 'damCapacityM3', value: 60_000 }] });

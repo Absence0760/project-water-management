@@ -256,6 +256,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
  * it names the DB test that ages its job past 30 days and runs the purge.
  */
 const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
+	'assessment.job_id': { updateTrigger: true, purgeTest: 'src/assessments/assessments.db.test.ts' },
 	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
 	'report.job_id': { updateTrigger: false },
 	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },

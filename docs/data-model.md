@@ -2706,7 +2706,9 @@ from 066 and changes no table, policy or grant: an update that only clears
 column unchanged) passes; water_app holds UPDATE on neither column, so only
 a key (or the schema owner) makes it, and any change to the outcome still
 meets the guard. `auto_calibration_update` (108) already let a cleared
-`job_id` through; `report` and `yield_result` have no UPDATE trigger.
+`job_id` through, and `assessment_complete` (145) fires only on its outcome
+columns (`BEFORE UPDATE OF …`), so a cleared `job_id` never reaches it;
+`report` and `yield_result` have no UPDATE trigger.
 `catalogue.db.test.ts` `JOB_REFERENCES` lists every key to `job`, and each
 table with an UPDATE trigger names the DB test that ages its job past 30
 days and runs the purge.
