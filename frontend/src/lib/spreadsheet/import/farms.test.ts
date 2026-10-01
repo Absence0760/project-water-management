@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asRunOfRiver, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -179,5 +179,26 @@ describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
 			'WARNING: farm Source: not imported as run of river (--run-of-river): an enabled transfer draws on its dam, so it stays a ' +
 				'farm dam; convert it by hand once the transfer is settled (issue #54, 2d)'
 		);
+	});
+});
+
+// Same cases and text as test_run_of_river.py PlaceholderPoolNote (issue #90 Q18).
+describe('placeholder pool note', () => {
+	it('flags a near-empty dam that takes less than all the upstream inflow', () => {
+		expect(placeholderPoolNote('Pool', 0, 0.5, 0)).toBe(
+			"WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a " +
+				"day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to " +
+				'the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply ' +
+				'rule to run of river with a pump capacity (issue #90 Q18)'
+		);
+		expect(placeholderPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
+		expect(placeholderPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
+	});
+
+	it('leaves a real dam, no dam and a run-of-river candidate alone', () => {
+		expect(placeholderPoolNote('Small dam', 0, 100, 0)).toBeNull();
+		expect(placeholderPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
+		expect(placeholderPoolNote('No dam', 0, 0, 0)).toBeNull();
+		expect(placeholderPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
 	});
 });
