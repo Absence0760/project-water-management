@@ -111,6 +111,22 @@
 		}
 	}
 
+	// Who acts for the responsible authority (163_licensing_authority): as an editor or owner they record its decisions and endorse a baseline.
+	async function setAuthority(m: Member, on: boolean) {
+		if (on === (m.actsForAuthority ?? false)) return;
+		busy = m.userId;
+		error = null;
+		try {
+			const updated = await api.members.setActsForAuthority(projectId, m.userId, on);
+			members = members.map((x) => (x.userId === m.userId ? updated : x));
+		} catch (err) {
+			error = msg(err);
+			await load();
+		} finally {
+			busy = null;
+		}
+	}
+
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
 		const ok = await confirmDialog(
@@ -202,6 +218,21 @@
 										<span class="muted small party">{m.party}</span>
 									{/if}
 								{/if}
+								{#if m.role === 'editor' || m.role === 'owner'}
+									{#if isOwner}
+										<label class="authority small">
+											<input
+												type="checkbox"
+												checked={m.actsForAuthority ?? false}
+												disabled={busy === m.userId}
+												onchange={(e) => setAuthority(m, e.currentTarget.checked)}
+											/>
+											Acts for the responsible authority
+										</label>
+									{:else if m.actsForAuthority}
+										<span class="muted small authority">Acts for the responsible authority</span>
+									{/if}
+								{/if}
 							</td>
 							<td class="act">
 								{#if isOwner || m.userId === currentUserId}
@@ -244,7 +275,9 @@
 			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
 			run it; owners also manage members. An applicant sees only the published baseline, their own hydrological units and their own
 			applications (a licence applicant or their consultant). Put an applicant and their consultant in the same applying
-			party: they can share applications only with each other.
+			party: they can share applications only with each other. Nobody who edits the project may also be in an applying party.
+			Tick “Acts for the responsible authority” for the editors who record the authority’s decisions on applications and
+			endorse a published baseline for it (DWS or the CMA that decides the project’s licences, named in Settings).
 		</p>
 		<PendingInvites
 			bind:invites
@@ -257,6 +290,12 @@
 </section>
 
 <style>
+	.authority {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-top: 0.25rem;
+	}
 	.add {
 		margin-top: 1rem;
 	}

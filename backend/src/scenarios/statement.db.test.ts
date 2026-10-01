@@ -7,7 +7,7 @@
 // change them, and each is at most 4 000 characters. Every "can't" has its
 // positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -135,10 +135,17 @@ describe('an application’s statement', () => {
 	});
 
 	it('can’t be changed by the decision (scenario_guard), which otherwise goes through (positive control)', async () => {
+		await actForAuthority(owner, projectId, editor.id);
 		await expect(
-			withUser(editor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'approved', monitoring = 'Nothing' WHERE id = $1`, [sid]))
+			withUser(editor.id, (db) =>
+				db.query(
+					`UPDATE scenario SET status = 'decided', outcome = 'licence_issued', decision_authority = 'CMA', decision_date = '2026-09-30', reasons_received = true,
+						monitoring = 'Nothing' WHERE id = $1`,
+					[sid]
+				)
+			)
 		).rejects.toMatchObject({ code: '23514', message: 'a decision changes nothing else in the application' });
-		const res = await editor.call('POST', `${S(sid)}/decide`, { outcome: 'approved' });
+		const res = await editor.call('POST', `${S(sid)}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(answers(res.body)).toEqual({ purposeAndNeed: 'Storage for 60 ha of citrus.', mitigation: 'A low-flow release pipe.', monitoring: 'A weir below the dam.' });
 	});

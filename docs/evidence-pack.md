@@ -35,7 +35,10 @@ applicant's own copy of their application's issued packs, with share links
 re-run of both runs from the stored bundle after issue, shown on the pack's
 page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
 locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
-report format `evidence-12`, 2026-10-01). What is left is
+report format `evidence-12`, 2026-10-01); and whom the report is for and
+whether the responsible authority endorsed its baseline
+([§ The responsible authority](#the-responsible-authority), report format
+`evidence-13`, 163_licensing_authority, 2026-10-01). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -341,6 +344,37 @@ issued pack's bundle reproduces the figure),
 `evidence-report.spec.ts`, `evidence-pack.spec.ts` (the figure's bytes hash
 to the manifest's `svgSha256`) and `evidence-pack-pdf.spec.ts` (the server
 PDF of a pack with a map).
+
+## The responsible authority
+
+Report format `evidence-13` (163_licensing_authority; provisional position,
+pre-counsel research, 2026-10-01; D1 and D14 in
+[step-3-licensing.md § 11](./roadmap/step-3-licensing.md)). Under the
+National Water Act only the responsible authority decides a licence and
+decides what evidence it accepts (s41(2)), so the report says whom it is
+for and whether that authority accepted the baseline:
+
+- **For** (`identity.authority`, the identity block's *For* row): the
+  project's `settings.responsibleAuthority` (name, DWS or a CMA, office), or
+  *No responsible authority named*.
+- **The baseline's endorsement** (`identity.baseline.endorsement`, under
+  *Baseline*): the newest endorsement of any publication of the baseline
+  run, by a member acting for the authority (`POST
+  …/publication/:pubId/endorse`): when, by whom and its note. Without one,
+  the identity block says *Not endorsed by the responsible authority* and
+  page 1 carries a caution flag, `notEndorsed`, *Baseline not endorsed by
+  the responsible authority.* (a fixed row: absence is printed, never
+  omitted, G6).
+- **§ 4's decided applications** carry the authority's outcome words; only
+  `licence_issued` counts among the other applications on the baseline (a
+  pack drafted before keeps its frozen `approved` /
+  `approved_with_conditions`, which it still words).
+
+Both are part of the report, so a pack freezes them when it is drafted: an
+authority named, or an endorsement made, after a pack is issued changes
+the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
+A pack drafted before `evidence-13` has neither field; its identity block
+says nothing about the authority and it has no such flag.
 
 ## What is hashed, and what isn't
 

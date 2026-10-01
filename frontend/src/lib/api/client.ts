@@ -109,7 +109,7 @@ import type {
 	ApplicantCopyState,
 	AssessorQuestion,
 	ApplicantResultsRun,
-	ScenarioOutcome,
+	DecideRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -455,6 +455,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Put an applicant in an applying party, or take them out (null); owners only. */
 			setParty: (id: string, userId: string, party: string | null) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
+			/** Mark or unmark a member as acting for the responsible authority (owner; 163). */
+			setActsForAuthority: (id: string, userId: string, actsForAuthority: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { actsForAuthority }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -699,6 +702,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Change the current publication's notice, note or next date without re-publishing (editor). */
 			update: (id: string, pubId: string, body: PublicationPatch) =>
 				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication),
+			/** Endorse a published baseline for the responsible authority, once (an editor acting for it; 163). */
+			endorse: (id: string, pubId: string, note: string) =>
+				request<{ publication: PublicationMeta }>('POST', `${p(id)}/publication/${enc(pubId)}/endorse`, { note }).then((r) => r.publication),
 			/** One run's publication and the changes since the one before (viewer; the printable report). */
 			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
 		},
@@ -867,9 +873,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
-			/** The assessor's decision: an editor who didn't make the application. */
-			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
-				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
+			/**
+			 * Record the responsible authority's decision (163): an editor the owner marks as acting for
+			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 */
+			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),

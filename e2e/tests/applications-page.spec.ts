@@ -38,7 +38,7 @@ test('thirty applications: the header counts the queue, the card fills the windo
 	await expect(first).toContainText('waiting 1 day');
 	const decided = rows(page).filter({ has: page.getByRole('rowheader', { name: seeded[27]!.name, exact: true }) });
 	await expect(decided).toContainText('decided');
-	await expect(decided.locator('.pill')).toHaveText(/^(Approved|Approved with conditions|Refused)$/);
+	await expect(decided.locator('.pill')).toHaveText(/^(Licence issued \(see its conditions\)|Licence refused|Application rejected \(formal requirements\))$/);
 	await expect(rows(page).filter({ has: page.getByRole('rowheader', { name: seeded[20]!.name, exact: true }) }).locator('.pill')).toHaveText('Withdrawn');
 
 	// The card reaches the window's bottom; the page doesn't scroll, the rows do, inside the card.
@@ -55,10 +55,10 @@ test('thirty applications: the header counts the queue, the card fills the windo
 	await expect(rows(page).first().getByRole('rowheader')).toHaveText(oldest.name);
 	await expect(rows(page).first()).toContainText('waiting 30 days');
 
-	// Decide the longest waiting opens it in Scenarios, with the Decide form.
+	// Decide the longest waiting opens it in Scenarios, with the form recording the authority's decision.
 	await next.click();
 	await expect(page).toHaveURL(new RegExp(`tab=scenarios&scenario=${oldest.id}`));
-	await expect(page.getByRole('form', { name: 'Decide' })).toBeVisible();
+	await expect(page.getByRole('form', { name: 'Record the authority’s decision' })).toBeVisible();
 });
 
 test('the status filter is in the URL: Back steps through it, a reload keeps it, and an empty one says so', async ({ page, owner, signIn }) => {

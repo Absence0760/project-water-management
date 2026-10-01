@@ -8,7 +8,7 @@
 // tables say about an application hidden from them (a note on its run, a
 // sign-off of it, a yield of it). Every "cannot see" has a positive control.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -238,7 +238,8 @@ describe('what these tables say about an application hidden from a viewer (045)'
 		expect(await idsAs(viewer, 'note')).not.toContain(note);
 		expect(await idsAs(viewer, 'signoff')).not.toContain(signoff);
 		expect(await idsAs(viewer, 'yield_result')).not.toContain(yieldOnScenario);
-		expect((await editor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(200);
+		await actForAuthority(owner, projectId, editor.id);
+		expect((await editor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		expect(await idsAs(viewer, 'note')).toContain(note);
 		expect(await idsAs(viewer, 'signoff')).toContain(signoff);
 		expect(await idsAs(viewer, 'yield_result')).toEqual(expect.arrayContaining([yieldOnScenario, yieldOnRun]));

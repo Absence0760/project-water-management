@@ -7,7 +7,7 @@
 // control: the same person, signed in with a code, gets through.
 import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { anon, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { SESSION_COOKIE } from './session.js';
 import { base32Decode, totp } from './totp.js';
 
@@ -59,6 +59,8 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
 	}
 	ownProjectId = (await enrolledOwner.call('POST', '/projects', { name: 'Step-up enrolled' })).body.project.id;
+	// Recording a decision and endorsing a baseline also need the authority mark (163): the positive control's owner has it.
+	await actForAuthority(enrolledOwner, ownProjectId, enrolledOwner.id);
 	teamId = (await owner.call('POST', '/teams', { name: 'Step-up team' })).body.team.id;
 	linkId = (await owner.call('POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 })).body.link.id;
 	// A run to sign on the enrolled owner's project, with the unenrolled editor a member of it.
@@ -160,7 +162,8 @@ describe('the editor actions that publish, decide or sign need two-step sign-in'
 		['PATCH', `/projects/${pid}/publication/${id}`, { note: 'x' }],
 		['POST', `/projects/${pid}/outlooks/${id}/publish`, { levelId: '0' }],
 		['DELETE', `/projects/${pid}/outlook-publication`, undefined],
-		['POST', `/projects/${pid}/scenarios/${id}/decide`, { outcome: 'refused' }],
+		['POST', `/projects/${pid}/scenarios/${id}/decide`, { ...DECISION, outcome: 'licence_refused' }],
+		['POST', `/projects/${pid}/publication/${id}/endorse`, {}],
 		['POST', `/projects/${pid}/packs/${id}/issue`, {}],
 		['POST', `/projects/${pid}/packs/${id}/withdraw`, { reason: 'x' }],
 		// Signing a run or a pack: any editor may sign, so every signer needs it (operator decision, 2026-10-01).

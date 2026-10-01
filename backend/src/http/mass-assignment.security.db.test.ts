@@ -353,7 +353,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/scenarios/:sid/submit': () => scenario([]),
 	'POST /projects/:id/scenarios/:sid/withdraw': () => scenario(['submit']),
 	'POST /projects/:id/scenarios/:sid/reopen': () => scenario(['submit', 'withdraw']),
-	'POST /projects/:id/scenarios/:sid/decide': async () => ({ ...(await scenario(['submit'])), body: { outcome: 'approved' } }),
+	// The owner acts for the responsible authority (163), as the decision needs.
+	'POST /projects/:id/scenarios/:sid/decide': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
+	},
 	// An applicant shares their own application with someone of their party (049).
 	'POST /projects/:id/scenarios/:sid/members': async () => {
 		const app = await ok(ctx.contributor.call('POST', `${at()}/scenarios`, { name: `Mass application ${crypto.randomUUID()}`, baseRunId: ctx.runId, ops: [] }));
@@ -381,6 +385,12 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		params: { pubId: (await ok(ctx.owner.call('GET', `${at()}/publication`))).current.id },
 		body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } }
 	}),
+	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (163).
+	'POST /projects/:id/publication/:pubId/endorse': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		const pub = await ok(ctx.owner.call('POST', `${at()}/publication`, { runId: ctx.runId }));
+		return { params: { pubId: pub.publication.id }, body: { note: 'Accepted' } };
+	},
 	// The owner can't demote themselves as the last owner; change the viewer instead.
 	'PATCH /projects/:id/members/:userId': () => ({ params: { userId: ctx.viewer.id }, body: { role: 'editor' } })
 };

@@ -58,6 +58,20 @@ export interface PublicationMeta {
 	publishedBy: string | null;
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
+	/**
+	 * The responsible authority's endorsement of this baseline (163), set
+	 * once by a member acting for it; null = not endorsed. Viewers and above
+	 * only (absent for a farmer).
+	 */
+	endorsement?: PublicationEndorsement | null;
+}
+
+/** Who endorsed a published baseline for the responsible authority, and when (163_licensing_authority). */
+export interface PublicationEndorsement {
+	endorsedAt: string;
+	/** Display name; null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
 }
 
 export interface Publication extends Omit<PublicationMeta, 'restriction'> {
@@ -143,15 +157,22 @@ interface PublicationRow {
 	superseded_at: Date | null;
 	updated_at: Date | null;
 	updated_by_name: string | null;
+	endorsed_at: Date | null;
+	endorsed_by_name: string | null;
+	endorsement_note: string;
 }
 
 const SELECT_PUBLICATION = `
 	SELECT p.id, p.run_id, p.published_at, pu.display_name AS published_by_name, p.note, p.restriction_level,
 		p.restriction_pct, p.notice, p.next_expected_on, p.catchment_view, p.superseded_at,
-		p.updated_at, uu.display_name AS updated_by_name
+		p.updated_at, uu.display_name AS updated_by_name, p.endorsed_at, eu.display_name AS endorsed_by_name, p.endorsement_note
 	FROM run_publication p
 	LEFT JOIN app_user pu ON pu.id = p.published_by
-	LEFT JOIN app_user uu ON uu.id = p.updated_by`;
+	LEFT JOIN app_user uu ON uu.id = p.updated_by
+	LEFT JOIN app_user eu ON eu.id = p.endorsed_by`;
+
+const endorsementOf = (r: PublicationRow): PublicationEndorsement | null =>
+	r.endorsed_at ? { endorsedAt: r.endorsed_at.toISOString(), endorsedBy: r.endorsed_by_name, note: r.endorsement_note } : null;
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -172,25 +193,27 @@ function toPublication(r: PublicationRow, withNote: boolean): Publication {
 		nextExpectedOn: r.next_expected_on,
 		catchmentView: withNote ? r.catchment_view : staffOnlyRemoved(r.catchment_view),
 		supersededAt: iso(r.superseded_at),
+		...(withNote ? { endorsement: endorsementOf(r) } : {}),
 		updatedAt: iso(r.updated_at),
 		updatedBy: r.updated_by_name
 	};
 }
 
-const toMeta = (r: PublicationRow): PublicationMeta => ({
+const toMeta = (r: PublicationRow, withNote: boolean): PublicationMeta => ({
 	id: r.id,
 	runId: r.run_id,
 	publishedAt: r.published_at.toISOString(),
 	publishedBy: r.published_by_name,
 	restriction: { level: r.restriction_level },
-	supersededAt: iso(r.superseded_at)
+	supersededAt: iso(r.superseded_at),
+	...(withNote ? { endorsement: endorsementOf(r) } : {})
 });
 
 /** The current publication and the history (newest first, the current one included). */
 export async function listPublications(db: Db, projectId: string, withNote: boolean): Promise<{ current: Publication | null; history: PublicationMeta[] }> {
 	const { rows } = await db.query<PublicationRow>(`${SELECT_PUBLICATION} WHERE p.project_id = $1 ORDER BY p.published_at DESC, p.id DESC`, [projectId]);
 	const cur = rows.find((r) => r.superseded_at === null);
-	return { current: cur ? toPublication(cur, withNote) : null, history: rows.map(toMeta) };
+	return { current: cur ? toPublication(cur, withNote) : null, history: rows.map((r) => toMeta(r, withNote)) };
 }
 
 async function getPublication(db: Db, id: string): Promise<Publication> {
@@ -390,4 +413,41 @@ export async function patchPublication(db: Db, projectId: string, pubId: string,
 	const fields = (['note', 'restriction', 'nextExpectedOn'] as const).filter((k) => body[k] !== undefined);
 	await recordAudit(db, projectId, 'publication.notice_changed', noticeChangedSubject(publication, fields));
 	return publication;
+}
+
+/** POST …/publication/:pubId/endorse: the endorser's note (≤ 2000 characters, '' = none). */
+export const EndorseBody = z
+	.object({
+		note: z
+			.string()
+			.trim()
+			.max(2000)
+			.refine((t) => !t.includes('\u0000'), 'text cannot contain NUL characters')
+			.default('')
+	})
+	.strict();
+
+/**
+ * Endorse a published baseline for the responsible authority (163_licensing_authority;
+ * s41(2): the authority decides what evidence it accepts). Once per
+ * publication, current or superseded (an application may rest on either);
+ * the caller's right (editor, marked as acting for the authority) is checked
+ * by the route and again by run_publication_endorse.
+ */
+export async function endorsePublication(db: Db, projectId: string, pubId: string, note: string): Promise<PublicationMeta> {
+	const { rows } = await db.query<{ endorsed: boolean }>('SELECT endorsed_at IS NOT NULL AS endorsed FROM run_publication WHERE project_id = $1 AND id = $2 FOR UPDATE', [
+		projectId,
+		pubId
+	]);
+	if (!rows[0]) throw new ApiError(404, 'not found');
+	if (rows[0].endorsed) throw new ApiError(409, 'this baseline is already endorsed; an endorsement is recorded once');
+	const { rowCount } = await db.query(
+		'UPDATE run_publication SET endorsed_at = now(), endorsement_note = $3 WHERE project_id = $1 AND id = $2 AND endorsed_at IS NULL',
+		[projectId, pubId, note]
+	);
+	if (!rowCount) throw new ApiError(409, 'this baseline is already endorsed; an endorsement is recorded once');
+	const { rows: after } = await db.query<PublicationRow>(`${SELECT_PUBLICATION} WHERE p.id = $1`, [pubId]);
+	const meta = toMeta(after[0]!, true);
+	await recordAudit(db, projectId, 'publication.endorsed', { publicationId: pubId, runId: meta.runId, note });
+	return meta;
 }

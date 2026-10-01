@@ -210,6 +210,38 @@ Tracked in issue #103.
   changed" list is rewritten with each new version. Only the app is gated;
   the API doesn't refuse other calls from such an account.
 
+### Licensing positions (pre-counsel, 2026-10-01)
+
+Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
+nothing here is approved by counsel), built so the app can ship before the
+client and counsel confirm them (issue #90; counsel review #92). Each is a
+row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
+
+- [ ] **D1, who hosts the baseline / who decides.** *Position:* the
+  National Water Act fixes who decides a licence (the responsible
+  authority: DWS, or a CMA the power is assigned or delegated to; s1, s40(1),
+  s41, s42) and whose evidence it accepts (s41(2)), not who hosts the model.
+  *Built (163_licensing_authority):* each project names its responsible
+  authority; only members the owner marks as acting for it record its
+  decision or endorse a published baseline; packs print whom they are for
+  and whether the baseline was endorsed; a database conflict guard keeps
+  editors out of applying parties, so a consultancy host can't also act for
+  applicants. *For counsel:* whether a WUA or consultancy host changes the
+  POPIA responsible party and the PAIA regime (a CMA, and probably a WUA,
+  is a public body), and whether a marked member's endorsement can stand for
+  the authority's acceptance of evidence under s41(2).
+- [ ] **D14, the outcome words.** *Position:* "approved with conditions"
+  has no meaning of its own (every licence carries conditions, s28(1)(d)),
+  and no app user decides. *Built (163):* the outcomes are *Licence issued
+  (see its conditions)*, *Licence refused*, *Application rejected (formal
+  requirements)* and *Not considered: use already authorised*; the action is
+  **Record the authority's decision**, with the authority's name, the
+  decision letter's date, its reference and whether written reasons were
+  received; the app says appeals run from the decision letter and computes
+  no deadline. Older decisions were mapped. *For counsel and the pilot
+  authority:* the exact labels (its house style), and whether the R267
+  "rejection" stages need their own record.
+
 ## Change log
 
 - 2026-09-27: first drafts; linked from the landing footer, under every

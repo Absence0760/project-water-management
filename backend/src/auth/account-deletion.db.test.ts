@@ -11,7 +11,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runEnsemble } from '@water-management/engine';
 import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -152,11 +152,12 @@ describe('deleting an assessor’s account', () => {
 		] as const) {
 			expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
 		}
+		await actForAuthority(owner, projectId, assessor.id);
 		const made = await applicant.call('POST', `/projects/${projectId}/scenarios`, { name: 'Raise the weir', baseRunId: runId, ops: [] });
 		expect(made.status, JSON.stringify(made.body)).toBe(201);
 		sid = made.body.scenario.id;
 		expect((await applicant.call('POST', `/projects/${projectId}/scenarios/${sid}/submit`)).status).toBe(200);
-		const decided = await assessor.call('POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'refused', note: 'Too little left in dry years.' });
+		const decided = await assessor.call('POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused', note: 'Too little left in dry years.' });
 		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
 	});
 
@@ -170,7 +171,7 @@ describe('deleting an assessor’s account', () => {
 		}
 		// …and so is clearing it together with anything else.
 		await expect(
-			withUser(applicant.id, (db) => db.query(`UPDATE scenario SET decided_by = NULL, outcome = 'approved', decision_note = '' WHERE id = $1`, [sid]))
+			withUser(applicant.id, (db) => db.query(`UPDATE scenario SET decided_by = NULL, outcome = 'licence_issued', decision_note = '' WHERE id = $1`, [sid]))
 		).rejects.toMatchObject({ code: '23514' });
 		expect(await decision()).toEqual(before);
 	});
@@ -181,7 +182,7 @@ describe('deleting an assessor’s account', () => {
 		expect(await decision()).toEqual({ ...before, decided_by: null });
 		const read = await owner.call('GET', `/projects/${projectId}/scenarios/${sid}`);
 		expect(read.status).toBe(200);
-		expect(read.body.scenario).toMatchObject({ status: 'decided', outcome: 'refused', decisionNote: 'Too little left in dry years.' });
+		expect(read.body.scenario).toMatchObject({ status: 'decided', outcome: 'licence_refused', decisionNote: 'Too little left in dry years.' });
 		expect(JSON.stringify(await events())).not.toContain('Dassessor');
 	});
 });

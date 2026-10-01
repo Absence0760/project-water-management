@@ -46,6 +46,7 @@ import { type Db, withUser } from '../db/tx.js';
 import { revisionsBetween } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { projectAuthority } from '../projects/authoritySettings.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
@@ -202,6 +203,18 @@ async function loadEnsembles(
 	return { baseline, paired };
 }
 
+/** The newest endorsement of any publication of the baseline run by the responsible authority (163; evidence-13), or null. */
+async function loadEndorsement(db: Db, projectId: string, runId: string): Promise<EvidenceInput['baselineEndorsement']> {
+	const { rows } = await db.query<{ endorsedAt: Date; endorsedBy: string | null; note: string }>(
+		`SELECT p.endorsed_at AS "endorsedAt", u.display_name AS "endorsedBy", p.endorsement_note AS note
+		 FROM run_publication p LEFT JOIN app_user u ON u.id = p.endorsed_by
+		 WHERE p.project_id = $1 AND p.run_id = $2 AND p.endorsed_at IS NOT NULL
+		 ORDER BY p.endorsed_at DESC, p.id DESC LIMIT 1`,
+		[projectId, runId]
+	);
+	return rows[0] ? { endorsedAt: iso(rows[0].endorsedAt)!, endorsedBy: rows[0].endorsedBy, note: rows[0].note } : null;
+}
+
 async function loadPublications(db: Db, projectId: string, baseline: RunRow): Promise<Pick<EvidenceInput, 'publication' | 'history'>> {
 	const { rows } = await db.query<{ runId: string; publishedAt: Date; publishedBy: string | null; current: boolean; runCreatedAt: Date }>(
 		`SELECT p.run_id AS "runId", p.published_at AS "publishedAt", u.display_name AS "publishedBy", p.superseded_at IS NULL AS current,
@@ -235,7 +248,7 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 
 /**
  * § 4's cumulative table: every other scenario on the baseline that is
- * submitted, or decided with approval, with its newest run of its current
+ * submitted, or decided with a licence issued, with its newest run of its current
  * ops (the ops' hash the run recorded equals the scenario's) on this
  * baseline. Under the reader's RLS: the scenario and run policies decide
  * which applications appear (a submitted application to the project's
@@ -268,7 +281,7 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 		 JOIN model_run r ON r.scenario_id = s.id AND r.project_id = s.project_id
 		 WHERE s.project_id = $1
 			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
-			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
 			AND r.inputs->'scenario'->>'baseRunId' = $2
 			AND r.inputs->'scenario'->>'opsSha256' = s.ops_sha256
 		 ORDER BY s.id, r.created_at DESC, r.id) newest
@@ -300,8 +313,8 @@ interface OwnApplication {
 
 /**
  * Page 1's combined row (evidence-11, finding C26, WP-3.11): every other
- * application the reader can see that is submitted, or decided with
- * approval, and based on this baseline, put together with this one.
+ * application the reader can see that is submitted, or decided with a licence
+ * issued, and based on this baseline, put together with this one.
  *
  * The figure is read from a completed cumulative assessment of exactly these
  * applications with these ops on this baseline (assessments/, which ran the
@@ -340,7 +353,7 @@ async function loadCombined(
 		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, s.ops_sha256 AS "opsSha256"
 		 FROM scenario s
 		 WHERE s.project_id = $1 AND s.base_run_id = $2 AND ($3::uuid IS NULL OR s.id <> $3::uuid)
-			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
 		 ORDER BY s.name, s.id
 		 LIMIT $4`,
 		[projectId, baselineRunId, own?.id ?? null, APPLICATION_RUNS_MAX + 1]
@@ -562,6 +575,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		application,
 		nominations,
 		...(await loadPublications(db, projectId, baseRow)),
+		authority: await projectAuthority(db, projectId),
+		baselineEndorsement: await loadEndorsement(db, projectId, baseline.id),
 		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null, application?.scenario.ownedNodeIds ?? []),
 		changes,
 		applicationRuns,
