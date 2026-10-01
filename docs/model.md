@@ -153,9 +153,48 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
    The crop factors multiply **A-pan** evaporation (`grossCropMm` in
    `packages/engine/src/demand.ts`), not FAO reference evapotranspiration ET₀.
-   ET₀ is about 0.7–0.85 × pan, so an FAO-56 Kc entered as it is overstates
-   demand by roughly a quarter. The Crops tab says so and points out any factor
-   above 1.0 (a hint, not an error).
+   The Crops tab says so and points out any factor above 1.0 (a hint, not an
+   error).
+
+   **How far an FAO-56 Kc set overstates demand (issue #289).** An FAO-56 Kc
+   is set against ET₀, and ET₀ = Kp × A-pan, so a Kc entered as it is
+   overstates demand by 1/Kp − 1 from the missing pan coefficient alone.
+   [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm) gives a Class
+   A pan Kp of **0.35–0.85**. Across 0.60–0.85, the plausibility band the
+   pan coefficient warns outside (§2.4a), that is about **18–67 %**: 18 % at
+   0.85, 25 % at 0.80, 33 % at 0.75, 43 % at 0.70, 67 % at 0.60. The
+   table's lowest cells (strong or very strong wind, a dry fallow fetch, low
+   humidity) go down to 0.35, which would give up to about 186 %. The
+   "~25–40 %" issue #54 item 1 first gave covers only Kp 0.71–0.80.
+
+   The node-based workbook's set as a whole differs by more than the missing
+   Kp, because its curves are also taller than the A-pan tables'. Weighted by
+   the workbook's own monthly A-pan row (Σ A-pan × factor over the year, the
+   workbook's set ÷ the matching crop in the reference library, item 8),
+   annual crop use comes out about **45–76 % higher** for citrus, deciduous
+   fruit and pasture: citrus +75 % (Table 4.13 citrus), pasture +46 % (mixed
+   pasture), apples and pears +47 % (late deciduous cultivars), nectarines
+   and peaches +64 % and +76 % (medium and early cultivars). Pecan comes out
+   about **+5 %**: its Table 4.10 curve (summer rainfall) is high all year.
+   The workbook is client data and isn't in the repo; the figures come from
+   it (issue #289) and aren't reproducible from a fresh clone. Three caveats
+   go with them:
+
+   - The ARC/SABI tables are design values of the late 1980s (the
+     winter-rainfall tables are dated June 1990) for clean-cultivated
+     orchards. Newer WRC orchard water-use studies give a higher Kc under a
+     cover crop (about 0.2–0.25 higher, issue #54), which narrows the gap for
+     the tree crops.
+   - The workbook's row labelled "WR90 A-pan evaporation" may really be
+     S-pan, or otherwise scaled (§2.4a, *Check the A-pan row*). A Symons
+     S-pan reads lower than an A-pan beside it, so if it is, the A-pan tables
+     belong on a higher row than the one both sets were weighted by, and the
+     workbook's Kc × row sits nearer Kc × ET₀ than the percentages suggest.
+     That would partly offset the excess.
+   - The figures are for that one workbook's row and crops. For a real
+     choice, the Load crop factors dialog (item 8) shows the demand
+     difference on the catchment's own row and areas before anything is
+     applied.
 
    **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
    demand]` table has rows pasted from another crop and one-month slips (issue
@@ -354,9 +393,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
-     optional Kp (default 1). A-pan tables and b023 factors already multiply
-     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀) needs
-     about 0.75 (issue #54).
+     optional Kp, defaulted by the source's shape (issue #289). A-pan tables
+     and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
+     an FAO-56 Kc set (against ET₀; a node-based workbook's
+     [Crop_Factors], the dialog's third source) defaults to 0.75, a mid value of FAO-56
+     Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
+     and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values
      from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
      WRC orchard studies should be checked. The engine's maths is unchanged
@@ -8342,6 +8384,14 @@ table is already general enough to hold such nodes.
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
   whole system, per water-year month.
+- **Crop sheets:** `[Crop_Factors]` (A-pan evaporation, rainfall and
+  effective-rainfall rows, then a crop per row with twelve factors, Oct..Sep,
+  and an irrigation efficiency) and `[Crop_Areas]` (a farm per row, a crop
+  per column, m²). The factors are FAO-56 Kc values (against ET₀) that the
+  workbook applies to A-pan with no pan coefficient (§2.3). The browser
+  reads these two sheets (`frontend/src/lib/spreadsheet/import/nodeCrops.ts`,
+  issue #289) and marks the set FAO-shaped, so a Kp of about 0.75 applies
+  before the factors stand as A-pan factors.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
@@ -8649,7 +8699,7 @@ step when a definition changes.
 | **Hydrological unit** | The name users see (issue #54 item 2a; client question Q6, issue #90) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The workspace, the farmer view, the farmer emails and the shared view all say it; the code, API, CSV exports and this document say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the S-pan evaporation (convert it before entering it as A-pan, §2.4a), MAP and naturalised flow data per quaternary catchment. |
-| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
+| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (about 0.6–0.85 × pan; 0.35–0.85 in FAO-56 Table 5). |
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (a project setting). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |

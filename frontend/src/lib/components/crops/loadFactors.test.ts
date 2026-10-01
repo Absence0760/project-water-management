@@ -1,7 +1,7 @@
 import type { CropDef, NetworkNode, ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { CROP_LIBRARY } from './library';
-import { applyChanges, cropChanges, demandDifference, matchByName, nameTokens, pctChange, withKp } from './loadFactors';
+import { applyChanges, b023CropWarnings, cropChanges, defaultKp, demandDifference, isKp, kpForShape, matchByName, nameTokens, nodeWarningText, pctChange, shapeOf, SOURCE_KINDS, withKp } from './loadFactors';
 
 describe('matchByName', () => {
 	const lib = CROP_LIBRARY.map((c) => ({ id: c.id, name: c.name }));
@@ -33,6 +33,72 @@ describe('withKp', () => {
 		expect(withKp([1.1, 0.4, 0], 0.75)).toEqual([0.825, 0.3, 0]);
 		expect(withKp([0.1, 0.2], 3)).toEqual([0.3, 0.6]);
 		expect(withKp([0.55], 1)).toEqual([0.55]);
+	});
+});
+
+describe('the pan coefficient default by source shape', () => {
+	it('is 1 for A-pan factors and 0.75 (mid FAO-56 Table 5, 0.35–0.85) for FAO-56 Kc against ET₀', () => {
+		expect(defaultKp('a-pan')).toBe(1);
+		expect(defaultKp('fao-et0')).toBe(0.75);
+		const k = defaultKp('fao-et0');
+		expect(k).toBeGreaterThanOrEqual(0.35);
+		expect(k).toBeLessThanOrEqual(0.85);
+	});
+
+	it('gives the library and a b023 workbook, both A-pan tables, the A-pan shape, and the node-based set FAO-56 Kc; every kind has one', () => {
+		expect(shapeOf('library')).toBe('a-pan');
+		expect(shapeOf('b023')).toBe('a-pan');
+		expect(shapeOf('node')).toBe('fao-et0');
+		expect(defaultKp(shapeOf('node'))).toBe(0.75);
+		expect(new Set(SOURCE_KINDS.map((k) => k.id)).size).toBe(SOURCE_KINDS.length);
+		for (const k of SOURCE_KINDS) expect(['a-pan', 'fao-et0']).toContain(k.shape);
+	});
+
+	it("re-applies the new shape's default while Kp is still the previous default", () => {
+		expect(kpForShape(1, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(0.75, 0.75, 'a-pan')).toBe(1);
+		expect(kpForShape(1, 1, 'a-pan')).toBe(1);
+	});
+
+	it('keeps a Kp the modeller typed, and never clobbers it on a change of source', () => {
+		expect(kpForShape(0.6, 1, 'fao-et0')).toBe(0.6);
+		expect(kpForShape(0.6, 0.75, 'a-pan')).toBe(0.6);
+		// Their own value that happens to be the new default stays too.
+		expect(kpForShape(0.75, 1, 'fao-et0')).toBe(0.75);
+	});
+
+	it('isKp compares within float dust; a blank Kp is no value', () => {
+		expect(isKp(0.75, 0.75)).toBe(true);
+		expect(isKp(0.1 + 0.2, 0.3)).toBe(true);
+		expect(isKp(0.8, 0.75)).toBe(false);
+		expect(isKp(null, 1)).toBe(false);
+	});
+
+	it('treats a blank or invalid Kp as unset: it takes the default', () => {
+		expect(kpForShape(null, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(0, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(-1, 0.75, 'a-pan')).toBe(1);
+	});
+});
+
+describe('the workbook warnings the dialog lists', () => {
+	it("keeps a b023 import's crop-table notes only, without the WARNING: prefix", () => {
+		const notes = [
+			{ code: 'crop-factors-copied', message: "WARNING: [Crop demand] crop Pasture F: its 12 factors are the same as Pasture C's" },
+			{ code: 'non-numeric-value', message: 'WARNING: [Dams] something else' },
+			{ code: 'crop-factors-suspect', message: 'WARNING: [Crop demand] crop Fodder E: Dec factor is 0' },
+			{ code: 'missing-crop', message: '[Farm demand] crop Hops X is not in [Crop demand]; ignored' }
+		];
+		expect(b023CropWarnings(notes)).toEqual(["[Crop demand] crop Pasture F: its 12 factors are the same as Pasture C's", '[Crop demand] crop Fodder E: Dec factor is 0']);
+		expect(b023CropWarnings([])).toEqual([]);
+	});
+
+	it('adds the cell to a node-based warning that names one', () => {
+		expect(nodeWarningText({ message: 'Olives Nov factor is not a number (n/a); read as 0.', sheet: 'Crop_Factors', cell: 'C9' })).toBe(
+			'Olives Nov factor is not a number (n/a); read as 0. ([Crop_Factors] C9)'
+		);
+		expect(nodeWarningText({ message: 'The workbook has no [Crop_Areas] sheet.', sheet: 'Crop_Areas' })).toBe('The workbook has no [Crop_Areas] sheet.');
+		expect(nodeWarningText({ message: 'x', cell: 'B2' })).toBe('x (B2)');
 	});
 });
 
