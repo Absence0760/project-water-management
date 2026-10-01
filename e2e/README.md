@@ -188,7 +188,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 
 | Path | What |
 | --- | --- |
-| `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`) |
+| `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`). The backend keeps an idle connection 65 s, not Node's 5 s (`backend/src/http/keepAlive.ts`), so a spec's `page.request` reusing one after a long step isn't reset with `ECONNRESET` |
 | `support/env.ts` | The checkout's slot, and from it the ports and database URLs (dev-only docker credentials); `env.test.ts` tests the slot (`pnpm test`) |
 | `support/build-site.ts` | Builds the site under test with the checkout's API URL baked in (`pnpm -C e2e build:site`) |
 | `support/shards.ts`, `shard-list.ts`, `shard-timings.ts`, `../shard-timings.json` | CI's time-balanced shards: the packing (tested by `shards.test.ts`), one shard's `--test-list`, the report job's check and timings, and `pnpm gen:e2e:timings` (§ CI) |
