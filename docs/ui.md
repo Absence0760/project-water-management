@@ -6703,8 +6703,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
-  `e2e/tests/evidence-allocations.spec.ts`, and for § 6 with objects
-  `e2e/tests/evidence-demand-objects.spec.ts`.
+  `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
+  `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
+  together, assessed, `e2e/tests/evidence-combined.spec.ts` (the
+  conflicting pair is in `evidence-report.spec.ts`).
 
 ### Evidence pack
 
