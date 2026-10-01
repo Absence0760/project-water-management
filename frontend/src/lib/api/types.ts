@@ -2390,5 +2390,41 @@ export interface QuaternaryLayer {
 	quaternaries: { code: string; dataset: string; synthetic: boolean; geometry: MapGeometry }[];
 	/** More met the bbox than one answer carries (the first by code are given). */
 	truncated: boolean;
+}
+
+/** A gauging station proposed as the observed-flow source (GET …/map/stations, issue #326 B-gauge). Never applied by the server. */
+export interface GaugeStationProposal {
+	/** The DWS station code, e.g. A2H012 (Z… in the synthetic dataset). */
+	code: string;
+	name: string;
+	river: string;
+	lon: number;
+	lat: number;
+	catchmentKm2: number | null;
+	/** YYYY-MM-DD; recordEnd null = still open (or not given). */
+	recordStart: string | null;
+	recordEnd: string | null;
+	/** Years the record spans, to one decimal; null without a start date. */
+	recordYears: number | null;
+	/** Great-circle distance from the point, km. */
+	distanceKm: number;
+	dataset: string;
+	/** The repo's invented dataset: never a real station. */
+	synthetic: boolean;
+	source: string;
+}
+
+/** Where the point came from: given, the map gauge linked to the outflow gauge node, or the boundary's centre. */
+export type GaugeStationPointFrom = 'query' | 'outlet_gauge' | 'boundary_centre';
+
+export interface GaugeStationLookup {
+	/** Null when no point was given and the map has neither an outlet gauge nor a boundary. */
+	point: MapPosition | null;
+	pointFrom: GaugeStationPointFrom | null;
+	/** The outlet gauge's or the boundary's name on the map (null for a given point). */
+	pointName: string | null;
+	withinKm: number;
+	/** River gauges within withinKm, nearest first, at most 10. */
+	stations: GaugeStationProposal[];
 	datasets: { dataset: string; count: number }[];
 }

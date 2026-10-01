@@ -13,6 +13,8 @@ import { API_URL, OWNER_E2E_URL } from './env.ts';
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Advisory lock key for loading the dataset (distinct from the examples' seed). */
 const QUATERNARY_LOCK = 288_288;
+/** And for the gauging stations (issue #326 B-gauge). */
+const STATIONS_LOCK = 326_153;
 
 /** A box `d` degrees on a side, south-west corner at (x, y). Around (21.35, -33.65) it lies in the synthetic quaternary Z01B. */
 export const box = (x: number, y: number, d: number): [number, number][] => [
@@ -48,6 +50,17 @@ export const projectedGeoJson = () =>
 export async function loadSyntheticQuaternaries(): Promise<void> {
 	await withSetupLock(QUATERNARY_LOCK, async () => {
 		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-quaternaries.ts'], {
+			cwd: backendDir,
+			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
+			stdio: 'pipe'
+		});
+	});
+}
+
+/** Load the committed synthetic gauging stations into the e2e database (`pnpm import:gauge-stations`; replacing them; idempotent). */
+export async function loadSyntheticStations(): Promise<void> {
+	await withSetupLock(STATIONS_LOCK, async () => {
+		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-gauge-stations.ts'], {
 			cwd: backendDir,
 			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
 			stdio: 'pipe'

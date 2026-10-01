@@ -23,6 +23,7 @@ import { feedFromBoundaryRoutes } from './feeds/fromBoundary.js';
 import { feedRoutes } from './feeds/routes.js';
 import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { quaternaryLayerRoutes } from './geo/quaternaryLayer.js';
+import { stationRoutes } from './geo/stationRoutes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
@@ -169,6 +170,7 @@ export function createApp() {
 	projects.route('/', feedFromBoundaryRoutes);
 	projects.route('/', mapRoutes);
 	projects.route('/', quaternaryLayerRoutes);
+	projects.route('/', stationRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);

@@ -141,7 +141,8 @@ import type {
 	MapImportReviewed,
 	MapLinkedNodes,
 	QuaternaryLookup,
-	QuaternaryLayer
+	QuaternaryLayer,
+	GaugeStationLookup
 } from './types';
 
 export class ApiError extends Error {
@@ -904,7 +905,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),
 			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
 			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
-				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`)
+				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
+			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
+			}
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

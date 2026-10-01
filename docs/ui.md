@@ -4189,7 +4189,18 @@ part of the Settings tab's chunk; WP-2.10,
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
+  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
+  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
+  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
+  of the catchment's outlet, nearest first: a sentence names the point used
+  (the outflow gauge's point on the map, else the boundary's centre, else it
+  asks for either on the Map tab), then a table of station (code, name and
+  source), river, distance, record (years and span) and **Use** (named "Use
+  Z1H001"). **Use** fills the station field and moves focus there; the row
+  then reads "In the field". Nothing is attached until **Attach feed**. A
+  synthetic list is badged **Sample stations**; no list loaded, or none in
+  range, says so and points back to typing the code. The area is
   **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the

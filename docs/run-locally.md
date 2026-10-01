@@ -375,6 +375,7 @@ pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
 pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
 pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
 pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
@@ -391,7 +392,12 @@ neither: it draws the synthetic outlines and lists their codes beside the map.
 
 The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
-proposal; anywhere else says no quaternary contains the point.
+proposal; anywhere else says no quaternary contains the point. The
+synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
+round the Sandspruit example's outlet, so its Settings → Data feeds →
+**Attach a feed** → DWS lists them nearest first; a real station list loads
+the same way once its licence allows ([maps.md § Gauging-station
+dataset](./maps.md#gauging-station-dataset)).
 
 To see a map without uploading anything, open the **Sandspruit** example
 (`pnpm seed:examples`; analyst@ owns it, demo@ views it; a database seeded before the map existed keeps its map-less examples until `pnpm dev:db:reset` and a re-seed) and its **Map** tab: an

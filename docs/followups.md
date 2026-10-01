@@ -3461,6 +3461,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
       WR2012 values are loaded only from the operator's own registered
       download, never committed or shipped.
+- [ ] **Decision: the DWS station catalogue's licence** (operator; maps.md
+      § Sources, issue #326 B-gauge, decision D-B). The Verified data pages
+      answer 403 outside South Africa, and DWS's information pages restrict
+      use to "academic, research or personal purposes". Ask DWS Hydrological
+      Services in writing whether station metadata may be reused in a
+      commercial service; until then the nearest-gauge proposal reads only
+      the synthetic list. On a yes: record it in the sources table, load the
+      catalogue with `pnpm import:gauge-stations`, and add it to the
+      production loading path above (same gap as the quaternaries).
 - [ ] **Contributor-owned features** (WP-3.3 × WP-3.12): `map_feature.scenario_id`
       so an applicant places their own scenario's features, with the RLS
       the WP describes. Today only editors write; farmers and applicants
