@@ -200,14 +200,28 @@ export interface OutlookSettings {
 	review?: { month: number; day: number } | null;
 }
 
+/**
+ * settings.responsibleAuthority (161_licensing_authority, backend
+ * projects/authoritySettings.ts): who decides the project's licence
+ * applications, DWS or a CMA with the power. null = none named. Not a model input.
+ */
+export interface ResponsibleAuthority {
+	name: string;
+	kind: 'dws' | 'cma';
+	/** '' = not given. */
+	office: string;
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
+	/** The caller acts for the responsible authority (161): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	actsForAuthority?: boolean;
 }
 
 /** What a series merge or replace answers: the series, and when the automatic re-run it queued is due (null: none queued). */
@@ -286,6 +300,8 @@ export interface Member {
 	role: Role;
 	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
 	party: string | null;
+	/** The owner marked them as acting for the responsible authority (161). Absent from an older API. */
+	actsForAuthority?: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -982,6 +998,11 @@ export interface Scenario {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
+	/** The authority's decision as recorded (161): its name, the date on its letter, its reference, and whether written reasons came. null/'' until decided; the date and the reasons flag are null on a decision recorded before 161. */
+	decisionAuthority?: string | null;
+	decisionDate?: string | null;
+	decisionReference?: string;
+	reasonsReceived?: boolean | null;
 	/** Who else reads an application: the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -992,13 +1013,39 @@ export interface Scenario {
 }
 
 export type ScenarioOrigin = 'team' | 'applicant';
-/** An assessor's decision on an application (backend scenarios/schema.ts SCENARIO_OUTCOMES; the words pending the licensing authority). */
-export type ScenarioOutcome = 'approved' | 'approved_with_conditions' | 'refused';
-export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['approved', 'approved_with_conditions', 'refused'];
+/**
+ * The responsible authority's decision on an application, in the National
+ * Water Act's and GN R267's words (backend scenarios/schema.ts
+ * SCENARIO_OUTCOMES, 161_licensing_authority; provisional position,
+ * pre-counsel research, 2026-10-01).
+ */
+export type ScenarioOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered';
+export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered'];
 export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
-	approved: 'Approved',
-	approved_with_conditions: 'Approved with conditions',
-	refused: 'Refused'
+	licence_issued: 'Licence issued (see its conditions)',
+	licence_refused: 'Licence refused',
+	application_rejected: 'Application rejected (formal requirements)',
+	not_considered: 'Not considered: use already authorised'
+};
+/** POST …/decide: "Record the authority's decision" (161). */
+export interface DecideRequest {
+	outcome: ScenarioOutcome;
+	/** The authority's name; omitted, the project's settings.responsibleAuthority. */
+	authority?: string;
+	/** The date on its decision letter, YYYY-MM-DD. */
+	decisionDate: string;
+	/** Its licence or file reference ('' = none). */
+	reference?: string;
+	reasonsReceived: boolean;
+	note?: string;
+}
+
+/** The outcome's basis in the Act or the regulations, printed beside the choice. */
+export const OUTCOME_BASIS: Record<ScenarioOutcome, string> = {
+	licence_issued: 'NWA s27, s28(1)(d): every licence carries conditions',
+	licence_refused: 'NWA s42',
+	application_rejected: 'GN R267 regs 9(1)(b), 11(2), 12(2)(b)',
+	not_considered: 'NWA s40(4)'
 };
 
 /**
@@ -1170,6 +1217,16 @@ export interface PublicationMeta {
 	publishedBy: string | null;
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
+	/** The responsible authority's endorsement of this baseline (161): null = not endorsed. Viewers and above only (absent for a farmer, or from an older API). */
+	endorsement?: PublicationEndorsement | null;
+}
+
+/** Who endorsed a published baseline for the responsible authority, and when (161; POST …/publication/:pubId/endorse). */
+export interface PublicationEndorsement {
+	endorsedAt: string;
+	/** null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
 }
 
 /** The current publication (GET …/publication, POST, PATCH). */

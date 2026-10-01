@@ -18,7 +18,7 @@ import {
 	type ModelInput
 } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -229,7 +229,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -278,6 +278,7 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 	beforeAll(async () => {
 		assessor = await signUp('EvAssessor');
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+		await actForAuthority(owner, projectId, assessor.id);
 		// An application's base must be published; the contributor applies for the farm they are linked to.
 		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun })).status).toBe(201);
 		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${contributor.id}`, { nodeIds: [farmId] })).status).toBe(200);
@@ -286,13 +287,13 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		teamSubmitted = await scenarioRunOf(owner, 'Second dam', 250_000, true);
 		await submit(owner, teamSubmitted.sid);
 		teamDraft = await scenarioRunOf(owner, 'Draft idea', 300_000, true);
-		// Decided: an approval is still proposed use on this baseline (listed), a refusal isn't (never listed).
+		// Decided: an issued licence is still proposed use on this baseline (listed), a refusal isn't (never listed).
 		approved = await scenarioRunOf(owner, 'Approved weir', 120_000, true);
 		await submit(owner, approved.sid);
-		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${approved.sid}/decide`, { outcome: 'approved_with_conditions' })).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${approved.sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		refused = await scenarioRunOf(owner, 'Refused weir', 130_000, true);
 		await submit(owner, refused.sid);
-		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${refused.sid}/decide`, { outcome: 'refused' })).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${refused.sid}/decide`, { ...DECISION, outcome: 'licence_refused' })).status).toBe(200);
 		// A second run of the submitted team scenario: its newest is the one read.
 		const again = await owner.call('POST', `/projects/${projectId}/scenarios/${teamSubmitted.sid}/runs`, {});
 		expect(again.status, JSON.stringify(again.body)).toBe(201);
@@ -311,7 +312,7 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect(c.applications.map((x) => x.scenarioName)).toEqual(['Applicant dam', 'Approved weir', 'Second dam']);
 		expect(c.applications.map((x) => [x.status, x.outcome])).toEqual([
 			['submitted', null],
-			['decided', 'approved_with_conditions'],
+			['decided', 'licence_issued'],
 			['submitted', null]
 		]);
 		expect(c.applications.every((x) => x.comparable)).toBe(true);
@@ -429,7 +430,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([

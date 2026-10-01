@@ -255,3 +255,16 @@ export async function plantCompleteOutlook(
 		return rows[0]!.id;
 	});
 }
+
+/**
+ * Mark a member as acting for the project's responsible authority (161_licensing_authority):
+ * the owner's PATCH, as the members page sends it. Only a marked editor or owner
+ * records a decision (POST …/decide) or endorses a baseline.
+ */
+export async function actForAuthority(owner: { call: Call }, projectId: string, userId: string): Promise<void> {
+	const res = await owner.call('PATCH', `/projects/${projectId}/members/${userId}`, { actsForAuthority: true });
+	if (res.status !== 200) throw new Error(`marking ${userId} as acting for the authority failed: ${res.status} ${JSON.stringify(res.body)}`);
+}
+
+/** The authority's part of a decision body (POST …/decide), beside `outcome` and `note`. */
+export const DECISION = { authority: 'Test catchment management agency', decisionDate: '2026-09-30', reference: 'WU-TEST-1', reasonsReceived: true } as const;

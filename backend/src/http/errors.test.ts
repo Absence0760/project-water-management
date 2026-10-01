@@ -38,6 +38,24 @@ describe('handleError', () => {
 	});
 });
 
+describe('handleError: the conflict guard (161_licensing_authority)', () => {
+	it('answers its check_violation as 409 role_conflict with fixed words, never the database’s text', async () => {
+		const pg = Object.assign(new Error('someone who edits a project … farmer@example.com'), { code: '23514', constraint: 'role_conflict' });
+		const res = await appThrowing(pg).request('/');
+		expect(res.status).toBe(409);
+		const body = (await res.json()) as { code?: string; error: string };
+		expect(body.code).toBe('role_conflict');
+		expect(body.error).toMatch(/applying party/);
+		expect(JSON.stringify(body)).not.toContain('farmer@example.com');
+	});
+
+	it('leaves every other check_violation the generic 409 with no code', async () => {
+		const res = await appThrowing(Object.assign(new Error('x'), { code: '23514', constraint: 'scenario_outcome_check' })).request('/');
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({ error: 'violates a data rule' });
+	});
+});
+
 describe('handleError: an unhandled error (issue #126)', () => {
 	afterEach(() => vi.restoreAllMocks());
 

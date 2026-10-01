@@ -43,6 +43,7 @@ import {
 	evidenceReport,
 	firstSiteBelow,
 	NO_BAND,
+	NOT_ENDORSED,
 	NOT_ASSESSED_NO_SITE_BELOW,
 	worksNodeIds
 } from './report';
@@ -329,7 +330,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -666,6 +667,38 @@ describe('absence is printed, never omitted (rule 3, G6, G16)', () => {
 	});
 });
 
+describe('the responsible authority (evidence-12, 161_licensing_authority)', () => {
+	const authority = { name: 'Breede-Olifants CMA', kind: 'cma' as const, office: 'Worcester' };
+	const endorsement = { endorsedAt: '2026-09-02T09:00:00.000Z', endorsedBy: 'CMA assessor', note: 'Accepted as the 2026 baseline.' };
+
+	it('names the authority in the identity block and prints its endorsement of the baseline', () => {
+		const r = evidenceReport(input({ authority, baselineEndorsement: endorsement }));
+		expect(r.identity.authority).toEqual(authority);
+		expect(r.identity.baseline.endorsement).toEqual(endorsement);
+		expect(r.flags.map((f) => f.id)).not.toContain('notEndorsed');
+	});
+
+	it('flags a baseline the authority hasn’t endorsed, and says no authority when the project names none', () => {
+		const r = evidenceReport(input());
+		expect(r.identity.authority).toBeNull();
+		expect(r.identity.baseline.endorsement).toBeNull();
+		const flag = r.flags.find((f) => f.id === 'notEndorsed');
+		expect(flag).toMatchObject({ level: 'caution', text: NOT_ENDORSED });
+		expect(NOT_ENDORSED).toBe('Baseline not endorsed by the responsible authority.');
+		// The baseline-only report carries it too.
+		expect(evidenceReport(input({ application: null })).flags.map((f) => f.id)).toContain('notEndorsed');
+	});
+
+	it('copies the inputs, so the document never shares an object with them', () => {
+		const i = input({ authority: { ...authority }, baselineEndorsement: { ...endorsement } });
+		const r = evidenceReport(i);
+		i.authority!.name = 'changed';
+		i.baselineEndorsement!.note = 'changed';
+		expect(r.identity.authority!.name).toBe(authority.name);
+		expect(r.identity.baseline.endorsement!.note).toBe(endorsement.note);
+	});
+});
+
 describe('the Reserve site strip: the REC (ER9) and months below the table (G16)', () => {
 	const withTable = (i: EvidenceInput, over: Record<string, unknown>): EvidenceInput => {
 		const settings = { ...i.baseline.inputs.settings, ewrRules: [{ ...reserveTable(), ...over }] as never };
@@ -887,7 +920,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-11');
+		expect(got.version).toBe('evidence-12');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1242,7 +1275,7 @@ describe('§ 4 other applications on the baseline, each one’s own run (evidenc
 	const days = (o: ModelOutput) => o.summary.catchment.ewrDaysNotMet;
 
 	it('lists each other application’s own change against the baseline, and sums them (not a combined run)', () => {
-		const second = other({ scenarioId: 'scn-3', scenarioName: 'Approved weir', status: 'decided', outcome: 'approved', runId: 'run-3', runCreatedAt: '2026-09-05T00:00:00.000Z' });
+		const second = other({ scenarioId: 'scn-3', scenarioName: 'Approved weir', status: 'decided', outcome: 'licence_issued', runId: 'run-3', runCreatedAt: '2026-09-05T00:00:00.000Z' });
 		const r = evidenceReport(input({ otherApplications: [second, other()] }));
 		const c = r.cumulative;
 		// Oldest run first.
@@ -1395,7 +1428,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1451,7 +1484,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

@@ -45,6 +45,7 @@
 		data,
 		runs,
 		canEdit,
+		actsForAuthority = false,
 		applicant = false,
 		onchange,
 		ondeleted,
@@ -55,6 +56,8 @@
 		runs: RunMeta[];
 		/** An editor or owner of the project. */
 		canEdit: boolean;
+		/** The caller acts for the responsible authority (161): with canEdit, they record its decision. */
+		actsForAuthority?: boolean;
 		/** The caller is an applicant (the contributor role): the applicant projection of the base, no comparison. */
 		applicant?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
@@ -470,7 +473,7 @@
 	{/key}
 
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && actsForAuthority && !isOwner} {canEdit} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 
 	{#if editable && !isApplication && !overriding}

@@ -76,6 +76,7 @@ import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
 import { OutcomesPatch } from './outcomeSettings.js';
 import { OutlookPatch } from './outlookSettings.js';
+import { ResponsibleAuthorityPatch } from './authoritySettings.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -1004,7 +1005,9 @@ export const SettingsPatch = z
 		// How the outcome matrix reads a sweep (outcomeSettings.ts, issue #53 R4): either field. Not a model input.
 		outcomes: OutcomesPatch,
 		// How a seasonal outlook is set up (outlookSettings.ts, issue #53 R5): either field. Not a model input.
-		outlook: OutlookPatch
+		outlook: OutlookPatch,
+		// Who decides the project's applications (authoritySettings.ts, 161): the whole authority, or null. Not a model input.
+		responsibleAuthority: ResponsibleAuthorityPatch
 	})
 	.partial()
 	.refine((s) => JSON.stringify(s).length <= 64_000, 'settings too large');

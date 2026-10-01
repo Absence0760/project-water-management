@@ -831,7 +831,7 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} actsForAuthority={project?.actsForAuthority ?? false} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>

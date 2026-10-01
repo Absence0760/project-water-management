@@ -289,6 +289,14 @@ the frontend catalogue (same contract: add, never rename):
   erratum found since the draft was made applies to its runs' engines (or
   their fits') and its manifest doesn't record it; the message names the
   errata and says to draft the pack again ([§ Evidence packs](#evidence-packs)).
+- `role_conflict` (`409` from a member's role or party change, a team
+  member's role change, moving a project into a team, sharing an
+  application): the change would make someone who edits the project (an
+  editor or owner, directly or through its team) also part of an applying
+  party there: in a party, owning an application, or shared one
+  (`161_licensing_authority`'s conflict guard; provisional position,
+  pre-counsel research, 2026-10-01). Take them out of the party, or keep
+  them below editor.
 
 | Code | Status | When |
 | --- | --- | --- |

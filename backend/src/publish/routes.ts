@@ -10,7 +10,8 @@ import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
-import { listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
+import { requireActsForAuthority } from '../projects/authoritySettings.js';
+import { EndorseBody, endorsePublication, listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
 import { runPublication } from './runPublication.js';
 
 export const publicationRoutes = new Hono<AuthEnv>()
@@ -61,5 +62,18 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		}).then(async ({ publication, alertJob }) => {
 			if (alertJob?.created) await wakeWorker(alertJob.id);
 			return c.json({ publication });
+		});
+	})
+	// The responsible authority endorses a published baseline (161_licensing_authority):
+	// an editor the owner marks as acting for it, once per publication.
+	.post('/:id/publication/:pubId/endorse', async (c) => {
+		const body = EndorseBody.parse(await readJson(c, { optional: true }));
+		const { id, pubId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			await requireStepUp(db);
+			await requireActsForAuthority(db, id);
+			if (!UUID.test(pubId)) throw new ApiError(404, 'not found');
+			return c.json({ publication: await endorsePublication(db, id, pubId, body.note) });
 		});
 	});

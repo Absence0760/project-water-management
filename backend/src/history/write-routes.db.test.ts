@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -223,6 +223,15 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } })
 	},
 	{
+		route: `POST ${P}/publication/:pubId/endorse`,
+		records: ['publication.endorsed', 'member.authority'],
+		call: async (c) => {
+			// Marking the owner as acting for the authority is its own recorded change (member.authority, 161).
+			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
+		}
+	},
+	{
 		route: `POST ${P}/share-links`,
 		records: ['share_link.created'],
 		call: async (c) => {
@@ -417,7 +426,8 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { outcome: 'approved' });
+			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
 	},
 	{

@@ -44,7 +44,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { minioUp, S3_ENDPOINT } from '../__tests__/minio.js';
 import { withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -255,7 +255,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-11');
+		expect(manifest.report.version).toBe('evidence-12');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -534,6 +534,33 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((detail.manifest as PackManifest).report.verification.errata.map((e) => e.id)).not.toContain('ER-991');
 		expect(detail.manifestMatches).toBe(true);
 		// v2 (below) is drafted with ER-991 on the list, so records it: its verify lists it once, as recorded.
+	});
+
+	it('keeps an issued pack’s manifest and hash when the authority is named and endorses the baseline afterwards (161, evidence-12)', async () => {
+		const frozen = async () => (await asOwner('SELECT manifest, manifest_sha256, report_version FROM evidence_pack WHERE id = $1', [v1.id]))[0]!;
+		const before = await frozen();
+		expect(before.manifest_sha256).toBe(v1.manifestSha256);
+		expect(before.manifest.report.identity.authority).toBeNull();
+		expect(before.manifest.report.flags.map((f: { id: string }) => f.id)).toContain('notEndorsed');
+		// Name the authority, publish the baseline and endorse it, as a member acting for the authority.
+		const authority = { name: 'Pk catchment management agency', kind: 'cma', office: 'Worcester' };
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { responsibleAuthority: authority } })).status).toBe(200);
+		const pub = await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun });
+		expect(pub.status, JSON.stringify(pub.body)).toBe(201);
+		await actForAuthority(owner, projectId, owner.id);
+		const endorsed = await owner.call('POST', `/projects/${projectId}/publication/${pub.body.publication.id}/endorse`, { note: 'Accepted.' });
+		expect(endorsed.status, JSON.stringify(endorsed.body)).toBe(200);
+		// Positive control: the live report now names both, and drops the flag.
+		const live = (await viewer.call('GET', `${runPath(baseRun)}/evidence-report`)).body.report;
+		expect(live.identity.authority).toEqual(authority);
+		expect(live.identity.baseline.endorsement).toMatchObject({ endorsedBy: 'PkOwner', note: 'Accepted.' });
+		expect(live.flags.map((f: { id: string }) => f.id)).not.toContain('notEndorsed');
+		// The issued pack is as it was issued: its stored manifest, its hash, and what verify and the pack view say.
+		expect(await frozen()).toEqual(before);
+		const detail = (await viewer.call('GET', packPath(v1.id))).body;
+		expect(detail.manifestMatches).toBe(true);
+		expect((detail.manifest as PackManifest).report.identity.authority).toBeNull();
+		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.manifestSha256).toBe(v1.manifestSha256);
 	});
 
 	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {

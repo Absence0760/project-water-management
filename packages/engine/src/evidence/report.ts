@@ -424,8 +424,10 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 				createdBy: b.createdBy,
 				nomination: isCurrent ? { nominatedAt: last!.nominatedAt, nominatedBy: last!.nominatedBy, reason: last!.reason } : null,
 				published: !pub ? 'none' : pub.runId === b.id ? 'this' : 'other',
-				publishedAt: pub?.publishedAt ?? null
+				publishedAt: pub?.publishedAt ?? null,
+				endorsement: input.baselineEndorsement ? { ...input.baselineEndorsement } : null
 			},
+			authority: input.authority ? { ...input.authority } : null,
 			application: a
 				? {
 						runId: a.id,
@@ -1632,6 +1634,9 @@ function demandSourceFlag(d: EvidenceDemandObjects | null): string | null {
 // Flags and questions
 // ---------------------------------------------------------------------------
 
+/** Page 1's flag when the responsible authority hasn't endorsed the baseline (evidence-12). */
+export const NOT_ENDORSED = 'Baseline not endorsed by the responsible authority.';
+
 function evidenceFlags(
 	input: EvidenceInput,
 	ctx: {
@@ -1722,6 +1727,8 @@ function evidenceFlags(
 	const wa = b.summary.warnings.length;
 	const wb = a?.summary.warnings.length ?? 0;
 	add('warnings', 'count', a ? `${wa} warning${wa === 1 ? '' : 's'} on the baseline and ${wb} on the application, verbatim in Appendix A.5.` : `${wa} run warning${wa === 1 ? '' : 's'}, verbatim in Appendix A.5.`);
+	// evidence-12: the authority decides what evidence it accepts (NWA s41(2)); say when it hasn't endorsed the baseline.
+	if (!input.baselineEndorsement) add('notEndorsed', 'caution', NOT_ENDORSED, 'The responsible authority has not said it accepts this baseline as the basis for assessing applications.');
 	const order = { red: 0, caution: 1, count: 2 } as const;
 	return out.map((f, i) => ({ f, i })).sort((x, y) => order[x.f.level] - order[y.f.level] || x.i - y.i).map((x) => x.f);
 }
