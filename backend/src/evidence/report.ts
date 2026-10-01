@@ -18,6 +18,8 @@ import {
 	summarisePaired,
 	type EnsembleHeader,
 	type EnsembleSummary,
+	type CumulativeReport,
+	type EvidenceCombinedInput,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
 	type EvidenceInput,
@@ -27,10 +29,13 @@ import {
 	type PairedMember,
 	type ResolvedEnsembleOptions,
 	type RunInputsSnapshot,
-	type RunSummary
+	type RunSummary,
+	type ScenarioOp
 } from '@water-management/engine';
 import { Hono } from 'hono';
 import { runAllocationComparison } from '../allocations/runUse.js';
+import { checkCombination } from '../assessments/store.js';
+import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { differingKinds, storedValues } from '../compare/routes.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -39,6 +44,7 @@ import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
+import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
 import { listNominations } from '../runs/evidence.js';
 
 /** Most other application runs the ledger lists (newest first). */
@@ -276,6 +282,93 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 	return { otherApplications, otherApplicationsTruncated: truncated };
 }
 
+/** This report's own application, as the combination takes it: the ops its run recorded. */
+interface OwnApplication {
+	id: string;
+	name: string;
+	origin: ScenarioOrigin;
+	/** The scenario's status now; null once it is deleted. */
+	status: string | null;
+	ops: ScenarioOp[];
+	opsSha256: string;
+	ownedNodeIds: string[];
+}
+
+/**
+ * Page 1's combined row (evidence-11, finding C26, WP-3.11): every other
+ * application the reader can see that is submitted, or decided with
+ * approval, and based on this baseline, put together with this one.
+ *
+ * The figure is read from a completed cumulative assessment of exactly these
+ * applications with these ops on this baseline (assessments/, which ran the
+ * baseline, each alone and all together on one engine), not run here: a
+ * combination is up to ASSESSMENT_SCENARIOS_MAX + 2 model runs, which a
+ * report request (a viewer's GET, a pack draft) must not carry. With no such
+ * assessment the combination is still checked here (checkCombination, pure,
+ * no model run), so a conflict is named whether or not anyone asked for an
+ * assessment; a matching complete assessment already passed that check on
+ * the same base and ops. Under the reader's RLS: an assessment is an
+ * editor's, so a viewer's report finds none.
+ */
+async function loadCombined(db: Db, projectId: string, baselineRunId: string, own: OwnApplication | null): Promise<EvidenceCombinedInput> {
+	const none: EvidenceCombinedInput = { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false };
+	const { rows: others } = await db.query<{ scenarioId: string; scenarioName: string; status: 'submitted' | 'decided'; outcome: string | null; opsSha256: string }>(
+		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, s.ops_sha256 AS "opsSha256"
+		 FROM scenario s
+		 WHERE s.project_id = $1 AND s.base_run_id = $2 AND ($3::uuid IS NULL OR s.id <> $3::uuid)
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+		 ORDER BY s.name, s.id
+		 LIMIT $4`,
+		[projectId, baselineRunId, own?.id ?? null, APPLICATION_RUNS_MAX + 1]
+	);
+	const listed = others.slice(0, APPLICATION_RUNS_MAX).map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome }));
+	const total = others.length + (own ? 1 : 0);
+	if (total < 2) return { ...none, others: listed };
+	if (others.length > APPLICATION_RUNS_MAX)
+		return { ...none, others: listed, unavailable: `more than ${APPLICATION_RUNS_MAX} other applications are based on this baseline; an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
+	if (own && own.origin === 'applicant' && own.status !== 'submitted' && own.status !== 'decided')
+		return { ...none, others: listed, unavailable: 'this application isn’t submitted, and an application is assessed with the others once it is.' };
+	if (total > ASSESSMENT_SCENARIOS_MAX)
+		return { ...none, others: listed, unavailable: `${total} applications are based on this baseline, and an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
+
+	const members = [...(own ? [`${own.id}:${own.opsSha256}`] : []), ...others.map((o) => `${o.scenarioId}:${o.opsSha256}`)];
+	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: CumulativeReport | null }>(
+		`SELECT a.id, a.name, a.created_at AS "createdAt", u.display_name AS "createdBy", a.engine_version AS "engineVersion", a.status, a.report
+		 FROM assessment a LEFT JOIN app_user u ON u.id = a.created_by
+		 WHERE a.project_id = $1 AND a.base_run_id = $2 AND a.status IN ('complete', 'pending')
+			AND (SELECT count(*) FROM assessment_member m WHERE m.assessment_id = a.id) = $4
+			AND NOT EXISTS (SELECT 1 FROM assessment_member m WHERE m.assessment_id = a.id
+				AND (m.scenario_id IS NULL OR NOT (m.scenario_id::text || ':' || m.ops_sha256) = ANY($3::text[])))
+		 ORDER BY a.status = 'complete' DESC, a.created_at DESC, a.id DESC
+		 LIMIT 1`,
+		[projectId, baselineRunId, members, members.length]
+	);
+	const hit = found[0];
+	if (hit?.status === 'complete' && hit.report)
+		return {
+			...none,
+			others: listed,
+			assessment: { id: hit.id, name: hit.name, createdAt: iso(hit.createdAt)!, createdBy: hit.createdBy, engineVersion: hit.engineVersion, report: hit.report }
+		};
+
+	// No assessment of exactly these: check that they combine at all, so a conflict is named now.
+	const { rows: full } = await db.query<{ id: string; name: string; origin: ScenarioOrigin; ops: ScenarioOp[]; ownedNodeIds: string[] }>(
+		`SELECT s.id, s.name, s.origin, s.ops, s.owned_node_ids::text[] AS "ownedNodeIds" FROM scenario s WHERE s.project_id = $1 AND s.id = ANY($2::uuid[])`,
+		[projectId, others.map((o) => o.scenarioId)]
+	);
+	const byId = new Map(full.map((r) => [r.id, r]));
+	const scenarios = [...(own ? [own] : []), ...others.map((o) => byId.get(o.scenarioId)).filter((x): x is NonNullable<typeof x> => !!x)];
+	let base: Awaited<ReturnType<typeof loadBaseInput>>;
+	try {
+		base = await loadBaseInput(db, projectId, baselineRunId);
+	} catch (err) {
+		if (err instanceof ApiError) return { ...none, others: listed, unavailable: `the baseline can’t be rebuilt to put them together (${err.message}).` };
+		throw err;
+	}
+	const check = checkCombination(base, scenarios);
+	return { ...none, others: listed, conflicts: check.conflicts.map((c) => c.message), problems: check.problems, pending: hit?.status === 'pending' };
+}
+
 /**
  * Page 1's licence impact inputs (issue #53 R7, evidence-5): the project's
  * outcome settings (no run records them, so the report, and a pack's
@@ -317,6 +410,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	let application: EvidenceInput['application'] = null;
 	let changes: EvidenceInput['changes'] = [];
 	let applicationRuns: EvidenceInput['applicationRuns'] = [];
+	let ownOrigin: ScenarioOrigin | null = null;
 	if (recorded) {
 		const { rows: sc } = await db.query<{
 			name: string;
@@ -325,14 +419,16 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 			mitigation: string;
 			monitoring: string;
 			status: string;
+			origin: ScenarioOrigin;
 			ownerName: string | null;
 		}>(
-			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, u.display_name AS "ownerName"
+			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName"
 			 FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id
 			 WHERE s.project_id = $1 AND s.id = $2`,
 			[projectId, recorded.id]
 		);
 		const meta = sc[0];
+		ownOrigin = meta?.origin ?? null;
 		application = {
 			...(await withAllocations(db, runInput(named))),
 			scenario: {
@@ -368,6 +464,22 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	}
 
 	const others = await loadOtherApplications(db, projectId, baseline.id, recorded?.id ?? null);
+	const combined = await loadCombined(
+		db,
+		projectId,
+		baseline.id,
+		recorded && application
+			? {
+					id: recorded.id,
+					name: application.scenario.name,
+					origin: ownOrigin ?? 'applicant',
+					status: application.scenario.status,
+					ops: recorded.ops,
+					opsSha256: recorded.opsSha256,
+					ownedNodeIds: recorded.ownedNodeIds
+				}
+			: null
+	);
 
 	const nominations = (await listNominations(db, projectId)).map((n) => ({
 		withdrawn: n.withdrawn,
@@ -389,6 +501,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		changes,
 		applicationRuns,
 		...others,
+		combined,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version },
 		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null
 	};

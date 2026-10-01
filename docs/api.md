@@ -2249,7 +2249,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-10`: the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-11`: page 1's row over the other applications reads one combined run from a cumulative assessment, `cumulative.combined` (below; absent from a pack's report drafted before `evidence-11`, whose row is the sum) (`evidence-11`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2268,8 +2268,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
-- **Other applications on the baseline** (`cumulative`, § 4 and page 1's
-  *Other applications on this baseline, summed*): every other scenario that is
+- **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
   submitted, or decided `approved` / `approved_with_conditions`, with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
   scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
@@ -2278,7 +2277,25 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   outlet's Reserve `overall` leave the database, not the runs. The engine
   lists each one's own change against the baseline and sums those of the same
   engine, period and runoff model (any other difference is the application's own ops): a sum of separate runs, not one combined
-  run (WP-3.11).
+  run. A document since `evidence-11` doesn't print that sum.
+- **All of them together** (`cumulative.combined`, `evidence-11`, page 1's
+  *This and the other applications on this baseline, together*, row id
+  `otherApplications`): `{ applications: { scenarioId, scenarioName, status,
+  outcome, isThis, ewrDays, reserveMonths }[], assessment: { id, name,
+  createdAt, createdBy, engineVersion } | null, conflicts, problems, ewrDays,
+  reserveMonths, warnings, notAssessed }`, each measure `{ baseline,
+  combined, change, sumOfSingles, interaction }` at the outlet. The
+  applications are this one and every other the reader sees that is
+  submitted or decided with approval and based on this baseline (no run
+  needed); the figures come from the newest complete assessment (editors
+  only, RLS) of exactly those scenarios with their current ops
+  (`assessment_member.ops_sha256`; this application's by the ops its run
+  recorded) on this baseline. Without one the backend checks the
+  combination (`checkCombination`, no model run): conflicts and ops that
+  don't apply together make it *Not assessed*, naming each; else it says an
+  assessment is under way, or that none exists. More than 8, or this
+  application not submitted, is *Not assessed* too
+  ([evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
 - **Always answers.** A run that isn't evidence still gets `200` with
   `refused: true` and the failed checks (`checks[]`: nominated, legacy,
   forecast, base, engine, period, runoff model refuse; baseline assumptions,

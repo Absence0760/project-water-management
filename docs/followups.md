@@ -3924,17 +3924,29 @@ the assessors' **Assess together** view
 ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
 Left:
 
-- [ ] **The evidence report's cumulative row reads a combined run.** C26
-      (`packages/engine/src/evidence/report.ts` `cumulativeOf`, § 4 and
-      page 1's *Other applications on this baseline, summed*) still adds up
-      other applications' separate runs and says so. The durable fix: the
-      report's backend (`backend/src/evidence/report.ts`) combines this
-      application with every other submitted or approved one on the baseline
-      (`combineScenarios`), runs it, and the row shows the combined change
-      and the interaction; a conflict makes the row *Not assessed* with the
-      conflicts named, never a silent merge. It changes the report's
-      content, so `REPORT_VERSION` and the evidence pack's manifest move with
-      it. Trigger: now (WP-3.11 landed); needs the report version decision.
+- [x] **The evidence report's cumulative row reads a combined run.** C26.
+      Built (report format `evidence-11`): page 1's row, now *This and the
+      other applications on this baseline, together*, and § 4's combined
+      table read a completed assessment of exactly this application and
+      every other submitted or approved one on the baseline with their
+      current ops (the combined change and the interaction at the outlet);
+      without one the backend checks the combination itself
+      (`checkCombination`, no model run), so a conflict makes the row *Not
+      assessed* with the conflicts named, never a silent merge. Chosen over
+      running the combination in the report request, which is up to 8 + 2
+      model runs per GET, pack draft and issue check. A pack drafted before
+      it keeps its frozen sum ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
+- [ ] **The reproduction bundle carries the combined row's runs.** An
+      `evidence-11` pack's combined row cites an assessment, whose runs (the
+      baseline, each alone, all together, on the assessment's engine) the
+      bundle doesn't hold, so `reproduce:pack` re-runs the baseline and the
+      application but not that row. Durable fix: the bundle adds the
+      assessment's members (ops and hashes, as `scenario.json` does for the
+      application) and its stored report, and `reproduce:pack` re-runs the
+      combination with `combineScenarios` and compares the outlet rows.
+      Trigger: the first issued pack whose combined row is assessed, or an
+      assessor asking to reproduce it.
 - [ ] **Yield and reliability per dam, together.** The report covers the EWR
       sites, the Reserve, the outlet and existing users' supply; a firm
       yield of each dam on the combined input (WP-3.6) is not in it. Durable
