@@ -2583,7 +2583,7 @@ counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
 Hydrological units and Data show their names. Settings & calibration, Runs
 & results and River & reserve don't, and space their links evenly: with the
-names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
+names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
 Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
@@ -2989,15 +2989,25 @@ section header, which it fills (`fillHeader`) like the other sections.
   at the top.
 - **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
-  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-evidence`, `#set-auto`, then after the
-  form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
-  listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
-  named for screen readers only, its links evenly spaced (the names on the
-  bar would push links into More at 1280 px, issue #162): **Model inputs**
-  (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
-  results, issue #173), **How results are read** (Outcome matrix, Seasonal
-  outlook, Evidence: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`,
+  `#set-restrict`, `#set-period`, `#set-quality`, `#set-outcomes`,
+  `#set-outlook`, `#set-evidence`, then one **Automation & access** link to
+  `#set-auto`; listed by `settings/sections.ts`, `settingsNavGroups`), in
+  three groups named for screen readers only, its links evenly spaced (the
+  names on the bar would push links into More at 1280 px, issue #162):
+  **Model inputs** (Demand … Data quality: its zero-rain and low-vs-CHIRPS
+  limits change results, issue #173), **How results are read** (Outcome
+  matrix, Seasonal outlook, Evidence: they change no result) and
+  **Automation & access**. That last link stands for the four panels that
+  run or connect by themselves: Automatic runs (`#set-auto`, last in the
+  form), then after the form Data feeds (`#set-feeds`), API keys
+  (`#set-api-keys`, owners only) and Scheduled reports
+  (`#set-report-schedules`). They keep their own headings and ids, so a link
+  to any of them still lands, and the group's link is marked while any of
+  them is read; a Save blocker on any of them puts its dot on that link. One
+  link for four keeps the bar's sixteen links in two rows at 1280 px in CI's
+  fonts, which the drought restrictions link's nineteenth did not (2026-09-30,
+  `section-nav.spec.ts`). It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links
@@ -3568,6 +3578,9 @@ which checks every catchment tab).
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
+- **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
+  model's restriction rule, off by default; see
+  [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality** (`DataQualitySection.svelte`): three groups.
   *Gauge vs logger*: the lowest and highest ratio in %, shown to one
@@ -4029,7 +4042,9 @@ read it before.
   table that was in the run summary; the printable report still shows it
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
-  (`#res-assurance`) and, for a run that has any, **Other uses**
+  (`#res-assurance`), for a run with the drought restriction rule **Drought
+  restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
+  [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
   demand-object and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
@@ -5092,6 +5107,95 @@ re-summarised by hand, a viewer; then on a record up to the current
 season, the trigger table against the stored one, publishing 85 %, a
 linked farmer's *This season* card against the stored per-farm figures,
 axe on both, and withdrawing it).
+
+### Drought restrictions
+
+WP-3.8, engine ≥ 1.54.0 ([model.md §2.7i](./model.md)): the model's
+drought restriction rule, `settings.droughtRestriction`. English, like the
+workspace; nothing of it reaches the farm view or the share page (a shared
+scenario's change reads *A catchment setting changed: droughtRestriction*,
+as every setting does). A model rule, not the restriction notice farmers
+see (WP-2.3); every place it shows says so.
+
+- **Settings → Drought restrictions** (`#set-restrict`, in the model inputs,
+  after Reserve rules; `settings/DroughtRestrictionFields.svelte`, its own
+  chunk, helpers `settings/droughtRestriction.ts`). **Apply drought
+  restrictions in runs** switches it on from a template (reviews on 1 October
+  and 1 January, lifted 1 May, three levels below 60 / 40 / 25 % of
+  capacity cutting crops and irrigation 20 / 40 / 60 % and domestic and
+  municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, and
+  a line under the rule says so until the first edit). The hint is one line:
+  what it does, that it is a model rule, and that off, runs are as before.
+  **The rule** in words heads it. **Review dates** and **Lift dates**: a
+  month and a day each, **Add a … date** / **Remove**. One card per level
+  (mildest first; side by side where there is room, one under the other on
+  a phone, no sideways scroll): **Name**, **Starts below (% of capacity)**
+  and one **… cut (%)** per part of demand (crops, then each demand-object
+  category; blank = *Not cut*; domestic and municipal marked *floor kept*),
+  each input labelled "Level 2: cut on …, %". **Add a deeper level** (the
+  last level's cuts, half its threshold) / **Remove the deepest level**;
+  **Where the levels come from**. A rule the engine refuses (a date twice, a
+  shallower deeper level, a deeper level cutting less) shows its first
+  problem under the cards (a status, not an alert) and blocks Save (the
+  save bar links here); switching off saves null, and the rule switched off
+  comes back until saved. Field history under it. A viewer reads it,
+  disabled, and *Drought restrictions: off.* when there is none.
+  From engine 1.54.0: **Start from the published notice** (editors) reads
+  the project's current publication and, after asking when a rule is set,
+  fills the rule from its notice (one level below 100 % at the notice's %,
+  from the day it was published, in the project's time zone, to the next
+  expected one), or says why it
+  can't (nothing published, no % cut); **Storage the level reads** (*Every
+  farm dam (their total)*, the default; *Some dams (their total)* with a
+  checkbox per farm dam; *Each unit's own dam*, with a note that a unit
+  without one isn't restricted by storage); **Units it cuts** (*Every
+  hydrological unit*, or a checkbox per unit); and the **EWR trigger**
+  (*Also restrict when the EWR wasn't met the day before a review*, the
+  site: the outlet or a gauge that is an EWR site, and the level: at least
+  which). An id the
+  model hasn't got blocks Save with its name.
+- **Units & supply → Drought restrictions** (`#res-restrictions`, its own
+  panel and menu entry, before Other uses, for a run with the rule;
+  `runs/RestrictionTables.svelte`, its own chunk, view model
+  `runs/restrictions.ts`; also in the printable report beside the other
+  tables): the rule in words and how often it was decided, then the days
+  at each level per water year (with *Days restricted*, and a bold *Whole
+  run* row), then per hydrological unit, the most cut first, its demand,
+  demand after the restriction, cut (m³/day and % of demand) and supplied
+  as run means, the mean cut on the restricted days alone and its days
+  restricted (its own under *Each unit's own dam*); the rule line counts
+  the reviews after a day the EWR trigger's site failed. Both lists
+  fold after ten (*Show all N water years* / *hydrological units*). The
+  note says the cut shows as a shortfall.
+- **River & reserve → Seasonal outlook → Review triggers**: under the
+  trigger table, the table *As a drought restriction rule* in words
+  (`outlook/triggers.ts` `triggerRuleView`, the engine's
+  `restrictionRuleFromTriggers`; *Settings → Drought restrictions* a link
+  there) and what it couldn't carry; an editor's **Use as the drought
+  restriction rule** saves it to the settings with the reason "Drought
+  restrictions from the seasonal outlook's review triggers" and says runs
+  from now on follow it. When a different rule is set the button reads
+  **Replace the drought restriction rule with this** and asks first (both
+  rules in words); when the table's rule is the project's, the panel says
+  *This is the project's drought restriction rule* instead.
+- **Scenarios → Add a change → Change a setting → Drought restriction
+  rule**: the same editor (with its on/off switch), starting from the rule
+  the scenario meets; the op replaces the rule whole, or turns it off. The
+  op's line reads *Drought restriction rule: off → reviewed 5 Oct; Level 1
+  (below 70 %): crops 50 %*.
+
+Tests: `settings/droughtRestriction.test.ts`, `settings/DroughtRestrictionFields.test.ts`
+(the storage, units and trigger choices rendered), `runs/restrictions.test.ts`,
+`runs/RestrictionTables.test.ts` (the tables rendered, sorted and folded),
+`supply/supply.test.ts` (the menu), `outlook/triggers.test.ts`
+(`triggerRuleView`), `scenarios/ops.test.ts` and `fields.test.ts` (the
+op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
+blocked save, edits saved whole, a viewer, off saves null, axe and the
+cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
+(the scenario's "Change a setting", a rule from the published notice on
+each unit's own dam with an EWR trigger, the outlook's triggers replacing
+it after the question, a run's tables on Units & supply with axe and no
+sideways scroll).
 
 ## Compare runs (`?tab=compare`)
 
@@ -6311,8 +6415,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
   saying the pack never records them, or on a draft *Errata found since this
-  draft was made*, saying to draft the pack again (`packs/pack.ts`
-  `errataFoundSinceNote`). The report below, and so the PDF, prints only the
+  draft was made*, saying it can't be issued until the pack is drafted again
+  (`packs/pack.ts` `errataFoundSinceNote`); the draft's checklist then fails
+  its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
+  API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
@@ -6365,17 +6471,19 @@ Part of the workspace, so English, like the rest of the Applicant view
   withdraw their links too; making one needs it issued), **Verify page**,
   where it stands (`standingLine`: issued and standing; replaced, with
   **Open the version that replaced it**; withdrawn, with the reason), and a
-  note that this is their copy: their own units by name, every other only
-  by a number, as the rest of the application; the assessors' copy, its PDF
+  note that this is their copy: their own units by name, the others
+  downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
 - **Hydrological units**: *Yours* (share of demand supplied, baseline, with
   the application, the change in points and its likely range; a unit the
-  application adds says so) and *Everyone else* (a one-line count of who
-  gets less and who more, then "Farm n" / "Water user n" with the change in
-  whole points, and a line saying the numbers are the pack's own). When the
+  application adds says so) and *Everyone else downstream* (a one-line
+  count of who gets less and who more, then each farm or water user
+  downstream of the application under the name the results view and the
+  map give it, "Farm 3", with the change in whole points; when the run's
+  base is no longer published, a line says why none is shown). When the
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
@@ -6386,7 +6494,8 @@ Part of the workspace, so English, like the rest of the Applicant view
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
-  view, their farm named and the neighbour as "Farm 1", no download, the
+  view, their farm named and the neighbour beside it, not downstream, not
+  listed (as in the results view), no download, the
   errata found since issue, a share link opened signed out, axe, the phone
   layout).
 

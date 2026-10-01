@@ -20,15 +20,14 @@ const SETTINGS_LINKS = [
 	'Flow share',
 	'EWR',
 	'Reserve rules',
+	'Drought restrictions',
 	'Simulation period',
 	'Data quality',
 	'Outcome matrix',
 	'Seasonal outlook',
 	'Evidence',
-	'Automatic runs',
-	'Data feeds',
-	'API keys',
-	'Scheduled reports'
+	// Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
+	'Automation & access'
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
 
@@ -107,7 +106,7 @@ test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most t
 	}
 });
 
-/** Settings & calibration at 1024 px, where its eighteen links don't fit in two rows. */
+/** Settings & calibration at 1024 px, where its sixteen links don't fit in two rows. */
 async function narrowSettings(page: Page, name: string) {
 	const project = await createProject(page.request, name);
 	await page.setViewportSize({ width: 1024, height: 768 });
@@ -135,7 +134,7 @@ test('a narrower window moves the last links into More, which works from the key
 	await page.keyboard.press('Enter');
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
-	await expect(menu.getByRole('list', { name: 'Runs, feeds and reports' }).last().getByRole('link').last()).toHaveText('Scheduled reports');
+	await expect(menu.getByRole('list', { name: 'Automation & access' }).last().getByRole('link').last()).toHaveText('Automation & access');
 	await page.keyboard.press('Tab');
 	await expect(menu.getByRole('link', { name: SETTINGS_LINKS[onBar.length], exact: true })).toBeFocused();
 	await page.keyboard.press('Escape');
@@ -145,11 +144,13 @@ test('a narrower window moves the last links into More, which works from the key
 
 	// Following a link in More jumps to its section below the menu, closes it, and More then says it holds the section read.
 	await more.click();
-	await menu.getByRole('link', { name: 'Scheduled reports' }).click();
-	await expect(page).toHaveURL(/#set-report-schedules$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Scheduled reports' })).toBeInViewport();
+	await menu.getByRole('link', { name: 'Automation & access' }).click();
+	await expect(page).toHaveURL(/#set-auto$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
-	// Past the form too: the menu used to sit inside it and scrolled away at Data feeds.
+	// Past the form too (the menu used to sit inside it and scrolled away at Data feeds): the group's panels below it
+	// still count as the group's link being read.
+	await page.getByRole('heading', { level: 2, name: 'Scheduled reports' }).scrollIntoViewIfNeeded();
 	await expect(menu).toBeInViewport();
 	await expect(more).toHaveAccessibleName('More sections, including the one being read');
 

@@ -554,6 +554,21 @@ and the switch that lets statistics read filled days ([model.md §2.10i](./model
 Filled values are derived in each run and never written to `time_series`, so
 turning it off undoes it; the run's own columns carry the filled days.
 
+**The drought restriction rule lives in `project.settings`** too
+(`settings.droughtRestriction`, engine ≥ 1.54.0, WP-3.8; no table, column or
+migration): review and lift dates and up to six levels, each a storage
+threshold and a % cut per part of demand ([model.md §2.7i](./model.md)).
+One rule per project (the dams and units it reads are listed in it, not a
+column on the node), so no same-project trigger or RLS policy of its own: it is read and written with
+the project's settings, under the project's policies. A patch replaces it
+whole; `null` or absent is off. A model input: runs snapshot it with their
+settings, and the run comparison and the settings history show changes.
+WP-3.8's design sketched a nullable `node.restriction jsonb` column; the
+rule's node ids (`damNodeIds`, `nodeIds`, the EWR trigger's site, engine ≥
+1.54.0) live in the one rule instead, so a per-node rule needs no column:
+a project copy moves them to the copy's node ids (`remapSettingNodeIds`),
+and ids a model change removed are left out by the run with a warning.
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
@@ -1082,8 +1097,12 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`app_applicant_pack_units(report, own)`, IMMUTABLE, not `water_app`'s:
   the report's users, their own by name, `own` being
   `app_application_own_nodes`, 071, plus the nodes only in the application
-  run; every other unit in both runs as `{ kind, n, changePts }`, numbered
-  per kind by `md5` of its id, the change rounded to whole points; NULL
+  run; every other unit in both runs as `{ nodeId, kind, changePts }`, the
+  change rounded to whole points, **for the server only** (135_pack_security;
+  `app_applicant_pack` also returns the pack's application run for the
+  server only): the route keeps
+  those downstream of the application in its run's stored model and names
+  them as the results view does, then drops the id; NULL
   when the report changed a baseline assumption). Nothing else of the
   manifest ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - **Cites both runs**: `model_run_cited` (latest body here) has a clause for
@@ -1152,9 +1171,9 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   Indexes on `user_id`, `project_id`, the open rows and `settled_at`.
   Purged **30 days** after it is settled (`app_purge_pack_notices`, from
   the tick).
-- RLS: SELECT your own rows (`pack_notice_own`). No write policy: every
-  write goes through the `SECURITY DEFINER` functions below (the table
-  grant mirrors `alert_delivery`'s).
+- RLS: SELECT your own rows (`pack_notice_own`). `water_app` holds
+  `SELECT` only (135_pack_security revoked 133's write grants) and there is no write policy: every write goes through the
+  `SECURITY DEFINER` functions below (`catalogue.db.test.ts` `READ_ONLY`).
 - **`app_pack_notice_queue(pack, event)`**: an editor of the pack's project
   only (`42501`), and only for a pack in that state (`23514`; an unknown
   event `22023`). Inserts a row for each person of
