@@ -116,8 +116,8 @@ export interface KeyItem {
 /**
  * The map's key, grouped as the Network's is (#326 E7): Areas, Lines,
  * Points. Colours come from `overlayColours(dark)` so the key can't drift
- * from the map; the point colours follow CatchmentMap's markers (gauge in
- * the water colour, dam in the parcel colour, other in the other colour).
+ * from the map; the point colours follow CatchmentMap's markers (gauges and dams
+ * are water, told apart by shape; other in the other colour).
  */
 export function keyGroups(c: { boundary: string; parcel: string; water: string; other: string }): { label: string; items: KeyItem[] }[] {
 	return [
@@ -135,7 +135,7 @@ export function keyGroups(c: { boundary: string; parcel: string; water: string; 
 			label: 'Points',
 			items: [
 				{ label: 'gauge', swatch: 'gauge', colour: c.water },
-				{ label: 'dam', swatch: 'dam', colour: c.parcel },
+				{ label: 'dam', swatch: 'dam', colour: c.water },
 				{ label: 'other', swatch: 'other', colour: c.other }
 			]
 		}

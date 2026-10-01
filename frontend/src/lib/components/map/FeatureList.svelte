@@ -45,8 +45,9 @@
 			if (!row || el.scrollHeight <= el.clientHeight) return;
 			const b = el.getBoundingClientRect();
 			const r = row.getBoundingClientRect();
-			if (r.top < b.top) el.scrollTop -= b.top - r.top;
-			else if (r.bottom > b.bottom) el.scrollTop += r.bottom - b.bottom;
+			// Whole pixels, rounded away from the row: scrollTop rounds a fraction down, which left the row a sliver short of the box's edge.
+			if (r.top < b.top) el.scrollTop -= Math.ceil(b.top - r.top);
+			else if (r.bottom > b.bottom) el.scrollTop += Math.ceil(r.bottom - b.bottom);
 		};
 		keep();
 		const ro = new ResizeObserver(keep);

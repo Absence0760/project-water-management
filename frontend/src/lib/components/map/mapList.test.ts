@@ -87,5 +87,9 @@ it('keys every overlay colour from mapStyle, in Areas, Lines and Points', () => 
 		expect(groups.map((g) => g.label)).toEqual(['Areas', 'Lines', 'Points']);
 		const colours = new Set(groups.flatMap((g) => g.items.map((i) => i.colour)));
 		for (const k of ['boundary', 'parcel', 'water', 'other'] as const) expect(colours).toContain(c[k]);
+		// Points match CatchmentMap's markers: gauges and dams are water, told apart by shape.
+		const points = groups.find((g) => g.label === 'Points')!.items;
+		expect(points.find((i) => i.label === 'dam')!.colour).toBe(c.water);
+		expect(points.find((i) => i.label === 'gauge')!.colour).toBe(c.water);
 	}
 });

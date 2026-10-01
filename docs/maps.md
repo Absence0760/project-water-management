@@ -183,8 +183,10 @@ model has unsaved edits the button waits: the change is saved straight away.
 
 ## Checks
 
-A **Checks** panel on the Map tab (`MapChecks.svelte`, issue #326 A4) lists
-what looks inconsistent between the map and the model. They are **warnings
+The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
+between the map and the model: a one-line count under the feature list, and
+the warnings in the **Map checks** side sheet (`checks=1`, `MapChecks.svelte`;
+`cap` folds a long list behind "Show all", unused in the sheet). They are **warnings
 only**: nothing stops a save or a run. Each warning names its features as
 buttons that select them on the map and in the list; "No problems found"
 when there are none. The checks are pure and in the browser

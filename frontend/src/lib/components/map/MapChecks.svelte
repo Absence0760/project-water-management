@@ -8,10 +8,26 @@
 	import { KIND_LABEL } from './mapData';
 	import { mapChecks } from './mapChecks';
 
-	let { features, nodes, onpick }: { features: MapFeature[]; nodes: MapNodeArea[]; onpick?: (featureId: string) => void } = $props();
+	let {
+		features,
+		nodes,
+		onpick,
+		cap = Infinity,
+		heading = true
+	}: {
+		features: MapFeature[];
+		nodes: MapNodeArea[];
+		onpick?: (featureId: string) => void;
+		/** Show this many warnings until "Show all" (ui-playbook: fold every long list); every one by default. */
+		cap?: number;
+		/** Draw the panel's own "Checks" heading (off inside a sheet that has its title). */
+		heading?: boolean;
+	} = $props();
 
 	const uid = $props.id();
 	const checks = $derived(mapChecks(features, nodes));
+	let all = $state(false);
+	const shown = $derived(all ? checks : checks.slice(0, cap));
 	const byId = $derived(new Map(features.map((f) => [f.id, f])));
 	const nameOf = (id: string) => {
 		const f = byId.get(id);
@@ -19,17 +35,19 @@
 	};
 </script>
 
-<section class="panel" aria-labelledby="{uid}-h" data-testid="map-checks">
-	<div class="panel-head">
-		<h2 id="{uid}-h">Checks</h2>
-		{#if checks.length}
-			<span class="small muted" data-testid="map-checks-count">{checks.length} {checks.length === 1 ? 'warning' : 'warnings'}</span>
-		{/if}
-	</div>
+<section class={heading ? 'panel' : 'bare'} aria-labelledby={heading ? `${uid}-h` : undefined} data-testid="map-checks">
+	{#if heading}
+		<div class="panel-head">
+			<h2 id="{uid}-h">Checks</h2>
+			{#if checks.length}
+				<span class="small muted" data-testid="map-checks-count">{checks.length} {checks.length === 1 ? 'warning' : 'warnings'}</span>
+			{/if}
+		</div>
+	{/if}
 	{#if checks.length}
 		<p class="small muted intro">Warnings only: none of them stops you saving or running the model.</p>
-		<ul class="checks">
-			{#each checks as c (c.id)}
+		<ul class="checks" id="{uid}-list">
+			{#each shown as c (c.id)}
 				<li class="check" data-check={c.id}>
 					<span class="text">{c.text}</span>
 					{#if c.featureIds.length}
@@ -46,6 +64,11 @@
 				</li>
 			{/each}
 		</ul>
+		{#if checks.length > cap}
+			<button type="button" class="btn btn-sm more" aria-expanded={all} aria-controls="{uid}-list" onclick={() => (all = !all)} data-testid="map-checks-more">
+				{all ? `Show the first ${cap} warnings` : `Show all ${checks.length} warnings`}
+			</button>
+		{/if}
 	{:else}
 		<p class="muted" data-testid="map-checks-none">No problems found.</p>
 	{/if}

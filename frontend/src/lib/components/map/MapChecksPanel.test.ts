@@ -57,6 +57,33 @@ describe('the Checks panel', () => {
 		expect(body).not.toContain('No problems found');
 	});
 
+	it('shows the first three warnings and folds the rest behind "Show all"', () => {
+		// One parcel (linked to Alpha) and four units without one: four warnings.
+		const nodes = [unit('a', 'Alpha'), ...['Bravo', 'Charlie', 'Delta', 'Echo'].map((n) => unit(n.toLowerCase(), n))];
+		const { body } = render(MapChecks, { props: { features: [parcel('p1', 'Alpha', 'a', 21)], nodes, cap: 3 } });
+		const t = text(body);
+		expect(t).toContain('Checks 4 warnings');
+		expect(body.match(/<li /g)).toHaveLength(3);
+		expect(t).toContain('Show all 4 warnings');
+		expect(body).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-controls="[^"]+-list"/);
+	});
+
+	it('draws no "Show all" within the cap, nor without one (every warning, the default)', () => {
+		const nodes = [unit('a', 'Alpha'), unit('b', 'Bravo')];
+		const { body } = render(MapChecks, { props: { features: [parcel('p1', 'Alpha', 'a', 21)], nodes, cap: 3 } });
+		expect(body).not.toContain('map-checks-more');
+		const many = [unit('a', 'Alpha'), ...['Bravo', 'Charlie', 'Delta', 'Echo'].map((n) => unit(n.toLowerCase(), n))];
+		const all = render(MapChecks, { props: { features: [parcel('p1', 'Alpha', 'a', 21)], nodes: many } }).body;
+		expect(all.match(/<li /g)).toHaveLength(4);
+		expect(all).not.toContain('map-checks-more');
+	});
+
+	it('leaves out its own heading inside a sheet', () => {
+		const { body } = render(MapChecks, { props: { features: [parcel('p1', 'Alpha', 'a', 21)], nodes: [unit('a', 'Alpha')], heading: false } });
+		expect(body).not.toContain('<h2');
+		expect(text(body)).toContain('No problems found.');
+	});
+
 	it('names the features as text without onpick', () => {
 		const features = [parcel('p1', 'Alpha', null, 21), parcel('p2', 'Bravo', null, 21.01)];
 		const { body } = render(MapChecks, { props: { features, nodes: [] } });

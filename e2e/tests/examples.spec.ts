@@ -90,6 +90,15 @@ test('a shared example has a seeded catchment map: a boundary, linked parcels, d
 	await expect(item('Klipdrift dam')).toContainText(/ha · Klipdrift/);
 	await expect(item('Melkhout Gauge')).toContainText(/E · linked/);
 	await expect(list.getByRole('group', { name: /Rivers/ }).getByRole('listitem').filter({ hasText: /^\s*Sandspruit\s*1 line\s*$/ })).toHaveCount(1);
+	// The checks (#326 A4): the seeded boundary has a margin round the farms, so the units' total is flagged.
+	await expect(page.getByTestId('map-checks-line')).toHaveText(/^\s*1 warning from the map’s checks\s*Show the checks\s*$/);
+	await page.getByTestId('map-checks-open').click();
+	const sheet = page.getByRole('dialog', { name: 'Map checks' });
+	await expect(sheet.locator('li[data-check="units-vs-boundary"]')).toContainText(/^The units add up to 184[.,]0 km², 12 % less than the boundary's 210[.,]2 km²\./);
+	// A warning's feature button picks it and closes the sheet.
+	await sheet.getByRole('button', { name: 'Show Sandspruit catchment on the map' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(list.getByRole('button', { name: /^Sandspruit catchment/ })).toHaveAttribute('aria-pressed', 'true');
 	await page.getByTestId('map-open-grid').click();
 	await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByText('sandspruit-map.synthetic.geojson', { exact: true })).toBeVisible();
 });

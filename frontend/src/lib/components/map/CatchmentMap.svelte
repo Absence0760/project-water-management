@@ -24,7 +24,8 @@
 		onselect,
 		tilesUrl,
 		label,
-		fills
+		fills,
+		fill = false
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -33,6 +34,8 @@
 		tilesUrl: string | null;
 		/** The map region's accessible name. */
 		label: string;
+		/** Take the parent's height (a flex column) instead of the map's own fixed height. */
+		fill?: boolean;
 		/** Results colours by feature id (A1): a polygon listed here is filled with its colour instead of its kind's. */
 		fills?: Readonly<Record<string, string>>;
 	} = $props();
@@ -222,6 +225,7 @@
 
 <div
 	class="map-wrap"
+	class:fill
 	data-status={status}
 	data-theme-drawn={dark ? 'dark' : 'light'}
 	style:--mk-casing={colours.casing}
@@ -252,6 +256,16 @@
 <style>
 	.map-wrap {
 		position: relative;
+	}
+	.map-wrap.fill {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	/* Grows (or shrinks to its min-height) to the parent's height; where the parent isn't a sized flex column (a phone), the fixed height stands. */
+	.map-wrap.fill .map {
+		flex: 1 1 auto;
 	}
 	.map {
 		height: min(60vh, 560px);

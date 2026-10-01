@@ -32,6 +32,8 @@
 	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
+	import MapChecks from './MapChecks.svelte';
+	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
 	import { overlayColours } from './mapStyle';
@@ -142,6 +144,12 @@
 	const upload = overlay('upload', '1', () => canEdit);
 	const place = overlay('place', '1', () => canEdit);
 	const grid = overlay('grid', GRID_ID, () => true);
+	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
+	const checksSheet = overlay('checks', '1', () => true);
+	const checks = $derived(mapChecks(features, nodes));
+	async function pickFromCheck(id: string) {
+		await pickInPlace(id, 'checks');
+	}
 
 	async function imported(r: { fileName: string; ids: string[] }) {
 		notice = `Imported ${r.ids.length} ${r.ids.length === 1 ? 'feature' : 'features'} from ${r.fileName}.`;
@@ -337,7 +345,7 @@
 					<div class="map-body">
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
-								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" />
+								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" fill />
 							{/snippet}
 						</Lazy>
 					</div>
@@ -405,12 +413,30 @@
 						</section>
 					{/if}
 
-					<!-- CHECKS: the map's consistency checks (#326 A4, MapChecks.svelte) go here, under the list. -->
+					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
+					{#if features.length}
+						<p class="panel side-box checks-line small" data-testid="map-checks-line">
+							{#if checks.length}
+								<span><strong>{checks.length} {checks.length === 1 ? 'warning' : 'warnings'}</strong> from the map’s checks</span>
+								<a class="btn btn-sm" href={withParam(page.url, 'checks', '1')} data-testid="map-checks-open">Show the checks</a>
+							{:else}
+								<span class="muted">The map’s checks found no problems.</span>
+							{/if}
+						</p>
+					{/if}
 				</aside>
 			</div>
 
 			{#if upload.open}
 				<UploadSheet bind:open={upload.open} {projectId} sources={data.sources} onimported={imported} />
+			{/if}
+			{#if checksSheet.open}
+				<Dialog bind:open={checksSheet.open} title="Map checks" side>
+					<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />
+					{#snippet actions()}
+						<button type="button" class="btn" onclick={() => (checksSheet.open = false)}>Close</button>
+					{/snippet}
+				</Dialog>
 			{/if}
 			{#if place.open}
 				<PlaceSheet bind:open={place.open} {projectId} {nodes} onplaced={placed} />
@@ -524,6 +550,15 @@
 		margin: 0;
 		min-width: 0;
 	}
+	/* One line, never growing: the warnings themselves are in the checks sheet. */
+	.checks-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex: 0 0 auto;
+	}
 	.map-card {
 		display: flex;
 		flex-direction: column;
@@ -563,11 +598,11 @@
 				display: flex;
 				flex-direction: column;
 			}
-			/* CatchmentMap's own box takes the card's height here rather than its fixed 60vh. */
-			.map-body > :global(*),
-			.map-body :global([data-testid='catchment-map']) {
+			/* The lazy loader's box passes the card's height on to CatchmentMap (`fill`). */
+			.map-body > :global(*) {
 				flex: 1;
-				height: 100%;
+				display: flex;
+				flex-direction: column;
 				min-height: 0;
 			}
 			.map-side {

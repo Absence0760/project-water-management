@@ -67,6 +67,8 @@ test('a unit with a parcel links to it on the map from the Network, Hydrological
 	await dams.getByRole('link', { name: 'Upper farm on the map' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=map&node=${p.upper}$`));
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('aria-current', 'page');
+	// … with that unit's parcel picked: pressed in the list, and named on the card.
+	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Upper parcel/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a viewer gets the links too', async ({ page, owner, signIn }) => {

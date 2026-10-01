@@ -2392,8 +2392,13 @@ map" card) stays the schematic; this is the geography.
   a parcel, its unit's area source ("area typed", "area from the map"). A
   pick far down is kept in view inside the list, never by scrolling the page;
   stacked on a phone, a pick from the list brings the card into view. The
-  head's **Every feature** opens the grid. A Checks panel (A4) goes under the
-  list.
+  head's **Every feature** opens the grid.
+- **Checks** (A4, under the list, viewers too): one line, never growing, with
+  the count ("1 warning from the map’s checks") and **Show the checks**, or
+  "The map’s checks found no problems."; the warnings themselves open in a
+  side sheet, **Map checks** (`checks=1`), each with buttons that pick its
+  features and close the sheet ([maps.md § Checks](./maps.md#checks)). The
+  line keeps a thirty-unit catchment's list its room.
 - **Every feature** (`grid=map-features`, a full modal drawn by the tab:
   `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
   one rather than through the model's save row): a table in the list's order
