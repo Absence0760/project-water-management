@@ -63,7 +63,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'alert_rule.created_by': { excluded: 'the project’s alert rule; its maker only' },
 	'alert_subscription.user_id': { section: 'alertSubscriptions' },
 	'allocation_source.imported_by': { excluded: 'the project’s import record; the import is audited' },
-	// The Map tab (146_catchment_map): the project's features and imports; who made them is only a pointer, and map.* audit events are exported.
+	// The Map tab (152_catchment_map): the project's features and imports; who made them is only a pointer, and map.* audit events are exported.
 	'geo_source.imported_by': { excluded: 'the project’s map import record; map.imported is in auditEvents' },
 	'map_feature.created_by': { excluded: 'the project’s map feature; its maker only, and map.feature_created is in auditEvents' },
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },

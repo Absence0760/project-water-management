@@ -359,7 +359,7 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['allocation.import_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
-	// --- the Map tab (146, issue #288) -----------------------------------------------------
+	// --- the Map tab (152, issue #288) -----------------------------------------------------
 	{
 		route: `POST ${P}/map/import`,
 		records: ['map.imported'],

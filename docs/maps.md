@@ -10,7 +10,7 @@ accepts one by one. Issue #288, phases 1–2 of roadmap
 covers the tiles, uploads, areas, the quaternary lookup and its dataset, and
 the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
-[data-model.md § Catchment map](./data-model.md#catchment-map-146_catchment_mapsql).
+[data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
 
 Two rules hold throughout:
 
@@ -160,7 +160,7 @@ use them for a real catchment".
 
 ### Quaternary dataset
 
-The lookup reads `quaternary_reference` (146), which the **operator** loads
+The lookup reads `quaternary_reference` (152), which the **operator** loads
 as the schema owner; the app never writes it.
 
 - **Committed: synthetic only.** `backend/fixtures/geo/quaternaries.synthetic.geojson`

@@ -4,7 +4,7 @@
 // value into Settings → WR2012 check, sees its source, and saves; nothing is
 // written to the model here.
 //
-// The values come from quaternary_reference (146), which the operator loads
+// The values come from quaternary_reference (152), which the operator loads
 // from their own copy of the open DWS quaternary boundaries and the WR2012
 // tables (`pnpm import:quaternaries`). The repo ships an invented dataset
 // (region Z, `dataset: 'synthetic'`) for development and tests; a proposal

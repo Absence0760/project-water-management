@@ -1,4 +1,4 @@
-// The catchment map (issue #288, WP-3.12; 146_catchment_map.sql,
+// The catchment map (issue #288, WP-3.12; 152_catchment_map.sql,
 // geo/routes.ts): the API end to end and RLS with positive controls.
 //  - an editor imports a synthetic boundary (checked and measured on the
 //    server); a viewer can't; the same file twice, a projected file and a

@@ -1,4 +1,4 @@
--- 146_catchment_map — the catchment map, phases 1–2 (issue #288, roadmap
+-- 152_catchment_map — the catchment map, phases 1–2 (issue #288, roadmap
 -- WP-3.12; docs/maps.md, docs/data-model.md § Catchment map).
 --
 -- In this file:
@@ -53,7 +53,7 @@ CREATE UNIQUE INDEX geo_source_sha_idx ON geo_source (project_id, sha256);
 CREATE INDEX geo_source_imported_by_idx ON geo_source (imported_by);
 
 COMMENT ON TABLE geo_source IS
-	'The GeoJSON file a batch of map features was imported from, with its SHA-256 (146, WP-3.12). Deleting it deletes its features.';
+	'The GeoJSON file a batch of map features was imported from, with its SHA-256 (152, WP-3.12). Deleting it deletes its features.';
 
 -- ---------------------------------------------------------------------------
 -- map_feature
@@ -98,7 +98,7 @@ CREATE INDEX map_feature_created_by_idx ON map_feature (created_by);
 CREATE UNIQUE INDEX map_feature_one_boundary_idx ON map_feature (project_id) WHERE kind = 'catchment_boundary';
 
 COMMENT ON TABLE map_feature IS
-	'A map feature of one project: catchment boundary, farm parcel, dam, gauge, river or other (146, WP-3.12). GeoJSON geometry in WGS84; the area of a polygon is computed on the server.';
+	'A map feature of one project: catchment boundary, farm parcel, dam, gauge, river or other (152, WP-3.12). GeoJSON geometry in WGS84; the area of a polygon is computed on the server.';
 COMMENT ON COLUMN map_feature.area_m2 IS
 	'Geodesic area of a polygon, m², on the WGS84 ellipsoid (geo/area.ts). Proposed to a node only when the modeller accepts it (node.area_source = ''map'').';
 
@@ -146,7 +146,7 @@ ALTER TABLE node
 CREATE INDEX node_area_feature_idx ON node (area_feature_id, project_id);
 
 COMMENT ON COLUMN node.area_source IS
-	'typed: entered by hand. map: accepted from a map feature''s polygon area (146, WP-3.12); a typed change sets it back.';
+	'typed: entered by hand. map: accepted from a map feature''s polygon area (152, WP-3.12); a typed change sets it back.';
 COMMENT ON COLUMN node.area_feature_id IS
 	'The map feature whose area was accepted, while area_source = ''map''; NULL once that feature is deleted (the area stays).';
 
@@ -181,7 +181,7 @@ CREATE TABLE quaternary_reference (
 CREATE INDEX quaternary_reference_bbox_idx ON quaternary_reference (min_lon, max_lon, min_lat, max_lat);
 
 COMMENT ON TABLE quaternary_reference IS
-	'Quaternary catchments with their reference values, loaded by the operator (pnpm import:quaternaries), read-only to the app (146, WP-3.12). The repo ships a synthetic dataset only.';
+	'Quaternary catchments with their reference values, loaded by the operator (pnpm import:quaternaries), read-only to the app (152, WP-3.12). The repo ships a synthetic dataset only.';
 
 -- ---------------------------------------------------------------------------
 -- RLS

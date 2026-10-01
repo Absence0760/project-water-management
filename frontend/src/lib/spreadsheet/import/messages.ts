@@ -13,6 +13,8 @@ import type { NodeCropSet } from './nodeCrops';
 export interface WorkbookImportOptions {
 	/** Import the gauge column as a reference gauge on another river, optionally undoing a known scaling. */
 	gaugeAsReference?: boolean | GaugeScaling;
+	/** Import the units flagged as probable run-of-river as run of river (ExtractOptions.runOfRiver). */
+	runOfRiver?: boolean;
 }
 
 export type ToWorker =

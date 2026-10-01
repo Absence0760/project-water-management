@@ -1,7 +1,8 @@
 // CI parity test (WP-1.31): the TypeScript importer on the committed
 // synthetic b023 workbook must produce exactly the committed output of the
 // Python importer (scripts/wbt-import/fixtures/, make_synthetic_workbook.py),
-// the project JSON and the notes, with and without --gauge-as-reference.
+// the project JSON and the notes, with and without --gauge-as-reference, and
+// with --run-of-river (the import dialog's run-of-river option).
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { WorkbookSource } from './source';
@@ -50,6 +51,22 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 		expect(jsonDiff(project, JSON.parse(read('synthetic_b023.gauge-reference.project.json').toString('utf8')))).toBeNull();
 		expect(notes.map((n) => n.message)).toEqual(projectNotes(lines('synthetic_b023.gauge-reference.notes.txt')));
 		expect(notes.filter((n) => n.severity === 'warning').map((n) => n.code)).toEqual(['transfer-switched-off', 'transfer-switched-off', 'probable-run-of-river', 'probable-run-of-river', 'crop-factors-suspect', 'crop-factors-copied', 'farm-demand-gross-mismatch', 'transfer-river-offtake', 'gauge-as-reference-calibration-unset']);
+	});
+
+	it('matches --run-of-river: Delta and India imported as run of river, nothing else changed', () => {
+		const { project, notes } = extractProject(wb, { fileName: 'synthetic_b023.xlsx', runOfRiver: true });
+		expect(jsonDiff(project, JSON.parse(read('synthetic_b023.run-of-river.project.json').toString('utf8')))).toBeNull();
+		expect(notes.map((n) => n.message)).toEqual(projectNotes(lines('synthetic_b023.run-of-river.notes.txt')));
+		// India's transfer into Delta is a river off-take, so it doesn't keep India's dummy dam.
+		expect(notes.filter((n) => n.code.startsWith('run-of-river-')).map((n) => `${n.code}:${n.element}`)).toEqual([
+			'run-of-river-imported:Delta Farm',
+			'run-of-river-imported:India Farm'
+		]);
+		const converted = project.model.nodes.filter((n) => n.supplyRule === 'runOfRiver');
+		expect(converted.map((n) => [n.name, n.damCapacityM3, n.pumpCapacityM3Day])).toEqual([
+			['Delta Farm', 0, null],
+			['India Farm', 0, null]
+		]);
 	});
 
 	it('lists what it could not map', () => {

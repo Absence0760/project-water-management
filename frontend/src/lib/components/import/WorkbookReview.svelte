@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The workbook part of the import review (WP-1.31): the gauge-as-reference
-	// option, then the importer's notes and the unmapped report
+	// option, the run-of-river option (only when the importer flags a unit as
+	// probable run-of-river; issue #54, 2c/2d), then the importer's notes and the unmapped report
 	// (ImportReportLists, shared with the Overview's import record).
 	// Everything here comes from the file (farm names, formula text), so it is
 	// rendered as text only: plain interpolation, never {@html}.
@@ -13,6 +14,7 @@
 		gaugeAsReference = $bindable(false),
 		scalingFrom = $bindable(''),
 		scaleFactor = $bindable(''),
+		runOfRiver = $bindable(false),
 		chirpsKey = $bindable(DEFAULT_CHIRPS_KEY),
 		optionsError = null,
 		updating = false,
@@ -23,9 +25,11 @@
 		gaugeAsReference?: boolean;
 		scalingFrom?: string;
 		scaleFactor?: string;
+		/** Import the flagged probable run-of-river units as run of river. */
+		runOfRiver?: boolean;
 		/** The CHIRPS column's product and version, as a provenance key ('' = not known). */
 		chirpsKey?: string;
-		/** Why the gauge options don't go together, or the importer refused them. */
+		/** Why the gauge options don't go together, or the importer refused the options. */
 		optionsError?: string | null;
 		/** Re-extracting with new options. */
 		updating?: boolean;
@@ -36,7 +40,7 @@
 </script>
 
 {#if report.hasGauge}
-	<fieldset class="gauge" {disabled}>
+	<fieldset class="option-group" {disabled}>
 		<legend>Gauge column</legend>
 		<label class="check">
 			<input type="checkbox" bind:checked={gaugeAsReference} onchange={onoptions} aria-describedby="wb-gauge-hint" />
@@ -68,9 +72,29 @@
 				values from then on are divided by it.
 			</p>
 		{/if}
-		{#if optionsError}<p class="options-error" role="alert">{optionsError}</p>{/if}
-		<p class="muted small" role="status">{updating ? 'Updating the preview…' : ''}</p>
 	</fieldset>
+{/if}
+
+{#if report.runOfRiverUnits.length}
+	{@const n = report.runOfRiverUnits.length}
+	<fieldset class="option-group" {disabled}>
+		<legend>River pumping units</legend>
+		<label class="check">
+			<input type="checkbox" bind:checked={runOfRiver} onchange={onoptions} aria-describedby="wb-ror-hint" />
+			Import {n === 1 ? 'it' : `these ${n}`} as run of river, pumping from the river
+		</label>
+		<p class="hint muted" id="wb-ror-hint">
+			The importer flags {n === 1 ? 'one unit' : `${n} units`} as probable run-of-river: {report.runOfRiverUnits.join(', ')}. b023 can't
+			pump from a river, so such a unit is entered as a tiny dummy dam or with no dam. This converts {n === 1 ? 'it' : 'them'} into
+			{n === 1 ? 'a unit' : 'units'} that pump{n === 1 ? 's' : ''} from the river, with no dam and no pump limit until you enter the pump
+			capacities (Network tab, Supply). A unit an enabled transfer draws on keeps its dam. Leave this off to import the workbook as it is.
+		</p>
+	</fieldset>
+{/if}
+
+{#if report.hasGauge || report.runOfRiverUnits.length}
+	{#if optionsError}<p class="options-error" role="alert">{optionsError}</p>{/if}
+	<p class="muted small" role="status">{updating ? 'Updating the preview…' : ''}</p>
 {/if}
 
 {#if report.hasChirps}
@@ -93,7 +117,7 @@
 	.chirps {
 		margin: 0.75rem 0;
 	}
-	.gauge {
+	.option-group {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		padding: 0.5rem 0.75rem 0.25rem;

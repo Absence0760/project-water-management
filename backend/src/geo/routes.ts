@@ -1,4 +1,4 @@
-// The catchment map (issue #288, roadmap WP-3.12; 146_catchment_map.sql,
+// The catchment map (issue #288, roadmap WP-3.12; 152_catchment_map.sql,
 // docs/api.md § Catchment map, docs/maps.md).
 //
 //   GET    /projects/:id/map/features                   features, sources, nodes' area sources (viewer)
@@ -35,7 +35,7 @@ export const MAP_IMPORT_BODY_MAX = GEO_MAX_BYTES + 2 * 1024 * 1024;
 /** The path app.ts lets past the general body limit, to this route's own. */
 export const MAP_IMPORT_PATH = /^\/projects\/[^/]+\/map\/import$/;
 
-/** The geometry types each kind may have (the 146 CHECKs, said first for a clear 400). */
+/** The geometry types each kind may have (the 152 CHECKs, said first for a clear 400). */
 const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = {
 	catchment_boundary: ['Polygon', 'MultiPolygon'],
 	farm_parcel: ['Polygon', 'MultiPolygon'],
@@ -193,7 +193,7 @@ function assertKindFits(kind: MapFeatureKind, g: Geometry) {
 	}
 }
 
-/** The node a feature stands for must be one of the project's, of a kind that fits (the 146 trigger, said first for a clear 400). */
+/** The node a feature stands for must be one of the project's, of a kind that fits (the 152 trigger, said first for a clear 400). */
 async function assertNodeFits(db: Db, projectId: string, kind: MapFeatureKind, nodeId: string | null | undefined) {
 	if (!nodeId) return;
 	const { rows } = await db.query<{ kind: string }>('SELECT kind::text AS kind FROM node WHERE id = $1 AND project_id = $2', [nodeId, projectId]);

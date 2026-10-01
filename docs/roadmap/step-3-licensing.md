@@ -1454,7 +1454,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.12 Catchment map
 
-- **Status (2026-10-01): phases 1–2 built** (issue #288): migration 146
+- **Status (2026-10-01): phases 1–2 built** (issue #288): migration 152
   (`map_feature`, `geo_source`, `node.area_source` / `area_feature_id`, and
   `quaternary_reference`), `backend/src/geo/` (GeoJSON checks, the geodesic
   area on the ellipsoid, the routes), the **Map** tab (MapLibre and PMTiles
