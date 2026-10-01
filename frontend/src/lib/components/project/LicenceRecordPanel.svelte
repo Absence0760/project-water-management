@@ -56,7 +56,7 @@
 		}
 	}
 
-	async function confirm() {
+	async function confirmStillNeeded() {
 		saving = true;
 		error = null;
 		notice = '';
@@ -90,7 +90,7 @@
 			{#if isOwner}
 				{#if !record.outcome && record.reviewDueOn}
 					<p>
-						<button class="btn btn-sm" type="button" disabled={saving} onclick={confirm}>The record is still needed</button>
+						<button class="btn btn-sm" type="button" disabled={saving} onclick={confirmStillNeeded}>The record is still needed</button>
 						<span class="muted small">Sets the next review five years from today.</span>
 					</p>
 				{/if}

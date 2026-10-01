@@ -198,6 +198,9 @@ export const SETTINGS: Record<string, Setting> = {
 	SMTP_USER: { why: 'SMTP transport only.' },
 	SMTP_PASSWORD: { why: 'SMTP transport only.' },
 	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
+	OPERATOR_EMAIL: {
+		why: 'The operator’s copy of the licence-record notices (licence/record.ts, 161); unset sends none and the owners still get theirs. Terraform sets it to budget_alert_email on the worker (infra/jobs.tf).'
+	},
 
 	// --- Alerts ----------------------------------------------------------------------------
 	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe and “Was this useful?” links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
