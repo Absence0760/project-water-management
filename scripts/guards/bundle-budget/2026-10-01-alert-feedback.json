@@ -1,4 +1,4 @@
 {
-	"addKb": 4,
-	"why": "Issue #74, the alert feedback page (/alerts/feedback) and the editors' Was it useful? summary under the alert rules. Measured 1420 KB on main @ 67214e0e and 1424 KB with this branch merged (+4 KB). Headroom 2 KB."
+	"addKb": 5,
+	"why": "Issue #74, the alert feedback page (/alerts/feedback) and the editors' Was it useful? summary under the alert rules. Re-measured in CI after merging main with two-step sign-in (#317): main 1435 KB (run 36883567450), this branch merged 1440 KB (run 36888215815), +5 KB. The first measurement (+4, on main @ 67214e0e) rounded down. No headroom left."
 }
