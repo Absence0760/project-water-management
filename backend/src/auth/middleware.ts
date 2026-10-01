@@ -27,5 +27,5 @@ export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	c.set('userId', session.userId);
 	c.set('renderSession', !!session.scope);
 	c.set('amr', session.amr);
-	await requestAuth.run({ userId: session.userId, amr: session.amr }, () => next());
+	await requestAuth.run({ userId: session.userId, amr: session.amr, otpAt: session.otpAt }, () => next());
 });

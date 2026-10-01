@@ -188,6 +188,30 @@ decide a licence application.
   `GET /auth/mfa` says whether the person's roles need it (`required`,
   false while the switch below is off, so the prompts say what the routes
   do).
+- **A fresh code for signing, issuing and withdrawing** (licensing
+  positions item 9; provisional position, pre-counsel research,
+  2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
+  specialist's included), issuing a pack and withdrawing one also need a
+  code from the authenticator **within the last 10 minutes**, not only at
+  sign-in: a sign-off publishes a professional statement under a real name
+  on the public verify page, and a session left open on a shared computer
+  mustn't make one (a false one would be a GN R267 reg 20 offence by whoever
+  made it, and a POPIA s19 failure by us). The session JWT carries `otp_at`
+  (epoch ms), set only where a code was just checked (`…/mfa/verify`,
+  `…/totp/confirm`, `POST /auth/mfa/step-up`) and never carried over by a
+  re-issue (changing the password keeps `amr`, not `otp_at`); a token whose
+  `otp_at` isn't a number or comes without `otp` is invalid.
+  `requireFreshCode` (`auth/stepUp.ts`) answers `401 mfa_fresh_code` when
+  it is older than 10 minutes (or more than a minute ahead), after
+  `requireStepUp`, so enrolment still comes first (`403 mfa_required` before
+  a first sign-off). The workspace asks for a code in a dialog
+  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`),
+  POSTs it to `/auth/mfa/step-up` (same throttle as every code check; a
+  recovery code works and is recorded) and sends the action again, once
+  (`lib/api/client.ts`). The step-up also turns a password-only session into
+  a two-step one. Off with the switch below. Tests:
+  `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
+  control), `lib/api/client.test.ts` (the retry).
 - **The prompt.** A person whose role needs it learns so before an action
   is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
   its own chunk, mounted by `routes/+layout.svelte`; the state is

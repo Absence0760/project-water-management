@@ -81,7 +81,7 @@ export const ERROR_CODES = [
 	'mfa_not_enrolled',
 	'mfa_required',
 	'mfa_step_up',
-	// A comment through a share link (164_public_participation, share/routes.ts): 10 an hour per account.
+	// A comment through a share link (166_public_participation, share/routes.ts): 10 an hour per account.
 	'comment_throttled'
 ] as const;
 
@@ -100,10 +100,14 @@ export const ERROR_CODES = [
  *     pack again (evidence/packs.ts).
  *   registration_not_checked: POST …/packs/:packId/issue refused a draft
  *     whose specialist signer's registration has no current check against
- *     the professional register (165_signers, signoffs/registrationCheck.ts);
+ *     the professional register (167_signers, signoffs/registrationCheck.ts);
  *     `details.signers` names them.
+ *   mfa_fresh_code (401): a sign-off, or issuing or withdrawing a pack,
+ *     needs a code from the authenticator within the last 10 minutes
+ *     (auth/stepUp.ts requireFreshCode). The client asks for one, POSTs it to
+ *     /auth/mfa/step-up and repeats the request (lib/api/client.ts).
  */
-export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'registration_not_checked'] as const;
+export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'registration_not_checked', 'mfa_fresh_code'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');

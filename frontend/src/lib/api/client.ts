@@ -171,6 +171,9 @@ export class ApiError extends Error {
 
 type FetchFn = typeof fetch;
 
+/** The 401's code when an action needs a code from the authenticator from the last 10 minutes (backend auth/stepUp.ts requireFreshCode). */
+export const FRESH_CODE = 'mfa_fresh_code';
+
 /** ApiError.code for the WAF's CAPTCHA answer (set here; the API never sends it). */
 export const CAPTCHA_REQUIRED = 'captcha_required';
 /** The header AWS WAF reads a token from, besides its aws-waf-token cookie. */
@@ -235,7 +238,26 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		return err;
 	}
 
+	/**
+	 * Asked for a code from the authenticator when an action answers 401
+	 * `mfa_fresh_code` (a sign-off, issuing or withdrawing an evidence pack
+	 * need one from the last 10 minutes; backend auth/stepUp.ts). True once
+	 * the code was accepted (POST /auth/mfa/step-up): the action is sent again,
+	 * once. Set by routes/+layout.svelte (lib/auth/freshCode.svelte.ts).
+	 */
+	let freshCodeHandler: (() => Promise<boolean>) | null = null;
+
 	async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+		try {
+			return await send<T>(method, path, body, extraHeaders);
+		} catch (e) {
+			if (!(e instanceof ApiError) || e.status !== 401 || e.code !== FRESH_CODE || !freshCodeHandler) throw e;
+			if (!(await freshCodeHandler())) throw e;
+			return send<T>(method, path, body, extraHeaders);
+		}
+	}
+
+	async function send<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
 		const headers = { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders };
 		try {
@@ -287,6 +309,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			errorListeners.add(fn);
 			return () => errorListeners.delete(fn);
 		},
+		/** Who asks for a code on a 401 mfa_fresh_code (see freshCodeHandler); returns the unset. */
+		onFreshCode(fn: () => Promise<boolean>): () => void {
+			freshCodeHandler = fn;
+			return () => {
+				if (freshCodeHandler === fn) freshCodeHandler = null;
+			};
+		},
 		auth: {
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			/**
@@ -315,7 +344,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				/** A new set of recovery codes, the old ones void (a code from the app). */
 				regenerate: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/recovery-codes', { code }).then((r) => r.recoveryCodes),
 				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
-				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code })
+				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code }),
+				/** A code again inside the session, for the actions that need one from the last 10 minutes (401 mfa_fresh_code). */
+				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code })
 			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a

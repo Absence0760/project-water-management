@@ -20,7 +20,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { requireStepUp, stepUpRefusal } from '../auth/stepUp.js';
+import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -44,7 +44,7 @@ const BODIES = REGISTRATION_BODIES.map((b) => b.code) as [RegistrationBodyCode, 
 /** A category or field code; which ones a body has is checked by the engine's registrationCheck. */
 const code = z.string().regex(/^[a-z_]{1,40}$/, 'must be a registration code');
 
-/** Who a sign-off is from (165_signers): the evidence's professional statement, or an authority-side reviewer's second one. */
+/** Who a sign-off is from (167_signers): the evidence's professional statement, or an authority-side reviewer's second one. */
 export const SIGNOFF_KINDS = ['specialist', 'review'] as const;
 export type SignoffKind = (typeof SIGNOFF_KINDS)[number];
 
@@ -60,7 +60,7 @@ export const SignoffBody = z.object({
 	confirmed: z.array(z.string().max(40)).max(20),
 	/** SHA-256 of the statement the dialog showed (GET …/signoffs `statementSha256`). */
 	statementSha256: z.string().regex(/^[0-9a-f]{64}$/, 'must be a lowercase SHA-256 hex digest'),
-	/** `review` only on a pack, by an editor (165_signers); a run's sign-off and the applicant's specialist's are `specialist`. */
+	/** `review` only on a pack, by an editor (167_signers); a run's sign-off and the applicant's specialist's are `specialist`. */
 	kind: z.enum(SIGNOFF_KINDS).default('specialist')
 });
 
@@ -84,10 +84,10 @@ export interface SignoffRow {
 	signedAt: string;
 	/** The signer is the caller. */
 	mine: boolean;
-	/** `specialist` or `review` (165_signers). */
+	/** `specialist` or `review` (167_signers). */
 	kind: SignoffKind;
 	/**
-	 * The registration's check against the public register (165_signers): the one bound when the pack was issued
+	 * The registration's check against the public register (167_signers): the one bound when the pack was issued
 	 * (`bound`), else the signer's current one; null: self-declared, never shown as checked.
 	 */
 	registrationCheck: { checkedAt: string; checkedByOrg: string; bound: boolean } | null;
@@ -249,8 +249,8 @@ export const signoffRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
-			await requireStepUp(db);
+			// A sign-off is the professional record an authority relies on: it needs two-step sign-in and a code from the last 10 minutes (auth/stepUp.ts).
+			await requireFreshCode(db);
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
 			const { statement, sha256: expected, legacy, forecast, verified } = await statementFor(db, id, runId);

@@ -19,13 +19,19 @@ function code(secret: string): string {
 }
 const sessionOf = (h: Headers) => `${SESSION_COOKIE}=${h.getSetCookie().find((c) => c.startsWith(`${SESSION_COOKIE}=`))!.split(';')[0]!.split('=')[1]}`;
 
+/** Each enrolled account's authenticator secret, for later codes. */
+const secrets = new Map<string, string>();
+
 /** Add an authenticator: the two-step session the confirm gave. */
 async function enrol(u: User): Promise<string> {
 	const { secret } = (await u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' })).body;
+	secrets.set(u.id, secret);
 	const r = await anon('POST', '/auth/mfa/totp/confirm', { code: code(secret) }, u.cookie);
 	expect(r.status).toBe(200);
 	const cookie = sessionOf(r.headers);
 	expect(decodeJwt(cookie.split('=')[1]!).amr).toEqual(['pwd', 'otp']);
+	// When the code was given (licensing positions item 9): a sign-off needs one from the last 10 minutes.
+	expect(decodeJwt(cookie.split('=')[1]!).otp_at).toBe(Date.now());
 	return cookie;
 }
 
@@ -206,6 +212,62 @@ describe('signing a run: the sign-off reads say so before the form is filled in'
 		const r = await anon('POST', at(), signed(read.body.statementSha256, confirmed), enrolledOwnerTwoStep);
 		expect(r.status).toBe(201);
 		expect(r.body.signoff.fullName).toBe('Step Signer');
+	});
+});
+
+describe('a sign-off, issuing and withdrawing need a code from the last 10 minutes', () => {
+	const at = () => `/projects/${ownProjectId}/runs/${ownRunId}/signoffs`;
+	const signed = (statementSha256: string, confirmed: string[]) => ({ ...SIGNOFF, fullName: 'Fresh Signer', confirmed, statementSha256 });
+
+	it('11 minutes after the code: 401 mfa_fresh_code for each, while an owner-only action still goes through', async () => {
+		vi.setSystemTime(Date.now() + 11 * 60_000);
+		const read = await anon('GET', at(), undefined, enrolledOwnerTwoStep);
+		// The read doesn't say so: the client asks for a code when the action answers.
+		expect(read.body.cannotSign).toBeNull();
+		const confirmed = read.body.statement.confirmations.map((k: { id: string }) => k.id);
+		expect(await anon('POST', at(), signed(read.body.statementSha256, confirmed), enrolledOwnerTwoStep)).toMatchObject({ status: 401, body: { code: 'mfa_fresh_code' } });
+		for (const [method, path, body] of [
+			['POST', `/projects/${ownProjectId}/packs/${uuid()}/issue`, {}],
+			['POST', `/projects/${ownProjectId}/packs/${uuid()}/withdraw`, { reason: 'x' }],
+			['POST', `/projects/${ownProjectId}/packs/${uuid()}/signoffs`, SIGNOFF]
+		] as const) {
+			expect(await anon(method, path, body, enrolledOwnerTwoStep), path).toMatchObject({ status: 401, body: { code: 'mfa_fresh_code' } });
+		}
+		// Control: owner actions need two-step sign-in, not a fresh code.
+		expect((await anon('POST', `/projects/${ownProjectId}/share-links`, { label: 'Fresh', expiresInDays: 7 }, enrolledOwnerTwoStep)).status).toBe(201);
+	});
+
+	it('POST /auth/mfa/step-up: a wrong code is refused; a right one re-issues the session, and the sign-off is made', async () => {
+		expect(await anon('POST', '/auth/mfa/step-up', { code: '000000' }, enrolledOwnerTwoStep)).toMatchObject({ status: 400, body: { code: 'mfa_code_wrong' } });
+		const r = await anon('POST', '/auth/mfa/step-up', { code: code(secrets.get(enrolledOwner.id)!) }, enrolledOwnerTwoStep);
+		expect(r.status).toBe(200);
+		const fresh = sessionOf(r.headers);
+		expect(decodeJwt(fresh.split('=')[1]!)).toMatchObject({ amr: ['pwd', 'otp'], otp_at: Date.now() });
+		const read = await anon('GET', at(), undefined, fresh);
+		const confirmed = read.body.statement.confirmations.map((k: { id: string }) => k.id);
+		const made = await anon('POST', at(), signed(read.body.statementSha256, confirmed), fresh);
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		// The old session still signs nothing.
+		expect(await anon('POST', at(), signed(read.body.statementSha256, confirmed), enrolledOwnerTwoStep)).toMatchObject({ status: 401 });
+	});
+
+	it('steps up a password-only session too, and refuses an account without an authenticator (403 mfa_required)', async () => {
+		const r = await anon('POST', '/auth/mfa/step-up', { code: code(secrets.get(enrolledOwner.id)!) }, enrolledOwner.cookie);
+		expect(r.status).toBe(200);
+		expect(decodeJwt(sessionOf(r.headers).split('=')[1]!).amr).toEqual(['pwd', 'otp']);
+		expect(await editor.call('POST', '/auth/mfa/step-up', { code: '123456' })).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
+		expect(await anon('POST', '/auth/mfa/step-up', { code: '123456' })).toMatchObject({ status: 401 });
+	});
+
+	it('not while the requirement is off (MFA_REQUIRED=false)', async () => {
+		vi.setSystemTime(Date.now() + 11 * 60_000);
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		try {
+			const r = await anon('POST', `/projects/${ownProjectId}/packs/${uuid()}/issue`, {}, enrolledOwnerTwoStep);
+			expect(r.status).toBe(404);
+		} finally {
+			vi.stubEnv('MFA_REQUIRED', 'true');
+		}
 	});
 });
 

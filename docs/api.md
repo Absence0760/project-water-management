@@ -46,7 +46,10 @@ recovery code (`ABCDE-FGH23`, case and the dash forgiven). Every code check
 counts on the account's code throttle first: the 5th wrong code in a row
 answers `429 mfa_locked` (`params.seconds`, `Retry-After`) for a minute,
 doubling to 15, right codes included. The session JWT carries `amr`:
-`["pwd"]`, or `["pwd", "otp"]` once signed in with a code.
+`["pwd"]`, or `["pwd", "otp"]` once signed in with a code, and `otp_at`,
+when the session last gave a code: a sign-off (of a run or a pack), issuing
+and withdrawing a pack answer `401 mfa_fresh_code` when it is more than 10
+minutes old; send a code to `POST /auth/mfa/step-up`, then the action again.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
@@ -56,6 +59,7 @@ doubling to 15, right codes included. The session JWT carries `amr`:
 | DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
+| POST | `/auth/mfa/step-up` | `{ code }` (app or recovery code) | `200 { ok, usedRecoveryCode? }` + this browser's session reissued with `amr: ["pwd", "otp"]` and `otp_at` now: what a sign-off, issuing or withdrawing an evidence pack need within 10 minutes (their `401 mfa_fresh_code`; [security.md § Two-step sign-in](./security.md#two-step-sign-in) → A fresh code). `400 mfa_code_wrong`; `403 mfa_required` no authenticator (signed in) |
 
 **Actions that need it.** Project owners, team admins and assessors must
 sign in with a code before: any route that needs the owner role (members,
@@ -289,6 +293,10 @@ the frontend catalogue (same contract: add, never rename):
   erratum found since the draft was made applies to its runs' engines (or
   their fits') and its manifest doesn't record it; the message names the
   errata and says to draft the pack again ([§ Evidence packs](#evidence-packs)).
+- `mfa_fresh_code` (`401` from a sign-off, `POST …/packs/:packId/issue` and
+  `…/withdraw`): the session's last code from the authenticator is more than
+  10 minutes old. The workspace asks for one, sends it to
+  `POST /auth/mfa/step-up` and repeats the action (§ Two-step sign-in).
 
 | Code | Status | When |
 | --- | --- | --- |
