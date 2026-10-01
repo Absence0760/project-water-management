@@ -39,6 +39,21 @@ export async function issuePackRenderToken(db: Db, projectId: string, packId: st
 	return token;
 }
 
+/**
+ * Issue a render token for an applicant's copy of an issued pack
+ * (165_applicant_copy), as the transaction's user, who must be a party of the
+ * pack's application (render_token_issue: app_applicant_pack_meta). Commit
+ * before handing it out, as issueRenderToken.
+ */
+export async function issueApplicantPackRenderToken(db: Db, projectId: string, packId: string): Promise<string> {
+	const { token, hash } = newToken();
+	await db.query(
+		`INSERT INTO render_token (token_hash, user_id, project_id, pack_id, purpose, expires_at) VALUES ($1, app_current_user_id(), $2, $3, 'applicant_pack', now())`,
+		[hash, projectId, packId]
+	);
+	return token;
+}
+
 export type ConsumedRenderToken =
 	| {
 			kind: 'report';
@@ -48,7 +63,9 @@ export type ConsumedRenderToken =
 			/** An impact report's baseline; null for the plain report (or a baseline since deleted: the token went with it). */
 			against: { projectId: string; runId: string } | null;
 	  }
-	| { kind: 'pack'; userId: string; projectId: string; packId: string };
+	| { kind: 'pack'; userId: string; projectId: string; packId: string }
+	/** An applicant's copy (165): the pack page of a party of its application. */
+	| { kind: 'applicant_pack'; userId: string; projectId: string; packId: string };
 
 /** What a consumed token opens, or null (unknown, used or expired). Runs with no user. */
 export async function consumeRenderToken(db: Db, hash: Buffer): Promise<ConsumedRenderToken | null> {
@@ -59,14 +76,16 @@ export async function consumeRenderToken(db: Db, hash: Buffer): Promise<Consumed
 		againstProjectId: string | null;
 		againstRunId: string | null;
 		packId: string | null;
+		purpose: string;
 	}>(
 		`SELECT user_id AS "userId", project_id AS "projectId", run_id AS "runId",
-			against_project_id AS "againstProjectId", against_run_id AS "againstRunId", pack_id AS "packId"
+			against_project_id AS "againstProjectId", against_run_id AS "againstRunId", pack_id AS "packId", purpose
 		 FROM app_consume_render_token($1)`,
 		[hash]
 	);
 	const r = rows[0];
 	if (!r) return null;
+	if (r.packId && r.purpose === 'applicant_pack') return { kind: 'applicant_pack', userId: r.userId, projectId: r.projectId, packId: r.packId };
 	if (r.packId) return { kind: 'pack', userId: r.userId, projectId: r.projectId, packId: r.packId };
 	if (!r.runId) return null;
 	const against = r.againstRunId && r.againstProjectId ? { projectId: r.againstProjectId, runId: r.againstRunId } : null;

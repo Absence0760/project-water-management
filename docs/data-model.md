@@ -1210,6 +1210,37 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
 
+**The applicant's printable copy (165_applicant_copy.sql;** [evidence-pack.md § Applicants](./evidence-pack.md#applicants)**).**
+
+- `job.kind` accepts `applicant_pack_render`: a party of the application
+  queues one as themselves (`POST …/scenarios/:sid/packs/:packId/pdf`),
+  deduplicated per pack and party (`applicant_copy:<pack>:<user>`); the
+  production retry is `applicant_copy_retry:<pack>:<user>:<n>` and the
+  renderer's answer `applicant_copy_result:<pack>`. `job_insert_applicant_copy`
+  lets a party insert one for an issued pack of their application
+  (`app_applicant_copy_target`, through `app_applicant_pack_meta`);
+  `job_select_applicant_copy` lets a contributor read the ones they
+  queued.
+- **`evidence_pack_applicant_copy`**: one per pack (`pack_id` primary key →
+  `evidence_pack`, cascade; `project_id` → `project`, cascade, indexed;
+  `evidence_pack_applicant_copy_same_project`), `pdf_key` (a CHECK holds it
+  to `packs/<project>/<pack>/applicant/<sha256>.pdf`), `pdf_sha256`,
+  `pdf_pages`, `rendered_at`. RLS: the project's viewers and up and the
+  pack's parties read; `water_app` has `SELECT` only (catalogue
+  `READ_ONLY`). Not the pack's PDF, and not on verify.
+- **`app_record_applicant_pack_pdf(pack, sha256, pages)`** (`SECURITY
+  DEFINER`): the one writer, as `app_record_pack_pdf` but for a *running*
+  `applicant_pack_render` job of the caller's and a caller who is still a
+  party; the first copy stands (false after).
+- `render_token.purpose` accepts `applicant_pack` (a `pack_id`, no run),
+  issued only to a party (`render_token_issue`, `render_token_insert`);
+  `app_consume_render_token` returns the purpose too.
+- **`app_applicant_copy_render_target(pack)`**: the production worker's
+  lookup for the renderer's answer, as `app_pack_render_target`.
+- Guards: `evidence/applicant-copy.db.test.ts`, `jobs/trust.security.db.test.ts`
+  (a copy job naming another project's pack touches nothing of it),
+  `db/catalogue.db.test.ts`, `db/cross-project-refs.security.db.test.ts`.
+
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
 
 - `job.kind` accepts `pack_reproduce`: issuing a pack queues one in the

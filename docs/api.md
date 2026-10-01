@@ -2450,6 +2450,8 @@ They read no pack row, so the routes above answer them `403`.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios/:sid/packs` | – | `{ packs: ApplicantPackMeta[] }`, newest version first: its issued, superseded and withdrawn-after-issue packs, never a draft. `404` for a scenario the caller can't read; `[]` to anyone who reads it but isn't a party (an editor reads the packs through `GET …/packs`) | contributor |
 | GET | `/projects/:id/scenarios/:sid/packs/:packId` | – | `ApplicantPack` (below); `Cache-Control: no-store`. `404` alike for a pack that isn't theirs, isn't of this application, is a draft or was never issued | contributor |
+| POST | `/projects/:id/scenarios/:sid/packs/:packId/pdf` | none, or `{}` (strict) | Their printable copy (165_applicant_copy, [evidence-pack.md § Applicants](./evidence-pack.md#applicants)): `202 { copy }` with `copy.status: 'rendering'` after queuing an `applicant_pack_render` job as the caller (one pending per pack and party), or while one is; `200 { copy }` once recorded (it stands: asking again changes nothing). `404` alike as above | a party of the application |
+| GET | `/projects/:id/scenarios/:sid/packs/:packId/pdf` | – | `302` to a one-minute signed GET of the copy, downloaded as `evidence-pack-v<n>-<code>-applicant-copy.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` until it is recorded; `404` alike as above | a party of the application |
 
 - `ApplicantPackMeta = { id, scenarioId, title, mode, version, status:
   'issued' | 'superseded' | 'withdrawn', issuedAt, manifestSha256,
@@ -2473,8 +2475,13 @@ They read no pack row, so the routes above answer them `403`.
   anonymous `name` ("Farm 3", as on `…/base`), in its order, with
   `changePts` their change in share of demand supplied in whole percentage
   points; `null` when the run's base is no longer a published run, so those
-  names can't be given. Never another unit's real name or id.
-- No PDF, manifest or bundle: each carries the whole report.
+  names can't be given. Never another unit's real name or id. `copy:
+  { status: 'ready' | 'rendering' | 'failed' | 'none', sha256, pages,
+  renderedAt, error }`: their printable copy (165), with its own SHA-256
+  once ready; `failed` gives why their last request gave up.
+- No PDF, manifest or bundle of the pack: each carries the whole report.
+  Their printable copy instead (above): the same view, printed as them, not
+  the pack.
 
 - A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
   can't be deleted or trimmed, and the scenario can't be deleted. A project

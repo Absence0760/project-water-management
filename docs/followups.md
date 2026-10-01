@@ -4891,16 +4891,18 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner
       link their own issued pack and list and revoke the links they made.
-- [ ] **An anonymised printable copy of the pack for its applicant.** The
-      applicant's view (131) offers no PDF, manifest or bundle: each carries
-      the whole report, every unit named (the assessors' copy, D2). An
-      applicant who needs a document to attach has the verify code and the
-      assessors' copy. Durable fix: a D2-anonymised print of the applicant's
-      view (the server renderer, a render session scoped to that route), not
-      hashed as the pack (it isn't the pack), saying so and carrying the
-      pack's code. Trigger: an applicant or the client asks for a file of
-      their own copy, or D2 is settled with the client (it may instead open
-      the assessors' copy to the applicant).
+- [x] **An anonymised printable copy of the pack for its applicant.**
+      Built 2026-10-01 (165_applicant_copy; licensing build item 12,
+      provisional position, pre-counsel research, 2026-10-01): a party of
+      the application asks for it on their pack view (`POST
+      …/scenarios/:sid/packs/:packId/pdf`), an `applicant_pack_render` job
+      prints that view as them in the server renderer (a render session that
+      reads that one page, render-token purpose `applicant_pack`), stores it
+      beside the pack's PDF under `applicant/` and records its own SHA-256
+      once (`evidence_pack_applicant_copy`); `GET …/pdf` downloads it. The
+      printed page says it is a derived copy, not the pack, with the pack's
+      code, manifest hash and verify address
+      ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner: built 2026-09-30
       (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,

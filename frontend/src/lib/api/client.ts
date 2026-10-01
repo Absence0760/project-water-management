@@ -106,6 +106,7 @@ import type {
 	ScenarioBase,
 	ApplicantResults,
 	ApplicationQuestion,
+	ApplicantCopyState,
 	AssessorQuestion,
 	ApplicantResultsRun,
 	ScenarioOutcome,
@@ -819,6 +820,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			packs: (id: string, sid: string) => request<{ packs: ApplicantPackMeta[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => r.packs),
 			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
 			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
+			/** Ask for the applicant's printable copy of an issued pack (165): 202 while it prints, 200 once recorded. */
+			packCopy: (id: string, sid: string, packId: string) =>
+				request<{ copy: ApplicantCopyState }>('POST', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.copy),
+			/** The copy's download (the API redirects to a short-lived signed GET). */
+			packCopyUrl: (id: string, sid: string, packId: string) => `${base}${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`,
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
 			create: (id: string, body: { name: string; baseRunId: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[] }) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios`, body),

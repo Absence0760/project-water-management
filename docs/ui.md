@@ -7200,6 +7200,18 @@ Part of the workspace, so English, like the rest of the Applicant view
   note that this is their copy: their own units by name, the others
   downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
+- **Their printable copy** (165_applicant_copy): **Make a printable copy**
+  in the head's bar asks the server to print this view as them; *Printing
+  your copy…* while it does (the page reads it again every 2 s for about a
+  minute), then **Download your printable copy** and a line with the
+  copy's own SHA-256, page count and when it was printed, saying it is a
+  copy of this page, not the pack. A failure says why, and the button
+  comes back. Printed (the server's PDF, or the browser's print), the page
+  drops the bar, the notes and the Back link, opens with a boxed
+  "Applicant's copy: other water users' figures withheld. Not the pack.
+  Check the pack at <verify address>" with the pack's code and manifest
+  hash, and repeats that in the footer of every page. The page sets
+  `data-report-ready` once loaded, for the renderer.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
@@ -7213,16 +7225,17 @@ Part of the workspace, so English, like the rest of the Applicant view
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
-  same note as the pack's page and verify), and the signers. No download:
-  the PDF, manifest and bundle are the assessors' copies. The "pack issued"
+  same note as the pack's page and verify), and the signers. No download
+  of the pack's PDF, manifest or bundle: those are the assessors' copies. The "pack issued"
   and "pack withdrawn" emails (133) link the applicant here.
 - 404 (not theirs, not issued, another application's) and 403 each have
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
   view, their farm named and the neighbour beside it, not downstream, not
-  listed (as in the results view), no download, the
-  errata found since issue, a share link opened signed out, axe, the phone
+  listed (as in the results view), no download of the pack, the
+  errata found since issue, their printable copy made by a worker tick and
+  its PDF's hash checked, a share link opened signed out, axe, the phone
   layout).
 
 ## Help (`/help`)

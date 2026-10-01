@@ -596,8 +596,15 @@ buys a **render session** that can read one report and nothing else.
   (`pack_id`) and no run: the trigger checks that the issuer reads that pack
   (RLS, as themselves) and that it was issued (`issued_at`: never a draft,
   nor a draft withdrawn before its issue), and a CHECK keeps exactly one
-  target per purpose. It is issued by the `report_render` job (or the
-  `pack_render` job, as the editor who issued the pack or asked again),
+  target per purpose. An applicant's copy's token (purpose
+  `applicant_pack`, 165_applicant_copy; provisional position, pre-counsel
+  research, 2026-10-01) names one issued pack too, but its issuer is a
+  party of the pack's application (`app_applicant_pack_meta`: the
+  application's owner or someone they shared it with, and the pack was
+  issued), not a viewer: the trigger and `render_token_insert` say so, and a
+  pack token asked for by anyone else stays a `pack` token. It is issued by the `report_render` job (or the
+  `pack_render` job, as the editor who issued the pack or asked again, or
+  the `applicant_pack_render` job, as the party who asked for their copy),
   which runs as the requester under RLS, and never leaves the server side:
   it goes to the local Chromium in memory, or in production over the
   SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
@@ -610,7 +617,9 @@ buys a **render session** that can read one report and nothing else.
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes** (a pack's carries `scope: { p, k }`, the project and
-  the pack). A used, expired, unknown or malformed token gets one
+  the pack; an applicant's copy's `scope: { p, k, s }`, with the pack's
+  application, after the exchange checks the requester is still its
+  party). A used, expired, unknown or malformed token gets one
   answer, `400`. Both refusals carry the machine-only code
   `render_token_refused`: the renderer fails a report for good only on that
   code, so a WAF or CloudFront `403` in front of the API (no code) is
@@ -623,7 +632,11 @@ buys a **render session** that can read one report and nothing else.
   `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
   `/series`, `/day`, `/signoffs` and `/publication` (the run's place in the
   publications, issue #70): exactly the reads the report route
-  makes. An impact report's session may also `GET /compare/runs` with
+  makes. A pack's session reads only `/projects/<p>/packs/<k>` and its
+  `/signoffs`; an applicant's copy's only
+  `/projects/<p>/scenarios/<s>/packs/<k>` (the party's D2 projection), never
+  the editor's pack route, the application or its download
+  (`evidence/applicant-copy.db.test.ts` sweeps every signed-in route). An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
   parameters, once each: the impact section's one read), and the
   baseline run's `/series` with exactly `key=natural_flow` or
@@ -3185,7 +3198,9 @@ nothing else.
   maps the answer field by field again (`evidence/applicantPacks.ts`),
   answers `404` alike for a pack not theirs, not issued or of another
   application, and never offers the PDF, manifest or bundle, which carry
-  the whole report (the assessors' copy). Tests:
+  the whole report (the assessors' copy). Their printable copy (165) is
+  this same projection printed as them in a render session scoped to that
+  one page ([§ Render tokens](#render-tokens)), stored with its own hash. Tests:
   `evidence/applicant-packs.db.test.ts` (each "cannot" with its control:
   another applicant, a non-party editor, a draft, a pack never issued, the
   baseline's; the string scan for every other unit's name and id; the

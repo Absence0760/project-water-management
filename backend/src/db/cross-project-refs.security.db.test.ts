@@ -302,6 +302,10 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app inserts none and updates only the answer; app_ask_assessors, SECURITY DEFINER, copies the project from the application itself (164)',
 		premise: 'not writable'
 	},
+	'evidence_pack_applicant_copy.pack_id': {
+		reason: 'water_app writes none of it; app_record_applicant_pack_pdf, SECURITY DEFINER, copies the project from the pack itself (165)',
+		premise: 'not writable'
+	},
 	'alert_feedback.event_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_answer_slot, SECURITY DEFINER, copies the project from the caller’s own delivery (151)',
 		premise: 'not writable'
@@ -944,12 +948,14 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:packId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:projectId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:runId': 'a queue envelope between the app’s own Lambdas, not a request',
+	'jobs/transport.ts:scenarioId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'model/validate.ts:downstreamNodeId': ['PUT /projects/:id/model downstreamNodeId'],

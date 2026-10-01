@@ -170,3 +170,40 @@ describe('scopeAllows, for an evidence pack (119_pack_render)', () => {
 		expect(scopeAllows(scope, 'GET', `/projects/${P}/packs/${K}/signoffs`)).toBe(false);
 	});
 });
+
+describe("scopeAllows, for an applicant's copy of a pack (165_applicant_copy)", () => {
+	const K = '44444444-4444-4444-8444-444444444444';
+	const S = '55555555-5555-4555-8555-555555555555';
+	const copy = { projectId: P, packId: K, scenarioId: S };
+
+	it.each(['/auth/me', `/projects/${P}/scenarios/${S}/packs/${K}`, `/projects/${P}/scenarios/${S}/packs/${K}/`, `/projects/${P.toUpperCase()}/scenarios/${S.toUpperCase()}/packs/${K}`])(
+		'allows GET %s (the applicant pack page’s one read)',
+		(path) => {
+			expect(scopeAllows(copy, 'GET', path)).toBe(true);
+		}
+	);
+
+	it.each([
+		// The editor's pack page and its sign-offs: the assessors' copy, which names every unit.
+		`/projects/${P}/packs/${K}`,
+		`/projects/${P}/packs/${K}/signoffs`,
+		// Its own download and request, the application, its other packs, another application's or another project's.
+		`/projects/${P}/scenarios/${S}/packs/${K}/pdf`,
+		`/projects/${P}/scenarios/${S}/packs`,
+		`/projects/${P}/scenarios/${S}`,
+		`/projects/${P}/scenarios/${OTHER}/packs/${K}`,
+		`/projects/${P}/scenarios/${S}/packs/${OTHER}`,
+		`/projects/${OTHER}/scenarios/${S}/packs/${K}`,
+		`/projects/${P}`,
+		`/projects/${P}/scenarios/${S}/packs/${K}/%2e%2e/${OTHER}`,
+		`/projects/${P}//scenarios/${S}/packs/${K}`
+	])('refuses GET %s', (path) => {
+		expect(scopeAllows(copy, 'GET', path)).toBe(false);
+	});
+
+	it('refuses every other method and any query; a pack session never reads the applicant page', () => {
+		for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) expect(scopeAllows(copy, method, `/projects/${P}/scenarios/${S}/packs/${K}`), method).toBe(false);
+		expect(scopeAllows(copy, 'GET', `/projects/${P}/scenarios/${S}/packs/${K}`, new URLSearchParams('x=1'))).toBe(false);
+		expect(scopeAllows({ projectId: P, packId: K }, 'GET', `/projects/${P}/scenarios/${S}/packs/${K}`)).toBe(false);
+	});
+});

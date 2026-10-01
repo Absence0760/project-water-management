@@ -624,6 +624,10 @@ const WRITE_ROUTES: Entry[] = [
 		exempt: 'records a settings revision (calibration/store.ts applyCalibration) and run.created for its run; exercised end to end in calibration/calibration.db.test.ts, which needs a fitted calibration this sweep has none of'
 	},
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
+	{
+		route: `POST ${P}/scenarios/:sid/packs/:packId/pdf`,
+		exempt: "queues the print of an applicant's own copy of an issued pack (165_applicant_copy); the pack, its standing and the model are untouched"
+	},
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (098_nomination_withdrawal.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },

@@ -806,8 +806,39 @@ flags and questions, the settings, model, input diff, series hashes,
 warnings or the applicant statement, and no person but the signers. **Not
 the PDF, the manifest or the bundle:** each carries the whole report, which
 is the assessors' copy (an applicant checks any copy they are handed on the
-verify page). An anonymised printable copy for the applicant is a follow-up
-([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+verify page).
+
+**Their printable copy** (165_applicant_copy; provisional position,
+pre-counsel research, 2026-10-01). R267 reg 11(1) has the applicant file the
+technical report, and what they file reaches the interested and affected
+parties (Annexure D item 8), so the copy they file should withhold the
+other water users' figures. A party of the application asks for it on their
+pack view (**Make a printable copy**, `POST …/scenarios/:sid/packs/:packId/pdf`);
+an `applicant_pack_render` job, as them, prints that very view in the same
+headless Chromium as the pack's PDF ([§ The PDF](#the-pdf)): a render token
+of purpose `applicant_pack`, issued only to a party (`render_token_issue`:
+`app_applicant_pack_meta`), whose session reads that one page and nothing
+else (not the editor's pack route, the run or the application;
+[security.md § Render tokens](./security.md#render-tokens)). The PDF goes
+beside the pack's own under `packs/<project>/<pack>/applicant/<sha256>.pdf`
+and is recorded once with **its own** SHA-256, pages and time
+(`evidence_pack_applicant_copy`, written only by
+`app_record_applicant_pack_pdf` from the party's own running job); asking
+again changes nothing. `GET …/pdf` downloads it (a one-minute signed GET,
+`evidence-pack-v<n>-<code>-applicant-copy.pdf`). The printed page opens with
+"Applicant's copy: other water users' figures withheld. Not the pack. Check
+the pack at <verify address>", with the pack's code and manifest hash, and
+its footer says the same on every page. It is not hashed as the pack, never
+replaces the pack's PDF, and verify knows nothing of it: the authority
+checks the pack itself. In production the job hands the render to the
+renderer Lambda with the application's id (`render_pack` with
+`scenarioId`), which answers `copy: 'applicant'`; the worker records it once
+the packs bucket is seen to hold it, as for the pack's PDF.
+Tests: `backend/src/evidence/applicant-copy.db.test.ts` (who asks and
+downloads, the token's issuer, the render session swept over every route,
+the one record, the production answer), `backend/src/jobs/handlers/applicant-pack-render.test.ts`,
+`backend/src/reports/scope.test.ts`, and `e2e/tests/applicant-pack.spec.ts`
+(the real print through MinIO, its hash checked).
 
 **Share links.** The application's owner (not the consultant they shared it
 with) makes a link to their own pack while it is issued, and lists and

@@ -1593,6 +1593,17 @@ export interface ApplicantPack {
 	 * published run, so those names can't be given.
 	 */
 	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; name: string; changePts: number }[] | null } | null;
+	/** Their printable copy of it (165_applicant_copy): their own page printed as them, other water users' figures withheld. */
+	copy: ApplicantCopyState;
+}
+
+/** The applicant's printable copy of a pack: ready (its own SHA-256), rendering, failed (why) or none (never asked for). */
+export interface ApplicantCopyState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	sha256: string | null;
+	pages: number | null;
+	renderedAt: string | null;
+	error: string | null;
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */

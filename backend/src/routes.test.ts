@@ -103,7 +103,10 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/reproduce',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
-			'GET /projects/:id/scenarios/:sid/packs/:packId'
+			'GET /projects/:id/scenarios/:sid/packs/:packId',
+			// Their printable copy of one (165_applicant_copy).
+			'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+			'GET /projects/:id/scenarios/:sid/packs/:packId/pdf'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);

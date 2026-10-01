@@ -78,6 +78,8 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	// (assertCanChange, the viewer checks in POST and …/runs).
 	['POST /projects/:id/scenarios', { why: 'a contributor makes an application; a viewer makes nothing', viewer: 403 }],
 	['PATCH /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
+	// The applicant's printable copy (165): a party of the application asks for it; anyone else gets the same 404.
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { why: "a party of the application asks for their copy of its issued pack (app_applicant_pack_meta); anyone else 404s", viewer: 404 }],
 	// "Ask the assessors why" (164): a party of the application asks; a team scenario has nothing hidden to ask about.
 	['POST /projects/:id/scenarios/:sid/questions', { why: "an application's parties ask about a rule hidden from them; a team scenario hides none", viewer: 409 }],
 	['DELETE /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
@@ -168,6 +170,8 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }],
 	// An applicant's packs (131_applicant_packs): the definer functions answer only the application's parties, for packs that were issued.
 	['GET /projects/:id/scenarios/:sid/packs', { min: 'contributor', why: "an application's issued packs, for its parties only (app_applicant_packs)" }],
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party asks for their printable copy of an issued pack of the application (165); any other 404s" }],
+	['GET /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party downloads their printable copy (165), other water users' figures withheld; any other 404s" }],
 	[
 		'GET /projects/:id/scenarios/:sid/packs/:packId',
 		{ min: 'contributor', why: "one issued pack of an application, D2-anonymised, for its parties only (app_applicant_pack); any other 404s" }

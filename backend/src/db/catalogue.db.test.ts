@@ -163,7 +163,9 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * An applicant's "Ask the assessors why" question is filed and answered only
  * through 164_applicant_visibility's app_ask_assessors (the project and the
  * name from the application) and app_answer_assessors_question (an editor,
- * once).
+ * once). An applicant's printable copy of a pack is recorded only by
+ * 165_applicant_copy's app_record_applicant_pack_pdf, from the party's own
+ * running render job.
  */
 const READ_ONLY = new Set([
 	'language',
@@ -175,7 +177,8 @@ const READ_ONLY = new Set([
 	'pack_reproduction',
 	'gauge_station_reference',
 	'dam_register_reference',
-	'application_question'
+	'application_question',
+	'evidence_pack_applicant_copy'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
