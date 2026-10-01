@@ -84,6 +84,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 		'A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.'
 	);
 	await expect(notice).toContainText('Irrigate at night and cut back where you can.');
+	// The WUA's percentage beside its own words, as on the farm page and in the alert email (operator, 2026-10-01).
+	await expect(notice).toContainText(/Set by the WUA: a 10\s%\scut in registered water use\./);
 	// The seeded record is long past, so the 30 days are named by their last day (issue #162).
 	await expect(reserve.getByText(/(Below|Kept) its reserve on .* the 30\sdays\sto\s\d{1,2}\s\w{3,4}\s\d{4}\./)).toBeVisible();
 	await expect(shared.getByRole('region', { name: 'River flow each month, in m³ a day' })).toBeVisible();

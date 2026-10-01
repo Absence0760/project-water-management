@@ -4934,12 +4934,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       record. Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before the first gateway key is issued on production.
-- [ ] **The WUA's cut % beside its own notice.** The farm page and `/share`
-      show "a 20 % cut in registered water use" only when the WUA wrote no
+- [x] **The WUA's cut % beside its own notice.** The farm page and `/share`
+      showed "a 20 % cut in registered water use" only when the WUA wrote no
       notice text; the alert email shows both. Make them agree (both, or
       neither). Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
-      Trigger: before farmers are invited.
+      **Decided (operator, 2026-10-01): both everywhere**, since the % is the
+      WUA's decision and the notice its explanation. **Done:** `noticeCard`
+      (farm page) and `shareNotice` (`/share` and its printed member
+      summary) show the line whenever a % was published. Tests:
+      `farm/cards.test.ts`, `share/share.test.ts`, `farm-view.spec.ts`,
+      `share-links.spec.ts`.
 - [x] **A stale EWR-forecast alert says nothing.** A firing
       `ewr_forecast_fail` event is left as it is while its forecast is behind
       the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast

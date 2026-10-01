@@ -7060,7 +7060,10 @@ published.
   the WUA on …. Data up to …", amber with its age when stale: "Data up to
   10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
   becomes "30 days to 10 Jan 2024"); the WUA's
-  notice first (warning or danger fill, icon and level in words), or "No
+  notice first (warning or danger fill, icon and level in words, the WUA's
+  words, and its percentage as "Set by the WUA: a 20 % cut in registered
+  water use." whenever it published one, beside its words as the alert email
+  has it), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
@@ -7692,7 +7695,9 @@ signed in or out, for someone outside the project, on a phone first.
   responsibility to anyone who relies on this page." (`shareCaveat()`,
   quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language, else English, else
+  restriction from the WUA"; the WUA's percentage, "Set by the WUA: a 20 %
+  cut in registered water use.", beside its words, as on the farm page and
+  in the alert email), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
@@ -7721,7 +7726,7 @@ signed in or out, for someone outside the project, on a phone first.
   k-ruled series). On paper: "Water Management · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
-  when it gave no words, who published it); each EWR site's reserve over
+  beside them, who published it); each EWR site's reserve over
   the period, always with its dates ("Below its reserve on 12 of the 102
   days from 1 Oct 2023 to 10 Jan 2024."); the monthly flow chart over the
   period's months (never fewer than 12, counting back from its last; drawn
