@@ -10,7 +10,12 @@
 	// the project's viewers and up (the pack's own page), and to its
 	// applicant and whoever they shared it with the ones that were issued,
 	// never a draft (131_applicant_packs: their anonymised pack view, where
-	// the applicant also shares it by link).
+	// the applicant also shares it by link). The notice's objection address
+	// and closing date (the applicant's, while a draft; every comment box
+	// prints them beside the warning that a comment is not an objection), and
+	// for the applicant and the assessors the public-participation record
+	// (166_public_participation, the reg 19 report's material). The drafts the
+	// caller may sign as the application's appointed specialist (167_signers).
 	import { base } from '$app/paths';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -29,7 +34,9 @@
 		type Pack,
 		type Scenario,
 		type ScenarioOutcome,
-		type ScenarioWithCheck
+		type PackSignoffList,
+		type ScenarioWithCheck,
+		type SpecialistDraft
 	} from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -203,6 +210,54 @@
 			}, failed);
 	});
 
+	// --- the notice: where written objections go (166) ---------------------------------
+	let noticeOpen = $state(false);
+	let address = $state('');
+	let closing = $state('');
+	function editNotice() {
+		address = s.objectionAddress ?? '';
+		closing = s.objectionClosingDate ?? '';
+		noticeOpen = true;
+	}
+	function saveNotice(e: SubmitEvent) {
+		e.preventDefault();
+		const body = { objectionAddress: address.trim() || null, objectionClosingDate: closing || null };
+		act('Notice details saved.', async () => {
+			const d = await api.scenarios.update(projectId, s.id, body);
+			noticeOpen = false;
+			return d;
+		});
+	}
+
+	// --- the specialist's drafts to sign (167) ------------------------------------------
+	let toSign = $state.raw<SpecialistDraft[]>([]);
+	$effect(() => {
+		const sid = scenarioId;
+		toSign = [];
+		if (canReadPacks) return;
+		api.scenarios.packsAndDrafts(projectId, sid).then(
+			(r) => {
+				if (sid === scenarioId) toSign = r.toSign;
+			},
+			() => {}
+		);
+	});
+	let signing = $state<SpecialistDraft | null>(null);
+	let signOpen = $state(false);
+	let signList = $state.raw<PackSignoffList | null>(null);
+	let signError = $state('');
+	async function openSigning(d: SpecialistDraft) {
+		signing = d;
+		signOpen = true;
+		signList = null;
+		signError = '';
+		try {
+			signList = await api.packs.signoffs(projectId, d.id);
+		} catch (e) {
+			signError = msg(e);
+		}
+	}
+
 	// --- comments and share links (WP-3.15) -------------------------------------------
 	const party = $derived(isOwner || s.members.some((m) => m.userId === session.user?.id));
 	const audiences = $derived(scenarioAudiences({ assessor: canDecide, party }));
@@ -230,6 +285,51 @@
 			<p><strong>{OUTCOME_LABEL[s.outcome]}</strong>{s.decidedBy ? ` by ${s.decidedBy}` : ''}{s.decidedAt ? `, ${fmtDate(s.decidedAt, true)}` : ''}.</p>
 			{#if s.decisionNote}<p class="reasons">{s.decisionNote}</p>{/if}
 		</div>
+	{/if}
+
+	<div class="notice" data-testid="application-notice">
+		<h4>Written objections</h4>
+		<p class="hint">
+			A comment in the app is not a written objection: only a written objection sent to the address in the application’s notice before its closing date keeps
+			a right to appeal (National Water Act s148(1)(f)). The comment boxes and share links say so, with these details when they are given.
+		</p>
+		{#if noticeOpen}
+			<form onsubmit={saveNotice} class="notice-form">
+				<div class="field">
+					<label for="notice-address">Where written objections go (as the notice gives it)</label>
+					<textarea id="notice-address" rows="3" maxlength="500" bind:value={address}></textarea>
+				</div>
+				<div class="field">
+					<label for="notice-date">Closing date for objections</label>
+					<input id="notice-date" type="date" bind:value={closing} />
+				</div>
+				<div class="actions">
+					<button type="submit" class="btn btn-primary btn-sm" disabled={busy || locked}>Save</button>
+					<button type="button" class="btn btn-sm" onclick={() => (noticeOpen = false)}>Cancel</button>
+				</div>
+			</form>
+		{:else}
+			<dl>
+				<dt>Address</dt>
+				<dd class="pre">{s.objectionAddress ?? 'Not given'}</dd>
+				<dt>Closing date</dt>
+				<dd>{s.objectionClosingDate ?? 'Not given'}</dd>
+			</dl>
+			{#if isOwner && s.status === 'draft'}
+				<button type="button" class="btn btn-sm" disabled={busy || locked} onclick={editNotice} data-testid="application-notice-edit">Edit the notice details</button>
+			{:else if isOwner}
+				<p class="hint">Fixed while the application is submitted; withdraw and reopen it to change them.</p>
+			{/if}
+		{/if}
+	</div>
+
+	{#if (isOwner || canDecide) && s.status !== 'draft'}
+		<p class="participation">
+			<a href="{base}/projects/{encodeURIComponent(projectId)}/scenarios/{encodeURIComponent(s.id)}/participation" data-testid="application-participation"
+				>Public participation record</a
+			>
+			<span class="hint">The comments made in the app, for the report to the authority (GN R267 reg 19).</span>
+		</p>
 	{/if}
 
 	<div class="actions talk">
@@ -320,6 +420,17 @@
 			{:else}
 				<p class="muted">None issued yet. The assessors issue a pack of the application once it is submitted; you can then read it here and share it by link.</p>
 			{/if}
+			{#if toSign.length}
+				<h5>To sign as the applicant’s specialist</h5>
+				<ul data-testid="application-panel-to-sign">
+					{#each toSign as d (d.id)}
+						<li>
+							Draft version {d.version}, drafted {fmtDate(d.createdAt)}{d.signoffs ? `, ${d.signoffs} sign-off${d.signoffs === 1 ? '' : 's'}` : ''}
+							<button type="button" class="btn btn-sm" onclick={() => openSigning(d)}>Sign…</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</div>
 	{/if}
 
@@ -366,6 +477,24 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<p class="visually-hidden" role="status">{note}</p>
 </section>
+
+{#if signing}
+	{@const d = signing}
+	<Dialog bind:open={signOpen} title="Sign draft version {d.version} as the applicant’s specialist" side wide>
+		{#if signError}
+			<p class="alert alert-error" role="alert">{signError}</p>
+		{:else if !signList}
+			<p class="muted" role="status">Loading the statement…</p>
+		{:else}
+			{#await import('$lib/components/liability/SignoffSection.svelte') then m}
+				<m.default {projectId} target={{ kind: 'pack', id: d.id }} list={signList} onchange={() => openSigning(d)} />
+			{/await}
+		{/if}
+		{#snippet actions()}
+			<button type="button" class="btn" onclick={() => (signOpen = false)}>Close</button>
+		{/snippet}
+	</Dialog>
+{/if}
 
 {#if canShare}
 	<Dialog bind:open={shareOpen} title="Share “{s.name}” read-only" side>
@@ -451,5 +580,37 @@
 		font-size: 0.82rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
+	}
+	h5 {
+		margin: 0.5rem 0 0.25rem;
+		font-size: 0.9rem;
+	}
+	.notice dl {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 0.2rem 0.75rem;
+		margin: 0 0 0.5rem;
+	}
+	.notice dt {
+		font-weight: 500;
+	}
+	.notice dd {
+		margin: 0;
+	}
+	.pre {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.notice-form textarea,
+	.notice-form input {
+		width: 100%;
+		max-width: 60ch;
+		font: inherit;
+	}
+	.participation {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
+		align-items: baseline;
 	}
 </style>
