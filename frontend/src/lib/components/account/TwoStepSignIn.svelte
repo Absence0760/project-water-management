@@ -9,7 +9,6 @@
 	import { onMount, tick } from 'svelte';
 	import { api, ApiError, type MfaStatus } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { saveBlob } from '$lib/export/download';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import { t, tn, plural } from '$lib/i18n/locale.svelte';
@@ -152,11 +151,25 @@
 	/** The key, in groups of four, as most apps ask for it typed. */
 	const grouped = (secret: string) => secret.replace(/(.{4})/g, '$1 ').trim();
 
-	/** The codes as a text file, through the app's one blob-download helper. */
-	function downloadCodes() {
+	/**
+	 * The codes as a text file, through the app's one blob-download helper,
+	 * loaded on click: imported statically it would join the page chunk and
+	 * take the "Download my data" helper's lazy chunk with it. If it can't
+	 * load, say so; no reload (that would lose the codes, shown once), copy them.
+	 */
+	let downloadFailed = $state(false);
+	async function downloadCodes() {
 		if (!codes) return;
 		const text = `${t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' })}\n\n${codes.join('\n')}\n\n${t('Each code works once, in place of a code from your authenticator app.')}\n`;
-		saveBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'water-management-recovery-codes.txt');
+		let download: typeof import('$lib/export/download');
+		try {
+			download = await import('$lib/export/download');
+		} catch {
+			downloadFailed = true;
+			return;
+		}
+		downloadFailed = false;
+		download.saveBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'water-management-recovery-codes.txt');
 	}
 </script>
 
@@ -175,6 +188,9 @@
 			<div class="codes" aria-labelledby="codes-h">
 				<h3 id="codes-h" tabindex="-1" bind:this={codesHeading}>{t('Your recovery codes')}</h3>
 				<p>{t('Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.')}</p>
+				{#if downloadFailed}
+					<div class="alert alert-error" role="alert">{t('The download could not be loaded. Copy the codes from the list below instead.')}</div>
+				{/if}
 				<ul class="code-list mono">
 					{#each codes as c (c)}<li>{c}</li>{/each}
 				</ul>

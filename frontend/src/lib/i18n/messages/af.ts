@@ -59,6 +59,8 @@ export const af: Catalogue = {
 	'950aa263': 'Jou herstelkodes',
 	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
 	'083eca42': 'Hou hulle op ’n veilige plek, weg van jou foon af. As jy jou foon verloor, teken elke kode jou een keer in. Hulle sal nie weer gewys word nie.',
+	// The download could not be loaded. Copy the codes from the list below instead.
+	'ac2f42d0': 'Die aflaai kon nie gelaai word nie. Kopieer eerder die kodes uit die lys hieronder.',
 	// Download the codes
 	'61a0db4c': 'Laai die kodes af',
 	// I’ve saved them

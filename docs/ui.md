@@ -108,7 +108,7 @@ two numbered steps: the QR code for the authenticator app, drawn in the page
 220 px; the encoder loads only at that moment) with the key in groups of
 four to type instead, and **Enter the code the app shows** with **Turn on
 two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
-whose heading takes focus: **Download the codes** (a text file) and **I’ve
+whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them) and **I’ve
 saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
