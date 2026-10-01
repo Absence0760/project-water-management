@@ -200,8 +200,8 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
 #   the runoff condition rules out a real on-channel dam, which catches the
 #   runoff draining into it as well as the river.
 #
-# The importer still imports it as a farm dam and only warns: the modeller
-# confirms it, and run-of-river supply waits for pump capacity (#54, 2c).
+# By default the importer still imports it as a farm dam and only warns, for
+# the modeller to confirm; --run-of-river converts it (as_run_of_river).
 RUN_OF_RIVER_PCT_UPSTREAM = 0.9999  # 100 %, allowing for float rounding
 RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION = 0.01
 RUN_OF_RIVER_POOL_MAX_M3 = 1.0

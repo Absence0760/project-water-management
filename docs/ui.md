@@ -1616,6 +1616,15 @@ workbook part is `WorkbookReview.svelte`.
      read) and updates the counts, notes and report in place; a date without
      a factor (or the other way round) or a non-positive factor is flagged
      and blocks Import.
+   - **River pumping units** (only when the importer flags a unit as
+     probable run-of-river; issue #54, 2c/2d): *Import these N as run of
+     river, pumping from the river*, off by default, its hint naming the
+     flagged units. On, it converts them as the Python importer's
+     `--run-of-river` does: the run-of-river supply rule, the dummy dam
+     dropped and the river pump uncapped (`pumpCapacityM3Day` null) until
+     the capacities are entered under Network → Supply, with a warning per
+     unit; a unit an enabled transfer draws on keeps its dam, and says so.
+     Like the gauge option it re-extracts from the workbook the worker holds.
    - **CHIRPS column** (only when the workbook has one; issue #40 part c):
      which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
      b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The
@@ -5971,6 +5980,43 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   published in Runs & results) and a filter with none ("Nothing is awaiting a
   decision." and **Show all**).
 
+**Assess together** (roadmap WP-3.11, `&view=assess` in the URL, so Back
+returns to the list; `CumulativeAssessment.svelte`, the pure parts in
+`cumulative.ts`): the section header's **Assess together** link swaps the
+card for the cumulative impact view, and **Back to the list** swaps it back.
+
+- **Pick:** every submitted or decided application, ticked two or more; once
+  one is ticked, an application on another base run can't be (it says
+  "based on another run than …"). A **Name**, then **Check they combine** (a
+  dry run: nothing written) or **Assess together** (writes the assessment
+  and queues its job).
+- **Refused, never merged:** when two applications change the same thing,
+  or one removes what another uses, each conflict is listed: its target
+  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  what the other uses, and both changes side by side (each application's
+  name, change number and the change in words). Changes that apply alone but
+  not together (two new dams given one name) are listed too.
+- **The result** (the newest assessment, or one picked under **Assessment**):
+  while it runs, *Queued* or *Running each application alone and all
+  together… N %* (followed every 1.5 s); a refused or failed one says why,
+  line by line. Complete: one matrix, rows = each measure at each EWR site
+  (the outlet first) and for the catchment (days the EWR is not met, mean
+  EWR shortfall, Reserve months met and deficit at each rule-table site,
+  mean flow at the outlet, supplied to existing users and their share of
+  demand met), columns = **Baseline**, each application **alone**, **All
+  together** (each with its change from the baseline under it, coloured
+  worse or better) and **Interaction** (together less the sum of the
+  separate changes; its plain-words reading is the cell's title and is read
+  out), with a one-paragraph explanation of the interaction above it and
+  **Download CSV** (the raw numbers, names guarded against CSV injection)
+  below.
+- Workspace English, like the rest of the assessors' tab.
+
+e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
+conflicting pair refused with both changes named, a pair that combines run
+by a worker tick into the matrix, the CSV, Back to the list; axe light and
+dark).
+
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it, and an editor who isn't its owner gets the
@@ -6467,6 +6513,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
 - **Board 1, the checks** (screen only, open by default): every check the
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Among them (`evidence-10`) *Every river pump has a capacity* and, for an
+  application, *The application's own river abstraction leaves the EWR in
+  the river*, each naming the units it found
+  ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
   Then **Expect questions about:** what an assessor will ask for, with the
   way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).

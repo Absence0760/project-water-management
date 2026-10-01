@@ -1541,9 +1541,10 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks and yield calculations (2 each) are counted under a
-  per-user advisory lock, so a concurrent burst can't pass them, and the
-  database refuses a sweep member or outlook level past the API's cap
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  are counted under a per-user advisory lock, so a concurrent burst can't
+  pass them, and the database refuses a sweep member, assessment member or
+  outlook level past the API's cap
   (`jobs/costCaps.security.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
@@ -1717,6 +1718,18 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **Cumulative assessments are the editors' alone** (145_assessment,
+    WP-3.11): an assessment names every application in it and shows what
+    each does, so `assessment` and `assessment_member` are read and written
+    by editors only (RLS and the routes, `403` below editor); a contributor
+    never learns another application exists from one, and a viewer, who
+    reads an application only once decided, doesn't read a submitted one
+    through it. A member's ops are copied from its scenario by the database
+    (`assessment_member_guard`, as the caller, so RLS hides a draft
+    application: it can't be named), never taken from the request.
+    `assessments/assessments.db.test.ts` checks each with a positive control;
+    `db/cross-project-refs.security.db.test.ts` and
+    `jobs/trust.security.db.test.ts` cover its references and its job.
   - **An application's own farms are its owner's farm links, now**
     (071_application_own_nodes). The `scenario_owned_nodes` trigger refuses
     an application whose `owned_node_ids` name a farm its owner isn't linked

@@ -123,6 +123,32 @@ async function sign(u: User, packId: string, name = 'Dr A. Hydrologist') {
 }
 
 const issue = (u: User, packId: string) => u.call('POST', `${packPath(packId)}/issue`);
+
+const PUMP_CROP = crypto.randomUUID();
+/** The upper farm pumping from the river under run of river for a new crop: no capacity, nothing kept for the EWR (evidence-10). */
+const PUMP = [
+	{ op: 'crop.add', crop: { id: PUMP_CROP, name: 'Lucerne', cropFactor: Array.from({ length: 12 }, () => 0.8) } },
+	{ op: 'cropArea.set', nodeId: '', cropId: PUMP_CROP, areaM2: 50_000 },
+	{ op: 'node.set', nodeId: '', field: 'supplyRule', value: 'runOfRiver' }
+];
+/** A capacity and the EWR kept, so both river checks pass. */
+const PROTECT = [
+	{ op: 'node.set', nodeId: '', field: 'pumpCapacityM3Day', value: 2400 },
+	{ op: 'node.set', nodeId: '', field: 'handsOffEwr', value: true }
+];
+
+/** An application on the baseline owning the upper farm, run, with its paired band on the cited ensemble, so only its own checks can fail. */
+async function scenarioRun(name: string, ops: Record<string, unknown>[]) {
+	const created = await owner.call('POST', `${at()}/scenarios`, { name, baseRunId: baseRun, ops: ops.map((o) => ('nodeId' in o ? { ...o, nodeId: farmId } : o)), ownedNodeIds: [farmId] });
+	expect(created.status, JSON.stringify(created.body)).toBe(201);
+	const ran = await owner.call('POST', `${at()}/scenarios/${created.body.scenario.id}/runs`, {});
+	expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+	const runId = ran.body.run.id as string;
+	const cited = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.uncertainty.cited.id as string;
+	const base = (await owner.call('GET', `${runPath(baseRun)}/uncertainty/${cited}`)).body.ensemble;
+	await ensemble(runId, { baselineId: cited }, { options: base.options, header: base.result.header, members: base.result.members });
+	return runId;
+}
 const bytesSha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
 /** Issuing a pack stores its reproduction bundle in MinIO (bundle.ts), so the describes that issue need it. */
@@ -229,7 +255,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-9');
+		expect(manifest.report.version).toBe('evidence-10');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -305,6 +331,54 @@ describe('drafting a pack', () => {
 		const res = await editor.call('POST', `${at()}/packs`, { runId: seedRun });
 		expect(res.status).toBe(409);
 		expect(res.body.details.checks.map((k: { id: string }) => k.id)).toContain('nominated');
+	});
+
+	it('refuses an application whose own river pump has no capacity and leaves the EWR unprotected, naming exactly those checks; capped and protected, it drafts (positive control)', async () => {
+		// Each run's stored model is what the checks read (issue #54, #90 Q15 and Q16, evidence-10).
+		const open = await scenarioRun('Upper pump', PUMP);
+		const res = await editor.call('POST', `${at()}/packs`, { runId: open });
+		expect(res.status).toBe(409);
+		const failing = res.body.details.checks as { id: string; detail: string; fix: string }[];
+		// The paired band is there, so the river checks are all that stop it.
+		expect(failing.map((k) => k.id).sort()).toEqual(['protectsEwr', 'pumpCapacity']);
+		expect(failing.find((k) => k.id === 'pumpCapacity')!.detail).toMatch(/^The application: Upper’s river pump\. /);
+		expect(failing.find((k) => k.id === 'protectsEwr')!.detail).toMatch(/^Upper’s river pump keeps neither the EWR nor a hands-off flow/);
+		const capped = await scenarioRun('Upper pump, capped', [...PUMP, ...PROTECT]);
+		const live = (await viewer.call('GET', `${runPath(capped)}/evidence-report`)).body.report;
+		expect(live.checks.filter((k: { id: string }) => k.id === 'pumpCapacity' || k.id === 'protectsEwr').map((k: { passed: boolean }) => k.passed)).toEqual([true, true]);
+		const ok = await draft(editor, capped);
+		expect((await editor.call('DELETE', packPath(ok.id))).status).toBe(204);
+	});
+
+	it('refuses to issue a pack drafted before evidence-10 on an uncapped pump: its frozen report lacks the checks, the live report has them', async () => {
+		const open = await scenarioRun('Upper pump, old draft', PUMP);
+		// The pack as an evidence-9 draft froze it: the live report without the two checks, which then passed every check.
+		const template = await draft(editor, await scenarioRun('Upper pump, template', [...PUMP, ...PROTECT]));
+		const now = (await editor.call('GET', packPath(template.id))).body.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(template.id))).status).toBe(204);
+		const live = (await viewer.call('GET', `${runPath(open)}/evidence-report`)).body.report as PackManifest['report'];
+		const id = crypto.randomUUID();
+		const checks = live.checks.filter((k) => k.id !== 'pumpCapacity' && k.id !== 'protectsEwr');
+		const old = { ...now, pack: { ...now.pack, id }, report: { ...live, version: 'evidence-9', checks, issuable: true } } as unknown as PackManifest;
+		const sid = (await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [open]))[0]!.scenario_id as string;
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-9', $8, $9)`,
+			[id, projectId, baseRun, sid, open, JSON.stringify(old), sha256(packManifestText(old)), now.engine.version, editor.id]
+		);
+		try {
+			// Its frozen report may be issued (the checklist says so), and it is signed.
+			expect((await editor.call('GET', packPath(id))).body.issue).toMatchObject({ issuable: true });
+			await sign(editor, id);
+			const res = await issue(editor, id);
+			expect(res.status).toBe(409);
+			expect(res.body.error).toMatch(/since its draft was made/);
+			expect((res.body.details.checks as { id: string }[]).map((k) => k.id).sort()).toEqual(['protectsEwr', 'pumpCapacity']);
+			expect((await asOwner('SELECT status FROM evidence_pack WHERE id = $1', [id]))[0]!.status).toBe('draft');
+		} finally {
+			// A signed draft is kept, never deleted: withdrawn, so nothing later meets it.
+			expect((await editor.call('POST', `${packPath(id)}/withdraw`, { reason: 'test: an old draft on an uncapped pump' })).status).toBe(200);
+		}
 	});
 
 	it('lets viewers read and not draft; contributors and farmers get 403, a stranger 404', async () => {

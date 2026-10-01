@@ -2201,7 +2201,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-9`: § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-10`: the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2252,7 +2252,7 @@ reproduction bundle).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
+| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails (among them, since `evidence-10`, `pumpCapacity` and `protectsEwr`); `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
 | GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
@@ -3054,6 +3054,59 @@ kept fit is the server's too.
   (`trigger: 'new_data'`, one pending per project, debounced like the
   automatic re-run); with `apply` and signed-off rules, its job applies the
   kept fit and makes an `auto` run.
+
+## Assessments
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)): several scenarios on one
+base run, each alone and all together, run by one background `assessment`
+job on the base run's stored input. **Editors only**: an assessment names
+submitted applications, which neither contributors nor viewers read.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
+| GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+
+- Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
+  distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).
+- Each scenario must be one the caller reads in this project (`404`: an
+  application still a draft is its applicant's alone), a team scenario or a
+  submitted or decided application (`409` for a withdrawn one), and all on
+  one base run (`422 these scenarios are based on different runs …`). The
+  base run is rebuilt from its stored input as for a scenario (`409` when it
+  can't be).
+- **Refused, never merged:** `422` when the scenarios don't combine, with
+  `details: { conflicts, problems }`. A conflict is
+  `{ reason: 'same_target' | 'removed_in_use', target, a, b, message }`,
+  `a`/`b` = `{ scenario, scenarioId, opIndex, op }`; `problems` are lines
+  naming the scenario (`"App B" alone: op 2 …`, or `"App B": op 1 …` for an
+  op that applies alone but not on top of the others). The message says how
+  many conflicts. Nothing is written.
+- **At most 2 assessment jobs queued or running per user** (`429`; a dry run
+  doesn't count). A job gets 2 attempts. A project keeps its newest **20**
+  assessments; one goes with its base run.
+- `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  status, problems, report?, engineVersion, job, createdBy, createdAt,
+  completedAt, members: AssessmentMember[] }`. `status`: `pending`, then
+  `complete` (`report` is the engine's `CumulativeReport`), `refused` (the
+  job found the scenarios no longer combine, or one doesn't apply alone;
+  `problems` says why) or `failed` (the engine refused an input). `job` as
+  for a sweep.
+- `AssessmentMember = { id, position, scenarioId, name, origin, opsSha256,
+  opCount, status, problems, startDate, endDate }`: the scenario's ops are
+  **copied** when the assessment is written (by the database, never from the
+  request), so a team scenario edited or deleted later (`scenarioId` then
+  `null`) doesn't change it. `status`: `pending`, `done` (its run alone is
+  stored), `problems` or `failed`.
+- `CumulativeReport = { scenarios: [{ id, name }], rows: CumulativeRow[],
+  warnings }`; a row is one measure at one EWR site (`siteNodeId` null = the
+  outlet) or of the catchment (`site` null): `{ metric, siteNodeId, site,
+  isOutlet, unit, higherIsWorse, baseline, singles[], combined,
+  singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
+  value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
+  lists the measures).
 
 ## Seasonal outlooks
 

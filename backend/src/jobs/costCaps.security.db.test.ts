@@ -3,16 +3,17 @@
 // concurrent requests, a body past a list cap, or a direct write past the
 // API, each against the cap's own positive control.
 //
-//   - The per-user queued-job caps (sweeps, outlooks, yield), the hourly
+//   - The per-user queued-job caps (sweeps, outlooks, yield, assessments), the hourly
 //     on-demand PDF cap and the per-project schedule cap are checked and
 //     written one request at a time (an advisory lock per user or project),
 //     so a burst can't pass the count together. The feed cap's burst test is
 //     in feeds/feeds.db.test.ts.
 //   - A report or schedule emails at most MAX_RECIPIENTS people.
-//   - The database refuses a sweep member or outlook level past the API's
+//   - The database refuses a sweep member, assessment member or outlook level past the API's
 //     cap, so a direct insert can't make a job run more engine runs.
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ASSESSMENT_JOBS_PER_USER, ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { OUTLOOK_JOBS_PER_USER, OUTLOOK_LEVELS_MAX } from '../outlooks/schema.js';
@@ -71,6 +72,15 @@ describe('per-user queued-job caps hold under a concurrent burst', () => {
 		const c = await catchment(owner);
 		await burst((i) => owner.call('POST', `/projects/${c.projectId}/sweeps`, { name: `s${i}`, baseRunId: c.runId, members: [{ name: 'm', ops: scale(0.9) }] }), SWEEP_JOBS_PER_USER, 202, 429);
 		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'sweep' AND acting_user_id = $1`, [owner.id]))[0].n).toBe(SWEEP_JOBS_PER_USER);
+	});
+
+	it(`at most ${ASSESSMENT_JOBS_PER_USER} assessments queued per user, however many arrive at once`, async () => {
+		const owner = await signUp('CapAssessment');
+		const c = await catchment(owner);
+		const scenario = async (name: string, ops: unknown[]) => (await owner.call('POST', `/projects/${c.projectId}/scenarios`, { name, baseRunId: c.runId, ops })).body.scenario.id as string;
+		const ids = [await scenario('Pump', [{ op: 'node.set', nodeId: c.farm.id, field: 'divertCapacityM3Day', value: 9000 }]), await scenario('Cut', scale(0.9))];
+		await burst((i) => owner.call('POST', `/projects/${c.projectId}/assessments`, { name: `a${i}`, scenarioIds: ids }), ASSESSMENT_JOBS_PER_USER, 202, 429);
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'assessment' AND acting_user_id = $1`, [owner.id]))[0].n).toBe(ASSESSMENT_JOBS_PER_USER);
 	});
 
 	it(`at most ${OUTLOOK_JOBS_PER_USER} outlooks queued per user, however many arrive at once`, async () => {
@@ -162,6 +172,26 @@ describe('the database caps what a job will run, past the API', () => {
 			);
 		await expect(insert(SWEEP_MEMBERS_MAX)).rejects.toMatchObject({ code: '23514' });
 		await expect(insert(SWEEP_MEMBERS_MAX - 1)).resolves.toMatchObject({ rowCount: 1 });
+	});
+
+	it(`an assessment member at position ${ASSESSMENT_SCENARIOS_MAX} is refused; the last allowed position is accepted (positive control)`, async () => {
+		const owner = await signUp('CapAssessmentRows');
+		const c = await catchment(owner);
+		const scenario = async (name: string) => (await owner.call('POST', `/projects/${c.projectId}/scenarios`, { name, baseRunId: c.runId, ops: [] })).body.scenario.id as string;
+		const ids = [await scenario('s0'), await scenario('s1'), await scenario('s2'), await scenario('s3')];
+		const { assessment } = (await owner.call('POST', `/projects/${c.projectId}/assessments`, { name: 'a', scenarioIds: ids.slice(0, 2) })).body;
+		const insert = (position: number, sid: string) =>
+			withUser(owner.id, (db) =>
+				db.query(`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256) VALUES ($1, $2, $3, $4, 'x', 'team', '[]', $5)`, [
+					assessment.id,
+					c.projectId,
+					sid,
+					position,
+					'a'.repeat(64)
+				])
+			);
+		await expect(insert(ASSESSMENT_SCENARIOS_MAX, ids[2]!)).rejects.toMatchObject({ code: '23514' });
+		await expect(insert(ASSESSMENT_SCENARIOS_MAX - 1, ids[3]!)).resolves.toMatchObject({ rowCount: 1 });
 	});
 
 	it(`an outlook with ${OUTLOOK_LEVELS_MAX + 1} demand levels is refused; ${OUTLOOK_LEVELS_MAX} are accepted (positive control)`, async () => {

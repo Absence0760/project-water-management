@@ -83,6 +83,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'GET /projects/:id/yield': (c) => ({ query: { runId: c.runId } }),
 	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
+	'POST /projects/:id/assessments': (c) => ({ body: { name: `Ladder assessment ${crypto.randomUUID()}`, scenarioIds: [c.ids.sid!, c.ids.sid2!] } }),
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
 	'POST /projects/:id/outlooks/:outlookId/publish': () => ({ body: { levelId: '0' } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
@@ -153,6 +154,8 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	};
 	const pubId = await made('/publication', { runId }, (b) => b.publication.id);
 	const sid = await made('/scenarios', { name: 'Team scenario', baseRunId: runId, ops: [] }, (b) => b.scenario.id);
+	// A second, for an assessment of two (WP-3.11).
+	const sid2 = await made('/scenarios', { name: 'Second team scenario', baseRunId: runId, ops: [] }, (b) => b.scenario.id);
 	const feedId = await made('/feeds', { source: 'dws', config: { station: 'X0H000' } }, (b) => b.feed.id);
 	const scheduleId = await made('/report-schedules', { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [owner!.id] }, (b) => b.schedule.id);
 	const aid = await made('/allocations', { nodeId: a.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 }, (b) => b.allocation.id);
@@ -184,6 +187,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			nodeId: a.id,
 			userId: owner!.id,
 			sid,
+			sid2,
 			pubId,
 			feedId,
 			scheduleId,
