@@ -124,6 +124,129 @@ describe('importing a GeoJSON file', () => {
 	});
 });
 
+describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () => {
+	let mixedId: string;
+	const mixAt = (p = '') => `/projects/${mixedId}/map${p}`;
+	const outlet2 = node('Outlet weir', null);
+	const upper = node('Upper farm', outlet2.id);
+	const lower = node('Lower farm', outlet2.id);
+	const poly = (name: string, ring: number[][], props: Record<string, unknown> = {}) => ({ type: 'Feature', properties: { name, ...props }, geometry: { type: 'Polygon', coordinates: [ring] } });
+	/** A boundary, two parcels named like the farms, a river and a gauge named like the outlet: no kind anywhere but the river's `layer`. */
+	const mixed = JSON.stringify({
+		type: 'FeatureCollection',
+		features: [
+			poly('Upper farm', box(21.31, -33.69, 0.02)),
+			poly('Mixed catchment', box(21.3, -33.7, 0.1)),
+			poly('Lower farm', box(21.35, -33.69, 0.02)),
+			{ type: 'Feature', properties: { name: 'Mixed river', layer: 'Streams' }, geometry: { type: 'LineString', coordinates: [[21.31, -33.68], [21.39, -33.61]] } },
+			{ type: 'Feature', properties: { name: 'outlet weir' }, geometry: { type: 'Point', coordinates: [21.39, -33.61] } }
+		]
+	});
+	const count = async () => ((await asOwner('SELECT count(*)::int AS n FROM map_feature WHERE project_id = $1', [mixedId]))[0] as { n: number }).n;
+
+	beforeAll(async () => {
+		mixedId = (await owner.call('POST', '/projects', { name: 'Mixed map' })).body.project.id;
+		expect((await owner.call('PUT', `/projects/${mixedId}/model`, { nodes: [outlet2, upper, lower], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		for (const [u, role] of [
+			[editor, 'editor'],
+			[viewer, 'viewer']
+		] as const)
+			expect((await owner.call('POST', `/projects/${mixedId}/members`, { email: u.email, role })).status).toBe(201);
+	});
+
+	it('proposes each feature’s kind and node from the file, and saves nothing; a viewer may not ask', async () => {
+		expect((await viewer.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed })).status).toBe(403);
+		const res = await editor.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body).toMatchObject({ fileName: 'mixed.geojson', duplicate: false, problems: [] });
+		expect(res.body.sha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(res.body.features.map((f: Record<string, unknown>) => [f.index, f.geometryType, f.kind, f.kindFrom, f.nodeId])).toEqual([
+			[1, 'Polygon', 'farm_parcel', 'geometry', upper.id],
+			[2, 'Polygon', 'catchment_boundary', 'geometry', null],
+			[3, 'Polygon', 'farm_parcel', 'geometry', lower.id],
+			[4, 'LineString', 'river', 'property', null],
+			[5, 'Point', 'gauge', 'geometry', outlet2.id]
+		]);
+		expect(await count()).toBe(0);
+	});
+
+	it('refuses a kind that doesn’t fit a feature’s geometry, a node of the wrong kind and a second boundary, per feature, and saves nothing', async () => {
+		const res = await editor.call('POST', mixAt('/import'), {
+			fileName: 'mixed.geojson',
+			text: mixed,
+			features: [
+				{ index: 1, kind: 'farm_parcel', nodeId: outlet2.id },
+				{ index: 2, kind: 'catchment_boundary' },
+				{ index: 3, kind: 'catchment_boundary' },
+				{ index: 4, kind: 'gauge' },
+				{ index: 5, kind: 'gauge' }
+			]
+		});
+		expect(res.status).toBe(422);
+		expect(res.body.details).toEqual([
+			{ feature: null, message: 'A file holds at most one catchment boundary; features 2, 3 are each marked as one.' },
+			{ feature: 1, message: 'is a farm parcel, which can stand for a farm or user node, not a gauge' },
+			{ feature: 4, message: 'is a LineString; a gauge is a Point' }
+		]);
+		const missing = await editor.call('POST', mixAt('/import'), { fileName: 'mixed.geojson', text: mixed, features: [{ index: 1, kind: 'farm_parcel' }] });
+		expect(missing.status).toBe(400);
+		expect(missing.body.error).toMatch(/List every feature in the file once: it has 5/);
+		expect(await count()).toBe(0);
+	});
+
+	it('imports each feature as reviewed: the kinds, a changed one, a renamed one and the nodes', async () => {
+		const res = await editor.call('POST', mixAt('/import'), {
+			fileName: 'mixed.geojson',
+			text: mixed,
+			features: [
+				{ index: 1, kind: 'farm_parcel', nodeId: upper.id },
+				{ index: 2, kind: 'catchment_boundary' },
+				{ index: 3, kind: 'dam', name: 'Lower dam', nodeId: null },
+				{ index: 4, kind: 'river' },
+				{ index: 5, kind: 'gauge' }
+			]
+		});
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.features.map((f: Record<string, unknown>) => [f.kind, f.name, f.nodeId])).toEqual([
+			['farm_parcel', 'Upper farm', upper.id],
+			['catchment_boundary', 'Mixed catchment', null],
+			['dam', 'Lower dam', null],
+			['river', 'Mixed river', null],
+			// No nodeId given: linked by name, as a one-kind import does.
+			['gauge', 'outlet weir', outlet2.id]
+		]);
+		expect(res.body.features[3].properties).toEqual({});
+		const [audit] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.imported'`, [mixedId]);
+		expect(audit!.subject).toMatchObject({ fileName: 'mixed.geojson', kind: 'mixed', features: 5, kinds: { farm_parcel: 1, catchment_boundary: 1, dam: 1, river: 1, gauge: 1 } });
+		// The preview now says the file is in already, and the import refuses it.
+		expect((await editor.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed })).body.duplicate).toBe(true);
+		expect((await editor.call('POST', mixAt('/import'), { fileName: 'mixed.geojson', text: mixed, kind: 'other' })).status).toBe(409);
+	});
+
+	it('lists a refused feature’s problem on its row in the preview, and the import takes nothing', async () => {
+		const file = JSON.stringify({
+			type: 'FeatureCollection',
+			features: [poly('Fine parcel', box(21.32, -33.66, 0.01)), { type: 'Feature', properties: { name: 'Projected' }, geometry: { type: 'Point', coordinates: [-45_000, 3_700_000] } }]
+		});
+		const pre = await editor.call('POST', mixAt('/import/preview'), { fileName: 'half.geojson', text: file });
+		expect(pre.status).toBe(200);
+		expect(pre.body.features.map((f: Record<string, unknown>) => [f.index, f.geometryType, f.kind])).toEqual([
+			[1, 'Polygon', 'farm_parcel'],
+			[2, null, null]
+		]);
+		expect(pre.body.problems).toEqual([{ feature: 2, message: expect.stringMatching(/looks projected/) }]);
+		const before = await count();
+		const res = await editor.call('POST', mixAt('/import'), { fileName: 'half.geojson', text: file, features: [{ index: 1, kind: 'farm_parcel' }, { index: 2, kind: 'gauge' }] });
+		expect(res.status).toBe(422);
+		expect(await count()).toBe(before);
+	});
+
+	it('refuses a body with both one kind and each feature’s, or neither', async () => {
+		expect((await editor.call('POST', mixAt('/import'), { fileName: 'x.geojson', text: mixed, kind: 'other', features: [{ index: 1, kind: 'other' }] })).status).toBe(400);
+		expect((await editor.call('POST', mixAt('/import'), { fileName: 'x.geojson', text: mixed })).status).toBe(400);
+	});
+});
+
 describe('placing and editing features', () => {
 	let gaugeId: string;
 
@@ -283,6 +406,9 @@ describe('the import’s body limit', () => {
 		const padded = boundaryFile('Padded', 0.05) + ' '.repeat(4.5 * 1024 * 1024);
 		const res = await editor.call('POST', at('/import'), { fileName: 'padded.geojson', kind: 'other', text: padded });
 		expect(res.status, JSON.stringify(res.body).slice(0, 200)).toBe(201);
+		// The review reads the same file, under the same limit.
+		const pre = await editor.call('POST', at('/import/preview'), { fileName: 'padded.geojson', text: padded });
+		expect(pre.status, JSON.stringify(pre.body).slice(0, 200)).toBe(200);
 		const huge = await app.request(at('/import'), {
 			method: 'POST',
 			headers: { cookie: editor.cookie, origin: 'http://localhost:7777', 'content-type': 'application/json' },
