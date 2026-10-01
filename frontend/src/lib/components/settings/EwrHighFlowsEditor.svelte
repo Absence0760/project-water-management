@@ -196,16 +196,6 @@
 		gap: 0.5rem;
 		margin-top: 0.35rem;
 	}
-	.file {
-		position: relative;
-		overflow: hidden;
-	}
-	.file input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		cursor: pointer;
-	}
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;

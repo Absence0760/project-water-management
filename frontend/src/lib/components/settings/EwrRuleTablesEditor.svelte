@@ -440,16 +440,6 @@
 		width: auto;
 		margin-top: 0.15rem;
 	}
-	.file {
-		position: relative;
-		overflow: hidden;
-	}
-	.file input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		cursor: pointer;
-	}
 	.notes {
 		color: var(--warning);
 		margin: 0.25rem 0 0.5rem;

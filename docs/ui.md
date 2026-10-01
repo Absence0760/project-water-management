@@ -1901,6 +1901,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
+- **Paste from a spreadsheet:** the node table takes a block copied from Excel, previewed
+  before it's applied, and gives the table as a CSV to fill in ([§ Grid modal](#grid-modal)).
 - **The node table** (`grid=nodes`): the whole table, through the **In use** share and the ✕
   column, fits a 1440px screen without sideways scrolling (the dam physics
   fields live in the one-node form only, see above). Field headers wrap
@@ -2532,6 +2534,50 @@ the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
   **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
+- **Paste from a spreadsheet** (issue #285): the node table and the
+  planted-areas grid take a block copied from Excel. Pasting more than one
+  cell into any of their inputs (a tab or a line break in it; one value stays
+  the input's own paste) opens **Paste into the node table** / **Paste
+  planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
+  **Paste from a spreadsheet…** under the grid opens it empty, to paste,
+  type or **Load a CSV file**. **Download the table as CSV** is the grid as
+  it is now (names, then each column with its unit in brackets; a % as
+  0–100, areas in ha; formula-like names defused, `docs/security.md`), the
+  template to fill in. The block is read by `lib/spreadsheet/paste/read.ts`,
+  the same reader as the Reserve rule tables' paste (`ewrRules.ts`
+  `parseGrid`): tabs, semicolons or a CSV, grouping spaces dropped. A comma
+  in a number is decided once for the whole block (`read.ts` `blockCommas`),
+  since a spreadsheet copies numbers as it shows them: a cell that can only be
+  a decimal comma (12,5, 0,75) makes it decimal, one that can only be
+  thousands (1,500,000, 1,234.5) makes it thousands, both stop the paste, and
+  a block whose only commas are single three-digit groups (300,000) stops
+  with that cell ("300 000 or 300?") rather than guess. (The Reserve rule
+  tables keep reading a comma as decimal.) Then
+  `paste/grid.ts` `mapPaste` places it: a heading row puts each column where
+  its heading says (case and a last bracket, the unit, ignored: "Dam
+  capacity (m³)", "Maize (white) (ha)"; a heading the grid hasn't got, such
+  as Total, is left out with a note); names in the first column put each row
+  on the row of that name, in any order, ignoring case but not brackets, so
+  "Farm A (east)" and "Farm A (west)" stay apart (a name the grid hasn't got,
+  or two rows share, is left out with a note; a name that is only a number
+  reads as a value, so such a block is placed by position); without names or
+  headings the block fills the grid from the cell it was pasted into, in the
+  grid's order, and says which cell that was (from the toolbar, or a cell
+  of no value column such as Kind, the first row's or that row's first
+  column, and it says so). A blank or a dash leaves a
+  value as it is; a value that isn't a number, a negative, or a % above 100
+  stops it with the row and column. The node table leaves out values for a
+  field the node doesn't use (a gauge's dam, any field of an other water
+  user, River to dam set by month) with a note (`network/nodePaste.ts`); the
+  planted-areas grid reads hectares, and 0 clears an area
+  (`crops/areaPaste.ts`). The **Preview** lists every value that would
+  change (row, column, now, pasted) and counts those already equal;
+  **Apply N changes** writes them into the editor, unsaved, as if typed, and
+  the grid's save row saves or discards them. The result is one status line
+  whose text changes (read out each time), and the list of changes scrolls
+  in its own focusable box. Escape or Cancel closes it and hands the focus
+  back; it isn't in the URL, so Back closes the grid modal under it, as
+  **Load crop factors…** does. Viewers get neither.
 - **Layout:** the `Dialog` `full` variant with `keepInputs` (the grid's inputs
   keep their own widths; other dialogs stretch text fields to the dialog's
   width). The grid scrolls inside the modal; the title and the save row stay

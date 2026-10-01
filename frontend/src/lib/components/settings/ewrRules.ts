@@ -12,6 +12,7 @@ import {
 	type EwrRuleTable,
 	type NetworkNode
 } from '@water-management/engine';
+import { DECIMAL_COMMA_NOTE, numberReader, readPastedBlock, splitCsvRow } from '$lib/spreadsheet/paste/read';
 
 /** An EWR site a table can be at: the outlet (id null) or a gauge. */
 export interface SiteOption {
@@ -117,25 +118,12 @@ const wyRow = (m: number) => (m + 2) % 12;
  * cells. Returns an error message instead when the paste isn't a 12-row table.
  */
 export function parseGrid(text: string): ParsedGrid | { error: string } {
-	const lines = text
-		.replace(/\r/g, '')
-		.split('\n')
-		.map((l) => l.trim())
-		.filter((l) => l.length);
-	if (!lines.length) return { error: 'Paste the table first.' };
-	const sep = lines.some((l) => l.includes('\t')) ? /\t/ : lines.some((l) => l.includes(';')) ? /;/ : lines.some((l) => /\d,\d/.test(l) && l.split(',').length > 2) ? /,/ : /\s+/;
-	const decimalComma = sep.source !== ',';
+	const block = readPastedBlock(text, { spaces: true });
+	if (!block.cells.length) return { error: 'Paste the table first.' };
 	const notes: string[] = [];
-	let sawComma = false;
-	const cellNum = (c: string): number => {
-		let v = c.trim().replace(/[ \s]/g, '');
-		if (decimalComma && /^-?\d+,\d+$/.test(v)) {
-			v = v.replace(',', '.');
-			sawComma = true;
-		}
-		return v === '' ? NaN : Number(v);
-	};
-	let cells = lines.map((l) => l.split(sep).map((c) => c.trim()));
+	const reader = numberReader(block.decimalComma);
+	const cellNum = (c: string): number => reader.read(c);
+	let cells = block.cells;
 
 	// A header row: no month name first, and every cell a point ("10", "10%", "0-10").
 	let points: number[] | null = null;
@@ -180,7 +168,7 @@ export function parseGrid(text: string): ParsedGrid | { error: string } {
 	if (points && points.length !== width) return { error: `The heading has ${points.length} % points but the rows have ${width} values.` };
 	const badRow = rows.findIndex((r) => r.some((v) => !Number.isFinite(v)));
 	if (badRow >= 0) return { error: `${WY[badRow]} has a value that isn't a number.` };
-	if (sawComma) notes.push('Decimal commas were read as decimal points (1,207 = 1.207).');
+	if (reader.sawComma) notes.push(DECIMAL_COMMA_NOTE);
 	return { rows, points, monthLabels: labelled, notes };
 }
 
@@ -273,18 +261,7 @@ export function parseMonths(text: string): number[] | null {
 function splitRow(line: string): string[] {
 	if (line.includes('\t')) return line.split('\t');
 	if (line.includes(';')) return line.split(';');
-	const cells: string[] = [];
-	let cur = '';
-	let quoted = false;
-	for (const ch of line) {
-		if (ch === '"') quoted = !quoted;
-		else if (ch === ',' && !quoted) {
-			cells.push(cur);
-			cur = '';
-		} else cur += ch;
-	}
-	cells.push(cur);
-	return cells;
+	return splitCsvRow(line);
 }
 
 /**
