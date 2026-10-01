@@ -242,7 +242,7 @@ of #326, and nothing on the Map tab calls this module today.
   published; anyone below editor gets the published run only, and nothing
   when nothing is published. This is a choice of view, not an access rule:
   viewers can already read every run on the Runs page. Farmers can't read
-  runs at all (`403`); their farm map (A3) reads the farm view instead.
+  runs at all (`403`); their farm map (A3, [§ The farmer's map](#the-farmers-map)) reads the farm view instead.
 - **Measures** (`unitStatuses`), per hydrological unit and water user, each
   as `{ nodeId, measure, value, band, label }` with `band` one of `ok`,
   `watch`, `short` or `none` (no figure), and `label` the figure in words so
@@ -278,6 +278,24 @@ of #326, and nothing on the Map tab calls this module today.
   `watchAppTheme` and pass the new `fills`: CatchmentMap redraws a theme
   change with the `fills` it was given, so stale ones keep the old theme's
   colours. The boundary and rivers are never filled.
+
+## The farmer's map
+
+Issue #326 A3 (decision D-A1/A3): the farm view (`/farm/[projectId]`) shows
+a small map of the farmer's **own** land (parcels) and dam, with the
+boundary, rivers and gauges for orientation, from
+`GET /projects/:id/farm/:nodeId/map` ([api.md § Farm](./api.md#farm)); never
+a neighbour's parcel or status. Farmers can't read runs, so the land is
+coloured by the farm view's own published band (the "Model: …" chip,
+`FarmProjection.river.band`) with the same tokens as `mapStatus.ts`
+`BAND_TOKEN` (`farm/farmMap.ts`, `farmMap.test.ts` keeps them one). The card
+says everything in words first (the land with its area, the dam, the streams
+and gauges by name, the place in degrees, and that no other unit is shown),
+and is left out when the farm has nothing of its own on the map. The map
+reuses `CatchmentMap.svelte` in a chunk of its own (`farm/FarmMapCanvas.svelte`),
+passing its words in the reader's language (`words`, `farmMap.ts`
+`mapWords`), since the shared component imports no catalogue. The screen is
+in [ui.md § Farmer view](./ui.md#farmer-view-farm).
 
 ## Quaternary lookup
 
