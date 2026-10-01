@@ -80,7 +80,9 @@ export const ERROR_CODES = [
 	'mfa_not_started',
 	'mfa_not_enrolled',
 	'mfa_required',
-	'mfa_step_up'
+	'mfa_step_up',
+	// A comment through a share link (164_public_participation, share/routes.ts): 10 an hour per account.
+	'comment_throttled'
 ] as const;
 
 /**
@@ -96,8 +98,12 @@ export const ERROR_CODES = [
  *     because an erratum found since it was drafted applies to its runs'
  *     engines (or their fits') and its manifest doesn't record it: draft the
  *     pack again (evidence/packs.ts).
+ *   registration_not_checked: POST …/packs/:packId/issue refused a draft
+ *     whose specialist signer's registration has no current check against
+ *     the professional register (165_signers, signoffs/registrationCheck.ts);
+ *     `details.signers` names them.
  */
-export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft'] as const;
+export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'registration_not_checked'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');

@@ -81,6 +81,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: null, to: 'Rooikloof Trust' }))).toBe('Put Ben in the applying party Rooikloof Trust');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: 'Rooikloof Trust', to: null }))).toBe('Took Ben out of the applying party Rooikloof Trust');
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: true, party: 'Rooikloof Trust' }))).toBe(
+			'Appointed Ben specialist for the applying party Rooikloof Trust'
+		);
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: false, party: null }))).toBe('Ben is no longer the specialist for their applying party');
+		expect(eventLine(ev('scenario.participation_exported', { application: true, comments: 3, emails: 1 }))).toBe(
+			'Downloaded the public comments on an application (3 comments, 1 emails given for the register)'
+		);
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');

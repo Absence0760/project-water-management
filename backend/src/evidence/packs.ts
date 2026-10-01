@@ -36,8 +36,19 @@ import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireStepUp, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
-import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
-import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
+import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
+import { registrationCheckRequired, registrationNotChecked } from '../signoffs/registrationCheck.js';
+import {
+	FORECAST_NOT_SIGNABLE,
+	insertSignoff,
+	LEGACY,
+	loadSignableRun,
+	SIGNOFF_SELECT,
+	SignoffBody,
+	type SignableRun,
+	type SignoffKind,
+	type SignoffRow
+} from '../signoffs/routes.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { packBundleFileName, packDownloadUrl, packFileName } from '../reports/storage.js';
 import { toVerify } from '../share/links.js';
@@ -214,14 +225,100 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
  */
 async function issueChecks(db: Db, projectId: string, pack: PackMeta, manifest: PackManifest, found: readonly PackErratum[]) {
 	const { sha256: current, unverified } = await packStatementFor(db, projectId, pack);
-	const { rowCount } = await db.query('SELECT 1 FROM signoff WHERE pack_id = $1 AND statement_sha256 = $2 LIMIT 1', [pack.id, current]);
+	// A `review` sign-off adds to the professional statement, never replaces it (165_signers).
+	const { rowCount } = await db.query(`SELECT 1 FROM signoff WHERE pack_id = $1 AND statement_sha256 = $2 AND kind = 'specialist' LIMIT 1`, [pack.id, current]);
 	return {
 		issuable: manifest.report.issuable && !manifest.report.refused,
 		signed: !!rowCount,
 		runsVerified: !unverified,
-		errataRecorded: found.length === 0
+		errataRecorded: found.length === 0,
+		// The specialist signers of the current statement whose registration has no current check (165_signers), and
+		// whether issue waits for them (always in production; signoffs/registrationCheck.ts).
+		registrationUnchecked: await registrationUnchecked(db, projectId, pack.id, current, false),
+		registrationCheckRequired: registrationCheckRequired(),
+		statementSha256: current
 	};
 }
+
+/**
+ * The specialist signers of statement `statement` whose registration has no
+ * current check; `bind` also binds every sign-off of the pack that has one to
+ * it (at issue, in the issue's transaction). app_pack_bind_registration_checks.
+ */
+async function registrationUnchecked(db: Db, projectId: string, packId: string, statement: string, bind: boolean): Promise<string[]> {
+	const { rows } = await db.query<{ m: string[] }>('SELECT app_pack_bind_registration_checks($1, $2, $3, $4) AS m', [projectId, packId, statement, bind]);
+	return rows[0]?.m ?? [];
+}
+
+/** A pack the caller may sign as the application's appointed specialist (165_signers, app_specialist_pack): what the sign-off needs. */
+interface SpecialistPack {
+	id: string;
+	scenarioId: string;
+	title: string;
+	version: number;
+	status: PackStatus;
+	manifestSha256: string;
+	statement: PackSignoffStatement;
+	sha256: string;
+	blocked: string | null;
+	unverified: boolean;
+}
+
+/**
+ * The pack as its applicant's specialist signs it, or null when the caller
+ * isn't that (app_pack_specialist). They read no pack row (112), so the
+ * database answers the lifecycle and the runs' identity, stamp and digest,
+ * and the statement is built here exactly as packStatementFor builds it.
+ */
+async function specialistPack(db: Db, projectId: string, packId: string): Promise<SpecialistPack | null> {
+	if (!UUID.test(packId)) return null;
+	const { rows } = await db.query<{ p: Record<string, unknown> | null }>('SELECT app_specialist_pack($1, $2) AS p', [projectId, packId]);
+	const p = rows[0]?.p;
+	if (!p) return null;
+	const runs = (Array.isArray(p.runs) ? p.runs : []) as Record<string, unknown>[];
+	const hex = (v: unknown) => (typeof v === 'string' && /^[0-9a-f]+$/.test(v) ? Buffer.from(v, 'hex') : null);
+	const signable = (id: unknown): SignableRun | null => {
+		const r = runs.find((x) => x.id === id);
+		if (!r) return null;
+		return {
+			run: {
+				id: String(r.id),
+				engineVersion: String(r.engineVersion),
+				scenario: r.scenario === true,
+				fitEngineVersion: typeof r.fitEngineVersion === 'string' ? r.fitEngineVersion : null
+			},
+			legacy: r.legacy === true,
+			forecast: r.forecast === true,
+			verified: stampMatches(hex(r.digest), hex(r.stamp))
+		};
+	};
+	const baseline = signable(p.baselineRunId);
+	const application = p.scenarioRunId ? signable(p.scenarioRunId) : null;
+	if (!baseline || (p.scenarioRunId && !application)) throw new ApiError(404, 'the pack’s runs are gone');
+	const statement = packSignoffStatement({
+		id: String(p.id),
+		version: Number(p.version),
+		manifestSha256: String(p.manifestSha256),
+		baseline: baseline.run,
+		application: application?.run ?? null
+	});
+	const all = [baseline, ...(application ? [application] : [])];
+	return {
+		id: String(p.id),
+		scenarioId: String(p.scenarioId),
+		title: typeof p.title === 'string' ? p.title : '',
+		version: Number(p.version),
+		status: p.status as PackStatus,
+		manifestSha256: String(p.manifestSha256),
+		statement,
+		sha256: sha256(signoffStatementText(statement)),
+		blocked: all.some((r) => r.legacy) ? LEGACY : all.some((r) => r.forecast) ? FORECAST_NOT_SIGNABLE : null,
+		unverified: all.some((r) => !r.verified)
+	};
+}
+
+/** Below viewer, only the application's appointed specialist reads a pack's sign-offs or signs it. */
+const notSpecialist = () => new ApiError(403, 'requires viewer role, or the application’s appointed specialist');
 
 /** Issue refuses a draft whose manifest misses an erratum that applies to its runs now: it would be issued without it, for good. */
 const errataSinceDraft = (found: readonly PackErratum[]) =>
@@ -355,7 +452,25 @@ export const packRoutes = new Hono<AuthEnv>()
 		return withUser(
 			c.get('userId'),
 			async (db) => {
-				const role = await requireRole(db, id, 'viewer');
+				const role = await requireRole(db, id, 'contributor');
+				if (rank[role] < rank.viewer) {
+					// The applicant's appointed specialist (165_signers): the statement of a pack they may sign, and who signed it.
+					const sp = await specialistPack(db, id, packId);
+					if (!sp) throw notSpecialist();
+					const { rows } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
+					return c.json({
+						statement: sp.statement,
+						statementSha256: sp.sha256,
+						disclaimer: { version: DISCLAIMER.version, status: DISCLAIMER.status },
+						cannotSign:
+							sp.status !== 'draft'
+								? `only a draft pack is signed; this one is ${sp.status}`
+								: (sp.blocked ?? (sp.unverified ? RUN_UNVERIFIED : ((await stepUpRefusal(db))?.message ?? null))),
+						// The kinds the caller may sign as: a specialist signs as the applicant's specialist only.
+						kinds: ['specialist'] satisfies SignoffKind[],
+						signoffs: rows
+					});
+				}
 				const pack = await loadPack(db, id, packId);
 				const { statement, sha256: statementSha256, blocked, unverified } = await packStatementFor(db, id, pack);
 				const { rows } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
@@ -369,6 +484,8 @@ export const packRoutes = new Hono<AuthEnv>()
 							: pack.status !== 'draft'
 								? `only a draft pack is signed; this one is ${pack.status}`
 								: (blocked ?? (unverified ? RUN_UNVERIFIED : ((await stepUpRefusal(db))?.message ?? null))),
+					// An editor signs as the professional responsible for the evidence, or as the authority's reviewer (165_signers).
+					kinds: (rank[role] >= rank.editor ? ['specialist', 'review'] : []) satisfies SignoffKind[],
 					signoffs: rows
 				});
 			},
@@ -379,7 +496,21 @@ export const packRoutes = new Hono<AuthEnv>()
 		const { id, packId } = c.req.param();
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
+			const role = await requireRole(db, id, 'contributor');
+			if (rank[role] < rank.editor) {
+				// The applicant's appointed specialist signs their party's application's draft (165_signers); a viewer, or
+				// a contributor who isn't that specialist, gets the 403 they got before.
+				const sp = rank[role] < rank.viewer ? await specialistPack(db, id, packId) : null;
+				if (!sp) throw rank[role] < rank.viewer ? notSpecialist() : new ApiError(403, 'requires editor role');
+				if (body.kind !== 'specialist') throw new ApiError(403, 'the applicant’s specialist signs as the specialist; a review sign-off is the authority’s');
+				// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
+				await requireStepUp(db);
+				if (sp.status !== 'draft') throw new ApiError(409, `only a draft pack is signed; this one is ${sp.status}`);
+				if (sp.blocked) throw new ApiError(409, sp.blocked);
+				if (sp.unverified) throw runUnverified();
+				const signoff = await insertSignoff(db, id, { packId }, body, sp.statement, sp.sha256);
+				return c.json({ signoff }, 201);
+			}
 			// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
 			await requireStepUp(db);
 			const pack = await loadPack(db, id, packId, true);
@@ -406,13 +537,20 @@ export const packRoutes = new Hono<AuthEnv>()
 			const checks = await issueChecks(db, id, pack, manifest, found);
 			if (!checks.issuable) throw notIssuable(manifest.report, 'this pack can’t be issued');
 			if (!checks.signed)
-				throw new ApiError(409, 'the pack has no sign-off of its current statement (none yet, or the statement changed since): sign it, then issue it');
+				throw new ApiError(
+					409,
+					'the pack has no sign-off of its current statement by the professional responsible for the evidence (none yet, only a review, or the statement changed since): sign it, then issue it'
+				);
 			if (!checks.runsVerified) throw runUnverified();
 			// An erratum found since the draft was made, for its runs' engines or their fits': the manifest would never list it.
 			if (!checks.errataRecorded) throw errataSinceDraft(found);
 			// The live report too: what was issuable when drafted (a nomination, the declared rule, the cited ensemble) must still be.
 			const live = await buildEvidenceReport(db, id, pack.scenarioRunId ?? pack.baselineRunId);
 			if (live.refused || !live.issuable) throw notIssuable(live, 'this pack can’t be issued, since its draft was made');
+			// Bind each sign-off to its signer's registration check (165_signers); without one, a specialist signer
+			// stops the issue while the requirement is on (always in production).
+			const unchecked = await registrationUnchecked(db, id, packId, checks.statementSha256, true);
+			if (unchecked.length && registrationCheckRequired()) throw registrationNotChecked(unchecked);
 			const pred = pack.supersedesId ? await loadPack(db, id, pack.supersedesId, true) : null;
 			if (pred && pred.status !== 'issued')
 				throw new ApiError(409, `the pack this version replaces is ${pred.status} now, so this version can’t supersede it; start a new pack`);
@@ -566,6 +704,13 @@ export interface PackVerification {
 		registrationField: string | null;
 		registrationNo: string;
 		signedAt: string;
+		/** `specialist`: the evidence's professional statement; `review`: an authority-side reviewer's second sign-off (165_signers). */
+		kind: SignoffKind;
+		/**
+		 * The check of the registration against the public register that stood when the pack was issued, recorded by
+		 * the host through the operator (165_signers); null: the registration is self-declared.
+		 */
+		registrationCheck: { checkedAt: string; checkedByOrg: string } | null;
 	}[];
 }
 

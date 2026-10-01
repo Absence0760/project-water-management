@@ -31,6 +31,9 @@ export interface ScenarioRow {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/** Where and by when written objections go, as the application's notice gives them (164_public_participation); null: not given. */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -74,7 +77,8 @@ export const APPLICATION_RUNS_KEPT = 5;
 // and a new run show them in full. Everyone else reads the stored list, the
 // record the assessors judge.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
-	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.base_run_id AS "baseRunId",
+	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring,
+	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate", s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256",
 	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",

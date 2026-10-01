@@ -54,6 +54,39 @@ export const ListQuery = z
 /** A token as the client sent it; anything malformed is simply not a live link. */
 export const ViewBody = z.object({ token: z.string().max(200) }).strict();
 export const SeriesBody = z.object({ token: z.string().max(200), key: z.string().max(64) }).strict();
+/** POST /share/comment (164_public_participation): plain text, as a note's body (notes/routes.ts NOTE_MAX). */
+export const CommentBody = z
+	.object({
+		token: z.string().max(200),
+		body: z
+			.string()
+			.max(20_000)
+			// Line endings as the textarea sends them, then trimmed: what is stored is what the CHECK counts.
+			.transform((s) => s.replace(/\r\n?/g, '\n').trim())
+			.pipe(
+				z
+					.string()
+					.min(1, 'a comment needs some text')
+					.max(4000)
+					.refine((s) => !s.includes('\u0000'), 'a comment cannot contain NUL characters')
+			),
+		/** "Give my name and email to the applicant for the register of interested and affected parties (GN R267 reg 18)". */
+		registerConsent: z.boolean().default(false)
+	})
+	.strict();
+
+/** Where and by when written objections go, as the application's notice gives it (164); null fields when not given. */
+export interface ShareObjection {
+	address: string | null;
+	closingDate: string | null;
+}
+
+export function toShareObjection(v: unknown): ShareObjection | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const o = obj(v);
+	const date = str(o.closingDate);
+	return { address: str(o.address), closingDate: date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null };
+}
 
 /**
  * The page a link opens, with the token in the fragment (never sent to a
@@ -300,6 +333,8 @@ export interface ShareScenario {
 	run: SharedRun | null;
 	/** Comments posted for public participation, oldest first. */
 	comments: SharedComment[];
+	/** The notice's objection address and closing date, when the applicant gave them (164); set by the route. */
+	objection: ShareObjection | null;
 }
 
 /** What app_share_scenario returns (one row, or none). */
@@ -407,7 +442,8 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 		comments: arr(r.comments).map((c) => {
 			const o = obj(c);
 			return { body: str(o.body) ?? '', author: str(o.author), createdAt: str(o.createdAt) ?? '', editedAt: str(o.editedAt) };
-		})
+		}),
+		objection: null
 	};
 }
 
@@ -480,6 +516,8 @@ export interface SharePack {
 	figures: SharedPackFigures | null;
 	/** Comments posted for public participation, oldest first. */
 	comments: SharedComment[];
+	/** For an application's pack, its notice's objection address and closing date when given (164); set by the route. */
+	objection: ShareObjection | null;
 }
 
 /** What app_share_pack returns (one row, or none). */
@@ -543,10 +581,21 @@ export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[
 				registrationCategory: str(s.registrationCategory),
 				registrationField: str(s.registrationField),
 				registrationNo: str(s.registrationNo) ?? '',
-				signedAt: str(s.signedAt) ?? ''
+				signedAt: str(s.signedAt) ?? '',
+				kind: s.kind === 'review' ? 'review' : 'specialist',
+				registrationCheck: toRegistrationCheck(s.registrationCheck)
 			};
 		})
 	};
+}
+
+/** A bound registration check, field by field; null unless both fields are there (the page never says "checked" without the record). */
+export function toRegistrationCheck(v: unknown): { checkedAt: string; checkedByOrg: string } | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const c = obj(v);
+	const checkedAt = str(c.checkedAt);
+	const checkedByOrg = str(c.checkedByOrg);
+	return checkedAt && checkedByOrg ? { checkedAt, checkedByOrg } : null;
 }
 
 /** The pack's figures field by field: the database's allowlist again. */
@@ -621,6 +670,7 @@ export function toSharePack(r: SharePackRow): SharePack {
 		comments: arr(r.comments).map((c) => {
 			const o = obj(c);
 			return { body: str(o.body) ?? '', author: str(o.author), createdAt: str(o.createdAt) ?? '', editedAt: str(o.editedAt) };
-		})
+		}),
+		objection: null
 	};
 }

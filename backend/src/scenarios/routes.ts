@@ -266,6 +266,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (body.purposeAndNeed !== undefined) set.push(['purpose_need', body.purposeAndNeed]);
 			if (body.mitigation !== undefined) set.push(['mitigation', body.mitigation]);
 			if (body.monitoring !== undefined) set.push(['monitoring', body.monitoring]);
+			// The notice's objection details (164): an application's, frozen once it is submitted (scenario_objection_frozen).
+			if (body.objectionAddress !== undefined || body.objectionClosingDate !== undefined) {
+				if (!isApplication(s)) throw new ApiError(409, 'only an application has a notice to object to');
+				if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} application's notice details are frozen; withdraw it to change them`);
+				if (body.objectionAddress !== undefined) set.push(['objection_address', body.objectionAddress]);
+				if (body.objectionClosingDate !== undefined) set.push(['objection_closing_date', body.objectionClosingDate]);
+			}
 			if (body.ops !== undefined)
 				set.push(
 					['ops', JSON.stringify(body.ops)],
@@ -289,6 +296,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				purposeAndNeed: s.purposeAndNeed,
 				mitigation: s.mitigation,
 				monitoring: s.monitoring,
+				objectionAddress: s.objectionAddress,
+				objectionClosingDate: s.objectionClosingDate,
 				ops: s.opsSha256,
 				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
 				status: s.status
@@ -299,6 +308,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				purposeAndNeed: body.purposeAndNeed,
 				mitigation: body.mitigation,
 				monitoring: body.monitoring,
+				objectionAddress: body.objectionAddress,
+				objectionClosingDate: body.objectionClosingDate,
 				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status

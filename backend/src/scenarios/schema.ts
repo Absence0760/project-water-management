@@ -166,6 +166,23 @@ export const CreateScenarioBody = z
 	})
 	.strict();
 
+/**
+ * Where written objections to an application go, and by when, as its notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
+ * 164_public_participation). Printed beside the warning that a comment in the app is not an objection. '' or null clears.
+ */
+export const objectionAddress = z
+	.string()
+	.max(500)
+	.transform((s) => s.replace(/\r\n?/g, '\n').trim())
+	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters')
+	.nullable()
+	.transform((s) => (s ? s : null));
+export const objectionClosingDate = z
+	.string()
+	.regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date, YYYY-MM-DD')
+	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s), 'must be a real date')
+	.nullable();
+
 /** PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft. */
 export const PatchScenarioBody = z
 	.object({
@@ -174,6 +191,9 @@ export const PatchScenarioBody = z
 		purposeAndNeed: promptAnswer.optional(),
 		mitigation: promptAnswer.optional(),
 		monitoring: promptAnswer.optional(),
+		/** An application's only, while it is a draft (scenario_objection_frozen). */
+		objectionAddress: objectionAddress.optional(),
+		objectionClosingDate: objectionClosingDate.optional(),
 		ops: Ops.optional(),
 		ownedNodeIds: ownedNodeIds.optional(),
 		status: z.enum(SCENARIO_STATUSES).optional()
@@ -181,7 +201,7 @@ export const PatchScenarioBody = z
 	.strict()
 	.refine(
 		(b) => Object.values(b).some((v) => v !== undefined),
-		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, ops, ownedNodeIds, status'
+		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, objectionAddress, objectionClosingDate, ops, ownedNodeIds, status'
 	);
 
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();

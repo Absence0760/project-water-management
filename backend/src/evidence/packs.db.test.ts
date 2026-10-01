@@ -494,10 +494,29 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.cannotSign).toBeNull();
 	});
 
-	it('issues a signed draft, stamping who and when', async () => {
+	it('issues a signed draft, stamping who and when, once the signer’s registration is checked (165: required, as in production)', async () => {
 		const s = await sign(editor, v1.id);
-		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1' });
-		const res = await issue(owner, v1.id);
+		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1', kind: 'specialist', registrationCheck: null });
+		let res: Awaited<ReturnType<typeof issue>>;
+		vi.stubEnv('REGISTRATION_CHECK_REQUIRED', 'true');
+		try {
+			// No check of the registration recorded: refused, naming the signer, and nothing is bound.
+			const refused = await issue(owner, v1.id);
+			expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+			expect(refused.body).toMatchObject({ code: 'registration_not_checked', details: { signers: ['Dr A. Hydrologist'] } });
+			expect(await asOwner('SELECT 1 FROM signoff_registration_check b JOIN signoff s ON s.id = b.signoff_id WHERE s.pack_id = $1', [v1.id])).toEqual([]);
+			// The host checked the register and the operator recorded it (scripts/registration-check.ts), as the schema owner.
+			await asOwner(
+				`INSERT INTO registration_check (user_id, registration_body, registration_category, registration_no, register_name, outcome, checked_by_org, checked_at)
+				 VALUES ($1, 'sacnasp', 'pr_sci_nat', '400999 / 20', 'Dr A Hydrologist', 'registered', 'Pack catchment WUA', now() - interval '1 day')`,
+				[editor.id]
+			);
+			const listed = (await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.signoffs[0];
+			expect(listed.registrationCheck).toMatchObject({ checkedByOrg: 'Pack catchment WUA', bound: false });
+			res = await issue(owner, v1.id);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
@@ -668,7 +687,19 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack.signers).toEqual([
 			expect.objectContaining({ fullName: 'Dr A. Hydrologist', registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationField: 'water_resources', registrationNo: '400999/20' })
 		]);
-		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual(['fullName', 'registrationBody', 'registrationCategory', 'registrationField', 'registrationNo', 'signedAt']);
+		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual([
+			'fullName',
+			'kind',
+			'registrationBody',
+			'registrationCategory',
+			'registrationField',
+			'registrationCheck',
+			'registrationNo',
+			'signedAt'
+		]);
+		// The check bound at issue (165): who checked and when, nothing else of it (not the register's name or the note).
+		expect(res.body.pack.signers[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Pack catchment WUA', checkedAt: expect.any(String) } });
+		expect(Object.keys(res.body.pack.signers[0].registrationCheck).sort()).toEqual(['checkedAt', 'checkedByOrg']);
 		const text = JSON.stringify(res.body);
 		for (const secret of [projectId, baseRun, v1.id, owner.email, editor.email, 'PkOwner', 'PkEditor']) expect(text).not.toContain(secret);
 		expect((await anon('GET', `/verify/${v1.manifestSha256}`)).body.pack.version).toBe(1);

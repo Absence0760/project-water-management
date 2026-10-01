@@ -149,6 +149,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Changed ${who}’s role from ${role(s.from)} to ${role(s.to)}`;
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
+		// The party's appointed specialist, who signs its applications' evidence packs (165_signers).
+		case 'member.specialist':
+			return s.specialist
+				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
+				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
 		case 'farmer.linked':
 			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
@@ -247,10 +252,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
+		// The reg 19 record of an application's public comments (164_public_participation): how many, and how many emails.
+		case 'scenario.participation_exported':
+			return `Downloaded the public comments on an application (${Number(s.comments) || 0} comments, ${Number(s.emails) || 0} emails given for the register)`;
 		case 'signoff.created': {
 			// From signoff-3 the event names the category and field too (issue #47); a sign-off of an evidence pack names the pack (112).
 			const opt = (v: unknown) => (v ? str(v) : null);
-			const what = s.packId ? 'an evidence pack' : 'a run';
+			const what = s.packId ? (s.kind === 'review' ? 'an evidence pack as the authority’s reviewer' : 'an evidence pack') : 'a run';
 			const line = registrationLine(str(s.registrationBody), opt(s.registrationCategory), opt(s.registrationField), str(s.registrationNo));
 			return line
 				? `Signed off ${what} as ${str(s.fullName)}, ${line}`

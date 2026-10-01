@@ -118,6 +118,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'share_link.created_by': { excluded: 'the project’s share link; share_link.created is in auditEvents; never the token' },
 	'share_link.revoked_by': { excluded: 'the project’s share link; share_link.revoked is in auditEvents' },
 	'signoff.user_id': { section: 'signoffs' },
+	// The host's checks of the person's professional registration (165_signers): own rows under RLS.
+	'registration_check.user_id': { section: 'registrationChecks' },
 	'team.created_by': { excluded: 'the team itself; the membership is in teamMemberships' },
 	'team_member.user_id': { section: 'teamMemberships' },
 	// The person's own display preferences (083): the workspace sections they hid.
@@ -219,7 +221,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		);
 		if (!acct[0]) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		const { rows: projectMemberships } = await db.query(
-			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.added_at AS "addedAt"
+			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.added_at AS "addedAt", m.party, m.specialist
 			 FROM project_member m LEFT JOIN project p ON p.id = m.project_id
 			 WHERE m.user_id = $1 ORDER BY m.added_at, m.project_id`,
 			[userId]
@@ -282,6 +284,16 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			`SELECT kind, created_at AS "createdAt" FROM account_security_event WHERE user_id = $1 ORDER BY created_at DESC, id DESC`,
 			[userId]
 		);
+		// The registration checks the host recorded (165_signers): own rows under RLS.
+		const { rows: registrationChecks } = await db.query(
+			`SELECT registration_body AS "registrationBody", registration_category AS "registrationCategory", registration_no AS "registrationNo",
+				register_name AS "registerName", outcome, checked_by_org AS "checkedByOrg", checked_at AS "checkedAt", note, recorded_at AS "recordedAt"
+			 FROM registration_check WHERE user_id = $1 ORDER BY checked_at DESC, id DESC`,
+			[userId]
+		);
+		// How each of their public comments was posted (a share link or as a member) and whether they agreed to the
+		// applicant's register (164): app_subject_participation, since a link participant reads no note under RLS.
+		const { rows: participation } = await db.query<{ p: unknown[] }>('SELECT app_subject_participation() AS p');
 		const { rows: hidden } = await db.query<{ doc: DefinerSections | null }>('SELECT app_subject_export() AS doc');
 		const rest = hidden[0]?.doc;
 		if (!rest) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
@@ -294,7 +306,9 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			teamMemberships,
 			farms,
 			notes: rest.notes,
+			publicComments: participation[0]?.p ?? [],
 			signoffs: rest.signoffs,
+			registrationChecks,
 			invites: rest.invites,
 			alertSubscriptions: rest.alertSubscriptions,
 			alertDeliveries,

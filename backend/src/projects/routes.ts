@@ -434,7 +434,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
 			const { rows } = await db.query(
-				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party
+				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist
 				 FROM project_member m JOIN app_user u ON u.id = m.user_id
 				 WHERE m.project_id = $1 ORDER BY m.role DESC, u.display_name`,
 				[c.req.param('id')]
@@ -483,27 +483,35 @@ export const projectRoutes = new Hono<AuthEnv>()
 					.max(80)
 					.nullable()
 					.optional()
-					.transform((p) => (p === '' ? null : p))
+					.transform((p) => (p === '' ? null : p)),
+				// The party's appointed specialist, who signs its applications' evidence packs (165_signers); needs a party.
+				specialist: z.boolean().optional()
 			})
 			.strict()
-			.refine((b) => b.role !== undefined || b.party !== undefined, 'give a role, a party or both')
+			.refine((b) => b.role !== undefined || b.party !== undefined || b.specialist !== undefined, 'give a role, a party, specialist or a mix')
 			.parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			if (body.role !== undefined && body.role !== 'owner') await assertNotLastOwner(db, id, userId);
-			const { rows: was } = await db.query<{ role: string; party: string | null }>('SELECT role, party FROM project_member WHERE project_id = $1 AND user_id = $2', [
-				id,
-				userId
-			]);
+			const { rows: was } = await db.query<{ role: string; party: string | null; specialist: boolean }>(
+				'SELECT role, party, specialist FROM project_member WHERE project_id = $1 AND user_id = $2',
+				[id, userId]
+			);
+			const party = body.party !== undefined ? body.party : (was[0]?.party ?? null);
+			if (body.specialist && party === null) throw new ApiError(409, 'only a member of an applying party can be its specialist: give them a party first');
 			const { rows } = await db.query(
-				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END FROM app_user u
+				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END,
+					specialist = COALESCE($6::boolean, m.specialist) FROM app_user u
 				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
-				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party`,
-				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null]
+				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist`,
+				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null, body.specialist ?? null]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			if ((was[0]?.specialist ?? false) !== rows[0].specialist) {
+				await recordAudit(db, id, 'member.specialist', { userId, displayName: rows[0].displayName, specialist: rows[0].specialist, party: rows[0].party });
+			}
 			if (body.role !== undefined && was[0]?.role !== body.role) {
 				await recordAudit(db, id, 'member.role', { userId, displayName: rows[0].displayName, from: was[0]?.role ?? null, to: body.role });
 			}

@@ -159,7 +159,20 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * loaded by the operator as the schema owner (152_catchment_map.sql,
  * `pnpm import:quaternaries`); the app only proposes from it.
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction']);
+const READ_ONLY = new Set([
+	'language',
+	'pack_notice',
+	'alert_feedback',
+	'erratum_notice',
+	'erratum_sweep',
+	'quaternary_reference',
+	'pack_reproduction',
+	// A signer's registration check is recorded by the operator's script as the schema owner, insert-only
+	// (`pnpm import:registration-check`), and bound to a sign-off only by app_pack_bind_registration_checks
+	// at issue, so no member can mark a registration checked (165_signers).
+	'registration_check',
+	'signoff_registration_check'
+]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -257,6 +270,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
+	// A registration check stays as the record of what verify showed when a pack was issued, without the account (165_signers).
+	'registration_check.user_id': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).

@@ -56,7 +56,12 @@ export const CreateNote = z
 		settingKey: settingKey.optional(),
 		scenarioId: uuid.optional(),
 		packId: uuid.optional(),
-		visibility: z.enum(NOTE_VISIBILITIES).optional()
+		visibility: z.enum(NOTE_VISIBILITIES).optional(),
+		/**
+		 * A public comment's "give my name and email to the applicant for the register of interested and affected
+		 * parties (GN R267 reg 18)" (164_public_participation). Only on a public-participation note.
+		 */
+		registerConsent: z.boolean().optional()
 	})
 	.strict()
 	.refine(
@@ -68,7 +73,8 @@ export const CreateNote = z
 	.refine(
 		(b) => b.visibility !== 'public_participation' || b.scenarioId !== undefined || b.packId !== undefined,
 		'only a note on a scenario or an evidence pack can be for public participation'
-	);
+	)
+	.refine((b) => !b.registerConsent || b.scenarioId !== undefined || b.packId !== undefined, 'only a public comment can give your name and email to the applicant’s register');
 
 export const EditNote = z.object({ body: Body }).strict();
 
@@ -228,6 +234,12 @@ async function packVisibility(db: Db, projectId: string, packId: string, asked: 
 	return visibility;
 }
 
+/** The register opt-in (164), only on a public comment: anything else is a 400, not a silent drop. */
+function registerConsent(asked: boolean | undefined, visibility: NoteVisibility): boolean {
+	if (asked && visibility !== 'public_participation') throw new ApiError(400, 'only a public comment can give your name and email to the applicant’s register');
+	return asked ?? false;
+}
+
 /** GET/POST /projects/:id/notes, GET /projects/:id/notes/counts, PATCH|DELETE /projects/:id/notes/:noteId, GET …/notes/:noteId/revisions. */
 export const noteRoutes = new Hono<AuthEnv>()
 	.get('/:id/notes', async (c) => {
@@ -300,10 +312,11 @@ export const noteRoutes = new Hono<AuthEnv>()
 				// A scenario note: an applicant, their consultant, an NGO (a viewer) or an assessor.
 				if (rank[role] < rank.contributor) throw ApiError.coded(403, 'note_audience_denied', 'a farmer can’t comment on a scenario');
 				const visibility = await scenarioVisibility(db, id, body.scenarioId, body.visibility);
+				const consent = registerConsent(body.registerConsent, visibility);
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO note (project_id, author_id, body, scenario_id, visibility)
-					 VALUES ($1, app_current_user_id(), $2, $3, $4) RETURNING id`,
-					[id, body.body, body.scenarioId, visibility]
+					`INSERT INTO note (project_id, author_id, body, scenario_id, visibility, register_consent)
+					 VALUES ($1, app_current_user_id(), $2, $3, $4, $5) RETURNING id`,
+					[id, body.body, body.scenarioId, visibility, consent]
 				);
 				return c.json({ note: toNote(await loadNote(db, id, rows[0]!.id), userId, role) }, 201);
 			}
@@ -311,10 +324,11 @@ export const noteRoutes = new Hono<AuthEnv>()
 				// A pack note: the team (whoever reads the pack), or a public comment from any member contributor+ while it is open.
 				if (rank[role] < rank.contributor) throw ApiError.coded(403, 'note_audience_denied', 'a farmer can’t comment on an evidence pack');
 				const visibility = await packVisibility(db, id, body.packId, body.visibility);
+				const consent = registerConsent(body.registerConsent, visibility);
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO note (project_id, author_id, body, pack_id, visibility)
-					 VALUES ($1, app_current_user_id(), $2, $3, $4) RETURNING id`,
-					[id, body.body, body.packId, visibility]
+					`INSERT INTO note (project_id, author_id, body, pack_id, visibility, register_consent)
+					 VALUES ($1, app_current_user_id(), $2, $3, $4, $5) RETURNING id`,
+					[id, body.body, body.packId, visibility, consent]
 				);
 				return c.json({ note: toNote(await loadNote(db, id, rows[0]!.id), userId, role) }, 201);
 			}
