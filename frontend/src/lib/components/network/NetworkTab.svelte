@@ -448,22 +448,31 @@
 				<option value="supply">Supply, latest run</option>
 				{#if farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
 			</select>
-			{#if colourBy === 'supply' || colourBy === 'dam'}
-				<span class="muted small" role="status">
-					{#if supplyLoading}
-						Loading the latest run’s results…
-					{:else if supplyError}
-						Couldn’t load the latest run’s results.
-						<button type="button" class="btn btn-sm" onclick={() => latestRun && loadSupply(latestRun.id)}>Retry</button>
-					{:else if colourBy === 'dam' && damLoading}
-						Loading dam levels ({damLoading.done} of {damLoading.of})…
-					{:else if colourBy === 'dam' && damError}
-						Couldn’t load the dam levels.
-						<button type="button" class="btn btn-sm" onclick={() => { damLevels = null; damAttempt++; }}>Retry</button>
-					{/if}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet colourStatus()}
+	<!-- The colouring's load and error line, laid over the map's top edge rather than in the card's header:
+	     in the header it wrapped the row at 1280 px and moved the map ~25 px when the load ended. -->
+	{#if farms.length && latestRun && (colourBy === 'supply' || colourBy === 'dam')}
+		<span class="map-status muted small" role="status">
+			{#if supplyLoading}
+				<span class="chip">Loading the latest run’s results…</span>
+			{:else if supplyError}
+				<span class="chip">
+					Couldn’t load the latest run’s results.
+					<button type="button" class="btn btn-sm" onclick={() => latestRun && loadSupply(latestRun.id)}>Retry</button>
+				</span>
+			{:else if colourBy === 'dam' && damLoading}
+				<span class="chip">Loading dam levels ({damLoading.done} of {damLoading.of})…</span>
+			{:else if colourBy === 'dam' && damError}
+				<span class="chip">
+					Couldn’t load the dam levels.
+					<button type="button" class="btn btn-sm" onclick={() => { damLevels = null; damAttempt++; }}>Retry</button>
 				</span>
 			{/if}
-		</div>
+		</span>
 	{/if}
 {/snippet}
 
@@ -704,7 +713,7 @@
 				<h3 id="sch-h">Catchment map</h3>
 				{@render colourByControl()}
 			</div>
-			<div class="map-body">{@render drawing(true)}</div>
+			<div class="map-body">{@render colourStatus()}{@render drawing(true)}</div>
 		</section>
 		<aside class="map-side" aria-label="Nodes">
 			<section class="panel side-box" aria-label="Selected node">
@@ -1144,6 +1153,31 @@
 	}
 	.map-card .colour-by {
 		margin: 0;
+	}
+	.map-body {
+		position: relative;
+	}
+	/* Laid over the map's top-left corner, so the map never moves when it comes and goes. The live region
+	   itself stays in place and draws nothing; only a message draws its chip. */
+	.map-status {
+		position: absolute;
+		top: 0.5rem;
+		left: 0.5rem;
+		right: 0.5rem;
+		z-index: 1;
+		pointer-events: none;
+	}
+	.map-status .chip {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.6rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		box-shadow: var(--shadow);
+		pointer-events: auto;
 	}
 	.map-side {
 		display: grid;
