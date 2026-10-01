@@ -27,6 +27,7 @@ import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from 
 import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
+import { base32Decode, hotp, totpStep } from '../auth/totp.js';
 
 const ORIGIN = 'http://localhost:7777';
 const ZERO = '00000000-0000-4000-8000-000000000000';
@@ -83,6 +84,13 @@ function deep(b: unknown, depth = 0): unknown {
 }
 
 const freshUser = (n: string, verified = true) => signUp(n, { verified });
+/** A fresh account with an authenticator confirmed (two-step sign-in), and its TOTP key. */
+async function enrolledUser(n: string) {
+	const u = await freshUser(n);
+	const key = base32Decode((await ok(u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' }))).secret)!;
+	await ok(u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) }));
+	return { u, key };
+}
 const at = () => `/projects/${ctx.projectId}`;
 const ok = async (r: Promise<{ status: number; body: any }>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
 	const res = await r;
@@ -180,6 +188,28 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const email = `mass-${crypto.randomUUID()}@example.com`;
 		await ctx.owner.call('POST', `/projects/${ctx.projectId}/members`, { email, role: 'viewer' });
 		return { as: null, body: { token: tokenIn(lastMailTo(email)) } };
+	},
+	// Two-step sign-in (issue #282): a fresh account each time, its codes made from the secret the enrolment hands out.
+	'POST /auth/mfa/totp/enrol': async () => ({ as: await freshUser('Menrol'), body: { password: 'correct horse' } }),
+	'POST /auth/mfa/totp/confirm': async () => {
+		const u = await freshUser('Mconfirm');
+		const key = base32Decode((await ok(u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' }))).secret)!;
+		return { as: u, body: { code: hotp(key, totpStep(Date.now())) } };
+	},
+	'POST /auth/mfa/recovery-codes': async () => {
+		const { u, key } = await enrolledUser('Mregen');
+		// The next step's code: confirming used this one, and a step is accepted once.
+		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
+	'POST /auth/mfa/verify': async () => {
+		const { u, key } = await enrolledUser('Mverify');
+		const login = await app.request('/auth/login', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', origin: ORIGIN },
+			body: JSON.stringify({ email: u.email, password: 'correct horse' })
+		});
+		const challenge = login.headers.getSetCookie().find((c) => c.startsWith('wm_mfa='))!.split(';')[0]!;
+		return { as: null, headers: { cookie: challenge }, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
 	},
 	'POST /auth/render-session': async () => ({ as: null, body: { token: await withUser(ctx.owner.id, (d) => issueRenderToken(d, ctx.projectId, ctx.runId)) } }),
 	'POST /alerts/unsubscribe': async () => {

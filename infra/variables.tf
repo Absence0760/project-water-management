@@ -118,6 +118,17 @@ variable "cloudfront_private_key" {
   }
 }
 
+variable "app_encryption_key" {
+  description = "Seals two-step sign-in's TOTP secrets at rest (AES-256-GCM under a key derived from it; backend/src/auth/secretBox.ts). The API only. sops key app_encryption_key; generate with openssl rand -hex 32. Rotating it voids every enrolled authenticator (docs/security.md § Two-step sign-in)."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{32,}$", var.app_encryption_key))
+    error_message = "app_encryption_key in prod.sops.yaml must be 32+ alphanumeric characters (the API refuses shorter). Generate with: openssl rand -hex 32"
+  }
+}
+
 variable "runtime_secret_version" {
   description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed; any change to this number writes every runtime secret again and cold-starts the API, worker and migrate Lambdas. Don't set it in a tfvars file: scripts/tf.sh derives it from prod.sops.yaml's sops.lastmodified (YYYYMMDDhhmmss), so every sops edit rotates, and refuses a var file that pins it. Pass -var runtime_secret_version=… only to force a rewrite of unchanged values (docs/deployment.md § Rotating a secret)."
   type        = number

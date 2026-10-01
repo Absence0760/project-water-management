@@ -9,6 +9,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
 import { runPublication } from './runPublication.js';
 
@@ -37,6 +38,8 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Publishing to farmers needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			// publishRun records it in the decision log (publication.published, decision.ts).
 			const published = await publishRun(db, id, body);
 			return { published, alertJob: await queueAlertEval(db, id, 'publish') };
@@ -50,6 +53,7 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		const { id, pubId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			await requireStepUp(db);
 			if (!UUID.test(pubId)) throw new ApiError(404, 'not found');
 			// patchPublication records it in the decision log (publication.notice_changed, decision.ts).
 			const publication = await patchPublication(db, id, pubId, body);

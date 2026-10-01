@@ -17,7 +17,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; for an account with two-step sign-in, `200 { mfaRequired: true }` and **no** session, only the 5-minute `wm_mfa` challenge cookie (send a code to `POST /auth/mfa/verify`, § Two-step sign-in); `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
 | POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
@@ -36,6 +36,39 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
+
+### Two-step sign-in
+
+TOTP (RFC 6238) from an authenticator app, with ten recovery codes (issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in)). A
+`code` is the app's six digits (spaces forgiven) or, where it says so, a
+recovery code (`ABCDE-FGH23`, case and the dash forgiven). Every code check
+counts on the account's code throttle first: the 5th wrong code in a row
+answers `429 mfa_locked` (`params.seconds`, `Retry-After`) for a minute,
+doubling to 15, right codes included. The session JWT carries `amr`:
+`["pwd"]`, or `["pwd", "otp"]` once signed in with a code.
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor; `sessionVerified`, this session signed in with a code (signed in) |
+| POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
+| POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
+| DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
+
+**Actions that need it.** Project owners, team admins and assessors must
+sign in with a code before: any route that needs the owner role (members,
+invites, API keys, data feeds, share links, renaming a team project,
+deleting a project), any that needs team admin (and removing someone else
+from a team; removing someone else from a project; an owner making or
+revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
+`POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
+deciding an application (`POST …/scenarios/:sid/decide`) and issuing or
+withdrawing an evidence pack. Checked after the role, so an outsider still
+gets `404` and a viewer `403` without a code: `403 mfa_required` (no
+authenticator yet: set one up) or `403 mfa_step_up` (one is set up, but this
+session signed in with the password only: sign in again).
 
 **Email links.** Tokens are 32 random bytes (43 base64url chars), single-use,
 stored only as SHA-256 hashes. Links point at `SITE_URL`:
@@ -277,6 +310,14 @@ the frontend catalogue (same contract: add, never rename):
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
+| `mfa_code_wrong` | 400 | a wrong two-step sign-in code (§ Two-step sign-in) |
+| `mfa_locked` | 429 | five wrong codes in a row; `params.seconds` (also `Retry-After`) |
+| `mfa_challenge_expired` | 401 | `POST /auth/mfa/verify` without a live sign-in challenge: sign in again |
+| `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
+| `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
+| `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
+| `mfa_required` | 403 | an owner's, team admin's or assessor's action without an authenticator set up |
+| `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 | `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 

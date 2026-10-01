@@ -47,6 +47,15 @@ thrash: like the budgets, it runs alone. Run it when you touch
 `network/reliability.ts` and on every Node version bump. Its unstressed half,
 `model/assurance-jit.test.ts`, is in `pnpm test`.
 
+`pnpm test:backend:v8-osr` (`backend/scripts/v8-osr-stress.ts`, issue #232)
+is the same stress against the engine at any git revision, built with
+`git archive` and no checkout. By default it builds the last revision with
+the day loop V8 miscompiled (`47e1ddb1^`), so it answers "does this Node
+still have the bug?": exit 1 when a stressed run differs from the
+unstressed one. `--node <binary>` tries another Node, and V8 flags go after
+`--`. It takes several minutes, so it is not in CI; run it alone, before and
+after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md)).
+
 ## The loop
 
 1. While editing: `pnpm test:changed` (or one file: `pnpm -C <ws> exec vitest run <path>`).
