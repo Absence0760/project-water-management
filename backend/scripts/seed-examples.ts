@@ -21,6 +21,7 @@
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
 // (several seconds). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
+import { createHash } from 'node:crypto';
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { actAsUser, type Db, withoutUser, withUser } from '../src/db/tx.js';
@@ -29,9 +30,11 @@ import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
 import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
-import { buildExamples } from './examples/catchments.js';
+import { buildExamples, type ExampleProject } from './examples/catchments.js';
+import { SANDSPRUIT_MAP_FILE, sandspruitMap } from './examples/map.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
+import { checkGeometry } from '../src/geo/geojson.js';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 
@@ -183,8 +186,39 @@ export async function seedExamples(): Promise<string[]> {
 		for (const [catchment, farm] of f.farms) await linkFarmer(byName[catchment].owner, byName[catchment].id, id, farm);
 	}
 	await seedApplication(byName[APPLICANT.catchment]);
+	await seedMap(ANALYST.email, ids[2]!, sandspruit!);
 	await acceptCurrentTerms(SEEDED());
 	return ids;
+}
+
+/**
+ * Sandspruit's invented map (examples/map.ts), recorded as one imported file
+ * the way `POST /map/import` records one, with each parcel, dam and gauge
+ * linked to its node. It only draws: no node's area comes from it until an
+ * editor uses **Use … km²**.
+ */
+async function seedMap(ownerEmail: string, projectId: string, ex: ExampleProject) {
+	const features = sandspruitMap(ex.model);
+	await withUser(await userId(ownerEmail), async (db) => {
+		const text = JSON.stringify({
+			type: 'FeatureCollection',
+			features: features.map((f) => ({ type: 'Feature', properties: { name: f.name }, geometry: f.geometry }))
+		});
+		const { rows: src } = await db.query<{ id: string }>(
+			`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
+			[projectId, SANDSPRUIT_MAP_FILE, createHash('sha256').update(text, 'utf8').digest('hex')]
+		);
+		const { rows: nodes } = await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1', [projectId]);
+		for (const f of features) {
+			const checked = checkGeometry(f.geometry);
+			if ('problem' in checked) throw new Error(`the example map's ${f.name} ${checked.problem}`);
+			await db.query(
+				`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, area_m2, source_id, created_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id())`,
+				[projectId, f.kind, f.name, f.node ? (nodes.find((n) => n.name === f.node)?.id ?? null) : null, JSON.stringify(checked.geometry), checked.areaM2, src[0]!.id]
+			);
+		}
+	});
 }
 
 /**

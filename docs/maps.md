@@ -170,6 +170,12 @@ as the schema owner; the app never writes it.
   says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
   (`pnpm setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
+- **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
+  an invented map inside those cells (`backend/scripts/examples/map.ts`,
+  recorded as the file `sandspruit-map.synthetic.geojson`): a boundary, a
+  parcel and a dam per farm linked to its node, two gauges and four streams.
+  Parcels are drawn to the model's areas, so the map proposes nothing new
+  until someone edits it; `map.test.ts` holds the layout to the model.
 - **Real data: the operator's own download.**
   1. Boundaries: the DWS quaternary catchments (open data; the DWS/WR2012
      GIS layers). Convert the shapefile to GeoJSON in WGS84:
