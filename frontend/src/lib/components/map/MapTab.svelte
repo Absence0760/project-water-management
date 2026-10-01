@@ -19,18 +19,22 @@
 	// the list, each in the URL. Viewers read. Editors draw on the map
 	// (#326 C1, D1, D4): Draw a shape and Place a point put the map in a
 	// drawing mode with a draw bar over it (draw/), and a drawing is saved only
-	// through its sheet's confirm.
+	// through its sheet's confirm. Anyone can Measure (measure/, the drawing
+	// mode with nothing saved) and Download GeoJSON (mapExport.ts, built from
+	// the loaded list); the Layers box turns on the quaternary outlines
+	// (`layers=quaternaries`, #326 A6, A7).
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TILES_URL } from '$env/static/public';
+	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
 	import { api, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { saveBlob } from '$lib/export/download';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
 	import { appIsDark, watchAppTheme } from './appTheme';
@@ -39,7 +43,13 @@
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
-	import { overlayColours } from './mapStyle';
+	import { glyphsUrl, overlayColours } from './mapStyle';
+	import { exportFileName, geoJsonText } from './mapExport';
+	import { layersOn } from './mapLayers';
+	import MapLayers from './MapLayers.svelte';
+	import { QuaternaryLayer } from './quaternaryLayer.svelte';
+	import MeasureBar from './measure/MeasureBar.svelte';
+	import { MeasureDraft } from './measure/measureDraft.svelte';
 	import MapKeyRow from './MapKeyRow.svelte';
 	import { featureResult, viewLabel } from './mapResults';
 	import { MapResults } from './mapResults.svelte';
@@ -60,6 +70,7 @@
 		canEdit,
 		runs = null,
 		role = null,
+		projectName = null,
 		onModelChanged
 	}: {
 		projectId: string;
@@ -69,12 +80,16 @@
 		runs?: RunMeta[] | null;
 		/** The caller's role: below editor the map shows the published run only. */
 		role?: Role | null;
+		/** The project's name, for the GeoJSON download's file name. */
+		projectName?: string | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
 
 	const uid = $props.id();
 	const tilesUrl = PUBLIC_TILES_URL?.trim() || null;
+	/** The labels' glyphs (#326 A6): empty = no labels, nothing fetched (docs/maps.md § Labels). */
+	const glyphs = glyphsUrl(PUBLIC_TILES_GLYPHS_URL, typeof location === 'undefined' ? '' : location.origin);
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const GRID_ID = 'map-features';
 
@@ -200,15 +215,18 @@
 	}
 	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
 	function startDraw(choiceId?: string) {
+		measure.cancel();
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
 		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
 		void afterStart();
 	}
 	function startPlace() {
+		measure.cancel();
 		draft.place('gauge');
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
+		measure.cancel();
 		if (draft.edit(f)) void afterStart();
 	}
 	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
@@ -254,6 +272,35 @@
 	function located(at: MapPosition) {
 		mapRef?.frameGeometry({ type: 'Point', coordinates: at });
 	}
+
+	// --- measure (#326 A7): the drawing mode with a MeasureDraft, nothing saved; anyone may measure ---
+	const measure = new MeasureDraft();
+	function startMeasure() {
+		if (measure.active) return endMeasure();
+		draft.cancel();
+		measure.start();
+		void afterStart();
+	}
+	function endMeasure() {
+		measure.cancel();
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** What the map is drawing with: the measurement, else the editor's draft. */
+	const mapDraft = $derived(measure.active ? measure : canEdit ? draft : null);
+
+	// --- Download GeoJSON (#326 A7): the loaded features as a file, built here (no route) ---
+	function downloadGeoJson() {
+		const name = exportFileName(projectName, localIsoDate());
+		saveBlob(new Blob([geoJsonText(features)], { type: 'application/geo+json' }), name);
+		notice = `Downloaded ${features.length} ${features.length === 1 ? 'feature' : 'features'} as ${name}.`;
+	}
+
+	// --- layers (#326 A6): the quaternary outlines, on while `layers=quaternaries` ---
+	const quaternaries = new QuaternaryLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('quaternaries'),
+		features: () => features
+	});
 
 	// --- per feature: link, area, delete (from the card and from Every feature) ---
 	let busy = $state<string | null>(null);
@@ -360,6 +407,10 @@
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
+	{#if mapState !== 'failed'}
+		<button type="button" class="btn" onclick={startMeasure} aria-pressed={measure.active} disabled={draft.active} data-testid="map-start-measure">Measure</button>
+	{/if}
+	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
 		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
 		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place'} data-testid="map-start-place">Place a point</button>
@@ -462,6 +513,9 @@
 		{#if data}
 			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
+					{#if measure.active}
+						<MeasureBar {measure} ondone={endMeasure} />
+					{/if}
 					{#if canEdit && draft.active}
 						<DrawBar
 							{draft}
@@ -486,7 +540,11 @@
 									label="Map of the catchment"
 									fills={results.fills}
 									fill
-									draft={canEdit ? draft : null}
+									draft={mapDraft}
+									{glyphs}
+									quaternaries={quaternaries.outlines}
+									pickedQuaternary={quaternaries.picked}
+									onquaternary={(code) => (quaternaries.picked = code)}
 									onstatus={(s) => (mapState = s)}
 								/>
 							{/snippet}
@@ -559,6 +617,11 @@
 							<FeatureList {features} {nodes} {selectedId} onselect={selectFromList} labelledby="{uid}-list-h" />
 						</section>
 					{/if}
+
+					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed. -->
+					<div class="panel side-box layers-box">
+						<MapLayers {quaternaries} {dark} />
+					</div>
 
 					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
 					{#if features.length}

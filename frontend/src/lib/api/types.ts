@@ -2343,3 +2343,12 @@ export interface QuaternaryLookup {
 	quaternary: QuaternaryProposal | null;
 	datasets: { dataset: string; count: number }[];
 }
+
+/** The quaternary outlines around a bbox (GET …/map/quaternaries, issue #326 A6): codes and polygons only. */
+export interface QuaternaryLayer {
+	bbox: [number, number, number, number];
+	quaternaries: { code: string; dataset: string; synthetic: boolean; geometry: MapGeometry }[];
+	/** More met the bbox than one answer carries (the first by code are given). */
+	truncated: boolean;
+	datasets: { dataset: string; count: number }[];
+}

@@ -7,7 +7,7 @@ project's catchment boundary, farm parcels, dams, gauges and rivers over a
 self-hosted basemap, and proposes values from them that the hydrologist
 accepts one by one. Issue #288, phases 1–2 of roadmap
 [WP-3.12](./roadmap/step-3-licensing.md#wp-312-catchment-map). This page
-covers the tiles, uploads, areas, the quaternary lookup and its dataset, and
+covers the tiles and labels, measuring, the GeoJSON download, uploads, areas, the quaternary lookup, outlines and dataset, the sources table and
 the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
 [data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
@@ -38,9 +38,10 @@ server and no tile CDN: the file is served from the app's own storage.
   URL is set but unreadable, the map drops the basemap and says so; the
   features stay.
 - The style (`frontend/src/lib/components/map/mapStyle.ts`) draws land,
-  water, land use, roads and boundaries with **no labels**, so it needs no
-  glyphs or sprites and fetches nothing else. Attribution ("© Protomaps ©
-  OpenStreetMap contributors") stays visible whenever the basemap is drawn.
+  water, land use, roads and boundaries, and place and water names only when
+  glyphs are configured ([§ Labels](#labels)); it uses no sprites.
+  Attribution ("© Protomaps © OpenStreetMap contributors") stays visible
+  whenever the basemap is drawn.
 - **Locally**: `pnpm dev:s3:up`, then `pnpm dev:tiles:fetch`
   (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
@@ -74,6 +75,49 @@ server and no tile CDN: the file is served from the app's own storage.
   `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` in the web release. Until
   then production shows the plain background. Tracked in
   [followups.md § Catchment map](./followups.md#catchment-map-issue-288).
+
+### Labels
+
+Place and water names (#326 A6) are drawn with **self-hosted glyphs**: the
+PBF glyph ranges MapLibre reads (`{fontstack}/{range}.pbf`, 256 code points
+a file), never a font CDN.
+
+- **The fonts**: Noto Sans Regular, Medium and Italic as glyph ranges, from
+  the Protomaps [basemaps-assets](https://github.com/protomaps/basemaps-assets)
+  repository at a pinned commit (`028c18f7`, 2025-10-31; `bin/tiles-dev.sh`
+  `FONTS_REF`), SIL Open Font License 1.1 ([§ Sources](#sources)). The
+  licence file (`OFL.txt`) is uploaded beside them.
+- `PUBLIC_TILES_GLYPHS_URL` (frontend env) is the URL template. **Empty**
+  (the committed default in `frontend/.env.development` and
+  `.env.production`): no labels and no glyph requests, the behaviour before
+  A6, so a fresh clone and CI fetch nothing. A path starting `/` is made
+  absolute on the page's origin (`glyphsUrl`), braces kept.
+- **Locally**: `pnpm dev:tiles:fetch` fetches the fonts after the tiles;
+  `pnpm dev:tiles:fonts` fetches only the fonts (no `pmtiles` CLI; about
+  14 MB, 768 ranges). Both download the commit's archive once into
+  `~/.cache/water-management-tiles/`, unpack the three fonts into `fonts/`,
+  and upload them to the MinIO bucket `tiles` under `fonts/<fontstack>/<range>.pbf`
+  (`backend/scripts/tiles-upload.ts --fonts`, which takes only files named
+  as ranges, and the licence). `pnpm dev:tiles:env` prints
+  `PUBLIC_TILES_GLYPHS_URL=http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf`.
+- **Production** (not deployed yet, with the tiles): the same files in S3
+  under `tiles/fonts/`, served by the same-origin `/tiles/*` behaviour, and
+  `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`. Tracked
+  with the basemap's follow-up.
+- **What is labelled** (`labelLayers`): towns, regions and suburbs from the
+  Protomaps `places` layer (the name in English when the tiles carry one,
+  else the local name; towns that show from far out in the medium weight),
+  named rivers and streams along their lines from zoom 11, and named water
+  bodies, in italic. Labels sit above every feature layer, so a results
+  fill never hides a name, and go with the basemap when its tiles fail.
+  With glyphs and the quaternary layer on, each quaternary's code is a
+  label too (even with no tiles).
+- **Contrast**: each label has a 1.5 px halo of the opposite lightness, and
+  its text is at least 4.5:1 against the halo *and* against every basemap
+  colour (background, land, water, land cover) in both themes
+  (`labelColours`, `mapStyle.test.ts`).
+- A glyph range that fails to load leaves those characters out; nothing else
+  breaks.
 
 ### Colours, theme and the picked name
 
@@ -126,11 +170,14 @@ server and no tile CDN: the file is served from the app's own storage.
   `worker-src 'self'` holds: no `blob:` worker, no `'unsafe-eval'`, no CSP
   change. The guard checks the worker imports MapLibre's shared code from
   `chunks/` rather than carrying a second copy.
-- Tiles are fetched with `connect-src`: same-origin in production
-  (`/tiles/*`), so `connect-src 'self'` holds. Locally there is no CSP header
-  (only SvelteKit's meta policy, which sets `script-src`).
+- Tiles and glyphs are fetched with `connect-src` (MapLibre `fetch`es glyph
+  ranges; they are not CSS fonts, so `font-src` is not involved):
+  same-origin in production (`/tiles/*`, `/tiles/fonts/*`), so
+  `connect-src 'self'` holds and **the CSP is unchanged** by the labels.
+  Locally there is no CSP header (only SvelteKit's meta policy, which sets
+  `script-src`).
 - The app loads **no third-party script, style, font or tile**: MapLibre is
-  bundled, the basemap is self-hosted, and there are no glyphs.
+  bundled, and the basemap and its glyphs are self-hosted.
 
 ## Drawing
 
@@ -216,6 +263,45 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   load, `draw/draft.svelte.ts` for the state) is a few KB in the map's own
   chunk, adds no dependency, and needs no CSP change: no `blob:`, no
   `eval`, no new origin.
+
+## Measure
+
+**Measure** in the Map tab's header (#326 A7; anyone who can see the map)
+puts the map in the drawing mode (`draw/attachDrawing.ts`) with a
+`MeasureDraft` (`measure/measureDraft.svelte.ts`, a `Draft` that is never
+saved): a click, or Enter at the keyboard crosshair, adds a point;
+Backspace removes the last; a click on the first point (or **Close the
+shape**, or a double click) closes it; once closed the points can be dragged,
+added and removed as a drawing's. Escape ends it at once, without asking
+(nothing is lost). The result is written in the measure bar's live region,
+never only on the canvas, with the points by coordinates beside it:
+
+- **Distance** while open: the path's length along its points, great-circle
+  (haversine, mean Earth radius, as the checks measure), in m under 1 km,
+  then km (2 decimals under 100 km).
+- **Area** once closed, with the **perimeter**: on the WGS84 ellipsoid by
+  the server's own method ([§ Areas](#areas), repeated in
+  `measure/measure.ts` and pinned to the same reference squares), so a
+  shape measured and the same shape saved give the same area; in ha under
+  1 km², then km² with the hectares.
+
+Nothing is sent to the server and nothing is kept: a measurement is not in
+the URL and ends with the tab.
+
+## Download GeoJSON
+
+**Download GeoJSON** in the Map tab's header (#326 A7, data portability;
+anyone who can see the map, with features) saves the project's features as
+one RFC 7946 FeatureCollection (`mapExport.ts`): built in the browser from
+the list the tab already loaded, **no route**. WGS84 longitude/latitude as
+stored, no `crs` member. Each feature's properties are `name`, `kind` (the
+API's: `catchment_boundary`, `farm_parcel`, `dam`, `gauge`, `river`,
+`other`), `node` (the node it stands for, by name, or null) and `areaKm2` /
+`areaHa` (the server's area of a polygon, null for points and lines);
+nothing else (no ids, files, users or imported properties). The file is
+`<project>-map-<day>.geojson` (`application/geo+json`). Uploaded again, the
+review reads each row's kind from its `kind` property and its node from its
+name.
 
 ## Uploads
 
@@ -462,6 +548,30 @@ with the quaternary and the point appended. Nothing fills itself, and a
 proposal from the synthetic dataset is marked "Synthetic test data … never
 use them for a real catchment".
 
+### Quaternary outlines
+
+The Map tab's **Quaternary catchments** layer (#326 A6; `layers=quaternaries`
+in the URL) draws the loaded `quaternary_reference` polygons around the
+project as dashed outlines (`quaternaryColour`: purple, at least 3:1 on
+the basemap and ΔE ≥ 40 from every feature stroke), under the features, and
+lists their codes beside the map ([ui.md § Map](./ui.md#map-tabmap)).
+
+- `GET /projects/:id/map/quaternaries?bbox=` (`backend/src/geo/quaternaryLayer.ts`,
+  viewer; [api.md § Catchment map](./api.md#catchment-map)) returns the
+  codes and outlines whose bounding box meets the bbox, by code, at most
+  `QUATERNARY_LAYER_MAX` (100) with `truncated` past it, and refuses a
+  bbox over `QUATERNARY_BBOX_MAX_DEG` (5°) a side: real outlines run to
+  thousands of vertices. No MAP, MAR or monthly values: proposing those
+  stays with the lookup.
+- The tab asks for the features' bounds padded by half their size (at least
+  0.1°) each way (`mapLayers.ts` `quaternaryBbox`), once per bbox, and draws
+  nothing with no features.
+- A code is a label on the map only with glyphs; without them the codes are
+  in the list, and a click inside a quaternary on the map (where no feature
+  is) or on its code in the list draws it heavier.
+- The synthetic dataset's outlines say so in the list ("Synthetic test data,
+  never real outlines.").
+
 ### Quaternary dataset
 
 The lookup reads `quaternary_reference` (152), which the **operator** loads
@@ -506,3 +616,18 @@ as the schema owner; the app never writes it.
   and the loader runs as the schema owner from a workstation. A follow-up
   (followups.md) adds one (a migrate-Lambda-style one-off, or a job reading the
   operator's file from the private bucket).
+
+## Sources
+
+Every dataset or asset the map serves or loads, with its licence, checked on
+the publisher's own page (decision D-B in #326: commercial use allowed,
+attribution fine; non-commercial or share-alike-on-output terms rejected).
+Real data is the operator's own download; the repo commits synthetic
+fixtures only.
+
+| Dataset | Publisher | Licence (read) | Attribution | Version | Update cadence | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
+| Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
+| Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
+| WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |

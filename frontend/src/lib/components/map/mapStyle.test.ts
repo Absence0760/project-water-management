@@ -4,7 +4,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { BASEMAP_ATTRIBUTION, basemapColours, basemapLayerIds, basemapStyle, fillColour, mapStyle, overlayColours, overlayData, overlayLayers, RESULT_FILL_OPACITY, withAlpha } from './mapStyle';
+import {
+	BASEMAP_ATTRIBUTION,
+	basemapColours,
+	basemapLayerIds,
+	basemapStyle,
+	fillColour,
+	glyphsUrl,
+	LABEL_FONTS,
+	labelColours,
+	mapStyle,
+	overlayColours,
+	overlayData,
+	overlayLayers,
+	quaternaryColour,
+	quaternaryData,
+	quaternaryLayers,
+	RESULT_FILL_OPACITY,
+	withAlpha
+} from './mapStyle';
 
 /** Relative luminance and contrast ratio (WCAG 2.2). */
 function lum(hex: string): number {
@@ -115,10 +133,10 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), ...overlayLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', ...overlayLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
-		expect(mapStyle(null, false, data).sources).toEqual({ features: { type: 'geojson', data } });
+		expect(mapStyle(null, false, data).sources).toEqual({ quaternaries: { type: 'geojson', data: quaternaryData(null) }, features: { type: 'geojson', data } });
 	});
 
 	it('feeds the source polygons and lines only (points are markers), marking the selected one', () => {
@@ -154,5 +172,93 @@ describe('the map shares the app’s colours', () => {
 		expect(values.length).toBeGreaterThanOrEqual(2);
 		expect(values[0]).toBe(overlayColours(false).parcel);
 		for (const dark of values.slice(1)) expect(dark).toBe(overlayColours(true).parcel);
+	});
+});
+
+describe('labels (#326 A6): self-hosted glyphs, none without a glyphs URL', () => {
+	const tiles = 'http://localhost:9002/tiles/south-africa.pmtiles';
+	const glyphs = 'http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf';
+	const data = overlayData([], null);
+	const fontsOf = (l: Record<string, unknown>): string[] => [...(JSON.stringify((l.layout as Record<string, unknown>)['text-font']).match(/Noto Sans \w+/g) ?? [])];
+
+	it('asks for no glyphs and draws no symbol layer without a glyphs URL (the default: a fresh clone and CI fetch nothing)', () => {
+		for (const t of [tiles, null]) {
+			const s = mapStyle(t, false, data);
+			expect(s).not.toHaveProperty('glyphs');
+			expect(s.layers.some((l) => l.type === 'symbol')).toBe(false);
+		}
+	});
+
+	it('with glyphs, draws place and water names over the features, and the quaternaries’ codes, in the self-hosted fonts only', () => {
+		for (const dark of [false, true]) {
+			const s = mapStyle(tiles, dark, data, { glyphs });
+			expect(s.glyphs).toBe(glyphs);
+			const ids = s.layers.map((l) => l.id);
+			for (const id of ['bm-label-waterway', 'bm-label-water', 'bm-label-places', 'qt-label']) expect(ids).toContain(id);
+			// Names sit above every feature layer, so a results fill never hides one.
+			expect(ids.indexOf('bm-label-places')).toBeGreaterThan(ids.indexOf('ov-selected'));
+			const fonts = new Set(s.layers.filter((l) => l.type === 'symbol').flatMap(fontsOf));
+			expect([...fonts].every((f) => (Object.values(LABEL_FONTS) as string[]).includes(f))).toBe(true);
+			// The basemap's names go with the basemap when its tiles fail.
+			expect(basemapLayerIds(s)).toEqual(expect.arrayContaining(['bm-label-places', 'bm-label-water', 'bm-label-waterway']));
+		}
+	});
+
+	it('with glyphs but no tiles, labels only the quaternaries (there are no place names to draw)', () => {
+		const s = mapStyle(null, false, data, { glyphs });
+		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label']);
+	});
+
+	it('keeps every label at least 4.5:1 against its halo and against every basemap colour, light and dark', () => {
+		for (const dark of [false, true]) {
+			const c = labelColours(dark);
+			const b = basemapColours(dark);
+			for (const text of [c.text, c.water, c.quaternary]) {
+				expect(contrast(text, c.halo), `${text} on its halo`).toBeGreaterThanOrEqual(4.5);
+				for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(text, g), `${text} on ${g}`).toBeGreaterThanOrEqual(4.5);
+			}
+			const halo = mapStyle(tiles, dark, data, { glyphs }).layers.filter((l) => l.type === 'symbol').map((l) => (l.paint as Record<string, unknown>)['text-halo-width'] as number);
+			expect(halo.every((w) => w >= 1)).toBe(true);
+		}
+	});
+
+	it('makes a same-origin glyphs path absolute without encoding its braces, and takes empty as none', () => {
+		expect(glyphsUrl('/tiles/fonts/{fontstack}/{range}.pbf', 'https://app.example.com')).toBe('https://app.example.com/tiles/fonts/{fontstack}/{range}.pbf');
+		expect(glyphsUrl(glyphs, 'https://app.example.com')).toBe(glyphs);
+		expect(glyphsUrl('  ', 'https://app.example.com')).toBeNull();
+		expect(glyphsUrl(undefined, 'https://app.example.com')).toBeNull();
+	});
+});
+
+describe('quaternary outlines (#326 A6)', () => {
+	const ring = [[[21, -33.75], [21.25, -33.75], [21.25, -33.5], [21, -33.75]]] as [number, number][][];
+
+	it('draws them dashed under the features, with the picked one heavier', () => {
+		const { under, labels } = quaternaryLayers(false, false);
+		expect(labels).toEqual([]);
+		const line = under.find((l) => l.id === 'qt-line')!.paint as Record<string, unknown>;
+		expect(line['line-dasharray']).toEqual([5, 2.5]);
+		expect(line['line-width']).toEqual(['case', ['==', ['get', 'picked'], true], 3, 1.75]);
+		const ids = mapStyle(null, false, overlayData([], null)).layers.map((l) => l.id);
+		expect(ids.indexOf('qt-line')).toBeLessThan(ids.indexOf('ov-parcel-fill'));
+	});
+
+	it('feeds each outline with its code, marking the picked one', () => {
+		const d = quaternaryData([{ code: 'Z01A', geometry: { type: 'Polygon', coordinates: ring } }, { code: 'Z01B', geometry: { type: 'Polygon', coordinates: ring } }], 'Z01B');
+		expect(d.features.map((f) => f.properties)).toEqual([
+			{ code: 'Z01A', picked: false },
+			{ code: 'Z01B', picked: true }
+		]);
+		expect(quaternaryData(null).features).toEqual([]);
+	});
+
+	it('keeps the outline at least 3:1 on the basemap and clearly apart from every feature stroke', () => {
+		for (const dark of [false, true]) {
+			const q = quaternaryColour(dark);
+			const b = basemapColours(dark);
+			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(q, g), `${q} on ${g}`).toBeGreaterThanOrEqual(3);
+			const c = overlayColours(dark);
+			for (const s of [c.boundary, c.parcel, c.water, c.other]) expect(deltaE(q, s), `${q} vs ${s}`).toBeGreaterThanOrEqual(40);
+		}
 	});
 });
