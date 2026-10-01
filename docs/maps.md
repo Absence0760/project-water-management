@@ -146,6 +146,59 @@ feature is deleted (the area stays; the link goes). The area is the farm's
 sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
 
+## Results on the map (data)
+
+Issue #326 A1 (decision D-A1) colours each parcel by one run's figures. This
+section is the data layer, `frontend/src/lib/components/map/mapStatus.ts`
+(pure, `mapStatus.test.ts`); the map's colours, measure picker, legend and the
+table beside it come with the Map tab's redesign.
+
+- **No new route.** Every figure is in the run's summary, which
+  `GET /projects/:id/runs/:runId` already returns (`api.runs.get`), with the
+  run's model snapshot for the dams' capacities. No series is downloaded:
+  the same summary feeds the Hydrological units page and the Network's
+  colours. A parcel reaches its figure through `map_feature.node_id`.
+- **Which run** (`chooseMapRun`, `mapRuns`): the current publication's run
+  (`RunMeta.published`) for everyone by default. An editor or owner may pick
+  any run (`from: 'picked'`), and sees their newest run when nothing is
+  published; anyone below editor gets the published run only, and nothing
+  when nothing is published. This is a choice of view, not an access rule:
+  viewers can already read every run on the Runs page. Farmers can't read
+  runs at all (`403`); their farm map (A3) reads the farm view instead.
+- **Measures** (`unitStatuses`), per hydrological unit and water user, each
+  as `{ nodeId, measure, value, band, label }` with `band` one of `ok`,
+  `watch`, `short` or `none` (no figure), and `label` the figure in words so
+  a colour is never the only cue. The bands reuse the app's thresholds rather
+  than new ones:
+  - **Days short** (the default): demand days in the reporting window not
+    fully met (`supplyAssurance.reliability`, as the Hydrological units
+    cards count them), banded by the share of demand days met with the
+    supply bands' thresholds (`supplyColour.ts`: 95 % and 70 %).
+  - **Curtailment**: the cut the curtailment table asks of a unit
+    (`curtailment.farms`, `totalChangeM3Day` below 0), banded by the share of
+    demand left with the same thresholds; no cut is `ok`. Water users are not
+    in that table, so they are `none`.
+  - **Dam level**: the end-of-run level, banded exactly as the Network's
+    **Colour by dam level** (`farmColour.ts` `damColouring`: 60 % full or
+    more, 30–60 %, under 30 % or at its minimum), from `damLevelsFromSummary`
+    or, for a run before engine 1.2.0, `loadDamLevels`.
+  - **Use against allocation**: per water source, *above registered* when
+    any whole water year was, else the engine's `allocationStatus` of the
+    mean whole year with the run's tolerance (the Allocations page's rule,
+    `allocations.ts` `unitRows`); a unit with both sources shows the worse.
+    Above registered is `short`, use with no registered volume `watch`,
+    within the band or below it `ok`. A run with no whole water year, or no
+    allocations, is `none`.
+- **Gauges and EWR sites** (`ewrStatuses`): met or missed over the reporting
+  window from `curtailment.ewrSites` (outlet first, then gauges); a gauge
+  that isn't a site in the run is `none`.
+- **Colours** (`bandFills`): `Record<featureId, colour>` for CatchmentMap's
+  fills, from the band's design token (`ok` `--success`, `watch`
+  `--warning`, `short` `--danger`, `none` `--text-muted`, the schematic's and
+  the node card's family), read from `<html>`'s computed style so it follows
+  the app's theme; re-read it on `watchAppTheme`. The boundary and rivers are
+  never filled.
+
 ## Quaternary lookup
 
 Settings → WR2012 check → **Propose from the map** looks up the quaternary
