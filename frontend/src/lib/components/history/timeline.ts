@@ -2,9 +2,10 @@
 // item says, grouping one request's items (a change set) into one entry, and
 // entries into the viewer's calendar days. No DOM, no fetch.
 import { registrationLine } from '@water-management/engine';
+import { language, LOCALES } from '@water-management/engine/languages';
 import { roleLabel } from '$lib/api/roleLabels';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
-import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
+import { fmtDay, fmtNum, fmtPct, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
@@ -458,4 +459,99 @@ export function historyContext(latest: HistoryEntry | null, since: string | null
 	if (!latest) return `No changes recorded yet${from}`;
 	const { title } = entrySummary(latest);
 	return `Latest change ${whenText(latest.createdAt, now)} by ${latest.actor ?? 'a deleted account'}: ${title}${from}`;
+}
+
+/** One hydrological unit's line in a publication's record: its own figures (backend publish/decision.ts DecisionFarm), formatted. */
+export interface PublicationRecordFarm {
+	/** The unit's id, or its position when the record holds none (the row's key). */
+	key: string;
+	name: string;
+	/** Supplied ÷ demand over the season, "92%". */
+	supplied: string;
+	/** "900 / 1 000" (m³). */
+	volumes: string;
+	shortDays: string;
+	/** The dam on dataUntil, "64%"; "–" without a dam. */
+	dam: string;
+	/** The model's band in words (OK, Watch, Short); "–" without one. */
+	band: string;
+}
+
+/**
+ * The season decision log's detail under a publication event (issue #119):
+ * the restriction, the window, the run (engine version, inputs hash), the
+ * notice in every language it was written in, the next date, the note, and
+ * each hydrological unit's own figures, least supplied first. null for any
+ * other event, and for an event recorded before the log widened (it holds
+ * only the level, % and farm count, which the event's line already says).
+ */
+export interface PublicationRecord {
+	lines: string[];
+	notices: { language: string; text: string }[];
+	farms: PublicationRecordFarm[];
+}
+
+const BAND_WORDS: Record<string, string> = { ok: 'OK', watch: 'Watch', short: 'Short' };
+const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+/** A notice's language code by its name ("Afrikaans"); a code the table no longer lists as itself. */
+const languageName = (code: string): string => {
+	const l = language(code);
+	return l.code === code ? l.name : code;
+};
+/** The language table's order (English first), codes it no longer lists last: jsonb stores keys shortest first, then alphabetically. */
+const languageRank = (code: string): number => {
+	const i = (LOCALES as readonly string[]).indexOf(code);
+	return i < 0 ? LOCALES.length : i;
+};
+
+export function publicationRecord(e: HistoryEvent): PublicationRecord | null {
+	if (e.kind !== 'publication.published' && e.kind !== 'publication.notice_changed') return null;
+	const s = e.subject;
+	const lines: string[] = [];
+	const r = rec(s.restriction);
+	// The published event's line already says the level; a change's line doesn't.
+	if (e.kind === 'publication.notice_changed' && 'notice' in r) {
+		const pct = num(r.pct);
+		lines.push(str(r.level) && str(r.level) !== 'none' ? `Restriction: ${str(r.level)}${pct !== null ? ` (${pct} %)` : ''}` : 'No restriction');
+	}
+	const w = rec(s.window);
+	const season = rec(w.season);
+	if (str(season.from) && str(season.to)) {
+		const until = str(w.dataUntil);
+		lines.push(
+			`Season ${fmtDay(str(season.from))} to ${fmtDay(str(season.to))}${until && until !== str(season.to) ? `, data to ${fmtDay(until)}` : ''}${str(w.runStart) ? `; the run from ${fmtDay(str(w.runStart))}` : ''}`
+		);
+	}
+	if (str(s.engineVersion)) {
+		lines.push(`Run ${str(s.runId)}, engine ${str(s.engineVersion)}${str(s.runoffModel) ? ` (${str(s.runoffModel)})` : ''}`);
+	}
+	if (str(s.inputsSha256)) lines.push(`Inputs SHA-256 ${str(s.inputsSha256)}`);
+	const notice = rec(r.notice);
+	const notices = Object.entries(notice)
+		.filter(([, t]) => typeof t === 'string' && t)
+		.sort(([a], [b]) => languageRank(a) - languageRank(b))
+		.map(([code, t]) => ({ language: languageName(code), text: t as string }));
+	if ('notice' in r && !notices.length) lines.push('No notice text');
+	if ('nextExpectedOn' in s) lines.push(s.nextExpectedOn ? `Next publication expected ${fmtDay(str(s.nextExpectedOn))}` : 'No next publication date');
+	if (str(s.note)) lines.push(`Note: ${str(s.note)}`);
+	const farms = (Array.isArray(s.perFarm) ? s.perFarm : [])
+		.map((raw, i) => {
+			const f = rec(raw);
+			const fs = rec(f.season);
+			const fraction = num(fs.fraction);
+			const row: PublicationRecordFarm = {
+				key: str(f.nodeId) || `#${i}`,
+				name: str(f.name),
+				supplied: fmtPct(fraction, 0),
+				volumes: `${fmtNum(num(fs.suppliedM3))} / ${fmtNum(num(fs.demandM3))}`,
+				shortDays: fmtNum(num(fs.shortDays)),
+				dam: fmtPct(num(f.damPct), 0),
+				band: BAND_WORDS[str(rec(f.model).band)] ?? '–'
+			};
+			return { row, fraction };
+		})
+		// Least supplied first, a unit without a share (no demand) last; then by name.
+		.sort((a, b) => (a.fraction ?? Infinity) - (b.fraction ?? Infinity) || a.row.name.localeCompare(b.row.name))
+		.map((x) => x.row);
+	return lines.length || notices.length || farms.length ? { lines, notices, farms } : null;
 }

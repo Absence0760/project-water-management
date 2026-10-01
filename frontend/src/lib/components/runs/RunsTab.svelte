@@ -53,6 +53,7 @@
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
 	import { runExclusions } from './exclusionShading';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
@@ -616,7 +617,7 @@
 						<!-- The note leads the reader to the Record group, below the results (sections.ts). -->
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
-							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}{detail.run.createdBy ? ` by ${detail.run.createdBy}` : ''} · engine {detail.run.engineVersion}
+							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
 						</span>
 						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->

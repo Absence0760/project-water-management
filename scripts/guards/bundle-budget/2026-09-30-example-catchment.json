@@ -1,0 +1,4 @@
+{
+	"addKb": 26,
+	"why": "2026-09-30 total 1370 → 1396 KB (issue #286, Start from an example on the empty project list): the invented Kleinberg example catchment as a project document (projects/exampleCatchment.generated.json, a lazy chunk of its own, 84 KB raw, ~25 KB gzip: 15 years of catchment rain, CHIRPS and the weir record at 3 significant figures, plus its stored GR4J fit) and the empty state's button (+~1 KB). Data, not code, but a JSON import is a JS chunk, so it counts here; it loads only on hover, focus or press of the button, never with a page, and the largest-chunk ceiling (42 KB) still holds it. Measured 1383 locally on main @ 4a17d615 plus this; CI ~2 KB above. Re-measured with main @ 11b181da merged (engine 1.55.0): 1387 locally. Again with main @ 9dbdbc8b (#293's crop work, 1370): 1391 locally, CI ~2 KB above. Headroom ~3 KB. (moved from the old change log when entry files arrived, #308)"
+}

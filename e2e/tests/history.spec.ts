@@ -6,7 +6,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { historyDetail } from '../support/history.ts';
+import { historyDetail, openHistory } from '../support/history.ts';
 import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -215,4 +215,46 @@ test('a field says how often it changed, and links to History filtered to it (WP
 	await expect(entries(page)).toHaveCount(2);
 	await expect(entries(page).first()).toContainText('Upper farm: dam capacity 200\u202f000 m³ → 250\u202f000 m³');
 	await expect(entries(page).last()).toContainText('Upper farm: dam capacity 150\u202f000 m³ → 200\u202f000 m³');
+});
+
+test('a publication in History shows its decision record: window, run, notice in each language and each farm’s figures (issue #119)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'History decision log');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const notice = { en: 'Irrigate at night only.', af: 'Besproei net snags.' };
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/publication`, {
+		data: { runId, note: 'Dry spell', restriction: { level: 'restricted', pct: 20, notice }, nextExpectedOn: '2031-01-15' }
+	});
+	expect(res.status()).toBe(201);
+
+	await openHistory(page, project.id, '&kind=publication');
+	await expect(entries(page)).toHaveCount(1);
+	await entries(page).first().getByRole('link').click();
+	const record = historyDetail(page).getByTestId('publication-record');
+	await expect(historyDetail(page)).toContainText('Published a run, restricted (20 %) to 2 farms');
+	await expect(record).toContainText('Season 1 Oct 2021 to 28 Jan 2022; the run from 1 Oct 2021');
+	await expect(record).toContainText(`Run ${runId}, engine`);
+	await expect(record).toContainText(/Inputs SHA-256 [0-9a-f]{64}/);
+	await expect(record.getByText('Notice (English): Irrigate at night only.')).toBeVisible();
+	await expect(record.getByText('Notice (Afrikaans): Besproei net snags.')).toBeVisible();
+	await expect(record).toContainText('Next publication expected 15 Jan 2031');
+	await expect(record).toContainText('Note: Dry spell');
+	await record.getByText('Figures per hydrological unit (2)').click();
+	const table = record.getByRole('table', { name: 'Each hydrological unit’s season figures in this publication, least supplied first' });
+	await expect(table.getByRole('rowheader')).toHaveCount(2);
+	// Ordered least supplied first (timeline.test.ts pins the order); here, that both units are there.
+	expect((await table.getByRole('rowheader').allInnerTexts()).sort()).toEqual(['Lower farm', 'Upper farm']);
+	await expectNoViolations(page);
+
+	// A notice change records the level it moved to; on a phone the record shows whole in the list.
+	const pubId = (await (await page.request.get(`${API_URL}/projects/${project.id}/publication`)).json()).current.id as string;
+	expect((await page.request.patch(`${API_URL}/projects/${project.id}/publication/${pubId}`, { data: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly.' } } } })).status()).toBe(200);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openHistory(page, project.id, '&kind=publication');
+	const changed = entries(page).first();
+	await expect(changed).toContainText('Changed the publication’s restriction notice');
+	await expect(changed.getByTestId('publication-record')).toContainText('Restriction: advisory');
+	await expect(changed.getByText('Notice (English): Use water sparingly.')).toBeVisible();
+	await entries(page).nth(1).getByText('Figures per hydrological unit (2)').click();
+	await expectNoViolations(page);
 });

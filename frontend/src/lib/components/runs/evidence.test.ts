@@ -54,7 +54,7 @@ describe('historyEntries', () => {
 		expect(currentNomination([])).toBeNull();
 		expect(historyEntries(h, fmt)).toEqual([
 			{ id: 'n1', runId: 'a', text: 'Nominated “Run A” on 2026-09-01 by Ann', reason: 'reason 1', model: 'GR4J, engine 0.19.2', current: false },
-			{ id: 'n2', runId: 'b', text: 'Replaced by “Untitled run” on 2026-09-02', reason: 'reason 2', model: 'GR4J, engine 0.19.2', current: false },
+			{ id: 'n2', runId: 'b', text: 'Replaced by “Untitled run” on 2026-09-02 by a former member', reason: 'reason 2', model: 'GR4J, engine 0.19.2', current: false },
 			{ id: 'n3', runId: 'a', text: 'Replaced by “Run A” on 2026-09-03 by Ann', reason: 'reason 3', model: 'GR4J, engine 0.19.2', current: true }
 		]);
 	});

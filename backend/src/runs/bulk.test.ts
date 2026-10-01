@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_EXPORT_BYTES } from '../export/csv.js';
+import { MAX_JSON_EXPORT_BYTES } from '../export/csv.js';
 import type { DailyScope } from '../export/daily-columns.js';
 import { BULK_PAGE_VALUES, bulkPage, bulkPageDays, MAX_VALUE_BYTES, type BulkPage } from './bulk.js';
 
@@ -58,9 +58,9 @@ describe('bulk series paging', () => {
 		const s = scope(40, 60_000, () => -2.2250738585072014e-308);
 		for (const c of s.series) c.header = c.label = 'x'.repeat(300);
 		const body = JSON.stringify(bulkPage(s, '00000000-0000-4000-8000-000000000000', '1950-01-01', 0));
-		expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(MAX_EXPORT_BYTES);
+		expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(MAX_JSON_EXPORT_BYTES);
 		// …and uses most of it, so a page isn't needlessly small.
-		expect(Buffer.byteLength(body, 'utf8')).toBeGreaterThan(0.9 * MAX_EXPORT_BYTES);
+		expect(Buffer.byteLength(body, 'utf8')).toBeGreaterThan(0.9 * MAX_JSON_EXPORT_BYTES);
 	});
 
 	it('pads a shorter series with null and refuses an offset past the run', () => {

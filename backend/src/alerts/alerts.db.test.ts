@@ -241,7 +241,8 @@ describe('subscriptions: own rows only, a farmer only for their own farm', () =>
 		expect(v.choices.map((c: { kind: string; mode: string }) => [c.kind, c.mode])).toEqual([
 			['dam_below', 'off'],
 			['ewr_forecast_fail', 'off'],
-			['restriction_published', 'immediate']
+			['restriction_published', 'immediate'],
+			['farms_short', 'off']
 		]);
 		expect((await stranger.call('GET', '/me/alerts')).body.projects.find((p: { id: string }) => p.id === projectId)).toBeUndefined();
 		expect((await stranger.call('PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'off' }] })).status).toBe(404);

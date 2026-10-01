@@ -213,8 +213,10 @@ bottom:
    *"Fit record: parameters edited since the fit (x1)"*.
    A demand object's line names its category, size, return, priority,
    schedule and, from engine 1.44.0, the people it serves for its
-   basic-needs floor (*"…, serves 2 000 people"*), so a change of people
-   is listed like any other field.
+   basic-needs floor (*"…, serves 2 000 people"*), and from engine 1.56.0
+   where its number comes from (*"…, from meter records"*; not recorded says
+   nothing, and absent and null are the same), so a change of people or of
+   source is listed like any other field.
    **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list
    of EWR sites differs (a gauge added or removed, turned into a unit, or
    ticked or unticked as an EWR site), one network line names both runs'

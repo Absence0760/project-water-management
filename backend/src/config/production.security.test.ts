@@ -14,7 +14,8 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeRuntime } from '../__tests__/lambdaRuntime.js';
 import { assertLambdaEnv, assertProductionEnv, productionEnvProblems, ROLES, type Role, SETTINGS } from './production.js';
 import { RUNTIME_SECRETS } from './runtimeSecrets.js';
 
@@ -395,6 +396,9 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 });
 
 describe('each entry point runs the check at init', () => {
+	// The API's handler is a streaming one (http/lambdaStream.ts), made from the runtime's awslambda global at load.
+	beforeEach(() => vi.stubGlobal('awslambda', fakeRuntime));
+	afterEach(() => vi.unstubAllGlobals());
 	/** Stub the process env to `env` for a fresh import: blank every classified setting and placeholder first. */
 	function stubProcessEnv(env: Record<string, string | undefined>) {
 		for (const name of Object.keys(SETTINGS)) vi.stubEnv(name, '');

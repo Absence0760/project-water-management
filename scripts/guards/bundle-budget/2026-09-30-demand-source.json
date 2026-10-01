@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Engine 1.56.0, issue #54 Q11 (#266): a demand object's structured source, its picker in the node form and demand by source in the run. Measured 1367 locally with main @ 9dbdbc8b (1370 before it, by the old log's count); raised the total 1370 → 1372 KB before entry files existed."
+}

@@ -209,6 +209,16 @@ collected as a checklist in issue #46; tick it there as they answer.
       `recession/check.ts`); the Runs panel reads them through
       `PROVISIONAL_SIGNATURE_LIMITS`, so the answer changes one place, and
       a change to a warning bumps `ENGINE_VERSION`.
+- [ ] **Demand sources to confirm** (engine 1.56.0, issue #54 Q11,
+      [model.md §2.7f](./model.md) "The source"). Built on these readings of
+      the client's rule; put each as "confirm or change": a per-head norm
+      for livestock counts as `perCapita` (the rule names people only); a
+      meter record and an AADD are always given as m³/day by month (never a
+      count × a metered litres per head); a new object stays "not recorded"
+      even when it starts at a category's norm (Red Book 230 l, 45 l per head
+      of cattle), until the modeller picks its source; and the workbook
+      importers record a typed-over demand as `other`, not as an AADD even
+      where the workbook's number came from one.
 - [ ] **Flow gap filling defaults to confirm** (engine 1.23.0, issue #66,
       [model.md §2.10i](./model.md)). Built off by default on these
       engineering defaults; put each to the hydrologist as "confirm or
@@ -2819,17 +2829,25 @@ role and not before it.
       size and reads every cell back.
     - No frozen header row or live formulas (SheetJS CE doesn't write panes;
       the formula audit workbook is the separate item in § Verification).
-  - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
-    plus a local MinIO equivalent). **Now a real limit, not a hypothetical
-    one** (measured 2026-09-25 for WP-1.28): the workspace's farm daily CSV has ~32
-    full-precision columns, ≈ 400 KB a year, so a multi-decade record gets
-    the `413` (the farmer's own CSV, six columns in whole m³ and the last
-    365 days by default since #124, reaches it only with a `?from=` decades
-    back). The
-    workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
-    bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
-    response streaming with a 50 MB cap (roadmap step 1). Trigger: before the
-    first production release that the client catchment will be exported from.
+  - ~~a path for exports over 5 MB~~ **landed (WP-1.29a, issue #283,
+    2026-09-30)**: the API's Function URL is in `RESPONSE_STREAM` mode and
+    every CSV download streams, capped at 50 MB (a farm's daily CSV is
+    ≈ 400 KB a year, so a century fits), the same code path on the local Node
+    server ([deployment.md § Response streaming](./deployment.md#response-streaming),
+    [api.md § Export](./api.md#export)). `export.json` and the bulk series
+    pages keep the 5 MB JSON cap (an export must import back).
+    - [ ] **Check it in production at the first backend deploy** (WP-1.29's
+      acceptance criteria; the steps are in deployment.md § Response
+      streaming): a farm daily CSV over 12 MB downloads through CloudFront,
+      and sign-in and sign-out still work. AWS's response-streaming page says
+      "Lambda function URLs do not support response streaming within a VPC
+      environment", which reads as a client inside a VPC calling a URL (its
+      example is a VPC client using `InvokeWithResponseStream`), not a
+      VPC-attached function behind a public URL as here; only a real deploy
+      settles it. If it fails, the durable fallback is WP-1.29 option (b),
+      the CSV written to S3 and handed out as a signed URL (the reports'
+      pattern), with the URL put back to `BUFFERED` and lambda.ts back to
+      the buffered adapter together.
 - **Accounts:**
   - Should sign-in require a verified email?
   - Should sign-up be invite-only, or email-first? Email-first closes the last
@@ -3446,18 +3464,29 @@ from the WP:
       `planObjects` (a gap runs at the schedule's factor), with the checks
       reading it the same way. Trigger: a client supplying such a record for
       a demand whose pattern windows can't describe.
-- [ ] **Demand objects: a structured demand source.** The rule is decided
-      (issue #54 Q11, confirmed by the client in issue #90): a demand comes
-      from meter records where they exist, else the reconciliation
-      strategy's AADD, else population × litres per person per day, and the
-      model records which. Today that record is the object's free-text
-      `note`, so a report can't say by rule how solid a demand is. Durable
-      fix: a `source` field on the object (`meter` | `aadd` | `perCapita` |
-      `other`, with the note kept for the detail), set by the node form and
-      the importers, shown in the run's object table and the evidence
-      report. Trigger: the evidence report (or a WUA screen) needing to
-      grade demands by source, or the first catchment with objects from
-      more than one source.
+- [x] **Demand objects: a structured demand source** (engine 1.56.0,
+      2026-09-30, migration 139; issue #54 Q11, confirmed in issue #90). A
+      `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
+      not recorded, the note kept for the detail); `meter` and `aadd` must be
+      sized `monthly`, `perCapita` `perUnit` (modelRules `doSourceSizing`).
+      Set by the node form (picking a source sets and locks the sizing), the
+      scenario ops and both workbook importers (`other`, the typed-over
+      demand); a record only, so a run is the same with any source. Shown in
+      the run's demand-objects table (a Source column and each source's
+      share of the demand) and the summary CSV ([model.md §2.7f](./model.md)).
+- [ ] **Demand objects: the source in the evidence report.** Not built: the
+      licensing evidence report doesn't list the applicant's demand objects
+      at all yet, so grading them by source there means a new report section
+      (the application's objects, each with its source and demand, and the
+      share of the added demand that is metered), an `EVIDENCE_REPORT_VERSION`
+      bump so issued packs keep rebuilding to their hash, and its PDF and
+      preview. Durable fix: that section built from the runs'
+      `DemandObjectSummary.source` (engine ≥ 1.56.0) and the same
+      `demandBySource` shares the results table uses (move it to the engine
+      then), with a flag when most of the added demand isn't metered or
+      isn't recorded. Trigger: an assessor or the client asking the report
+      to grade an application's demand by source, or the first application
+      whose change is a demand object.
 - [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
       issue #123, migration 127; agreed in issue #90 Q13). A domestic or
       municipal demand object has a floor of population × 25 l a day (its
@@ -4487,6 +4516,16 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` has its `af` entry:
       the Mailpit e2e checks the Afrikaans mail and the unsubscribe page on a
       phone set to Afrikaans.
+- [x] **Staleness for series an API key sends, and units short on an
+      automatic publication (issue #120).** Built (141): a `data_stale` rule
+      per series an API key writes (`alert_rule.series_id`, 2 days by
+      default, from the series' last non-blank day; listed under **API data
+      behind**, marked "(no API key sends it now)" once a person writes over
+      the key's days; a hand-uploaded series gets none), and the
+      `farms_short` kind, staff only, on publications an auto run made
+      (`run_publication.auto`). The one Afrikaans line not yet re-translated
+      after the rename, `mail.alert.stale.seriesWhat` ("API data behind"),
+      is on the translation sheet and goes out in English until it is.
 - [x] **Per-feed staleness levels.** Built (057 `alert_rule.feed_id`):
       one `data_stale` rule per feed, each at its own level past that
       feed's usual delay, with a default per source (CHIRPS 3 days,
@@ -4566,15 +4605,24 @@ own. Loop in the CISO or security analyst before acting on any of them.
       key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
       (above) must say it exists.
 - [ ] **Self-service account deletion, and evidence that names its maker.**
-      Deleting an account is an operator act today (deployment.md §
-      Runbooks, item 7), and it is refused for anyone who created a
-      project, team, run, scenario, ensemble, import or nomination (those
-      keys restrict: `catalogue.db.test.ts` `APP_USER_ON_DELETE`). Decide
-      with the information officer whether that evidence keeps the name (the
-      regulator's record, like a sign-off), is reassigned, or is
-      pseudonymised, then change those keys to match and build the Account
-      page's "delete my account". Trigger: before public registration opens,
-      or the first deletion request from a modeller.
+      **Operator path done (138, issue #112):** deleting an account keeps
+      the evidence it made (project, team, run, ensemble, nomination,
+      scenario, import) with the maker cleared, deletes a started ensemble
+      and draft applications, and refuses only the sole owner or admin until
+      handed over (deployment.md § Runbooks, item 7; Privacy §7 rewritten,
+      `LEGAL_VERSION` 2026-09-30). **Still to build (#112):** `DELETE
+      /auth/me` (password again; 409 naming the projects and teams they solely
+      own or administer; audit event; a confirmation email of what was done,
+      s24(4)) and the Account page's **Delete my account** with its e2e and
+      the Afrikaans words. The information officer still confirms the rule
+      (#90). Trigger: before public registration opens, or the first deletion
+      request from a modeller.
+- [ ] **A DWS or CMA responsible party may have to keep the maker's name**
+      (National Archives Act, operator agreement notes for counsel, clause
+      8.4). Durable fix: a per-team setting that keeps a snapshot of the name
+      on the evidence (its own migration), on for such a team. Trigger: D1
+      (#50) puts the published baseline with a CMA or DWS, or counsel says
+      the Act applies.
 - [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
       body for editors for the life of the project (037). Decide a limit (for
       example a year, then purge the body and keep the event). Who: client.

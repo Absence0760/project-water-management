@@ -163,11 +163,13 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 		case 'ewr_forecast_fail':
 			return { kind: 'ewr_forecast_fail', days: Number(d.days), of: Number(d.of), from: String(d.from), to: String(d.to), madeOn: String(d.madeOn), threshold: e.threshold };
 		case 'data_stale':
-			return { kind: 'data_stale', threshold: e.threshold, feeds: Array.isArray(d.feeds) ? d.feeds : [] };
+			return { kind: 'data_stale', threshold: e.threshold, feeds: Array.isArray(d.feeds) ? d.feeds : [], series: d.series === true };
 		case 'feed_failing':
 			return { kind: 'feed_failing', threshold: e.threshold, feeds: Array.isArray(d.feeds) ? d.feeds : [] };
 		case 'job_dead':
 			return { kind: 'job_dead', count: Number(d.count) };
+		case 'farms_short':
+			return { kind: 'farms_short', count: Number(d.farmsShort7), of: Number(d.of), from: String(d.from), to: String(d.to), publishedAt: String(d.publishedAt), threshold: e.threshold };
 		case 'restriction_published': {
 			const { rows: p } = await db.query<{ restriction_level: 'none' | 'advisory' | 'restricted'; restriction_pct: string | null; notice: Record<string, string>; published_at: Date }>(
 				'SELECT restriction_level, restriction_pct, notice, published_at FROM run_publication WHERE id = $1',
