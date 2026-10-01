@@ -132,6 +132,7 @@ import type {
 	MapFeatureInput,
 	MapFeatureKind,
 	MapFeatureList,
+	MapLinkedNodes,
 	QuaternaryLookup
 } from './types';
 
@@ -842,6 +843,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		map: {
 			list: (id: string) => request<MapFeatureList>('GET', `${p(id)}/map/features`),
+			/** Which nodes have a linked feature, ids only: the "Show on map" links (issue #326). */
+			linkedNodes: (id: string) => request<MapLinkedNodes>('GET', `${p(id)}/map/linked-nodes`),
 			create: (id: string, body: MapFeatureInput & { kind: MapFeatureKind }) =>
 				request<{ feature: MapFeature }>('POST', `${p(id)}/map/features`, body).then((r) => r.feature),
 			update: (id: string, fid: string, body: MapFeatureInput) =>

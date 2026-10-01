@@ -1826,8 +1826,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
       only when a map feature is linked to the node, issue #326 A2; which
-      nodes have one comes from the map's feature list, fetched once the page
-      has drawn, `workspace/mapLinks.ts`, as on Hydrological units and Dams) and
+      nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
+      fetched once the page has drawn, `workspace/mapLinks.ts`, as on
+      Hydrological units and Dams) and
       **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile

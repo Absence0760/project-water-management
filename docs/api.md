@@ -2660,6 +2660,7 @@ and the quaternary lookup only proposes.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
+| GET | `/projects/:id/map/linked-nodes` | – | `{ nodeIds: string[] }`: each node at least one feature is linked to, once, and no geometry. The "Show on map" links on Network, Hydrological units and Dams (issue #326) read this rather than the feature list. A farmer gets `403`, as from `/map/features` | viewer |
 | POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one | editor |
 | PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
 | DELETE | `/projects/:id/map/features/:fid` | – | `204`; its import goes with its last feature. A node whose area came from it keeps the area and loses the link | editor |

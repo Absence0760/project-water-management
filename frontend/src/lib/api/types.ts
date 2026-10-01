@@ -2249,6 +2249,11 @@ export interface MapFeatureList {
 	quaternaryDatasets: { dataset: string; count: number }[];
 }
 
+/** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */
+export interface MapLinkedNodes {
+	nodeIds: string[];
+}
+
 /** POST/PATCH …/map/features: a point from the coordinates form, or a geometry. */
 export interface MapFeatureInput {
 	kind?: MapFeatureKind;

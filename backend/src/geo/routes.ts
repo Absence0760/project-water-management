@@ -2,6 +2,7 @@
 // docs/api.md § Catchment map, docs/maps.md).
 //
 //   GET    /projects/:id/map/features                   features, sources, nodes' area sources (viewer)
+//   GET    /projects/:id/map/linked-nodes               the ids of the nodes a feature is linked to (viewer)
 //   POST   /projects/:id/map/features                   place one feature: a point from the coordinates form, or a geometry (editor)
 //   PATCH  /projects/:id/map/features/:fid              rename, re-kind, link to a node, move (editor)
 //   DELETE /projects/:id/map/features/:fid              (editor); its import goes with its last feature
@@ -271,6 +272,20 @@ export const mapRoutes = new Hono<AuthEnv>()
 				nodes: nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, areaKm2: n.area_km2, areaSource: n.area_source, areaFeatureId: n.area_feature_id })),
 				quaternaryDatasets: await quaternaryDatasets(db)
 			});
+		})
+	)
+	// Which nodes get a "Show on map" link on the Network, Hydrological units and
+	// Dams pages (issue #326): only the ids, never a geometry. Viewer, like the
+	// feature list: a farmer gets 403 (their farm view has no map).
+	.get('/:id/map/linked-nodes', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const id = c.req.param('id');
+			await requireRole(db, id, 'viewer');
+			const { rows } = await db.query<{ node_id: string }>(
+				'SELECT DISTINCT node_id FROM map_feature WHERE project_id = $1 AND node_id IS NOT NULL ORDER BY node_id',
+				[id]
+			);
+			return c.json({ nodeIds: rows.map((r) => r.node_id) });
 		})
 	)
 	.post('/:id/map/features', async (c) => {
