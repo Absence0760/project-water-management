@@ -175,6 +175,12 @@ test('an editor sees the newest run until one is published, picks a run in the U
 	// The outlet gauge's EWR on its card and in the table, the parcels' figures beside it.
 	await row(page, 'Outflow gauge').click();
 	await expect(card(page).getByTestId('map-card-result')).toHaveText(/^EWR (met every day|missed on [\d\s,]+ days?) \(outlet\) · (ok|short)$/);
+	// Its marker takes the EWR's band colour too, where the browser can draw the map (no WebGL: the list and card above carry it).
+	const mapBox = page.getByTestId('catchment-map').locator('xpath=..');
+	await expect(mapBox).toHaveAttribute('data-status', /^(ready|failed)$/);
+	if ((await mapBox.getAttribute('data-status')) === 'ready') {
+		await expect(page.getByRole('button', { name: 'Gauge: Outflow gauge' })).toHaveAttribute('data-fill', /^(#|rgb)/);
+	}
 	await page.getByTestId('map-open-grid').click();
 	const grid = page.getByRole('dialog', { name: 'Every map feature' });
 	const gaugeRow = grid.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Outflow gauge' }) });

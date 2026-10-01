@@ -142,7 +142,9 @@
 		for (const f of points) {
 			const at = f.geometry.coordinates as [number, number];
 			const name = f.name || words.kind(f.kind);
-			const key = `${f.kind}|${name}|${at.join(',')}`;
+			// A results colour (A1: a gauge's EWR met or missed) fills the marker's shape; its words are in the card, the grid and the legend.
+			const tint = fills?.[f.id] ?? '';
+			const key = `${f.kind}|${name}|${at.join(',')}|${tint}`;
 			const had = markers.get(f.id);
 			if (had && had.key === key) {
 				had.button.setAttribute('aria-pressed', String(f.id === selectedId));
@@ -155,6 +157,10 @@
 			button.setAttribute('aria-label', `${words.kind(f.kind)}: ${name}`);
 			button.setAttribute('aria-pressed', String(f.id === selectedId));
 			button.title = `${words.kind(f.kind)}: ${name}`;
+			if (tint) {
+				button.style.setProperty('--mk-fill', tint);
+				button.dataset.fill = tint;
+			}
 			button.append(markerShape(f.kind));
 			button.addEventListener('click', (e) => {
 				e.stopPropagation();
@@ -458,6 +464,10 @@
 	.map :global(.mk-gauge .mk-shape),
 	.map :global(.mk-dam .mk-shape) {
 		fill: var(--mk-water);
+	}
+	/* A results colour (A1) wins over the kind's; the casing stays, so the marker keeps its 3:1 edge on the basemap. */
+	.map :global(.map-marker[data-fill] .mk-shape) {
+		fill: var(--mk-fill);
 	}
 	.map :global(.map-marker[aria-pressed='true'] .mk-shape) {
 		stroke: var(--mk-selected);
