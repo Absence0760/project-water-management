@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-14 strings: 10 on the site, 4 in emails, 0 in the glossary.
+31 strings: 27 on the site, 4 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -37,10 +37,12 @@ The page a signed-in person sees after the Terms of use or Privacy notice change
 | Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `b216c7f0` | We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time. |  |  |
-| `eabe4936` | A deleted note’s text is erased 90 days after it is deleted. |  |  |
+| `596c0a0e` | A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed. |  |  |
 | `062d7e8b` | If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made. |  |  |
 | `e7b636d7` | Licence records, and the names they keep, are kept until a set date and then deleted. |  |  |
 | `3c1e1737` | Outside the organisation, registered water use is shown only as totals, never with a name. |  |  |
+| `111c02c6` | Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation. |  |  |
+| `a4f4b99d` | When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project. |  |  |
 
 ### farm.whoDecides
 
@@ -52,6 +54,42 @@ Farm view: “Who decides about your farm’s information”, from the menu. The
 | `2940b781` | Your WUA |  |  |
 | `d82dcb91` | The organisation that runs this catchment decides what is done with your farm’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA. |  |  |
 | `3bb1e71b` | We run the app for them. How we handle your information, and how to ask us: |  |  |
+
+### share.scenario
+
+Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `c1ae57b1` | Licence issued |  |  |
+| `6fa8b764` | Licence refused |  |  |
+| `06bc1d4d` | Application rejected |  |  |
+| `978fe1a5` | Not considered: use already authorised |  |  |
+
+### share.comments
+
+Shared application and shared evidence pack: the public comments box. Anyone with an account comments through the link (an NGO, a neighbour), without joining the catchment. A comment here is not a “written objection” under the National Water Act: only a written objection sent to the address in the application’s notice before its closing date keeps the right to appeal (s148(1)(f)); keep that force exactly. The tick box hands the commenter’s name and email to the applicant for the “register of interested and affected parties” the regulations (GN R267 reg 18) make the applicant keep. Keep “GN R267 reg 18”, “reg 19” and “s148(1)(f)” as they are. {date} is a date like “1 Dec 2026”.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `8f3489cb` | This link no longer takes comments. |  |  |
+| `ebaaeca5` | A comment here is not a written objection. |  |  |
+| `09aa1077` | To object, and to keep the right to appeal (National Water Act s148(1)(f)), write to the address in the application’s notice before its closing date. |  |  |
+| `6204d35f` | Written objections go to: |  |  |
+| `ccf63ea7` | Closing date for objections: {date} | Keep: {date} |  |
+| `9abf2b4d` | Shown with your name to everyone this page is shared with. Plain text. |  |  |
+| `51d2288c` | The applicant, the responsible authority that decides the application, and the public participation report the applicant gives it (GN R267 reg 19) receive your comment and your name. |  |  |
+| `333a2d46` | Give my name and email to the applicant for the register of interested and affected parties (GN R267 reg 18) |  |  |
+| `5c2fec15` | The applicant keeps that register while the application is considered and for two years after a licence is granted. Without the tick, the applicant gets your name and comment, not your email. |  |  |
+| `9ee9f497` | Commenting needs an account, so every comment has a name. You don’t need to be a member of the project: the account reads only what this link shows. |  |  |
+
+### error
+
+A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `2ae5aea1` | You have posted 10 comments in the last hour. Wait a while, then try again. |  |  |
 
 ## Emails
 

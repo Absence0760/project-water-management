@@ -20,14 +20,17 @@
 	import { msg, t } from '$lib/i18n/locale.svelte';
 
 	// What changed in this version. Rewrite it whenever LEGAL_VERSION changes.
-	// Since 2026-10-01: the POPIA positions taken pending counsel (docs/legal-status.md, 2026-10-02): lawful bases and the
-	// right to object, deleted notes, restores, licence records' dates, and registered water use outside the organisation.
+	// Since 2026-10-01: the positions taken pending counsel (docs/legal-status.md, 2026-10-02): lawful bases and the
+	// right to object, deleted notes and invitation entries, restores, licence records' dates, registered water use outside
+	// the organisation, the organisation's privacy contact, and public comments on a licence application.
 	const CHANGES = [
 		msg('We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.'),
-		msg('A deleted note’s text is erased 90 days after it is deleted.'),
+		msg('A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.'),
 		msg('If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.'),
 		msg('Licence records, and the names they keep, are kept until a set date and then deleted.'),
-		msg('Outside the organisation, registered water use is shown only as totals, never with a name.')
+		msg('Outside the organisation, registered water use is shown only as totals, never with a name.'),
+		msg('Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.'),
+		msg('When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.')
 	];
 
 	let busy = $state(false);
