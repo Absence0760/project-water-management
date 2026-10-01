@@ -22,7 +22,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await applicant.page.emulateMedia({ colorScheme });
 		const { project, upper } = await seedApplicantProject(page, `Ask the assessors ${colorScheme}`, applicant.user);
 		// Flow shares by hand: Upper 5 %, Lower (hidden from the applicant) 90 %. A new baseline run, published.
-		const model = project.model as { nodes: { id: string; name: string; flowShareManual?: number | null }[] };
+		const model = project.model as unknown as { nodes: { id: string; name: string; flowShareManual?: number | null }[] };
 		for (const n of model.nodes) n.flowShareManual = n.name === 'Upper farm' ? 0.05 : n.name === 'Lower farm' ? 0.9 : null;
 		await putModel(page.request, project.id, project.model);
 		await updateSettings(page.request, project.id, { flowShareMethod: 'manual' });
