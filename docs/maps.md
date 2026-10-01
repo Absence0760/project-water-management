@@ -432,6 +432,21 @@ the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
   CatchmentMap's DOM buttons, which don't read `fills`. The EWR is in the
   card, the table and the legend's count line meanwhile.
 
+## In an evidence pack
+
+The licensing evidence report prints a site locality map at the top of § 1
+(report format `evidence-12`, issue #326 A5), and an evidence pack freezes it.
+It is not this map: no basemap and no MapLibre, but one SVG the engine draws
+from the map features (`packages/engine/src/geo/localityMap.ts`, a local
+equirectangular projection about the features' centre), with a scale bar, a
+north arrow, coordinate ticks, a legend and the features' date, so the PDF
+renderer and `pnpm reproduce:pack` produce the same bytes and the pack's
+manifest names their SHA-256. It reads the features when the report is built,
+under the reader's RLS; `other` features aren't drawn, and another unit's
+parcel or dam is drawn without its name. Any module that needs a plain
+locality figure can import the same builder. Details:
+[evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map).
+
 ## The farmer's map
 
 Issue #326 A3 (decision D-A1/A3): the farm view (`/farm/[projectId]`) shows

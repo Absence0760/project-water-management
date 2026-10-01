@@ -81,6 +81,19 @@ describe('reproduce:pack', () => {
 		expect(out).toMatch(/FAIL\s+files\s+.*README\.md/);
 	});
 
+	it('draws an evidence-12 pack’s locality map again and checks its SVG against the manifest (figure:locality); a wrong hash fails it', async () => {
+		await writeFile(join(dir, 'locality.zip'), (await buildPackBundle(packBundleFixture(hash, { locality: true }), hash)).bytes);
+		const ok = await run(['locality.zip', '--no-run']);
+		expect(ok.code, ok.out).toBe(0);
+		expect(ok.out).toMatch(/ok\s+figure:locality\s+the locality map drawn again from the manifest's 4 map features hashes to [0-9a-f]{64}/);
+		await writeFile(join(dir, 'locality-bad.zip'), (await buildPackBundle(packBundleFixture(hash, { locality: { svgSha256: 'd'.repeat(64) } }), hash)).bytes);
+		const bad = await run(['locality-bad.zip', '--no-run']);
+		expect(bad.code).toBe(1);
+		expect(bad.out).toMatch(/FAIL\s+figure:locality\s+the locality map drawn again hashes to [0-9a-f]{64}, not the d{64}/);
+		// Positive control for an older pack: the good bundle above has no figure, and no such check.
+		expect((await run([good, '--no-run'])).out).not.toContain('figure:locality');
+	});
+
 	it('checks without re-running with --no-run, and prints JSON with --json', async () => {
 		const noRun = await run([good, '--no-run']);
 		expect(noRun.code).toBe(0);
