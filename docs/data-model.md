@@ -1369,6 +1369,12 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
+The trigger (`project_member_keep_owner`, latest 149_last_owner_lock) takes
+a per-project advisory lock before it counts the owners, so two
+owners leaving or being demoted at the same moment serialise: the second
+waits for the first to commit, re-reads, and is refused. The member routes
+lock the owner rows before their own `409` check for the same reason
+(docs/security.md § Authorization).
 
 ### Farmers (019_farmer_role.sql, 020_farm_scope.sql)
 
@@ -2011,7 +2017,8 @@ Direct project membership still works on top — the **effective role is the
 higher of the two** (`app_project_role()`). Every project policy goes through
 `app_has_role()`, which uses the effective role, so team access applies to all
 project-scoped tables at once. The team's creator becomes its first admin and a
-team always keeps at least one admin (same trigger pattern as project owners).
+team always keeps at least one admin (same trigger pattern as project owners,
+including the per-team advisory lock, 149).
 Deleting a team keeps its projects with their direct members (`ON DELETE SET
 NULL`). No project is orphaned, because the keep-owner trigger counts direct
 `project_member` rows only: the creator starts as a direct owner, and a project

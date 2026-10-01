@@ -1433,7 +1433,20 @@ In short:
   `node_id`; `human-impacts.db.test.ts` checks a member sees its patches, a
   non-member none, and a patch can't be attached to another project's farm.
 - A **last-owner guard** means a project can't be orphaned (and a
-  last-admin guard, a team).
+  last-admin guard, a team): the deferred `project_member_keep_owner` and
+  `team_member_keep_admin` triggers refuse, at commit, a change that leaves
+  none, and the member routes answer `409` first. Both hold **when two
+  owners (admins) give it up at the same moment** (149_last_owner_lock):
+  the routes lock the project's owner rows (the team's admin rows) `FOR
+  UPDATE` before their check, and each trigger takes a per-project
+  (per-team) advisory lock before counting, so the second change waits for the first, re-reads, and
+  is refused. Without the locks each read the other as still there (its
+  change not yet committed), both passed, and the project was left with no
+  owner. The trigger lock is the backstop for every other path, the
+  operator deleting `app_user` rows among them; its re-read needs READ
+  COMMITTED, the level every write runs at. Tests:
+  `projects/last-owner-race.db.test.ts` (forced interleavings through the
+  routes and straight at the triggers).
 - **Runs are immutable by privilege.** `water_app` may `UPDATE` only
   `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
   rewrite a run's inputs, outputs or label after the fact; who last changed
