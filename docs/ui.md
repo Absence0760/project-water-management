@@ -6009,8 +6009,9 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   run" when they have); the **Ecological Reserve** (the outlet's days not
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
-  flow and a chart of the outlet's flow and EWR, baseline against theirs, or
-  why not: fewer than five farm holders); **Your hydrological units**
+  flow and a chart of the outlet's flow and EWR, baseline against theirs;
+  below five farm holders natural flow and the EWR only, and why the outlet
+  flow isn't shown); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:

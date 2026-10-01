@@ -7,10 +7,13 @@
 //
 //  - every EWR site: months met, rate and longest run not met, base beside
 //    application; the deficit volume only when the catchment figures show;
-//  - the catchment: its flows and the daily outflow and EWR series, base
-//    beside application, only at 5 or more farm holders (the k rule of the
-//    share links and the contributor's series, 025/046) *and* when every op
-//    was a proposal; its EWR days not met always (as the share link);
+//  - the catchment, base beside application, when every op was a proposal:
+//    its natural flow and daily EWR requirement (the river, made from
+//    natural flow) at any holder count; its outflow, the outflow series and
+//    the EWR deficit volume only at 5 or more farm holders, since natural
+//    minus outflow is the farms' use (the k rule of the share links and the
+//    contributor's series, 025/046, split in 162); its EWR days not met
+//    always (as the share link);
 //  - their own units (their farm links as they read them now, and the nodes
 //    the application's ops add), in full, when every op was a proposal;
 //  - every other farm or water user downstream of those units, under the
@@ -37,7 +40,7 @@ export interface ApplicantEwrFigures {
 	/** met ÷ months; null without a complete month. */
 	rate: number | null;
 	longestNotMetRun: number;
-	/** Only when the catchment figures show (k and every op a proposal); else null. */
+	/** Only when the impacted figures show (k and every op a proposal); else null. */
 	deficitM3: number | null;
 }
 
@@ -53,7 +56,8 @@ export interface ApplicantEwrSite {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	meanSimulatedOutflowM3Day: number;
+	/** The use's figure: only at 5 or more farm holders (162); else null. */
+	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
 }
@@ -107,9 +111,11 @@ export interface ApplicantResults {
 		/** EWR days not met at the outlet, always. */
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
-		/** The flows and series, or null with why. */
+		/** The flows, or null when an op was a baseline assumption; the outflow in them is null below the k rule (`withheld`). */
 		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		series: { outflow: { base: ApplicantSeries; application: ApplicantSeries }; ewr: { base: ApplicantSeries; application: ApplicantSeries } } | null;
+		/** The EWR requirement's series whenever the figures show; the outflow's only past the k rule. */
+		series: { outflow: { base: ApplicantSeries; application: ApplicantSeries } | null; ewr: { base: ApplicantSeries; application: ApplicantSeries } | null } | null;
+		/** Why the use's figures (the outflow, its series, the EWR deficit) are left out; null when they show. */
 		withheld: ApplicantWithheld | null;
 	};
 	/** Their own units and those the ops add; [] with `unitsWithheld` when an op was a baseline assumption. */
@@ -138,8 +144,8 @@ export interface ApplicantResultsInput {
 	farmHoldersOk: boolean;
 	/** The catchment series, read under the caller's RLS; null when not read. */
 	series: {
-		outflow: { base: ApplicantSeries; application: ApplicantSeries };
-		ewr: { base: ApplicantSeries; application: ApplicantSeries };
+		outflow: { base: ApplicantSeries; application: ApplicantSeries } | null;
+		ewr: { base: ApplicantSeries; application: ApplicantSeries } | null;
 	} | null;
 }
 
@@ -154,9 +160,9 @@ const ewrFigures = (s: EwrAssuranceSite | undefined, volumes: boolean): Applican
 			}
 		: null;
 
-const catchmentFigures = (s: RunSummary): ApplicantCatchmentFigures => ({
+const catchmentFigures = (s: RunSummary, impacted: boolean): ApplicantCatchmentFigures => ({
 	meanNaturalFlowM3Day: s.catchment.meanNaturalFlowM3Day,
-	meanSimulatedOutflowM3Day: s.catchment.meanSimulatedOutflowM3Day,
+	meanSimulatedOutflowM3Day: impacted ? s.catchment.meanSimulatedOutflowM3Day : null,
 	ewrDaysNotMet: s.catchment.ewrDaysNotMet,
 	ewrFractionDaysNotMet: s.catchment.ewrFractionDaysNotMet
 });
@@ -229,7 +235,10 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 	const anonName = new Map(baseView.model.nodes.filter((n) => anonymous.has(n.id)).map((n) => [n.id, n.name]));
 	const kindOf = new Map<string, NodeKind>([...i.base.model.nodes, ...i.runModel.nodes].map((n) => [n.id, n.kind]));
 
-	const catchmentShown = i.allProposals && i.farmHoldersOk;
+	// The k rule, split (162): the river (natural flow, the EWR requirement) whenever the figures may show at all;
+	// the use (outflow, its series, the EWR deficit) only past k as well.
+	const naturalShown = i.allProposals;
+	const impactedShown = i.allProposals && i.farmHoldersOk;
 	const catchmentWithheld: ApplicantWithheld | null = !i.allProposals ? 'baseline_assumptions' : !i.farmHoldersOk ? 'few_farm_holders' : null;
 
 	// --- EWR sites: the base's and the application's, paired by site ---
@@ -251,8 +260,8 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 			nodeId: key === 'outlet' ? null : key,
 			name: siteName(any),
 			isOutlet: key === 'outlet',
-			base: ewrFigures(b, catchmentShown),
-			application: ewrFigures(a, catchmentShown)
+			base: ewrFigures(b, impactedShown),
+			application: ewrFigures(a, impactedShown)
 		};
 	});
 
@@ -314,8 +323,8 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 		catchment: {
 			ewrDaysNotMet: { base: i.baseSummary.catchment.ewrDaysNotMet, application: i.runSummary.catchment.ewrDaysNotMet },
 			ewrFractionDaysNotMet: { base: i.baseSummary.catchment.ewrFractionDaysNotMet, application: i.runSummary.catchment.ewrFractionDaysNotMet },
-			figures: catchmentShown ? { base: catchmentFigures(i.baseSummary), application: catchmentFigures(i.runSummary) } : null,
-			series: catchmentShown ? i.series : null,
+			figures: naturalShown ? { base: catchmentFigures(i.baseSummary, impactedShown), application: catchmentFigures(i.runSummary, impactedShown) } : null,
+			series: naturalShown && i.series ? { ewr: i.series.ewr, outflow: impactedShown ? i.series.outflow : null } : null,
 			withheld: catchmentWithheld
 		},
 		units,

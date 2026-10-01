@@ -277,19 +277,27 @@ describe('the series a link reads', () => {
 		expect((await withUser(stranger.id, async (db) => (await db.query("SELECT * FROM app_share_series($1, 'ewr')", [hash])).rows)).length).toBe(1);
 	});
 
-	it(`answers nothing below ${FARMER_K} farm holders, counting one user’s farms once, and answers again at ${FARMER_K}`, async () => {
+	it(`answers the use's series only from ${FARMER_K} farm holders, counting one user’s farms once; the river's at any count (162)`, async () => {
 		// app_share_series writes k as the literal 5 (SQL can't import it): the two move together.
 		expect(FARMER_K).toBe(5);
-		// The farmer holds farms 1–4: 1 + 2 unlinked = 3 holders.
 		const set = (nodeIds: string[]) => owner.call('PUT', `/projects/${projectId}/farmers/${farmer.id}`, { nodeIds });
+		const impacted = ['simulated_outflow', 'ewr_shortfall'];
+		const river = ['natural_flow', 'ewr'];
+		const statuses = async (keys: string[]) => Promise.all(keys.map(async (k) => (await series(token, k)).status));
+		// One holder: the farmer holds all six farms. The river's series still show (positive control); the use's don't.
+		expect((await set(farms.map((f) => f.id))).status).toBe(200);
+		expect(await statuses(river)).toEqual([200, 200]);
+		expect(await statuses(impacted)).toEqual([404, 404]);
+		// The farmer holds farms 1–4: 1 + 2 unlinked = 3 holders.
 		expect((await set(farms.slice(0, 4).map((f) => f.id))).status).toBe(200);
 		expect((await series(token, 'simulated_outflow')).status).toBe(404);
-		// FARMER_K − 1 holders: still nothing.
+		// FARMER_K − 1 holders: still nothing of the use, the river as ever.
 		expect((await set(farms.slice(0, 3).map((f) => f.id))).status).toBe(200);
-		expect((await series(token, 'simulated_outflow')).status).toBe(404);
+		expect(await statuses(impacted)).toEqual([404, 404]);
+		expect(await statuses(river)).toEqual([200, 200]);
 		// FARMER_K holders: the farmer's two farms count once, four unlinked farms count one each.
 		expect((await set(farms.slice(0, 2).map((f) => f.id))).status).toBe(200);
-		expect((await series(token, 'simulated_outflow')).status).toBe(200);
+		expect(await statuses(impacted)).toEqual([200, 200]);
 		// The catchment view itself carries no volumes, so it shows at any count.
 		expect((await set(farms.slice(0, 4).map((f) => f.id))).status).toBe(200);
 		expect((await view(token)).status).toBe(200);

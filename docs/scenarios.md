@@ -1243,10 +1243,13 @@ scenario is `'team'`, and behaves exactly as above).
   - every **EWR site**'s months met, rate and longest run not met, base
     beside application (the outlet unnamed, a gauge by name), and the
     outlet's EWR days not met;
-  - the **catchment**'s mean natural and outlet flow and the outlet's daily
-    flow and EWR series, base beside application, only at five or more farm
-    holders (the k rule of the share links and the contributor's series),
-    read under the caller's own RLS; the EWR deficit volumes likewise;
+  - the **catchment**, base beside application: its mean natural flow and
+    the outlet's daily EWR requirement (the river) at any holder count; its
+    mean outlet flow and daily outflow series, and the EWR deficit volumes
+    (the use: natural minus outflow is the farms' take), only at five or
+    more farm holders (the k rule of the share links and the contributor's
+    series, split in 162; provisional position, pre-counsel research,
+    2026-10-01); read under the caller's own RLS;
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR
     charge, the dam;

@@ -20,6 +20,25 @@
 --    naming (applicantPacks.ts) starts from the same list, which the
 --    database returns to the server only (`units.ownNodeIds`).
 --    Signature and grants unchanged.
+--
+-- 2. The k rule is split (build item 7). The catchment's natural flow and
+--    its EWR requirement (derived from natural flow) describe the river,
+--    not any holder's use, so a share link and an applicant read them
+--    whatever the farm holder count. The impacted series (simulated
+--    outflow, observed flow below the farms, EWR shortfall), from which
+--    "natural minus outflow = the farms' use" follows, keep k ≥ 5 (FARMER_K),
+--    as do the volume rows (app_share_run_projection, unchanged).
+--      app_share_series        from 115: the k test only for an impacted key.
+--      app_contributor_published_runs
+--                              new: the published runs of projects where the
+--                              caller is exactly a contributor, without k
+--                              (app_contributor_catchment_runs, 046, is the
+--                              same set with k, and stays).
+--      run_series_select_contributor
+--                              from 046: natural_flow and ewr of a published
+--                              run, or of an application run they read
+--                              (app_contributor_scenario_runs, 118), at any
+--                              holder count; the impacted keys as before.
 
 -- ---------------------------------------------------------------------------
 -- 1. The applicant's units, frozen at issue
@@ -135,3 +154,101 @@ CREATE OR REPLACE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 	$$;
 COMMENT ON FUNCTION app_applicant_pack(uuid, uuid) IS
 	'An application''s issued pack for its party (131_applicant_packs, 135_pack_security, 162_applicant_visibility): verify''s fields, a pack link''s figures, D2''s units frozen at issue with the other units'' ids for the server to name (never returned), and the application run. Never the manifest.';
+
+-- ---------------------------------------------------------------------------
+-- 2. The k rule, split: the river always, the use at k ≥ 5
+-- ---------------------------------------------------------------------------
+
+-- app_share_series, from 115_scenario_share_notes.sql (its latest): an
+-- untargeted link only; natural_flow and ewr at any holder count.
+CREATE OR REPLACE FUNCTION app_share_series(p_hash bytea, p_key text)
+	RETURNS TABLE (
+		label text,
+		unit text,
+		monthly_start date,
+		monthly double precision[],
+		recent_start date,
+		recent double precision[]
+	)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+		WITH pub AS (
+			SELECT p.project_id, p.run_id, r.start_date
+			FROM share_link s
+			JOIN run_publication p ON p.project_id = s.project_id AND p.superseded_at IS NULL
+			JOIN model_run r ON r.id = p.run_id
+			WHERE s.token_hash = p_hash AND s.target_kind IS NULL AND s.revoked_at IS NULL AND s.expires_at > now()
+			  AND p_key IN ('natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall')
+		), holders AS (
+			SELECT count(DISTINCT coalesce(
+				(SELECT min(fl.user_id::text) FROM farm_link fl WHERE fl.node_id = n.id),
+				'node:' || n.id::text
+			)) AS n
+			FROM node n JOIN pub ON n.project_id = pub.project_id
+			WHERE n.kind = 'farm'
+		), series AS (
+			SELECT rs.meta, rs."values" AS vals, pub.start_date
+			FROM run_series rs JOIN pub ON rs.run_id = pub.run_id AND rs.project_id = pub.project_id
+			WHERE rs.node_id IS NULL AND rs.key = p_key
+			  -- The river (162): natural flow and the requirement made from it, always; the use's series at k ≥ 5.
+			  AND (p_key IN ('natural_flow', 'ewr') OR (SELECT n FROM holders) >= 5)
+		), days AS (
+			SELECT (series.start_date + (u.o - 1)::int) AS d, NULLIF(u.v, 'NaN'::double precision) AS v
+			FROM series, unnest(series.vals) WITH ORDINALITY u(v, o)
+		), months AS (
+			SELECT date_trunc('month', d)::date AS m, avg(v) AS v FROM days GROUP BY 1
+		)
+		SELECT
+			coalesce(series.meta->>'label', p_key),
+			coalesce(series.meta->>'unit', ''),
+			date_trunc('month', series.start_date)::date,
+			coalesce((SELECT array_agg(months.v ORDER BY months.m) FROM months), '{}'),
+			series.start_date + greatest(0, cardinality(series.vals) - 365),
+			coalesce((SELECT array_agg(days.v ORDER BY days.d) FROM days WHERE days.d >= series.start_date + greatest(0, cardinality(series.vals) - 365)), '{}')
+		FROM series
+	$$;
+
+-- The published runs of the projects where the current user is exactly a
+-- contributor, at any holder count: where they read the river's series.
+CREATE FUNCTION app_contributor_published_runs() RETURNS SETOF uuid
+	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		uid uuid := app_current_user_id();
+	BEGIN
+		-- Most readers are no contributor anywhere: one index probe, and done.
+		IF NOT EXISTS (SELECT 1 FROM project_member WHERE user_id = uid AND role = 'contributor') THEN
+			RETURN;
+		END IF;
+		RETURN QUERY
+			SELECT p.run_id FROM run_publication p
+			JOIN project_member m ON m.project_id = p.project_id AND m.user_id = uid AND m.role = 'contributor'
+			WHERE app_is_contributor(p.project_id);
+	END
+	$$;
+REVOKE ALL ON FUNCTION app_contributor_published_runs() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_contributor_published_runs() TO water_app;
+
+-- run_series_select_contributor, from 046_contributor_runs.sql (its latest).
+DROP POLICY run_series_select_contributor ON run_series;
+CREATE POLICY run_series_select_contributor ON run_series FOR SELECT
+	USING (
+		-- An application run they read: the application's own nodes.
+		(run_id, node_id) IN (SELECT n.run_id, n.node_id FROM app_contributor_run_nodes() n)
+		-- The river (162): natural flow and the EWR requirement, of a published run or of an application run they read, always.
+		OR (
+			node_id IS NULL
+			AND key IN ('natural_flow', 'ewr')
+			AND (run_id IN (SELECT app_contributor_published_runs()) OR run_id IN (SELECT app_contributor_scenario_runs()))
+		)
+		-- The use's series (the share links' allowlist, 025) under the k rule: of a
+		-- published run, or of an application run they read.
+		OR (
+			node_id IS NULL
+			AND key IN ('simulated_outflow', 'observed_flow', 'ewr_shortfall')
+			AND (
+				run_id IN (SELECT app_contributor_catchment_runs())
+				OR (run_id IN (SELECT app_contributor_scenario_runs()) AND project_id IN (SELECT app_contributor_k_projects()))
+			)
+		)
+	);

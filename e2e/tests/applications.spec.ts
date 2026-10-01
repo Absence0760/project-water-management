@@ -67,6 +67,10 @@ test('an applicant submits an application on the published baseline, and the ass
 	// Both farms drain to the gauge: nothing lies below theirs. Two farm holders: no catchment flows.
 	await expect(results.getByTestId('applicant-downstream-empty')).toHaveText('No other farm or water user lies downstream of your units.');
 	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
+	// The river shows at any holder count (162): natural flow, never the outflow.
+	const catchment = results.getByTestId('applicant-catchment');
+	await expect(catchment.getByRole('rowheader', { name: 'Natural flow' })).toBeVisible();
+	await expect(catchment.getByRole('rowheader', { name: 'Flow at the outlet' })).toHaveCount(0);
 	await expect(results.getByTestId('applicant-results-stale')).toHaveCount(0);
 	await expect(a.getByText('Lower farm')).toHaveCount(0);
 	// The Yield panel offers their own farm only, and they may queue a yield (096_contributor_yield): cancelled before a worker runs it.

@@ -65,7 +65,8 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 	const base = await loadBaseInput(db, projectId, r.baseRunId, 'contributor');
 	const { reIds } = checkScenario(base, { ops: recorded.ops, ownedNodeIds: recorded.ownedNodeIds ?? [], origin: 'applicant' });
 
-	const series = r.allProposals && r.farmHoldersOk ? await catchmentSeries(db, projectId, runId, r.startDate, r.baseRunId, r.baseStartDate) : null;
+	// The river's series at any holder count, the outflow past the k rule only (162; RLS holds the same line).
+	const series = r.allProposals ? await catchmentSeries(db, projectId, runId, r.startDate, r.baseRunId, r.baseStartDate, r.farmHoldersOk) : null;
 	const results = projectResultsForApplicant({
 		base,
 		baseSummary: r.baseSummary,
@@ -94,15 +95,16 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 
 /**
  * The outflow and EWR series at the outlet of both runs, read under the
- * caller's RLS (run_series_select_contributor: a contributor reads them only
- * past the k rule and, of an application run, only when its ops were all
- * proposals, 118). null unless all four are there.
+ * caller's RLS (run_series_select_contributor: of an application run only
+ * when its ops were all proposals, 118; the EWR requirement at any holder
+ * count, the outflow only past the k rule, 162). Each pair is null unless
+ * both runs have it; the outflow is not read below k (`impacted`).
  */
-async function catchmentSeries(db: Db, projectId: string, runId: string, runStart: string, baseRunId: string, baseStart: string) {
+async function catchmentSeries(db: Db, projectId: string, runId: string, runStart: string, baseRunId: string, baseStart: string, impacted: boolean) {
 	const { rows } = await db.query<{ runId: string; key: string; values: (number | null)[] }>(
 		`SELECT run_id AS "runId", key, "values" FROM run_series
-		 WHERE project_id = $1 AND run_id = ANY($2::uuid[]) AND node_id IS NULL AND key IN ('simulated_outflow', 'ewr')`,
-		[projectId, [runId, baseRunId]]
+		 WHERE project_id = $1 AND run_id = ANY($2::uuid[]) AND node_id IS NULL AND key = ANY($3::text[])`,
+		[projectId, [runId, baseRunId], impacted ? ['simulated_outflow', 'ewr'] : ['ewr']]
 	);
 	const get = (run: string, key: string, startDate: string): ApplicantSeries | null => {
 		const row = rows.find((x) => x.runId === run && x.key === key);
@@ -112,5 +114,5 @@ async function catchmentSeries(db: Db, projectId: string, runId: string, runStar
 	const oa = get(runId, 'simulated_outflow', runStart);
 	const eb = get(baseRunId, 'ewr', baseStart);
 	const ea = get(runId, 'ewr', runStart);
-	return ob && oa && eb && ea ? { outflow: { base: ob, application: oa }, ewr: { base: eb, application: ea } } : null;
+	return { outflow: ob && oa ? { base: ob, application: oa } : null, ewr: eb && ea ? { base: eb, application: ea } : null };
 }

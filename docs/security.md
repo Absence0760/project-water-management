@@ -825,11 +825,26 @@ result without signing in, until it expires or its owner revokes it.
 - **The k rule on series.** `app_share_series` returns only the catchment
   allowlist (`natural_flow`, `simulated_outflow`, `observed_flow`, `ewr`,
   `ewr_shortfall`) of the current published run, monthly means plus the last
-  365 days, and **only when the catchment has at least `FARMER_K` = 5 farm
-  holders** (counted from nobody's point of view: one user's farms once, an
+  365 days. The rule is **split** (162; provisional position, pre-counsel
+  research, 2026-10-01): **the river** (`natural_flow`, and `ewr`, the
+  requirement made from it) is returned at any holder count, since it
+  describes the river and no holder's use (it is close to the public WR2012
+  quaternary record); **the use** (`simulated_outflow`, `observed_flow`,
+  `ewr_shortfall`) only when the catchment has at least `FARMER_K` = 5 farm
+  holders (counted from nobody's point of view: one user's farms once, an
   unlinked farm on its own). In a smaller catchment natural flow minus
   outflow is the farms' use, and with one farm it is that farm's
-  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)).
+  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)),
+  so it stays linkable to a person "by a reasonably foreseeable method"
+  (POPIA s1, de-identify). The volume rows of the scenario and pack links
+  (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
+  were. An applicant reads the same split (`run_series_select_contributor`,
+  `app_contributor_published_runs`; `scenarios/applicantResults.ts`
+  `naturalShown` / `impactedShown`). Five is a judgement in line with
+  statistical-disclosure practice, not a number in any statute; k alone
+  doesn't protect a catchment where one holder does almost all the
+  abstraction (a dominance rule is a follow-up,
+  [followups.md § Applicants](./followups.md#applicants-wp-33)).
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
@@ -841,7 +856,8 @@ result without signing in, until it expires or its owner revokes it.
 - **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
   control, the dead-link cases against a live one, the response scan for the
   note and every farm name and id, the `last_used_at` throttle, farm keys,
-  and the k boundary at 4 and 5 holders), `share/share.security.db.test.ts`
+  and the k boundary at 1, 4 and 5 holders, the river's series shown at 1
+  as the positive control), `share/share.security.db.test.ts`
   (a link made under one publication reads only the current one, view and
   series; a sweep over every key the published run stores, catchment and
   node level, answers exactly the allowlisted catchment series, one row
@@ -1886,7 +1902,8 @@ In short:
     server an application run's summary and model and its base's summary for
     `GET …/scenarios/:sid/results`; both are projected before anything
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
-    EWR sites, the catchment under the k rule, their own units, other units
+    EWR sites, the catchment under the split k rule (the river always, the
+    use at 5 or more holders), their own units, other units
     downstream only as "Farm 3" and a whole percentage, and nothing but the
     EWR when an op was a baseline assumption). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's

@@ -4304,6 +4304,19 @@ Applicant view and the Applications tab. Left:
       from the members list keeps the farms. Tests:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
+- [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
+      split, 162; provisional position, pre-counsel research, 2026-10-01).
+      The use's catchment series (outflow, observed flow, EWR shortfall) and
+      the volume rows show at 5 or more farm holders, but k alone doesn't
+      protect a catchment where one holder does almost all the abstraction:
+      natural minus outflow is then mostly that holder's use. Durable fix:
+      withhold the use's series and volume rows also when one holder accounts
+      for more than ~70 % of modelled consumptive use in the published run
+      (one SQL helper beside the holder count, used by `app_share_series`,
+      `run_series_select_contributor` and the volume projections, with tests
+      at 69 and 71 %). Trigger: counsel's answer on question 5 of the
+      licensing positions (k and "reasonably foreseeable method"), or the
+      first pilot catchment with one dominant user.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

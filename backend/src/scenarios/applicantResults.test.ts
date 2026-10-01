@@ -192,15 +192,21 @@ describe('projectResultsForApplicant', () => {
 		]);
 	});
 
-	it('leaves the catchment figures, series and EWR volumes out below 5 farm holders, and keeps their own units', () => {
+	it('leaves the use (outflow, its series, EWR volumes) out below 5 farm holders, and keeps the river and their own units (162)', () => {
 		const series = { outflow: { base: { startDate: '2020-01-01', values: [1] }, application: { startDate: '2020-01-01', values: [2] } }, ewr: { base: { startDate: '2020-01-01', values: [3] }, application: { startDate: '2020-01-01', values: [3] } } };
 		const few = projectResultsForApplicant(scenario([damRaise], raised, { farmHoldersOk: false, series }));
-		expect(few.catchment).toMatchObject({ figures: null, series: null, withheld: 'few_farm_holders' });
+		expect(few.catchment.withheld).toBe('few_farm_holders');
+		expect(few.catchment.figures).toEqual({
+			base: { meanNaturalFlowM3Day: 9_000, meanSimulatedOutflowM3Day: null, ewrDaysNotMet: 4, ewrFractionDaysNotMet: 4 / 24 },
+			application: { meanNaturalFlowM3Day: 9_000, meanSimulatedOutflowM3Day: null, ewrDaysNotMet: 6, ewrFractionDaysNotMet: 6 / 24 }
+		});
+		expect(few.catchment.series).toEqual({ ewr: series.ewr, outflow: null });
+		expect(JSON.stringify(few.catchment)).not.toContain('5800');
 		expect(few.ewrSites.every((s) => s.base?.deficitM3 === null && s.application?.deficitM3 === null)).toBe(true);
 		expect(few.units).toHaveLength(1);
 		expect(few.downstream).toHaveLength(1);
 		// Positive control: at 5 or more, the series pass through.
-		expect(projectResultsForApplicant(scenario([damRaise], raised, { series })).catchment.series).toEqual(series);
+		expect(projectResultsForApplicant(scenario([damRaise], raised, { series })).catchment.series).toEqual({ ewr: series.ewr, outflow: series.outflow });
 	});
 
 	it('shows an item their ops added under a hidden item’s id by the id they gave it (the run holds it under a fresh one)', () => {

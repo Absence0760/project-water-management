@@ -2258,10 +2258,13 @@ below work on it too, for an editor.
   `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
   `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
   application }` always; `figures` (mean natural flow and outlet flow, base
-  and application) and `series` (the outlet's daily `outflow` and `ewr`,
-  base and application) only at five or more farm holders and when every op
-  was a proposal, else null with `withheld: 'few_farm_holders' |
-  'baseline_assumptions'` (and `deficitM3` null). `units[]`: their own units
+  and application) and `series` (`{ outflow, ewr }`, the outlet's daily
+  series, base and application) only when every op was a proposal, else
+  null with `withheld: 'baseline_assumptions'`. Within them the k rule is
+  split (162): natural flow and the `ewr` series at any holder count; the
+  outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
+  `deficitM3` only at five or more farm holders, else null with
+  `withheld: 'few_farm_holders'`. `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
   (`added`), `{ nodeId, name, kind, base, application }` with demand,
   supply, share met, EWR charge and dam figures. `downstream[]`: every other
@@ -2708,16 +2711,18 @@ never a farm's row, name or id.
   one catchment series of the published run as monthly means (m³/day; a
   month without a value is `null`) from the run's first month, and the last
   365 days daily. `key` must be one of `natural_flow`, `simulated_outflow`,
-  `observed_flow`, `ewr`, `ewr_shortfall`. It answers only when the
+  `observed_flow`, `ewr`, `ewr_shortfall`. `natural_flow` and `ewr` (the
+  river) answer at any holder count; the other three (the use) only when the
   catchment has at least `FARMER_K` = 5 farm **holders** (farms linked to one
   user count once, an unlinked farm on its own; design
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
-  in a smaller catchment the flows would reveal the farms' use.
+  in a smaller catchment natural flow minus outflow would reveal the farms'
+  use (162).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,
   malformed, revoked or expired token, or nothing published. `/share/series`
   answers the same `404` for a key off the allowlist (every farm key), a key
-  the run doesn't have (`observed_flow` without observed data), and below
-  `k` holders. A body without `token` (or `key`) is `400`.
+  the run doesn't have (`observed_flow` without observed data), and a use
+  key below `k` holders. A body without `token` (or `key`) is `400`.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn

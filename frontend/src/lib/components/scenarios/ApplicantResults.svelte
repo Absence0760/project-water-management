@@ -73,12 +73,21 @@
 
 	const chartSeries = $derived.by(() => {
 		const s = results?.catchment.series;
-		if (!s) return null;
+		if (!s || (!s.outflow && !s.ewr)) return null;
+		// The EWR requirement is the river's (shown at any holder count); the outflow only past the k rule (162).
 		return [
-			{ ...s.outflow.base, label: 'Outflow, baseline', color: '--series-1' },
-			{ ...s.outflow.application, label: 'Outflow, your application', color: '--series-2' },
-			{ ...s.ewr.base, label: 'EWR, baseline', color: '--series-3', style: 'step' as const },
-			{ ...s.ewr.application, label: 'EWR, your application', color: '--series-4', style: 'dashed' as const, hidden: true }
+			...(s.outflow
+				? [
+						{ ...s.outflow.base, label: 'Outflow, baseline', color: '--series-1' },
+						{ ...s.outflow.application, label: 'Outflow, your application', color: '--series-2' }
+					]
+				: []),
+			...(s.ewr
+				? [
+						{ ...s.ewr.base, label: 'EWR, baseline', color: '--series-3', style: 'step' as const },
+						{ ...s.ewr.application, label: 'EWR, your application', color: '--series-4', style: 'dashed' as const, hidden: !!s.outflow }
+					]
+				: [])
 		];
 	});
 </script>
@@ -167,25 +176,35 @@
 										<td class="num">{fmtNum(f.base.meanNaturalFlowM3Day)}</td>
 										<td class="num">{fmtNum(f.application.meanNaturalFlowM3Day)}</td>
 									</tr>
-									<tr>
-										<th scope="row">Flow at the outlet</th>
-										<td class="num">{fmtNum(f.base.meanSimulatedOutflowM3Day)}</td>
-										<td class="num">{fmtNum(f.application.meanSimulatedOutflowM3Day)}</td>
-									</tr>
+									{#if f.base.meanSimulatedOutflowM3Day !== null && f.application.meanSimulatedOutflowM3Day !== null}
+										<tr>
+											<th scope="row">Flow at the outlet</th>
+											<td class="num">{fmtNum(f.base.meanSimulatedOutflowM3Day)}</td>
+											<td class="num">{fmtNum(f.application.meanSimulatedOutflowM3Day)}</td>
+										</tr>
+									{/if}
 								</tbody>
 							</table>
 						</div>
+						{#if results.catchment.withheld === 'few_farm_holders'}
+							<p class="muted small" data-testid="applicant-catchment-withheld">
+								The natural flow and the EWR are shown. The flow at the outlet is shown once the catchment has five or more farm holders,
+								since natural flow less the outflow is what the farms use, and that can't be traced back to one farm.
+							</p>
+						{/if}
 						{#if chartSeries}
 							<Lazy load={loadChart}>
 								{#snippet children(LineChart)}
-									<LineChart title="Flow at the outlet and the EWR · baseline vs your application" unit="m³/day" series={chartSeries} logToggle height={260} />
+									<LineChart
+										title={results?.catchment.series?.outflow ? 'Flow at the outlet and the EWR · baseline vs your application' : 'The EWR · baseline vs your application'}
+										unit="m³/day"
+										series={chartSeries}
+										logToggle
+										height={260}
+									/>
 								{/snippet}
 							</Lazy>
 						{/if}
-					{:else if results.catchment.withheld === 'few_farm_holders'}
-						<p class="muted small" data-testid="applicant-catchment-withheld">
-							The catchment's flows are shown once it has five or more farm holders, so that they can't be traced back to one farm.
-						</p>
 					{:else}
 						<p class="muted small" data-testid="applicant-catchment-withheld">Not shown for a run with a baseline assumption (above).</p>
 					{/if}
