@@ -1,11 +1,12 @@
 // The local basemap upload (tiles-upload.ts): the URLs it prints for the
 // frontend, and which files of a fonts directory become glyph objects
-// (#326 A6): only `<fontstack>/<n>-<n+255>.pbf` and the licence.
+// (#326 A6): only `<fontstack>/<n>-<n+255>.pbf` and the licence; and the
+// env lines `dev:tiles:up` writes into the frontend's .env.development.local.
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, tilesUrl } from './tiles-upload.js';
+import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, tilesUrl, withEnv } from './tiles-upload.js';
 
 describe('tiles-upload', () => {
 	it('prints localhost URLs for the tiles and the glyphs, braces kept for MapLibre', () => {
@@ -39,5 +40,20 @@ describe('tiles-upload', () => {
 			['fonts/Noto Sans Regular/256-511.pbf', 'application/x-protobuf'],
 			['fonts/OFL.txt', 'text/plain; charset=utf-8']
 		]);
+	});
+
+	it('sets the tiles URLs in an env file, keeping its other lines, and changes nothing the second time', () => {
+		const vars = { PUBLIC_TILES_URL: 'http://localhost:9002/tiles/south-africa.pmtiles', PUBLIC_TILES_GLYPHS_URL: 'http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf' };
+		const first = withEnv('# mine\nPUBLIC_API_URL=http://localhost:3001\nPUBLIC_TILES_URL=\n', vars);
+		expect(first).toEqual({
+			changed: true,
+			text: '# mine\nPUBLIC_API_URL=http://localhost:3001\nPUBLIC_TILES_URL=http://localhost:9002/tiles/south-africa.pmtiles\nPUBLIC_TILES_GLYPHS_URL=http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf\n'
+		});
+		expect(withEnv(first.text, vars)).toEqual({ changed: false, text: first.text });
+	});
+
+	it('writes a new env file from nothing, and sets the last of a repeated key', () => {
+		expect(withEnv('', { A: '1' })).toEqual({ changed: true, text: 'A=1\n' });
+		expect(withEnv('A=0\nB=2\nA=9', { A: '1' }).text).toBe('A=0\nB=2\nA=1\n');
 	});
 });
