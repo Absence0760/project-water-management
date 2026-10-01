@@ -3327,6 +3327,21 @@ from the WP:
       15 Feb) keeps its printed factor rather than being prorated, and the
       stage-to-month rule for vegetables (model.md §2.3 item 8). Trigger:
       their answer on #46.
+- [x] **b023 crop-table slips flagged on import** (2026-09-30, issue #289).
+      Rows copied from another crop, a negative factor, a lone 0, a lone
+      spike or dip of more than 0.3 and a factor above 1.0 each give an
+      import-report warning (`crop-factors-copied`, `crop-factors-suspect`),
+      both importers alike; the factors import unchanged ([model.md §2.3
+      item 3](./model.md)).
+- [ ] **The Load crop factors dialog doesn't show those warnings.** Loading
+      a b023 workbook's factors into an existing project (Crops tab, *Load
+      crop factors*, `LoadCropFactorsDialog.svelte`) runs the same import
+      but keeps only the crops, so a copied or suspect row arrives without
+      its warning. Durable fix: keep the result's `crop-factors-*` notes with
+      the workbook source and list them under it in the dialog, beside each
+      affected crop's diff row. Trigger: after the other #289 changes to that
+      dialog (the Kp default, the node-based source) have merged, to avoid
+      three branches editing it at once.
 - [ ] **A node-based workbook's crop sheets can't be loaded.** The browser importer reads
       b023 only (it needs b023's named ranges); node-based `Crop_Factors` /
       `Crop_Areas` sheets have none. Durable fix: a small

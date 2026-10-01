@@ -10,7 +10,7 @@ import type { CalibrationParams, DemandObject, FlowShareMethod, NetworkNode, Pro
 import type { WorkbookSource } from './source';
 import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
-import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
+import { cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
@@ -183,6 +183,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		);
 	}
 
+	for (const n of cropTableNotes(crops.crops)) report.note(n.code, n.message, { sheet: 'Crop demand', element: n.crop });
 	const cropDefs = crops.crops.map((c) => ({ id: uid(`crop:${c.name}`), name: c.name, cropFactor: c.cropFactor }));
 	const cropId = new Map(cropDefs.map((c) => [c.name, c.id]));
 	const cropAreas: ProjectModel['cropAreas'] = [];
