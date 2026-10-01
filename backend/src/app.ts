@@ -19,6 +19,7 @@ import { handleError } from './http/errors.js';
 import { logEvent } from './logging/logEvent.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { myInviteRoutes, projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
+import { feedFromBoundaryRoutes } from './feeds/fromBoundary.js';
 import { feedRoutes } from './feeds/routes.js';
 import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { jobRoutes } from './jobs/routes.js';
@@ -164,6 +165,7 @@ export function createApp() {
 	projects.route('/', autoCalibrationRoutes);
 	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);
+	projects.route('/', feedFromBoundaryRoutes);
 	projects.route('/', mapRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);

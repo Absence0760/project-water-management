@@ -11,6 +11,7 @@
 	import { api } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
+	import BoundaryRain from './BoundaryRain.svelte';
 	import {
 		CHIRPS_PRODUCT_FIRST_DAY,
 		cellsUsedNote,
@@ -249,7 +250,7 @@
 	</div>
 	<p class="hint muted">
 		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells or a box over the
-		catchment, or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
+		catchment (or the cells of the map’s catchment boundary, area weighted), or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
 		no value for never erases what is there. A feed that stops shows as failing or stale here.
 	</p>
 
@@ -318,6 +319,11 @@
 		<!-- Always in the page, so screen readers announce each new message. -->
 		<div role="status">{#if message}<p class="muted">{message}</p>{/if}</div>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+
+		<!-- The rain feed from the map's catchment boundary (issue #326 B-rain): a proposal for editors, applied by an owner. -->
+		{#if data.canRun && !adding}
+			<div class="boundary"><BoundaryRain {projectId} feeds={data.feeds} onapplied={() => reload().then(() => undefined)} /></div>
+		{/if}
 
 		{#if adding}
 			<form class="add" onsubmit={add} novalidate aria-labelledby="{uid}-add-h">
@@ -565,6 +571,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
+	.boundary {
 		margin-top: 0.4rem;
 	}
 	.add {

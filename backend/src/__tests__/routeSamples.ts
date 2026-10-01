@@ -87,6 +87,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
 	'POST /projects/:id/outlooks/:outlookId/publish': () => ({ body: { levelId: '0' } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
+	// A body of the right shape; with no boundary on the ladder's map the owner gets 409, past the role check.
+	'POST /projects/:id/feeds/chirps/from-boundary': () => ({ body: { featureId: crypto.randomUUID(), updatedAt: '2026-10-01T00:00:00.000Z' } }),
 	'POST /projects/:id/report-schedules': (c) => ({ body: { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [c.owner.id] } }),
 	'POST /projects/:id/farmers': (c) => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, nodeIds: [c.farmId] } }),
 	'POST /projects/:id/farmers/bulk': () => ({ body: { rows: [{ email: `ladder-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }] } }),

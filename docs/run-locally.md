@@ -289,7 +289,11 @@ answers every source from the synthetic files in `backend/fixtures/feeds/`,
 re-dated to today, and the panel shows a "Sample data" badge. The sample grid
 is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
 25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
-feed), and any river-gauge (H) code for DWS (e.g. `X0H000`).
+feed), and any river-gauge (H) code for DWS (e.g. `X0H000`). Around it the
+files repeat that grid over 21.0–25.4° E, 20.0–34.0° S (no sea there), so on
+the seeded Sandspruit example **Use the catchment boundary** sets up a rain
+feed from its map's boundary that fetches offline too
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
 
 Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
 they fetch daily on their own, and "Run now" fetches at once. Without it:

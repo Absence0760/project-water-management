@@ -13,7 +13,10 @@
 //
 // The grids are encoded as real LZW GeoTIFFs in the CHC layout
 // (sources/tiff-write.ts), so fixtures exercise the same reader as
-// production. Any other URL is a 404. Invented grid and station: no real
+// production. Each file covers the fixture's `cover` (21.0–25.4° E, 20.0–34.0° S),
+// the invented 8 × 6 grid repeated around it, so a feed over a seeded
+// example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
+// offline. Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +31,14 @@ export const FIXTURE_DIR = fileURLToPath(new URL('../../fixtures/feeds/', import
 
 interface GridFixture {
 	grid: { originLon: number; originLat: number; scale: number; width: number; height: number; sea: [number, number][] };
+	/**
+	 * The wider grid the files cover (same scale, aligned with `grid`): the
+	 * cells of `grid` hold its values, and every other cell repeats them
+	 * (row mod height, column mod width) with no sea, so a feed over the
+	 * seeded examples' synthetic catchments reads plausible rain offline
+	 * (issue #326 B-rain: the rain feed from a boundary there).
+	 */
+	cover?: { originLon: number; originLat: number; width: number; height: number };
 	colGradient: number;
 	rowGradient: number;
 	pattern: number[];
@@ -53,11 +64,24 @@ export function fixtureValue(f: GridFixture, k: number, row: number, col: number
 	return Math.fround(base * (1 + f.colGradient * col + f.rowGradient * row));
 }
 
-function gridFile(f: GridFixture, k: number): Uint8Array {
+/** The rainfall of a cover cell (row, col counted from `grid`'s origin, either may be negative): `grid`'s own value, else the pattern repeated, no sea. */
+export function coverValue(f: GridFixture, k: number, row: number, col: number, landOnly: GridFixture = { ...f, grid: { ...f.grid, sea: [] } }): number {
 	const { width, height } = f.grid;
+	if (row >= 0 && row < height && col >= 0 && col < width) return fixtureValue(f, k, row, col);
+	return fixtureValue(landOnly, k, ((row % height) + height) % height, ((col % width) + width) % width);
+}
+
+function gridFile(f: GridFixture, k: number): Uint8Array {
+	const g = f.grid;
+	const cover = f.cover ?? { originLon: g.originLon, originLat: g.originLat, width: g.width, height: g.height };
+	// Where `grid`'s origin sits in the cover, in cells (the north-west corners; rows count southward).
+	const dRow = Math.round((cover.originLat - g.originLat) / g.scale);
+	const dCol = Math.round((g.originLon - cover.originLon) / g.scale);
+	const { width, height } = cover;
 	const values = new Float32Array(width * height);
-	for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) values[r * width + c] = fixtureValue(f, k, r, c);
-	return writeGrid({ width, height, originLon: f.grid.originLon, originLat: f.grid.originLat, scale: f.grid.scale, values });
+	const landOnly = { ...f, grid: { ...g, sea: [] } };
+	for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) values[r * width + c] = coverValue(f, k, r - dRow, c - dCol, landOnly);
+	return writeGrid({ width, height, originLon: cover.originLon, originLat: cover.originLat, scale: g.scale, values, shareStrips: true });
 }
 
 /**

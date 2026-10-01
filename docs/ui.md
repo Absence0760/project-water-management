@@ -2367,6 +2367,14 @@ core tab: owners, editors and viewers see it (it becomes a results view with
 A1); viewers get no edit tools. The Network's own picture (its "Catchment
 map" card) stays the schematic; this is the geography.
 
+- **Rain from the boundary** (editors; issue #326 B-rain,
+  `MapRainLink.svelte`): a slim line under the header while the map has a
+  boundary and no CHIRPS feed reads it ("No rain feed reads this catchment
+  boundary yet. **Set up the rain feed from the boundary**"), or one read it
+  before it was redrawn ("**Propose its cells again**"). The link opens
+  Settings → Data feeds with the proposal showing. Its wrapper's
+  `data-state` (`loading`, `current`, `changed`, `none`, `error`) says when
+  the feed list is in.
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
@@ -4135,12 +4143,25 @@ part of the Settings tab's chunk; WP-2.10,
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **Use the catchment boundary** (editors and owners; issue #326 B-rain,
+  `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)): opens **Rain from the
+  catchment boundary** under the list with the proposal: the boundary (name,
+  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
+  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
+  source, what **Apply** does (attach a new feed, or give an empty feed the
+  cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners get **Apply**; editors read "An owner of the
+  project applies it". The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link opens it at once
+  (`?rain=boundary`). Without a boundary the error says so, with a link to
+  the map.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
   **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
-  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
