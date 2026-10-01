@@ -320,6 +320,12 @@ async function specialistPack(db: Db, projectId: string, packId: string): Promis
 /** Below viewer, only the application's appointed specialist reads a pack's sign-offs or signs it. */
 const notSpecialist = () => new ApiError(403, 'requires viewer role, or the application’s appointed specialist');
 
+/** The checklist as GET …/packs/:packId sends it: without the statement's hash, which only the issue route uses. */
+function publicChecks(c: Awaited<ReturnType<typeof issueChecks>>) {
+	const { statementSha256: _statement, ...checks } = c;
+	return checks;
+}
+
 /** Issue refuses a draft whose manifest misses an erratum that applies to its runs now: it would be issued without it, for good. */
 const errataSinceDraft = (found: readonly PackErratum[]) =>
 	ApiError.coded(
@@ -426,7 +432,7 @@ export const packRoutes = new Hono<AuthEnv>()
 					// The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify.
 					reproduction: await packReproductionState(db, id, packId, pack.issuedAt !== null),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
-					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest, errataFoundSince) : null
+					issue: pack.status === 'draft' && rank[role] >= rank.editor ? publicChecks(await issueChecks(db, id, pack, manifest, errataFoundSince)) : null
 				});
 			},
 			{ readOnly: true }

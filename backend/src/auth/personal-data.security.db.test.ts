@@ -178,6 +178,17 @@ beforeAll(async () => {
 		confirmed: statement.confirmations.map((k: { id: string }) => k.id),
 		statementSha256
 	});
+	// The host's check of their own registration, recorded by them as a member acting for the authority (167):
+	// registration_check.user_id and .recorded_by. No issued pack rests on it, so the deletion removes it.
+	await call(subject, 'POST', `/projects/${projectId}/members/${subject.id}/registration-checks`, {
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationNo: `R-${tag}`,
+		registerName: TYPED_NAME,
+		outcome: 'registered',
+		checkedByOrg: 'Personal-data WUA',
+		checkedAt: '2026-01-01'
+	});
 	await call(subject, 'PUT', `/projects/${projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: farm.id, threshold: 0.25, enabled: false }] });
 	await call(subject, 'PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'daily_digest' }] });
 	await call(subject, 'POST', `/projects/${projectId}/feeds`, { source: 'dws', config: { station: 'X0H000' } });

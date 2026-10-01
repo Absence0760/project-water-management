@@ -265,7 +265,15 @@ describe('drafting a pack', () => {
 		expect(read.body.manifestMatches).toBe(true);
 		// The issue checklist is an editor's (only editors issue); a viewer gets null.
 		expect(read.body.issue).toBeNull();
-		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({
+			issuable: true,
+			signed: false,
+			runsVerified: true,
+			errataRecorded: true,
+			// The registration check (167): nobody signed yet, and the tests' switch is off (__tests__/setup.ts).
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 	});
 
 	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
@@ -801,8 +809,8 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			'kind',
 			'registrationBody',
 			'registrationCategory',
-			'registrationField',
 			'registrationCheck',
+			'registrationField',
 			'registrationNo',
 			'signedAt'
 		]);
@@ -1131,7 +1139,14 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	it('refuses to issue a signed draft missing an erratum found since it was drafted (409 pack_errata_since_draft); drafted again, it issues (below)', async () => {
 		const stale = await draft(editor, baseRun, v1.id);
 		await sign(editor, stale.id);
-		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({ issuable: true, signed: true, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({
+			issuable: true,
+			signed: true,
+			runsVerified: true,
+			errataRecorded: true,
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 		errataList.push(SINCE_DRAFT);
 		const detail = (await editor.call('GET', packPath(stale.id))).body;
 		expect(detail.issue).toMatchObject({ signed: true, errataRecorded: false });

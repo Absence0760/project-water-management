@@ -393,6 +393,7 @@ describe('the SECURITY DEFINER lookups', () => {
 // since 138: their account may be deleted, and the row stays with no name.
 const INNER_JOINS = new Map<string, string>([
 	['projects/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
+	['signoffs/registrationCheck.ts JOIN app_user u ON u.id = m.user_id', 'current project members (the member whose check is recorded)'],
 	['farms/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['farms/routes.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible'],
 	['history/record.ts JOIN app_user u ON u.id = fl.user_id', 'a linked farmer is a current member'],
