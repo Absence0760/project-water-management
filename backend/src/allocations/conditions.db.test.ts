@@ -116,8 +116,8 @@ describe('licence conditions (103)', () => {
 		expect(list[0]).toMatchObject({ registrationNo: 'IMP-1', months: [1, 2, 3, 10, 11, 12], maxRateM3s: 0.01, conditions: ['Stop below 0.1 m3/s', 'Meter monthly'] });
 		const csv = await app.request(`/projects/${projectId}/allocations/export.csv`, { headers: { cookie: owner.cookie, origin: 'http://localhost:7777' } });
 		const [head, row] = (await csv.text()).split('\r\n');
-		expect(head).toContain('months,max_rate_m3s,conditions,source_file');
-		expect(row).toContain('1 2 3 10 11 12,0.01,Stop below 0.1 m3/s | Meter monthly,conditions.csv');
+		expect(head).toContain('months,max_rate_m3s,conditions,water_use,source_file');
+		expect(row).toContain('1 2 3 10 11 12,0.01,Stop below 0.1 m3/s | Meter monthly,21a,conditions.csv');
 		await owner.call('DELETE', `/projects/${projectId}/allocations/sources/${res.body.source.id}`);
 	});
 });

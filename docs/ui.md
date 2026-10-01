@@ -5464,6 +5464,9 @@ exists shows the default with a note), **Download CSV** (the export, names
 for editors only), and for editors **Import** (`import=1`) and **+ Add
 volume** (`volume=new`), each a side sheet that closes in place, so Back goes
 to where it was opened from. A viewer opening a sheet link gets the page.
+The volume sheet's **Water use** picks a take (s21a) or a dam's storage
+(s21b, issue #72); a storage row has no volume field, its water source is
+surface and its storage is required.
 
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
@@ -5518,7 +5521,10 @@ m³ written beside it; hidden from screen readers, the table under it
 carries the numbers); the same years as a table (registered
 m³, modelled use m³ "modelled, not metered", modelled ÷ registered, the
 status badge with its full sentence in the title, "part (N d)" for a part
-year); its registered storage beside the dam capacity in the run; and its
+year); its registered storage beside the dam capacity in the run, with the
+difference and the band in words ("the dam is 50 000 m³ larger than the
+storage registered for it (outside the ±10 % band)", `storageSentence`,
+issue #72; arithmetic only, whether filling counts as a take is #90); and its
 registered volumes (volume, source, authorisation, registration number, the
 holder for editors only, validity), each with **Change** and **Delete** for
 editors. The bars and the table show the latest six water years (both
@@ -5533,7 +5539,8 @@ opened list scrolls the page back to its detail.
 **Registered volumes** (below the first screen): the list, stacked so it
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
-authorisation with purpose, volume with source, storage, validity with where
+authorisation with purpose, volume with source (**Storage only (s21b)** for a
+dam's registered storage, which is never a take, issue #72), storage, validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
 "Entered by hand") and, when it states any, its licence conditions in one
 line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,
@@ -6718,7 +6725,14 @@ published.
   switch (saved to the account, `app_user.volume_unit`, and kept on the
   phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level
-  wording; "Looking back", the model's card (dashed, neutral "Model: …"
+  wording; **Your registered water** (issue #72, `farm/RegisteredCard.svelte`,
+  wording in `cards.ts` `registeredCard`, section `farm.registered`), only
+  when something is registered on the farm: its own surface and groundwater
+  volumes a year and dam storage in force today (`FarmView.registered`, no
+  name or registration number), the season's modelled supply beside the
+  year's registered volume, the modelled dam beside the registered storage,
+  and "A registered volume is not an entitlement, and it doesn't say whether
+  a use is lawful"; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
   the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a

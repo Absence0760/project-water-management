@@ -27,6 +27,8 @@ export interface AllocationBody {
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
+	/** The s21 water use (issue #72): '21b' is a dam's storage only (volume 0, a storage, surface). */
+	waterUse?: '21a' | '21b';
 }
 
 export async function addAllocation(request: APIRequestContext, projectId: string, body: AllocationBody): Promise<string> {

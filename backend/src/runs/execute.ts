@@ -95,20 +95,22 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 
 /**
  * A project's allocations as a run reads them (engine AllocationEntry), in id
- * order: the volume, source, validity and match, and the licence conditions
+ * order: the volume, source, storage (and whether it is storage only, 21b), validity and match, and the licence conditions
  * (a cap run applies the months and the rate, engine ≥ 1.37.0). Never the holder's name, the
  * registration number or the property: a run's stored input is readable by
  * every viewer, and the engine needs none of them (D3, docs/allocations.md §
  * Who sees what). Read under the caller's RLS, like the rest of the input.
  */
 export async function allocationsForRun(db: Db, projectId: string): Promise<AllocationEntry[]> {
-	const { rows } = await db.query<AllocationEntry>(
+	const { rows } = await db.query<AllocationEntry & { waterUse: '21a' | '21b' }>(
 		`SELECT id, node_id AS "nodeId", water_source AS "waterSource", volume_m3_year AS "volumeM3PerYear", storage_m3 AS "storageM3",
-			valid_from AS "validFrom", valid_to AS "validTo", months::int[] AS months, max_rate_m3s AS "maxRateM3s"
+			valid_from AS "validFrom", valid_to AS "validTo", months::int[] AS months, max_rate_m3s AS "maxRateM3s", water_use AS "waterUse"
 		 FROM allocation WHERE project_id = $1 ORDER BY id`,
 		[projectId]
 	);
-	return rows;
+	// A take (21a) carries no waterUse, so its input reads as it did before 137 (engine 1.59.0); a
+	// storage-only row (21b) says so, and no mode counts it as a take (issue #72).
+	return rows.map(({ waterUse, ...a }) => (waterUse === '21b' ? { ...a, waterUse } : a));
 }
 
 /**

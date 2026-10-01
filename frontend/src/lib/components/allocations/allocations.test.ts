@@ -1,7 +1,8 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
+import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { fmtNum } from '$lib/format/number';
 
 const comparison = () =>
 	compareAllocations({
@@ -182,8 +183,33 @@ describe('previewOrder', () => {
 describe('TEMPLATE_CSV', () => {
 	it('has the backend template header', () => {
 		expect(TEMPLATE_CSV.split('\r\n')[0]).toBe(
-			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions'
+			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use'
 		);
+	});
+});
+
+describe('the s21 water use and the storage comparison (issue #72)', () => {
+	it('shows a storage-only (s21b) row as storage, never as a volume taken', () => {
+		expect(volumeCell({ waterUse: '21a', volumeM3PerYear: 120000 })).toBe(`${fmtNum(120000)} m³/a`);
+		expect(volumeCell({ waterUse: '21b', volumeM3PerYear: 0 })).toBe('Storage only (s21b)');
+	});
+
+	it('says how the dam compares with its registered storage, with the band', () => {
+		const st = (registeredM3: number | null, modelledCapacityM3: number | null, status: 'over' | 'under' | 'within' | 'unregistered' | 'none') => ({
+			registeredM3,
+			modelledCapacityM3,
+			differenceM3: registeredM3 !== null && modelledCapacityM3 !== null ? modelledCapacityM3 - registeredM3 : null,
+			status
+		});
+		expect(storageSentence(st(null, null, 'none'), 0.1)).toBeNull();
+		expect(storageSentence(st(150000, 200000, 'over'), 0.1)).toBe(
+			`Registered storage ${fmtNum(150000)} m³ · dam capacity in the run ${fmtNum(200000)} m³: the dam is ${fmtNum(50000)} m³ larger than the storage registered for it (outside the ±10 % band).`
+		);
+		expect(storageSentence(st(150000, 100000, 'under'), 0.1)).toContain(`the dam is ${fmtNum(50000)} m³ smaller than the storage registered for it`);
+		expect(storageSentence(st(150000, 150000, 'within'), 0.1)).toMatch(/: within ±10 %\.$/);
+		expect(storageSentence(st(null, 80000, 'unregistered'), 0.1)).toBe(`Dam capacity in the run ${fmtNum(80000)} m³, with no registered storage (s21b).`);
+		// Storage registered, no dam in the run.
+		expect(storageSentence(st(150000, null, 'under'), 0.1)).toBe(`Registered storage ${fmtNum(150000)} m³, with no dam in the run.`);
 	});
 });
 

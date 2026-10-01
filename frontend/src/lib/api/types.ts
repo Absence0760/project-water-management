@@ -1759,6 +1759,8 @@ export type AllocationAuthorisation =
 export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';
+/** The NWA s21 water use (137, issue #72): 21a a take per year, 21b a dam's storage only (volume 0). */
+export type AllocationWaterUse = '21a' | '21b';
 
 /**
  * A cap run's water years for one unit and source (GET …/runs/:runId/allocations
@@ -1796,6 +1798,7 @@ export interface Allocation {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	waterUse: AllocationWaterUse;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -1838,6 +1841,8 @@ export interface AllocationInput {
 	months?: number[] | null;
 	maxRateM3s?: number | null;
 	conditions?: string[];
+	/** Default '21a'. A '21b' row has volume 0, a storage and surface water. */
+	waterUse?: AllocationWaterUse;
 }
 
 /** One row of an import preview. */
@@ -1858,6 +1863,7 @@ export interface AllocationPreviewRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	waterUse: AllocationWaterUse;
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

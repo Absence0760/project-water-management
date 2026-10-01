@@ -2309,13 +2309,16 @@ whether a use is lawful.
 | POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
-| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `, `water_use` `21a` / `21b`) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
 | GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison, capYears }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
   storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
-  createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
+  waterUse, createdAt, updatedAt }`. `waterUse` (137, issue #72) is the NWA
+  s21 water use: `'21a'` a take of `volumeM3PerYear` a year, `'21b'` a dam's
+  storage only (`volumeM3PerYear` 0, `storageM3` stated, surface water),
+  never counted as a take. `months` (calendar months 1–12, ascending, or
   `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
   (strings) are licence conditions (103, issue #72), recorded and shown; a
   cap run (engine ≥ 1.37.0) applies `months` and `maxRateM3s`, never
@@ -2331,10 +2334,17 @@ whether a use is lawful.
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
   reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
   | null, maxRateM3s?: 0 ≤ r < 10⁶ | null, conditions?: up to 20 strings of
-  1–500 characters }` (dates `YYYY-MM-DD`).
+  1–500 characters, waterUse?: '21a' (default) | '21b' }` (dates
+  `YYYY-MM-DD`). A `'21b'` row, created or as a PATCH leaves it, must have
+  `volumeM3PerYear` 0, a `storageM3` and `waterSource` `'surface'`, else
+  `400` (137's `allocation_storage_only_check` refuses it in the table too).
 - Import: the template and a WARMS extract may carry `months` (numbers or
   names, ranges over the new year: `Oct-Mar`), `max_rate_m3s` and
   `conditions` (separated by `|`); a cell that doesn't read is a row problem.
+  A WARMS extract must carry a water-use (s21) column, or the file is `422`;
+  each row's code, unit and frequency are read and an ambiguous row is a
+  row problem ([allocations.md § Importing](./allocations.md#importing)).
+  `PreviewRow` carries `waterUse`.
 - Every run's input carries the project's allocations (engine ≥ 1.18.0:
   `GET /projects/:id/model-input` and the stored run's `inputs.model.allocations`,
   without names, registration numbers or properties), and a write that changes
@@ -2365,13 +2375,17 @@ whether a use is lawful.
   `null`) and `alreadyInProject` (the registration number is already there).
 - `AllocationComparison = { tolerance, startDate, endDate, nodes: [{ nodeId,
   name, kind, surface, groundwater, storage: { registeredM3,
-  modelledCapacityM3 } }], unmatchedAllocationIds, notInRunAllocationIds }`;
+  modelledCapacityM3, differenceM3, status } }], unmatchedAllocationIds,
+  notInRunAllocationIds }` (`storage.differenceM3` = capacity − registered,
+  `null` unless both are known; `storage.status` bands the capacity against
+  the registered storage as a year's use is banded, issue #72);
   `surface` / `groundwater` = `{ waterSource, allocationIds, years: [{
   waterYear, days, yearDays, partial, modelledM3, registeredM3, ratio, status
   }], yearsOver, wholeYears, meanModelledM3PerYear, meanRegisteredM3PerYear }`,
   `status` ∈ `over` | `within` | `under` | `unregistered` | `none`.
-- **Farmers** get `403` on every route, like every viewer route; RLS already
-  limits them to their own farms' allocations for the farm view to come.
+- **Farmers** get `403` on every route, like every viewer route; RLS limits
+  them to their own farms' allocations, which the farm view sums
+  (`FarmView.registered`, [§ Farm](#farm)).
 - History: `allocation.created/changed/deleted/imported/import_deleted`; the
   preview is exempt (it writes nothing).
 
@@ -2683,7 +2697,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook, registered }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2706,6 +2720,15 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil` to today in the project's time zone.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
+- `registered = { asOf, surfaceM3PerYear, groundwaterM3PerYear, storageM3 }`
+  (issue #72): the farm's **own** registered water in force on `asOf`
+  (today in the project's zone), read under the caller's RLS from the
+  allocations on this farm, current rather than the publication's: the 21(a)
+  takes summed per source (m³ a year, `null` when none; Schedule 1
+  permissible use left out, since it isn't registered) and the registered
+  storage (21(b) rows and storage on a take, m³, `null` when none stated).
+  Never a holder's name, a registration number or a property. `null` when
+  nothing is in force ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
   `publishedBy` is the publisher's display name, `null` once that account
   is gone (the page words it, "A former member", in the reader's language).

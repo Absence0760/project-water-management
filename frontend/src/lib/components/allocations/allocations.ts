@@ -5,7 +5,7 @@
 // app compares modelled use with a registered volume and leaves the finding to
 // the authority (docs/allocations.md § What the comparison is not).
 import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
-import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
+import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
@@ -31,6 +31,43 @@ export const SOURCE_LABEL: Record<AllocationWaterSourceKind, string> = {
 	surface: 'Surface water',
 	groundwater: 'Groundwater'
 };
+
+/** The NWA s21 water use (137, issue #72). */
+export const WATER_USE_LABEL: Record<AllocationWaterUse, string> = {
+	'21a': 'Taking water (s21a)',
+	'21b': 'Storing water in a dam (s21b)'
+};
+
+/**
+ * A volume's main figure in the list: "120,000 m³/a", or for a storage-only
+ * (s21b) row, which registers no take, "Storage only (s21b)".
+ */
+export const volumeCell = (a: { waterUse: AllocationWaterUse; volumeM3PerYear: number | null }): string => (a.waterUse === '21b' ? 'Storage only (s21b)' : `${fmtNum(a.volumeM3PerYear)} m³/a`);
+
+/**
+ * The dam against its registered storage (engine compareAllocations
+ * `storage`, issue #72), in words, or null when there is neither. Arithmetic
+ * only: whether filling the dam is also a s21(a) take is the hydrologist's
+ * question (issue #90).
+ */
+export function storageSentence(s: AllocationComparison['nodes'][number]['storage'], tolerance: number): string | null {
+	const cap = s.modelledCapacityM3;
+	if (s.registeredM3 === null && !cap) return null;
+	const band = `±${fmtNum(tolerance * 100, 0)} %`;
+	if (s.registeredM3 === null) return `Dam capacity in the run ${fmtNum(cap)} m³, with no registered storage (s21b).`;
+	if (!cap) return `Registered storage ${fmtNum(s.registeredM3)} m³, with no dam in the run.`;
+	const both = `Registered storage ${fmtNum(s.registeredM3)} m³ · dam capacity in the run ${fmtNum(cap)} m³`;
+	switch (s.status) {
+		case 'over':
+			return `${both}: the dam is ${fmtNum(s.differenceM3 ?? 0)} m³ larger than the storage registered for it (outside the ${band} band).`;
+		case 'under':
+			return `${both}: the dam is ${fmtNum(-(s.differenceM3 ?? 0))} m³ smaller than the storage registered for it (outside the ${band} band).`;
+		case 'within':
+			return `${both}: within ${band}.`;
+		default:
+			return `${both}.`;
+	}
+}
 
 /** Short badge text per status: what the numbers say, not a finding. */
 export const STATUS_LABEL: Record<AllocationStatus, string> = {
@@ -268,8 +305,8 @@ export const MATCHED_BY_LABEL: Record<NonNullable<AllocationPreviewRow['matchedB
 
 /** The CSV template's header line (backend TEMPLATE_HEADERS) and one invented example row. */
 export const TEMPLATE_CSV =
-	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions\r\n' +
-	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly\r\n';
+	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use\r\n' +
+	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly,21a\r\n';
 
 /** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
 export const shortHash = (sha: string) => sha.slice(0, 12);

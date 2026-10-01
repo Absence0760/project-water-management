@@ -3250,10 +3250,19 @@ from the WP:
       and a pair with only one run at full allocation is said so
       (`report/licenceImpact.ts`). Making the pair for an assessor in one
       step is WP-3.11's cumulative assessment (roadmap step 3).
-- [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
-      import and a column-mapping step for unknown headings. Until then an
-      unknown heading is listed as "not read". Trigger: the client sends an
-      extract (plan.md questions).
+- [x] **WARMS per s21 water use** (2026-09-30, migration 137, engine
+      1.59.0, issue #72): the importer reads a water-use code (21(a) a take,
+      21(b) a dam's storage), the unit and the frequency, and refuses an
+      ambiguous row (no code, two uses, another s21 use, a missing or
+      non-annual unit, two storages) rather than guess; a WARMS extract
+      without the code column is refused. A 21(b) row is stored as storage
+      only and never caps, scales or compares as a take
+      ([allocations.md § Importing](./allocations.md#importing)).
+- [ ] **A real WARMS extract** to check `HEADER_ALIASES` (the water-use,
+      unit and frequency spellings included) against, then XLSX import and a
+      column-mapping step for unknown headings. Until then an unknown heading
+      is listed as "not read". Trigger: the client sends an extract
+      (plan.md questions; DWS supplies extracts on request).
 - [x] **Licence conditions** (2026-09-28, migration 103, issue #72):
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
@@ -3283,13 +3292,21 @@ from the WP:
       `capReached` / `limitBound` per unit and source
       (`EvidenceAllocationSource.capA` / `capB`) and prints them in *What the
       cap held back* ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
-- [ ] **Farm view**: a farmer's own registered volume beside their modelled
-      use (RLS already allows it: `allocation_select_farmer`,
-      `allocation_holder_select`); share views per D3 (c) (volumes public,
-      names hidden). Trigger: D3 settled with the client's legal adviser.
-- [ ] **Dam filling vs registered storage** (s21b): the comparison counts
-      supply from the farm's own dam as abstraction and compares storage with
-      the dam capacity only. Pending the hydrologist.
+- [x] **Farm view: a farmer's own registered volume** (2026-09-30, issue
+      #72): *Your registered water* shows the farm's own volumes a year and
+      dam storage in force today beside the season's modelled supply and the
+      modelled dam, with "not an entitlement" (`FarmView.registered`; no
+      name or registration number). Not blocked by D3, which is about other
+      people's names and volumes.
+- [ ] **Share views per D3 (c)** (volumes public, names hidden). Trigger: D3
+      settled with the client's legal adviser.
+- [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
+      comparison's `storage` carries the difference and a status banded like
+      a year's use, and the Allocations page says it in words.
+- [ ] **Dam filling vs registered storage** (s21b): whether filling a dam
+      from the river is also a s21(a) take, and so how the comparison and the
+      cap count it. The comparison counts supply from the farm's own dam as
+      abstraction. Pending the hydrologist (issue #90).
 - [x] **POPIA**: allocations and holder names in the data-subject export
       (2026-09-26). `GET /auth/me/export` lists, per linked farm, the
       allocations matched to it with the holder name (what RLS already lets

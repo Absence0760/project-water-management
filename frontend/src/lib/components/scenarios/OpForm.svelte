@@ -56,7 +56,8 @@
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));
 	const crop = $derived(input.model.crops.find((c) => c.id === d.cropId));
 	const patch = $derived((input.model.landCover ?? []).find((p) => p.id === d.patchId));
-	const allocations = $derived(input.model.allocations ?? []);
+	// A storage-only (s21b) row isn't a volume to change (issue #72): allocation.set lists takes only; remove lists all.
+	const allocations = $derived((input.model.allocations ?? []).filter((a) => d.kind === 'allocation.remove' || a.waterUse !== '21b'));
 	// Demand objects (engine ≥ 1.45.0): on units only.
 	const objects = $derived(input.model.demandObjects ?? []);
 	const demandObject = $derived(objects.find((o) => o.id === d.demandObjectId));
