@@ -1,6 +1,7 @@
 {
-	"_about": "Synthetic CHIRPS-GEFS forecast fixture (FEED_SOURCE=fixtures, backend/src/feeds/fixtures.ts). Same invented grid as chirps-sample.json. Forecast day d of an issue is pattern[(issueDay + d) % pattern.length] mm, scaled per cell like the CHIRPS fixture. The fixture server issues a forecast every day (16 files from the issue date).",
+	"_about": "Synthetic CHIRPS-GEFS forecast fixture (FEED_SOURCE=fixtures, backend/src/feeds/fixtures.ts). Same invented grid as chirps-sample.json. The files cover `cover` (21.0-25.4° E, 20.0-34.0° S, where the seeded examples' synthetic catchments sit): the grid's own cells keep their values and every other cell repeats them (row mod 6, column mod 8), with no sea, so a feed over a seeded boundary reads offline (issue #326). Forecast day d of an issue is pattern[(issueDay + d) % pattern.length] mm, scaled per cell like the CHIRPS fixture. The fixture server issues a forecast every day (16 files from the issue date).",
 	"grid": { "originLon": 25.0, "originLat": -20.0, "scale": 0.05, "width": 8, "height": 6, "sea": [[5, 7]] },
+	"cover": { "originLon": 21.0, "originLat": -20.0, "width": 88, "height": 280 },
 	"colGradient": 0.02,
 	"rowGradient": 0.01,
 	"pattern": [1.1, 0, 0, 5.4, 9.2, 2.0, 0, 0, 0, 0.4, 14.6, 3.3, 0, 0, 0, 0.8, 0]
