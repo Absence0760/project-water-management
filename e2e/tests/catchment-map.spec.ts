@@ -12,7 +12,8 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { whatChanged } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadSyntheticQuaternaries, parcelsGeoJson, projectedGeoJson } from '../support/map.ts';
+import { boundaryGeoJson, damGeoJson, loadSyntheticQuaternaries, parcelsGeoJson, projectedGeoJson } from '../support/map.ts';
+import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
 const upload = (name: string, text: string) => ({ name, mimeType: 'application/geo+json', buffer: Buffer.from(text) });
 
@@ -66,6 +67,18 @@ test('an editor uploads a boundary and parcels, accepts an area into the model, 
 	await expect(page.getByTestId('map-notice')).toContainText(/Upper farm’s area is now \d+\.\d{3} km², from the map\./);
 	await expect(upperRow.getByRole('button', { name: 'In use' })).toBeDisabled();
 	await expect(page.getByTestId('map-area-sources').getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('From the map “Upper farm”');
+
+	// A dam's polygon and the boundary are never a unit's catchment area: no area control on their rows.
+	await page.getByLabel('The file holds').selectOption('dam');
+	await file.setInputFiles(upload('dams.geojson', damGeoJson()));
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Imported 1 feature from dams.geojson.');
+	for (const name of ['Upper dam', 'Synthetic catchment']) {
+		const row = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name }) });
+		await expect(row).toBeVisible();
+		await expect(row.getByRole('button', { name: /^Use / })).toHaveCount(0);
+		await expect(row.getByRole('combobox', { name: /area$/ })).toHaveCount(0);
+	}
 
 	// A gauge from typed coordinates, with the form's own checks first.
 	await page.getByRole('button', { name: 'Place the point' }).click();
@@ -148,6 +161,8 @@ for (const scheme of ['light', 'dark'] as const) {
 		await page.getByLabel(/^GeoJSON file/).setInputFiles(upload('boundary.geojson', boundaryGeoJson()));
 		await page.getByRole('button', { name: 'Upload', exact: true }).click();
 		await expect(page.getByTestId('map-notice')).toContainText('Imported 1 feature');
+		await layoutSettled(page);
+		await expectNoSidewaysScroll(page);
 		await expectNoViolations(page);
 	});
 }
