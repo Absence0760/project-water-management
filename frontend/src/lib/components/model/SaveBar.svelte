@@ -3,7 +3,8 @@
 	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the
 	// project details (the Project page, issue #162 item 12). Unsaved
 	// indicator, validation summary, the optional reason for a model change
-	// (kept with it in the History tab), Save / Discard for everything unsaved.
+	// (kept with it in the History tab), Preview of the model's edits against
+	// the last run (issue #284), Save / Discard for everything unsaved.
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import type { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
 
@@ -13,7 +14,8 @@
 		onsave,
 		readonly,
 		height = $bindable(0),
-		reason = $bindable('')
+		reason = $bindable(''),
+		onpreview = null
 	}: {
 		editor: ModelEditor;
 		/** The project details being edited, saved and discarded with the model's edits. */
@@ -25,6 +27,8 @@
 		height?: number;
 		/** The optional "why" sent with a model save (at most 500 characters). */
 		reason?: string;
+		/** Preview what the unsaved model edits do to the last run (issue #284); null hides the button. */
+		onpreview?: (() => void) | null;
 	} = $props();
 
 	const detailsDirty = $derived(!!details?.dirty);
@@ -72,6 +76,10 @@
 					<span class="visually-hidden">Reason for this change (optional)</span>
 					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
 				</label>
+			{/if}
+			<!-- The model's edits only, so it waits until they have no problems the engine would refuse. -->
+			{#if editor.dirty && onpreview}
+				<button type="button" class="btn" onclick={onpreview} disabled={saving || editor.issues.length > 0}>Preview</button>
 			{/if}
 			<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
 			<button type="button" class="btn btn-primary" onclick={onsave} disabled={saving || blocking > 0 || !dirty}>Save changes</button>

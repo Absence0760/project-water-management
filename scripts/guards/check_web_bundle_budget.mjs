@@ -47,7 +47,7 @@
 //                   (frontend/vite.config.ts, workerChunks), not a bundle of
 //                   its own: the calibration worker's file holds the code
 //                   only it runs (the fit, the ensemble), the preview
-//                   worker's the yield search, and both import the engine
+//                   worker's the yield search and the unsaved-edits read (issue #284), and both import the engine
 //                   code they share with pages or with each other (the run)
 //                   from chunks/, which count as page chunks. They load only
 //                   when a fit, an ensemble or a preview starts, never on
@@ -1629,6 +1629,16 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1368 KB (issue #284, Preview of unsaved edits
+//             against the last run: the dialog and the overlay of the unsaved
+//             settings and model edits on the run's input, its own chunk
+//             (preview/UnsavedPreviewDialog.svelte, lib/preview/overlay.ts,
+//             4.0 KB), the preview worker's effect request (3.4 → 4.3 KB;
+//             it reads the two runs itself rather than importing compareRuns,
+//             whose module put a second copy of every run comparison in a
+//             chunk of its own, +4 KB), and the Preview buttons in the model
+//             save bar and Settings. Measured locally: main @ 4a17d615 1357,
+//             this branch 1363 (+6 KB); CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1639,7 +1649,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1362,
+	totalCodeKb: 1368,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
