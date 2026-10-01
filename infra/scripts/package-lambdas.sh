@@ -137,9 +137,10 @@ guard() {
 }
 
 # No Lambda bundle may carry dotenv: it would read env files from the
-# package in production (docs/STACK.md § Two backend entry points). Migrate is
-# exempt, as it always was: it bundles backend/scripts/migrate.ts, whose CLI
-# branch (never taken in the Lambda) calls dotenv's config().
+# package in production (docs/STACK.md § Two backend entry points). Migrate
+# included: backend/scripts/migrate.ts has no CLI branch of its own (that is
+# scripts/migrate-cli.ts, with the dev env loader), so nothing it bundles
+# imports dotenv.
 dotenv=(--forbid dotenv 'docs/STACK.md § Two backend entry points')
 # Nor may the API, worker and fetcher carry Chromium's driver (see above).
 # playwright-core is --external in all of them, so it is never an input: the
@@ -151,6 +152,7 @@ chromium=(--forbid-static playwright-core 'only the renderer image ships it' --f
 pg=(--forbid pg 'no database')
 
 guard api "${dotenv[@]}" "${chromium[@]}"
+guard migrate "${dotenv[@]}"
 guard worker "${dotenv[@]}" "${chromium[@]}"
 guard fetcher "${dotenv[@]}" "${chromium[@]}" "${pg[@]}"
 guard renderer "${dotenv[@]}" "${pg[@]}"

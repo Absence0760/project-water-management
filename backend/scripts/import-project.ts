@@ -18,7 +18,6 @@
 // fitted project.
 // Runs through the same RLS-bound path and validation as POST /projects/import
 // (src/projects/import.ts).
-import { config } from 'dotenv';
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { hashPassword } from '../src/auth/password.js';
@@ -27,6 +26,7 @@ import { actAsUser, withoutUser, withUser } from '../src/db/tx.js';
 // The same validation and transaction as POST /projects/import.
 import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
 import { fitDocument, fitSummary, withSettingsPatch, withTransferPatch, type FitOptions, type ProjectDocument } from './fit-project.js';
+import { loadDevEnv } from '../src/config/devEnv.js';
 
 export async function importProject(file: string, email: string, opts: ImportOptions = {}) {
 	return importProjectData(JSON.parse(await readFile(file, 'utf8')), email, opts);
@@ -133,8 +133,8 @@ function describe(err: unknown): string {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	// CLI only: importing this module must not load dev env (see scripts/migrate.ts).
-	config({ path: ['.env.development.local', '.env.development'] });
+	// CLI only: importing this module must not load dev env (the DB tests once ran against the dev database that way).
+	loadDevEnv();
 	const { values, positionals } = parseArgs({
 		allowPositionals: true,
 		options: {

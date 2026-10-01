@@ -6,12 +6,13 @@
 // didn't exist yet, and every such request failed with a 500.
 //
 // Dev only: e2e and Lambda start src/server.ts / lambda.ts directly.
-import { config } from 'dotenv';
+import { ensureDevDb, loadDevEnv } from '../src/config/devEnv.js';
 import { migrate } from './migrate.js';
 
-config({ path: ['.env.development.local', '.env.development'] });
+loadDevEnv();
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url) throw new Error('MIGRATION_DATABASE_URL is not set');
+await ensureDevDb(url);
 const applied = await migrate(url);
 console.log(applied.length ? `${applied.length} migration(s) applied` : 'schema up to date');
 await import('../src/server.js');
