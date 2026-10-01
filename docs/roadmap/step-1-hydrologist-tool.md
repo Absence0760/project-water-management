@@ -944,9 +944,18 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > fake-worker-tested protocol) as a second entry of the page build beside the
 > calibration worker (`frontend/vite.config.ts` `workerChunks`, so it shares
 > the engine chunks). Its first request kind is WP-3.6's single firm yield,
-> the Yield panel's preview ([ui.md § Yield](../ui.md#yield-wp-36)). Not
-> built yet: `buildModelInput`, `preview.svelte.ts` and the "Preview
-> (unsaved)" panel below; they add a `run` request kind to the same worker.
+> the Yield panel's preview ([ui.md § Yield](../ui.md#yield-wp-36)).
+>
+> **Preview of unsaved edits built (issue #284):** a **Preview** on the
+> model save bar (Network, Crops, Transfers) and on Settings opens a dialog
+> with the last run's figures against the same run with the unsaved edits
+> (the worker's `effect` request). It departs from the plan below on
+> purpose: no `buildModelInput` and no series from the browser's caches; the
+> input is the last run's own from the server (`…/runs/:runId/model-input`)
+> with only the saved → unsaved change laid over it (`lib/preview/overlay.ts`),
+> so the series can't drift from a stored run. On demand, not debounced live:
+> a run is ~0.15 s on the client catchment (`run.perf.test.ts`) and the
+> preview runs two. Not built: the mini hydrograph.
 
 - **Goal:** change a parameter and see its effect before saving. The engine
   already runs in the browser, fast enough on the client catchment for live preview.

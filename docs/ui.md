@@ -593,6 +593,41 @@ optional reason field shows only with model edits (it goes into History with
 them). Every other card on the Project page acts at once. Settings has its
 own save button, which sits above that bar.
 
+**Preview unsaved edits** (issue #284, roadmap WP-1.17). With model edits
+unsaved and no problems to fix, the save bar has **Preview** (Network, Crops
+& demand, Transfers, the farm drawer's edits; every tab but Settings).
+Settings has its own **Preview** beside **Discard** while its form (with
+nothing blocking Save) or the model has unsaved edits; it takes both, so the
+save bar's is hidden there, and model edits with problems to fix are left
+out and named. Both open the same dialog
+(`preview/UnsavedPreviewDialog.svelte`, its own chunk), "Preview: your
+unsaved settings" (or "model edits", or "settings and model edits"). When
+the page couldn't load the runs list, the dialog asks for it itself rather
+than say there is no run. It starts from the newest run
+of the catchment's own model (`previewBaseRun`: not a scenario's run, not a
+legacy one) and its own input from the server (`GET …/runs/:runId/model-input`,
+`lib/preview/inputs.ts`, kept for the next preview of that run), lays only the
+unsaved edits over it (`lib/preview/overlay.ts`: the settings and each model
+list as last saved against as edited, path by path for settings and field by
+field for an item, matched by id, a planted area by unit and crop; the
+settings a run doesn't read, `autoRun`, `outcomes` and `outlook`, left out),
+and runs both in the preview worker on this build's engine, so a difference
+is the edits', never an engine change since the stored run. The series are
+always the run's, so the preview can't drift from a stored run; a change
+saved since the run isn't in it, which the dialog says. The figures, last
+run against with your edits with the change (`compare/Delta.svelte`, sign,
+arrow and better/worse in words): demand met, demand, shortfall, units below
+95 % supplied, mean natural flow, mean outflow at the outlet, days the EWR
+is not met, and NSE, KGE and percent bias when the run has a record to score;
+then the units whose supply moved (the ten largest changes, "and N more"),
+and units the edits added or removed. An edited item the run doesn't have
+(added and saved after it) is left out and named under "Not in this
+preview". With no run yet it says to run the model first; the engine's
+refusal of the edited input is shown in its words. Nothing is stored, no run
+slot is used, and the edits stay unsaved. The dialog is modal, so the edits
+can't change under an answer; each opening works it out again (two model
+runs, about 0.3 s on the client catchment, `run.perf.test.ts`).
+
 **Leaving with unsaved changes** (issue #162 items 11 and 13;
 `lib/nav/unsaved.ts`, `lib/nav/leaveGuard.ts`). Unsaved work registers
 itself while it is on screen (`guardUnsaved`): the model's edits and the
@@ -3023,8 +3058,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
   focused control is never hidden under either (WCAG 2.4.11).
 - **Save bar.** Sticky at the bottom (above the model save bar when that
-  shows), with "Unsaved settings", **Discard** and **Save settings** (editors
-  only). When something blocks Save it says how many groups have a problem
+  shows), with "Unsaved settings", **Preview** (what the unsaved settings, and
+  the model's unsaved edits, do to the last run; § Preview unsaved edits under
+  Project workspace), **Discard** and **Save settings** (editors only). When something blocks Save it says how many groups have a problem
   and links to each one (`saveBlockers`; the link's accessible name carries
   the message), and that group's menu link gets a red dot ("has a problem").
   Each problem is also shown next to its field. The bar ends with the form;
