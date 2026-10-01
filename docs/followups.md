@@ -3944,6 +3944,17 @@ Left:
       model runs per GET, pack draft and issue check. A pack drafted before
       it keeps its frozen sum ([evidence-pack.md § The other applications
       together](./evidence-pack.md#the-other-applications-together)).
+- [x] **The cumulative row's assessment engine** (from #71, C26; operator,
+      #93). The row read the newest complete assessment of the same
+      applications on any engine and printed which, so its baseline figure
+      (the assessment's own run of the baseline) could differ from the
+      report's. **Decided (operator, 2026-10-01): require the baseline
+      run's engine. Done:** `loadCombined` reads only an assessment made on
+      the baseline run's engine; one on another engine makes the row *Not
+      assessed* with why (assessed on X, the baseline ran on Y: assess
+      again), and while the server runs another engine than the baseline's
+      it says to run the baseline again (`staleAssessment`). Tests:
+      `evidence/report-combined.db.test.ts`.
 - [ ] **The reproduction bundle carries the combined row's runs.** An
       `evidence-11` pack's combined row cites an assessment, whose runs (the
       baseline, each alone, all together, on the assessment's engine) the

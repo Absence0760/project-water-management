@@ -3,13 +3,17 @@
 // reads a completed cumulative assessment of exactly this application and
 // every other submitted or approved one on the baseline, with their current
 // ops; without one it says why (not assessed yet, under way); a conflict
-// makes it not assessed with the conflict named, never a silent merge.
+// makes it not assessed with the conflict named, never a silent merge. Only
+// an assessment on the baseline run's engine is read (operator decision,
+// 2026-10-01), so the row's baseline figure is the report's own.
 // Synthetic catchment: invented names and values.
 import { randomUUID } from 'node:crypto';
-import { COMBINED_CONFLICT, COMBINED_NOT_RUN, COMBINED_PENDING, type CumulativeReport, type EvidenceReport } from '@water-management/engine';
+import { COMBINED_CONFLICT, COMBINED_NOT_RUN, COMBINED_PENDING, type CumulativeReport, ENGINE_VERSION, type EvidenceReport } from '@water-management/engine';
+import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
+import { staleAssessment } from './report.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -128,6 +132,43 @@ describe('the evidence report’s combined row (evidence-11, C26)', () => {
 		}
 		// Positive control: withdrawn, it leaves the set, and the assessment of the two is read again.
 		expect(rowOf(await reportOf(assessor, runA)).notAssessed).toBeNull();
+	});
+
+	it('reads only an assessment on the baseline run’s engine: one on another engine is named with why, until they are assessed again', async () => {
+		// The assessment above, as if made on an older engine. An assessment is fixed once complete (145's
+		// assessment_complete trigger), so the schema owner moves its engine with the triggers off.
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query('SET LOCAL session_replication_role = replica');
+			await client.query(`UPDATE assessment SET engine_version = '0.0.1-older' WHERE project_id = $1 AND status = 'complete'`, [projectId]);
+			await client.query('COMMIT');
+		} finally {
+			await client.end();
+		}
+		const r = await reportOf(assessor, runA);
+		const why = `Not assessed: they were assessed together on engine 0.0.1-older, but the baseline ran on engine ${ENGINE_VERSION}, so its baseline figure isn’t this report’s: assess them together again.`;
+		expect(r.cumulative.combined!).toMatchObject({ notAssessed: why, assessment: null, ewrDays: null });
+		expect(rowOf(r)).toMatchObject({ notAssessed: why, change: null, baseline: null, application: null });
+
+		// Positive control: assessed again, on the baseline's engine, the row reads the new one.
+		const res = await assessor.call('POST', `${P()}/assessments`, { name: 'Both, again', scenarioIds: [appA, appB] });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		expect(rowOf(await reportOf(assessor, runA)).notAssessed).toBe(COMBINED_PENDING);
+		await tick();
+		const again = (await reportOf(assessor, runA)).cumulative.combined!;
+		expect(again.notAssessed).toBeNull();
+		expect(again.assessment).toMatchObject({ id: res.body.assessment.id, name: 'Both, again', engineVersion: ENGINE_VERSION });
+	});
+
+	it('says why no assessment can match while the server runs another engine than the baseline’s', () => {
+		expect(staleAssessment(null, '1.0.0', '1.0.0')).toBeNull();
+		expect(staleAssessment('0.9.0', '1.0.0', '1.0.0')).toMatch(/assessed together on engine 0\.9\.0, but the baseline ran on engine 1\.0\.0, .*assess them together again\.$/);
+		expect(staleAssessment(null, '1.0.0', '1.1.0')).toBe(
+			'the baseline ran on engine 1.0.0, and an assessment now runs on engine 1.1.0, so none made now would match the report’s baseline: run the baseline again on engine 1.1.0 and assess the applications on that run.'
+		);
+		expect(staleAssessment('1.0.0', '0.9.0', '1.1.0')).toMatch(/^they were assessed together on engine 1\.0\.0, but the baseline ran on engine 0\.9\.0, and an assessment now runs on engine 1\.1\.0/);
 	});
 
 	it('is not assessed when an application on the baseline conflicts with this one, naming the conflict', async () => {

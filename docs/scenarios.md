@@ -842,7 +842,9 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
 Page 1's row over the other applications (C26, report format
 `evidence-11`) reads a completed assessment of exactly the report's
 application and every other submitted or approved one on its baseline, with
-their current ops: the combined change and the interaction at the outlet.
+their current ops, made on the baseline run's engine (so its baseline
+figure is the report's own; one on another engine is named with why it
+isn't read): the combined change and the interaction at the outlet.
 Without one the report checks the combination itself (`checkCombination`,
 no model run) and names any conflict, or says the applications haven't been
 assessed together ([evidence-pack.md § The other applications

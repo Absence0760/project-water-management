@@ -204,9 +204,18 @@ based on this baseline (`cumulative.combined`; engine
   of each alone and the **interaction** (combined − Σ each alone). It does
   not run the model itself: a combination is up to 8 + 2 runs, which a
   report request (a viewer's GET, a pack draft, the issue route's live
-  check) must not carry. The note names the assessment, its date and engine;
-  its baseline column is the assessment's run of the baseline, so it may
-  differ from the stored run's on an older engine.
+  check) must not carry. The note names the assessment, its date and engine.
+- **Only one on the baseline run's engine** (operator decision,
+  2026-10-01). The assessment's baseline column is its own run of the
+  baseline, so the row reads only an assessment made on the engine the
+  baseline run used: its baseline figure is then the report's own. One of
+  exactly these applications made on another engine isn't read; the row is
+  *Not assessed* and says why (*they were assessed together on engine X, but
+  the baseline ran on engine Y, …: assess them together again*). An
+  assessment runs on the server's current engine, so while that isn't the
+  baseline's, no new one can match either, and the row says to run the
+  baseline again on the current engine and assess on that run
+  (`staleAssessment`).
 - **A conflict is never merged.** Without a matching assessment the backend
   still checks the combination (`checkCombination`, pure, no model run), so
   two applications that change the same thing make the row *Not assessed*
