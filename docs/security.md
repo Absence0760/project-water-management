@@ -2317,6 +2317,48 @@ database:
   (`allocations/water-use.db.test.ts`, the WUA's preview as positive
   control).
 
+### Map uploads (152_catchment_map.sql)
+
+The Map tab (issue #288, [maps.md](./maps.md)) takes GeoJSON files and
+placed points. The server never trusts the browser with geometry:
+
+- Every geometry is parsed and checked in `backend/src/geo/geojson.ts`
+  before it is stored, whatever the client sent: WGS84 ranges (a projected
+  file is refused, never reprojected by guess), 2D, the five supported
+  types, closed rings with an area that don't cross themselves, holes
+  inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
+  50 000 positions per feature; the self-crossing sweep stops at 5 million
+  comparisons and refuses the ring, so a crafted file can't cost quadratic
+  time. The import route has its own body limit (7 MB of JSON, `app.ts`
+  exempts that one path from the general 4 MB), and the parse is
+  `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
+  there is no archive to bomb), no external references.
+- Every **area is computed on the server** (`geo/area.ts`); a client's figure
+  is never accepted. An area reaches the model only through
+  `area-from-map`, an editor's explicit action recorded as a model revision.
+- **Properties are allowlisted** (`name`, `description`, `ref`; capped):
+  a GIS attribute table can carry owners' names, ID numbers or phone numbers,
+  and anything else is dropped before storage (POPIA minimisation, as the
+  allocations import refuses such columns). The file's name and SHA-256 are
+  kept for provenance; its text is not.
+- Feature names and descriptions render through Svelte's escaping, and map
+  markers are DOM buttons built with `createElement`, labelled with
+  `setAttribute` and `textContent`-free SVG (no `innerHTML`;
+  `rawHtml.test.ts`).
+- RLS: viewers read, editors write; a farmer or applicant reads only the
+  boundary, gauges, rivers and their own farm's features (no route serves
+  them yet). `quaternary_reference` is public reference data, readable by any
+  signed-in user and written by no app role (the operator loads it as the
+  schema owner).
+- No third-party origin: MapLibre is bundled, its worker is same-origin
+  (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
+  with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and
+  bundle](./maps.md#csp-and-bundle)).
+- Account deletion: `geo_source.imported_by` and `map_feature.created_by`
+  are `SET NULL` (the features are the project's; catalogue guard). A map
+  feature holds no personal information about its creator, so the
+  data-subject export doesn't list them.
+
 ## Personal information (POPIA)
 
 What the app keeps about people, why, for how long, and what happens on a

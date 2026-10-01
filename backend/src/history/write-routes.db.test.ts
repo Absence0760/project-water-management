@@ -359,6 +359,43 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['allocation.import_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
+	// --- the Map tab (152, issue #288) -----------------------------------------------------
+	{
+		route: `POST ${P}/map/import`,
+		records: ['map.imported'],
+		call: async (c) => {
+			const square = [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]];
+			const text = JSON.stringify({ type: 'Feature', properties: { name: 'Guard parcel' }, geometry: { type: 'Polygon', coordinates: square } });
+			const r = await c.owner.call('POST', `${at(c)}/map/import`, { fileName: 'guard.geojson', kind: 'farm_parcel', text });
+			c.mapParcelId = r.body.features[0].id;
+			return r;
+		}
+	},
+	{
+		// An area from the map is a model change: a revision whose reason names the feature.
+		route: `POST ${P}/nodes/:nodeId/area-from-map`,
+		records: ['revision'],
+		call: (c) => c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/area-from-map`, { featureId: c.mapParcelId })
+	},
+	{
+		route: `POST ${P}/map/features`,
+		records: ['map.feature_created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'gauge', name: 'Guard gauge', lon: 21.31, lat: -33.69 });
+			c.mapPointId = r.body.feature.id;
+			return r;
+		}
+	},
+	{
+		route: `PATCH ${P}/map/features/:fid`,
+		records: ['map.feature_changed'],
+		call: (c) => c.owner.call('PATCH', `${at(c)}/map/features/${c.mapPointId}`, { name: 'Guard weir' })
+	},
+	{
+		route: `DELETE ${P}/map/features/:fid`,
+		records: ['map.feature_deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/map/features/${c.mapPointId}`)
+	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{
 		route: `POST ${P}/scenarios/:sid/submit`,

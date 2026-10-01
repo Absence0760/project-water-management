@@ -117,13 +117,13 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 (`routes/projects/[id]`) is split further, because it carries most of the app:
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
-River & reserve, Hydrological units, Runs & results, Scenarios, History) is a dynamic `import()` of its component, as are the two
+River & reserve, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and River & reserve's compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). Inside the Overview, the flow chart,
+water users). The Map tab loads its map component as one more chunk, and that loads MapLibre (and the PMTiles reader, with a basemap) only when the map is drawn, measured against a ceiling of their own (issue #288, [maps.md § CSP and bundle](./maps.md#csp-and-bundle)). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
 room for the section header, issue #17). The compare page loads its daily overlay and, only when a side

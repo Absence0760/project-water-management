@@ -1,0 +1,4 @@
+{
+	"addKb": 23,
+	"why": "Issue #288, the Map tab (WP-3.12): the tab (7 KB), its map component (4 KB), the map helpers (1 KB), the WR2012 proposal (4 KB, its own chunk), MapLibre's worker entry (6 KB) and their CSS. MapLibre and PMTiles themselves are measured against mapKb, not here. Measured 1439 locally against main @ 911cb093's 1416 (+23 KB)."
+}
