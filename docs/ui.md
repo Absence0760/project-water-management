@@ -4844,8 +4844,35 @@ read it before.
   series with the engine's `recessionPoints`, so the summary holds only the
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
-  those runs; an older run shows neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  those runs; an older run shows neither. From engine 1.55.0, after it,
+  **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
+  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
+  signatures*, CR-16): which record is scored (the outlet's gauge or logger
+  record, or the calibration site's, named) and on how many days; a verdict
+  line; a table with a row each for the base-flow index by the Hughes et al.
+  (2003) and the Eckhardt (2005) filters, the low-flow FDC's Q70–Q95 slope,
+  the low-flow volume bias (%BiasFLV) and the skill on held-out recessions
+  (observed = the river's own recession curve fitted on the other segments,
+  simulated = the model), each with its observed and simulated value, the
+  difference or bias, the **Provisional limit** and *within* / *outside* /
+  *not judged* (a row outside its limit shaded); and a line on how the
+  recessions were held out. The intro says the limits are provisional, for
+  the hydrologist to confirm: they are the engine's warning limits (±0.15
+  BFI by either filter, ±50 % on the slope bias and %BiasFLV, a held-out
+  skill of at least 0 with 8 or more segments), which the display reads
+  through one named constant, `PROVISIONAL_SIGNATURE_LIMITS` in
+  `runs/signatures.ts` ([followups.md § Hydrologist](./followups.md#hydrologist)).
+  The check list gains a *Validation signatures* line (so does the run's
+  credibility strip, which counts the check list's findings) and the
+  panel's intro counts six checks on those runs; a run with no observed
+  record shows the heading and "Not computed: needs an observed flow
+  record."; a run made before 1.55.0 shows neither. The help article
+  *Validation signatures* (`plausibility-signatures`) explains BFI, the two
+  filters, the low-flow slope and %BiasFLV and the held-out recession skill
+  in plain words. The Compare page sets the first four checks and the
+  gauges side by side
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
+  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
@@ -6490,17 +6517,19 @@ Part of the workspace, so English, like the rest of the Applicant view
   withdraw their links too; making one needs it issued), **Verify page**,
   where it stands (`standingLine`: issued and standing; replaced, with
   **Open the version that replaced it**; withdrawn, with the reason), and a
-  note that this is their copy: their own units by name, every other only
-  by a number, as the rest of the application; the assessors' copy, its PDF
+  note that this is their copy: their own units by name, the others
+  downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
 - **Hydrological units**: *Yours* (share of demand supplied, baseline, with
   the application, the change in points and its likely range; a unit the
-  application adds says so) and *Everyone else* (a one-line count of who
-  gets less and who more, then "Farm n" / "Water user n" with the change in
-  whole points, and a line saying the numbers are the pack's own). When the
+  application adds says so) and *Everyone else downstream* (a one-line
+  count of who gets less and who more, then each farm or water user
+  downstream of the application under the name the results view and the
+  map give it, "Farm 3", with the change in whole points; when the run's
+  base is no longer published, a line says why none is shown). When the
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
@@ -6511,7 +6540,8 @@ Part of the workspace, so English, like the rest of the Applicant view
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
-  view, their farm named and the neighbour as "Farm 1", no download, the
+  view, their farm named and the neighbour beside it, not downstream, not
+  listed (as in the results view), no download, the
   errata found since issue, a share link opened signed out, axe, the phone
   layout).
 

@@ -68,20 +68,25 @@ describe('the units', () => {
 		]);
 	});
 
-	it('shows every other unit by kind and number only', () => {
+	it('shows every other unit downstream under the anonymous name the API gives it', () => {
 		const others = [
-			{ kind: 'farm' as const, n: 1, changePts: -4 },
-			{ kind: 'farm' as const, n: 2, changePts: 0 },
-			{ kind: 'user' as const, n: 1, changePts: 3 }
+			{ kind: 'farm' as const, name: 'Farm 3', changePts: -4 },
+			{ kind: 'farm' as const, name: 'Farm 1', changePts: 0 },
+			{ kind: 'user' as const, name: 'Water user 1', changePts: 3 }
 		];
 		expect(otherUnitLines(others)).toEqual([
-			{ name: 'Farm 1', change: '−4 points' },
-			{ name: 'Farm 2', change: 'no change' },
+			{ name: 'Farm 3', change: '−4 points' },
+			{ name: 'Farm 1', change: 'no change' },
 			{ name: 'Water user 1', change: '+3 points' }
 		]);
 		expect(othersSummary(others)).toBe('Of 3 other units, 1 gets less of its demand and 1 more.');
-		expect(othersSummary([{ kind: 'farm', n: 1, changePts: 0 }])).toBe('The one other unit doesn’t change by a whole point or more.');
-		expect(othersSummary([{ kind: 'farm', n: 1, changePts: 0 }, { kind: 'user', n: 1, changePts: 0 }])).toBe('None of the 2 other units changes by a whole point or more.');
-		expect(othersSummary([])).toBe('No other farm or water user is in both runs.');
+		expect(othersSummary([{ kind: 'farm', name: 'Farm 1', changePts: 0 }])).toBe('The one other unit doesn’t change by a whole point or more.');
+		expect(othersSummary([{ kind: 'farm', name: 'Farm 1', changePts: 0 }, { kind: 'user', name: 'Water user 1', changePts: 0 }])).toBe('None of the 2 other units changes by a whole point or more.');
+		expect(othersSummary([])).toBe('No other farm or water user downstream of your application is in both runs.');
+	});
+
+	it('says why no other unit is shown when the base is no longer published', () => {
+		expect(otherUnitLines(null)).toEqual([]);
+		expect(othersSummary(null)).toMatch(/^Not shown: this pack’s base is no longer a published run/);
 	});
 });
