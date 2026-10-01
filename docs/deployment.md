@@ -1540,7 +1540,11 @@ they are. Two pieces are not deployed yet, each in
   The labels' glyph ranges (#326 A6) ride the same behaviour: the
   `fonts/` tree `bin/tiles-dev.sh fonts` builds, in S3 under
   `tiles/fonts/`, and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
-  (empty until then: no names on the map).
+  (empty until then: no names on the map). The relief's DEM
+  ([maps.md § Relief](./maps.md#relief)) is one more file there,
+  `tiles/terrain.pmtiles`, with `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`,
+  once the Copernicus licence's liability sentence is in the app's legal
+  notice (empty until then: no Relief layer offered).
 - **Quaternary dataset**: `quaternary_reference` is empty in production
   until the operator loads one, so the lookup says no dataset is loaded.
   There is no production loading path yet, and WR2012's licence terms are a

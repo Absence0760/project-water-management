@@ -1,16 +1,17 @@
 // The local basemap upload (tiles-upload.ts): the URLs it prints for the
-// frontend, and which files of a fonts directory become glyph objects
+// frontend (basemap, relief, glyphs), and which files of a fonts directory become glyph objects
 // (#326 A6): only `<fontstack>/<n>-<n+255>.pbf` and the licence.
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, tilesUrl } from './tiles-upload.js';
+import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, terrainUrl, tilesUrl } from './tiles-upload.js';
 
 describe('tiles-upload', () => {
 	it('prints localhost URLs for the tiles and the glyphs, braces kept for MapLibre', () => {
 		expect(tilesUrl('http://127.0.0.1:9002/')).toBe('http://localhost:9002/tiles/south-africa.pmtiles');
 		expect(glyphsUrl('http://127.0.0.1:9002')).toBe('http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf');
+		expect(terrainUrl('http://127.0.0.1:9002')).toBe('http://localhost:9002/tiles/terrain.pmtiles');
 	});
 
 	it('lets anyone GET an object and nothing else', () => {

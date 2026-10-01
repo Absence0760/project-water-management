@@ -20,7 +20,11 @@ import {
 	quaternaryColour,
 	quaternaryData,
 	quaternaryLayers,
+	RELIEF_LAYER,
+	reliefBeforeId,
 	RESULT_FILL_OPACITY,
+	TERRAIN_ATTRIBUTION,
+	TERRAIN_SOURCE,
 	withAlpha
 } from './mapStyle';
 
@@ -259,6 +263,63 @@ describe('quaternary outlines (#326 A6)', () => {
 			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(q, g), `${q} on ${g}`).toBeGreaterThanOrEqual(3);
 			const c = overlayColours(dark);
 			for (const s of [c.boundary, c.parcel, c.water, c.other]) expect(deltaE(q, s), `${q} vs ${s}`).toBeGreaterThanOrEqual(40);
+		}
+	});
+});
+
+describe('relief (shaded from a DEM)', () => {
+	const tiles = 'http://localhost:9002/tiles/south-africa.pmtiles';
+	const terrain = 'http://localhost:9002/tiles/terrain.pmtiles';
+	const data = overlayData([], null);
+
+	it('fetches no DEM and draws no relief without a terrain URL (the default: a fresh clone and CI)', () => {
+		for (const t of [tiles, null]) {
+			const s = mapStyle(t, false, data, { terrain: null });
+			expect(s.sources).not.toHaveProperty(TERRAIN_SOURCE);
+			expect(s.layers.some((l) => l.type === 'hillshade')).toBe(false);
+		}
+	});
+
+	it('reads one Terrarium PMTiles file with the Copernicus notice the licence asks for', () => {
+		const s = mapStyle(tiles, false, data, { terrain });
+		expect(s.sources[TERRAIN_SOURCE]).toEqual({ type: 'raster-dem', url: `pmtiles://${terrain}`, encoding: 'terrarium', tileSize: 512, attribution: TERRAIN_ATTRIBUTION });
+		// Copernicus DEM licence, Art. 6(b): the notice for adapted data, word for word.
+		expect(TERRAIN_ATTRIBUTION).toContain('produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved');
+	});
+
+	it('shades over the land and land cover, under the water, roads, outlines, features and names', () => {
+		for (const dark of [false, true]) {
+			const ids = mapStyle(tiles, dark, data, { terrain, glyphs: 'http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf' }).layers.map((l) => l.id);
+			const at = ids.indexOf(RELIEF_LAYER);
+			for (const below of ['background', 'bm-earth', 'bm-landcover', 'bm-landuse']) expect(ids.indexOf(below), below).toBeLessThan(at);
+			for (const above of ['bm-water', 'bm-roads', 'qt-line', 'ov-parcel-fill', 'ov-selected', 'bm-label-places']) expect(ids.indexOf(above), above).toBeGreaterThan(at);
+		}
+	});
+
+	it('with no basemap, shades the plain background under the outlines and features', () => {
+		const ids = mapStyle(null, false, data, { terrain }).layers.map((l) => l.id);
+		expect(ids.slice(0, 3)).toEqual(['background', RELIEF_LAYER, 'qt-fill']);
+	});
+
+	it('is not a basemap layer: the basemap failing leaves the relief drawn', () => {
+		expect(basemapLayerIds(mapStyle(tiles, false, data, { terrain }))).not.toContain(RELIEF_LAYER);
+	});
+
+	it('goes in before the water on a live map too, or on top of an empty one', () => {
+		expect(reliefBeforeId(['background', 'bm-earth', 'bm-landcover', 'bm-landuse', 'bm-water', 'bm-roads'])).toBe('bm-water');
+		expect(reliefBeforeId(['background', 'qt-fill', 'ov-casing'])).toBe('qt-fill');
+		expect(reliefBeforeId([])).toBeUndefined();
+	});
+
+	it('keeps its shading translucent, so the basemap’s colours read through it', () => {
+		for (const dark of [false, true]) {
+			const l = mapStyle(null, dark, data, { terrain }).layers.find((x) => x.id === RELIEF_LAYER)!;
+			const paint = l.paint as Record<string, unknown>;
+			expect(paint['hillshade-exaggeration']).toBeLessThanOrEqual(0.5);
+			for (const k of ['hillshade-shadow-color', 'hillshade-highlight-color', 'hillshade-accent-color']) {
+				const alpha = Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(String(paint[k]))?.[1]);
+				expect(alpha, k).toBeLessThanOrEqual(0.6);
+			}
 		}
 	});
 });

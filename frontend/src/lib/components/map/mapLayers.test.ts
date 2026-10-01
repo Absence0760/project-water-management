@@ -1,4 +1,4 @@
-// The Map tab's layers (mapLayers.ts, issue #326 A6): `layers=` in the URL and
+// The Map tab's layers (mapLayers.ts, issue #326 A6, the relief): `layers=` in the URL and
 // the bbox the quaternaries are asked for around the features.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
@@ -19,6 +19,13 @@ describe('layers in the URL', () => {
 		expect(new URLSearchParams(on).get('layers')).toBe('quaternaries');
 		expect(new URLSearchParams(on).get('feature')).toBe('f1');
 		expect(withLayer(on, 'quaternaries', false)).toBe('?tab=map&feature=f1');
+	});
+
+	it('keeps the relief and the quaternaries apart, listed in a fixed order whichever went on first', () => {
+		const both = withLayer(withLayer('?tab=map', 'relief', true), 'quaternaries', true);
+		expect(new URLSearchParams(both).get('layers')).toBe('quaternaries,relief');
+		expect([...layersOn(new URLSearchParams(both))]).toEqual(['quaternaries', 'relief']);
+		expect(new URLSearchParams(withLayer(both, 'quaternaries', false)).get('layers')).toBe('relief');
 	});
 });
 

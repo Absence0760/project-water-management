@@ -22,11 +22,12 @@
 	// through its sheet's confirm. Anyone can Measure (measure/, the drawing
 	// mode with nothing saved) and Download GeoJSON (mapExport.ts, built from
 	// the loaded list); the Layers box turns on the quaternary outlines
-	// (`layers=quaternaries`, #326 A6, A7).
+	// (`layers=quaternaries`, #326 A6, A7) and, with a DEM configured, the
+	// relief (`layers=relief`, docs/maps.md § Relief).
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
+	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
 	import { api, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -91,6 +92,8 @@
 	const tilesUrl = PUBLIC_TILES_URL?.trim() || null;
 	/** The labels' glyphs (#326 A6): empty = no labels, nothing fetched (docs/maps.md § Labels). */
 	const glyphs = glyphsUrl(PUBLIC_TILES_GLYPHS_URL, typeof location === 'undefined' ? '' : location.origin);
+	/** The relief's DEM (docs/maps.md § Relief): empty = no Relief layer offered, nothing fetched. */
+	const terrainUrl = PUBLIC_TERRAIN_URL?.trim() || null;
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const GRID_ID = 'map-features';
 
@@ -302,6 +305,10 @@
 		on: () => layersOn(params).has('quaternaries'),
 		features: () => features
 	});
+
+	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
+	const relief = $derived(!!terrainUrl && layersOn(params).has('relief'));
+	let reliefFailed = $state(false);
 
 	// --- per feature: link, area, delete (from the card and from Every feature) ---
 	let busy = $state<string | null>(null);
@@ -548,6 +555,9 @@
 									quaternaries={quaternaries.outlines}
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
+									{terrainUrl}
+									{relief}
+									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
 								/>
 							{/snippet}
@@ -621,9 +631,9 @@
 						</section>
 					{/if}
 
-					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed. -->
+					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed; the relief when a DEM is configured. -->
 					<div class="panel side-box layers-box">
-						<MapLayers {quaternaries} {dark} />
+						<MapLayers {quaternaries} {dark} relief={terrainUrl ? { on: relief, failed: reliefFailed } : null} />
 					</div>
 
 					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
