@@ -114,7 +114,8 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 				await requireRole(db, id, 'editor');
 				const { rows } = await db.query<RegistrationCheckRow>(`${SELECT} WHERE c.project_id = $1 ORDER BY c.checked_at DESC, c.id DESC`, [id]);
 				const { rows: p } = await db.query<{ r: boolean }>('SELECT require_registration_check AS r FROM project WHERE id = $1', [id]);
-				return c.json({ checks: rows, required: (p[0]?.r ?? true) && registrationCheckRequired() });
+				// The owner's setting as chosen; REGISTRATION_CHECK_REQUIRED=false (tests, e2e) only stops issue enforcing it.
+				return c.json({ checks: rows, required: p[0]?.r ?? true });
 			},
 			{ readOnly: true }
 		)
@@ -165,6 +166,6 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 			);
 			if (!rows[0]) throw notFound();
 			if (rows[0].was !== body.required) await recordAudit(db, id, 'registration.requirement', { required: body.required });
-			return c.json({ required: body.required && registrationCheckRequired() });
+			return c.json({ required: body.required });
 		});
 	});

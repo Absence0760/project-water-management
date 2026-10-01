@@ -261,7 +261,10 @@ describe('the registration check', () => {
 	});
 
 	it('is read by the editors and the person, never by a viewer or another member', async () => {
-		expect((await assessor.call('GET', `${P()}/registration-checks`)).body.checks).toHaveLength(2);
+		const listed = (await assessor.call('GET', `${P()}/registration-checks`)).body;
+		expect(listed.checks).toHaveLength(2);
+		// The owner's setting as chosen (on by default), whatever the tests' switch.
+		expect(listed.required).toBe(true);
 		expect((await viewer.call('GET', `${P()}/registration-checks`)).status).toBe(403);
 		const own = (u: User) => withUser(u.id, async (db) => (await db.query('SELECT id FROM registration_check WHERE project_id = $1', [projectId])).rows);
 		expect(await own(specialistA)).toHaveLength(1);
@@ -336,6 +339,7 @@ describe('the project’s requirement', () => {
 		const r = await owner.call('PUT', `${P()}/registration-check-required`, { required: false });
 		expect(r.status).toBe(200);
 		expect((await asOwner('SELECT require_registration_check AS r FROM project WHERE id = $1', [projectId]))[0]).toEqual({ r: false });
+		expect((await assessor.call('GET', `${P()}/registration-checks`)).body.required).toBe(false);
 		expect(await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'registration.requirement'`, [projectId])).toEqual([{ subject: { required: false } }]);
 	});
 });
