@@ -1,4 +1,4 @@
--- 161_licensing_authority — the responsible authority decides; the app
+-- 163_licensing_authority — the responsible authority decides; the app
 -- records it (provisional position, pre-counsel research, 2026-10-01:
 -- docs/legal/licensing-positions.md items 1 and 3; docs/scenarios.md
 -- § Applications "Workflow", docs/data-model.md § Applications).
@@ -20,7 +20,10 @@
 --     app's stamp), its licence or file reference and whether written
 --     reasons were received (s42(b)). Set once, with the outcome, and never
 --     changed. A decision recorded before this migration has no authority,
---     date or reasons: its authority reads "Not recorded (before 161)".
+--     date or reasons: its authority reads "Not recorded (before 163)". A
+--     team scenario an editor marks decided (PATCH status, no outcome) is a
+--     team's own what-if, no licence decision: it records none of this, as
+--     before; recording an outcome on any scenario is the authority's.
 --  2. Authority capacity. project_member.acts_for_authority: the project's
 --     owner marks the members who act for the responsible authority. Only a
 --     marked editor (or owner) records a decision. The authority's name
@@ -64,28 +67,28 @@ ALTER TABLE scenario
 ALTER TABLE scenario DISABLE TRIGGER scenario_guard;
 UPDATE scenario SET outcome = CASE outcome WHEN 'refused' THEN 'licence_refused' ELSE 'licence_issued' END
 	WHERE outcome IN ('approved', 'approved_with_conditions', 'refused');
-UPDATE scenario SET decision_authority = 'Not recorded (before 161)' WHERE status = 'decided';
+UPDATE scenario SET decision_authority = 'Not recorded (before 163)' WHERE status = 'decided' AND outcome IS NOT NULL;
 ALTER TABLE scenario ENABLE TRIGGER scenario_guard;
 
 ALTER TABLE scenario
 	ADD CONSTRAINT scenario_outcome_check CHECK (outcome IN ('licence_issued', 'licence_refused', 'application_rejected', 'not_considered')),
-	ADD CONSTRAINT scenario_decision_recorded CHECK ((status = 'decided') = (decision_authority IS NOT NULL)),
+	ADD CONSTRAINT scenario_decision_recorded CHECK ((outcome IS NOT NULL) = (decision_authority IS NOT NULL)),
 	ADD CONSTRAINT scenario_decision_fields CHECK (status = 'decided' OR (decision_date IS NULL AND decision_reference = '' AND reasons_received IS NULL));
 
 COMMENT ON COLUMN scenario.outcome IS
-	'The responsible authority''s decision on an application, as recorded by a member acting for it (161): licence_issued, licence_refused, application_rejected or not_considered. Set once, on the move to decided, with decision_authority, decision_date, decision_reference, reasons_received, decided_at, decided_by and decision_note.';
+	'The responsible authority''s decision on an application, as recorded by a member acting for it (163): licence_issued, licence_refused, application_rejected or not_considered. Set once, on the move to decided, with decision_authority, decision_date, decision_reference, reasons_received, decided_at, decided_by and decision_note.';
 COMMENT ON COLUMN scenario.decision_authority IS
-	'The responsible authority whose decision this is (161), named by whoever recorded it; NOT NULL exactly when decided. "Not recorded (before 161)" on a decision recorded before 161.';
-COMMENT ON COLUMN scenario.decision_date IS 'The date on the authority''s decision letter (161); decided_at is when the app recorded it. NULL only on a decision recorded before 161.';
-COMMENT ON COLUMN scenario.decision_reference IS 'The authority''s licence or file reference (161); '''' = none given.';
-COMMENT ON COLUMN scenario.reasons_received IS 'Whether the authority''s written reasons were received (NWA s42(b); 161). NULL only on a decision recorded before 161.';
+	'The responsible authority whose decision this is (163), named by whoever recorded it; NOT NULL exactly when there is an outcome (every decided application; a team scenario marked decided has neither). "Not recorded (before 163)" on a decision recorded before 163.';
+COMMENT ON COLUMN scenario.decision_date IS 'The date on the authority''s decision letter (163); decided_at is when the app recorded it. NULL only on a decision recorded before 163.';
+COMMENT ON COLUMN scenario.decision_reference IS 'The authority''s licence or file reference (163); '''' = none given.';
+COMMENT ON COLUMN scenario.reasons_received IS 'Whether the authority''s written reasons were received (NWA s42(b); 163). NULL only on a decision recorded before 163.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Who acts for the authority.
 -- ---------------------------------------------------------------------------
 ALTER TABLE project_member ADD COLUMN acts_for_authority boolean NOT NULL DEFAULT false;
 COMMENT ON COLUMN project_member.acts_for_authority IS
-	'The member acts for the project''s responsible authority (161, settings.responsibleAuthority): as an editor or owner, they record the authority''s decision on an application and endorse a published baseline. Set only by an owner of the project; false on a new membership.';
+	'The member acts for the project''s responsible authority (163, settings.responsibleAuthority): as an editor or owner, they record the authority''s decision on an application and endorse a published baseline. Set only by an owner of the project; false on a new membership.';
 
 -- water_app changes a membership's role, party and this flag only (member_update keeps it to owners).
 REVOKE UPDATE ON project_member FROM water_app;
@@ -187,8 +190,10 @@ CREATE OR REPLACE FUNCTION scenario_guard() RETURNS trigger
 				RAISE EXCEPTION 'a scenario can''t go from % to %', OLD.status, NEW.status USING ERRCODE = 'check_violation';
 			END IF;
 			deciding := NEW.status = 'decided' AND OLD.status <> 'decided';
-			-- 161: a decision is the responsible authority's, recorded by a member acting for it.
-			IF deciding THEN
+			-- 163: a decision is the responsible authority's, recorded by a member acting for it:
+			-- every application's, and any outcome on a team scenario (one an editor only marks
+			-- decided, with no outcome, records nothing and needs no authority, as before).
+			IF deciding AND (OLD.origin = 'applicant' OR NEW.outcome IS NOT NULL) THEN
 				IF NOT app_acts_for_authority(NEW.project_id) THEN
 					RAISE EXCEPTION 'only a member acting for the responsible authority records its decision' USING ERRCODE = 'insufficient_privilege';
 				END IF;
@@ -260,7 +265,7 @@ ALTER TABLE run_publication
 	ADD CONSTRAINT run_publication_endorsement CHECK (endorsed_at IS NOT NULL OR (endorsed_by IS NULL AND endorsement_note = ''));
 CREATE INDEX run_publication_endorsed_by_idx ON run_publication (endorsed_by);
 COMMENT ON COLUMN run_publication.endorsed_at IS
-	'When a member acting for the responsible authority endorsed this published baseline (161, POST …/publication/:pubId/endorse); with endorsed_by (NULL once that account is gone) and endorsement_note. Set once, never changed; evidence reports on its run print it.';
+	'When a member acting for the responsible authority endorsed this published baseline (163, POST …/publication/:pubId/endorse); with endorsed_by (NULL once that account is gone) and endorsement_note. Set once, never changed; evidence reports on its run print it.';
 
 GRANT UPDATE (endorsed_by, endorsed_at, endorsement_note) ON run_publication TO water_app;
 

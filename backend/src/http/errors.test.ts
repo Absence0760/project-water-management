@@ -38,7 +38,7 @@ describe('handleError', () => {
 	});
 });
 
-describe('handleError: the conflict guard (161_licensing_authority)', () => {
+describe('handleError: the conflict guard (163_licensing_authority)', () => {
 	it('answers its check_violation as 409 role_conflict with fixed words, never the database’s text', async () => {
 		const pg = Object.assign(new Error('someone who edits a project … farmer@example.com'), { code: '23514', constraint: 'role_conflict' });
 		const res = await appThrowing(pg).request('/');

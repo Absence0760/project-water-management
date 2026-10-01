@@ -149,13 +149,15 @@ beforeAll(async () => {
 	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-10-01', values: rain });
 	await call(subject, 'PATCH', `/projects/${projectId}`, { settings: { lakeEvapFactor: 0.9 } });
 	// member.authority names them in the log (pseudonymised on deletion, 048). An owner can't be in an
-	// applying party any more (161's conflict guard), which member.party used to stand in for here.
+	// applying party any more (163's conflict guard), which member.party used to stand in for here.
 	await actForAuthority(owner, projectId, subject.id);
 	await call(subject, 'POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
 	await call(subject, 'PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked' });
 	const pub = await call(subject, 'POST', `/projects/${projectId}/publication`, { runId });
 	await call(subject, 'PATCH', `/projects/${projectId}/publication/${pub.publication.id}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } });
+	// They endorse it for the responsible authority (163): run_publication.endorsed_by, cleared on deletion.
+	await call(subject, 'POST', `/projects/${projectId}/publication/${pub.publication.id}/endorse`, { note: 'Accepted as the baseline.' });
 	const key = await call(subject, 'POST', `/projects/${projectId}/api-keys`, { name: 'logger' });
 	await call(subject, 'DELETE', `/projects/${projectId}/api-keys/${key.key.id}`);
 	const link = await call(subject, 'POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 });

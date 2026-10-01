@@ -227,7 +227,7 @@ const WRITE_ROUTES: Entry[] = [
 		route: `POST ${P}/publication/:pubId/endorse`,
 		records: ['publication.endorsed', 'member.authority'],
 		call: async (c) => {
-			// Marking the owner as acting for the authority is its own recorded change (member.authority, 161).
+			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
 			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
 			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
 		}

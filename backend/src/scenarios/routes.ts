@@ -126,7 +126,7 @@ const subject = (s: Pick<ScenarioRow, 'id' | 'name' | 'origin'>, extra: Record<s
 	s.origin === 'applicant' && !decided ? { scenarioId: s.id, application: true, ...extra } : { scenarioId: s.id, name: s.name, ...extra };
 
 /** Move a scenario's status after the caller's right to has been checked; the guard trigger checks the move again. */
-/** What recording the authority's decision writes beside the move (161_licensing_authority). */
+/** What recording the authority's decision writes beside the move (163_licensing_authority). */
 interface DecisionRecord {
 	outcome: string;
 	note: string;
@@ -464,7 +464,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
 		});
 	})
-	// Record the responsible authority's decision (161_licensing_authority): an
+	// Record the responsible authority's decision (163_licensing_authority): an
 	// editor the owner marks as acting for the authority, who didn't make the
 	// application. The app records the decision; it never makes one.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
@@ -551,7 +551,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const added = await db
 				.query('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [s.id, id, userId])
 				.catch(async (err: { code?: string; constraint?: string }) => {
-					// 161's conflict guard (an editor can't be shared an application): said as
+					// 163's conflict guard (an editor can't be shared an application): said as
 					// it is to a viewer and up, who read the member list anyway; an applicant
 					// gets the one refusal (their candidates are their party, never an editor).
 					if (err.constraint === 'role_conflict' && rank[role] >= rank.viewer) throw err;

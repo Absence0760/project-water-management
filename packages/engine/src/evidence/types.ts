@@ -173,7 +173,7 @@ export interface EvidenceEnsembleInput {
 	paired: PairedSummary | null;
 }
 
-/** The project's responsible authority (settings.responsibleAuthority, 161; evidence-12). */
+/** The project's responsible authority (settings.responsibleAuthority, 163; evidence-13). */
 export interface EvidenceAuthority {
 	name: string;
 	/** dws: the Department of Water and Sanitation; cma: a catchment management agency with the power. */
@@ -182,7 +182,7 @@ export interface EvidenceAuthority {
 	office: string;
 }
 
-/** A member acting for the responsible authority endorsed the baseline's publication (161; evidence-12). */
+/** A member acting for the responsible authority endorsed the baseline's publication (163; evidence-13). */
 export interface EvidenceEndorsement {
 	endorsedAt: string;
 	/** Display name; null once that account is gone. */
@@ -226,7 +226,7 @@ export interface EvidenceOtherApplicationInput {
 	scenarioId: string;
 	scenarioName: string;
 	status: 'submitted' | 'decided';
-	/** The authority's outcome, when decided: 'licence_issued' (the only decided outcome the table takes; evidence-12; 'approved' or 'approved_with_conditions' in a pack drafted before). */
+	/** The authority's outcome, when decided: 'licence_issued' (the only decided outcome the table takes; evidence-13; 'approved' or 'approved_with_conditions' in a pack drafted before). */
 	outcome: string | null;
 	runId: string;
 	runCreatedAt: string;
@@ -292,9 +292,9 @@ export interface EvidenceInput {
 	nominations: EvidenceNomination[];
 	/** The current publication and the one before it, when there are any. */
 	publication: { current: EvidencePublication | null; previous: EvidencePublication | null };
-	/** The project's responsible authority (evidence-12); null or absent when it names none. */
+	/** The project's responsible authority (evidence-13); null or absent when it names none. */
 	authority?: EvidenceAuthority | null;
-	/** The newest endorsement of a publication of the baseline run (evidence-12); null or absent when none. */
+	/** The newest endorsement of a publication of the baseline run (evidence-13); null or absent when none. */
 	baselineEndorsement?: EvidenceEndorsement | null;
 	/** Every ensemble started on the baseline, and every paired ensemble on the application run, newest first. */
 	ensembles: { baseline: EvidenceEnsembleInput[]; paired: EvidenceEnsembleInput[] };
@@ -876,10 +876,10 @@ export interface EvidenceReport {
 			/** Where the run stands against the project's publication (WP-2.3), persona A: "baseline provenance". */
 			published: 'this' | 'other' | 'none';
 			publishedAt: string | null;
-			/** The responsible authority's endorsement of this baseline (evidence-12); null = not endorsed. Absent from an older pack's document. */
+			/** The responsible authority's endorsement of this baseline (evidence-13); null = not endorsed. Absent from an older pack's document. */
 			endorsement?: EvidenceEndorsement | null;
 		};
-		/** Whom the report is for: the project's responsible authority (evidence-12); null when it names none. Absent from an older pack's document. */
+		/** Whom the report is for: the project's responsible authority (evidence-13); null when it names none. Absent from an older pack's document. */
 		authority?: EvidenceAuthority | null;
 		application: {
 			runId: string;

@@ -1006,7 +1006,7 @@ export const SettingsPatch = z
 		outcomes: OutcomesPatch,
 		// How a seasonal outlook is set up (outlookSettings.ts, issue #53 R5): either field. Not a model input.
 		outlook: OutlookPatch,
-		// Who decides the project's applications (authoritySettings.ts, 161): the whole authority, or null. Not a model input.
+		// Who decides the project's applications (authoritySettings.ts, 163): the whole authority, or null. Not a model input.
 		responsibleAuthority: ResponsibleAuthorityPatch
 	})
 	.partial()

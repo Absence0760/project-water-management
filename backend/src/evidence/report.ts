@@ -203,7 +203,7 @@ async function loadEnsembles(
 	return { baseline, paired };
 }
 
-/** The newest endorsement of any publication of the baseline run by the responsible authority (161; evidence-12), or null. */
+/** The newest endorsement of any publication of the baseline run by the responsible authority (163; evidence-13), or null. */
 async function loadEndorsement(db: Db, projectId: string, runId: string): Promise<EvidenceInput['baselineEndorsement']> {
 	const { rows } = await db.query<{ endorsedAt: Date; endorsedBy: string | null; note: string }>(
 		`SELECT p.endorsed_at AS "endorsedAt", u.display_name AS "endorsedBy", p.endorsement_note AS note

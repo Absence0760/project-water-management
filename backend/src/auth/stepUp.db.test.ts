@@ -59,7 +59,7 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
 	}
 	ownProjectId = (await enrolledOwner.call('POST', '/projects', { name: 'Step-up enrolled' })).body.project.id;
-	// Recording a decision and endorsing a baseline also need the authority mark (161): the positive control's owner has it.
+	// Recording a decision and endorsing a baseline also need the authority mark (163): the positive control's owner has it.
 	await actForAuthority(enrolledOwner, ownProjectId, enrolledOwner.id);
 	teamId = (await owner.call('POST', '/teams', { name: 'Step-up team' })).body.team.id;
 	linkId = (await owner.call('POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 })).body.link.id;

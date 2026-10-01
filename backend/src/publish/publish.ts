@@ -59,14 +59,14 @@ export interface PublicationMeta {
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
 	/**
-	 * The responsible authority's endorsement of this baseline (161), set
+	 * The responsible authority's endorsement of this baseline (163), set
 	 * once by a member acting for it; null = not endorsed. Viewers and above
 	 * only (absent for a farmer).
 	 */
 	endorsement?: PublicationEndorsement | null;
 }
 
-/** Who endorsed a published baseline for the responsible authority, and when (161_licensing_authority). */
+/** Who endorsed a published baseline for the responsible authority, and when (163_licensing_authority). */
 export interface PublicationEndorsement {
 	endorsedAt: string;
 	/** Display name; null once that account is gone. */
@@ -428,7 +428,7 @@ export const EndorseBody = z
 	.strict();
 
 /**
- * Endorse a published baseline for the responsible authority (161_licensing_authority;
+ * Endorse a published baseline for the responsible authority (163_licensing_authority;
  * s41(2): the authority decides what evidence it accepts). Once per
  * publication, current or superseded (an application may rest on either);
  * the caller's right (editor, marked as acting for the authority) is checked

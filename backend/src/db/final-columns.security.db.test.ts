@@ -281,7 +281,7 @@ describe('scenarios', () => {
 			"UPDATE scenario SET status = 'submitted', decided_at = NULL, decided_by = NULL, outcome = NULL WHERE id = $1",
 			"UPDATE scenario SET outcome = 'licence_refused' WHERE id = $1",
 			"UPDATE scenario SET decided_at = decided_at + interval '1 day' WHERE id = $1",
-			// 161: the authority's record is set once, with the outcome.
+			// 163: the authority's record is set once, with the outcome.
 			"UPDATE scenario SET decision_authority = 'Someone else' WHERE id = $1",
 			"UPDATE scenario SET decision_date = decision_date - 1 WHERE id = $1",
 			"UPDATE scenario SET reasons_received = false WHERE id = $1",

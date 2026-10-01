@@ -89,7 +89,7 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
 	}
 	expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: [kalkoenkrans.id] })).status).toBe(201);
-	// The assessor acts for the responsible authority (161): only such a member records its decision.
+	// The assessor acts for the responsible authority (163): only such a member records its decision.
 	await actForAuthority(owner, projectId, assessor.id);
 	// A contributor keeps farm links (045 widened farm_link_check and /farmers/:userId).
 	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
@@ -318,12 +318,12 @@ describe('an application', () => {
 	it('is decided by an assessor, never by its applicant, and viewers then read it', async () => {
 		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
 		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'maybe' })).status).toBe(400);
-		// The old words are gone from the API (161).
+		// The old words are gone from the API (163).
 		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'approved' })).status).toBe(400);
 		// The authority's date and the reasons flag are part of the record.
 		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'licence_issued', authority: 'X' })).status).toBe(400);
 		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', decisionDate: '2999-01-01' })).status).toBe(400);
-		// An owner who doesn't act for the authority can't (161; the assessor, marked, can: below).
+		// An owner who doesn't act for the authority can't (163; the assessor, marked, can: below).
 		expect((await owner.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
 		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', note: 'Releases of 5 % in dry months.' });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);

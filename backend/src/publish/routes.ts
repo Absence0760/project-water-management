@@ -64,7 +64,7 @@ export const publicationRoutes = new Hono<AuthEnv>()
 			return c.json({ publication });
 		});
 	})
-	// The responsible authority endorses a published baseline (161_licensing_authority):
+	// The responsible authority endorses a published baseline (163_licensing_authority):
 	// an editor the owner marks as acting for it, once per publication.
 	.post('/:id/publication/:pubId/endorse', async (c) => {
 		const body = EndorseBody.parse(await readJson(c, { optional: true }));

@@ -1,4 +1,4 @@
-// The project's responsible authority (161_licensing_authority; provisional
+// The project's responsible authority (163_licensing_authority; provisional
 // position, pre-counsel research, 2026-10-01: docs/scenarios.md
 // § Applications "Who decides", docs/api.md § Projects). Under the National
 // Water Act only the responsible authority decides a licence: DWS (a
@@ -52,7 +52,7 @@ export async function projectAuthority(db: Db, projectId: string): Promise<Respo
 	return resolveResponsibleAuthority(rows[0]?.settings);
 }
 
-/** Whether the current user acts for the project's authority: editor or above, and marked by an owner (app_acts_for_authority, 161). */
+/** Whether the current user acts for the project's authority: editor or above, and marked by an owner (app_acts_for_authority, 163). */
 export async function actsForAuthority(db: Db, projectId: string): Promise<boolean> {
 	const { rows } = await db.query<{ ok: boolean }>('SELECT app_acts_for_authority($1) AS ok', [projectId]);
 	return rows[0]?.ok === true;

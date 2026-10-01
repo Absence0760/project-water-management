@@ -52,10 +52,10 @@ export interface ScenarioRow {
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
 	/**
-	 * The authority's decision as recorded (161_licensing_authority): its
+	 * The authority's decision as recorded (163_licensing_authority): its
 	 * name, the date on its decision letter (null on a decision recorded
-	 * before 161), its licence or file reference ('' = none) and whether its
-	 * written reasons were received (null before 161). All null/'' until decided.
+	 * before 163), its licence or file reference ('' = none) and whether its
+	 * written reasons were received (null before 163). All null/'' until decided.
 	 */
 	decisionAuthority: string | null;
 	decisionDate: string | null;

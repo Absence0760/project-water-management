@@ -257,7 +257,7 @@ export async function plantCompleteOutlook(
 }
 
 /**
- * Mark a member as acting for the project's responsible authority (161_licensing_authority):
+ * Mark a member as acting for the project's responsible authority (163_licensing_authority):
  * the owner's PATCH, as the members page sends it. Only a marked editor or owner
  * records a decision (POST …/decide) or endorses a baseline.
  */

@@ -273,7 +273,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-12');
+		expect(manifest.report.version).toBe('evidence-13');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -611,7 +611,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		// v2 (below) is drafted with ER-991 on the list, so records it: its verify lists it once, as recorded.
 	});
 
-	it('keeps an issued pack’s manifest and hash when the authority is named and endorses the baseline afterwards (161, evidence-12)', async () => {
+	it('keeps an issued pack’s manifest and hash when the authority is named and endorses the baseline afterwards (163, evidence-13)', async () => {
 		const frozen = async () => (await asOwner('SELECT manifest, manifest_sha256, report_version FROM evidence_pack WHERE id = $1', [v1.id]))[0]!;
 		const before = await frozen();
 		expect(before.manifest_sha256).toBe(v1.manifestSha256);

@@ -99,7 +99,7 @@ export const ERROR_CODES = [
  *   role_conflict: the change would make someone who edits the project
  *     (editor or owner, directly or through its team) also part of an
  *     applying party there: in a party, owning an application or shared
- *     one (161_licensing_authority's conflict guard). The member list and
+ *     one (163_licensing_authority's conflict guard). The member list and
  *     sharing are English workspace pages.
  */
 export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'role_conflict'] as const;
@@ -116,7 +116,7 @@ export function mustChange(r: { rowCount: number | null }): void {
 	if (!r.rowCount) throw notFound();
 }
 
-/** 409 role_conflict's words (161_licensing_authority): fixed, never the database's text. */
+/** 409 role_conflict's words (163_licensing_authority): fixed, never the database's text. */
 export const ROLE_CONFLICT_MESSAGE =
 	'someone who edits this project (an editor or owner, directly or through its team) can’t also be in an applying party, own an application or be shared one here: take them out of the party, or keep them below editor';
 
@@ -155,7 +155,7 @@ export function handleError(err: unknown, c: Context) {
 	if (code === PG_UNIQUE) return c.json({ error: 'already exists' }, 409);
 	// Never echo raw database error text — it leaks schema details.
 	if (code === PG_FK) return c.json({ error: 'references something that does not exist in this project' }, 400);
-	// 161's conflict guard names itself, so the client can say what to change.
+	// 163's conflict guard names itself, so the client can say what to change.
 	if (code === PG_CHECK && (err as { constraint?: string }).constraint === 'role_conflict')
 		return c.json({ error: ROLE_CONFLICT_MESSAGE, code: 'role_conflict' satisfies ErrorCode }, 409);
 	if (code === PG_CHECK) return c.json({ error: 'violates a data rule' }, 409);

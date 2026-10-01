@@ -348,7 +348,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/scenarios/:sid/submit': () => scenario([]),
 	'POST /projects/:id/scenarios/:sid/withdraw': () => scenario(['submit']),
 	'POST /projects/:id/scenarios/:sid/reopen': () => scenario(['submit', 'withdraw']),
-	// The owner acts for the responsible authority (161), as the decision needs.
+	// The owner acts for the responsible authority (163), as the decision needs.
 	'POST /projects/:id/scenarios/:sid/decide': async () => {
 		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
 		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
@@ -380,7 +380,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		params: { pubId: (await ok(ctx.owner.call('GET', `${at()}/publication`))).current.id },
 		body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } }
 	}),
-	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (161).
+	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (163).
 	'POST /projects/:id/publication/:pubId/endorse': async () => {
 		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
 		const pub = await ok(ctx.owner.call('POST', `${at()}/publication`, { runId: ctx.runId }));

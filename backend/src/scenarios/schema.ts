@@ -190,7 +190,7 @@ export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).opti
 
 /**
  * The responsible authority's decision on an application, in the National
- * Water Act's and GN R267's words (161_licensing_authority; provisional
+ * Water Act's and GN R267's words (163_licensing_authority; provisional
  * position, pre-counsel research, 2026-10-01): a licence issued (every
  * licence carries conditions, s28(1)(d)) or refused (s42), an application
  * rejected on its formal requirements (R267 regs 9, 11, 12), or not

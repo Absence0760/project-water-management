@@ -53,7 +53,7 @@ type ProjectRow = {
 	published_at: Date | null;
 	/** When the project's pending re-run is due, or null (042_auto_rerun). */
 	rerun_queued_for: Date | null;
-	/** The caller acts for the responsible authority (161, app_acts_for_authority): editor or above and marked by an owner. */
+	/** The caller acts for the responsible authority (163, app_acts_for_authority): editor or above and marked by an owner. */
 	acts_for_authority: boolean;
 };
 
@@ -85,7 +85,7 @@ const full = (r: ProjectRow) => ({
 		responsibleAuthority: resolveResponsibleAuthority(r.settings)
 	},
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null,
-	// Whether the caller may record the authority's decision and endorse a baseline (161).
+	// Whether the caller may record the authority's decision and endorse a baseline (163).
 	actsForAuthority: r.acts_for_authority
 });
 
@@ -198,7 +198,7 @@ const withoutRunPolicy = (settings: unknown) => {
  * A patch that changes nothing but settings.autoRun (when the project re-runs
  * itself, not how), settings.outcomes (how the outcome matrix reads a
  * sweep), settings.outlook (how a seasonal outlook is set up) or
- * settings.responsibleAuthority (who decides its applications, 161) leaves
+ * settings.responsibleAuthority (who decides its applications, 163) leaves
  * updated_at alone: updated_at is "the inputs changed since the latest run"
  * to the Runs tab, and none of them changes an input. The Settings
  * form sends every setting, so this compares the settings as they'd be
@@ -485,9 +485,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 	// A member's role, and their applying party (049: an applicant shares
 	// applications only within their own party; '' or null takes them out of
 	// every party, and a change ends the shares it no longer allows), and
-	// whether they act for the responsible authority (161: as an editor or
+	// whether they act for the responsible authority (163: as an editor or
 	// owner they then record its decisions and endorse a baseline). Nobody
-	// who edits the project may be in a party (161's conflict guard: 409
+	// who edits the project may be in a party (163's conflict guard: 409
 	// role_conflict).
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z
@@ -512,10 +512,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (body.role !== undefined && body.role !== 'owner') await assertNotLastOwner(db, id, userId);
 			const { rows: was } = await db.query<{ role: string; party: string | null; actsForAuthority: boolean }>(
 				'SELECT role, party, acts_for_authority AS "actsForAuthority" FROM project_member WHERE project_id = $1 AND user_id = $2',
-				[
-				id,
-				userId
-			]);
+				[id, userId]
+			);
 			const { rows } = await db.query(
 				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END,
 					acts_for_authority = COALESCE($6, m.acts_for_authority) FROM app_user u

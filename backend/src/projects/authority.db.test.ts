@@ -1,4 +1,4 @@
-// The responsible authority (161_licensing_authority; provisional position,
+// The responsible authority (163_licensing_authority; provisional position,
 // pre-counsel research, 2026-10-01; docs/scenarios.md § Applications "Who
 // decides", docs/api.md § Members and § Publication): who acts for it, what
 // only they may do (record its decision, endorse a published baseline), and
@@ -33,9 +33,8 @@ const apply = async (u: User, name: string) => {
 };
 
 beforeAll(async () => {
-	[owner, marked, unmarked, viewer, applicant, partyMate, farmer] = await Promise.all(
-		['AuOwner', 'AuMarked', 'AuUnmarked', 'AuViewer', 'AuApplicant', 'AuPartymate', 'AuFarmer'].map((n) => signUp(n))
-	);
+	const users = await Promise.all(['AuOwner', 'AuMarked', 'AuUnmarked', 'AuViewer', 'AuApplicant', 'AuPartymate', 'AuFarmer'].map((n) => signUp(n)));
+	[owner, marked, unmarked, viewer, applicant, partyMate, farmer] = users as [User, User, User, User, User, User, User];
 	projectId = (await owner.call('POST', '/projects', { name: 'Authority' })).body.project.id;
 	expect((await owner.call('PUT', `${P()}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
 	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150) } })).status).toBe(200);
@@ -140,6 +139,19 @@ describe('recording the authority’s decision', () => {
 		});
 		const [event] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'scenario.decided' ORDER BY id DESC LIMIT 1`, [projectId]);
 		expect(event.subject).toMatchObject({ outcome: 'application_rejected', authority: AUTHORITY.name, decisionDate: DECISION.decisionDate });
+	});
+
+	it('leaves a team scenario an editor only marks decided alone, but an outcome on one is the authority’s', async () => {
+		const made = await unmarked.call('POST', `${P()}/scenarios`, { name: 'Team what-if', baseRunId: published, ops: [] });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const team = made.body.scenario.id as string;
+		expect((await unmarked.call('PATCH', `${P()}/scenarios/${team}`, { status: 'submitted' })).status).toBe(200);
+		// Recording an outcome on it needs the mark too.
+		expect((await unmarked.call('POST', `${P()}/scenarios/${team}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
+		// Positive control: marking it decided, with no outcome, is the team's own move (as before 163).
+		const marked = await unmarked.call('PATCH', `${P()}/scenarios/${team}`, { status: 'decided' });
+		expect(marked.status, JSON.stringify(marked.body)).toBe(200);
+		expect(marked.body.scenario).toMatchObject({ status: 'decided', outcome: null, decisionAuthority: null, decisionDate: null, reasonsReceived: null });
 	});
 
 	it('needs an authority: without one in the body or the settings it is refused', async () => {

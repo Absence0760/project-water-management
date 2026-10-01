@@ -35,7 +35,7 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A membership's project, user and join date are fixed; an owner changes its role, party and authority flag (161_licensing_authority.sql).
+	// A membership's project, user and join date are fixed; an owner changes its role, party and authority flag (163_licensing_authority.sql).
 	project_member: ['acts_for_authority', 'party', 'role'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
@@ -44,7 +44,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
 	report: ['bytes', 'error', 'finished_at', 'pages', 'status'],
 	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql),
-	// and the responsible authority's endorsement, once (161_licensing_authority.sql).
+	// and the responsible authority's endorsement, once (163_licensing_authority.sql).
 	run_publication: [
 		'endorsed_at',
 		'endorsed_by',
