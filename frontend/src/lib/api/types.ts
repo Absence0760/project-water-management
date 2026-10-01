@@ -372,6 +372,25 @@ export interface Team {
 	settings: { portfolio?: { thresholds?: { green: number; amber: number } } };
 	/** The portfolio thresholds that apply: the team's, or the defaults. */
 	portfolioThresholds: PortfolioThresholds;
+	/** Whom to ask about the personal information in the team's projects (168, POPIA s18(1)(b)); null = not set. */
+	privacyContact: PrivacyContact | null;
+}
+
+/** A team's privacy contact: a name (or office) and an email address, a postal address optional (168). */
+export interface PrivacyContact {
+	name: string;
+	email: string;
+	postal: string | null;
+}
+
+/**
+ * GET /projects/:id/privacy-contact: who decides about a project's information, for every member, farmers
+ * included. contact null: the project has no team, or its team has set no contact.
+ */
+export interface ProjectPrivacyContact {
+	/** The WUA the farm pages name (095), or null. */
+	wuaName: string | null;
+	contact: (PrivacyContact & { organisation: string }) | null;
 }
 
 /**

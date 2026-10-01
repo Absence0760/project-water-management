@@ -18,9 +18,17 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-7 strings: 5 on the site, 2 in emails, 0 in the glossary.
+14 strings: 10 on the site, 4 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
+
+### common
+
+Words used on several pages (buttons, field labels, the page title in the browser tab).
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `c084b088` | Who decides about your farm’s information |  |  |
 
 ### terms-update
 
@@ -34,7 +42,27 @@ The page a signed-in person sees after the Terms of use or Privacy notice change
 | `e7b636d7` | Licence records, and the names they keep, are kept until a set date and then deleted. |  |  |
 | `3c1e1737` | Outside the organisation, registered water use is shown only as totals, never with a name. |  |  |
 
+### farm.whoDecides
+
+Farm view: “Who decides about your farm’s information”, from the menu. The organisation that runs the catchment (a WUA or a consultancy) decides what is done with the farmer’s information; this page names it and the person or office to ask, as the organisation typed them. “We” is the company that runs the app for it.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `3f5aed22` | {organisation} decides what is done with your farm’s information in this catchment. Ask them first about it, or to see, correct or delete it: | Keep: {organisation} |  |
+| `2940b781` | Your WUA |  |  |
+| `d82dcb91` | The organisation that runs this catchment decides what is done with your farm’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA. |  |  |
+| `3bb1e71b` | We run the app for them. How we handle your information, and how to ask us: |  |  |
+
 ## Emails
+
+### mail.invite
+
+Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline. The “contact” lines name the organisation responsible for the catchment’s information ({organisation}, a team’s name) and the person or office to ask about it ({name}, {email}, {postal}, as the organisation typed them); they appear only when the organisation has set a contact.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `mail.invite.contact` | {organisation} decides about your information in this catchment. Questions about it: {name}, {email}. | Keep: {email}, {name}, {organisation} |  |
+| `mail.invite.contactPost` | Or write to {name} at: {postal} | Keep: {name}, {postal} |  |
 
 ### mail.alert
 

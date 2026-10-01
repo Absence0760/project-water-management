@@ -55,7 +55,7 @@
 	);
 </script>
 
-<FarmShell {back} {preview} {strip} onretry={strip ? retry : undefined} busy={farm.phase.kind === 'loading'}>
+<FarmShell {projectId} {back} {preview} {strip} onretry={strip ? retry : undefined} busy={farm.phase.kind === 'loading'}>
 	{#if farm.phase.kind === 'loading'}
 		<FarmSkeleton />
 	{:else if farm.phase.kind === 'error'}

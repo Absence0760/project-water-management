@@ -450,6 +450,19 @@ describe('teams client', () => {
 		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: null } } } });
 	});
 
+	it('sets or removes a team’s privacy contact, and reads a project’s (168)', async () => {
+		const contact = { name: 'IO', email: 'io@example.org', postal: null };
+		const f = mockFetch(200, { team: { id: 't/1', privacyContact: contact } });
+		const api = createApi('', f);
+		expect((await api.teams.setPrivacyContact('t/1', contact)).privacyContact).toEqual(contact);
+		await api.teams.setPrivacyContact('t/1', null);
+		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: contact } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: null } });
+		const g = mockFetch(200, { wuaName: null, contact: null });
+		expect(await createApi('', g).farm.privacyContact('p/1')).toEqual({ wuaName: null, contact: null });
+		expect(call(g, 0)).toEqual({ url: '/projects/p%2F1/privacy-contact', method: 'GET' });
+	});
+
 	it('farmers.* call the farmer routes and unwrap the farmer', async () => {
 		const farmer = { status: 'active', userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
 		const add = mockFetch(201, { farmer });

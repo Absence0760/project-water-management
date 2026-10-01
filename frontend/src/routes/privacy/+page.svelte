@@ -57,12 +57,13 @@
 			<strong>What an organisation puts into its projects</strong> (who it invites, which farm a farmer is linked to, its model,
 			data and notes): the organisation decides, and it is the responsible party for that information. We process it on its
 			behalf, as its <em>operator</em>. If you have questions about why you were invited or what a project holds about your farm,
-			ask the organisation first; we will help it answer you.
+			ask the organisation first: its contact details are on your farm page (menu, <em>Who decides about your farm’s
+			information</em>) and in your invitation email, once it has added them. We will help it answer you.
 		</li>
 	</ul>
 	<p>
-		We process an organisation’s project information under a written agreement with it (POPIA section 21); you can ask the
-		organisation, or us, for the organisation’s contact details.
+		We process an organisation’s project information under a written agreement with it (POPIA section 21). If an organisation
+		hasn’t added its contact details yet, ask us for them.
 	</p>
 
 	<h2 id="what">3. What we collect</h2>

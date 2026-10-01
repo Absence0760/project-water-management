@@ -51,6 +51,7 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	ProjectPrivacyContact,
 	FarmMap,
 	AddFarmerResult,
 	FarmRole,
@@ -489,6 +490,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
 			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
 			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
+			/** "Who decides about your farm's information": the project's team and its privacy contact (168), any member. */
+			privacyContact: (id: string) => request<ProjectPrivacyContact>('GET', `${p(id)}/privacy-contact`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
@@ -511,6 +514,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The portfolio's traffic-light cut-offs (team admin, D11); null goes back to the defaults. */
 			setThresholds: (id: string, thresholds: { green: number; amber: number } | null) =>
 				request<{ team: Team }>('PATCH', t(id), { settings: { portfolio: { thresholds } } }).then((r) => r.team),
+			/** Whom to ask about the team's projects' personal information (team admin, 168); null removes it. */
+			setPrivacyContact: (id: string, privacyContact: { name: string; email: string; postal: string | null } | null) =>
+				request<{ team: Team }>('PATCH', t(id), { privacyContact }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
 			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			addMember: (id: string, email: string, role: TeamRole) =>
