@@ -1629,6 +1629,14 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1366 KB (issue #289, #293 with #291, #292 and
+//             #294 merged: Load crop factors' Kp default by crop-set shape
+//             with its why line, the node-based workbook as the third source
+//             and the workbook warnings list). Measured 1361 locally against
+//             #294's 1360 (+1 KB), plus CI's ~3 KB over local; headroom ~1 KB
+//             on CI. The import worker is now 31 of 32 KB
+//             (largestSpreadsheetWorkerKb, the node-based reader in it), so
+//             the next addition there trips that ceiling.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1639,7 +1647,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1362,
+	totalCodeKb: 1366,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
