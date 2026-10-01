@@ -171,7 +171,7 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    Kp, because its curves are also taller than the A-pan tables'. Weighted by
    the workbook's own monthly A-pan row (Σ A-pan × factor over the year, the
    workbook's set ÷ the matching crop in the reference library, item 8),
-   annual crop use comes out about **45–75 % higher** for citrus, deciduous
+   annual crop use comes out about **45–76 % higher** for citrus, deciduous
    fruit and pasture: citrus +75 % (Table 4.13 citrus), pasture +46 % (mixed
    pasture), apples and pears +47 % (late deciduous cultivars), nectarines
    and peaches +64 % and +76 % (medium and early cultivars). Pecan comes out
@@ -8260,7 +8260,7 @@ step when a definition changes.
 | **Hydrological unit** | The name users see (issue #54 item 2a; client question Q6, issue #90) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The workspace, the farmer view, the farmer emails and the shared view all say it; the code, API, CSV exports and this document say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the S-pan evaporation (convert it before entering it as A-pan, §2.4a), MAP and naturalised flow data per quaternary catchment. |
-| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
+| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (about 0.6–0.85 × pan; 0.35–0.85 in FAO-56 Table 5). |
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (a project setting). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |
