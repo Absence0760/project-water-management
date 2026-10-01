@@ -114,6 +114,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	}),
 	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
+	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),

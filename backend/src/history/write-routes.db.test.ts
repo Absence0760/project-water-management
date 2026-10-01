@@ -18,6 +18,7 @@ import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
+import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -376,6 +377,26 @@ const WRITE_ROUTES: Entry[] = [
 		route: `POST ${P}/nodes/:nodeId/area-from-map`,
 		records: ['revision'],
 		call: (c) => c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/area-from-map`, { featureId: c.mapParcelId })
+	},
+	{
+		// A dam's full-supply area from its polygon (issue #326 B-dams): a revision whose reason names the dam.
+		route: `POST ${P}/nodes/:nodeId/dam-area-from-map`,
+		records: ['revision'],
+		call: async (c) => {
+			// Round the synthetic register's Z100/07, so the next entry has a registered dam to propose.
+			const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
+			const f = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'dam', name: 'Guard dam', nodeId: c.farmId, geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+		}
+	},
+	{
+		// A dam's capacity from the register of dams: a revision whose reason names the registered dam.
+		route: `POST ${P}/nodes/:nodeId/dam-capacity-from-register`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-capacity-from-register`, { registerNo: 'Z100/07' });
+		}
 	},
 	{
 		route: `POST ${P}/map/features`,
