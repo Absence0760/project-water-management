@@ -1,4 +1,4 @@
--- 154_dam_register — the register of dams the catchment map proposes a dam's
+-- 157_dam_register — the register of dams the catchment map proposes a dam's
 -- capacity from (issue #326 Part B, "B-dams"; docs/maps.md § Dams from the
 -- register and the map, docs/data-model.md § Catchment map).
 --
@@ -44,7 +44,7 @@ CREATE INDEX dam_register_reference_position_idx ON dam_register_reference (lat,
 CREATE INDEX dam_register_reference_dataset_idx ON dam_register_reference (dataset);
 
 COMMENT ON TABLE dam_register_reference IS
-	'Registered dams with position, capacity and wall height, loaded by the operator (pnpm import:dam-register), read-only to the app (154, issue #326 B-dams). The repo ships a synthetic list only.';
+	'Registered dams with position, capacity and wall height, loaded by the operator (pnpm import:dam-register), read-only to the app (157, issue #326 B-dams). The repo ships a synthetic list only.';
 COMMENT ON COLUMN dam_register_reference.capacity_m3 IS
 	'Full-supply capacity, m³. Proposed to a dam node''s damCapacityM3 only when the modeller accepts it (a model revision naming the entry).';
 

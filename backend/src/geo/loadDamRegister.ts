@@ -1,4 +1,4 @@
-// Load a register of dams into dam_register_reference (154; issue #326
+// Load a register of dams into dam_register_reference (157; issue #326
 // B-dams, docs/maps.md § Dams from the register and the map). The operator's
 // tool, run as the schema owner (`pnpm import:dam-register`); the app only
 // reads the table.

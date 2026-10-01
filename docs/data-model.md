@@ -1402,7 +1402,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   farm's; no route serves them yet. `quaternary_reference` is readable by
   anyone signed in (public reference data) and written by no app role.
   Covering indexes on every foreign key.
-- **`dam_register_reference`** (`154_dam_register.sql`, issue #326 B-dams,
+- **`dam_register_reference`** (`157_dam_register.sql`, issue #326 B-dams,
   [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)):
   the register of dams the dam proposals read. `register_no` (primary key,
   1–20, the register's "No of dam"; the fixture's are `Z…`), `dataset` (the

@@ -791,7 +791,7 @@ changes, Use waits. Viewers see the proposals but not Use.
 
 ### The register of dams
 
-`dam_register_reference` (154) is global reference data, like the quaternary
+`dam_register_reference` (157) is global reference data, like the quaternary
 dataset: the **operator** loads it as the schema owner and the app only
 reads it.
 

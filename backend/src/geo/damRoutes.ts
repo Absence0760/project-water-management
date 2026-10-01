@@ -1,5 +1,5 @@
 // Dam values proposed from the register of dams and the map (issue #326
-// Part B, "B-dams"; 154_dam_register.sql; docs/api.md § Catchment map,
+// Part B, "B-dams"; 157_dam_register.sql; docs/api.md § Catchment map,
 // docs/maps.md § Dams from the register and the map).
 //
 //   GET  /projects/:id/nodes/:nodeId/dam-proposals                 the proposals for a hydrological unit's dam (viewer)

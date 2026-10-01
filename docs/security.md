@@ -2362,7 +2362,7 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference` and `dam_register_reference` (154) are public reference data, readable by any
+  orientation kinds only). `quaternary_reference` and `dam_register_reference` (157) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin

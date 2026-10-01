@@ -1,7 +1,7 @@
 // A dam on the map → the values the model's dam could take from it (issue
 // #326 Part B, "B-dams"; docs/maps.md § Dams from the register and the map):
 //
-//  * from the register of dams (dam_register_reference, 154): the registered
+//  * from the register of dams (dam_register_reference, 157): the registered
 //    dams within RADIUS_M of the dam's place on the map (a polygon's centroid,
 //    or the point), nearest first, each with its capacity, wall height and
 //    source;

@@ -1,5 +1,5 @@
 // Dam values proposed from the register of dams and the map (issue #326
-// B-dams; 154_dam_register.sql, geo/damRoutes.ts), end to end against
+// B-dams; 157_dam_register.sql, geo/damRoutes.ts), end to end against
 // Postgres with the committed synthetic register loaded:
 //  - a viewer reads a unit's proposals: the registered dams within 1 km of
 //    its dam on the map, nearest first, marked synthetic, with their source,
