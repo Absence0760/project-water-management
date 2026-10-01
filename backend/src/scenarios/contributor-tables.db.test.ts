@@ -150,8 +150,9 @@ describe('a contributor and the tables added alongside WP-3.3', () => {
 		const names = await rowsAs<{ user_display: string }>(applicant, 'SELECT user_display FROM allocation_holder WHERE project_id = $1', [projectId]);
 		expect(names.map((r) => r.user_display)).toEqual(['R. Holder']);
 		expect(await idsAs(applicant, 'allocation_source')).toEqual([]);
-		// Positive controls: a viewer reads every volume and the import, an editor every name.
-		expect((await idsAs(viewer, 'allocation')).length).toBe(3);
+		// Positive controls: an editor reads every volume and every name, a viewer the import. (A viewer
+		// reads each volume only once an owner allows it, D3, 162: allocations/allocations.db.test.ts.)
+		expect((await idsAs(editor, 'allocation')).length).toBe(3);
 		expect((await idsAs(viewer, 'allocation_source')).length).toBe(1);
 		expect((await rowsAs(editor, 'SELECT 1 FROM allocation_holder WHERE project_id = $1', [projectId])).length).toBe(2);
 		// The API refuses them the Allocations tab's routes, as it does a farmer.

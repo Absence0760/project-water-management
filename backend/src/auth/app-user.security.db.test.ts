@@ -413,7 +413,9 @@ const INNER_JOINS = new Map<string, string>([
 	['teams/routes.ts FROM app_user u WHERE u.id = m.user_id', 'a current team member (a team-mate of the admin)'],
 	['alerts/send.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row'],
 	['evidence/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the pack notice’s recipient, 133)'],
-	['errata/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the erratum notice’s recipient, 153)']
+	['errata/notices.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the erratum notice’s recipient, 153)'],
+	['licence/record.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row (the licence-record mail’s owner, 161)'],
+	['evidence/packSend.ts JOIN app_user u ON u.id = m.user_id', 'current project members (those acting for the authority, 163)']
 ]);
 
 describe('inner joins to app_user', () => {
