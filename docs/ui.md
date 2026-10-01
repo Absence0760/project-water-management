@@ -6968,8 +6968,23 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     interaction in its note; no band; *Not assessed* naming each conflict
     when they conflict, or saying none of exactly them is assessed yet;
     *None* when there are none the reader can see; an older pack prints its
-    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
-    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    application report, **Against full authorised use** (`evidence-14`,
+    licensing build item 8; `report/evidence/authorised.ts`): the same
+    board over the baseline and the application both run with every holder
+    at their registered volume, worded by `evidenceBoard` from the report's
+    `licenceImpactAuthorised`, and under it the authorised volumes' mix
+    (held as licence, verified existing lawful use, registration, claimed
+    existing lawful use, general authorisation or Schedule 1, the volume,
+    whether it is an entitlement, and the totals) and when and on which
+    engine it was run; without one, a fixed *Not assessed* row says why
+    (not run for this application run, no registered volumes, or out of
+    date); a pack drafted before `evidence-14` says it isn't part of it.
+    Above the report, on screen only, an editor gets **Run at full
+    authorised use** (or **Run it again** when out of date), which runs
+    the pair (`POST …/authorised-impact`) and reads the report again. Then
+    **Against modelled current use**, the **Impact by year
+    class** board (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
     the runs' stored series and the project's `settings.outcomes` (the

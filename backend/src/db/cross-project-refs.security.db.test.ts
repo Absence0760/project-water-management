@@ -428,6 +428,21 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.revisionId,
 		insert: (h, ref) => [`INSERT INTO model_revision (project_id, created_by, source, snapshot, restored_from) VALUES ($1, $2, 'restore', '{}', $3)`, [h.projectId, u(), ref]]
 	},
+	// Page 1's board against full authorised use (165, licensing build item 8): authorised_impact_same_project checks both runs.
+	'authorised_impact.application_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, ref, h.runId]
+		]
+	},
+	'authorised_impact.base_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, h.scenarioRunId, ref]
+		]
+	},
 	'model_run.scenario_id': {
 		ref: (w) => w.scenarioId,
 		insert: (h, ref) => [

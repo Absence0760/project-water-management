@@ -103,6 +103,8 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/reproduce',
 			// Sending the issued pack to the members acting for the responsible authority (licensing build item 13).
 			'POST /projects/:id/packs/:packId/send',
+			// Page 1's board against full authorised use (licensing build item 8): an editor runs the full-allocation pair.
+			'POST /projects/:id/runs/:runId/authorised-impact',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
 			'GET /projects/:id/scenarios/:sid/packs/:packId',

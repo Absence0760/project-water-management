@@ -376,6 +376,43 @@ the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
 A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
 
+### Both impact bases
+
+Report format `evidence-14` (licensing build item 8; provisional position,
+pre-counsel research, 2026-10-01; D15 in
+[step-3-licensing.md § 11](./roadmap/step-3-licensing.md)). Page 1 judges
+the application twice, both labelled:
+
+- **Against full authorised use** (the headline, `licenceImpactAuthorised`):
+  the baseline and the application both run with every holder at their
+  registered volume (`allocationMode: 'fullAllocation'`). NWA s27(1)(a) and
+  (f) have the authority weigh existing lawful uses and the effect on other
+  users, and s29(1)(a)(iii) and R267's "cumulative impact" protect existing
+  *and potential* use: a proposal that passes only because other holders
+  don't take their full entitlement would hurt them as soon as they do.
+  Beside it, the authorised volume's mix by how it is held: a licence
+  (s40) and an existing lawful use verified under s35 are entitlements; a
+  WARMS registration, a claimed existing lawful use, a general authorisation
+  and Schedule 1 use are not, and the table says which.
+- **Against modelled current use** (`licenceImpact`, as before): the
+  baseline as it ran, so "existing use" is what the model found holders
+  use; it answers what changes tomorrow.
+
+The pair is two model runs, which a report request (a viewer's GET, a pack
+draft) must not carry, so an editor runs it from the evidence report
+(**Run at full authorised use**, `POST …/runs/:runId/authorised-impact`):
+the board the engine builds over it, the mix (from the allocations' rows as
+they are then) and when and on which engine are kept for that application
+run (`authorised_impact`, the newest only); the pair's runs aren't stored.
+The report reads it only when it was run on the baseline's engine with the
+project's outcome settings as they are now; otherwise, or without one, or
+when the baseline ran with no registered volumes, a fixed row says which
+(*Not assessed: …*, never left out). A pack freezes whichever page 1 had
+when it was drafted; one drafted before `evidence-14` has no such board and
+says so. Tests: `backend/src/evidence/authorised-impact.db.test.ts`,
+`packages/engine/src/evidence/authorised.test.ts`,
+`e2e/tests/evidence-allocations.spec.ts`.
+
 ### Sending it to the authority
 
 Licensing build item 13 (provisional position, pre-counsel research,

@@ -90,3 +90,49 @@ test('the evidence report cites a capped run’s cap: the years it used its volu
 	await expect(cap.getByRole('row', { name: /^Lower farm/ })).toHaveCount(0);
 	await expectNoViolations(page);
 });
+
+// Both impact bases (licensing build item 8, evidence-14): an application's page 1 leads with the board against full authorised use,
+// once an editor runs the pair, with the authorised volumes' mix; until then a fixed row says it isn't run.
+test('an application’s evidence report leads with the board against full authorised use, run by an editor', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Evidence authorised use');
+	const days = 731;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2019-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: syntheticFlow(days) });
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	const nodes = project.model.nodes as { id: string; name: string }[];
+	const upper = nodes.find((n) => n.name === 'Upper farm')!.id;
+	for (const [name, authorisation, volumeM3PerYear] of [
+		['Upper farm', 'licence', 50_000],
+		['Lower farm', 'registration', 200_000]
+	] as const) {
+		const res = await page.request.post(`${API_URL}/projects/${project.id}/allocations`, {
+			data: { nodeId: nodes.find((n) => n.name === name)!.id, waterSource: 'surface', authorisation, volumeM3PerYear }
+		});
+		expect(res.status()).toBe(201);
+	}
+	const run = await createRun(page.request, project.id, 'Baseline with volumes');
+	await nominateRun(page.request, project.id, run, 'Baseline with registered volumes');
+	const created = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name: 'Upper dam raised', baseRunId: run, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 300_000 }], ownedNodeIds: [upper] }
+	});
+	expect(created.status(), await created.text()).toBe(201);
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${((await created.json()) as { scenario: { id: string } }).scenario.id}/runs`, { data: {} });
+	expect(ran.status(), await ran.text()).toBe(201);
+	const appRun = ((await ran.json()) as { run: { id: string } }).run.id;
+
+	await page.goto(`/projects/${project.id}/report?run=${appRun}&evidence`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	const authorised = page.getByTestId('evidence-impact-authorised');
+	await expect(authorised.getByTestId('evidence-impact-authorised-na')).toHaveAttribute('data-status', 'notBuilt');
+	await expect(page.getByTestId('evidence-impact-modelled-h')).toHaveText('Against modelled current use');
+
+	await page.getByTestId('evidence-authorised-run').getByRole('button', { name: 'Run at full authorised use' }).click();
+	await expect(authorised.getByTestId('evidence-impact-authorised-na')).toHaveCount(0);
+	const mix = authorised.getByTestId('evidence-authorised-mix');
+	await expect(mix.getByRole('rowheader')).toHaveText(['Licence', 'Registration (WARMS)', /^All of it/]);
+	await expect(mix.getByRole('row', { name: /^Licence/ })).toContainText('Yes');
+	await expect(mix.getByRole('row', { name: /^Registration/ })).toContainText('No');
+	await expect(page.getByTestId('evidence-authorised-run')).toHaveCount(0);
+	await expectNoViolations(page);
+});

@@ -142,7 +142,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * recovery code is issued, then used or replaced (deleted), and an account's
  * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event']);
+// Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes

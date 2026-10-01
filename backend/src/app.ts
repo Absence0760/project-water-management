@@ -36,6 +36,7 @@ import { evidenceRoutes } from './runs/evidence.js';
 import { evidenceReportRoutes } from './evidence/report.js';
 import { applicantPackRoutes } from './evidence/applicantPacks.js';
 import { packSendRoutes } from './evidence/packSend.js';
+import { authorisedImpactRoutes } from './evidence/authorisedImpact.js';
 import { packRoutes, verifyRoutes } from './evidence/packs.js';
 import { reproduceRoutes } from './runs/reproduce.js';
 import { runRoutes } from './runs/routes.js';
@@ -159,6 +160,7 @@ export function createApp() {
 	projects.route('/', packRoutes);
 	projects.route('/', applicantPackRoutes);
 	projects.route('/', packSendRoutes);
+	projects.route('/', authorisedImpactRoutes);
 	projects.route('/', reproduceRoutes);
 	projects.route('/', scenarioRoutes);
 	projects.route('/', questionRoutes);

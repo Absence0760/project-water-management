@@ -1248,6 +1248,20 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (a copy job naming another project's pack touches nothing of it),
   `db/catalogue.db.test.ts`, `db/cross-project-refs.security.db.test.ts`.
 
+**The board against full authorised use (165_applicant_copy.sql § 5;** [evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)**).**
+
+- **`authorised_impact`**: page 1's board over an application run's
+  full-allocation pair (licensing build item 8): `application_run_id` and
+  `base_run_id` → `model_run` (cascade; `authorised_impact_same_project`),
+  `engine_version`, the outcome settings it was built with
+  (`year_class_method`, `reserve_site`, the Reserve site's node id or null
+  for the outlet), `result` (the engine's `EvidenceAuthorisedImpact`, status
+  `ok`: the board, the authorised volumes' mix, when, which engine) and
+  `created_at`. RLS: read by a viewer and up who reads the application run
+  (`model_run`'s RLS in the policy's subquery); an editor inserts, and
+  deletes the run's older ones (the route keeps one per run); no `UPDATE`
+  (catalogue `NO_UPDATE`). The pair's runs themselves aren't stored.
+
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
 
 - `job.kind` accepts `pack_reproduce`: issuing a pack queues one in the

@@ -13,15 +13,22 @@
 	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
 	import { FORMER_MEMBER } from '$lib/format/maker';
+	import { AUTHORISED_HEADING, MODELLED_HEADING, authorisedRow, mixLines } from './authorised';
 
 	let {
 		report,
 		board = null,
 		boardNotFrozen = false,
+		authorisedBoard = null,
+		frozen = false,
 		signoffs,
 		verify
 	}: {
 		report: EvidenceReport;
+		/** The headline board against full authorised use (evidence-14), worded; null when there is none (the fixed row says why). */
+		authorisedBoard?: BoardView | null;
+		/** An evidence pack's frozen report: one drafted before evidence-14 says it has no board against full authorised use. */
+		frozen?: boolean;
 		/** Licence impact by year class (issue #53 R7), after the change table (§4.1); null for baseline evidence. */
 		board?: BoardView | null;
 		/** An evidence pack drafted before evidence-5: its manifest has no board, so it is left out and says so. */
@@ -42,6 +49,9 @@
 		return { shown: [...rest, ...users.slice(0, USERS_ON_PAGE_1)], more: Math.max(0, users.length - USERS_ON_PAGE_1) };
 	});
 	const outlet = $derived(report.river[0] ?? null);
+	/** evidence-14: both impact bases; undefined in a pack drafted before it. */
+	const authorised = $derived(report.licenceImpactAuthorised);
+	const mix = $derived(authorised?.mix ? mixLines(authorised.mix) : null);
 	const band = (m: { median: number; band: { p5: number | null; p95: number | null } }) =>
 		`${signed(m.median, 0)} days (${m.band.p5 === null ? '–' : signed(m.band.p5, 0)} to ${m.band.p95 === null ? '–' : signed(m.band.p95, 0)})`;
 </script>
@@ -172,6 +182,40 @@
 {#if rows.more}<p class="small muted">{rows.more} more users’ supply changed: § 4 lists every one.</p>{/if}
 <p class="small muted">{report.rules.footnote} “run:” is the nominated run’s own difference.</p>
 
+{#if app && authorised}
+	<!-- evidence-14 (licensing build item 8): the board against full authorised use is the headline; the modelled-use board follows. -->
+	<div class="board-block" data-testid="evidence-impact-authorised">
+		<p class="k">{AUTHORISED_HEADING}</p>
+		<p class="small muted">
+			The baseline and the application both run with every holder at their full registered volume: what the application does to the river and to
+			other users if each takes what they are registered or licensed for.
+		</p>
+		{#if authorisedBoard}
+			<LicenceImpactBoard view={authorisedBoard} />
+		{:else}
+			<p class="na" data-testid="evidence-impact-authorised-na" data-status={authorised.status}>{authorisedRow(authorised)}</p>
+		{/if}
+		{#if mix}
+			<table class="data mix" data-testid="evidence-authorised-mix">
+				<caption class="small">The volumes it held holders to, by how they are held. Only a licence or a verified existing lawful use is an entitlement.</caption>
+				<thead><tr><th scope="col">Held as</th><th scope="col" class="num">Volume</th><th scope="col">Entitlement</th></tr></thead>
+				<tbody>
+					{#each mix.lines as l (l.label)}<tr><th scope="row">{l.label}</th><td class="num">{l.volume}</td><td>{l.entitlement ? 'Yes' : 'No'}</td></tr>{/each}
+					<tr class="total"><th scope="row">All of it (entitlements: {mix.entitlement})</th><td class="num">{mix.total}</td><td></td></tr>
+				</tbody>
+			</table>
+		{/if}
+		{#if authorised.builtAt && authorised.engineVersion}
+			<p class="small muted">Run {fmtDate(authorised.builtAt)} on engine {authorised.engineVersion}.</p>
+		{/if}
+	</div>
+	{#if board}<p class="k" data-testid="evidence-impact-modelled-h">{MODELLED_HEADING}</p>{/if}
+{:else if app && frozen && authorised === undefined}
+	<p class="small muted" data-testid="evidence-impact-authorised-omitted">
+		The board against full authorised use is not part of this pack: it was drafted before the evidence report carried it (report format evidence-14).
+		A new version of the pack carries it.
+	</p>
+{/if}
 {#if board}
 	<div class="board-block" data-testid="evidence-impact-board">
 		<LicenceImpactBoard view={board} />
@@ -235,6 +279,18 @@
 		margin: 0 0 1rem;
 	}
 	dt,
+	.mix {
+		margin: 0.5rem 0;
+		max-width: 36rem;
+	}
+	.mix caption {
+		caption-side: top;
+		text-align: left;
+	}
+	.mix .total th,
+	.mix .total td {
+		font-weight: 600;
+	}
 	.k {
 		font-size: 0.72rem;
 		font-weight: 600;

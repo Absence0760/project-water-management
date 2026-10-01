@@ -422,6 +422,10 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 		{ why: 'takes an empty body only (strict); a pack is issued only from an issuable report, which the ladder has none of (evidence/packs.db.test.ts)', legit: 404 }
 	],
 	[
+		'POST /projects/:id/runs/:runId/authorised-impact',
+		{ why: 'an empty body only (strict); the ladder’s run is the model’s own, not an application run, so a legit call is 409 (evidence/authorised-impact.db.test.ts runs a pair)', legit: 409 }
+	],
+	[
 		'POST /projects/:id/packs/:packId/send',
 		{ why: 'a strict body; the ladder has no pack, so a legit send is 404 (evidence/pack-send.db.test.ts sends an issued one)', legit: 404 }
 	],

@@ -8054,9 +8054,35 @@ the **application** run. Each run is `Pick<ModelOutput, 'startDate' | 'series' |
   step *existing authorised use*. The view is the same either way; only the
   label and the note change. A pair where only one run is at full
   allocation gets a note: its "proposed" step then also counts the other
-  holders' change between modelled and registered use. Making that pair
-  (the baseline and the application both at full allocation) for an
-  assessor in one step is cumulative assessment (roadmap WP-3.11).
+  holders' change between modelled and registered use.
+- **Both impact bases** (report format `evidence-14`, licensing build item
+  8; provisional position, pre-counsel research, 2026-10-01). The evidence
+  report prints two boards for an application, labelled: **against full
+  authorised use** as the headline, and **against modelled current use**
+  (the board above, the baseline as it ran). The first is the same view
+  over a pair made in one step: the baseline's stored input with
+  `settings.allocationMode: 'fullAllocation'`, and the application's
+  recorded ops applied to it (`checkScenario`, its applicant's mask as the
+  run had it), both run on the current engine
+  (`POST …/runs/:runId/authorised-impact`; `licenceImpactBoard` in
+  `packages/engine/src/evidence/impact.ts`, the function
+  `licenceImpactSection` is built on). Both runs are then at full
+  allocation, so the board's *existing authorised use* step and the
+  proposed step compare like with like, and the "only one run at full
+  allocation" note never appears. The authorised volume's mix by
+  `authorisation` sits beside it (`authorisedMix`,
+  `packages/engine/src/evidence/authorised.ts`): only a licence or a
+  verified existing lawful use is an entitlement. The pair's runs aren't
+  stored; the board is kept for the application run and read by the report
+  only when it was made on the baseline's engine with the project's
+  outcome settings as they are now. Why both: NWA s27(1)(a) and (f) and
+  s29(1)(a)(iii) and R267's "cumulative impact" point to existing *and
+  potential* use as the protective basis, while the modelled-use board
+  answers what changes tomorrow; which one an assessor weighs is theirs
+  ([evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)).
+  Tests: `packages/engine/src/evidence/authorised.test.ts`,
+  `packages/engine/src/evidence/impact.test.ts`,
+  `backend/src/evidence/authorised-impact.db.test.ts`.
 - A run without a water account (engine < 0.32.0) throws; the report says to
   run the model again.
 

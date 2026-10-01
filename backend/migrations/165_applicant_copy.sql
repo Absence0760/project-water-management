@@ -32,6 +32,9 @@
 --   4. app_applicant_copy_render_target(pack): the production worker's
 --      lookup for a render-results answer about an applicant copy, as
 --      app_pack_render_target (119) is for the pack's own.
+--   5. authorised_impact (licensing build item 8, evidence-14): page 1's
+--      board against full authorised use for an application run, built by an
+--      editor over the full-allocation pair and kept for the evidence report.
 
 -- ---------------------------------------------------------------------------
 -- 1. job: the new kind, and who queues and reads it
@@ -256,3 +259,52 @@ CREATE FUNCTION app_applicant_copy_render_target(p_pack uuid)
 	$$;
 REVOKE ALL ON FUNCTION app_applicant_copy_render_target(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_applicant_copy_render_target(uuid) TO water_app;
+
+-- ---------------------------------------------------------------------------
+-- 5. Both impact bases (licensing build item 8): the full-authorised-use board
+-- ---------------------------------------------------------------------------
+-- (In this file with the applicant's copy because the round's migration
+-- numbers were assigned per branch; docs/model.md §2.14a, docs/evidence-pack.md
+-- § Both impact bases.) Page 1's headline licence impact board judges an
+-- application against full authorised use: the baseline and the application
+-- both run with every holder at their registered volume. That is two model
+-- runs, which a report request (a viewer's GET, a pack draft) must not carry,
+-- so an editor runs the pair (POST …/runs/:runId/authorised-impact) and the
+-- board the engine builds over it is kept here; the evidence report reads the
+-- newest for the application run, or says why there is none. Nothing else:
+-- the pair's runs aren't stored (they would count toward the run cap and show
+-- in every run list), only the board, the authorised volume's mix and what
+-- built them.
+CREATE TABLE authorised_impact (
+	id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	project_id         uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+	-- The application run the board is about, and its baseline (both go with the run).
+	application_run_id uuid NOT NULL REFERENCES model_run(id) ON DELETE CASCADE,
+	base_run_id        uuid NOT NULL REFERENCES model_run(id) ON DELETE CASCADE,
+	-- The engine that ran the pair (the report reads it only when it is the baseline's).
+	engine_version     text NOT NULL CHECK (char_length(engine_version) BETWEEN 1 AND 40),
+	-- The project's outcome settings it was built with (year classes, and the Reserve site node, null = the outlet; the report reads it only when they are the project's now).
+	year_class_method  text NOT NULL CHECK (char_length(year_class_method) BETWEEN 1 AND 40),
+	reserve_site       text CHECK (reserve_site IS NULL OR char_length(reserve_site) BETWEEN 1 AND 100),
+	-- engine EvidenceAuthorisedImpact with status 'ok': the board, the mix, when, which engine.
+	result             jsonb NOT NULL CHECK (jsonb_typeof(result) = 'object' AND result->>'status' = 'ok'),
+	created_at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX authorised_impact_run_idx ON authorised_impact (application_run_id, created_at DESC);
+CREATE INDEX authorised_impact_base_idx ON authorised_impact (base_run_id);
+CREATE INDEX authorised_impact_project_idx ON authorised_impact (project_id);
+CREATE TRIGGER authorised_impact_same_project BEFORE INSERT OR UPDATE ON authorised_impact
+	FOR EACH ROW EXECUTE FUNCTION assert_same_project('application_run_id', 'base_run_id');
+COMMENT ON TABLE authorised_impact IS
+	'Page 1''s licence impact board against full authorised use (165, licensing build item 8): the board over an application run''s full-allocation pair, its authorised-volume mix, engine and outcome settings. Read by whoever reads the run; written by editors; never changed (newest wins, older go).';
+
+ALTER TABLE authorised_impact ENABLE ROW LEVEL SECURITY;
+-- Whoever reads the application run (model_run's RLS, in the subquery: a draft application's run is its applicant's).
+CREATE POLICY authorised_impact_select ON authorised_impact FOR SELECT
+	USING (app_has_role(project_id, 'viewer') AND EXISTS (SELECT 1 FROM model_run r WHERE r.id = application_run_id));
+CREATE POLICY authorised_impact_insert ON authorised_impact FOR INSERT
+	WITH CHECK (app_has_role(project_id, 'editor') AND EXISTS (SELECT 1 FROM model_run r WHERE r.id = application_run_id));
+-- The older boards of a run go when an editor builds a new one.
+CREATE POLICY authorised_impact_delete ON authorised_impact FOR DELETE
+	USING (app_has_role(project_id, 'editor'));
+GRANT SELECT, INSERT, DELETE ON authorised_impact TO water_app;

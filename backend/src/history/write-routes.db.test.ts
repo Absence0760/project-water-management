@@ -648,6 +648,10 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
 	{
+		route: `POST ${P}/runs/:runId/authorised-impact`,
+		exempt: "computes page 1's board against full authorised use for an application run and keeps it for its evidence report (licensing build item 8); no run is stored and no model, setting, run or publication changes"
+	},
+	{
 		route: `POST ${P}/scenarios/:sid/packs/:packId/pdf`,
 		exempt: "queues the print of an applicant's own copy of an issued pack (165_applicant_copy); the pack, its standing and the model are untouched"
 	},

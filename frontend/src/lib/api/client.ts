@@ -8,6 +8,7 @@ import type {
 	AllocationMode,
 	DailySeries,
 	DayBoundary,
+	EvidenceAuthorisedImpact,
 	EvidenceReport,
 	PackManifest,
 	InputChange,
@@ -644,7 +645,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** The licensing evidence report of a run (issue #71, docs/api.md § Evidence report): an application run on its base, or a baseline alone. */
 		evidence: {
 			report: (id: string, runId: string) =>
-				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
+				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report),
+			/** Run an application run's full-allocation pair and keep page 1's board against full authorised use (editor; licensing build item 8). */
+			authorisedImpact: (id: string, runId: string) =>
+				request<{ authorised: EvidenceAuthorisedImpact }>('POST', `${p(id)}/runs/${enc(runId)}/authorised-impact`, {}).then((r) => r.authorised)
 		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */

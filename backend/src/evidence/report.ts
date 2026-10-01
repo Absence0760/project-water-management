@@ -29,6 +29,7 @@ import {
 	type EvidenceReport,
 	type EvidenceRunInput,
 	type MemberResult,
+	type ModelInput,
 	type PairedMember,
 	type ResolvedEnsembleOptions,
 	type RunInputsSnapshot,
@@ -50,6 +51,7 @@ import { projectAuthority } from '../projects/authoritySettings.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
+import { loadAuthorisedImpact } from './authorisedImpact.js';
 import { listNominations } from '../runs/evidence.js';
 
 /** Most other application runs the ledger lists (newest first). */
@@ -569,6 +571,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		nominatedAt: iso(n.nominatedAt)!,
 		nominatedBy: n.nominatedBy
 	}));
+	const impact = application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null;
 	return {
 		project: { id: project[0]!.id, name: project[0]!.name },
 		baseline,
@@ -583,7 +586,17 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		...others,
 		combined,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version },
-		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null,
+		impact,
+		// Page 1's headline board against full authorised use (evidence-14, licensing build item 8): stored by an editor's run of the pair.
+		authorisedImpact:
+			application && impact
+				? await loadAuthorisedImpact(db, projectId, application.id, {
+						baselineEngine: baseline.engineVersion,
+						yearClassMethod: impact.yearClassMethod,
+						siteNodeId: impact.siteNodeId,
+						baselineInput: baseline.inputs as unknown as ModelInput
+					})
+				: null,
 		mapFeatures: await loadMapFeatures(db, projectId)
 	};
 }
