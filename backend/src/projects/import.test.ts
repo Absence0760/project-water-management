@@ -1,6 +1,6 @@
 import { canonicalUnit, defaultCalibrationRules } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { MAX_EXPORT_BYTES } from '../export/csv.js';
+import { MAX_JSON_EXPORT_BYTES } from '../export/csv.js';
 import { ProjectFile } from './document.js';
 import { freshIds, IMPORT_MAX_BYTES, parseProjectFile, projectFileProblems } from './import.js';
 
@@ -12,7 +12,7 @@ describe('import body cap', () => {
 	});
 
 	it('takes every file the export writes (raise the export cap and imports need a gzip body first)', () => {
-		expect(IMPORT_MAX_BYTES).toBeGreaterThanOrEqual(MAX_EXPORT_BYTES);
+		expect(IMPORT_MAX_BYTES).toBeGreaterThanOrEqual(MAX_JSON_EXPORT_BYTES);
 	});
 });
 

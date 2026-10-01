@@ -2,7 +2,7 @@
 // [Farm demand] (crop areas per farm, and the gross demand checked against
 // them): extract_project.py read_crops, read_crop_areas and gross_demand_note.
 import type { DemandObject } from '@water-management/engine';
-import { clean, isName, num, pyRepr } from './cells';
+import { clean, isName, num, pyFormatG, pyRepr } from './cells';
 import { InvalidWorkbookError } from './errors';
 import type { Report } from './report';
 import type { B023Workbook } from './workbook';
@@ -51,6 +51,86 @@ export function readCrops(wb: B023Workbook, report: Report): CropTable {
 		apan,
 		effectiveRainFraction: report.num(wb.cell(erf.sheet, erf.c1, erf.r1), { sheet: erf.sheet, col: erf.c1, row: erf.r1, what: 'Effective rainfall' }, 0.65)
 	};
+}
+
+// Checks of the [Crop demand] factor table (issue #289; extract_project.py, same rules and text).
+// b023's table has rows pasted from another crop and one-month slips (a lone 0,
+// a spike above 1; issue #54 item 1). The factors are imported as they are;
+// each finding is a WARNING for the modeller to check (docs/model.md §2.3).
+
+/**
+ * The Crops tab's high-factor hint. A-pan factors are Kp × Kc: FAO-56 Kc
+ * mid-season is at most about 1.2 (Table 12) and Class A pan Kp at most 0.85
+ * (Table 5), about 1.0; the ARC/SABI tables in the crop library peak at 0.7.
+ */
+export const CROP_FACTOR_CEILING = 1.0;
+/**
+ * A month more than this above (or below) both its neighbours. The ARC/SABI
+ * tables' largest step between adjacent months is 0.3 (table grapes Mar → Apr,
+ * pecan), and no month there stands off both neighbours by more than 0.15.
+ */
+export const CROP_FACTOR_LONE_STEP = 0.3;
+/** Float noise in a difference of two typed factors (0.65 − 0.35 is 0.30000000000000004). */
+const CROP_FACTOR_EPS = 1e-9;
+
+/** crop_row_findings(): the suspect months of one crop's 12 factors (Oct..Sep; the year wraps, so Oct's neighbours are Sep and Nov). */
+export function cropRowFindings(factors: readonly number[]): string[] {
+	const out: string[] = [];
+	const step = CROP_FACTOR_LONE_STEP + CROP_FACTOR_EPS;
+	factors.forEach((x, m) => {
+		const pm = (m + 11) % 12;
+		const nm = (m + 1) % 12;
+		const a = factors[pm]!;
+		const b = factors[nm]!;
+		const around = `${MONTHS_WY[pm]} ${pyFormatG(a)} and ${MONTHS_WY[nm]} ${pyFormatG(b)}`;
+		const month = MONTHS_WY[m];
+		if (x < 0) out.push(`${month} factor ${pyFormatG(x)} is negative`);
+		else if (x === 0 && a > 0 && b > 0) out.push(`${month} factor is 0 between ${around} (a lone month out of the ground)`);
+		else if (x - a > step && x - b > step) out.push(`${month} factor ${pyFormatG(x)} is more than ${pyFormatG(CROP_FACTOR_LONE_STEP)} above both ${around} (a lone spike)`);
+		else if (a - x > step && b - x > step) out.push(`${month} factor ${pyFormatG(x)} is more than ${pyFormatG(CROP_FACTOR_LONE_STEP)} below both ${around} (a lone dip)`);
+		if (x > CROP_FACTOR_CEILING) out.push(`${month} factor ${pyFormatG(x)} is above ${pyFormatG(CROP_FACTOR_CEILING)} (more water than an open A-pan loses)`);
+	});
+	return out;
+}
+
+export interface CropTableNote {
+	code: 'crop-factors-copied' | 'crop-factors-suspect';
+	crop: string;
+	message: string;
+}
+
+/**
+ * crop_table_notes(): WARNINGs for [Crop demand] rows copied from another crop
+ * and for suspect months (issue #289). A row identical to an earlier,
+ * differently named crop's (not all zero) names that crop; its months aren't
+ * checked again, since the first crop's note covers them.
+ */
+export function cropTableNotes(crops: readonly { name: string; cropFactor: readonly number[] }[]): CropTableNote[] {
+	const notes: CropTableNote[] = [];
+	const same = (p: readonly number[], q: readonly number[]) => p.length === q.length && p.every((v, i) => v === q[i]);
+	crops.forEach((c, i) => {
+		const f = c.cropFactor;
+		const first = crops.slice(0, i).find((d) => d.name !== c.name && same(d.cropFactor, f));
+		if (first && f.some((x) => x !== 0)) {
+			notes.push({
+				code: 'crop-factors-copied',
+				crop: c.name,
+				message:
+					`WARNING: [Crop demand] crop ${c.name}: its 12 factors are the same as ${first.name}'s, a row copied from ` +
+					'another crop by the look of it; imported as they are, so give it its own curve if it has one (issue #289)'
+			});
+			return;
+		}
+		const findings = cropRowFindings(f);
+		if (findings.length) {
+			notes.push({
+				code: 'crop-factors-suspect',
+				crop: c.name,
+				message: `WARNING: [Crop demand] crop ${c.name}: ${findings.join('; ')}; imported as they are, so check them against the workbook (issue #289)`
+			});
+		}
+	});
+	return notes;
 }
 
 /** read_crop_areas(): m² per crop per farm, by farm name then crop name (Python dict order and overwrite rules). */
@@ -147,6 +227,8 @@ export function nonCropDemandObject(uid: (key: string) => string, farm: string, 
 		priority: 'shared',
 		destination: 'internal',
 		enabled: true,
+		// The workbook's typed-over demand is neither a meter record, an AADD nor a norm by rule (engine 1.56.0).
+		source: 'other',
 		note: 'b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)'
 	};
 }

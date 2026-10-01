@@ -1718,8 +1718,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
     so the schematic's scroller carries `data-fit` (`<width>x<height>`, plus
     ` wide` from 900 px): the box the drawing on screen was laid out for. It
     is settled once that matches the box as it is now and `--map-top` matches
-    the layout's top; e2e waits on that (`waitForMapFit`, e2e/support/diagrams.ts)
-    before measuring the map (issue #138).
+    the layout's top, and the map card isn't `aria-busy` (set while the latest
+    run's results load: their status line sits in the card's head, which wraps
+    at 1280 px, so the map moves up when it goes); e2e waits on that
+    (`waitForMapFit`, e2e/support/diagrams.ts) before measuring the map (issue #138).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
@@ -1824,7 +1826,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   text):
   - **Supply, latest run** (the default once there is a run): the newest
     run's summary (`api.runs.get`, sharing the Runs tab's `detailCache`; a
-    quiet status line covers loading, and a failure offers Retry) banded by
+    quiet status chip over the map's top-left corner covers loading, and a
+    failure offers Retry there; it lies over the drawing rather than in the
+    card's header, where at 1280 px it wrapped the header and moved the map
+    when the load ended, `network-map.spec.ts`) banded by
     `fractionSupplied` (`network/supplyColour.ts`): **≥ 95 %**
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
@@ -2078,13 +2083,19 @@ note's link on the Summary, `notes.ts` `noteHref`).
   issue's research table (municipal: m³/day by month, first, 50 % returned;
   domestic: people × 230 l a day, first; livestock: head × 45 l a day, with
   the crops; external: piped out, nothing returned; the rest: m³/day by month,
-  with the crops). Each has a **Name**, **Category**, **Demand given as**
-  (m³/day by month, or a count × litres a day), **Priority** (first / with the
+  with the crops). Each has a **Name**, **Category**, **Source of the
+  number** (engine ≥ 1.56.0, issue #54 Q11, `demandObjectSource.ts`: Not
+  recorded, the default; Meter records; Reconciliation strategy's AADD;
+  Population × litres a day (a norm); Other), **Demand given as**
+  (m³/day by month, or a count × litres a day; picking meter records or an
+  AADD sets it to m³/day by month and a norm to a count × litres, and locks
+  it with "Set by the source." under it; Other and Not recorded leave it to
+  the modeller), **Priority** (first / with the
   crops / last), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
-  m³/day, or the per-unit profile, blank = 1), and **Where the number comes
-  from**. Per unit: **Number of** people / head / units, **Litres per** person
+  m³/day, or the per-unit profile, blank = 1), and **Source details** (the
+  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2121,7 +2132,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   floor** (the days, with the mean m³/day below it on a second line, stacked
   so the table keeps its width); "–" on an object without one, which the
   intro says means no floor (`HumanImpactTables.test.ts`,
-  `e2e/tests/demand-objects.spec.ts`).
+  `e2e/tests/demand-objects.spec.ts`). When an object records its source
+  (engine ≥ 1.56.0), a **Source** column after the name ("not recorded" on
+  the rest) and a line above the table giving each source's share of the
+  objects' demand, best source first ("Of their demand, 60% is from meter
+  records, 30% from a per-capita norm and 10% not recorded.",
+  `runs/demandSources.ts`, `e2e/tests/demand-source.spec.ts`); the summary
+  CSV's demand-objects block gains a Source column the same way.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -2364,10 +2381,29 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   importer in its worker (`spreadsheet/import/`, the same reader and
   failure messages as Import a b023 workbook; it reads the whole workbook,
   so a large one takes a few seconds). Workbooks never leave the
-  browser. A node-based workbook (no b023 named ranges) can't be
-  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
-- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
-  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+  browser.
+  **A node-based workbook** is the third source: its [Crop_Factors] and
+  [Crop_Areas] sheets, read by the same worker
+  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+  efficiency column isn't loaded (a crop's efficiency changes only through
+  the system select below), nor are its farm areas. For
+  either workbook, the dialog lists what the reader flagged as text under
+  the file: for a node-based workbook, a missing sheet (a b023 file picked
+  under this option), names that differ between the two sheets and cells
+  read as 0; for a b023 workbook, the import report's
+  `crop-factors-copied` and `crop-factors-suspect` warnings.
+- **Pan coefficient Kp** multiplies the source factors. It starts at the
+  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
+  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
+  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
+  set against reference ET₀ while the engine multiplies crop factors by
+  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
+  mid value). A line under the input says which and why, linking [FAO-56
+  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
+  re-applies the new source's default only while Kp is still the previous
+  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
+  **Use the default, N** puts the default back.
 - **Match crops:** a row per project crop with a **Load factors from**
   select, preset by name (`matchByName`: the same name ignoring case,
   accents, punctuation and a plural s, or the one source whose words hold the
@@ -4825,8 +4861,35 @@ read it before.
   series with the engine's `recessionPoints`, so the summary holds only the
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
-  those runs; an older run shows neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  those runs; an older run shows neither. From engine 1.55.0, after it,
+  **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
+  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
+  signatures*, CR-16): which record is scored (the outlet's gauge or logger
+  record, or the calibration site's, named) and on how many days; a verdict
+  line; a table with a row each for the base-flow index by the Hughes et al.
+  (2003) and the Eckhardt (2005) filters, the low-flow FDC's Q70–Q95 slope,
+  the low-flow volume bias (%BiasFLV) and the skill on held-out recessions
+  (observed = the river's own recession curve fitted on the other segments,
+  simulated = the model), each with its observed and simulated value, the
+  difference or bias, the **Provisional limit** and *within* / *outside* /
+  *not judged* (a row outside its limit shaded); and a line on how the
+  recessions were held out. The intro says the limits are provisional, for
+  the hydrologist to confirm: they are the engine's warning limits (±0.15
+  BFI by either filter, ±50 % on the slope bias and %BiasFLV, a held-out
+  skill of at least 0 with 8 or more segments), which the display reads
+  through one named constant, `PROVISIONAL_SIGNATURE_LIMITS` in
+  `runs/signatures.ts` ([followups.md § Hydrologist](./followups.md#hydrologist)).
+  The check list gains a *Validation signatures* line (so does the run's
+  credibility strip, which counts the check list's findings) and the
+  panel's intro counts six checks on those runs; a run with no observed
+  record shows the heading and "Not computed: needs an observed flow
+  record."; a run made before 1.55.0 shows neither. The help article
+  *Validation signatures* (`plausibility-signatures`) explains BFI, the two
+  filters, the low-flow slope and %BiasFLV and the held-out recession skill
+  in plain words. The Compare page sets the first four checks and the
+  gauges side by side
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
+  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
@@ -5472,8 +5535,9 @@ volume to match it"), or matched to a unit the run doesn't have. A run made
 with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
 says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
-full allocation ("… what the river would look like if every registered user
-took their entitlement, not what they take").
+full allocation ("… what the river would look like if every registered or
+licensed volume were taken in full (a registration is not an entitlement), not
+what the units take").
 In a cap run the picked unit's card says, per capped source under its water
 years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
 days the cap held use back and by which limit (the volume used up, the
@@ -5795,6 +5859,16 @@ the viewer's day, with a request's change set folded into one entry.
   (`.history.fit`) and the list and the detail scroll inside it; a linked
   entry further down is scrolled into view inside the list, never the page.
   **Show older changes** (50 items a page) sits at the foot of the list.
+- **A publication's record** (the season decision log, issue #119;
+  `timeline.ts` `publicationRecord`): under a `publication.published` or
+  `publication.notice_changed` event, wherever the whole entry shows (the
+  detail, or the narrow list), the season window and data-until day, the
+  run id with its engine version and runoff model, the inputs' SHA-256, the
+  notice in each language it was written in ("Notice (Afrikaans): …"), the
+  next publication date, the note, and a collapsed **Figures per farm (N)**
+  table (supplied %, demand and supplied m³, short days, dam %, model band).
+  `&kind=publication` is the log on its own. Events from before the log
+  widened show only their line.
 - **Narrow (a phone):** no detail; each entry shows whole under its day, with
   its buttons (44 px targets), and the page scrolls. The two selects share a
   row, the parameter box has its own.
@@ -6568,9 +6642,10 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail pinned to the column's right edge instead). A
-  guide spans the Help column like the overview (issue #162): body text,
-  notes and lists keep a 44rem reading measure, while diagrams, picture
-  tours, formulas and the terms table take the column's whole width (a
+  guide spans the Help column like the overview (issue #162), and so do
+  its body text, notes and lists (no 44rem measure since 2026-09-30, which
+  left half the column empty beside the figures), along with diagrams,
+  picture tours, formulas and the terms table (a
   diagram is drawn at most 1.3 times its viewBox width, centred, so a small
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last

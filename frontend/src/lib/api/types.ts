@@ -249,8 +249,8 @@ export interface ImportReport {
 /** GET /projects/:id/import-report: the newest import's report, with who imported it and when. */
 export interface StoredImportReport extends ImportReport {
 	importedAt: string;
-	/** The importer's display name. */
-	importedBy: string;
+	/** The importer's display name; null once their account is deleted (138). */
+	importedBy: string | null;
 }
 
 export interface Member {
@@ -692,7 +692,8 @@ export interface Ensemble {
 	summary: EnsembleSummary | PairedSummary | null;
 	createdAt: string;
 	createdBy: string | null;
-	createdById: string;
+	/** Null once the starter's account is deleted (138). */
+	createdById: string | null;
 	completedAt: string | null;
 }
 
@@ -896,7 +897,8 @@ export interface Scenario {
 	 * rebase dropped still reads by name. Sorted by id.
 	 */
 	opNames: { id: string; name: string }[];
-	ownerUserId: string;
+	/** Null once the owner's account is deleted (138): the scenario stays, the name goes. */
+	ownerUserId: string | null;
 	/** The owner's display name. */
 	owner: string | null;
 	status: ScenarioStatus;
@@ -1748,7 +1750,14 @@ export interface SignoffRequest {
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
 
-export type AllocationAuthorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+/** Mirrors backend allocations/parse.ts `Authorisation` (and 136's CHECK); a registration is not an entitlement (issue #281). */
+export type AllocationAuthorisation =
+	| 'registration'
+	| 'licence'
+	| 'general_authorisation'
+	| 'schedule_1'
+	| 'existing_lawful_use_claimed'
+	| 'existing_lawful_use';
 export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';

@@ -48,7 +48,6 @@ const IGNORED_NODE_KEYS = new Set(['id', 'sortOrder']);
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const sortedMonths = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - b);
 const label = (n: { name: string }) => `“${n.name || 'unnamed node'}”`;
-const cropLabel = (c: { name: string }) => `“${c.name || 'unnamed crop'}”`;
 
 /** Crop areas summed per farm and crop (the editor keeps one row each; an old document may have duplicates). */
 function areaMap(rows: readonly CropArea[], keep: (a: CropArea) => boolean = () => true): Map<string, number> {
@@ -288,6 +287,8 @@ function objectField(o: DemandObject, f: DemandObjectSetField): unknown {
 		return o.schedule?.length ? o.schedule.map((w) => ({ label: w.label.trim(), span: w.span, from: w.from, to: w.to, easterFrom: w.easterFrom, easterTo: w.easterTo, weekdays: w.weekdays, factor: w.factor })) : null;
 	if (f === 'note' || f === 'name') return (o[f] ?? '').trim();
 	if (f === 'population') return o.population ?? null;
+	// Likewise no source and null (not recorded, engine ≥ 1.56.0).
+	if (f === 'source') return o.source ?? null;
 	return o[f];
 }
 

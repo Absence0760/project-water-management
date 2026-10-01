@@ -392,7 +392,9 @@ describe('auto-publish (settings.autoRun.publish)', () => {
 		expect(Number(now!.restriction_pct)).toBe(20);
 		expect(now!.note).toMatch(/^Published automatically: .* the run published on 2026-09-26 didn't\.$/);
 		const [audit] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'publication.published' ORDER BY created_at DESC, id DESC LIMIT 1`, [pid]);
-		expect(audit.subject).toMatchObject({ runId: autoRun.id, auto: true });
+		// The decision log (issue #119) records the notice it carried over and the auto run's own figures.
+		expect(audit.subject).toMatchObject({ runId: autoRun.id, auto: true, restriction: { level: 'restricted', pct: 20, notice: { en: 'Irrigate at night only' } }, note: now!.note });
+		expect(audit.subject.perFarm).toHaveLength(audit.subject.farms);
 	});
 
 	it('if_no_new_warnings: never makes the first publication, and holds back a run with a new warning', async () => {

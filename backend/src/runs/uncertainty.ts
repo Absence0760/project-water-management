@@ -199,7 +199,7 @@ interface Row {
 	summary: unknown;
 	createdAt: string;
 	createdBy: string | null;
-	createdById: string;
+	createdById: string | null;
 	completedAt: string | null;
 }
 
@@ -207,7 +207,7 @@ const COLUMNS = `u.id, u.run_id AS "runId", u.baseline_id AS "baselineId", b.run
 	u.runoff_model AS "runoffModel", u.engine_version AS "engineVersion", u.method, u.seed::int AS seed, u.members,
 	u.options, u.status, u.accepted, u.summary, u.created_at AS "createdAt", au.display_name AS "createdBy",
 	u.created_by AS "createdById", u.completed_at AS "completedAt"`;
-const FROM = `FROM run_uncertainty u JOIN app_user au ON au.id = u.created_by LEFT JOIN run_uncertainty b ON b.id = u.baseline_id`;
+const FROM = `FROM run_uncertainty u LEFT JOIN app_user au ON au.id = u.created_by LEFT JOIN run_uncertainty b ON b.id = u.baseline_id`;
 
 async function loadRow(db: Db, projectId: string, runId: string, uid: string, withResult = false) {
 	if (!UUID.test(runId) || !UUID.test(uid)) throw new ApiError(404, 'not found');

@@ -216,6 +216,19 @@ resource "aws_lambda_function" "backend" {
 resource "aws_lambda_function_url" "backend" {
   function_name      = aws_lambda_function.backend.function_name
   authorization_type = "NONE"
+  # Response streaming (WP-1.29a, issue #283): a response may pass the 6 MB a
+  # BUFFERED URL stops at (up to 200 MB), so the CSV exports stream instead of
+  # answering 413 (backend/src/export/download.ts, capped at 50 MB). It covers
+  # every route, and must match the handler: backend/src/lambda.ts exports a
+  # streaming one (http/lambdaStream.ts), so this and that change together,
+  # never one alone (docs/deployment.md § Response streaming). Nothing at the
+  # edge changes: CloudFront passes a streamed (chunked) origin response
+  # through on /api/* (CachingDisabled, so nothing is stored or compressed),
+  # the WAF inspects requests only, and the shared-secret check is the app's
+  # first middleware whichever way the response travels. Past the first 6 MB a
+  # stream runs at about 2 MB/s, which the 50 MB cap keeps inside the 30 s
+  # timeout.
+  invoke_mode = "RESPONSE_STREAM"
   # No `cors` block: the browser never calls the Function URL. It calls the
   # site's own origin (/api/*) and CloudFront proxies here, so every request
   # is same-origin and Hono's cors()/csrf() middleware is the only CORS layer.

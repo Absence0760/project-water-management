@@ -1629,6 +1629,26 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1365 KB (CR-16, engine 1.55.0: the validation
+//             signatures of the scored record, BFI, low-flow FDC slope and
+//             held-out recession skill, with the drought rule's 1.54.0 now on
+//             main @ the #273 merge). Measured 1360 locally; CI ~2 KB above.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1365 → 1370 KB (issue #289, #293 with #291, #292 and
+//             #294 merged: Load crop factors' Kp default by crop-set shape
+//             with its why line, the node-based workbook as the third source
+//             and the workbook warnings list). Measured 1361 locally against
+//             #294's 1360 (+1 KB), plus CI's ~3 KB over local; headroom ~1 KB
+//             on CI. The import worker is now 31 of 32 KB
+//             (largestSpreadsheetWorkerKb, the node-based reader in it), so
+//             the next addition there trips that ceiling.
+//             Re-measured with main @ 11b181da merged (engine 1.55.0, #267's
+//             1365): 1365 locally, CI ~3 KB above. Headroom ~2 KB on CI.
+// 2026-10-01  total 1370 → 1372 KB (engine 1.56.0, issue #54 Q11: a demand
+//             object's structured source, its picker in the node form and
+//             demand by source in the run, over main @ the #267 merge).
+//             Measured 1363 locally. Re-measured with main @ 9dbdbc8b (#293's
+//             crop work, 1370): 1367 locally, CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1639,7 +1659,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1362,
+	totalCodeKb: 1372,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

@@ -1515,7 +1515,6 @@ def run(doc: dict) -> dict:
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).
-            T = 0.0
             beta = x["lossReturnFraction"]
             if objs[xid]:
                 left_g = G
@@ -1742,7 +1741,6 @@ def run(doc: dict) -> dict:
             charge_irr[f][i] = -a_irr
 
     # ---- write the node series ------------------------------------------
-    dam_keys = {"dam_release"}
     for x in nodes:
         xid = x["id"]
         cc = col[xid]

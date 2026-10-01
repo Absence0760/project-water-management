@@ -153,9 +153,69 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
    The crop factors multiply **A-pan** evaporation (`grossCropMm` in
    `packages/engine/src/demand.ts`), not FAO reference evapotranspiration ET₀.
-   ET₀ is about 0.7–0.85 × pan, so an FAO-56 Kc entered as it is overstates
-   demand by roughly a quarter. The Crops tab says so and points out any factor
-   above 1.0 (a hint, not an error).
+   The Crops tab says so and points out any factor above 1.0 (a hint, not an
+   error).
+
+   **How far an FAO-56 Kc set overstates demand (issue #289).** An FAO-56 Kc
+   is set against ET₀, and ET₀ = Kp × A-pan, so a Kc entered as it is
+   overstates demand by 1/Kp − 1 from the missing pan coefficient alone.
+   [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm) gives a Class
+   A pan Kp of **0.35–0.85**. Across 0.60–0.85, the plausibility band the
+   pan coefficient warns outside (§2.4a), that is about **18–67 %**: 18 % at
+   0.85, 25 % at 0.80, 33 % at 0.75, 43 % at 0.70, 67 % at 0.60. The
+   table's lowest cells (strong or very strong wind, a dry fallow fetch, low
+   humidity) go down to 0.35, which would give up to about 186 %. The
+   "~25–40 %" issue #54 item 1 first gave covers only Kp 0.71–0.80.
+
+   The node-based workbook's set as a whole differs by more than the missing
+   Kp, because its curves are also taller than the A-pan tables'. Weighted by
+   the workbook's own monthly A-pan row (Σ A-pan × factor over the year, the
+   workbook's set ÷ the matching crop in the reference library, item 8),
+   annual crop use comes out about **45–76 % higher** for citrus, deciduous
+   fruit and pasture: citrus +75 % (Table 4.13 citrus), pasture +46 % (mixed
+   pasture), apples and pears +47 % (late deciduous cultivars), nectarines
+   and peaches +64 % and +76 % (medium and early cultivars). Pecan comes out
+   about **+5 %**: its Table 4.10 curve (summer rainfall) is high all year.
+   The workbook is client data and isn't in the repo; the figures come from
+   it (issue #289) and aren't reproducible from a fresh clone. Three caveats
+   go with them:
+
+   - The ARC/SABI tables are design values of the late 1980s (the
+     winter-rainfall tables are dated June 1990) for clean-cultivated
+     orchards. Newer WRC orchard water-use studies give a higher Kc under a
+     cover crop (about 0.2–0.25 higher, issue #54), which narrows the gap for
+     the tree crops.
+   - The workbook's row labelled "WR90 A-pan evaporation" may really be
+     S-pan, or otherwise scaled (§2.4a, *Check the A-pan row*). A Symons
+     S-pan reads lower than an A-pan beside it, so if it is, the A-pan tables
+     belong on a higher row than the one both sets were weighted by, and the
+     workbook's Kc × row sits nearer Kc × ET₀ than the percentages suggest.
+     That would partly offset the excess.
+   - The figures are for that one workbook's row and crops. For a real
+     choice, the Load crop factors dialog (item 8) shows the demand
+     difference on the catchment's own row and areas before anything is
+     applied.
+
+   **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
+   demand]` table has rows pasted from another crop and one-month slips (issue
+   #54 item 1). Both importers (`crops.ts` `cropTableNotes`,
+   `extract_project.py` `crop_table_notes`) import every factor as it is and
+   add one import-report warning per crop that trips a check, on the `Crop
+   demand` sheet with the crop as its element:
+
+   | Check | Rule | Why this line |
+   | --- | --- | --- |
+   | Copied row (`crop-factors-copied`) | the 12 factors equal an earlier, differently named crop's, exactly; a row of zeros (an unused crop) isn't compared | a pasted row is exact; two crops may share a curve (apples and pears, #54), so it is for the modeller to confirm, not an error. The copy's months aren't checked again, the first crop's warning covers them |
+   | Negative factor (`crop-factors-suspect`) | below 0 | a crop can't give water back to the pan |
+   | Lone month out of the ground | 0, with both neighbouring months above 0 | no crop in the ARC/SABI tables (item 8) leaves the ground for one month between two in it |
+   | Lone spike or dip | more than 0.3 above, or below, both neighbouring months | 0.3 is the largest step between adjacent months in those tables (table grapes Mar → Apr, pecan into and out of dormancy), and no month there stands off both neighbours by more than 0.15 |
+   | Above 1.0 | above 1.0 | the Crops tab's hint: a factor is Kp × Kc, FAO-56 Kc mid-season is at most about 1.2 ([Table 12](https://www.fao.org/4/x0490e/x0490e0b.htm)) and Class A pan Kp at most 0.85 ([Table 5](https://www.fao.org/4/x0490e/x0490e08.htm)), about 1.0; the ARC/SABI tables peak at 0.7 |
+
+   The year wraps (Oct's neighbours are Sep and Nov). A difference exactly at
+   0.3 isn't flagged (a 10⁻⁹ allowance absorbs float noise). The checks read
+   the table, not the farms, so a crop no farm grows is checked too. A number
+   cell holding text is already its own unmapped item (`non-numeric-value`,
+   imported as 0).
 
    Demand always reads A-pan: `apanMm`, or on the days it covers the daily
    A-pan series (§2.3a, engine ≥ 0.38.0). GR4J's own PE input (`settings.pe`,
@@ -344,9 +404,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
-     optional Kp (default 1). A-pan tables and b023 factors already multiply
-     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀) needs
-     about 0.75 (issue #54).
+     optional Kp, defaulted by the source's shape (issue #289). A-pan tables
+     and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
+     an FAO-56 Kc set (against ET₀; a node-based workbook's
+     [Crop_Factors], the dialog's third source) defaults to 0.75, a mid value of FAO-56
+     Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
+     and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values
      from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
      WRC orchard studies should be checked. The engine's maths is unchanged
@@ -3333,7 +3396,8 @@ regression suite is unchanged.
 | Field | Meaning |
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
-| `name`, `note` | a label, and where the number comes from, so reports can say how solid it is (Q11). The rule, decided with the client (issue #90): use meter records where they exist, else the reconciliation strategy's AADD, else population × litres per person per day, and record which one was used. Today that record is the free-text `note`; a structured source field is a follow-up ([followups.md](./followups.md) "Demand objects: a structured demand source") |
+| `name`, `note` | a label, and the detail of where the number comes from (which meter and years, which strategy, which norm) |
+| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 139; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -3364,6 +3428,32 @@ unit (it no longer follows from G alone), and the curtailment report's supply
 cut divides the irrigation part of the charge by the window's
 (Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
 objects included, with the draft; its `demand` shape includes them.
+
+**The source** (engine ≥ 1.56.0, issue #54 Q11, `project.ts`
+`DEMAND_OBJECT_SOURCES`). So a report can say by rule how solid a demand
+is, the client's rule (confirmed in issue #90) is recorded per object: use
+meter records where they exist, else the reconciliation strategy's AADD
+(annual average daily demand), else population × litres per person per day.
+The source fixes how the volume is derived:
+
+| `source` | The number | `sizing` |
+| --- | --- | --- |
+| `meter` | metered abstraction, m³/day per month (a meter record includes losses, so it isn't grossed up) | `monthly` |
+| `aadd` | the strategy's AADD, m³/day, shaped by month if the strategy gives a profile | `monthly` |
+| `perCapita` | `count` (people, or head of stock) × `litresPerUnitDay` (a norm: the Red Book's 230 l, about 45 l per head of cattle) ÷ (1 − losses) × the monthly profile | `perUnit` |
+| `other` | anything else: a licence volume, an estimate, a workbook's typed-over demand (the importers' choice) | either |
+
+A save (and a scenario op) that gives `meter` or `aadd` to a per-unit object,
+or `perCapita` to a monthly one, is refused (modelRules `doSourceSizing`); the
+node form sets the sizing when the source is picked and locks it. Null (every
+object saved before 1.56.0, and a new one until the modeller says) is "not
+recorded". The source is a record, never an input: a run is the same to the
+bit with any source or none (`run.demandSource.test.ts` on random networks).
+The run carries it on the object's summary (`DemandObjectSummary.source`), and
+the demand-objects table and the summary CSV show it with each source's share
+of the objects' demand. Which source a demand *should* have (whether a
+catchment has meter records the modeller skipped) is the modeller's call; the
+app records it and never guesses one.
 
 **Decisions, pending the hydrologist** (the issue #54 research; the
 conservative reading where it didn't settle them):
@@ -3479,7 +3569,8 @@ stages are shown as the supplied l per person per day, never applied.
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
 supplied, return and days short, and, on an object with a schedule, its
-days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
+days off, engine ≥ 1.17.0; a day off is never a day short; and its source
+when it records one, engine ≥ 1.56.0). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so. An
 object with a basic-needs floor (engine ≥ 1.44.0) adds its people and floor
 B_k, the days it got less than b_k(t) and the mean of MAX(b_k − G_k, 0) (the
@@ -3504,7 +3595,7 @@ span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction (and doubles an object's population, so a floor doubles with it). Half the fuzz's monthly objects name people
 (engine ≥ 1.44.0), so domestic and municipal ones have floors below and above
-their demand; `run.basicNeeds.test.ts` restricts every unit of the random
+their demand, and two in three objects a source that fits their sizing (engine ≥ 1.56.0); `run.basicNeeds.test.ts` restricts every unit of the random
 networks (factors 0 to 1) and checks every invariant. Hand examples: `run.basicNeeds.test.ts`, `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
 dates, the year-end wrap, 29 February, overlap order).
@@ -4451,7 +4542,8 @@ rule table has no such dependence.
 *Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
 Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
-aside) · Nathan & McMahon
+aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
+validation signatures' BFI, §2.10d) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
@@ -5617,7 +5709,7 @@ question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
-Not in the workbook. Five checks (four before engine 1.19.0) a reviewing hydrologist makes by hand
+Not in the workbook. Six checks (four before engine 1.19.0, five before 1.55.0) a reviewing hydrologist makes by hand
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
@@ -5874,6 +5966,149 @@ fits. The summary CSV has a *Recession diagnostics* block
 ([api.md](./api.md#export)). The check stays at the outlet: it doesn't run at
 gauges inside the network. Per-segment fits, bootstrap bands and seasonal
 tags are CR-15.
+
+#### Validation signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
+
+A sixth check (`packages/engine/src/plausibility/signatures.ts`, kept in
+`RunSummary.plausibility.signatures`; absent on older runs, null without an
+observed record). It follows the **scored record**: the calibration site's
+record when `settings.calibrationSiteNodeId` scores a gauge inside the
+network (§2.10k), with the simulated flow there, else the outlet's
+calibration record against the simulated outflow; the summary names the site
+(`siteNodeId`, `siteName`). Three signatures of that record against the
+simulated flow on the same days. Like the other checks it only reports and
+warns: nothing it computes reaches a simulated flow (tested: the flows are
+bit-identical whichever record is scored).
+
+**Days.** The base-flow index and the low-flow curve use every recorded day
+(≥ 0 m³/s) the calibration exclusions leave in, over the whole run, as the
+Q90 check does. They keep the days the record's quality flags mark
+(extrapolated above or below the rating, infilled, suspect): a digital
+filter needs the continuous hydrograph (an extrapolated flood is still a
+flood, and cutting it out would split the record at every storm), and the
+days below the lowest gauging are the low end of the curve being measured.
+The recession segments leave flagged days out, as the recession check does
+(CR-18): the mask is the exclusions and the days the scored record's
+per-day classes flag, the classes the run stores as `observed_flow_quality`
+(§2.10h, `recordFlowFlags`; at a calibration site without a gauged range or
+gap fill, as there).
+
+**1. Base-flow index** (BFI = Σ base flow ÷ Σ flow), by two filters on the
+§2.9d plumbing (`filterBaseflow` in `reserve/baseflow.ts`, the series
+reflected by 30 days at each end, as there):
+
+| Filter | Formula | Parameters | Source |
+| --- | --- | --- | --- |
+| Hughes, Hannart & Watkins (2003) | q_t = α·q_t−1 + β·(1 + α)·(Q_t − Q_t−1), 0 ≤ q_t ≤ Q_t, b_t = Q_t − q_t, q_0 = 0 | α **0.995**, β **0.5**, **one forward pass** | their eq. 1; β fixed at 0.5 for daily data ("no reason to change the β parameter from the fixed value of 0.5"); α 0.995 for South African daily flows (Smakhtin & Watkins 1997; up to 0.997 in some catchments); Nathan & McMahon's repeated passes set aside as a further parameter |
+| Eckhardt (2005) | b_t = ((1 − BFImax)·a·b_t−1 + (1 − a)·BFImax·Q_t) ÷ (1 − a·BFImax), b_t ≤ Q_t, b_0 = BFImax·Q_0 | a **0.98**, BFImax **0.25** | Eckhardt 2005's BFImax 0.25 for perennial streams on hard-rock aquifers (0.80 perennial on porous aquifers, 0.50 ephemeral on porous); most South African rivers drain fractured hard-rock aquifers. a 0.98 is the usual daily recession constant; Eckhardt (2008) derives it from the record's own recessions instead |
+
+β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter
+with one pass instead of three (`lyneHollickBaseflow` is now the β = 0.5 case
+of `filterBaseflow`, bit for bit; tested). b_0 = BFImax·Q_0 is Eckhardt's
+steady state for a constant flow, so a flat record needs no start-up.
+Eckhardt's index can't exceed BFImax much, so its absolute value says more
+about the parameter than the river; read it as a comparison between record
+and model, and the Hughes index as the South African figure. A filter needs
+consecutive days: each runs over every stretch of **30 or more** consecutive
+scored days (`BFI_MIN_RUN_DAYS`; a shorter stretch is mostly start-up), the
+record and the simulated flow over the **same** stretches, and the BFI sums
+over all of them. It needs **365** such days (`SIGNATURE_MIN_DAYS`, a year,
+so every season is in) or is null. For both filters 0 ≤ b_t ≤ Q_t every day,
+so 0 ≤ BFI ≤ 1 (tested on random series and parameters).
+
+**2. The low-flow duration curve.** On the same scored days (365 or more),
+the flow duration curve of the record and of the simulated flow (Weibull
+positions, as check 4, `exceedanceFlow` in `lowFlow.ts`), its **slope**
+between Q70 and Q95 on log flow:
+
+```
+slope = (ln Q70 − ln Q95) ÷ (0.95 − 0.70)          flows floored at 0.001 m³/s
+slope bias = 100 × (slope_sim − slope_obs) ÷ slope_obs    (null when slope_obs = 0, or either curve's Q95 ≤ 0.001 m³/s)
+```
+
+The bias is Yilmaz, Gupta & Wagener's (2008) %BiasFMS form; their segment is
+20–70 % (the fit reports that one, §2.10b), and this is the low segment the
+Reserve's low flows sit on. Beside it, their **%BiasFLV** (the bottom 30 %'s
+volume in log space) from `fdcSignatures` in `calibrate/objective.ts`, the
+definition the fit report and the ensemble's low-flow filter (§2.10e)
+already use. A positive slope bias is a model whose low flows fall away
+faster than the river's. The slope bias needs both curves to flow at Q95:
+where either is at or below the 0.001 m³/s floor there (an intermittent
+river, or a model that dries out), the floored slope measures the floor,
+not the river (two curves that both stop flowing by Q95, with Q70 either
+side of the floor, read −100 % apart; the example Sandspruit catchment
+did), so it is null and %BiasFLV alone judges those low flows.
+
+**3. Skill on withheld recession segments.** The scored record's recession
+segments, found as the recession check finds them (TOSSH defaults and the
+1 mm rain rule, the day mask above). **Every third segment in date order is
+held out** (`HOLDOUT_EVERY` 3: the 3rd, 6th, 9th …, a third of them): a
+deterministic split, the same on every run of the same record, spread
+through the record's seasons and years rather than one period (a date split
+would put every held-out recession in one climate). The power law
+−dQ/dt = a·Q^b is fitted to the **other** segments (ETS, as the check). On
+each held-out segment from its first day s to its last e:
+
+```
+observed fall     y_t = ln(Q_obs(t) ÷ Q_obs(s))
+simulated fall    m_t = ln(Q_sim(t) ÷ Q_sim(s))
+law's fall        l_t = ln(L(t − s) ÷ Q_obs(s)),  L(τ) solved exactly from −dQ/dt = a·Q^b, Q(0) = Q_obs(s)
+                    b = 1: Q_obs(s)·e^(−aτ);  else (Q_obs(s)^(1−b) + (b − 1)·a·τ)^(1/(1−b)), 0 once that base is ≤ 0,
+                    floored at 10⁻⁶ × Q_obs(s)
+skill = 1 − Σ (m_t − y_t)² ÷ Σ y_t²     over every held-out day t > s   (the same for l_t)
+```
+
+The skill is against **no recession at all** (a flat line scores 0; the same
+fall scores 1; tested by hand: a flow that rises as the river falls by
+halves scores −3). Both falls start from their own first day, so the score
+is the recession's shape, not its level (the low-flow curve and the
+calibration statistics judge the level). The simulated flow is scored on
+the held-out segments where it is above zero every day (`modelSegments`); the
+law on all of them. The log RMSEs are reported too. **What is withheld:**
+the segments are withheld from the recession law, which the check compares
+the model with; the model's parameters were fitted to every scored day
+(§2.10b), these included, so for the model the score is on recessions it was
+not fitted to separately, not on unseen days. The fit's split-sample tests
+(§2.10b) are the out-of-sample check of the parameters.
+
+**Warnings** (provisional thresholds, engine constants, pending the
+hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
+
+| Signature | Warns when | Reasoning |
+| --- | --- | --- |
+| BFI | \|simulated − observed\| > **0.15** by either filter (`BFI_WARN_DIFF`) | a house default: separation methods and parameters differ in BFI on the same record (Eckhardt 2008 compares seven), so a small gap is method noise, and 0.15 is meant to sit beyond it |
+| Low-flow FDC | \|slope bias\| or \|%BiasFLV\| > **50 %** (`FDC_LOW_WARN_PCT`) | the ensemble's default low-flow limit (§2.10e); low-flow gauging error runs to ±50–100 % (McMillan, Krueger & Freer 2012) |
+| Held-out recessions | simulated skill < **0** (`HOLDOUT_SKILL_WARN`) with **8** or more segments (`RECESSION_MIN_SEGMENTS`), or a simulated flow that reaches zero on every held-out segment | worse than assuming the river doesn't fall at all; below 8 segments not judged, as the recession check |
+
+Each warning starts "Validation signatures (provisional limits): …", names the
+record (and the gauge, at a site) and points at the GR4J parameters to look
+at. The Plausibility checks panel lists them under **Validation signatures**
+([ui.md](./ui.md)), the summary CSV has a *Validation signatures* block
+([api.md](./api.md#export)), and the check list a *Validation signatures*
+line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
+%BiasFMS, and the BFI and the held-out recessions are signatures of a run,
+not of the objective.
+
+*Tests* (`plausibility/signatures.test.ts`, `reserve/baseflow.test.ts`):
+each filter by hand on three-day series and on a step from 1 to 2 m³/s
+(Hughes' quick flow 0.9975·α^k after the step, Eckhardt's base flow
+2B − B·c1^(k+1) with c1 = (1 − B)·a ÷ (1 − a·B)); a steady river gives
+BFI 1 by Hughes and BFImax by Eckhardt; zero flow gives no BFI rather than a
+pass or a fail; gaps split the stretches and a stretch under 30 days drops
+out, 365 days in stretches being the least; the low-flow slope by hand
+(a doubled flow has no slope bias, Q^0.4 −60 %, Q² +100 %; none where either
+curve is at the floor at Q95, a model that dries out or an intermittent river); the held-out skill by hand (1, 0, −3), pooled over the held-out
+days rather than averaged per segment, with the log RMSE and the law's score;
+no segments, nothing judged. `run.invariants.test.ts` checks on random
+networks that both indices stay in [0, 1], Q70 ≥ Q95, the held-out count is
+a third of the segments, a skill never exceeds 1, and that removing the
+observed records leaves the simulated outflow bit-identical.
+
+*Sources:* Hughes, Hannart & Watkins 2003, *Water SA* 29(1):43–48 ·
+Eckhardt 2005, *Hydrological Processes* 19:507–515 · Eckhardt 2008,
+*J. Hydrology* 352:168 (a from recession analysis) · Smakhtin & Watkins 1997,
+WRC 494/1/97 · Yilmaz, Gupta & Wagener 2008, *WRR* 44:W09417 · Gnann et
+al. 2021 (TOSSH) · Klemeš 1986 (split-sample testing).
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
@@ -7082,7 +7317,8 @@ bits whatever order they came in).
   volumes; the comparison still nets it, and reads the unit below its
   surface volume by that much. Pending the hydrologist, with dam filling vs
   registered storage (s21b, issue #90).
-- **`fullAllocation`**: "what if every lawful user took their entitlement",
+- **`fullAllocation`**: "what if every registered or licensed volume were
+  taken in full" (a registration is not an entitlement, issue #281),
   the background run of a cumulative assessment (WP-3.11). Each unit's
   abstraction demand D = F / e + its demand objects' (a water user's own
   demand) is scaled, water year by water year, by
@@ -8169,6 +8405,14 @@ table is already general enough to hold such nodes.
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
   whole system, per water-year month.
+- **Crop sheets:** `[Crop_Factors]` (A-pan evaporation, rainfall and
+  effective-rainfall rows, then a crop per row with twelve factors, Oct..Sep,
+  and an irrigation efficiency) and `[Crop_Areas]` (a farm per row, a crop
+  per column, m²). The factors are FAO-56 Kc values (against ET₀) that the
+  workbook applies to A-pan with no pan coefficient (§2.3). The browser
+  reads these two sheets (`frontend/src/lib/spreadsheet/import/nodeCrops.ts`,
+  issue #289) and marks the set FAO-shaped, so a Kp of about 0.75 applies
+  before the factors stand as A-pan factors.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
@@ -8477,7 +8721,7 @@ step when a definition changes.
 | **Hydrological unit** | The name users see (issue #54 item 2a; client question Q6, issue #90) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The workspace, the farmer view, the farmer emails and the shared view all say it; the code, API, CSV exports and this document say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the S-pan evaporation (convert it before entering it as A-pan, §2.4a), MAP and naturalised flow data per quaternary catchment. |
-| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
+| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (about 0.6–0.85 × pan; 0.35–0.85 in FAO-56 Table 5). |
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (a project setting). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |

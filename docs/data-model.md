@@ -70,7 +70,7 @@ erDiagram
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
-| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
+| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
@@ -501,12 +501,13 @@ any row keeps the project, withdrawn or not.
   withdrawal is ever added, since a withdrawn nomination is still history.
   There is no un-nominate; a nomination can only be replaced. Cascades into
   `project`: none. `project.team_id` is `ON DELETE SET NULL` (deleting a team
-  keeps its projects) and `project.created_by` is `NO ACTION` (there is no
-  account deletion). The operator's out-of-band removal is in
+  keeps its projects) and `project.created_by` is `ON DELETE SET NULL`
+  (138: an account's deletion keeps the project, its maker cleared). The
+  operator's out-of-band removal is in
   [security.md](./security.md) § Authorization, "Tamper evidence".
-- No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
-  is no account deletion yet. When there is, it must keep the history (for
-  example a tombstone user), not cascade it away.
+- `nominated_by` is `ON DELETE SET NULL` (138), the same as
+  `model_run.created_by`: deleting the account keeps the history, with who
+  nominated cleared (never reassigned, never cascaded away).
 - Migration 009 was reserved for pinned runs (issue #7), which landed as
   015 instead. 009 is an unused gap; the runner applies every unapplied file
   in name order, so the gap is harmless.
@@ -649,7 +650,21 @@ the result change?", and put back any earlier version.
   `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
   flag, which would say whether the address has an account; `declined`,
   109, has no actor, so the owner never learns who declined),
-  `publication.published/notice_changed`, `outlook.published/unpublished`
+  `publication.published/notice_changed` (the season decision log, issue
+  #119, `publish/decision.ts`: `published` holds the publication and run
+  ids, the run's `engineVersion`, `runoffModel` and `inputsSha256` (SHA-256
+  of `model_run.inputs::text`, the hash `app_run_digest` folds in, 077), the
+  `window` (`runStart`, `dataUntil`, `season` and `last30` from/to), the
+  whole notice (`restriction` level, % and `notice` text in every language,
+  `nextExpectedOn`, the modeller's `note`), the number of `farms`, `perFarm`
+  (each farm's own figures as its farm history reads them: id, name,
+  `dataUntil`, season demand, supply, fraction and short days, `damPct`,
+  the model's headline and band; never the even share) and `auto` for an
+  auto run published by itself; `notice_changed` holds the ids, the
+  `fields` sent and the whole notice as it then stands. So the record of
+  what was announced, and from which figures, outlives the 12 publications
+  `run_publication` keeps and the run itself; events from before it hold
+  only the level, % and farm count), `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
@@ -700,9 +715,33 @@ the result change?", and put back any earlier version.
   `author` in every `note.deleted` about their note; then the foreign key
   clears `actor_user_id`. The events, kinds and times stay (the project's
   audit trail). What every other foreign key to `app_user` does is
-  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
-  null, or restrict for evidence that names its maker);
+  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade or
+  set null; none restricts since 138);
   `auth/account-deletion.db.test.ts` checks the outcome.
+- **Evidence that names its maker (138, issue #112).** `project.created_by`,
+  `team.created_by`, `model_run.created_by`, `run_uncertainty.created_by`,
+  `run_nomination.nominated_by`, `project_import.imported_by` and
+  `scenario.owner_user_id` were `RESTRICT`, so an account that had made any of
+  them couldn't be deleted. They are `ON DELETE SET NULL` and nullable now:
+  the evidence stays, the name goes ("keep the evidence, remove the name";
+  never reassigned, which would make the record false). The maker is still
+  required where it was: `app_maker_kept` (BEFORE INSERT OR UPDATE OF
+  `created_by` on `project`, `team` and `model_run`) refuses an insert
+  without one (`not_null_violation`) and any change but clearing it once its
+  account is gone (`check_violation`); the other four are stamped from the
+  session by their insert triggers. `run_uncertainty_complete` and
+  `scenario_guard` let the key's SET NULL through (an update whose only
+  change is that column going to NULL, for an account that no longer
+  exists), as 052 and 066 did for their keys. Before the row goes,
+  `app_user_pseudonymise` also deletes the person's still-`started`
+  ensembles and their **draft applications** (`origin = 'applicant'`,
+  `status = 'draft'`) with those drafts' runs; a draft the project keeps
+  (public comments, an evidence pack, or a pinned, nominated or cited run)
+  stays, its applicant cleared. Deletion is still refused, at commit, for
+  the only owner of a project or the only admin of a team
+  (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
+  joined `app_user` on these columns left-join it, and the API answers
+  `null` for the maker's name.
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -1211,7 +1250,9 @@ water-use volumes per farm or water user.
   project_id)`, cascade, so a source is always the same project's), `node_id`
   (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
   `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
-  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `general_authorisation` | `schedule_1` | `existing_lawful_use_claimed` |
+  `existing_lawful_use`; the last is verified under s35, the claimed value
+  isn't; 136, issue #281), `purpose` (`irrigation` |
   `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
   `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
   `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
@@ -1265,8 +1306,8 @@ assessor, needs it long after the import. `POST /projects/import` stores it in
 the import's own transaction ([api.md § Import report](./api.md#import-report)).
 
 - **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
-  `imported_by` (→ `app_user`; no `ON DELETE`, like `model_run.created_by`:
-  there is no account deletion yet, and WP-1.13 makes both `SET NULL`),
+  `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
+  `model_run.created_by`: the record stays with who imported it cleared),
   `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
   `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
   `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and

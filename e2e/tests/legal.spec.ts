@@ -10,7 +10,7 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PAGES = [
-	{ path: '/privacy', title: 'Privacy notice', must: ['Jared Howard', 'jared@jaredhoward.com', 'Information Regulator', 'POPIAComplaints@inforegulator.org.za', 'af-south-1', 'POPIA section 21'] },
+	{ path: '/privacy', title: 'Privacy notice', must: ['Jared Howard', 'jared@jaredhoward.com', 'Information Regulator', 'POPIAComplaints@inforegulator.org.za', 'af-south-1', 'POPIA section 21', 'It is never put in someone', 'a sign-off’s typed name and'] },
 	{ path: '/terms', title: 'Terms of use', must: ['Jared Howard', 'jared@jaredhoward.com', 'Model results are estimates', 'The short version', 'the law of the Republic of South Africa', 'Commonwealth of Virginia'] }
 ];
 

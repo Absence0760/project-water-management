@@ -129,6 +129,17 @@ rows and columns don't break it.
   with no crops the two agree, the offset being 0). `model.demandObjects` is
   present only when there is one, so a workbook without typed-over demand
   imports exactly as before.
+- **The crop table's own slips** (issue #289). b023's [Crop demand] has rows
+  pasted from another crop and one-month slips (issue #54 item 1). The factors
+  are imported as they are, never corrected, and each crop gets at most one
+  `WARNING:` (`crop_table_notes`, the same rules and text in the browser
+  importer): a row whose 12 factors equal an earlier, differently named
+  crop's, naming that crop (a row of zeros, an unused crop, isn't compared);
+  otherwise every suspect month of the row: a negative factor, a 0 between two
+  months above 0 (a lone month out of the ground), a month more than 0.3
+  above or below both its neighbours (a lone spike or dip; the year wraps, so
+  Oct's neighbours are Sep and Nov), and a factor above 1.0. Thresholds and
+  their sources: docs/model.md §2.3.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
@@ -314,7 +325,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |
 | Hi/lo split 0.8/0.2, tolerance 0.0002, February 28.25 days, A-pan row, effective rain 0.7 | settings read from their named ranges |
-| [Crop demand] 5 crops; Fodder E grown nowhere | crops and factors, Oct..Sep header check |
+| [Crop demand] 6 crops; Fodder E grown nowhere, with a lone 0 in Dec and 1.2 in Mar; Pasture F a copy of Pasture C's row | crops and factors, Oct..Sep header check; the crop-table `WARNING:`s (a lone month out of the ground, a lone spike, above 1; "the same as Pasture C's"), the factors imported unchanged |
 | [Farm demand]: zero and blank areas, a blank row, Hops X (not in [Crop demand]) on Echo, Kilo Farm (not in [Network]) | zero areas omitted, blank rows skipped, notes "crop Hops X is not in [Crop demand]" and "farm Kilo Farm is not in [Network]" |
 | [Transfers] 7 draw-from-dam columns: months `"1,2,3,11,12"`; `"11,12"`; the number `7`; `" 5, 6 ,7"`; to `--`; rate 0; to "Zulu Farm" | month lists, the M1 substring note (`"11,12"`), a numeric month cell, spaces, two rules on one dam (Bravo, priorities 0 and 3 by column order), the two silent skips, note "names an unknown element; skipped" |
 | [Transfers] an 8th column, Foxtrot → Golf, whose draw formula is `=0` | `WARNING:` "its draw formula is the constant 0", imported with `enabled: false`; the InOut formulas include it, so no unmapped row |

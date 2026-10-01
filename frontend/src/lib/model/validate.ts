@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -271,6 +271,16 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): the API refuses a negative one.
 		if (o.population !== null && o.population !== undefined && !inRange(o.population, 0, Infinity))
 			issues.push({ area: 'network', message: `${label}: the people it serves can't be negative.` });
+		// Where its number comes from (engine ≥ 1.56.0): the sizing that source gives a volume (the form keeps them in step).
+		if (o.source !== null && o.source !== undefined) {
+			const sizing = (DEMAND_OBJECT_SOURCE_SIZING as Record<string, DemandObject['sizing'] | null | undefined>)[o.source];
+			if (sizing === undefined) issues.push({ area: 'network', message: `${label}: choose where its number comes from.` });
+			else if (sizing !== null && o.sizing !== sizing)
+				issues.push({
+					area: 'network',
+					message: sizing === 'monthly' ? `${label}: ${o.source === 'meter' ? 'meter records give' : 'an AADD gives'} a volume, so give the demand as m³/day by month.` : `${label}: a demand from population × litres a day is given as a count × litres a day.`
+				});
+		}
 		// Its schedule (engine ≥ 1.17.0): the engine's own window rule, as the API applies it.
 		if ((o.schedule?.length ?? 0) > DEMAND_SCHEDULE_MAX_WINDOWS) issues.push({ area: 'network', message: `${label}: a schedule has at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows.` });
 		(o.schedule ?? []).forEach((w, i) => {
