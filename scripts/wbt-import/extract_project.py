@@ -402,6 +402,63 @@ def read_crops(wb: Workbook) -> tuple[list[dict[str, Any]], list[float], float]:
     return crops, apan, erf
 
 
+# Checks of the [Crop demand] factor table (issue #289; same rules and text in the browser importer, crops.ts).
+# b023's table has rows pasted from another crop and one-month slips (a lone 0, a spike above 1; issue #54 item 1).
+# The factors are imported as they are; each finding is a WARNING for the modeller to check.
+# CEILING: the Crops tab's high-factor hint. A-pan factors are Kp x Kc: FAO-56 Kc mid-season is at most about 1.2
+# (Table 12) and Class A pan Kp at most 0.85 (Table 5), about 1.0; the ARC/SABI tables in the crop library peak at 0.7.
+CROP_FACTOR_CEILING = 1.0
+# LONE_STEP: a month more than this above (or below) both its neighbours. The ARC/SABI tables' largest step between
+# adjacent months is 0.3 (table grapes Mar -> Apr, pecan), and no month there stands off both neighbours by more than 0.15.
+CROP_FACTOR_LONE_STEP = 0.3
+# Float noise in a difference of two typed factors (0.65 - 0.35 is 0.30000000000000004).
+CROP_FACTOR_EPS = 1e-9
+
+
+def crop_row_findings(factors: list[float]) -> list[str]:
+    """The suspect months of one crop's 12 factors (Oct..Sep; the year wraps, so Oct's neighbours are Sep and Nov)."""
+    out = []
+    for m, x in enumerate(factors):
+        pm, nm = (m - 1) % 12, (m + 1) % 12
+        a, b = factors[pm], factors[nm]
+        around = f"{MONTHS_WY[pm]} {a:g} and {MONTHS_WY[nm]} {b:g}"
+        if x < 0:
+            out.append(f"{MONTHS_WY[m]} factor {x:g} is negative")
+        elif x == 0 and a > 0 and b > 0:
+            out.append(f"{MONTHS_WY[m]} factor is 0 between {around} (a lone month out of the ground)")
+        elif x - a > CROP_FACTOR_LONE_STEP + CROP_FACTOR_EPS and x - b > CROP_FACTOR_LONE_STEP + CROP_FACTOR_EPS:
+            out.append(f"{MONTHS_WY[m]} factor {x:g} is more than {CROP_FACTOR_LONE_STEP:g} above both {around} (a lone spike)")
+        elif a - x > CROP_FACTOR_LONE_STEP + CROP_FACTOR_EPS and b - x > CROP_FACTOR_LONE_STEP + CROP_FACTOR_EPS:
+            out.append(f"{MONTHS_WY[m]} factor {x:g} is more than {CROP_FACTOR_LONE_STEP:g} below both {around} (a lone dip)")
+        if x > CROP_FACTOR_CEILING:
+            out.append(f"{MONTHS_WY[m]} factor {x:g} is above {CROP_FACTOR_CEILING:g} (more water than an open A-pan loses)")
+    return out
+
+
+def crop_table_notes(crops: list[dict[str, Any]]) -> list[str]:
+    """WARNINGs for [Crop demand] rows copied from another crop and for suspect months (issue #289).
+
+    A row identical to an earlier, differently named crop's (not all zero) names that crop; its months aren't
+    checked again, since the first crop's note covers them."""
+    notes = []
+    for i, c in enumerate(crops):
+        f = c["cropFactor"]
+        first = next((d["name"] for d in crops[:i] if d["name"] != c["name"] and d["cropFactor"] == f), None)
+        if first is not None and any(x != 0 for x in f):
+            notes.append(
+                f"WARNING: [Crop demand] crop {c['name']}: its 12 factors are the same as {first}'s, a row copied from "
+                "another crop by the look of it; imported as they are, so give it its own curve if it has one (issue #289)"
+            )
+            continue
+        findings = crop_row_findings(f)
+        if findings:
+            notes.append(
+                f"WARNING: [Crop demand] crop {c['name']}: {'; '.join(findings)}; imported as they are, so check "
+                "them against the workbook (issue #289)"
+            )
+    return notes
+
+
 def read_crop_areas(wb: Workbook) -> tuple[dict[str, dict[str, float]], dict[str, list[float]], list[float] | None]:
     """(m² per crop per farm, the sheet's gross demand in m³/day per farm per month, its days per month or None)."""
     sheet, rows, names = table_rows(wb, "zFarmDemand_FarmNameLst")
@@ -1053,6 +1110,7 @@ def extract(
                 "evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure"
             )
 
+        wb.notes.extend(crop_table_notes(crops))
         crop_defs = [{"id": uid(f"crop:{c['name']}"), "name": c["name"], "cropFactor": c["cropFactor"]} for c in crops]
         crop_id = {c["name"]: c["id"] for c in crop_defs}
         crop_areas = []

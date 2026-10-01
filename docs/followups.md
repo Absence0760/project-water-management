@@ -3307,6 +3307,13 @@ from the WP:
       (`SOURCE_KINDS`, `defaultKp` in `crops/loadFactors.ts`) and the
       reader's warnings listed ([ui.md § Load crop
       factors](./ui.md#load-crop-factors)).
+- [x] **b023 crop-table slips flagged on import** (2026-09-30, issue #289).
+      Rows copied from another crop, a negative factor, a lone 0, a lone
+      spike or dip of more than 0.3 and a factor above 1.0 each give an
+      import-report warning (`crop-factors-copied`, `crop-factors-suspect`),
+      both importers alike; the factors import unchanged ([model.md §2.3
+      item 3](./model.md)). Load crop factors lists them under a b023
+      workbook source too ([ui.md § Load crop factors](./ui.md#load-crop-factors)).
 - [x] **One table of irrigation efficiencies; drip the new-farm default**
       (2026-09-28, issue #90 answering #54 Q10). The engine's
       `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values
