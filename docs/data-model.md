@@ -742,6 +742,14 @@ the result change?", and put back any earlier version.
   (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
   joined `app_user` on these columns left-join it, and the API answers
   `null` for the maker's name.
+- **Deleting your own account (143, issue #112).** `app_delete_my_account()`
+  (`SECURITY DEFINER`, `search_path` pinned, `EXECUTE` for `water_app`
+  only, no arguments) deletes the `app_user` row of `app_current_user_id()`
+  and nobody else's, and refuses a transaction with no user (`42501`).
+  `DELETE /auth/me` calls it under `withUser`, after recording the audit
+  events, so everything above (the keys, `app_user_pseudonymise`, the
+  owner and admin checks) runs exactly as for the operator's deletion.
+  water_app still has no `DELETE` on `app_user` (068).
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -1369,6 +1377,12 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
+The trigger (`project_member_keep_owner`, latest 149_last_owner_lock) takes
+a per-project advisory lock before it counts the owners, so two
+owners leaving or being demoted at the same moment serialise: the second
+waits for the first to commit, re-reads, and is refused. The member routes
+lock the owner rows before their own `409` check for the same reason
+(docs/security.md § Authorization).
 
 ### Farmers (019_farmer_role.sql, 020_farm_scope.sql)
 
@@ -2011,7 +2025,8 @@ Direct project membership still works on top — the **effective role is the
 higher of the two** (`app_project_role()`). Every project policy goes through
 `app_has_role()`, which uses the effective role, so team access applies to all
 project-scoped tables at once. The team's creator becomes its first admin and a
-team always keeps at least one admin (same trigger pattern as project owners).
+team always keeps at least one admin (same trigger pattern as project owners,
+including the per-team advisory lock, 149).
 Deleting a team keeps its projects with their direct members (`ON DELETE SET
 NULL`). No project is orphaned, because the keep-owner trigger counts direct
 `project_member` rows only: the creator starts as a direct owner, and a project
@@ -2304,7 +2319,10 @@ The background job queue's source of truth ([architecture.md § Background work]
     lease (a stale worker gets `NULL` and rolls back); `done`, `failed` with
     backoff, or `dead`.
   - `app_purge_jobs(age)`: deletes `done`/`dead` jobs finished longer ago
-    than `age` (at least a day; the tick passes 30 days).
+    than `age` (at least a day; the tick passes 30 days). Every key to `job`
+    is ON DELETE SET NULL, so the rows that named a purged job stay with
+    `job_id` cleared; a table whose UPDATE trigger guards its outcome lets
+    that update through ([§ The job purge clears links](#the-job-purge-clears-links-148_job_purge_clears_linkssql)).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
@@ -2627,6 +2645,25 @@ functions and changes no table, policy or grant:
   exists, instead of putting the old creator back;
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
+
+### The job purge clears links (148_job_purge_clears_links.sql)
+
+The tick's `app_purge_jobs` deletes jobs finished more than 30 days ago,
+and every key to `job` clears the row's `job_id` (SET NULL). Until 148,
+`scenario_sweep_complete` and `seasonal_outlook_complete` refused that
+update (a complete row is "completed once and never changed"; a pending one,
+its job dead, is changed only by whoever asked, and the purge runs with no
+user), so the purge's DELETE rolled back once any sweep's or outlook's job
+was 30 days old, and from then on no job was cleaned up. 148 redefines both
+from 066 and changes no table, policy or grant: an update that only clears
+`created_by` or `job_id` (each unchanged or going to NULL, every other
+column unchanged) passes; water_app holds UPDATE on neither column, so only
+a key (or the schema owner) makes it, and any change to the outcome still
+meets the guard. `auto_calibration_update` (108) already let a cleared
+`job_id` through; `report` and `yield_result` have no UPDATE trigger.
+`catalogue.db.test.ts` `JOB_REFERENCES` lists every key to `job`, and each
+table with an UPDATE trigger names the DB test that ages its job past 30
+days and runs the purge.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 

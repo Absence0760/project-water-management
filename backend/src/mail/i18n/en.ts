@@ -153,7 +153,22 @@ export const en = {
 	'mail.pack.action': 'Check the pack',
 	'mail.pack.open': 'Open the pack in the catchment',
 	'mail.pack.why.editor': 'You get this email because you can issue and withdraw evidence packs in {project}.',
-	'mail.pack.why.applicant': 'You get this email because the application “{name}” is yours.'
+	'mail.pack.why.applicant': 'You get this email because the application “{name}” is yours.',
+
+	// Your account was deleted (issue #112, DELETE /auth/me): what was done, as POPIA s24(4) asks.
+	'mail.deleted.subject': 'Your account has been deleted — {product}',
+	'mail.deleted.heading': 'Your account has been deleted',
+	'mail.deleted.body': 'As you asked, we deleted the {product} account for {email}.',
+	'mail.deleted.gone':
+		'Deleted with it: your name, email address and password, your memberships and hydrological unit links, your alert choices and the alert emails sent to you, your settings, and any uncertainty result you started and never finished or licence application still in draft.',
+	'mail.deleted.left': 'You are no longer a member of {list}.',
+	'mail.deleted.kept':
+		'Kept without your name: what you made for a project (the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes) and the project’s history. It now reads “a former member” or “Deleted user”, and is never put in someone else’s name.',
+	'mail.deleted.signed':
+		'Kept with your name: a sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.',
+	'mail.deleted.backups': 'Copies in our backups are deleted as the backups expire, within 35 days.',
+	'mail.deleted.action': 'Read the privacy notice',
+	'mail.deleted.notYou': 'If you didn’t delete your account, contact us straight away: the privacy notice says how.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -176,6 +191,8 @@ export const sections: Record<string, string> = {
 		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
 	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',
 	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.',
+	'mail.deleted':
+		'Email: sent once an account has been deleted, from the account page’s “Delete my account”, saying what was deleted and what was kept (the law asks us to tell the person what we did). {list} is the names of the catchments and teams they left, joined with “and”.',
 	'mail.pack':
 		'Evidence pack emails: sent to the catchment’s editors and to the applicant when an evidence pack (a frozen, signed copy of the evidence report for a water-use licence application) is issued or withdrawn. {version} and {previous} are numbers; {code} is a short code like “3f2a-91bc-07de”; {project} is the catchment; {what} is one of the “what” lines; {name} is the application’s name (or the “name” line, for baseline evidence).'
 };

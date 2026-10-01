@@ -1,5 +1,6 @@
 // Schema invariants read from the Postgres catalogue. Each one guards a rule in
 // CLAUDE.md so a future migration can't silently break it.
+import { existsSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -243,6 +244,22 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'yield_result.created_by': 'set null'
 };
 
+/**
+ * Every foreign key to job. The 30-day job clean-up (app_purge_jobs,
+ * 016_jobs.sql) deletes finished jobs, so each is ON DELETE SET NULL and the
+ * row it sits on must take that update. A table with an UPDATE trigger (a
+ * complete-once guard) must let a cleared job_id through, or the purge rolls
+ * back and no job is ever cleaned again (148_job_purge_clears_links.sql), so
+ * it names the DB test that ages its job past 30 days and runs the purge.
+ */
+const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
+	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
+	'report.job_id': { updateTrigger: false },
+	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
+	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
+	'yield_result.job_id': { updateTrigger: false }
+};
+
 let db: pg.Client;
 beforeAll(async () => {
 	db = new pg.Client({ connectionString: OWNER_URL });
@@ -460,6 +477,21 @@ describe('schema catalogue', () => {
 		);
 		expect(rows.length).toBeGreaterThan(30);
 		expect(Object.fromEntries(rows.map((r) => [r.col, r.action]))).toEqual(APP_USER_ON_DELETE);
+	});
+
+	it('every foreign key to job is ON DELETE SET NULL, and a table with an UPDATE trigger names its purge test (148)', async () => {
+		const { rows } = await db.query<{ col: string; action: string; update_trigger: boolean }>(
+			`SELECT c.conrelid::regclass || '.' || a.attname AS col, c.confdeltype::text AS action,
+				EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.conrelid AND NOT t.tgisinternal AND (t.tgtype & 16) <> 0) AS update_trigger
+			 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+			 WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.confrelid = 'job'::regclass
+			 ORDER BY 1`
+		);
+		expect(rows.every((r) => r.action === 'n')).toBe(true);
+		expect(Object.fromEntries(rows.map((r) => [r.col, r.update_trigger]))).toEqual(
+			Object.fromEntries(Object.entries(JOB_REFERENCES).map(([col, ref]) => [col, ref.updateTrigger]))
+		);
+		for (const ref of Object.values(JOB_REFERENCES)) if (ref.updateTrigger) expect(existsSync(new URL(`../../${ref.purgeTest}`, import.meta.url)), ref.purgeTest).toBe(true);
 	});
 
 	// The pseudonymisation that goes with the set-null keys (D12).

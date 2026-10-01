@@ -24,6 +24,8 @@ export const SECTIONS: Record<string, string> = {
 	verify: 'The confirm-your-email page (opened from the confirmation email).',
 	banner: 'The strips at the top of every page: until the email address is confirmed, and while an invitation to a catchment or team waits to be accepted.',
 	account: 'The account page: name, language and units, password.',
+	'account.delete':
+		'The account page’s “Delete my account” section: what deleting the account removes, what the catchment keeps without the person’s name, and what keeps the name (a sign-off is a professional’s signature on a model run; an evidence pack is a sealed copy of the evidence for a water-use licence application). Then the password again, and, if refused, the catchments (“projects”) and teams the person must hand to someone else first. Plain and exact: this is a legal promise about the person’s information.',
 	invitations: 'The invitations page (from the account page, an invitation email or the strip at the top): invitations to join a catchment or a team, each accepted or declined. Nobody joins until they accept.',
 	farm: 'The farm view (a farmer’s own farm, on a phone). The app calls the farm a “hydrological unit” everywhere a farmer reads it (the client’s choice, issue #90 Q6): keep the one Afrikaans term for it throughout. Otherwise plain words for farmers; see docs/design/farmer-view.md §5.1 for the words to use and to avoid.',
 	'farm.state': 'Farm view: loading, error and empty states.',
