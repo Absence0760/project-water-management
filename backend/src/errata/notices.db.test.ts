@@ -15,7 +15,7 @@ import pg from 'pg';
 import { ENGINE_ERRATA, errataFor, type Erratum } from '@water-management/engine';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
-import { withoutUser, withUser } from '../db/tx.js';
+import { withApiKey, withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { outbox } from '../mail/transport.js';
 import { purgeErratumNotices, sendErratumNotices, sweepErrata } from './notices.js';
@@ -162,6 +162,15 @@ describe('the sweep', () => {
 		});
 		// Positive control: the worker's own context.
 		await expect(withoutUser((db) => db.query(`SELECT app_erratum_sweep('[]'::jsonb) AS n`))).resolves.toMatchObject({ rows: [{ n: 0 }] });
+	});
+
+	it('a signed-in person reads the sweep record, an API key never (it sees only its own series)', async () => {
+		expect((await withUser(viewer.id, (db) => db.query(`SELECT 1 FROM erratum_sweep WHERE erratum_id = 'ER-9001'`))).rowCount).toBe(1);
+		const [key] = await asOwner(
+			`INSERT INTO api_key (project_id, name, key_hash, created_by) VALUES ($1, 'Erratum key', sha256(random()::text::bytea), $2) RETURNING id::text`,
+			[affected, owner.id]
+		);
+		expect((await withApiKey(key!.id as string, (db) => db.query('SELECT 1 FROM erratum_sweep'))).rowCount).toBe(0);
 	});
 
 	it('a person reads their own notices only (positive control: the owner reads theirs)', async () => {

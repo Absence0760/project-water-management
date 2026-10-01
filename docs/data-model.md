@@ -1252,8 +1252,9 @@ issue #103). The errata themselves live in code (`ENGINE_ERRATA`, from
 were swept and who was mailed.
 
 - **`erratum_sweep`**: one row per erratum id with the range it was swept
-  with (`keyed_on`, `first_affected`, `fixed_in`). Public facts; `water_app`
-  reads it (`erratum_sweep_read`), only `app_erratum_sweep` writes it.
+  with (`keyed_on`, `first_affected`, `fixed_in`). Public facts; a signed-in
+  person reads it (`erratum_sweep_read`; never an API key, which sees only its
+  own series), only `app_erratum_sweep` writes it.
 - **`erratum_notice`**: one email per erratum, project and recipient, ever
   (the primary key), with `run_count` (the project's runs in range when
   swept) and pack_notice's life (pending → sending → sent | skipped |

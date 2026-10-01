@@ -20,7 +20,8 @@
 --     an erratum's range (keyed on, first affected, fixed in) changes, so an
 --     unchanged list costs one primary-key lookup per erratum per tick. Not
 --     personal and not project data (it repeats what docs/engine-errata.md
---     publishes): readable by water_app, written only by app_erratum_sweep.
+--     publishes): readable by a signed-in person (never an API key), written
+--     only by app_erratum_sweep.
 --
 --  2. erratum_notice: one row per erratum, project and recipient, ever (the
 --     primary key), so an erratum mails a person about a project at most
@@ -66,8 +67,9 @@ COMMENT ON TABLE erratum_sweep IS
 	'Which engine errata the worker has swept for affected runs, and with which range (150_erratum_notices, issue #103). Written and read only by app_erratum_sweep.';
 
 ALTER TABLE erratum_sweep ENABLE ROW LEVEL SECURITY;
--- Reading only, by anyone: it holds what docs/engine-errata.md already publishes. Written only by app_erratum_sweep.
-CREATE POLICY erratum_sweep_read ON erratum_sweep FOR SELECT USING (true);
+-- Reading only, by a signed-in person: it holds what docs/engine-errata.md already publishes. Never an API key,
+-- which sees only its own project's allowed series (039; ingest.security.db.test.ts). Written only by app_erratum_sweep.
+CREATE POLICY erratum_sweep_read ON erratum_sweep FOR SELECT USING (app_current_user_id() IS NOT NULL);
 GRANT SELECT ON erratum_sweep TO water_app;
 
 CREATE TABLE erratum_notice (
