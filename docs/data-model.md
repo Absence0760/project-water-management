@@ -1242,6 +1242,34 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
   (`USER_FK_COVERAGE`: the `packNotices` section).
 
+### Engine errata notices (150_erratum_notices.sql)
+
+The known-defect procedure's emails ([legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+issue #103). The errata themselves live in code (`ENGINE_ERRATA`, from
+[engine-errata.md](./engine-errata.md)); the database records only which
+were swept and who was mailed.
+
+- **`erratum_sweep`**: one row per erratum id with the range it was swept
+  with (`keyed_on`, `first_affected`, `fixed_in`). Public facts; `water_app`
+  reads it (`erratum_sweep_read`), only `app_erratum_sweep` writes it.
+- **`erratum_notice`**: one email per erratum, project and recipient, ever
+  (the primary key), with `run_count` (the project's runs in range when
+  swept) and pack_notice's life (pending → sending → sent | skipped |
+  failed). Personal: cascades with the account, in the data export
+  (`erratumNotices`), purged **30 days** after it is settled. RLS: SELECT
+  your own rows (`erratum_notice_own`); `water_app` holds `SELECT` only.
+- **`app_erratum_sweep(errata jsonb)`**: the worker's context only. For each
+  erratum not yet swept with its range, finds the projects with a run whose
+  engine (`model_run.engine_version`, or for a `fit` erratum
+  `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
+  in), compared numerically (`engine_version_key`), and queues each owner
+  (project owner or team admin) with a confirmed, unsuppressed address.
+- **`app_erratum_notice_claim`**, **`app_erratum_notice_finish`**,
+  **`app_purge_erratum_notices(age ≥ 30 days)`**: as pack notices'.
+- Guards: `errata/notices.db.test.ts`, the catalogue (`READ_ONLY`,
+  `APP_USER_ON_DELETE`: cascade), `auth/personal-data.security.db.test.ts`
+  (`USER_FK_COVERAGE`: the `erratumNotices` section).
+
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed

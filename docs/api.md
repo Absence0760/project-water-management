@@ -139,12 +139,14 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, preferences,
+  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, erratumNotices, preferences,
   reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
-  createdAt, sentAt }]` (133). `account` is
+  createdAt, sentAt }]` (133). `erratumNotices` is the known engine bug
+  emails sent to them as an owner (kept 30 days likewise), `[{ projectId,
+  erratumId, status, createdAt, sentAt }]` (150). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
@@ -1581,12 +1583,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
-  (`summary.forecast.from`), else `null`.
+  (`summary.forecast.from`), else `null`. `fitEngineVersion` is the engine
+  of the automatic fit the run's parameters came from
+  (`settings.fitRecord.engineVersion`), else `null`; `errata` the ids of the
+  known engine bugs that may affect the run (issue #103,
+  [engine-errata.md](./engine-errata.md)): the errata whose range holds its
+  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which
   engine 1.0.0 removed, so only a stored run from before it can be one. The

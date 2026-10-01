@@ -233,7 +233,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
 - `docs/engine-audit.md`: where and why the engine departs from the workbook (finding IDs); `docs/engine-review.md`: the earlier faithfulness review
 - `docs/legal/disclaimer-review.md`: the report disclaimer, sign-off statement and farmer liability lines, quoted for the client's legal review (issue #47)
-- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
+- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
 - `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract

@@ -124,7 +124,10 @@ The checklist for these is issue #62; the history scrub is #63.
       [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
       changed, why, and § 6: what stays open for a lawyer, tracked in
       [legal-status.md](./legal-status.md) under Counsel review; the go-live
-      gates and pre-fee items are issue #103).
+      gates and pre-fee items are issue #103; its known-defect procedure is
+      built, 2026-10-01:
+      [legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+      awaiting counsel review with the rest).
 
 - [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
