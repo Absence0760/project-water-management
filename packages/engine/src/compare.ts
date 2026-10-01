@@ -809,7 +809,7 @@ const CALIBRATION_FIELDS: Record<string, ScalarField> = {
 	summerFactor: { label: 'summer factor', fmt: plain },
 	winterFactor: { label: 'winter factor', fmt: plain },
 	baseFlowInitial: { label: 'initial base flow', fmt: withUnit('m³/day') },
-	catchmentAreaKm2: { label: 'catchment area', fmt: (v) => (v === null || v === undefined ? 'sum of farm areas' : `${fmtValue(v)} km²`) },
+	catchmentAreaKm2: { label: 'catchment area', fmt: (v) => (v === null || v === undefined ? 'sum of unit areas' : `${fmtValue(v)} km²`) },
 	baseResetRatio: { label: 'base-flow reset ratio', fmt: plain },
 	winterTodayRainMm: { label: 'winter switch (rain today)', fmt: withUnit('mm') },
 	winterNextDayRainMm: { label: 'winter switch (rain yesterday)', fmt: withUnit('mm') },

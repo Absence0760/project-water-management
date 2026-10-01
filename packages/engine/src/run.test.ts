@@ -195,7 +195,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(get(out, null, 'natural_flow')).toEqual([200, 0, 1601]);
 		// B has no dam but takes upstream inflow to it: it irrigates from the river with no limit, and the run says so (issue #54).
 		expect(out.summary.warnings).toEqual([
-			'farm "B": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity',
+			'unit "B": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity',
 			'no observed flow series: calibration statistics not computed'
 		]);
 	});
@@ -922,7 +922,7 @@ describe('runModel — transfers', () => {
 			natural: [0],
 			startDate: '2021-01-01'
 		});
-		expect(out.summary.warnings.some((w) => w.includes('transfers must be between farms'))).toBe(true);
+		expect(out.summary.warnings.some((w) => w.includes('transfers must be between units'))).toBe(true);
 	});
 });
 

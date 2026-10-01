@@ -480,11 +480,24 @@ on …", "Open your hydrological unit") and the public `/share` page. The
 client chose it knowing it is more technical for farmers. Engine check
 labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
 
+Engine run warnings, save errors (model rules, scenario ops) and the
+workspace's API errors say **unit** too (engine 1.61.0: `unit "Upper": no
+river pump capacity is set …`, "only a unit has a dam", "unit flow shares
+sum to …"), and a new node is named `Unit N` (operator decision,
+2026-10-01, from #54). Only the words changed, never a field name. A run
+from before 1.61.0 keeps its stored warnings as they were, so the first
+automatic run after the upgrade reads every such warning as new and isn't
+published by itself (`autoPublish` compares warnings by their words): a
+person publishes it once.
+
 What keeps **farm**: the code, database, API and CSV names (`kind: 'farm'`,
 `/farm`, `farms.csv`, `farm_scope`, the invite CSV's `farm` column), URL
-params (`unit=`), test ids, engine and API messages (run warnings, save
-errors, the bulk invite's "no farm named …") and the summary CSV's block
-titles. So do words that mean the real thing rather than the node: a
+params (`unit=`), test ids, the bulk invite's "no farm named …" (the CSV's
+`farm` column), the summary CSV's block titles, and so the xlsx export's
+Summary sheet's "Farm summary" block, which is the summary CSV's own: the
+CSV is a contract other tools read, so its titles stay (the same decision),
+and the evidence report and validation statement, whose words are frozen
+in packs and signed statements. So do words that mean the real thing rather than the node: a
 **farmer** (the person, "Preview as farmer", "farmer views" in the
 publication panel), a **farm dam** (the kind of dam), "a farm, sub-catchment
 or town" where the glossary says what a unit can stand for, the landing
@@ -495,8 +508,7 @@ own decision: the farm notice's title "Before you look at your farm"
 rewording it means a new version every farmer re-accepts), and the Terms
 and Privacy pages (`/terms`, `/privacy`, versioned by `LEGAL_VERSION`). The
 importer's notes keep b023's own terms (and match `extract_project.py`),
-and node names ("Upper farm") are data. A new node is still named
-`Farm N`.
+and node names ("Upper farm") are data.
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab

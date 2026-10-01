@@ -490,7 +490,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'cropArea.set': {
 			const n = findNode(d, op.nodeId);
-			if (n.kind !== 'farm') fail(`crops grow on farms; "${n.name}" is a ${n.kind}`);
+			if (n.kind !== 'farm') fail(`crops grow on units; "${n.name}" is a ${n.kind}`);
 			if (!m.crops.some((c) => c.id === op.cropId)) fail(`crop ${op.cropId} not found`);
 			if (!(Number.isFinite(op.areaM2) && op.areaM2 >= 0)) fail('areaM2 must be a finite number ≥ 0');
 			const at = m.cropAreas.findIndex((a) => a.nodeId === op.nodeId && a.cropId === op.cropId);
@@ -570,7 +570,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (typeof p?.id !== 'string') fail('the new patch needs an id');
 			if ((m.landCover ?? []).some((x) => x.id === p.id)) fail(`land-cover id ${p.id} is already in use`);
 			const n = findNode(d, p.nodeId);
-			if (n.kind !== 'farm') fail(`land cover lies on a farm; "${n.name}" is a ${n.kind}`);
+			if (n.kind !== 'farm') fail(`land cover lies on a unit; "${n.name}" is a ${n.kind}`);
 			m.landCover = [...(m.landCover ?? []), cloneData(p) as LandCoverPatch];
 			break;
 		}
@@ -592,7 +592,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (typeof b?.id !== 'string') fail('the new borehole needs an id');
 			if ((m.boreholes ?? []).some((x) => x.id === b.id)) fail(`borehole id ${b.id} is already in use`);
 			const n = findNode(d, b.nodeId);
-			if (n.kind === 'gauge') fail(`a borehole supplies a farm or other user; "${n.name}" is a gauge`);
+			if (n.kind === 'gauge') fail(`a borehole supplies a unit or other water user; "${n.name}" is a gauge`);
 			m.boreholes = [...(m.boreholes ?? []), cloneData(b) as Borehole];
 			break;
 		}
@@ -742,7 +742,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!allocation) fail(`the registered volume isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
 			const a = allocation!;
 			const n = findNode(d, a.nodeId!);
-			if (n.kind === 'gauge') fail(`a registered volume is held for a farm or other water user; "${n.name}" is a gauge`);
+			if (n.kind === 'gauge') fail(`a registered volume is held for a unit or other water user; "${n.name}" is a gauge`);
 			// Months as a sorted set, as the backend stores them.
 			const entry: AllocationEntry = { ...a, ...(Array.isArray(a.months) ? { months: monthSet(a.months) } : {}) };
 			const list = m.allocations ?? [];

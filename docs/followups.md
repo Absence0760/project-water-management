@@ -2236,6 +2236,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
+- [x] **"Unit" wording, the smaller choices** (from #54; operator, #93).
+      Should engine run warnings and API errors say "unit" in the
+      workspace, should the xlsx summary sheets say "Unit summary", and
+      should a new node default to "Unit N"? **Decided (operator,
+      2026-10-01): yes, keep, yes. Done:** the engine's run warnings and
+      save errors and the workspace API's errors say "unit" (engine 1.61.0,
+      words only); a new node is `Unit N`; the xlsx Summary sheet keeps
+      "Farm summary", since it is the summary CSV's block and the CSV is a
+      contract (ui.md § the words). The first automatic run after the
+      upgrade reads the reworded warnings as new, so a person publishes it
+      once.
 - [x] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
       `main`** (tracked on #76; seen 2026-09-27, not caused by it; fails the same on a clean
       checkout): at 1440 px the page itself scrolls 25 px, where the list

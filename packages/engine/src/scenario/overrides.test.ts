@@ -401,7 +401,7 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 }).input.model.cropAreas[0]).toEqual({ nodeId: 'A', cropId: 'c1', areaM2: 1 });
 		expect(one({ op: 'cropArea.set', nodeId: 'B', cropId: 'c1', areaM2: 5 }).input.model.cropAreas).toHaveLength(3);
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 0 }).input.model.cropAreas.map((a) => a.nodeId)).toEqual(['C']);
-		expect(one({ op: 'cropArea.set', nodeId: 'G', cropId: 'c1', areaM2: 5 }).problems[0]).toMatch(/crops grow on farms/);
+		expect(one({ op: 'cropArea.set', nodeId: 'G', cropId: 'c1', areaM2: 5 }).problems[0]).toMatch(/crops grow on units/);
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'zz', areaM2: 5 }).problems[0]).toMatch(/crop zz not found/);
 	});
 
@@ -445,7 +445,7 @@ describe('applyScenario: each op', () => {
 	it('landCover.add / remove', () => {
 		const p = { id: 'lc2', nodeId: 'A', coverClass: 'invasive' as const, areaKm2: 0.5, densityPct: 1, factors: null };
 		expect(one({ op: 'landCover.add', patch: p }).input.model.landCover).toHaveLength(2);
-		expect(one({ op: 'landCover.add', patch: { ...p, nodeId: 'G' } }).problems[0]).toMatch(/lies on a farm/);
+		expect(one({ op: 'landCover.add', patch: { ...p, nodeId: 'G' } }).problems[0]).toMatch(/lies on a unit/);
 		expect(one({ op: 'landCover.add', patch: { ...p, id: 'lc1' } }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'landCover.remove', patchId: 'lc1' }).input.model.landCover).toEqual([]);
 		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
@@ -1176,7 +1176,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(ok.problems).toEqual([]);
 		expect(ok.input.model.transfers[0]).toMatchObject({ lossReturnPct: 0.5, lossReturnNodeId: 'A' });
 		// B is not below C on the river: skipped, with the rule as its problem.
-		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a farm downstream of it/);
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a unit downstream of it/);
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'Z' }]).problems[0]).toMatch(/node Z not found/);
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnPct', value: 1.5 }]).problems[0]).toMatch(/lossReturnPct/);
 		const gone = applyScenario(ok.input, [{ op: 'node.remove', nodeId: 'A' }]);
@@ -1416,7 +1416,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 
 	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
-		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a farm or other water user; "Outlet gauge" is a gauge']);
+		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a unit or other water user; "Outlet gauge" is a gauge']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
 		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);
