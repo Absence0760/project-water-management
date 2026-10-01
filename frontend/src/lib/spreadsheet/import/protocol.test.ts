@@ -78,6 +78,16 @@ describe('handle: the worker protocol', () => {
 		expect(structuredClone(results[0]!.result)).toEqual(results[0]!.result);
 	});
 
+	it('passes the run-of-river option to the extractor, off unless asked', async () => {
+		const out = await drive([
+			{ type: 'parse', file: fixture(), fileName: 'synthetic_b023.xlsx', options: {} },
+			{ type: 'extract', options: { runOfRiver: true } },
+			{ type: 'extract', options: {} }
+		]);
+		const rules = out.flatMap((m) => (m.type === 'result' ? [m.result.project.model.nodes.filter((n) => n.supplyRule === 'runOfRiver').map((n) => n.name)] : []));
+		expect(rules).toEqual([[], ['Delta Farm', 'India Farm'], []]);
+	});
+
 	it('posts a typed error for a workbook that is not b023', async () => {
 		const wb = XLSX.utils.book_new();
 		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Farm', 'Area'], ['A', 1]]), 'Sheet1');

@@ -26,6 +26,10 @@ export type ImportNoteCode =
 	/** WARNING: a transfer whose draw formula is the constant 0 is imported switched off (issue #54). */
 	| 'transfer-switched-off'
 	| 'transfer-river-offtake'
+	/** WARNING: with the run-of-river option, a flagged unit imported as run of river, with no dam and an uncapped pump (issue #54, 2c/2d). */
+	| 'run-of-river-imported'
+	/** WARNING: with the run-of-river option, a flagged unit kept as a farm dam because an enabled transfer draws on it. */
+	| 'run-of-river-kept-dam'
 	/** The run covers [Home]'s calculation window, not all of [Flow data] (issue #54). */
 	| 'model-window'
 	/** Dams have no surface area in the workbook; runs estimate it (audit N2). */

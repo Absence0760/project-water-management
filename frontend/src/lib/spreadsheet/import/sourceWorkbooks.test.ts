@@ -118,7 +118,8 @@ describe.skipIf(!available)('parity with extract_project.py on the source workbo
 		const path = join(SOURCE!, file);
 		const variants: [string, string[], Omit<ExtractOptions, 'fileName'>][] = [
 			['default', [], {}],
-			['--gauge-as-reference', ['--gauge-as-reference'], { gaugeAsReference: true }]
+			['--gauge-as-reference', ['--gauge-as-reference'], { gaugeAsReference: true }],
+			['--run-of-river', ['--run-of-river'], { runOfRiver: true }]
 		];
 		const scaling = file.startsWith('Blank') ? null : gaugeScaling();
 		if (scaling) {

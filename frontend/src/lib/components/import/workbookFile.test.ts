@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportResult } from '$lib/spreadsheet/import/extract';
 import type { ProjectFile } from '$lib/api';
-import { DEFAULT_CHIRPS_KEY, describeFailure, fromResult, gaugeOptions, isWorkbookFile, location, progressText, withChirpsProvenance } from './workbookFile';
+import { DEFAULT_CHIRPS_KEY, describeFailure, fromResult, gaugeOptions, isWorkbookFile, location, progressText, withChirpsProvenance, workbookOptions } from './workbookFile';
 
 describe('the CHIRPS column’s product and version (issue #40c)', () => {
 	const file = (kinds: string[]) =>
@@ -66,6 +66,15 @@ describe('gaugeOptions', () => {
 	});
 });
 
+describe('workbookOptions: the gauge options plus run of river', () => {
+	it('adds the run-of-river option only when it is on, and keeps the gauge options’ errors', () => {
+		expect(workbookOptions(false, '', '', false)).toEqual({ options: {} });
+		expect(workbookOptions(false, '', '', true)).toEqual({ options: { runOfRiver: true } });
+		expect(workbookOptions(true, '2021-10-01', '0.8', true)).toEqual({ options: { gaugeAsReference: { scalingFrom: '2021-10-01', scaleFactor: 0.8 }, runOfRiver: true } });
+		expect(workbookOptions(true, '2021-10-01', '', true)).toEqual({ error: 'Give both the date the scaling starts and its factor, or neither.' });
+	});
+});
+
 describe('fromResult and progress', () => {
 	const result = (kinds: string[]): ImportResult =>
 		({
@@ -84,6 +93,18 @@ describe('fromResult and progress', () => {
 		// The notes are shown by the review with their severity, not as the preview's plain notes.
 		expect(fromResult(result([])).parsed.notes).toEqual([]);
 		expect(fromResult(result([])).report.notes).toHaveLength(1);
+	});
+
+	it('lists the units flagged as probable run-of-river, in order, so the option shows only for a workbook with some', () => {
+		const r = result([]);
+		expect(fromResult(r).report.runOfRiverUnits).toEqual([]);
+		r.notes = [
+			{ code: 'probable-run-of-river', severity: 'warning', message: 'WARNING: farm Delta Farm: …', sheet: 'Farm spec', element: 'Delta Farm' },
+			{ code: 'dam-area-unknown', severity: 'info', message: 'n' },
+			{ code: 'run-of-river-imported', severity: 'warning', message: 'WARNING: farm Delta Farm: imported …', element: 'Delta Farm' },
+			{ code: 'probable-run-of-river', severity: 'warning', message: 'WARNING: farm India Farm: …', sheet: 'Farm spec', element: 'India Farm' }
+		];
+		expect(fromResult(r).report.runOfRiverUnits).toEqual(['Delta Farm', 'India Farm']);
 	});
 
 	it('words the progress and weighs reading as most of the time', () => {

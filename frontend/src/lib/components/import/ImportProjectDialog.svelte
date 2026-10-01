@@ -31,7 +31,7 @@
 		WORKBOOK_MAX_MB,
 		describeFailure,
 		fromResult,
-		gaugeOptions,
+		workbookOptions,
 		isWorkbookFile,
 		progressText,
 		withChirpsProvenance,
@@ -82,6 +82,8 @@
 	let gaugeAsReference = $state(false);
 	let scalingFrom = $state('');
 	let scaleFactor = $state('');
+	/** Import the units the importer flags as probable run-of-river as run of river (issue #54, 2c/2d). */
+	let runOfRiver = $state(false);
 	/** The workbook's CHIRPS column: product and version (issue #40 part c), v2.0 unless the review says otherwise. */
 	let chirpsKey = $state(DEFAULT_CHIRPS_KEY);
 	let optionsError = $state<string | null>(null);
@@ -121,6 +123,7 @@
 		gaugeAsReference = false;
 		scalingFrom = '';
 		scaleFactor = '';
+		runOfRiver = false;
 		chirpsKey = DEFAULT_CHIRPS_KEY;
 		optionsError = null;
 		updating = false;
@@ -190,9 +193,9 @@
 		step = 'pick';
 	}
 
-	/** The gauge options changed on the review: extract again from the workbook already read. */
+	/** The importer's options changed on the review: extract again from the workbook already read. */
 	async function changeOptions() {
-		const opts = gaugeOptions(gaugeAsReference, scalingFrom, scaleFactor);
+		const opts = workbookOptions(gaugeAsReference, scalingFrom, scaleFactor, runOfRiver);
 		if ('error' in opts) {
 			optionsError = opts.error;
 			return;
@@ -337,6 +340,7 @@
 							bind:gaugeAsReference
 							bind:scalingFrom
 							bind:scaleFactor
+							bind:runOfRiver
 							bind:chirpsKey
 							{optionsError}
 							{updating}
