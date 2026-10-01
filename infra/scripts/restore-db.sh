@@ -411,8 +411,13 @@ Next, by hand, in this order:
      AWS_PROFILE=$PROFILE $SCRIPTS_DIR/tf.sh -chdir=$INFRA_DIR apply -var-file=$VAR_FILE
   2. Run the migrate Lambda (applies migrations newer than the restore point, resets water_app's password):
      aws lambda invoke --function-name $MIGRATE_FN --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region $REGION --profile $PROFILE /dev/stdout
-  3. Check the site, and that the data is as of the restore point.
-  4. Only then delete the old instance ($OLD). Writes made after the restore point exist only there; export anything you need first. Its master secret goes with it:
+  3. Re-apply erasures and revocations made after the restore point, before traffic is back (docs/deployment.md § Restoring the database, step 6a):
+     on $OLD, as the schema owner, read erasure_log and the audit_event removals and revocations since the restore point; delete and revoke them
+     again on $ID in one transaction; invoke the worker once; then re-run the apply in step 1 to restore the API's and worker's concurrency.
+  4. Check the site, and that the data is as of the restore point with the erasures re-applied.
+  5. Only then delete the old instance ($OLD). Writes made after the restore point exist only there; export anything you need first. Its master secret goes with it:
      aws rds modify-db-instance --db-instance-identifier $OLD --no-deletion-protection --apply-immediately --region $REGION --profile $PROFILE
-     aws rds delete-db-instance --db-instance-identifier $OLD --final-db-snapshot-identifier $OLD-final --region $REGION --profile $PROFILE
+     aws rds delete-db-instance --db-instance-identifier $OLD --skip-final-snapshot --region $REGION --profile $PROFILE
+     Only if you may need its post-restore-point data, take a final snapshot instead (--final-db-snapshot-identifier $OLD-final) and delete it
+     within 30 days (it holds what was erased since the restore point and never expires); note the delete-by date in the operator log.
 EOF
