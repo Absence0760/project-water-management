@@ -148,7 +148,6 @@ test('colour farms by dam level (end of the latest run), with its own words', as
 	await page.goto(`/projects/${project.id}?tab=network`);
 	const colourBy = page.getByLabel('Colour hydrological units by');
 	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
-	const lower = page.locator('svg.schematic g.node').filter({ hasText: 'Lower farm' });
 
 	// Dam level: fetched when picked; every farm here has a dam.
 	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
