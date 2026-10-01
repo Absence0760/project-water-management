@@ -7492,7 +7492,7 @@ the catalogue, [§ Language](#language)); both unit-tested.
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing. Under the rules, **Was it
-  useful?** (`alerts/AlertFeedbackSummary.svelte`, 147, issue #74): what
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
   people answered to "Was this alert useful?" over the last year, one line
   per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
   most answered first), then **Comments** (the newest 50, each with its
