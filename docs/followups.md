@@ -4223,9 +4223,14 @@ Applicant view and the Applications tab. Left:
 - [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and results (downstream
       units as a whole percentage, nothing but the EWR for a run with a
-      baseline assumption) and the outcome words
-      (`approved`, `approved_with_conditions`, `refused`) are **pending the
-      client and the licensing authority**. Trigger: the client's answers.
+      baseline assumption) are **pending the client and the licensing
+      authority**. D1 (who decides: the responsible authority, members acting
+      for it, the endorsement and the conflict guard) and the outcome words
+      (D14: `licence_issued`, `licence_refused`, `application_rejected`,
+      `not_considered`) are built on provisional positions (pre-counsel
+      research, 2026-10-01, 163_licensing_authority) and wait for the client,
+      the pilot authority's house style and counsel (#92). Trigger: the
+      client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant

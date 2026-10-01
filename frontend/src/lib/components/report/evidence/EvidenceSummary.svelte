@@ -59,8 +59,27 @@
 			<span class="sub" data-testid="evidence-published">
 				{#if id.baseline.published === 'this'}The project’s published baseline (since {fmtDate(id.baseline.publishedAt)}){:else if id.baseline.published === 'other'}<strong>Not the published baseline:</strong> another run was published {fmtDate(id.baseline.publishedAt)}{:else}Nothing is published for this project{/if}
 			</span>
+			<!-- evidence-13 (163_licensing_authority): the authority's endorsement; a pack drafted before has no such field and says nothing. -->
+			{#if id.baseline.endorsement !== undefined}
+				<span class="sub" data-testid="evidence-endorsement">
+					{#if id.baseline.endorsement}Endorsed by the responsible authority {fmtDate(id.baseline.endorsement.endorsedAt)}{id.baseline.endorsement.endorsedBy ? ` (${id.baseline.endorsement.endorsedBy})` : ''}{:else}<strong>Not endorsed by the responsible authority</strong>{/if}
+				</span>
+			{/if}
 		</dd>
 	</div>
+	{#if id.authority !== undefined}
+		<div data-testid="evidence-for">
+			<dt>For</dt>
+			<dd>
+				{#if id.authority}
+					{id.authority.name}
+					<span class="sub">{id.authority.kind === 'dws' ? 'Department of Water and Sanitation' : 'Catchment management agency'}{id.authority.office ? ` · ${id.authority.office}` : ''}</span>
+				{:else}
+					<span class="na">No responsible authority named</span>
+				{/if}
+			</dd>
+		</div>
+	{/if}
 	{#if id.application}
 		<div>
 			<dt>Application</dt>

@@ -103,6 +103,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'report_schedule_recipient.user_id': { section: 'reportSubscriptions' },
 	'revoked_session.user_id': { excluded: 'ids of sessions the person signed out, no other data; kept until the token would have expired, 7 days at most' },
 	'run_nomination.nominated_by': { excluded: 'the project’s evidence nomination; its maker only' },
+	'run_publication.endorsed_by': { excluded: 'the responsible authority’s endorsement of a published baseline; publication.endorsed is in auditEvents' },
 	'run_publication.published_by': { excluded: 'the project’s publication; publication.published is in auditEvents' },
 	'run_publication.updated_by': { excluded: 'the project’s publication; its last editor only' },
 	'run_uncertainty.created_by': { excluded: 'the project’s ensemble; its maker only' },
@@ -222,7 +223,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		);
 		if (!acct[0]) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		const { rows: projectMemberships } = await db.query(
-			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.added_at AS "addedAt", m.party, m.specialist
+			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.acts_for_authority AS "actsForAuthority", m.added_at AS "addedAt", m.party, m.specialist
 			 FROM project_member m LEFT JOIN project p ON p.id = m.project_id
 			 WHERE m.user_id = $1 ORDER BY m.added_at, m.project_id`,
 			[userId]

@@ -271,6 +271,8 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/publication',
 			'POST /projects/:id/publication',
 			'PATCH /projects/:id/publication/:pubId',
+			// The responsible authority's endorsement of a published baseline (163).
+			'POST /projects/:id/publication/:pubId/endorse',
 			'GET /projects/:id/runs/:runId/publication',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',

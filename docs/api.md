@@ -68,7 +68,8 @@ deleting a project), any that needs team admin (and removing someone else
 from a team; removing someone else from a project; an owner making or
 revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
 `POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
-deciding an application (`POST …/scenarios/:sid/decide`), issuing or
+recording the authority's decision on an application (`POST …/scenarios/:sid/decide`),
+endorsing a published baseline (`POST …/publication/:pubId/endorse`), issuing or
 withdrawing an evidence pack, and signing a run or a pack (`POST
 …/runs/:runId/signoffs`, `POST …/packs/:packId/signoffs`: every signer, since
 any editor may sign). Checked after the role, so an outsider still
@@ -297,6 +298,14 @@ the frontend catalogue (same contract: add, never rename):
   `…/withdraw`): the session's last code from the authenticator is more than
   10 minutes old. The workspace asks for one, sends it to
   `POST /auth/mfa/step-up` and repeats the action (§ Two-step sign-in).
+- `role_conflict` (`409` from a member's role or party change, a team
+  member's role change, moving a project into a team, sharing an
+  application): the change would make someone who edits the project (an
+  editor or owner, directly or through its team) also part of an applying
+  party there: in a party, owning an application, or shared one
+  (`163_licensing_authority`'s conflict guard; provisional position,
+  pre-counsel research, 2026-10-01). Take them out of the party, or keep
+  them below editor.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -376,8 +385,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   that team's settings), is judged by the defaults (5 %, 20 %). A project
   where your role is `farmer` or `contributor` is left out, as on the
   portfolio. Sorted by name.
+- **The responsible authority** (163_licensing_authority; provisional
+  position, pre-counsel research, 2026-10-01): `settings.responsibleAuthority
+  = { name: 1–200, kind: 'dws' | 'cma', office?: ≤ 200 } | null` names who
+  decides the project's licence applications (DWS, or a CMA with the power),
+  set through `PATCH /projects/:id` like any setting (editor; `400` for a
+  blank name or another kind). No model input: runs don't record it and
+  saving it alone leaves `updatedAt` alone. `project.actsForAuthority`
+  (boolean) says whether the caller acts for it: an editor or owner whom an
+  owner marked (`PATCH …/members/:userId { actsForAuthority }`); only they
+  record the authority's decision on an application and endorse a published
+  baseline.
 - `project` (`GET`/`PATCH /projects/:id`, create, import, copy) is a
-  `ProjectSummary` plus `settings`, `rerunQueuedFor` and `timeZone`: an
+  `ProjectSummary` plus `settings`, `rerunQueuedFor`, `actsForAuthority` and `timeZone`: an
   IANA zone name (058_project_time_zone, `Africa/Johannesburg` by default)
   that dates the project's downloads (§ Export) and every other day a
   person reads from the server: the portfolio's ages, a feed's health, the
@@ -911,9 +931,9 @@ out, and a re-import of an export records itself as a `project-file` import.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
+| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party, actsForAuthority }[] }` | viewer |
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Invites); `409` if a verified account with that address is already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
-| PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
+| PATCH | `/projects/:id/members/:userId` | `{ role?, party?, actsForAuthority? }` (at least one) | `{ member }`. `actsForAuthority` (163_licensing_authority) marks the member as acting for the project's responsible authority: as an editor or owner they then record its decisions on applications and endorse a published baseline. Only an owner sets it (the database refuses anyone else, `project_member_authority`); a new membership never has it; logged as `member.authority`. **Conflict guard** (D1 (c)): a role or party change that would make an editor or owner (directly or through the project's team) also a member of an applying party, the owner of an application or someone it is shared with is `409 role_conflict`; change both in one request to move someone out of a party and up to editor. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
 `409 a project must keep at least one owner` when demoting or removing the
@@ -2212,8 +2232,15 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   the scenario routes too, for applications ([Applications](#applications)).
 - Since 045 `Scenario` also has `origin: 'team' | 'applicant'`,
   `submittedAt`, `decidedAt`, `decidedBy` (a display name), `outcome:
-  'approved' | 'approved_with_conditions' | 'refused' | null`,
-  `decisionNote` and `members: { userId, displayName }[]`; `baseRun.label` is
+  'licence_issued' | 'licence_refused' | 'application_rejected' |
+  'not_considered' | null` (since 163; a decision recorded before it was
+  mapped, `approved` and `approved_with_conditions` to `licence_issued`,
+  `refused` to `licence_refused`), `decisionNote`, the authority's record
+  `decisionAuthority` (its name, `null` until decided; `"Not recorded
+  (before 163)"` on an older decision), `decisionDate` (`YYYY-MM-DD`, the
+  date on its decision letter, `null` before 163), `decisionReference` (its
+  licence or file reference, `''` = none) and `reasonsReceived` (`boolean`,
+  `null` before 163), and `members: { userId, displayName }[]`; `baseRun.label` is
   `''` and `baseRun.createdAt` `null` for a caller who can't read the run.
 - `GET /projects/:id/scenarios/:sid/base` → `{ baseRunId, settings, model,
   anonymisedNodeIds }`: the base run's settings and model as the caller may
@@ -2241,7 +2268,7 @@ below work on it too, for an editor.
 | POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
-| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor |
+| POST | `/projects/:id/scenarios/:sid/decide` | **Record the authority's decision** (163_licensing_authority; provisional position, pre-counsel research, 2026-10-01): `{ outcome: 'licence_issued' \| 'licence_refused' \| 'application_rejected' \| 'not_considered', authority?: ≤ 200, decisionDate: 'YYYY-MM-DD', reference?: ≤ 200, reasonsReceived: boolean, note?: ≤ 4000 }` (`authority` omitted: the project's `settings.responsibleAuthority.name`, `400` when it names none; `decisionDate` a real date, not after tomorrow) | `submitted → decided`, with `decidedAt` (the app's stamp), `decidedBy` and the record above; final. `403` unless the caller acts for the responsible authority (an editor or owner the owner marked, `actsForAuthority`), and for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor acting for the authority |
 | GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
@@ -2292,7 +2319,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-12`: § 1's locality map, `localityMap` `{ version: 'locality-1', applicant, features: [{ layer, label, geometry }], asOf, sources: [{ fileName, sha256, importedAt }], drawnInApp, svgSha256 }` (the project's map features as the reader reads them now, `layer` one of `boundary`, `parcel`, `dam`, `applicantParcel`, `applicantDam`, `river`, `gauge`, `ewrSite`; another unit's parcel or dam has `label: null` and no node; geometries at 6 decimals, simplified to the figure; `svgSha256` the SHA-256 of the engine's `localityMapSvg` of it; null with no map features; absent from a pack's report drafted before `evidence-12`; [evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)) (`evidence-12`); page 1's row over the other applications reads one combined run from a cumulative assessment, `cumulative.combined` (below; absent from a pack's report drafted before `evidence-11`, whose row is the sum) (`evidence-11`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-13`: the identity block's `identity.authority` `{ name, kind: 'dws' \| 'cma', office } \| null` (the project's `settings.responsibleAuthority`) and `identity.baseline.endorsement` `{ endorsedAt, endorsedBy, note } \| null` (the newest endorsement of a publication of the baseline run), with the page-1 caution `flags[id=notEndorsed]` without one; both absent from a pack's report drafted before `evidence-13` (163_licensing_authority, [evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)) (`evidence-13`); § 1's locality map, `localityMap` `{ version: 'locality-1', applicant, features: [{ layer, label, geometry }], asOf, sources: [{ fileName, sha256, importedAt }], drawnInApp, svgSha256 }` (the project's map features as the reader reads them now, `layer` one of `boundary`, `parcel`, `dam`, `applicantParcel`, `applicantDam`, `river`, `gauge`, `ewrSite`; another unit's parcel or dam has `label: null` and no node; geometries at 6 decimals, simplified to the figure; `svgSha256` the SHA-256 of the engine's `localityMapSvg` of it; null with no map features; absent from a pack's report drafted before `evidence-12`; [evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)) (`evidence-12`); page 1's row over the other applications reads one combined run from a cumulative assessment, `cumulative.combined` (below; absent from a pack's report drafted before `evidence-11`, whose row is the sum) (`evidence-11`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2312,7 +2339,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
 - **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
-  submitted, or decided `approved` / `approved_with_conditions`, with its
+  submitted, or decided `licence_issued` (`approved` / `approved_with_conditions` in a pack drafted before `evidence-13`), with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
   scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
   viewer's report lists no submitted application (editors read those) and
@@ -2626,6 +2653,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
 | POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`, and records `publication.notice_changed` with the whole notice as it then stands (issue #119). `409` for a superseded publication | editor |
+| POST | `/projects/:id/publication/:pubId/endorse` | `{ note?: ≤ 2000 }` | `{ publication: PublicationMeta }` with its `endorsement`: the responsible authority endorses this published baseline (163_licensing_authority; s41(2): the authority decides what evidence it accepts). Once per publication, current or superseded (an application may rest on either); the database stamps `endorsedAt` and `endorsedBy` and never lets them change. Needs two-step sign-in; records `publication.endorsed`. `403` unless the caller acts for the authority; `404` for another project's publication; `409` once endorsed | editor acting for the authority |
 | GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
@@ -2639,8 +2667,12 @@ received. For a **forecast run** (WP-2.12) it is the day before
   trimmed the same way. `nextExpectedOn` is a date
   (`YYYY-MM-DD`) or `null` (design E10). Without `restriction` a
   publication has none.
-- `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt }`;
+- `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt, endorsement? }`;
   `publishedBy` is a display name (`null` once that account is gone).
+  `endorsement = { endorsedAt, endorsedBy, note } | null` (163): the
+  responsible authority's endorsement, `null` = not endorsed; to viewers and
+  above only (a farmer's answer has no `endorsement`). The same field is on
+  `Publication`.
 - `Publication = PublicationMeta & { note?, restriction: { level, pct, notice }, nextExpectedOn, catchmentView, updatedAt, updatedBy }`,
   `notice` as above (`{}` for none), only the languages the WUA wrote.
   `note` is the modeller's note to the project's staff: returned to viewers

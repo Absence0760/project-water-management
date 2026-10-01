@@ -167,6 +167,8 @@ export type AuditKind =
 	| 'member.role'
 	| 'member.party'
 	| 'member.specialist'
+	// An owner marked or unmarked a member as acting for the responsible authority (163).
+	| 'member.authority'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'
@@ -176,6 +178,8 @@ export type AuditKind =
 	// The season decision log (issue #119, publish/decision.ts): the notice, window, run and per-farm figures.
 	| 'publication.published'
 	| 'publication.notice_changed'
+	// A member acting for the responsible authority endorsed a published baseline (163).
+	| 'publication.endorsed'
 	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
 	| 'outlook.published'
 	| 'outlook.unpublished'

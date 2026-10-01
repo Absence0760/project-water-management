@@ -25,6 +25,14 @@ export const KIND_FILTERS: { value: string; label: string }[] = [
 	{ value: 'restore', label: 'Restores of data' }
 ];
 
+/** The authority's outcome words (163_licensing_authority), as the history writes them. */
+const DECISION_WORDS: Record<string, string> = {
+	licence_issued: 'licence issued',
+	licence_refused: 'licence refused',
+	application_rejected: 'application rejected',
+	not_considered: 'not considered (use already authorised)'
+};
+
 const SOURCE_TITLES: Record<HistoryRevision['source'], string> = {
 	baseline: 'Starting point',
 	model_put: 'Model changed',
@@ -154,6 +162,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.specialist
 				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
 				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
+		case 'member.authority':
+			// 163_licensing_authority: the owner marks who acts for the responsible authority.
+			return s.actsForAuthority ? `Marked ${who} as acting for the responsible authority` : `${who} no longer acts for the responsible authority`;
 		case 'farmer.linked':
 			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
@@ -177,6 +188,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const fields = (Array.isArray(s.fields) ? (s.fields as string[]) : []).map((f) => names[f] ?? f);
 			return `Changed the publication’s ${fields.join(' and ') || 'notice'}`;
 		}
+		case 'publication.endorsed':
+			return 'Endorsed a published baseline for the responsible authority';
 		case 'series.created':
 			return `Added ${seriesName(s)}${range(s)}${s.feedId ? ` from the ${feedName(s.source)} feed` : ''}`;
 		case 'series.replaced':
@@ -320,8 +333,12 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.application ? 'An applicant withdrew an application' : `Withdrew the scenario “${str(s.name)}”`;
 		case 'scenario.reopened':
 			return s.application ? 'An applicant reopened an application as a draft' : `Reopened the scenario “${str(s.name)}” as a draft`;
-		case 'scenario.decided':
-			return `Decided ${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”: ${str(s.outcome).replaceAll('_', ' ')}`;
+		case 'scenario.decided': {
+			// 163_licensing_authority: the authority decides; the app records it (older events: "Decided … approved").
+			const what = `${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”`;
+			const outcome = DECISION_WORDS[str(s.outcome)];
+			return outcome ? `Recorded ${str(s.authority) || 'the responsible authority'}’s decision on ${what}: ${outcome}` : `Decided ${what}: ${str(s.outcome).replaceAll('_', ' ')}`;
+		}
 		case 'scenario.shared':
 			return 'Shared an application with another applicant';
 		case 'scenario.unshared':

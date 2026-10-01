@@ -34,6 +34,7 @@
 		projectId,
 		runs,
 		canEdit,
+		actsForAuthority = false,
 		applicant = false,
 		publishedRunId = null,
 		onRunsChange,
@@ -42,6 +43,8 @@
 		projectId: string;
 		runs: RunMeta[] | null;
 		canEdit: boolean;
+		/** The caller acts for the responsible authority (163): they record its decision on an application. */
+		actsForAuthority?: boolean;
 		/** The caller is an applicant: applications only, on the published run. */
 		applicant?: boolean;
 		/** The current publication's run: an applicant's base. */
@@ -303,7 +306,7 @@
 		{#if selectedId}
 			<LoadState loading={detailLoading && !detail} error={detailError} retry={() => selectedId && loadDetail(selectedId)}>
 				{#if detail}
-					<ScenarioEditor {projectId} data={detail} runs={runs ?? []} {canEdit} {applicant} onchange={changed} ondeleted={deleted} onran={ran} />
+					<ScenarioEditor {projectId} data={detail} runs={runs ?? []} {canEdit} {actsForAuthority} {applicant} onchange={changed} ondeleted={deleted} onran={ran} />
 				{/if}
 			</LoadState>
 		{/if}

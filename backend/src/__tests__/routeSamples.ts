@@ -61,7 +61,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios': (c) => ({ body: { name: `Ladder ${crypto.randomUUID()}`, baseRunId: c.runId, ops: [] } }),
 	'PATCH /projects/:id/scenarios/:sid': () => ({ body: { description: 'ladder' } }),
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),
-	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'approved' } }),
+	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'licence_issued', authority: 'Ladder CMA', decisionDate: '2026-09-30', reasonsReceived: true } }),
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
@@ -107,6 +107,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PUT /projects/:id/farmers/:userId': (c) => ({ body: { nodeIds: [c.otherFarmId] }, params: { userId: c.farmer.id } }),
 	'POST /projects/:id/publication': (c) => ({ body: { runId: c.runId } }),
 	'PATCH /projects/:id/publication/:pubId': () => ({ body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } } }),
+	'POST /projects/:id/publication/:pubId/endorse': () => ({ body: { note: 'ladder' } }),
 	'POST /projects/:id/share-links': () => ({ body: { label: 'Ladder link', expiresInDays: 7 } }),
 	'POST /projects/:id/allocations': (c) => ({ body: { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 } }),
 	// A PATCH changes only what it sends (issue #72), so an empty one is refused before the role check.

@@ -72,8 +72,16 @@ import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
  * the SVG drawn from them (geo/localityMap.ts), so a pack freezes the figure and reproduce:pack draws
  * it again. Null when the project has no map features; absent from a pack drafted before it, whose
  * § 1 says the figure isn't part of it.
+ * evidence-13: the responsible authority (163_licensing_authority; provisional position, pre-counsel
+ * research, 2026-10-01): the identity block names the project's authority ("For: …",
+ * `identity.authority`) and whether it endorsed the baseline (`identity.baseline.endorsement`), and
+ * page 1 flags "Baseline not endorsed by the responsible authority" (`notEndorsed`) when it hasn't.
+ * § 4's decided applications carry the Act's outcome words (licence_issued, licence_refused,
+ * application_rejected, not_considered); a pack drafted before keeps its frozen approved /
+ * approved_with_conditions, which the report still words. A pack drafted before evidence-13 has
+ * neither field: its identity block says nothing about the authority, and it has no such flag.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-12';
+export const EVIDENCE_REPORT_VERSION = 'evidence-13';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -165,6 +173,23 @@ export interface EvidenceEnsembleInput {
 	paired: PairedSummary | null;
 }
 
+/** The project's responsible authority (settings.responsibleAuthority, 163; evidence-13). */
+export interface EvidenceAuthority {
+	name: string;
+	/** dws: the Department of Water and Sanitation; cma: a catchment management agency with the power. */
+	kind: 'dws' | 'cma';
+	/** '' = not given. */
+	office: string;
+}
+
+/** A member acting for the responsible authority endorsed the baseline's publication (163; evidence-13). */
+export interface EvidenceEndorsement {
+	endorsedAt: string;
+	/** Display name; null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
+}
+
 /** The project's publication (022_publication) of a run, the baseline's context (WP-2.3). */
 export interface EvidencePublication {
 	runId: string;
@@ -201,7 +226,7 @@ export interface EvidenceOtherApplicationInput {
 	scenarioId: string;
 	scenarioName: string;
 	status: 'submitted' | 'decided';
-	/** The assessor's outcome, when decided ('approved' | 'approved_with_conditions'). */
+	/** The authority's outcome, when decided: 'licence_issued' (the only decided outcome the table takes; evidence-13; 'approved' or 'approved_with_conditions' in a pack drafted before). */
 	outcome: string | null;
 	runId: string;
 	runCreatedAt: string;
@@ -267,6 +292,10 @@ export interface EvidenceInput {
 	nominations: EvidenceNomination[];
 	/** The current publication and the one before it, when there are any. */
 	publication: { current: EvidencePublication | null; previous: EvidencePublication | null };
+	/** The project's responsible authority (evidence-13); null or absent when it names none. */
+	authority?: EvidenceAuthority | null;
+	/** The newest endorsement of a publication of the baseline run (evidence-13); null or absent when none. */
+	baselineEndorsement?: EvidenceEndorsement | null;
 	/** Every ensemble started on the baseline, and every paired ensemble on the application run, newest first. */
 	ensembles: { baseline: EvidenceEnsembleInput[]; paired: EvidenceEnsembleInput[] };
 	/** diffInputs(baseline, application), with stored values; [] for baseline evidence. */
@@ -847,7 +876,11 @@ export interface EvidenceReport {
 			/** Where the run stands against the project's publication (WP-2.3), persona A: "baseline provenance". */
 			published: 'this' | 'other' | 'none';
 			publishedAt: string | null;
+			/** The responsible authority's endorsement of this baseline (evidence-13); null = not endorsed. Absent from an older pack's document. */
+			endorsement?: EvidenceEndorsement | null;
 		};
+		/** Whom the report is for: the project's responsible authority (evidence-13); null when it names none. Absent from an older pack's document. */
+		authority?: EvidenceAuthority | null;
 		application: {
 			runId: string;
 			label: string;

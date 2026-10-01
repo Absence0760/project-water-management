@@ -6,7 +6,7 @@
 // "cannot see" has its positive control.
 import { blankEwrRuleTable } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -89,6 +89,8 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
 	}
 	expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: [kalkoenkrans.id] })).status).toBe(201);
+	// The assessor acts for the responsible authority (163): only such a member records its decision.
+	await actForAuthority(owner, projectId, assessor.id);
 	// A contributor keeps farm links (045 widened farm_link_check and /farmers/:userId).
 	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
 	expect(linked.status, JSON.stringify(linked.body)).toBe(200);
@@ -320,13 +322,29 @@ describe('an application', () => {
 	});
 
 	it('is decided by an assessor, never by its applicant, and viewers then read it', async () => {
-		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(403);
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'maybe' })).status).toBe(400);
-		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved_with_conditions', note: 'Releases of 5 % in dry months.' });
+		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'maybe' })).status).toBe(400);
+		// The old words are gone from the API (163).
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'approved' })).status).toBe(400);
+		// The authority's date and the reasons flag are part of the record.
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'licence_issued', authority: 'X' })).status).toBe(400);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', decisionDate: '2999-01-01' })).status).toBe(400);
+		// An owner who doesn't act for the authority can't (163; the assessor, marked, can: below).
+		expect((await owner.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
+		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', note: 'Releases of 5 % in dry months.' });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.scenario).toMatchObject({ status: 'decided', outcome: 'approved_with_conditions', decisionNote: 'Releases of 5 % in dry months.', decidedBy: 'Assessor' });
+		expect(res.body.scenario).toMatchObject({
+			status: 'decided',
+			outcome: 'licence_issued',
+			decisionNote: 'Releases of 5 % in dry months.',
+			decidedBy: 'Assessor',
+			decisionAuthority: DECISION.authority,
+			decisionDate: DECISION.decisionDate,
+			decisionReference: DECISION.reference,
+			reasonsReceived: true
+		});
 		// Final: no second decision, no withdrawal, no delete.
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'refused' })).status).toBe(409);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused' })).status).toBe(409);
 		expect((await asA('POST', `${P()}/scenarios/${sid}/withdraw`)).status).toBe(409);
 		expect((await asA('DELETE', `${P()}/scenarios/${sid}`)).status).toBe(409);
 		// Viewers read a decided application (control above: not before).
@@ -358,9 +376,9 @@ describe('withdraw, reopen and delete', () => {
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/withdraw`)).body.scenario.status).toBe('withdrawn');
 		// A decision racing the withdrawal: RLS filters the assessor's UPDATE to no
 		// row, silently (why the route's move() checks the count and answers 409).
-		const raced = await withUser(assessor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'approved' WHERE id = $1`, [sid]));
+		const raced = await withUser(assessor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'licence_issued' WHERE id = $1`, [sid]));
 		expect(raced.rowCount).toBe(0);
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(409);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(409);
 		expect((await asOwner('SELECT status FROM scenario WHERE id = $1', [sid]))[0].status).toBe('withdrawn');
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/reopen`)).body.scenario).toMatchObject({ status: 'draft', submittedAt: null });
 		// Hidden again from the assessor once a draft.

@@ -1429,12 +1429,6 @@ export const af: Catalogue = {
 	'caff1997': 'Gemiddelde lewering aan die hidrologiese eenhede',
 	// Hydrological units short of 95 % of their demand
 	'f0f6ca6b': 'Hidrologiese eenhede wat minder as 95 % van hul waterbehoefte kry',
-	// Approved
-	'c699109a': 'Goedgekeur',
-	// Approved with conditions
-	'8451eca8': 'Goedgekeur met voorwaardes',
-	// Refused
-	'9155ad83': 'Geweier',
 	// Decided
 	'99f42a3f': 'Besluit',
 	// {outcome} on {date}.

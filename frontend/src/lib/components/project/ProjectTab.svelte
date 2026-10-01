@@ -18,6 +18,7 @@
 	import { holdAnchor } from '$lib/help/anchor';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
+	import AuthorityPanel from './AuthorityPanel.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { projectAnchor } from './links';
@@ -185,6 +186,8 @@
 			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
 			<!-- The host's checks of signers' registrations (167_signers): editors read them, owners record them. -->
 			{#if canEdit}<RegistrationChecksPanel projectId={project.id} {isOwner} />{/if}
+			<!-- Who decides the project's licence applications (163_licensing_authority). -->
+			<AuthorityPanel {project} {canEdit} {onProjectChange} />
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}

@@ -682,7 +682,10 @@ the result change?", and put back any earlier version.
   `report_schedule.configured`, `scenario.created/changed/deleted`, the
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
-  it is decided),
+  it is decided; since 163 `scenario.decided` also carries the `authority`
+  and `decisionDate`), `member.authority` (163: an owner marked or unmarked
+  a member as acting for the responsible authority, `actsForAuthority`),
+  `publication.endorsed` (163: `publicationId`, `runId`, `note`),
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
@@ -1664,14 +1667,27 @@ projection's read and narrows their series further:
 - **`scenario.origin`** `'team' | 'applicant'`, stamped by `scenario_guard`
   from the creator's role and never changed, plus the decision:
   `submitted_at`, `decided_at`, `decided_by → app_user` (covering index),
-  `outcome` (`approved`, `approved_with_conditions`, `refused`; only when
-  decided) and `decision_note` (≤ 4000). A partial index
+  `outcome` (since 163_licensing_authority, the responsible authority's
+  outcome in the Act's words: `licence_issued`, `licence_refused`,
+  `application_rejected`, `not_considered`; only when decided; 163 mapped
+  `approved` and `approved_with_conditions` to `licence_issued`, `refused`
+  to `licence_refused`) and `decision_note` (≤ 4000), plus the authority's
+  record (163): `decision_authority` (1–200, trimmed; NOT NULL exactly when
+  there is an outcome, `scenario_decision_recorded`: every decided
+  application, never a team scenario an editor only marks decided; "Not recorded (before 163)" on an
+  older decision), `decision_date` (the decision letter's date; `decided_at`
+  is the app's stamp), `decision_reference` (≤ 200, `''` = none) and
+  `reasons_received` (boolean); the last three are empty unless decided
+  (`scenario_decision_fields`), and NULL only on a decision before 163. A partial index
   `(project_id, status) WHERE origin = 'applicant'` serves the Applications
   list. `scenario_guard` (from 024's body) also: an application's base is a
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
-  its owner decides it, with an outcome and nothing else changed; the
-  decision is set once. The one change it lets through is the assessor's
+  its owner **and acts for the responsible authority** (163,
+  `app_acts_for_authority`; also for an outcome on a team scenario, though
+  an editor may still mark a team scenario decided without one) decides it, with an
+  outcome, the authority, the date and the reasons flag, and nothing else
+  changed; the decision and its record are set once. The one change it lets through is the assessor's
   account going (052): an update whose only change is `decided_by` becoming
   NULL, once the account it named no longer exists (the foreign key's
   `SET NULL`), passes untouched, so the decision stays with no assessor.
@@ -1698,6 +1714,26 @@ projection's read and narrows their series further:
   applicant names someone, so no answer says who else is a member.
   `project_member_prune_shares` (after a change of party or role) deletes
   the shares the rule no longer allows.
+- **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
+  default false): the owner marks the members who act for the project's
+  responsible authority (`settings.responsibleAuthority`, backend
+  `projects/authoritySettings.ts`, no model input). `project_member_authority`
+  forces it false on insert and refuses a change by anyone but an owner of
+  the project; water_app's `UPDATE` grant on `project_member` is now the
+  columns `role`, `party` and `acts_for_authority`. `app_acts_for_authority(project)`
+  (`SECURITY DEFINER`, pinned `search_path`): the current user is editor or
+  above and marked. It gates the decision (`scenario_guard`) and the
+  baseline endorsement (`run_publication_endorse`).
+- **The conflict guard** (163, D1 (c)): `app_member_role(project, user)`
+  (any user's effective role, direct or through the team; not granted to
+  water_app) and `app_assert_no_role_conflict(project, user)`, called by
+  `AFTER` triggers on `project_member` (insert, role, party), `team_member`
+  (insert, role: every project of the team), `project` (moving into a team:
+  every member of it), `scenario` (an application's insert) and
+  `scenario_member` (insert, update). It raises `check_violation` with the
+  constraint name `role_conflict` when an editor or owner is in an applying
+  party, owns an application or is shared one; the API answers `409
+  role_conflict`. Existing conflicts aren't rewritten.
 - **Who reads a scenario** is one function, `app_scenario_visible(project,
   id, origin, status, owner)` (taking columns so the insert's `RETURNING`
   passes it); `app_scenario_readable(id)` looks the row up and calls it. A
@@ -1771,7 +1807,16 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
-  `published_by`, `updated_by`.
+  `published_by`, `updated_by`, `endorsed_by`.
+- **The responsible authority's endorsement** (163_licensing_authority):
+  `endorsed_by → app_user SET NULL`, `endorsed_at`, `endorsement_note`
+  (≤ 2000), granted to water_app's `UPDATE`. `run_publication_endorse`
+  stamps `endorsed_at` and `endorsed_by` itself and refuses anyone but
+  `app_acts_for_authority`; `run_publication_final` (from 067's) lets an
+  endorsement onto a superseded publication too (an application may rest on
+  it) and refuses any change to one once made, except the endorser's
+  account going clearing `endorsed_by`. The `run_publication_endorsement`
+  CHECK keeps `endorsed_by` and the note empty without `endorsed_at`.
 - **The notice, by language (081_notice_languages.sql, issue #58).**
   `notice` is one jsonb object from a language code to the WUA's words in
   that language, `{"en": "…", "af": "…"}`; `{}` is no notice (never NULL).
