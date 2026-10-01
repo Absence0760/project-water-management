@@ -18,7 +18,21 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-2 strings: 0 on the site, 2 in emails, 0 in the glossary.
+7 strings: 5 on the site, 2 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### terms-update
+
+The page a signed-in person sees after the Terms of use or Privacy notice changed, before anything else: what changed, and a button to accept the new terms (or sign out).
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `b216c7f0` | We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time. |  |  |
+| `eabe4936` | A deleted note’s text is erased 90 days after it is deleted. |  |  |
+| `062d7e8b` | If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made. |  |  |
+| `e7b636d7` | Licence records, and the names they keep, are kept until a set date and then deleted. |  |  |
+| `3c1e1737` | Outside the organisation, registered water use is shown only as totals, never with a name. |  |  |
 
 ## Emails
 
