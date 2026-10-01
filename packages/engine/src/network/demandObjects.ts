@@ -200,6 +200,8 @@ export interface PlanObjects {
 	 * no object has a floor.
 	 */
 	restricted: Uint8Array | null;
+	/** Each object's category (engine ≥ 1.54.0): the part of demand a drought restriction level cuts it as (./restriction.ts). */
+	category: DemandObject['category'][];
 }
 
 /**
@@ -263,7 +265,7 @@ export function planObjects(
 		tier[k] = p ?? 1;
 	});
 	for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total, floor: floors, restricted };
+	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total, floor: floors, restricted, category: objects.map((o) => o.category) };
 }
 
 /**

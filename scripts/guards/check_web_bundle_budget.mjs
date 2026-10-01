@@ -1615,6 +1615,25 @@
 //             issue on verify, the pack page and the applicant view
 //             (errataFoundSinceNote)). Measured 1338 locally, 1341 on CI;
 //             headroom ~3 KB.
+// 2026-09-30  total 1344 → 1362 KB (engine 1.54.0, WP-3.8's drought
+//             restriction rule: measured on main @ 3571e104, 1,352,782 →
+//             1,369,985 gzip bytes, +16.8 KB, raised by that rounded up). The
+//             rule in the engine (network/restriction.ts with its bases,
+//             units, EWR trigger and the notice's rule, its daily step in
+//             simulate, the droughtRestriction self-check, the
+//             triggers-to-rule mapping and the run comparison's lines), the
+//             Settings editor (its own chunk, also the scenario form's), the
+//             Units & supply tables (their own chunk and panel) and the
+//             outlook's "Use as the drought restriction rule". Re-measured
+//             with main @ b88b7f4f's 1338 merged (#260, the pack share,
+//             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
+//             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
+//             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1365 KB (CR-16, engine 1.55.0: the validation
+//             signatures of the scored record, BFI, low-flow FDC slope and
+//             held-out recession skill, with the drought rule's 1.54.0 now on
+//             main @ the #273 merge). Measured 1360 locally; CI ~2 KB above.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1625,7 +1644,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1344,
+	totalCodeKb: 1365,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

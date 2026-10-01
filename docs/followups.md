@@ -232,6 +232,42 @@ collected as a checklist in issue #46; tick it there as they answer.
       floor from the demand before it, so those days show as below basic
       needs. Either is a change to `allocations/mode.ts` `planAllocations`
       or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
+- [ ] **Drought restrictions (WP-3.8) to confirm** (engine 1.54.0,
+      [model.md §2.7i](./model.md); to put to the hydrologist through #90 /
+      #46). Built off by default on these choices; confirm or change each:
+      one rule per project on the **total farm dam storage** by default (every
+      farm dam, Σ storage ÷ Σ capacity, the review triggers' basis; some dams
+      or each unit's own dam are options); the level **decided on review dates and held** until
+      the next review or lift date (no daily re-evaluation or hysteresis);
+      the storage read at the **start of the review day**; a fresh run's
+      **first day decided** from its starting storage when the latest date
+      before it is a review; **every unit's demand** cut, the other water
+      users not; the demand kept as the demand, so a cut **counts as a
+      shortfall** in the assurance of supply; the **outlook, its triggers
+      and firm yield run without the rule**; the Settings template's
+      levels (60 / 40 / 25 % of capacity; irrigation 20 / 40 / 60 %,
+      domestic and municipal 10 / 20 / 30 %) as a starting point only.
+      From engine 1.54.0 also: under the **own-dam basis** a unit without a
+      dam isn't restricted by storage (only by the EWR trigger); the **EWR
+      trigger** reads the site's pragmatic EWR shortfall on the **day
+      before** a review only (not a count of recent days, not the Reserve
+      rule tables' monthly compliance) and raises the level to at least its
+      own; a rule **from the published notice** is one level in force below
+      100 % from the publication date to the next expected one.
+- [ ] **Drought restrictions on the other water users: decide whether and
+      how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
+      only hydrological units: an other water user's demand has no category
+      and no population, so a cut on it could take a town below basic needs
+      with nothing to stop it. Options, for the hydrologist and the client:
+      (a) leave users uncut (today; a municipal abstractor's own restriction
+      stages are outside the model); (b) give user nodes a restriction
+      category (domestic / municipal / industrial / other) and a population,
+      then cut them by their category's share with the 25 l floor, as a
+      demand object is; (c) model towns and industry as demand objects on a
+      unit instead of user nodes, so the rule, the categories and the floor
+      already apply; (d) one % cut for every user with no floor, marked as
+      unprotected. Trigger: a catchment where a municipal abstractor sits on
+      the river as an other water user and is restricted in practice.
 - [ ] **Which dam evaporation preset for the client's catchment** (engine
       1.49.0, [model.md §2.7a](./model.md) item 4). Built without changing
       the default (one flat 0.75 × A-pan): Settings → Demand → **Dam
@@ -3417,9 +3453,10 @@ from the WP:
       summary CSV and the demand-objects table report the days and volume
       below the floor apart from the shortfall, with the l/person/day
       supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
-      stay one % for every category (#53 O4). Still to do when it is built:
-      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
-      same floor; it doesn't exist yet, so there is nothing to wire.
+      stay one % for every category (#53 O4). WP-3.8's drought restriction
+      rule (a cut by dam level) holds the same floor: done (engine 1.54.0,
+      2026-09-30, [model.md §2.7i](./model.md)), through `planObjects`'
+      floor and `dayFloor`, checked by the `droughtRestriction` self-check.
 - [x] **A scenario op for demand objects** (engine 1.45.0, 2026-09-30;
       related: issue #73 "Later scenario ops"). `demandObject.add` /
       `.set` / `.remove` ([scenarios.md § Op catalogue](./scenarios.md#op-catalogue)):
@@ -3442,6 +3479,26 @@ from the WP:
       stacks on the unit's own and goes through the same basic-needs floor
       (engine 1.44.0, `planObjects`): a domestic or municipal cut never goes
       below the floor ([scenarios.md § Demand scaling](./scenarios.md)).
+- [x] **WP-3.8's drought restriction rule** (engine 1.54.0, 2026-09-30,
+      [model.md §2.7i](./model.md)). `settings.droughtRestriction`: review
+      and lift dates and up to six levels, each a storage threshold on the
+      total farm dam storage and a % cut per part of demand (crops, each
+      demand-object category), the basic-needs floor kept; off by default.
+      Series `restriction_level`, `restriction_cut@<part>`,
+      `restricted_demand`; `RunSummary.droughtRestriction` and its summary
+      CSV block; the `droughtRestriction` self-check; Settings → Drought
+      restrictions, the Units & supply tables and the outlook's "Use as the
+      drought restriction rule" (the review triggers, R6); `settings.set`
+      in scenarios and the run comparison's lines. No migration: the rule is
+      part of `project.settings` (jsonb). Also built (engine 1.54.0, the
+      same PR): the rule on some dams or each unit's own dam (`basis`,
+      `damNodeIds`) and on some units (`nodeIds`), moved with a project
+      copy; the EWR-failure trigger (`ewrTrigger`, the site's EWR not met
+      the day before a review); a rule started from the WUA's published
+      notice (`restrictionRuleFromNotice`, in Settings and the scenario
+      form); and resumed runs, bit-identical to the uninterrupted one and
+      self-checked. Cutting the other water users is a question for the
+      hydrologist (§ Hydrologist), not built.
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns. Enter them in the
       Network tab's Supply section once the capacities are known.
@@ -4340,7 +4397,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `errataFoundSince` (`errataFor` over the current list, less the
       recorded ids) and never returns itself; the verify page lists them
       under "Errata found since issue", and the pack's page in its unprinted
-      bar (on a draft, "found since this draft was made"). The manifest, its
+      bar (on a draft, "found since this draft was made"). Issue refuses a
+      draft with any (`409` `pack_errata_since_draft`, the checklist's
+      `errataRecorded`): draft it again, which records them. The manifest, its
       hash and `errata` are unchanged
       ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
 - [x] **Applicants' access to their own application's packs** (WP-3.15):

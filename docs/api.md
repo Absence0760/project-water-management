@@ -205,14 +205,20 @@ code has no message in `apiError.ts` `CODES`). A guard (`backend/src/http/errorC
 fails on any uncoded `ApiError` in the routes the translated pages call,
 unless it is listed there with why its status says enough.
 
-**Machine-only codes.** A code that only a machine client reads, never a
-translated page, is in `MACHINE_ERROR_CODES` instead, so it has no words in
-the frontend catalogue (same contract: add, never rename). One so far:
-`render_token_refused` (`400`/`403` from `POST /auth/render-session`: the
-render token is used, expired or unknown, or the requester lost access). The
-report renderer treats only that code as a final refusal; a `403` without it
-is a WAF or CloudFront block, and is retried with the other passing failures
-(`backend/src/reports/render.ts` `sessionRefusal`).
+**Machine-only codes.** A code that a translated page never meets (a
+machine client reads it, or the English workspace, which shows the server's
+message as it is) is in `MACHINE_ERROR_CODES` instead, so it has no words in
+the frontend catalogue (same contract: add, never rename):
+
+- `render_token_refused` (`400`/`403` from `POST /auth/render-session`: the
+  render token is used, expired or unknown, or the requester lost access). The
+  report renderer treats only that code as a final refusal; a `403` without it
+  is a WAF or CloudFront block, and is retried with the other passing failures
+  (`backend/src/reports/render.ts` `sessionRefusal`).
+- `pack_errata_since_draft` (`409` from `POST …/packs/:packId/issue`): an
+  erratum found since the draft was made applies to its runs' engines (or
+  their fits') and its manifest doesn't record it; the message names the
+  errata and says to draft the pack again ([§ Evidence packs](#evidence-packs)).
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -368,6 +374,25 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
+  `settings.droughtRestriction` (engine ≥ 1.54.0, WP-3.8,
+  [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
+  is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
+  (1–12), liftDates?: ['MM-DD', …] (0–12, none a review date), levels: [{
+  label?, belowPct (0 < x ≤ 1), cuts: { crops?, domestic?, municipal?,
+  industrial?, livestock?, irrigation?, external?, other? } (each 0–1) }]
+  (1–6, mildest first), source? (≤ 500 characters), basis?: 'total' |
+  'dams' | 'own', damNodeIds? (with 'dams' only, 1–500 farm dam ids),
+  nodeIds? (1–500 farm ids, the units cut), ewrTrigger?: { siteNodeId: a
+  gauge id (an EWR site) or null for the outlet (the catchment's EWR), level: 1…levels } }`, or `null` / absent
+  for off (the default). Replaced whole, never merged; the engine's
+  `droughtRestrictionIssues` checks it (`400 drought restriction rule: …`:
+  real month-days, not 29 February, no date twice, thresholds strictly
+  falling, a deeper level cutting each part at least as much and every part
+  a milder one cuts, the trigger's level one of the rule's, no other
+  field). Ids that aren't in the model are saved and left out by the run
+  with a warning (the Settings form refuses them). A project copy moves its
+  ids to the copy's nodes. A model input: runs record it, and changing it
+  moves `updatedAt`.
   `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
   ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
   evidence report's cited ensemble must follow: `{ members, bounds:
@@ -1601,6 +1626,24 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- `summary.droughtRestriction` (engine ≥ 1.54.0, WP-3.8; only with
+  `settings.droughtRestriction`): `{ rule (as applied), years: [{
+  waterYear, days, daysByLevel: [none, level 1, …] }], daysByLevel (the
+  whole run), reviews (days the level was decided), units: [{ nodeId, name,
+  avgDemandM3Day, avgRestrictedDemandM3Day, avgSuppliedM3Day,
+  avgCutOnRestrictedDaysM3Day (the mean cut over the days a level was in
+  force, null when none was), daysByLevel }] (the units the rule cuts, id
+  order), ewrReviews? (with an EWR trigger: reviews after a day its site
+  failed), start? (a resumed run: { levelsBefore: { nodeId: level } | null,
+  ewrFailedBefore, damStorageBeforeM3: { nodeId: m³ } }) }`. Under the
+  'own' basis the catchment `restriction_level` is the deepest any unit is
+  at, each cut unit has its own `restriction_level`, and there is no
+  `restriction_cut@<part>`. The run has the catchment series `restriction_level` (0 =
+  none) and `restriction_cut@<part>` (the day's cut, 0–1, for each part a
+  level cuts), and every farm `restricted_demand` (m³/day, what its sources
+  are asked for; `demand` and `deficit` stay the unrestricted demand's).
+  The summary CSV has a *Drought restrictions* block. `verification.checks`
+  has `droughtRestriction`.
 - `summary.groundwaterAnnualUse` (engine ≥ 0.36.0, WP-3.9; only with
   boreholes) is one row per farm or user with boreholes (node-id order) per
   water year the run touches: `{ nodeId, name, kind, waterYear (start year),
@@ -1811,7 +1854,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
   with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
-  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.34.0:
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0), `droughtRestriction` (engine ≥ 1.54.0, only with `settings.droughtRestriction`) and `assurance` (engine ≥ 1.34.0:
   the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
@@ -2130,11 +2173,11 @@ reproduction bundle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified }`, what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
 | GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
 | POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
