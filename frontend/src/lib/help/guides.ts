@@ -354,7 +354,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'Crop factors multiply **A-pan** evaporation, not FAO reference ET₀. A published FAO-56 Kc overstates demand by about a quarter unless you first multiply it by the pan coefficient (0.7–0.85).'
+						text: 'Crop factors multiply **A-pan** evaporation, not FAO reference ET₀. A published FAO-56 Kc overstates demand by about 18–67 % (a third at a pan coefficient of 0.75) unless you first multiply it by the pan coefficient (usually 0.60–0.85).'
 					}
 				]
 			},

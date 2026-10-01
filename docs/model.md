@@ -153,9 +153,48 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
    The crop factors multiply **A-pan** evaporation (`grossCropMm` in
    `packages/engine/src/demand.ts`), not FAO reference evapotranspiration ET₀.
-   ET₀ is about 0.7–0.85 × pan, so an FAO-56 Kc entered as it is overstates
-   demand by roughly a quarter. The Crops tab says so and points out any factor
-   above 1.0 (a hint, not an error).
+   The Crops tab says so and points out any factor above 1.0 (a hint, not an
+   error).
+
+   **How far an FAO-56 Kc set overstates demand (issue #289).** An FAO-56 Kc
+   is set against ET₀, and ET₀ = Kp × A-pan, so a Kc entered as it is
+   overstates demand by 1/Kp − 1 from the missing pan coefficient alone.
+   [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm) gives a Class
+   A pan Kp of **0.35–0.85**. Across 0.60–0.85, the plausibility band the
+   pan coefficient warns outside (§2.4a), that is about **18–67 %**: 18 % at
+   0.85, 25 % at 0.80, 33 % at 0.75, 43 % at 0.70, 67 % at 0.60. The
+   table's lowest cells (strong or very strong wind, a dry fallow fetch, low
+   humidity) go down to 0.35, which would give up to about 186 %. The
+   "~25–40 %" issue #54 item 1 first gave covers only Kp 0.71–0.80.
+
+   The node-based workbook's set as a whole differs by more than the missing
+   Kp, because its curves are also taller than the A-pan tables'. Weighted by
+   the workbook's own monthly A-pan row (Σ A-pan × factor over the year, the
+   workbook's set ÷ the matching crop in the reference library, item 8),
+   annual crop use comes out about **45–75 % higher** for citrus, deciduous
+   fruit and pasture: citrus +75 % (Table 4.13 citrus), pasture +46 % (mixed
+   pasture), apples and pears +47 % (late deciduous cultivars), nectarines
+   and peaches +64 % and +76 % (medium and early cultivars). Pecan comes out
+   about **+5 %**: its Table 4.10 curve (summer rainfall) is high all year.
+   The workbook is client data and isn't in the repo; the figures come from
+   it (issue #289) and aren't reproducible from a fresh clone. Three caveats
+   go with them:
+
+   - The ARC/SABI tables are design values of the late 1980s (the
+     winter-rainfall tables are dated June 1990) for clean-cultivated
+     orchards. Newer WRC orchard water-use studies give a higher Kc under a
+     cover crop (about 0.2–0.25 higher, issue #54), which narrows the gap for
+     the tree crops.
+   - The workbook's row labelled "WR90 A-pan evaporation" may really be
+     S-pan, or otherwise scaled (§2.4a, *Check the A-pan row*). A Symons
+     S-pan reads lower than an A-pan beside it, so if it is, the A-pan tables
+     belong on a higher row than the one both sets were weighted by, and the
+     workbook's Kc × row sits nearer Kc × ET₀ than the percentages suggest.
+     That would partly offset the excess.
+   - The figures are for that one workbook's row and crops. For a real
+     choice, the Load crop factors dialog (item 8) shows the demand
+     difference on the catchment's own row and areas before anything is
+     applied.
 
    **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
    demand]` table has rows pasted from another crop and one-month slips (issue
