@@ -233,6 +233,33 @@ describe('digestMail', () => {
 	});
 });
 
+describe('"Was this useful?" (151_alert_feedback)', () => {
+	const fb = { yesUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=yes', noUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=no' };
+
+	it('asks under the action with two plain links, in text and HTML, and never an image', () => {
+		const m = alertMail(farmer, project, dam, unsub, fb);
+		expect(m.text).toContain('Was this alert useful?\nYes: http://localhost:7777/alerts/feedback#t=FB&a=yes\nNo: http://localhost:7777/alerts/feedback#t=FB&a=no');
+		expect(m.html).toContain('Was this alert useful? <a href="http://localhost:7777/alerts/feedback#t=FB&amp;a=yes"');
+		expect(m.html).toContain('<a href="http://localhost:7777/alerts/feedback#t=FB&amp;a=no"');
+		expect(m.html).not.toMatch(/<img\b/i);
+		// After the action, before "why you got this".
+		expect(m.text.indexOf('Was this alert useful?')).toBeGreaterThan(m.text.indexOf('Open your hydrological unit'));
+		expect(m.text.indexOf('Was this alert useful?')).toBeLessThan(m.text.indexOf('You get this email because'));
+	});
+
+	it('asks about the summary in a digest, and in Afrikaans for an Afrikaans reader', () => {
+		expect(digestMail(staff, project, [dam], unsub, 5, 0, fb).text).toContain('Was this summary useful?');
+		const af = alertMail({ ...farmer, locale: 'af' }, project, dam, unsub, fb);
+		expect(af.text).not.toContain('Was this alert useful?');
+		expect(af.text).toContain('Was hierdie waarskuwing nuttig?\nJa: ');
+		expect(af.text).toContain('#t=FB&a=yes');
+	});
+
+	it('asks nothing without links', () => {
+		expect(alertMail(farmer, project, dam, unsub).text).not.toContain('useful');
+	});
+});
+
 describe('formatting', () => {
 	// Issue #51: numeric(5,2) gave "12.5 %" (a decimal point) in an Afrikaans mail while the farm page showed "13 %".
 	it('writes the WUA’s cut as the farm page does: whole, with the ends marked', () => {

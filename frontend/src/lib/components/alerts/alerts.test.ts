@@ -1,9 +1,9 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
-import { eventKindName, eventText, feedRuleLabel, outOfDateText, groupRules, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, outOfDateText, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '$lib/api/client';
-import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
+import { choiceLabel, farmAlertText, feedbackThanks, fragmentAnswer, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
 // A token's shape (43 base64url characters); low entropy, so no secret scanner mistakes it for a key.
 const TOKEN = 'a'.repeat(20) + '_-' + 'b'.repeat(21);
@@ -34,6 +34,39 @@ describe('fragmentToken', () => {
 		expect(fragmentToken('#t=short')).toBeNull();
 		expect(fragmentToken('')).toBeNull();
 		expect(fragmentToken(`#t=${TOKEN.slice(0, 42)}!`)).toBeNull();
+	});
+});
+
+describe('the feedback page (151_alert_feedback)', () => {
+	it('reads the chosen answer from #t=…&a=yes|no, and nothing else', () => {
+		expect(fragmentAnswer(`#t=${TOKEN}&a=yes`)).toBe(true);
+		expect(fragmentAnswer(`#t=${TOKEN}&a=no`)).toBe(false);
+		expect(fragmentToken(`#t=${TOKEN}&a=no`)).toBe(TOKEN);
+		expect(fragmentAnswer(`#t=${TOKEN}`)).toBeNull();
+		expect(fragmentAnswer(`#t=${TOKEN}&a=maybe`)).toBeNull();
+		expect(fragmentAnswer(`#t=${TOKEN}&a=yess`)).toBeNull();
+	});
+
+	it('thanks the reader, naming the catchment and saying their name isn’t passed on', () => {
+		expect(feedbackThanks({ kind: 'dam_below', project: { name: 'Vaal' } })).toBe('Thank you. Your answer goes to the people who run alerts for Vaal, without your name.');
+	});
+});
+
+describe('the editors’ feedback summary', () => {
+	it('names the daily summary, counts each kind’s answers, and puts the most answered first', () => {
+		expect(feedbackKindName('digest')).toBe('Daily summary');
+		expect(feedbackKindName('dam_below')).toBe('Dam low');
+		expect(feedbackShare({ yes: 3, no: 1 })).toBe('3 of 4 said useful');
+		const rows = feedbackRows({
+			since: '2025-10-01T00:00:00Z',
+			kinds: [
+				{ kind: 'restriction_published', yes: 1, no: 0 },
+				{ kind: 'dam_below', yes: 2, no: 2 },
+				{ kind: 'digest', yes: 0, no: 1 }
+			],
+			comments: []
+		});
+		expect(rows.map((r) => r.kind)).toEqual(['dam_below', 'digest', 'restriction_published']);
 	});
 });
 

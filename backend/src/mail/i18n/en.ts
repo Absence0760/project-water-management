@@ -76,6 +76,11 @@ export const en = {
 	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
 	'mail.alert.unsubscribe': 'Stop these emails',
 	'mail.alert.manage': 'Manage your alerts',
+	// "Was this useful?" (151_alert_feedback): two links to a page that asks before it records anything.
+	'mail.alert.feedback.question': 'Was this alert useful?',
+	'mail.alert.feedback.digestQuestion': 'Was this summary useful?',
+	'mail.alert.feedback.yes': 'Yes',
+	'mail.alert.feedback.no': 'No',
 	'mail.alert.digest.subject': 'Your alerts for {project} — {product}',
 	'mail.alert.digest.heading': 'Your alerts for {project}',
 	'mail.alert.digest.intro': 'Since the last summary:',

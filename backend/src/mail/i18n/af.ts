@@ -110,6 +110,14 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.unsubscribe': 'Stop hierdie e-posse',
 	// Manage your alerts
 	'mail.alert.manage': 'Bestuur jou waarskuwings',
+	// Was this alert useful?
+	'mail.alert.feedback.question': 'Was hierdie waarskuwing nuttig?',
+	// Was this summary useful?
+	'mail.alert.feedback.digestQuestion': 'Was hierdie opsomming nuttig?',
+	// Yes
+	'mail.alert.feedback.yes': 'Ja',
+	// No
+	'mail.alert.feedback.no': 'Nee',
 	// Your alerts for {project} — {product}
 	'mail.alert.digest.subject': 'Jou waarskuwings vir {project} — {product}',
 	// Your alerts for {project}

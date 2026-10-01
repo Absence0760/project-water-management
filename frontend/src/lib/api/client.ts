@@ -32,6 +32,8 @@ import type {
 	AlertRuleChange,
 	ProjectAlerts,
 	Unsubscribed,
+	FeedbackAnswered,
+	AlertFeedbackSummary,
 	Allocation,
 	AllocationCapYears,
 	AllocationImportRequest,
@@ -752,7 +754,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Turn alert emails back on after SES suppressed your address (429 when it bounced again within a day). */
 			resume: () => request<{ mailSuppressed: null }>('POST', '/me/alerts/resume'),
 			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
-			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
+			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token }),
+			/** Answer "Was this useful?" for the mail a token names (signed out; 404 for a dead link). */
+			feedback: (token: string, useful: boolean, comment: string | null) =>
+				request<FeedbackAnswered>('POST', '/alerts/feedback', { token, useful, ...(comment ? { comment } : {}) }),
+			/** The catchment's "Was this useful?" answers, counted, and their comments (editor). */
+			feedbackSummary: (id: string) => request<AlertFeedbackSummary>('GET', `${p(id)}/alert-feedback`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */

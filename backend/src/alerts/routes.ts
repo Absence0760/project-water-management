@@ -6,11 +6,14 @@
 //   GET  /projects/:id/alert-rules        the project's rules (editor)
 //   PUT  /projects/:id/alert-rules        switch kinds on and set thresholds (editor)
 //   GET  /projects/:id/alert-events       firing (or recent) alerts, as RLS lets the caller see them (farmer+)
+//   GET  /projects/:id/alert-feedback     "Was this useful?" answers, counted, and their comments, unnamed (editor)
 //   POST /alerts/unsubscribe              public: the token is the credential
+//   POST /alerts/feedback                 public: answer "Was this useful?" (the token is the credential)
 //
 // Everything signed-in runs as the caller under RLS (051_alerts.sql). The
 // unsubscribe route runs with no user, through app_alert_unsubscribe, and
-// can only turn its own token's subscription off.
+// can only turn its own token's subscription off; the feedback route the
+// same way, through app_alert_answer, and can only answer its own mail.
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -379,6 +382,20 @@ export interface AlertEventView {
 
 const EventsQuery = z.object({ state: z.enum(['firing', 'all']).default('firing') });
 
+/** How far back the feedback summary reaches: as long as an answer is kept (151_alert_feedback). */
+export const FEEDBACK_KEEP_DAYS = 365;
+/** The newest comments the summary lists. */
+export const FEEDBACK_COMMENTS = 50;
+
+export type FeedbackKind = AlertKind | 'digest';
+
+/** GET /projects/:id/alert-feedback: the answers counted per kind, and the newest comments, never who gave them. */
+export interface AlertFeedbackSummary {
+	since: string;
+	kinds: { kind: FeedbackKind; yes: number; no: number }[];
+	comments: { kind: FeedbackKind; useful: boolean; comment: string; answeredAt: string }[];
+}
+
 export const alertProjectRoutes = new Hono<AuthEnv>()
 	.get('/:id/alert-rules', async (c) =>
 		withUser(c.get('userId'), async (db) => {
@@ -432,6 +449,32 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 		if (job?.created) await wakeWorker(job.id);
 		return c.json({ rules });
 	})
+	.get('/:id/alert-feedback', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const id = c.req.param('id');
+			await requireRole(db, id, 'editor');
+			// RLS lets an editor read the project's rows; only counts and comments leave, never a person.
+			const { rows: since } = await db.query<{ since: Date }>('SELECT now() - make_interval(days => $1) AS since', [FEEDBACK_KEEP_DAYS]);
+			const from = since[0]!.since;
+			const { rows: kinds } = await db.query<{ kind: FeedbackKind; yes: number; no: number }>(
+				`SELECT kind, count(*) FILTER (WHERE useful)::int AS yes, count(*) FILTER (WHERE NOT useful)::int AS no
+				 FROM alert_feedback WHERE project_id = $1 AND answered_at >= $2 GROUP BY kind ORDER BY kind`,
+				[id, from]
+			);
+			const { rows: comments } = await db.query<{ kind: FeedbackKind; useful: boolean; comment: string; answered_at: Date }>(
+				`SELECT kind, useful, comment, answered_at FROM alert_feedback
+				 WHERE project_id = $1 AND answered_at >= $2 AND comment IS NOT NULL
+				 ORDER BY answered_at DESC, id LIMIT $3`,
+				[id, from, FEEDBACK_COMMENTS]
+			);
+			const body: AlertFeedbackSummary = {
+				since: from.toISOString(),
+				kinds,
+				comments: comments.map((r) => ({ kind: r.kind, useful: r.useful, comment: r.comment, answeredAt: r.answered_at.toISOString() }))
+			};
+			return c.json(body);
+		})
+	)
 	.get('/:id/alert-events', async (c) => {
 		const id = c.req.param('id');
 		const q = EventsQuery.parse(c.req.query());
@@ -513,16 +556,48 @@ const gone = () => ApiError.coded(404, 'unsubscribe_link_gone', 'this unsubscrib
  * Exempt from the CSRF check (app.ts): it reads no session, so a forged
  * cross-site post can do only what the token's holder could do anyway.
  */
-export const alertPublicRoutes = new Hono().post('/unsubscribe', async (c) => {
-	const type = c.req.header('content-type') ?? '';
-	if (/^application\/json\b/i.test(type)) {
-		const { token } = UnsubscribeBody.parse(await readJson(c));
-		const done = await unsubscribe(token);
-		if (!done) throw gone();
-		return c.json({ kind: done.kind, project: { name: done.projectName }, farm: done.nodeName });
-	}
-	const token = c.req.query('token');
-	if (!token) throw new ApiError(400, 'no token');
-	if (!(await unsubscribe(token))) throw gone();
-	return c.body(null, 204);
-});
+export const FeedbackBody = z
+	.object({
+		token: z.string().max(200),
+		useful: z.boolean(),
+		comment: z.string().max(500).nullable().optional()
+	})
+	.strict();
+
+/**
+ * POST /alerts/feedback: the answer to "Was this useful?" from the feedback
+ * page (JSON `{ token, useful, comment? }`, the token from its URL fragment).
+ * 200 with what the mail was about, for the page to say so; 404
+ * `feedback_link_gone` for an unknown or tampered token, a link more than 30
+ * days old, or a person who can no longer open the catchment. Answering again
+ * replaces the answer. Same-origin from the page, so the CSRF check applies.
+ */
+async function answerFeedback(token: string, useful: boolean, comment: string | null): Promise<{ kind: FeedbackKind; projectName: string } | null> {
+	const hash = parseToken(token);
+	if (!hash) return null;
+	const { rows } = await withoutUser((db) =>
+		db.query<{ kind: FeedbackKind; project_name: string }>('SELECT kind, project_name FROM app_alert_answer($1, $2, $3)', [hash, useful, comment])
+	);
+	return rows[0] ? { kind: rows[0].kind, projectName: rows[0].project_name } : null;
+}
+
+export const alertPublicRoutes = new Hono()
+	.post('/unsubscribe', async (c) => {
+		const type = c.req.header('content-type') ?? '';
+		if (/^application\/json\b/i.test(type)) {
+			const { token } = UnsubscribeBody.parse(await readJson(c));
+			const done = await unsubscribe(token);
+			if (!done) throw gone();
+			return c.json({ kind: done.kind, project: { name: done.projectName }, farm: done.nodeName });
+		}
+		const token = c.req.query('token');
+		if (!token) throw new ApiError(400, 'no token');
+		if (!(await unsubscribe(token))) throw gone();
+		return c.body(null, 204);
+	})
+	.post('/feedback', async (c) => {
+		const body = FeedbackBody.parse(await readJson(c));
+		const done = await answerFeedback(body.token, body.useful, body.comment ?? null);
+		if (!done) throw ApiError.coded(404, 'feedback_link_gone', 'this feedback link is not valid any more');
+		return c.json({ kind: done.kind, project: { name: done.projectName } });
+	});

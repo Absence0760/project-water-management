@@ -298,6 +298,10 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_fan_out, SECURITY DEFINER, copies the project from the event',
 		premise: 'not writable'
 	},
+	'alert_feedback.event_id': {
+		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_answer_slot, SECURITY DEFINER, copies the project from the caller’s own delivery (151)',
+		premise: 'not writable'
+	},
 	'pack_notice.pack_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_pack_notice_queue, SECURITY DEFINER, copies the project from the pack (133)',
 		premise: 'not writable'
