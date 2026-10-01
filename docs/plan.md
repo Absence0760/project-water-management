@@ -190,10 +190,12 @@ workbook (as in 1a) with **no manual edits**.
   vs simulated vs observed flow, EWR line, days not met), per-farm charts
   (demand vs supplied, dam storage, spill), a Shortfalls table, and calibration
   stats. Charts use uPlot and handle a full multi-decade daily record without lag.
-- 🚧 A browser-side instant preview: change a parameter and see the effect
-  without saving, using the same engine. The preview worker is built (issue
-  #73, `lib/preview/engine.worker.ts`), so far for the Yield panel's instant
-  firm yield; the preview of an unsaved model is still to come (WP-1.17).
+- ✅ A browser-side instant preview: change a parameter and see the effect
+  without saving, using the same engine. The preview worker (issue #73,
+  `lib/preview/engine.worker.ts`) runs the Yield panel's instant firm yield
+  and, since issue #284, **Preview** on Settings and the model save bar: the
+  last run against the same run with the unsaved edits (WP-1.17; no mini
+  hydrograph).
 - ✅ Members panel (owner manages; anyone can leave).
 - ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or
@@ -305,8 +307,8 @@ writing, or gives a ranked change list.
   parameters with live NSE/PBIAS, and save a calibration version (the
   workbook's "Calibration" button and `[Log]`). Built: the calibration panel,
   automatic calibration (Fit automatically, model.md §2.10b) and a fit record
-  stored with the parameters and snapshotted by each run. Not built: a live
-  preview while editing (roadmap WP-1.17).
+  stored with the parameters and snapshotted by each run, and **Preview**
+  of the unsaved parameters against the last run (issue #284, WP-1.17).
 - ✅ **In-browser Excel import** with SheetJS (WP-1.31, 2026-09-25), loaded
   from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
   advisories), in a Web Worker. The import needs no Python. Since then it

@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "worker's the yield search and the unsaved-edits read (issue #284), and both import the engine 2026-09-30 total 1370 → 1376 KB (issue #284, Preview of unsaved edits against the last run: the dialog and the overlay of the unsaved settings and model edits on the run's input, its own chunk (preview/UnsavedPreviewDialog.svelte, lib/preview/overlay.ts, 4.0 KB), the preview worker's effect request (3.4 → 4.3 KB; it reads the two runs itself rather than importing compareRuns, whose module put a second copy of every run comparison in a chunk of its own, +4 KB), and the Preview buttons in the model save bar and Settings. Measured locally: main @ 4a17d615 1357, this branch 1363 (+6 KB); CI ~2 KB above. Re-measured with main @ the #293 merge (1370): 1371 locally, CI ~2 KB above. Headroom ~3 KB. (moved from the old change log when entry files arrived, #308)"
+}

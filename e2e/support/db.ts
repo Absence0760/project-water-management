@@ -163,6 +163,19 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 }
 
 /**
+ * A run as engine 1.54.0 stored it, before the validation signatures (CR-16,
+ * engine 1.55.0): the summary loses `plausibility.signatures`. The API only
+ * makes current runs, so the compare spec that shows how an older run reads
+ * plants one. Its run stamp no longer matches (it reads as unverified).
+ */
+export async function plantPreSignaturesRun(runId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET engine_version = '1.54.0', summary = summary #- '{plausibility,signatures}' WHERE id = $1`, [runId]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
  * A sign-off as it was recorded under statement signoff-2, before the
  * registration category and field were (092_signoff_registration): a
  * free-text body and NULL category and field. The route only makes current

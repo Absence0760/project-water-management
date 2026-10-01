@@ -90,6 +90,10 @@ The same `runModel` runs:
   (`frontend/src/lib/preview/engine.worker.ts`, WP-1.17's worker) on a run's
   own input, never stored; the `yield` job's result is the stored one
   ([ui.md § Yield](./ui.md#yield-wp-36)).
+  **Preview** on Settings and the model save bar (issue #284) runs the model
+  in the same worker twice, on the last run's own input and on it with the
+  unsaved edits laid over it (`lib/preview/overlay.ts`), and shows the
+  difference; nothing is stored ([ui.md § Project workspace](./ui.md#project-workspace)).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series, and the input series themselves, once per
@@ -274,13 +278,17 @@ holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
 a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
 the total bundle dropped 919 → 899 KB.
 
-The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17; so far
-the Yield panel's in-browser firm yield, issue #73) is a second entry of the
+The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17: the
+Yield panel's in-browser firm yield, issue #73, and the Preview of unsaved
+edits against the last run, issue #284) is a second entry of the
 page build in the same way (`virtual:preview-worker-url`, one `workerChunks`
 plugin for both, `_app/immutable/workers/preview.worker-<hash>.js`). The
 network run code both workers use then sits in a chunk of its own that only
 the workers load, so the calibration worker's own file is 17 KB and the
-preview worker's 2.6 KB (the yield search). Its runner
+preview worker's 4.3 KB (the yield search, and the read of two runs for the
+unsaved-edits preview, which deliberately doesn't import `compareRuns`:
+that module would put a second copy of every run comparison in a chunk of
+its own). Its runner
 (`lib/preview/runner.ts`) is a dynamic import of the panel, and only the
 worker imports `lib/preview/compute.ts`, the module that calls the engine
 (`compute.test.ts` scans for other importers). One request at a time, latest
@@ -288,7 +296,7 @@ wins: a newer one terminates the worker mid-search, since the engine loop is
 synchronous. The bundle guard checks both workers import from `chunks/`.
 The worker treats its message as untrusted data: `compute.ts` `parseMessage`
 checks it strictly before the engine sees it (known keys only; the yield
-parameters in the backend's `YieldParams` ranges; the input's outline; a
+parameters in the backend's `YieldParams` ranges; each input's outline; a
 scenario's ops through `validateScenarioOps`), and answers a malformed
 request with an error carrying its id.
 

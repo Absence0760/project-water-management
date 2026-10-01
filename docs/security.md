@@ -2025,6 +2025,11 @@ In short:
   names, run label, notes, notes author, series name and allocation fields: no
   text cell may start with a trigger, the quoting must parse strictly, and an
   ordinary name must round-trip unchanged.
+- **The grids' CSV templates too.** The node table's and planted-areas grid's
+  **Download the table as CSV** (issue #285) is built in the browser
+  (`frontend/src/lib/spreadsheet/paste/grid.ts` `csvCell`): names go through
+  the same `defuse` and RFC 4180 quoting, numbers are written as numbers, and
+  pasting the file back drops the apostrophe again before matching a name.
 - **The `.xlsx` workbook treats names the same way.** It is built in the
   browser from the same API data (`frontend/src/lib/spreadsheet/export/`):
   the summary sheets are the summary CSV's cells, already defused; names the

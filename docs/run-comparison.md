@@ -340,7 +340,8 @@ bottom:
    2×2 table of observed days, per month and per water year) sits side by
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
-5. **Plausibility checks** (engine ≥ 1.4.0 compares them, issue #64;
+5. **Plausibility checks** (engine ≥ 1.4.0 compares them, issue #64; the
+   recession diagnostics and the validation signatures from engine 1.55.0;
    `plausibility/compare.ts` `comparePlausibility`,
    `compare/PlausibilityCompare.svelte`), under its own heading; see
    [Plausibility checks](#plausibility-checks) below.
@@ -456,13 +457,49 @@ and site, with run A, run B and the change:
   *Observed flow vs rain* (the double-mass breaks the model doesn't share,
   each with its change and hint), with the change in fallback-rain years or
   in the whole-record runoff ratio.
+- **Recessions** (engine ≥ 1.19.0, `RunComparison.plausibility.recession`,
+  at the outlet's calibration record): *Recessions, simulated vs observed*,
+  each run's recession rate ratio (simulated ÷ observed at the reference
+  flow) and b difference with its stored verdict ("rate 1.50×, b +0.30
+  (agrees)", "no simulated fit (disagrees)", "not judged: 5 of 8
+  segments"), and the change in each ("rate −1.10×; b −0.40").
+- **Validation signatures** (engine ≥ 1.55.0, CR-16,
+  `RunComparison.plausibility.signatures`, on each run's scored record: the
+  outlet's, or the calibration site's gauge, named in the Site column):
+  a row each for the base-flow index by the Hughes et al. (2003) and the
+  Eckhardt (2005) filters (observed, simulated and their difference, within
+  or outside ±0.15; the change in the simulated BFI, and in the observed
+  when new data moved it), the low-flow FDC's Q70–Q95 slope bias and the
+  low-flow volume bias (%BiasFLV) (each within or outside ±50 %; the change
+  in points), and the model's skill on the held-out recessions beside the
+  river's own fitted curve's (pass or fail is the run's stored verdict;
+  "not judged" with fewer than 8 segments). The limits are the engine's
+  provisional warning limits, the same the run's own panel shows.
+
+The recession and signature rows are each run's stored numbers; nothing is
+recomputed. A change is given only when both runs have the check **on the
+same record**: the same kind (gauge or logger) and, for the signatures, the
+same site. Two runs that scored different records (a record moved to a
+gauge, or a logger record in place of the gauge's) show each side with no
+change and a note naming both records, since their numbers differ for that
+reason alone. A run with none says why, on its side and in a note above the
+table, instead of showing a false difference: "not in this run (made before
+engine 1.55.0)" (or 1.19.0 for the recessions; re-run it to compare them),
+or "not computed (no observed record)" (the recessions: "needs an observed
+record and rain"). A part a run couldn't compute (a BFI or low-flow curve
+with under a year of record, a slope bias with a curve at the floor at Q95,
+no held-out recessions without catchment rain) says "not computed" and is
+neither pass nor fail. The rows are absent when neither run has the check.
+This is display only: the comparison reads what each run stored, so it
+changes no run output and `ENGINE_VERSION` is unchanged.
 
 Each result is marked pass (green) or fail (red) in words and colour; "not
 checked" when that run couldn't make the check (no record, too few years, or
 a run before engine 0.25.0, whose side is empty). A site neither run could
 check is left out; the panel is absent when neither run has checks. The
 typical use is before and after a refit or new data: which years stopped
-failing, and whether the low flows moved inside the factor of 2. A gauge's
+failing, whether the low flows moved inside the factor of 2, and whether a
+recession rate or a BFI moved. A gauge's
 own record also shows in *What changed* by its gauge ("Observed flow at gauge
 Middle weir series added …").
 

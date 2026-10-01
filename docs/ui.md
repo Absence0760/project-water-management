@@ -593,6 +593,41 @@ optional reason field shows only with model edits (it goes into History with
 them). Every other card on the Project page acts at once. Settings has its
 own save button, which sits above that bar.
 
+**Preview unsaved edits** (issue #284, roadmap WP-1.17). With model edits
+unsaved and no problems to fix, the save bar has **Preview** (Network, Crops
+& demand, Transfers, the farm drawer's edits; every tab but Settings).
+Settings has its own **Preview** beside **Discard** while its form (with
+nothing blocking Save) or the model has unsaved edits; it takes both, so the
+save bar's is hidden there, and model edits with problems to fix are left
+out and named. Both open the same dialog
+(`preview/UnsavedPreviewDialog.svelte`, its own chunk), "Preview: your
+unsaved settings" (or "model edits", or "settings and model edits"). When
+the page couldn't load the runs list, the dialog asks for it itself rather
+than say there is no run. It starts from the newest run
+of the catchment's own model (`previewBaseRun`: not a scenario's run, not a
+legacy one) and its own input from the server (`GET …/runs/:runId/model-input`,
+`lib/preview/inputs.ts`, kept for the next preview of that run), lays only the
+unsaved edits over it (`lib/preview/overlay.ts`: the settings and each model
+list as last saved against as edited, path by path for settings and field by
+field for an item, matched by id, a planted area by unit and crop; the
+settings a run doesn't read, `autoRun`, `outcomes` and `outlook`, left out),
+and runs both in the preview worker on this build's engine, so a difference
+is the edits', never an engine change since the stored run. The series are
+always the run's, so the preview can't drift from a stored run; a change
+saved since the run isn't in it, which the dialog says. The figures, last
+run against with your edits with the change (`compare/Delta.svelte`, sign,
+arrow and better/worse in words): demand met, demand, shortfall, units below
+95 % supplied, mean natural flow, mean outflow at the outlet, days the EWR
+is not met, and NSE, KGE and percent bias when the run has a record to score;
+then the units whose supply moved (the ten largest changes, "and N more"),
+and units the edits added or removed. An edited item the run doesn't have
+(added and saved after it) is left out and named under "Not in this
+preview". With no run yet it says to run the model first; the engine's
+refusal of the edited input is shown in its words. Nothing is stored, no run
+slot is used, and the edits stay unsaved. The dialog is modal, so the edits
+can't change under an answer; each opening works it out again (two model
+runs, about 0.3 s on the client catchment, `run.perf.test.ts`).
+
 **Leaving with unsaved changes** (issue #162 items 11 and 13;
 `lib/nav/unsaved.ts`, `lib/nav/leaveGuard.ts`). Unsaved work registers
 itself while it is on screen (`guardUnsaved`): the model's edits and the
@@ -1866,6 +1901,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
+- **Paste from a spreadsheet:** the node table takes a block copied from Excel, previewed
+  before it's applied, and gives the table as a CSV to fill in ([§ Grid modal](#grid-modal)).
 - **The node table** (`grid=nodes`): the whole table, through the **In use** share and the ✕
   column, fits a 1440px screen without sideways scrolling (the dam physics
   fields live in the one-node form only, see above). Field headers wrap
@@ -2504,6 +2541,50 @@ the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
   **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
+- **Paste from a spreadsheet** (issue #285): the node table and the
+  planted-areas grid take a block copied from Excel. Pasting more than one
+  cell into any of their inputs (a tab or a line break in it; one value stays
+  the input's own paste) opens **Paste into the node table** / **Paste
+  planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
+  **Paste from a spreadsheet…** under the grid opens it empty, to paste,
+  type or **Load a CSV file**. **Download the table as CSV** is the grid as
+  it is now (names, then each column with its unit in brackets; a % as
+  0–100, areas in ha; formula-like names defused, `docs/security.md`), the
+  template to fill in. The block is read by `lib/spreadsheet/paste/read.ts`,
+  the same reader as the Reserve rule tables' paste (`ewrRules.ts`
+  `parseGrid`): tabs, semicolons or a CSV, grouping spaces dropped. A comma
+  in a number is decided once for the whole block (`read.ts` `blockCommas`),
+  since a spreadsheet copies numbers as it shows them: a cell that can only be
+  a decimal comma (12,5, 0,75) makes it decimal, one that can only be
+  thousands (1,500,000, 1,234.5) makes it thousands, both stop the paste, and
+  a block whose only commas are single three-digit groups (300,000) stops
+  with that cell ("300 000 or 300?") rather than guess. (The Reserve rule
+  tables keep reading a comma as decimal.) Then
+  `paste/grid.ts` `mapPaste` places it: a heading row puts each column where
+  its heading says (case and a last bracket, the unit, ignored: "Dam
+  capacity (m³)", "Maize (white) (ha)"; a heading the grid hasn't got, such
+  as Total, is left out with a note); names in the first column put each row
+  on the row of that name, in any order, ignoring case but not brackets, so
+  "Farm A (east)" and "Farm A (west)" stay apart (a name the grid hasn't got,
+  or two rows share, is left out with a note; a name that is only a number
+  reads as a value, so such a block is placed by position); without names or
+  headings the block fills the grid from the cell it was pasted into, in the
+  grid's order, and says which cell that was (from the toolbar, or a cell
+  of no value column such as Kind, the first row's or that row's first
+  column, and it says so). A blank or a dash leaves a
+  value as it is; a value that isn't a number, a negative, or a % above 100
+  stops it with the row and column. The node table leaves out values for a
+  field the node doesn't use (a gauge's dam, any field of an other water
+  user, River to dam set by month) with a note (`network/nodePaste.ts`); the
+  planted-areas grid reads hectares, and 0 clears an area
+  (`crops/areaPaste.ts`). The **Preview** lists every value that would
+  change (row, column, now, pasted) and counts those already equal;
+  **Apply N changes** writes them into the editor, unsaved, as if typed, and
+  the grid's save row saves or discards them. The result is one status line
+  whose text changes (read out each time), and the list of changes scrolls
+  in its own focusable box. Escape or Cancel closes it and hands the focus
+  back; it isn't in the URL, so Back closes the grid modal under it, as
+  **Load crop factors…** does. Viewers get neither.
 - **Layout:** the `Dialog` `full` variant with `keepInputs` (the grid's inputs
   keep their own widths; other dialogs stretch text fields to the dialog's
   width). The grid scrolls inside the modal; the title and the save row stay
@@ -3066,8 +3147,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
   focused control is never hidden under either (WCAG 2.4.11).
 - **Save bar.** Sticky at the bottom (above the model save bar when that
-  shows), with "Unsaved settings", **Discard** and **Save settings** (editors
-  only). When something blocks Save it says how many groups have a problem
+  shows), with "Unsaved settings", **Preview** (what the unsaved settings, and
+  the model's unsaved edits, do to the last run; § Preview unsaved edits under
+  Project workspace), **Discard** and **Save settings** (editors only). When something blocks Save it says how many groups have a problem
   and links to each one (`saveBlockers`; the link's accessible name carries
   the message), and that group's menu link gets a red dot ("has a problem").
   Each problem is also shown next to its field. The bar ends with the form;
@@ -4899,10 +4981,15 @@ read it before.
   record."; a run made before 1.55.0 shows neither. The help article
   *Validation signatures* (`plausibility-signatures`) explains BFI, the two
   filters, the low-flow slope and %BiasFLV and the held-out recession skill
-  in plain words. The Compare page sets the first four checks and the
-  gauges side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
-  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
+  in plain words. The Compare page sets all six checks and the
+  gauges side by side (`compare/PlausibilityCompare.svelte`, rows from
+  `compare/plausibility.ts`; the recessions' rate ratio and b difference,
+  and the BFI by both filters, the low-flow slope bias, %BiasFLV and the
+  held-out skill), each run's stored numbers with a change only between two
+  runs that scored the same record, and a note above the table on a run
+  that has none (made before the engine that added the check, or no
+  observed record) or on two runs that scored different records
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS

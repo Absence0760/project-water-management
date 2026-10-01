@@ -168,7 +168,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
+						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were. The **Node table** and **Planted areas** also take a block copied from a spreadsheet: paste it into any cell, or use **Paste from a spreadsheet…** under the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. A preview lists every value it would change before **Apply**, and nothing is kept until you save.'
 					},
 					{
 						type: 'note',
@@ -576,6 +576,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
+							'To see what the change does first, press **Preview** beside **Save settings**: the last run against the same run with your unsaved change, worked out in your browser (KGE, NSE, PBIAS and supply). Nothing is saved and no run is made.',
 							'Save and run.',
 							'On the run, read the **Hydrograph** (observed flow against simulated outflow) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
 							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',

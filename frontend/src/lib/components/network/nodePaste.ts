@@ -1,0 +1,85 @@
+// The node table's paste from a spreadsheet (issue #285): what a pasted block
+// would change, the change itself, and the table as a CSV to fill in. The
+// block is read by $lib/spreadsheet/paste (shared with the Reserve rule
+// tables); this file says what each column means: a % is entered 0–100 and
+// stored 0–1, and a field a node doesn't use is left out.
+import type { NetworkNode } from '@water-management/engine';
+import { mapPaste, sameValue, toCsv, type GridColumn, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { cardLabel, isPct, setNodeField, TABLE_FIELDS, type NodeField, type NodeNumberKey } from './fields';
+import { divertMonthsCell } from './supply';
+
+/** Headings the node table's name column goes by. */
+const NAME_HEADINGS = ['Name', 'Node', 'Hydrological unit'];
+
+/** The CSV heading of a field: "Dam capacity (m³)". */
+const heading = (f: NodeField) => `${cardLabel(f)} (${f.unit})`;
+
+/** The value columns, in the table's order: each matches its card label ("Dam capacity") or its column label ("Capacity"). */
+export const NODE_PASTE_COLUMNS: GridColumn[] = TABLE_FIELDS.map((f) => ({ key: f.key, labels: [cardLabel(f), f.label] }));
+
+/** Why a field of this node takes no pasted value, or null when it does. */
+function notUsed(n: NetworkNode, f: NodeField): string | null {
+	if (n.kind === 'user') return 'an other water user';
+	if (f.farmOnly && n.kind !== 'farm') return 'a gauge';
+	if (f.key === 'divertCapacityM3Day' && divertMonthsCell(n, n.name)) return 'set by month';
+	return null;
+}
+
+/** A node's field as the table shows it (0–100 for a %), null when empty. */
+function shown(n: NetworkNode, f: NodeField): number | null {
+	const v = (n as unknown as Record<NodeNumberKey, number | null | undefined>)[f.key];
+	if (v === null || v === undefined) return null;
+	return isPct(f) ? v * 100 : v;
+}
+
+/**
+ * What pasting `text` into the node table would change. Rows match by name
+ * (or by position from `anchor`), columns by heading (or by position); see
+ * mapPaste. Values below 0, or a % above 100, stop the paste; values for a
+ * field the node doesn't use (a gauge's dam, River to dam set by month) are
+ * left out with a note.
+ */
+export function planNodePaste(text: string, nodes: readonly NetworkNode[], anchor?: PasteAnchor | null): PastePlan | { error: string } {
+	const mapped = mapPaste(text, nodes, NODE_PASTE_COLUMNS, { anchor, nameHeadings: NAME_HEADINGS });
+	if ('error' in mapped) return mapped;
+	const plan: PastePlan = { changes: [], unchanged: 0, notes: [...mapped.notes] };
+	const skipped: string[] = [];
+	for (const v of mapped.values) {
+		const n = nodes.find((x) => x.id === v.rowId)!;
+		const f = TABLE_FIELDS.find((x) => x.key === v.key)!;
+		const name = n.name || '(unnamed)';
+		const why = notUsed(n, f);
+		if (why) {
+			skipped.push(`${name} ${cardLabel(f).toLowerCase()} (${why})`);
+			continue;
+		}
+		if (v.value < 0) return { error: `${name}, ${cardLabel(f)}: ${v.value} is below 0.` };
+		if (isPct(f) && v.value > 100) return { error: `${name}, ${cardLabel(f)}: ${v.value} % is above 100 %.` };
+		const from = shown(n, f);
+		if (sameValue(from, v.value)) plan.unchanged++;
+		else plan.changes.push({ rowId: n.id, rowName: name, key: f.key, column: cardLabel(f), unit: f.unit, from, to: v.value });
+	}
+	if (skipped.length) plan.notes.push(`Left out values for fields these nodes don't use: ${skipped.join('; ')}.`);
+	return plan;
+}
+
+/** Write a plan's changes into the nodes (the editor's model: Save keeps them, Discard drops them). */
+export function applyNodePaste(nodes: NetworkNode[], plan: PastePlan): void {
+	for (const c of plan.changes) {
+		const n = nodes.find((x) => x.id === c.rowId);
+		const f = TABLE_FIELDS.find((x) => x.key === c.key);
+		if (n && f) setNodeField(n, f.key, isPct(f) ? c.to / 100 : c.to);
+	}
+}
+
+/**
+ * The node table as a CSV, to fill in and paste back: the name, then each
+ * column of the table with its unit, a % as 0–100. A field the node doesn't
+ * use is blank (a blank leaves a value as it is).
+ */
+export function nodeTableCsv(nodes: readonly NetworkNode[]): string {
+	return toCsv([
+		[NAME_HEADINGS[0]!, ...TABLE_FIELDS.map(heading)],
+		...nodes.map((n) => [n.name, ...TABLE_FIELDS.map((f) => (notUsed(n, f) ? null : shown(n, f)))])
+	]);
+}
