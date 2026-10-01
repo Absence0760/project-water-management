@@ -1,4 +1,4 @@
--- 144_mfa — two-step sign-in: TOTP (RFC 6238) with recovery codes (issue
+-- 150_mfa — two-step sign-in: TOTP (RFC 6238) with recovery codes (issue
 -- #282; docs/security.md § Two-step sign-in, docs/data-model.md § Accounts).
 --
 -- One phished password could publish a restriction to a catchment's farmers
@@ -36,7 +36,7 @@ CREATE TABLE user_totp (
 	created_at     timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE user_totp IS
-	'A person''s authenticator app (144, issue #282): the sealed TOTP secret. Own row only, for every command.';
+	'A person''s authenticator app (150, issue #282): the sealed TOTP secret. Own row only, for every command.';
 
 ALTER TABLE user_totp ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_totp_own ON user_totp FOR ALL
@@ -54,7 +54,7 @@ CREATE TABLE user_recovery_code (
 	PRIMARY KEY (user_id, code_hash)
 );
 COMMENT ON TABLE user_recovery_code IS
-	'A person''s unused recovery codes (144), as SHA-256. Deleted when used or replaced. Own rows only.';
+	'A person''s unused recovery codes (150), as SHA-256. Deleted when used or replaced. Own rows only.';
 
 ALTER TABLE user_recovery_code ENABLE ROW LEVEL SECURITY;
 -- No UPDATE: a code is issued, then used (deleted) or replaced (deleted).
@@ -152,7 +152,7 @@ CREATE TABLE account_security_event (
 );
 CREATE INDEX account_security_event_user_idx ON account_security_event (user_id, created_at DESC);
 COMMENT ON TABLE account_security_event IS
-	'A person''s own sign-in security events (144): two-step sign-in added, turned off, a recovery code used. Append-only, own rows only.';
+	'A person''s own sign-in security events (150): two-step sign-in added, turned off, a recovery code used. Append-only, own rows only.';
 
 ALTER TABLE account_security_event ENABLE ROW LEVEL SECURITY;
 CREATE POLICY account_security_event_own_select ON account_security_event FOR SELECT USING (user_id = app_current_user_id());

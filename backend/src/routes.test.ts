@@ -114,9 +114,10 @@ describe('route auth inventory', () => {
 	});
 
 	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts),
-	// and so does "download my data" (POPIA; auth/export.db.test.ts), and accepting new terms (auth/auth.db.test.ts).
+	// and so does "download my data" (POPIA; auth/export.db.test.ts), accepting new terms (auth/auth.db.test.ts),
+	// and "delete my account" (issue #112; auth/delete-me.db.test.ts).
 	it('inventories the account routes as auth-gated', () => {
-		for (const r of ['PATCH /auth/me', 'POST /auth/change-password', 'GET /auth/me/export', 'POST /auth/me/farm-notice', 'POST /auth/me/accept-terms']) {
+		for (const r of ['PATCH /auth/me', 'DELETE /auth/me', 'POST /auth/change-password', 'GET /auth/me/export', 'POST /auth/me/farm-notice', 'POST /auth/me/accept-terms']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -177,6 +178,14 @@ describe('route auth inventory', () => {
 	// Scenario sweeps (issue #53 R2, 062_scenario_sweeps): auth-gated like every project route.
 	it('inventories the sweep routes as auth-gated', () => {
 		for (const r of ['POST /projects/:id/sweeps', 'GET /projects/:id/sweeps', 'GET /projects/:id/sweeps/:sweepId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
+	// Cumulative impact assessments (WP-3.11, 145_assessment): auth-gated like every project route (editors only, assessments.db.test.ts).
+	it('inventories the assessment routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/:aid']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

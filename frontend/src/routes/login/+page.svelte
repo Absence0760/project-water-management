@@ -30,6 +30,8 @@
 	// link, so this page says where the link went and has the address ready.
 	const emailAuth = emailAuthApi(api);
 	const justSignedUp = page.url.searchParams.get('confirm') === 'sent';
+	// After "Delete my account" (issue #112, components/account/DeleteAccount.svelte).
+	const justDeleted = page.url.searchParams.get('deleted') === '1';
 	let sentTo = $state<string | null>(null);
 	onMount(() => {
 		if (!justSignedUp) return;
@@ -177,6 +179,12 @@
 					password = DEMO.password;
 				}}>Use demo account</button
 			>
+		</div>
+	{/if}
+	{#if justDeleted}
+		<div class="notice" role="status" data-account-deleted>
+			<p class="notice-title">{t('Your account has been deleted')}</p>
+			<p>{t('We emailed you what was deleted and what was kept.')}</p>
 		</div>
 	{/if}
 	{#if justSignedUp && !unconfirmed}

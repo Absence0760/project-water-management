@@ -11,7 +11,8 @@
 //      to the person (the fixture must reach each one, so a new sectioned
 //      key without a fixture fails too), and every APP_USER_EXPORTED column
 //      comes out with the stored value.
-//   2. Deletion: after the operator deletes the account, no column of any
+//   2. Deletion: after the person deletes the account (DELETE /auth/me, the
+//      self-service path, issue #112), no column of any
 //      table (every text, citext, varchar, json, jsonb, uuid and array
 //      column in information_schema) still holds the person's email or
 //      display name, and their id survives only where the table in
@@ -223,6 +224,8 @@ beforeAll(async () => {
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
 	await withUser(subject.id, async (tx) => {
 		await tx.query(`INSERT INTO scenario_sweep (project_id, base_run_id, name) VALUES ($1, $2, 'pd sweep')`, [projectId, runId]);
+		// A cumulative assessment (145): created_by is SET NULL when they go; its completion trigger fires only on the outcome columns.
+		await tx.query(`INSERT INTO assessment (project_id, base_run_id, name) VALUES ($1, $2, 'pd assessment')`, [projectId, runId]);
 		const [o] = (
 			await tx.query(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels)
@@ -311,7 +314,7 @@ beforeAll(async () => {
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);
-	// Two-step sign-in (144, issue #282), last, since it makes signing in two-step: an authenticator they set up
+	// Two-step sign-in (150, issue #282), last, since it makes signing in two-step: an authenticator they set up
 	// (user_totp, user_recovery_code, account_security_event), then a wrong code (mfa_throttle).
 	const enrol = await call(subject, 'POST', '/auth/mfa/totp/enrol', { password: 'correct horse' });
 	await call(subject, 'POST', '/auth/mfa/totp/confirm', { code: totp(base32Decode(enrol.secret)!, Date.now()) });
@@ -370,8 +373,8 @@ describe('while the account exists, only its deletion clears who made a row (066
 		expect(await asOwner('SELECT created_by FROM alert_rule WHERE project_id = $1', [projectId])).toEqual([{ created_by: subject.id }]);
 	});
 
-	it('refuses water_app a change to who asked for a sweep or an outlook', async () => {
-		for (const table of ['scenario_sweep', 'seasonal_outlook']) {
+	it('refuses water_app a change to who asked for a sweep, an outlook or an assessment', async () => {
+		for (const table of ['scenario_sweep', 'seasonal_outlook', 'assessment']) {
 			await expect(withUser(owner.id, (tx) => tx.query(`UPDATE ${table} SET created_by = NULL WHERE project_id = $1`, [projectId]))).rejects.toMatchObject({
 				code: '42501'
 			});
@@ -406,7 +409,14 @@ describe('deleting the account leaves no copy of the person outside the document
 		}
 		before = {};
 		for (const [k, v] of Object.entries(needles())) before[k] = await whereIs(v);
-		await asOwner('DELETE FROM app_user WHERE id = $1', [subject.id]);
+		// Through "Delete my account" (DELETE /auth/me, issue #112), as the person under RLS: the operator's path
+		// (the schema owner deleting the row) runs the same keys and triggers, checked end to end in account-deletion.db.test.ts.
+		const res = await app.request('/auth/me', {
+			method: 'DELETE',
+			headers: { cookie: subject.cookie, origin: ORIGIN, 'content-type': 'application/json' },
+			body: JSON.stringify({ password: 'correct horse' })
+		});
+		expect(res.status).toBe(204);
 	});
 
 	it('had a row behind every cascade and set-null key to app_user before the deletion (the fixture reaches each)', () => {

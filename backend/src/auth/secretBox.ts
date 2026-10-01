@@ -1,4 +1,4 @@
-// Encryption at rest for the TOTP secrets (issue #282, 144_mfa.sql). A
+// Encryption at rest for the TOTP secrets (issue #282, 150_mfa.sql). A
 // database dump or a read through some future bug must not hand over the
 // seeds that make the second factor: each is sealed with AES-256-GCM under
 // APP_ENCRYPTION_KEY, a runtime secret the database never sees (production:

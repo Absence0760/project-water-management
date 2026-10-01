@@ -20,6 +20,7 @@ import { demandSourceShares, type DemandSourceShare } from '../network/demandSou
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
+import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
 	type EvidenceAllocationCounts,
@@ -111,6 +112,18 @@ const oldestFirst = <T extends { createdAt: string; id: string }>(rows: readonly
 // ---------------------------------------------------------------------------
 // Checks
 // ---------------------------------------------------------------------------
+
+/** What to enter for each kind of unbounded river abstraction, in the check's fix. */
+function capacityFix(ws: readonly RiverWorks[]): string {
+	const kinds = new Set(ws.map((w) => w.kind));
+	const parts: string[] = [];
+	if (kinds.has('pump')) parts.push('enter the river pump’s capacity (Network › the unit › Supply, pumps × m³/h)');
+	if (kinds.has('noDam')) parts.push('give a unit without a dam the run of river supply rule, with a pump capacity');
+	if (kinds.has('user')) parts.push('enter the other water user’s pump capacity (Network › the user)');
+	if (kinds.has('offtake')) parts.push('give the off-take a rate that is a number (Transfers)');
+	const text = parts.join('; ');
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** Every check the report makes on its inputs, in the order the board lists them. */
 export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
@@ -210,6 +223,65 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 		blocksIssue: true,
 		fix: 'Take the baseline-assumption changes out of the application, or make them in the baseline (a new nominated run) first.'
 	});
+	}
+	// Licensing evidence rests on bounded, Reserve-protecting abstraction (issue #54, #90 Q15 and Q16): a model
+	// may run without either while exploring (each run warns), but a pack isn't issued on it. From each run's
+	// stored model, so the check reads what the pack cites, never the live project.
+	const winB = { startDate: b.startDate, endDate: b.endDate };
+	const winA = a ? { startDate: a.startDate, endDate: a.endDate } : winB;
+	const unbounded = { b: unboundedRiverWorks(b.inputs.model, winB), a: a ? unboundedRiverWorks(a.inputs.model, winA) : [] };
+	const listWorks = (ws: readonly RiverWorks[]) => ws.map(riverWorksName).join(', ');
+	// Named once: in both runs, the baseline's only, the application's only (by kind and id, so a renamed unit is one).
+	const key = (w: RiverWorks) => `${w.kind}:${w.id}`;
+	const inA = new Set(unbounded.a.map(key));
+	const inB = new Set(unbounded.b.map(key));
+	const all: { who: string; ws: RiverWorks[] }[] = a
+		? [
+				{ who: 'Both runs', ws: unbounded.b.filter((w) => inA.has(key(w))) },
+				{ who: 'the baseline', ws: unbounded.b.filter((w) => !inA.has(key(w))) },
+				{ who: 'the application', ws: unbounded.a.filter((w) => !inB.has(key(w))) }
+			]
+		: [{ who: 'The run', ws: unbounded.b }];
+	const groups = all.filter((g) => g.ws.length > 0);
+	const nUnbounded = groups.reduce((n, g) => n + g.ws.length, 0);
+	const capitalise = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+	add({
+		id: 'pumpCapacity',
+		label: 'Every river pump has a capacity',
+		passed: nUnbounded === 0,
+		detail:
+			nUnbounded === 0
+				? riverWorks(b.inputs.model, winB).length + (a ? riverWorks(a.inputs.model, winA).length : 0) === 0
+					? `No unit, other water user or off-take takes from the river${a ? ' in either run' : ''}.`
+					: `Every river pump, other water user and off-take${a ? ' in both runs' : ''} has a capacity, so what it takes is bounded.`
+				: capitalise(groups.map((g) => `${g.who}: ${listWorks(g.ws)}`).join('; ')) +
+					`. With no capacity, only the river’s flow limits what ${nUnbounded === 1 ? 'it takes' : 'they take'}.`,
+		refuses: false,
+		blocksIssue: true,
+		fix: `${capacityFix([...unbounded.b, ...unbounded.a])}, then ${
+			unbounded.b.length ? `run the model again and nominate the new run${a ? ', and run the application on it' : ''}` : 'run the application again (in the scenario, for the application’s own units)'
+		}.`
+	});
+	if (a) {
+		const works = proposedRiverWorks(a.scenario.ops, a.scenario.classified, b.inputs.model, a.inputs.model, winA);
+		const open = works.filter((w) => !w.protectsEwr);
+		const users = open.some((w) => w.kind === 'user');
+		add({
+			id: 'protectsEwr',
+			label: 'The application’s own river abstraction leaves the EWR in the river',
+			passed: open.length === 0,
+			detail:
+				works.length === 0
+					? 'The application adds or changes no river abstraction on the applicant’s units.'
+					: open.length === 0
+						? `${listWorks(works)} ${works.length === 1 ? 'leaves' : 'each leave'} the EWR, or a hands-off flow, in the river before taking anything, in every month ${works.length === 1 ? 'it takes' : 'they take'}.`
+						: `${listWorks(open)} ${open.length === 1 ? 'keeps' : 'keep'} neither the EWR nor a hands-off flow in every month ${open.length === 1 ? 'it takes' : 'they take'}, so on a dry day ${open.length === 1 ? 'it' : 'they'} can take the river below its Reserve. The baseline’s existing users are current use and are not judged here.`,
+			refuses: false,
+			blocksIssue: true,
+			fix: `In the scenario, give each one a hands-off flow in every month it takes, or keep the EWR in the river (Network › the unit › Supply; an off-take’s rule on Transfers), and run it again.${
+				users ? ' An other water user can’t keep one in the model: model the new take as a unit that pumps from the river, with a pump capacity and a hands-off flow.' : ''
+			}`
+		});
 	}
 	const rule = declaredRuleOf(b);
 	add({

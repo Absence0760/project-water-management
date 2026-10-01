@@ -137,7 +137,7 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: secret(32), worker: secret(32) }
 	},
 	APP_ENCRYPTION_KEY: {
-		why: 'Seals the TOTP secrets of two-step sign-in at rest (auth/secretBox.ts, 144_mfa): the API only, which enrols and checks codes.',
+		why: 'Seals the TOTP secrets of two-step sign-in at rest (auth/secretBox.ts, 150_mfa): the API only, which enrols and checks codes.',
 		checks: { api: secret(32) }
 	},
 	MFA_REQUIRED: {
@@ -182,7 +182,6 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'The runtime role password the migrate Lambda sets (sops db_app_password), from its runtime secret.',
 		checks: { migrate: appPassword }
 	},
-	MIGRATION_DATABASE_URL: { why: 'Read only by scripts/migrate.ts run as a CLI; the migrate Lambda passes its own URL.' },
 
 	// --- Email -----------------------------------------------------------------------------
 	MAIL_TRANSPORT: { why: 'log (the default) sends nothing; smtp is Mailpit.', checks: { api: oneOf('ses'), worker: oneOf('ses') } },

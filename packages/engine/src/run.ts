@@ -1520,7 +1520,7 @@ export function buildNetworkPlan(
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed, ...(u.pump !== undefined ? { userPumpM3Day: u.pump } : {}) } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
-				...supplyOf(n, warnings),
+				...supplyOf(n, warnings, start === undefined ? undefined : { start, end: start + days - 1 }),
 				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),

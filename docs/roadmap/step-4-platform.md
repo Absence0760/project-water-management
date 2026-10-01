@@ -253,7 +253,7 @@ run in parallel after WP-4.1.
 > owners, team admins and assessors exist now, without organisations: the
 > check is at the route (`auth/stepUp.ts`, from the request's `amr`), not in
 > RLS, and the tables are `user_totp`, `user_recovery_code`,
-> `mfa_throttle` and `account_security_event` (144_mfa.sql;
+> `mfa_throttle` and `account_security_event` (150_mfa.sql;
 > security.md § Two-step sign-in). Still to do here: `withSession` and
 > `app.auth_mfa` in RLS, the per-organisation `require_mfa_for_admins`, and
 > SSO.

@@ -41,6 +41,7 @@ describe('errorText', () => {
 			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.',
 		body_refused: 'Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.',
 		run_unverified: 'This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.',
+		account_sole_holder: 'You are the only owner of a project or the only admin of a team. Hand it to someone else first.',
 		note_comment_closed: 'This application isn’t open for comment right now.',
 		note_audience_denied: 'You can’t post a comment here.',
 		mfa_code_wrong: 'That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.',

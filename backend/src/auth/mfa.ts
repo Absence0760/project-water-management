@@ -1,4 +1,4 @@
-// Two-step sign-in's storage and checks (issue #282, 144_mfa.sql;
+// Two-step sign-in's storage and checks (issue #282, 150_mfa.sql;
 // docs/security.md § Two-step sign-in). The routes are auth/mfa-routes.ts
 // and the sign-in step in auth/routes.ts; the requirement for the roles that
 // need it is auth/stepUp.ts. Every function here runs as the account itself
@@ -19,7 +19,7 @@ import {
 } from './totp.js';
 
 /**
- * The code throttle (mfa_throttle, 144): the 5th wrong code in a row locks
+ * The code throttle (mfa_throttle, 150): the 5th wrong code in a row locks
  * the account's code checks for a minute, doubling to 15, as the password
  * lockout does (LOGIN_THROTTLE). A right code clears it; a day forgets it.
  */

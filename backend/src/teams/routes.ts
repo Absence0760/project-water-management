@@ -16,7 +16,15 @@ import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatc
 const RoleEnum = z.enum(TEAM_ROLES);
 const Name = z.string().trim().min(1).max(200);
 
+/**
+ * Friendly 409 before the deferred team_member_keep_admin trigger would abort
+ * the commit. Locks the team's admin rows first, in user order, so two
+ * admins leaving (or demoting each other) at the same moment can't both
+ * pass: the second waits for the first and then counts what it committed
+ * (149_last_owner_lock, as assertNotLastOwner in projects/routes.ts).
+ */
 async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
+	await db.query(`SELECT 1 FROM team_member WHERE team_id = $1 AND role = 'admin' ORDER BY user_id FOR UPDATE`, [teamId]);
 	const { rows } = await db.query<{ admins: number; target_is_admin: boolean }>(
 		`SELECT count(*) FILTER (WHERE role = 'admin')::int AS admins,
 			bool_or(user_id = $2 AND role = 'admin') AS target_is_admin
@@ -30,7 +38,7 @@ async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 const PROJECT_ROLE: Record<TeamRole, string> = { viewer: 'viewer', member: 'editor', admin: 'owner' };
 
 /** A team member as a team_member.* audit subject names them: the team, the person, their team role and what it makes them here. */
-async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
+export async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
 	const { rows } = await db.query<{ team: string; display_name: string; role: TeamRole }>(
 		`SELECT t.name AS team, u.display_name, m.role FROM team_member m JOIN team t ON t.id = m.team_id JOIN app_user u ON u.id = m.user_id
 		 WHERE m.team_id = $1 AND m.user_id = $2`,

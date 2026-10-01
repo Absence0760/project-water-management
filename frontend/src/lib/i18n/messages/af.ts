@@ -105,6 +105,56 @@ export const af: Catalogue = {
 	'96778761': 'Tik die kode in wat die app wys',
 	// Turn on two-step sign-in
 	'd9156f01': 'Skakel tweestap-intekening aan',
+	// Enter your password.
+	'fed4dc29': 'Tik jou wagwoord in.',
+	// Delete my account
+	'0498d7af': 'Vee my rekening uit',
+	// Deleting your account removes your name and email address. What you made for a project stays, without your name.
+	'81dfce88': 'As jy jou rekening uitvee, word jou naam en e-posadres verwyder. Wat jy vir ’n projek gemaak het, bly, sonder jou naam.',
+	// Delete your account?
+	'82917cc3': 'Vee jou rekening uit?',
+	// Deleting your account can’t be undone. This is what happens:
+	'39fc4c15': 'As jy jou rekening uitvee, kan dit nie ongedaan gemaak word nie. Dit is wat gebeur:',
+	// Deleted
+	'f225740a': 'Uitgevee',
+	// Your name, email address and password
+	'272a8ad7': 'Jou naam, e-posadres en wagwoord',
+	// Your memberships of projects and teams, and your links to hydrological units
+	'91155f4d': 'Jou lidmaatskappe van projekte en spanne, en jou koppelings aan hidrologiese eenhede',
+	// Your alert choices, and the alert emails sent to you
+	'f794ef91': 'Jou waarskuwingskeuses, en die waarskuwings-e-posse wat aan jou gestuur is',
+	// Your settings
+	'7249c56b': 'Jou instellings',
+	// An uncertainty result you started and never finished, and a licence application still in draft
+	'9ba21fef': '’n Onsekerheidsresultaat wat jy begin en nooit voltooi het nie, en ’n lisensieaansoek wat nog ’n konsep is',
+	// Kept, without your name
+	'79b111b9': 'Behou, sonder jou naam',
+	// What you made for a project: the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes
+	'3ca58f90': 'Wat jy vir ’n projek gemaak het: die projek of span self, modellopies, invoere, scenario’s, ’n lisensieaansoek wat jy ingedien het, notas',
+	// The project’s history of what you did
+	'52c6bbde': 'Die projek se geskiedenis van wat jy gedoen het',
+	// They will read “Deleted user” or “a former member”, and are never put in someone else’s name.
+	'f210a141': 'Hulle sal “Deleted user” of “’n voormalige lid” wys, en word nooit op iemand anders se naam gesit nie.',
+	// Kept, with your name
+	'20f65773': 'Behou, met jou naam',
+	// A sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.
+	'44e58ddf': '’n Aftekening behou die naam en registrasie wat jy ingetik het, en ’n bewyspakket behou die name wat dit gedruk het, so lank as wat die lisensierekord wat hulle ondersteun, gehou word.',
+	// If you are the only owner of a project or the only admin of a team, hand it to someone else first. We email you what was deleted and what was kept. Copies in our backups are deleted as the backups expire, within 35 days.
+	'862bf4f0': 'As jy die enigste eienaar van ’n projek of die enigste administrateur van ’n span is, gee dit eers aan iemand anders oor. Ons sal vir jou e-pos wat uitgevee is en wat behou is. Kopieë in ons rugsteun word uitgevee soos die rugsteun verval, binne 35 dae.',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Your account wasn’t deleted: someone else needs to take over these first.
+	'f098ea6b': 'Jou rekening is nie uitgevee nie: iemand anders moet hierdie eers oorneem.',
+	// You are the only owner of these projects. Make someone else an owner, or delete the project:
+	'000e0749': 'Jy is die enigste eienaar van hierdie projekte. Maak iemand anders ’n eienaar, of vee die projek uit:',
+	// You are the only admin of these teams. Make someone else an admin, or delete the team:
+	'186d4da1': 'Jy is die enigste administrateur van hierdie spanne. Maak iemand anders ’n administrateur, of vee die span uit:',
+	// Your password
+	'15253243': 'Jou wagwoord',
+	// Type your password again to confirm.
+	'b03f97c0': 'Tik jou wagwoord weer in om te bevestig.',
+	// Deleting…
+	'6476ae31': 'Vee tans uit…',
 	// Right away
 	'52eea1c1': 'Dadelik',
 	// Once a day (06:00)
@@ -185,8 +235,6 @@ export const af: Catalogue = {
 	'e8345543': 'Wat verander het',
 	// Terms of use
 	'953dc886': 'Gebruiksvoorwaardes',
-	// Privacy notice
-	'016ac231': 'Privaatheidskennisgewing',
 	// Saving…
 	'74119e7f': 'Stoor tans…',
 	// Accept the new terms
@@ -1435,6 +1483,8 @@ export const af: Catalogue = {
 	'32d75bec': 'Hiervoor is tweestap-intekening nodig. Stel eers op jou rekeningbladsy ’n verifikasie-app op.',
 	// This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.
 	'380b94ff': 'Hiervoor is tweestap-intekening nodig. Teken uit, en teken dan weer in met ’n kode van jou verifikasie-app.',
+	// You are the only owner of a project or the only admin of a team. Hand it to someone else first.
+	'72b3c72f': 'Jy is die enigste eienaar van ’n projek of die enigste administrateur van ’n span. Gee dit eers aan iemand anders oor.',
 	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
 	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
@@ -1677,6 +1727,10 @@ export const af: Catalogue = {
 	'5457b62c': 'Tik een van jou herstelkodes in.',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
+	// Your account has been deleted
+	'57d933f4': 'Jou rekening is uitgevee',
+	// We emailed you what was deleted and what was kept.
+	'7b0e2947': 'Ons het vir jou ge-e-pos wat uitgevee is en wat behou is.',
 	// Check your email to finish signing up
 	'6460f76e': 'Kyk in jou e-pos om klaar te registreer',
 	// We sent a confirmation link to **{email}**. Open it to confirm your address, then sign in here.

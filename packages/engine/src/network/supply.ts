@@ -5,6 +5,7 @@
 // read a node through these, so a stored value means the same thing to both.
 import { waterYearIndex } from '../calendar';
 import type { NetworkNode } from '../project';
+import { damPresence } from './development';
 
 /**
  * A farm's supply rule as the simulation runs it; a node without one
@@ -25,6 +26,21 @@ export interface PlanSupply {
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /**
+ * Why a farm irrigates what is routed to its dam straight from the river, or
+ * null when it doesn't: something is routed there (the upstream or runoff
+ * share, River to dam), and there is no dam on some day of the run `span`
+ * (epoch days; damPresence: none entered, not in service yet, silted empty,
+ * engine ≥ 1.60.0). Without a span, the entered capacity alone decides.
+ */
+function noDamOf(n: NetworkNode, span: { start: number; end: number } | undefined): string | null {
+	const routed = n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || (Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0);
+	if (!routed) return null;
+	const dam = damPresence(n, span);
+	if (dam.always) return null;
+	return dam.ever ? 'its dam isn’t there on some days of the run (not in service yet, or silted empty), so on those days' : 'it has no dam, so';
+}
+
+/**
  * The farm's supply rule for the plan; {} for 'damFirst' (and absent fields),
  * where the pump capacity is inert. Out-of-range values run clamped with a
  * warning. Without a dam, 'trigger' has nothing to trigger on and runs as
@@ -33,7 +49,7 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
  * (modelRuleIssues). A supply rule on a gauge or other water user is ignored
  * with a warning.
  */
-export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSupply } {
+export function supplyOf(n: NetworkNode, warnings: string[], span?: { start: number; end: number }): { supply?: PlanSupply } {
 	const rule = n.supplyRule ?? 'damFirst';
 	const pump = n.pumpCapacityM3Day;
 	if (n.kind !== 'farm') {
@@ -46,9 +62,10 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 	if (rule === 'damFirst') {
 		// A farm with no dam irrigates from the river routed to it (K, M, O pass through the absent
 		// dam), with no pump limit: b023's stand-in for a river pump, kept, but said (issue #54).
-		if (!(n.damCapacityM3 > 0) && (n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || (Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0)))
+		const none = noDamOf(n, span);
+		if (none)
 			warnings.push(
-				`farm "${n.name}": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity`
+				`farm "${n.name}": ${none} what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity`
 			);
 		return {};
 	}
@@ -61,6 +78,15 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 	else if (finite(pump) && pump >= 0) pumpM3Day = pump;
 	else warnings.push(`farm "${n.name}": pump capacity ${String(pump)} m³/day is not a size ≥ 0; no limit`);
 	const cap = n.damCapacityM3 > 0 ? n.damCapacityM3 : 0;
+	// River first or trigger with no dam (engine ≥ 1.60.0): the dam split and River to dam still route water
+	// "into the dam", which is irrigated straight from the river past the pump and its capacity (simulate.ts
+	// zeroes K, M and O only under run of river), as under dam only. Said, as there (issue #54), judged over
+	// the run's days like the dam-only warning.
+	const none = rule === 'runOfRiver' ? null : noDamOf(n, span);
+	if (none)
+		warnings.push(
+			`farm "${n.name}": ${none} what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river`
+		);
 	if (rule === 'runOfRiver') {
 		if (cap > 0) {
 			warnings.push(`farm "${n.name}": run of river has no dam, but this farm has a ${Math.round(cap)} m³ dam; it runs as river first. Set the dam capacity to 0`);

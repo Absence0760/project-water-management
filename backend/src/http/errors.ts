@@ -26,10 +26,11 @@ export class ApiError extends Error {
 	 * An error a farmer can meet on a translated page (the sign-in, account,
 	 * alert and farm pages): the response carries `code` (and `params`), which
 	 * the client words in the reader's language (docs/api.md § Errors). The
-	 * English `message` stays for everyone else.
+	 * English `message` stays for everyone else. `details`: data the page shows
+	 * as it is (the names in account_sole_holder), never words.
 	 */
-	static coded(status: ApiError['status'], code: ErrorCode, message: string, params?: Record<string, number | string>): ApiError {
-		const e = new ApiError(status, message);
+	static coded(status: ApiError['status'], code: ErrorCode, message: string, params?: Record<string, number | string>, details?: unknown): ApiError {
+		const e = new ApiError(status, message, details);
 		e.code = code;
 		if (params) e.params = params;
 		return e;
@@ -69,6 +70,7 @@ export const ERROR_CODES = [
 	'alerts_resume_throttled',
 	'body_refused',
 	'run_unverified',
+	'account_sole_holder',
 	// Two-step sign-in (issue #282, auth/mfa-routes.ts, auth/stepUp.ts).
 	'mfa_code_wrong',
 	'mfa_locked',

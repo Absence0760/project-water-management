@@ -1,4 +1,4 @@
-// Two-step sign-in end to end through the API (issue #282, 144_mfa.sql;
+// Two-step sign-in end to end through the API (issue #282, 150_mfa.sql;
 // docs/security.md § Two-step sign-in): adding an authenticator, the
 // sign-in's second step, recovery codes, turning it off, the code throttle,
 // and RLS on the new tables. Codes are made in the test from the secret the
@@ -246,7 +246,7 @@ describe('turning it off, and new recovery codes', () => {
 	});
 });
 
-describe('RLS on the two-step tables (144)', () => {
+describe('RLS on the two-step tables (150)', () => {
 	let victim: Awaited<ReturnType<typeof enrolled>>;
 	let other: User;
 	beforeAll(async () => {

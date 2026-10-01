@@ -102,6 +102,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'scenario.decided_by': { excluded: 'the project’s application decision; its assessor only' },
 	'scenario.owner_user_id': { excluded: 'the project’s scenario; scenario.created is in auditEvents' },
 	'scenario_member.added_by': { excluded: 'people the person added to a scenario; its maker only' },
+	'assessment.created_by': { excluded: 'the project’s cumulative assessment; who asked only' },
 	'scenario_sweep.created_by': { excluded: 'the project’s scenario sweep; its maker only' },
 	'auto_calibration.created_by': { excluded: 'the project’s run of its calibration rules; who asked only' },
 	'auto_calibration.applied_by': { excluded: 'the project’s run of its calibration rules; who applied its fit only' },
@@ -114,7 +115,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'team_member.user_id': { section: 'teamMemberships' },
 	// The person's own display preferences (083): the workspace sections they hid.
 	'user_preferences.user_id': { section: 'preferences' },
-	// Two-step sign-in (144, issue #282): whether it is on and since when, never the secret.
+	// Two-step sign-in (150, issue #282): whether it is on and since when, never the secret.
 	'user_totp.user_id': { section: 'twoStepSignIn' },
 	'user_recovery_code.user_id': { excluded: 'secrets (recovery code hashes); how many are left is in twoStepSignIn' },
 	'mfa_throttle.user_id': { excluded: 'a count of wrong two-step sign-in codes for the lockout, a day at most' },
@@ -251,7 +252,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			`SELECT preferences, updated_at AS "updatedAt" FROM user_preferences WHERE user_id = $1`,
 			[userId]
 		);
-		// Two-step sign-in (144): own rows only under RLS. The authenticator's state, never its sealed secret or the code hashes.
+		// Two-step sign-in (150): own rows only under RLS. The authenticator's state, never its sealed secret or the code hashes.
 		const { rows: twoStepSignIn } = await db.query(
 			`SELECT t.created_at AS "createdAt", t.confirmed_at AS "confirmedAt",
 				(SELECT count(*)::int FROM user_recovery_code r WHERE r.user_id = t.user_id) AS "recoveryCodesLeft"

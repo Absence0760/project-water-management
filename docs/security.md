@@ -101,7 +101,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 
 ## Two-step sign-in
 
-TOTP (RFC 6238) with recovery codes, issue #282, `144_mfa.sql`. One phished
+TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
 password could otherwise publish a restriction to a catchment's farmers or
 decide a licence application.
 
@@ -434,7 +434,8 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
 [deployment.md § Runbooks](./deployment.md#runbooks), Credential stuffing).
 
 - *Reasons:* `unknown_account` and `bad_password` (sign-in; change-password's
-  current password is `bad_password` on `/auth/change-password`), `locked`
+  current password is `bad_password` on `/auth/change-password`, and "Delete
+  my account"'s password on `/auth/me`, issue #112), `locked`
   (refused by the lockout before the password is checked), and `invalid_link`
   (a malformed, used, expired or unknown reset or verification token).
 - *No personal data:* the line holds the route's pattern and the reason only,
@@ -1536,7 +1537,20 @@ In short:
   `node_id`; `human-impacts.db.test.ts` checks a member sees its patches, a
   non-member none, and a patch can't be attached to another project's farm.
 - A **last-owner guard** means a project can't be orphaned (and a
-  last-admin guard, a team).
+  last-admin guard, a team): the deferred `project_member_keep_owner` and
+  `team_member_keep_admin` triggers refuse, at commit, a change that leaves
+  none, and the member routes answer `409` first. Both hold **when two
+  owners (admins) give it up at the same moment** (149_last_owner_lock):
+  the routes lock the project's owner rows (the team's admin rows) `FOR
+  UPDATE` before their check, and each trigger takes a per-project
+  (per-team) advisory lock before counting, so the second change waits for the first, re-reads, and
+  is refused. Without the locks each read the other as still there (its
+  change not yet committed), both passed, and the project was left with no
+  owner. The trigger lock is the backstop for every other path, the
+  operator deleting `app_user` rows among them; its re-read needs READ
+  COMMITTED, the level every write runs at. Tests:
+  `projects/last-owner-race.db.test.ts` (forced interleavings through the
+  routes and straight at the triggers).
 - **Runs are immutable by privilege.** `water_app` may `UPDATE` only
   `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
   rewrite a run's inputs, outputs or label after the fact; who last changed
@@ -1630,9 +1644,10 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks and yield calculations (2 each) are counted under a
-  per-user advisory lock, so a concurrent burst can't pass them, and the
-  database refuses a sweep member or outlook level past the API's cap
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  are counted under a per-user advisory lock, so a concurrent burst can't
+  pass them, and the database refuses a sweep member, assessment member or
+  outlook level past the API's cap
   (`jobs/costCaps.security.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
@@ -1806,6 +1821,18 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **Cumulative assessments are the editors' alone** (145_assessment,
+    WP-3.11): an assessment names every application in it and shows what
+    each does, so `assessment` and `assessment_member` are read and written
+    by editors only (RLS and the routes, `403` below editor); a contributor
+    never learns another application exists from one, and a viewer, who
+    reads an application only once decided, doesn't read a submitted one
+    through it. A member's ops are copied from its scenario by the database
+    (`assessment_member_guard`, as the caller, so RLS hides a draft
+    application: it can't be named), never taken from the request.
+    `assessments/assessments.db.test.ts` checks each with a positive control;
+    `db/cross-project-refs.security.db.test.ts` and
+    `jobs/trust.security.db.test.ts` cover its references and its job.
   - **An application's own farms are its owner's farm links, now**
     (071_application_own_nodes). The `scenario_owned_nodes` trigger refuses
     an application whose `owned_node_ids` name a farm its owner isn't linked
@@ -2330,9 +2357,9 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
-| Ids of sessions the person signed out (102), and used two-step sign-in challenges (144) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
-| Two-step sign-in (144): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
-| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (144); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
+| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
@@ -2380,19 +2407,42 @@ PDF someone else asked for kept the person as a recipient
   audit events. The project exports (`export.json`, CSV, the farm CSV)
   remain project data, not a data-subject export
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
-- **Deletion: an operator act.** There is no self-service deletion yet
-  (issue #112). On an emailed request (POPIA s24 and Regulation 3's Form 2,
-  which may come in any expedient way) the operator deletes the `app_user`
-  row as the schema owner ([deployment.md § Runbooks](./deployment.md#runbooks),
-  item 7), as soon as reasonably practicable, and tells the person what was
-  done (s24(4)): the table above is what happens. The rule for evidence
+- **Deletion: self-service, or on request.** Account → **Delete my
+  account** (`DELETE /auth/me`, issue #112, [api.md § Auth](./api.md#auth))
+  says what goes, what stays without the name and what keeps it, asks for
+  the password again (through the sign-in lockout, as a password change
+  does), and deletes the account straight away. It runs as the person under
+  RLS: the up-front refusal reads their own memberships, the audit events
+  (one per project and team they belonged to, `accountDeleted: true`) are
+  written as them while they are still a member, and the row goes through
+  `app_delete_my_account()` (143), a `SECURITY DEFINER` function with **no
+  user argument** that deletes only `app_current_user_id()`'s row and
+  refuses a transaction with no user; water_app still has no `DELETE` on
+  `app_user` (068). The keys and triggers that act on the deletion are the
+  same as the operator's, so the table above holds for both paths
+  (`personal-data.security.db.test.ts` sweeps the schema after a deletion
+  through this route; `account-deletion.db.test.ts` checks the operator's).
+  The person gets an email of what was done (s24(4)): what was deleted,
+  the projects and teams they left, what stays without the name and what
+  keeps it. A request may also come by email or any other expedient way
+  (POPIA s24 and Regulation 3's Form 2): the operator then deletes the
+  `app_user` row as the schema owner ([deployment.md §
+  Runbooks](./deployment.md#runbooks), item 7), as soon as reasonably
+  practicable, and tells the person what was done. The rule for evidence
   (138): **keep the evidence, remove the name**. The one refusal is an
-  account that is the only owner of a project or the only admin of a team
-  (checked at commit): ownership is handed to someone else first, by the
-  person or the project's other members. A responsible party that is DWS or
-  a CMA may need the name kept under the National Archives Act; that waits
-  on counsel and on D1 (#50), and would be a per-team setting in its own
-  migration ([followups.md § POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
+  account that is the only owner of a project or the only admin of a team:
+  ownership is handed to someone else first, by the person or the project's
+  other members. Self-service answers `409 account_sole_holder` naming them:
+  read up front with the project's owner rows and the team's admin rows
+  locked (`FOR UPDATE`, since the deferred checks take no lock and two
+  co-owners deleting at once would otherwise each see the other and both
+  pass), and fired again inside the request by `SET CONSTRAINTS ALL
+  IMMEDIATE` (`delete-me.db.test.ts` runs two at once). The operator's path
+  is refused at commit. A responsible party
+  that is DWS or a CMA may need the name kept under the National Archives
+  Act; that waits on counsel and on D1 (#50), and would be a per-team
+  setting in its own migration ([followups.md §
+  POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
 
@@ -3074,8 +3124,9 @@ nothing else.
   should be invite-only (plan question 11).
 - Any editor may sign off the calibration rules; restricting it to a role
   waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
-- POPIA: no self-service account deletion yet (the operator deletes on an
-  emailed request, issue #112); what exists today and the open items are in
+- POPIA: self-service deletion keeps the evidence and removes the name
+  (issue #112); the rule, a deleted note's body, backups after an erasure,
+  D12 and the lawful bases wait on the information officer's answers (#90),
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook

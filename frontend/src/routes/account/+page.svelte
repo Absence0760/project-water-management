@@ -4,8 +4,9 @@
 	// confirmed, language and volume unit (WP-2.5), and changing the password
 	// while signed in, two-step sign-in (issue #282, TwoStepSignIn), a link to the alert emails page (WP-2.13), with a
 	// banner when SES stopped delivering to the address (alert emails paused
-	// until the person turns them back on), and "download my data" (POPIA,
-	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
+	// until the person turns them back on), "download my data" (POPIA,
+	// GET /auth/me/export) and "delete my account" (issue #112, DELETE
+	// /auth/me, components/account/DeleteAccount.svelte). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
@@ -14,6 +15,7 @@
 	import { passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import DeleteAccount from '$lib/components/account/DeleteAccount.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
@@ -312,6 +314,8 @@
 				</section>
 
 				<TwoStepSignIn />
+				<!-- Self-service deletion (issue #112): a small card; its dialog says what goes and what stays, then asks for the password again. -->
+				<DeleteAccount />
 			</div>
 
 			<div class="col">
@@ -372,6 +376,7 @@
 						<p class="status" role="status" aria-live="polite">{exported ? t('Your data has been downloaded.') : ''}</p>
 					</div>
 				</section>
+
 			</div>
 		</div>
 	{/if}

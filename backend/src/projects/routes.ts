@@ -550,8 +550,18 @@ export const projectRoutes = new Hono<AuthEnv>()
  * Friendly 409 before the deferred DB trigger would abort the commit. Checked
  * *before* the change: afterwards a member who just left can no longer see
  * the member list through RLS.
+ *
+ * The project's owner rows are locked first (149_last_owner_lock). Without
+ * that, two owners leaving (or demoting each other) at the same moment each
+ * count the other as still an owner, since neither change is committed, and
+ * both pass. With it the second waits here until the first commits, and the
+ * count that follows (a new statement, so a new snapshot) sees the change.
+ * Locked in user order, so two of these never deadlock. Only an owner may
+ * lock them (member_update): anyone else is never the last owner, and their
+ * lock just finds no rows.
  */
 async function assertNotLastOwner(db: import('../db/tx.js').Db, projectId: string, userId: string) {
+	await db.query(`SELECT 1 FROM project_member WHERE project_id = $1 AND role = 'owner' ORDER BY user_id FOR UPDATE`, [projectId]);
 	const { rows } = await db.query<{ owners: number; target_is_owner: boolean }>(
 		`SELECT count(*) FILTER (WHERE role = 'owner')::int AS owners,
 			bool_or(user_id = $2 AND role = 'owner') AS target_is_owner

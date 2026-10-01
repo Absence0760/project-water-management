@@ -1,11 +1,13 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { actAsUser, withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
 import { issueEmailToken, markVerified, verificationMail } from './email-routes.js';
 import { answerAlike } from './accountMail.js';
-import { accountExistsMail, siteLink } from '../mail/templates.js';
+import { accountDeletedMail, accountExistsMail, siteLink } from '../mail/templates.js';
+import { lockOwnRoles, recordDeparture, soleHoldings, type Departure, type SoleHoldings } from './deleteAccount.js';
+import { logEvent } from '../logging/logEvent.js';
 import type { Mail } from '../mail/transport.js';
 import { buildSubjectExport, ExportThrottled } from './export.js';
 import { attachment } from '../export/csv.js';
@@ -20,7 +22,7 @@ import { readJson } from '../http/body.js';
 import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
-import { logLoginFailed } from './loginFailed.js';
+import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 
@@ -65,6 +67,46 @@ const FarmNoticeBody = z.object({ version: z.string().max(20) });
 /** The re-acceptance step (docs/legal-status.md): the version the notice showed, the engine's LEGAL_VERSION. */
 const AcceptTermsBody = z.object({ version: z.string().max(20) });
 const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
+/** "Delete my account" (issue #112): the password, typed again. */
+const DeleteMeBody = z.object({ password: z.string().min(1).max(200) });
+
+/** 409 account_sole_holder: the projects and teams that would be left with no owner or admin, in `details`. */
+const soleHolderError = (held: SoleHoldings) =>
+	ApiError.coded(409, 'account_sole_holder', 'you are the only owner or admin of these projects and teams: hand them to someone else first', undefined, held);
+
+/** A Postgres error raised by a check (23514): here, the deferred owner and admin checks at SET CONSTRAINTS. */
+const isCheckViolation = (err: unknown) => (err as { code?: string } | null)?.code === '23514';
+
+/**
+ * The current password, checked through the sign-in lockout as
+ * change-password does (a stolen session can't guess it any faster than the
+ * sign-in form can). Returns the account's email, language and the hash
+ * just checked (change-password writes only if it is still the one).
+ */
+async function checkPasswordAgain(c: Context<AuthEnv>, route: LoginFailureRoute, typed: string): Promise<{ email: string; locale: Locale | null; passwordHash: string }> {
+	const userId = c.get('userId');
+	// Counted in its own transaction before the bcrypt check, as in login.
+	const { lockedSeconds, row } = await withUser(userId, async (db) => {
+		const { rows } = await db.query<{ email: string; locale: Locale | null; password_hash: string; sessions_revoked_at: Date | null }>(
+			'SELECT email, locale, password_hash, sessions_revoked_at FROM app_user WHERE id = $1',
+			[userId]
+		);
+		const row = rows[0];
+		if (!row) return { lockedSeconds: 0, row: undefined };
+		return { lockedSeconds: await countAttempt(db, row.email, trustedDevice(c, row.email, row.sessions_revoked_at)), row };
+	});
+	if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+	if (lockedSeconds > 0) {
+		logLoginFailed(route, 'locked');
+		c.header('Retry-After', String(lockedSeconds));
+		throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
+	}
+	if (!(await verifyPassword(typed, row.password_hash))) {
+		logLoginFailed(route, 'bad_password');
+		throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
+	}
+	return { email: row.email, locale: row.locale, passwordHash: row.password_hash };
+}
 
 /**
  * Sign-in lockout per address: the 5th attempt in a row without a correct
@@ -416,6 +458,49 @@ export const authRoutes = new Hono<AuthEnv>()
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		return c.json({ user: toUser(row) });
 	})
+	// "Delete my account" (issue #112; POPIA s24; 143_delete_my_account.sql,
+	// auth/deleteAccount.ts). The password is typed again. The only owner of a
+	// project or only admin of a team is refused with 409 account_sole_holder,
+	// naming them, until they hand it over: read up front as the person, with
+	// the owner and admin rows locked first (lockOwnRoles), so a co-owner
+	// deleting or leaving at the same moment waits instead of both passing,
+	// and the database's deferred checks fired again inside the request by
+	// SET CONSTRAINTS. Otherwise, as the person under RLS: an audit event in every
+	// project and team they belonged to, then app_delete_my_account(), the
+	// same deletion the operator runs (keep the evidence, remove the name).
+	// Then this browser's cookies go, and an email says what was done (s24(4)).
+	.delete('/me', requireUser, async (c) => {
+		const body = DeleteMeBody.parse(await readJson(c));
+		const userId = c.get('userId');
+		const account = await checkPasswordAgain(c, '/auth/me', body.password);
+		type Outcome = { kind: 'held'; held: SoleHoldings } | { kind: 'deleted'; left: Departure };
+		let outcome: Outcome;
+		try {
+			outcome = await withUser(userId, async (db): Promise<Outcome> => {
+				await lockOwnRoles(db, userId);
+				const held = await soleHoldings(db, userId);
+				if (held.projects.length || held.teams.length) return { kind: 'held', held };
+				const left = await recordDeparture(db, userId);
+				const { rows } = await db.query<{ gone: boolean }>('SELECT app_delete_my_account() AS gone');
+				if (!rows[0]?.gone) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+				await db.query('SET CONSTRAINTS ALL IMMEDIATE');
+				return { kind: 'deleted', left };
+			});
+		} catch (err) {
+			// A co-owner or co-admin left between the check and the delete: say which, as above.
+			if (!isCheckViolation(err)) throw err;
+			const held = await withUser(userId, (db) => soleHoldings(db, userId));
+			if (!held.projects.length && !held.teams.length) throw err;
+			outcome = { kind: 'held', held };
+		}
+		if (outcome.kind === 'held') throw soleHolderError(outcome.held);
+		clearSession(c);
+		clearDevice(c);
+		// No id, address or name in the line: the account is gone, and the operator log is the operator's (deployment.md runbook item 7).
+		logEvent('info', { event: 'account_deleted', via: 'self' });
+		await trySendMail(accountDeletedMail(account.email, outcome.left, account.locale));
+		return c.body(null, 204);
+	})
 	// Change the password while signed in. The current password is checked
 	// through the sign-in lockout (a stolen session can't guess it any faster
 	// than the login form can), then every session is revoked, and this device
@@ -423,26 +508,7 @@ export const authRoutes = new Hono<AuthEnv>()
 	.post('/change-password', requireUser, async (c) => {
 		const body = ChangePasswordBody.parse(await readJson(c));
 		const userId = c.get('userId');
-		// Counted in its own transaction before the bcrypt check, as in login.
-		const { lockedSeconds, row } = await withUser(userId, async (db) => {
-			const { rows } = await db.query<{ email: string; password_hash: string; sessions_revoked_at: Date | null }>(
-				'SELECT email, password_hash, sessions_revoked_at FROM app_user WHERE id = $1',
-				[userId]
-			);
-			const row = rows[0];
-			if (!row) return { lockedSeconds: 0, row: undefined };
-			return { lockedSeconds: await countAttempt(db, row.email, trustedDevice(c, row.email, row.sessions_revoked_at)), row };
-		});
-		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
-		if (lockedSeconds > 0) {
-			logLoginFailed('/auth/change-password', 'locked');
-			c.header('Retry-After', String(lockedSeconds));
-			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
-		}
-		if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
-			logLoginFailed('/auth/change-password', 'bad_password');
-			throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
-		}
+		const row = await checkPasswordAgain(c, '/auth/change-password', body.currentPassword);
 		const newHash = await hashPassword(body.newPassword);
 		const watermark = new Date();
 		// As the user (withUser), so email_token's RLS lets the reset links be deleted.
@@ -453,7 +519,7 @@ export const authRoutes = new Hono<AuthEnv>()
 				`UPDATE app_user SET password_hash = $3, sessions_revoked_at = $4
 				 WHERE id = $1 AND password_hash = $2 RETURNING ${USER_COLS}`,
 				// Watermark from this server's clock, the one that stamps session iat_ms.
-				[userId, row.password_hash, newHash, watermark]
+				[userId, row.passwordHash, newHash, watermark]
 			);
 			const updated = rows[0];
 			if (!updated) return undefined;

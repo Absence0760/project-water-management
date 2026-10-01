@@ -49,7 +49,7 @@ const NOT_A_CREDENTIAL: Record<string, string> = {
  */
 const ENCRYPTED_CREDENTIAL: Record<string, string> = {
 	'user_totp.secret_enc':
-		'the TOTP seed (144): checking a code needs the seed itself, so it is sealed with AES-256-GCM under APP_ENCRYPTION_KEY, bound to its account (auth/secretBox.ts; mfa.db.test.ts checks the stored bytes hold no plaintext)'
+		'the TOTP seed (150): checking a code needs the seed itself, so it is sealed with AES-256-GCM under APP_ENCRYPTION_KEY, bound to its account (auth/secretBox.ts; mfa.db.test.ts checks the stored bytes hold no plaintext)'
 };
 const CREDENTIAL_NAME = /(token|secret|password|api_?key|_hash)/;
 
