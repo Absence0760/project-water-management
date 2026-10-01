@@ -4926,7 +4926,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       closed #51, re-checked at 81db5ed), and the 60-farm load timings in
       step-2 WP-2.16 "Load checks" (manual run ≈ 8.7 s on the API Lambda,
       under the 10 s trigger; storage flat over 30 days).
-- [ ] **Hold a key's pushes into a short series?** A series with fewer than
+- [x] **Hold a key's pushes into a short series?** A series with fewer than
       100 non-zero days has no outlier limit, so a key's push into it is
       checked for negatives only (security.md § API keys, Limits). Holding
       every such push is safer but holds a new logger's automatic runs
@@ -4934,6 +4934,14 @@ own. Loop in the CISO or security analyst before acting on any of them.
       record. Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before the first gateway key is issued on production.
+      **Decided (operator, 2026-10-01): hold auto-publish only (option b),
+      keep automatic runs (option a). Done:** a key's push with no outlier
+      limit records `series.unchecked` and answers `autoPublishHeld: true`;
+      its automatic run runs, and `autoPublish` publishes none while such an
+      event is newer than the latest manual run (`series/hold.ts`
+      `uncheckedSinceLastRun`); the History says "Paused automatic
+      publishing". Tests: `ingest/ingest.db.test.ts`,
+      `history/timeline.test.ts`.
 - [x] **The WUA's cut % beside its own notice.** The farm page and `/share`
       showed "a 20 % cut in registered water use" only when the WUA wrote no
       notice text; the alert email shows both. Make them agree (both, or

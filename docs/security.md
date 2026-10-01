@@ -1064,7 +1064,22 @@ and nothing else.
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a short
     series is checked for negatives only (a new one a key creates is held
-    whatever its days, below);
+    whatever its days, below). Such a push **pauses automatic publishing**
+    (operator decision, 2026-10-01, #93: option (b) for auto-publish, (a)
+    for automatic runs): when no outlier limit could be taken at all, the
+    merge records `series.unchecked` as the key and answers
+    `autoPublishHeld: true`; the automatic run still runs, so a new
+    logger's figures stay current in the workspace, but
+    `publish/autoPublish.ts` publishes no automatic run while such an event
+    is newer than the project's latest manual run
+    (`uncheckedSinceLastRun`). So a leaked key's absurd value in a short
+    series can reach an automatic run, which only staff see, and never
+    farmers until a person has run the model on it. Holding the runs too
+    was rejected: a new logger's automatic runs would wait for a manual run
+    every day, for months on a dry rain record. A ceiling per kind was
+    rejected: it works for rain, but flow has none. Editors seed a series
+    with its record so far, not one day (the `409` below says so), which
+    shortens the paused stretch;
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -1120,7 +1135,9 @@ and nothing else.
   key pushing in batches held by the limit without its own days, another
   key's and a person's days counting, the guard's directions; a key that
   alone fills a series held by the accepted values, a genuine value passing,
-  the `own` bootstrap before a manual run), `series/hold.test.ts`.
+  the `own` bootstrap before a manual run; a push into a short series
+  running automatically but not published until a person runs the model,
+  with a long-enough record as the positive control), `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route

@@ -10,7 +10,12 @@
 //   - it raises no warning the published run didn't (newWarnings: the same
 //     sentence with different numbers or dates, e.g. "CHIRPS stands in on
 //     2131 days" → "… 2132 days", is the same warning);
-//   - publishRun accepts it (not a legacy-runoff run, a projectable summary).
+//   - publishRun accepts it (not a legacy-runoff run, a projectable summary);
+//   - no API key pushed into a series too short for the outlier limit since
+//     the latest run a person made (series.unchecked, series/hold.ts
+//     uncheckedSinceLastRun): such a push was checked for negatives only, so
+//     a person runs the model before farmers see it (operator decision,
+//     2026-10-01).
 // The WUA's restriction notice and next-update date carry over unchanged,
 // since a new run is no reason to lift or change a restriction. The note says
 // it was published automatically, the audit event carries `auto: true`
@@ -21,6 +26,7 @@ import type { NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
+import { uncheckedSinceLastRun } from '../series/hold.js';
 import { publishRun } from './publish.js';
 
 /** A warning's shape: its text with every number (and so every date) masked. */
@@ -34,7 +40,7 @@ export function newWarnings(prev: readonly string[], next: readonly string[]): s
 
 export type AutoPublishOutcome =
 	| { published: true; publicationId: string }
-	| { published: false; reason: 'no_publication' | 'already_published' | 'failed_checks' | 'new_warnings' | 'not_publishable'; detail?: string };
+	| { published: false; reason: 'no_publication' | 'already_published' | 'unchecked_push' | 'failed_checks' | 'new_warnings' | 'not_publishable'; detail?: string };
 
 interface RunWarnings {
 	id: string;
@@ -59,6 +65,8 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 	const current = cur[0];
 	if (!current) return { published: false, reason: 'no_publication' };
 	if (current.run_id === runId) return { published: false, reason: 'already_published' };
+	// A key's push a short series couldn't check: a person runs the model before this is published.
+	if (await uncheckedSinceLastRun(db, projectId)) return { published: false, reason: 'unchecked_push' };
 	const { rows } = await db.query<RunWarnings>(
 		`SELECT id, summary->'warnings' AS warnings,
 			(SELECT count(*)::int FROM jsonb_array_elements(COALESCE(summary->'verification'->'checks', '[]'::jsonb)) c WHERE c->>'passed' = 'false') AS failed

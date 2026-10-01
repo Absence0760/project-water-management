@@ -237,7 +237,9 @@ describe('ingesting days', () => {
 			`SELECT kind, actor_user_id, actor_api_key_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND subject->>'seriesId' = $2 ORDER BY id`,
 			[projectId, first.body.series.id]
 		);
-		expect(events.map((e) => e.kind)).toEqual(['series.created', 'series.held', 'series.merged']);
+		// The second push, into a 3-day series too short for the outlier limit, pauses automatic publishing (series/hold.ts).
+		expect(next.body.autoPublishHeld).toBe(true);
+		expect(events.map((e) => e.kind)).toEqual(['series.created', 'series.held', 'series.merged', 'series.unchecked']);
 		for (const e of events) {
 			expect(e).toMatchObject({ actor_user_id: null, actor_api_key_id: id, actor_label: 'API key “Rain gateway”' });
 		}
@@ -248,7 +250,7 @@ describe('ingesting days', () => {
 		const history = await viewer.call('GET', `/projects/${projectId}/history?kind=series`);
 		expect(history.status).toBe(200);
 		const seen = history.body.items.filter((i: { subject?: { seriesId?: string } }) => i.subject?.seriesId === first.body.series.id);
-		expect(seen.map((i: { actor: string }) => i.actor)).toEqual(['API key “Rain gateway”', 'API key “Rain gateway”', 'API key “Rain gateway”']);
+		expect(seen.map((i: { actor: string }) => i.actor)).toEqual(['API key “Rain gateway”', 'API key “Rain gateway”', 'API key “Rain gateway”', 'API key “Rain gateway”']);
 	});
 
 	it('is idempotent: the same days again change nothing and record nothing', async () => {
@@ -561,6 +563,73 @@ describe('a key pushing days that look wrong holds the automatic re-run (WP-2.16
 		expect(res.body.rerunQueuedFor).toEqual(expect.any(String));
 		expect(await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND kind = 'series.held'`, [pid])).toEqual([{ n: 2 }]);
 		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+});
+
+// Operator decision (2026-10-01, #93): a key's push into a series too short
+// for the outlier limit (fewer than OUTLIER_MIN_POSITIVE non-zero days, so
+// checked for negatives only) still makes its automatic run, but that run
+// isn't published by itself until a person has run the model
+// (series.unchecked, series/hold.ts uncheckedSinceLastRun, publish/autoPublish.ts).
+// Positive control: once the series is long enough to judge (a person's
+// record, read by their run), the next push publishes automatically.
+describe('a key’s push into a short series runs automatically but waits for a person to publish', () => {
+	let pid: string;
+	let secret: string;
+	const runs = async () => (await asOwner('SELECT id, trigger FROM model_run WHERE project_id = $1 ORDER BY created_at, id', [pid])) as { id: string; trigger: string }[];
+	const published = async () => ((await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [pid]))[0]?.run_id ?? null) as string | null;
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Short logger' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id);
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+		// 60 days, 12 of them rain: far short of the outlier rule's 100 non-zero days.
+		await addSeries(owner, pid, rain('2020-01-01', Array.from({ length: 60 }, (_, i) => (i % 5 === 0 ? 10 : 0))));
+		const first = (await owner.call('POST', `/projects/${pid}/runs`, { label: 'baseline' })).body.run.id as string;
+		expect((await owner.call('POST', `/projects/${pid}/publication`, { runId: first })).status).toBe(201);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true, debounceMinutes: 0, publish: 'if_no_new_warnings' } } })).status).toBe(200);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+		({ secret } = await newKey(pid));
+	});
+
+	it('records series.unchecked as the key and says so; the automatic run runs, and isn’t published', async () => {
+		const before = await published();
+		const res = await merge(secret, { ...rain('2020-03-01', [4]), source: 'gw-9' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body).toMatchObject({ daysChanged: 1, rerunHeld: null, rerunQueuedFor: expect.any(String), autoPublishHeld: true });
+		const [event] = await asOwner(`SELECT actor_api_key_id, actor_user_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'series.unchecked'`, [pid]);
+		expect(event).toMatchObject({ actor_user_id: null, subject: { kind: 'rain_catchment_mm', daysChanged: 1, source: 'gw-9' } });
+		expect(event.actor_api_key_id).toEqual(expect.any(String));
+		await runTick();
+		const made = await runs();
+		expect(made.map((r) => r.trigger)).toEqual(['manual', 'auto']);
+		expect(await published()).toBe(before);
+	});
+
+	it('a person’s own merge into it is never paused (only a key’s push is)', async () => {
+		expect((await owner.call('POST', `/projects/${pid}/series/merge`, rain('2020-03-02', [1]))).status).toBe(200);
+		expect(await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND kind = 'series.unchecked'`, [pid])).toEqual([{ n: 1 }]);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('positive control: once a person’s run has read a record long enough to judge, the next push publishes automatically', async () => {
+		// The person's full record (600 days, 120 of them rain) and their run of it: long enough for the outlier limit.
+		await addSeries(owner, pid, rain('2020-01-01', Array.from({ length: 600 }, (_, i) => (i % 5 === 0 ? 10 : 0))));
+		const reviewed = await owner.call('POST', `/projects/${pid}/runs`, { label: 'reviewed' });
+		expect(reviewed.status).toBe(201);
+		// They publish it, as a person would after a change of record (auto-publish replaces a run with no new warning).
+		expect((await owner.call('POST', `/projects/${pid}/publication`, { runId: reviewed.body.run.id })).status).toBe(201);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+		// The day after the record's last (2021-08-22): no gap, so no new warning to hold the publication back.
+		const res = await merge(secret, rain('2021-08-23', [3]));
+		expect(res.body).toMatchObject({ rerunHeld: null, autoPublishHeld: false });
+		await runTick();
+		const auto = (await runs()).filter((r) => r.trigger === 'auto').at(-1)!;
+		expect(await published()).toBe(auto.id);
 	});
 });
 
