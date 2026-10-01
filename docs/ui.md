@@ -1770,8 +1770,8 @@ parameter in place, so Back closes it.
 traffic lights" until issue #176): every member reads the rule the team's
 statuses are judged by (linking to the project list), "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
-*These are the team's own thresholds* or *These are the default thresholds,
-still to be confirmed by the hydrologist*. Admins get two number inputs,
+*These are the team's own thresholds* or *These are the default thresholds:
+a provisional default, not yet confirmed by the catchment's hydrologist*. Admins get two number inputs,
 *Green below (%)* and *Amber below (%)*, checked as the API checks them (both
 0–100, green below amber; the message sits under the inputs, which carry
 `aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
@@ -3556,7 +3556,11 @@ which checks every catchment tab).
     over the same columns, with how to read it in its foot (judge by the
     validation columns; the model should clearly beat the mean flow, and in a
     seasonal catchment the climatology; `fit-benchmarks-note`, a note at the
-    panel's end until issue #174), and a warning sentence
+    panel's end until issue #174) and, from engine 1.61.0, a second foot row
+    (`fit-benchmarks-source`) saying where the validation columns'
+    benchmarks came from (the test's calibration period; a column on the
+    other record, or a report from before 1.61.0, its own flows; CR-5), and
+    a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report
     made before 1.19.0 has neither. The formatting lives in
@@ -3846,7 +3850,8 @@ which checks every catchment tab).
   classes**: *Automatic* (terciles, quintiles once the record has 25
   complete years; the default), *Terciles* or *Quintiles*. **Risk
   cut-offs**, one group per measure, each with **Use the default
-  cut-offs** ticked by default and a **Defaults pending the hydrologist**
+  cut-offs** ticked by default and a **Provisional defaults, not yet
+  confirmed by the catchment's hydrologist**
   badge while it is: *Reserve months met* (lower risk from 90 %,
   increasing risk from 75 % of months met) and *Days below the pragmatic
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
@@ -5261,7 +5266,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 - **Around it**: badges for the **measure**, naming its site (Reserve months
   met at the chosen site when every level has a rule table there, else days
   below the pragmatic EWR at the outlet), the method and number of complete years,
-  and **Risk cut-offs pending the hydrologist** while the measure in use has
+  and **Provisional risk cut-offs, not yet confirmed by the catchment's
+  hydrologist** while the measure in use has
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
   levels have a rule table, or too few years for every class to judge).

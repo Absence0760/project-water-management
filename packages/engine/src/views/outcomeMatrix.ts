@@ -56,6 +56,9 @@ export interface OutcomeRiskCutoffs {
  * below the EWR use the portfolio traffic lights' 5 % / 20 % (roadmap D11,
  * also unconfirmed); months met 90 % / 75 % are a judgement. The project
  * setting `settings.outcomes.riskCutoffs` overrides them per metric.
+ * Provisional decision 2026-10-01 keeps them (no published standard says
+ * otherwise; docs/calibration-research.md § Provisional decisions), not the
+ * hydrologist's confirmation, so OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST stays true.
  */
 export const DEFAULT_OUTCOME_RISK_CUTOFFS: Readonly<OutcomeRiskCutoffs> = Object.freeze({
 	reserveMonthsMet: Object.freeze({ lower: 0.9, increasing: 0.75 }),

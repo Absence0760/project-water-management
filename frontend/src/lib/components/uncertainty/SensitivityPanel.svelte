@@ -105,7 +105,7 @@
 				</div>
 			{/if}
 		</div>
-		<p class="muted small">The thresholds are defaults (80 %) pending the hydrologist: a rule table and the pragmatic EWR carry no pass mark of their own.</p>
+		<p class="muted small">The thresholds are provisional defaults (80 %, decided 2026-10-01), not yet confirmed by the catchment’s hydrologist: a rule table and the pragmatic EWR carry no pass mark of their own.</p>
 
 		<ul class="verdicts" data-testid="sensitivity-verdicts">
 			{#each verdicts as v (v.key)}

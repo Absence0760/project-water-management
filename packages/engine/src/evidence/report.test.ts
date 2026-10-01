@@ -714,7 +714,7 @@ describe('the Reserve site strip: the REC (ER9) and months below the table (G16)
 		expect(f.level).toBe('caution');
 		expect(s.belowTableExpectedPct).toBe(1);
 		expect(f.text).toBe(
-			`At Gauge the natural flow is drier than the rule table’s driest point in 3 of ${s.monthsA} months: the requirement there is scaled with the flow, a rule pending the hydrologist. With the percentile from the run, about 1 % of months fall there by construction.`
+			`At Gauge the natural flow is drier than the rule table’s driest point in 3 of ${s.monthsA} months: the requirement there is scaled with the flow, a provisional rule not yet confirmed by the catchment’s hydrologist. With the percentile from the run, about 1 % of months fall there by construction.`
 		);
 		expect(f.effect).toMatch(/^The requirement shrinks with the flow in those months, below the table’s driest requirement/);
 	});

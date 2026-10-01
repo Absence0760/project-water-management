@@ -50,7 +50,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
 		"title": "Missing catchment rain recorded as 0 runs the catchment dry",
-		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24, pending the hydrologist's confirmation of the flagged runs)"
+		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records)"
 	},
 	{
 		"id": "B3",
@@ -71,56 +71,63 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",
 		"title": "Automatic calibration scored every observed day as recorded",
-		"status": "Fixed, engine 1.22.0 (pending the hydrologist, issue #66)"
+		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.61.0, C3)"
+	},
+	{
+		"id": "C3",
+		"source": "finding",
+		"severity": "Medium (fits on records of rivers that stop for 90 days or more)",
+		"title": "A long stretch of zero flow was suspect, so the fit never saw the river dry",
+		"status": "Fixed, engine 1.61.0 (provisional decision 2026-10-01, the client's hydrologist's confirmation pending; calibration-research.md § Provisional decisions)"
 	},
 	{
 		"id": "A1",
 		"source": "finding",
 		"severity": "Medium (Reserve rule-table sites whose natural flow falls below the table's driest point: (100 − P_last) % of months with the percentile from the run, 1 % at the DRM's 99 % point; more with the gazette's curve when the model runs drier)",
 		"title": "Below a rule table's driest point the requirement is scaled down with the flow, not held at the drought flow",
-		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A2",
 		"source": "finding",
 		"severity": "Low",
 		"title": "A rule table is interpolated linearly between its % points; Sawunyama & Hughes (2010) interpolate on a log scale",
-		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A3",
 		"source": "finding",
 		"severity": "Medium (sites whose modelled natural flow differs from the determination's)",
 		"title": "By default a month's natural percentile comes from the run's own natural flow, not the gazette's natural curve",
-		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; pending the hydrologist)"
+		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A4",
 		"source": "finding",
 		"severity": "Medium (sites with a Reserve rule table)",
 		"title": "The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default, while the Reserve compliance report follows the rule table",
-		"status": "Built (engine 1.3.0, issue #64), off by default; pending the hydrologist and the assessor"
+		"status": "Built (engine 1.3.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's or the assessor's confirmation pending"
 	},
 	{
 		"id": "A5",
 		"source": "finding",
 		"severity": "Medium (sites with a low-flow requirement and floods in dry months)",
 		"title": "By default a low-flow requirement is judged on the month's total volume, so a flood month can pass its low flows while its base flow was short",
-		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; pending the hydrologist"
+		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending"
 	},
 	{
 		"id": "A6",
 		"source": "finding",
 		"severity": "Medium (rule tables with high-flow components)",
 		"title": "A high-flow event is found in daily flow by the engine's own rule: at least half the duration at or above half the peak",
-		"status": "Decided (engine 1.9.0, licensing-authority persona review of issue #46; pending the hydrologist)"
+		"status": "Decided (engine 1.9.0, licensing-authority persona review of issue #46; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A7",
 		"source": "finding",
 		"severity": "Medium (rule tables with high-flow components)",
 		"title": "A year is asked for no more high-flow events than its natural flow had, counted per water year, and the DRM's high-flow volumes are not checked",
-		"status": "Decided (from the literature, engine 0.33.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.33.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "L1",
