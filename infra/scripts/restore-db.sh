@@ -412,8 +412,10 @@ Next, by hand, in this order:
   2. Run the migrate Lambda (applies migrations newer than the restore point, resets water_app's password):
      aws lambda invoke --function-name $MIGRATE_FN --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region $REGION --profile $PROFILE /dev/stdout
   3. Re-apply erasures and revocations made after the restore point, before traffic is back (docs/deployment.md § Restoring the database, step 6a):
-     on $OLD, as the schema owner, read erasure_log and the audit_event removals and revocations since the restore point; delete and revoke them
-     again on $ID in one transaction; invoke the worker once; then re-run the apply in step 1 to restore the API's and worker's concurrency.
+     the apply in step 1 put the API's and worker's concurrency back, so first set both to 0 again (aws lambda put-function-concurrency ...
+     --reserved-concurrent-executions 0, as in the runbook's step 1); on $OLD, as the schema owner, read erasure_log and the audit_event
+     removals and revocations since the restore point; delete and revoke them again on $ID in one transaction; then re-run the apply in
+     step 1, which restores the concurrency, and invoke the worker once at once (its purges catch up; reserved concurrency 0 would throttle it).
   4. Check the site, and that the data is as of the restore point with the erasures re-applied.
   5. Only then delete the old instance ($OLD). Writes made after the restore point exist only there; export anything you need first. Its master secret goes with it:
      aws rds modify-db-instance --db-instance-identifier $OLD --no-deletion-protection --apply-immediately --region $REGION --profile $PROFILE

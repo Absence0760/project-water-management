@@ -1619,7 +1619,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
    was done; point them there. It logs
    `{"event":"account_deleted","via":"self","accountId":"…"}`: the account's
    random id only, never an address or a name. Both paths, the self-service
-   one and the SQL below, also write the id to the `erasure_log` table (157),
+   one and the SQL below, also write the id to the `erasure_log` table (159),
    which a restore reads to delete the account again
    ([§ Restoring the database](#restoring-the-database), step 6a). Otherwise
    (they can't sign in, or ask another way): a request may come by email or
@@ -1985,12 +1985,15 @@ replace or destroy; don't apply one.
    project, team; the triggers pseudonymise and log as they did the first
    time), and re-apply each removal, unlink and revocation the events name
    (delete the `project_member`, `team_member` or `farm_link` row; set
-   `revoked_at` on the share link or API key; delete the invite). Invoke the
-   worker once (`aws lambda invoke --function-name water-management-worker …`,
-   the production `pnpm dev:jobs:tick`) so the time-based purges catch up:
-   lapsed invites, deleted notes' text, alert deliveries, pack notices. Only
-   then let traffic back (run step 5's apply again; it restores the
-   concurrency). Record each re-applied erasure in the operator log.
+   `revoked_at` on the share link or API key; delete the invite). Only then
+   let traffic back (run step 5's apply again; it restores the concurrency),
+   and at once invoke the worker once (`aws lambda invoke --function-name
+   water-management-worker …`, the production `pnpm dev:jobs:tick`; at
+   reserved concurrency 0 it would be throttled, hence after the apply) so
+   the time-based purges catch up: lapsed invites, deleted notes' text,
+   alert deliveries, pack notices. None of those is served by the API, so
+   the minutes between are harmless. Record each re-applied erasure in the
+   operator log.
 
    **If the instance itself is gone** (below), there is no old instance to
    read: take the erasures since `LatestRestorableTime` from the operator
