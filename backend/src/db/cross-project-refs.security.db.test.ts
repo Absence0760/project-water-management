@@ -370,6 +370,14 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [`INSERT INTO allocation (project_id, node_id, authorisation, water_source, volume_m3_year) VALUES ($1, $2, 'licence', 'surface', 1)`, [h.projectId, ref]]
 	},
+	// A map feature stands for a node of its project (152: assert_same_project on map_feature.node_id).
+	'map_feature.node_id': {
+		ref: (w) => w.farmId,
+		insert: (h, ref) => [
+			`INSERT INTO map_feature (project_id, kind, node_id, geometry) VALUES ($1, 'dam', $2, '{"type":"Point","coordinates":[21.3,-33.6]}')`,
+			[h.projectId, ref]
+		]
+	},
 	'alert_rule.node_id': {
 		ref: (w) => w.farm2Id,
 		insert: (h, ref) => [`INSERT INTO alert_rule (project_id, kind, node_id, threshold) VALUES ($1, 'dam_below', $2, 0.3)`, [h.projectId, ref]]
@@ -828,6 +836,17 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'PUT /me/alerts/:projectId nodeId': (h, r) => farmer.call('PUT', `/me/alerts/${h.projectId}`, { items: [{ kind: 'dam_below', nodeId: r.farmId, mode: 'immediate' }] }),
 	'POST /projects/:id/allocations nodeId': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/allocations`, { nodeId: r.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 }),
+	'POST /projects/:id/map/features nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.3, lat: -33.6, nodeId: r.farmId }),
+	'PATCH /projects/:id/map/features/:fid nodeId': async (h, r) => {
+		const f = await dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.31, lat: -33.61 });
+		return dual.call('PATCH', `/projects/${h.projectId}/map/features/${f.body.feature.id}`, { nodeId: r.farmId });
+	},
+	// The feature is made in the referenced project, then named from the home one.
+	'POST /projects/:id/nodes/:nodeId/area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.31, -33.7], [21.31, -33.69], [21.3, -33.69], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'other', geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/area-from-map`, { featureId: f.body.feature.id });
+	},
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
 			...modelOf(h),
@@ -892,6 +911,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
+	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId'],
+	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':

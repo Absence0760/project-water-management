@@ -68,7 +68,8 @@ test('every workspace tab and app page keeps only a gutter below its content, wi
 		[390, 844]
 	] as const) {
 		await page.setViewportSize({ width, height });
-		for (const url of ['/', '/teams', '/account', '/help', ...TABS.map((t) => `/projects/${project.id}?tab=${t}`)]) {
+		// The Map opens from the Network's header, not the sidebar (LINKED_ONLY), so it isn't in TABS' count; checked too.
+		for (const url of ['/', '/teams', '/account', '/help', ...[...TABS, 'map'].map((t) => `/projects/${project.id}?tab=${t}`)]) {
 			await page.goto(url);
 			await expectNoReservedRoom(page, `${url.replace(project.id, '<id>')} at ${width}×${height}`);
 		}

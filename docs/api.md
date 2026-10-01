@@ -174,15 +174,17 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, preferences,
+  signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, erratumNotices, preferences,
   reportSubscriptions, auditEvents, auditEventsTruncated }`. `alertFeedback`
   is their "Was this useful?" rows on alert emails, answered or not,
-  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (147; never
+  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (151; never
   the token's hash or nonce). `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
-  createdAt, sentAt }]` (133). `account` is
+  createdAt, sentAt }]` (133). `erratumNotices` is the known engine bug
+  emails sent to them as an owner (kept 30 days likewise), `[{ projectId,
+  erratumId, status, createdAt, sentAt }]` (153). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
@@ -1162,7 +1164,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
-| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 147) | editor |
+| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
 | POST | `/alerts/feedback` *(public)* | `{ token, useful: boolean, comment?: string \| null }` (comment ≤ 500 characters) | `200 { kind, project: { name } }` | – |
 
 - Kinds, what fires them, and who gets them by default:
@@ -1664,12 +1666,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
-  (`summary.forecast.from`), else `null`.
+  (`summary.forecast.from`), else `null`. `fitEngineVersion` is the engine
+  of the automatic fit the run's parameters came from
+  (`settings.fitRecord.engineVersion`), else `null`; `errata` the ids of the
+  known engine bugs that may affect the run (issue #103,
+  [engine-errata.md](./engine-errata.md)): the errata whose range holds its
+  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which
   engine 1.0.0 removed, so only a stored run from before it can be one. The
@@ -2759,6 +2767,46 @@ never a farm's row, name or id.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
   `revokedBy`), not yet as audit events (WP-2.4,
   [followups.md](./followups.md)).
+
+## Catchment map
+
+The map's features, GeoJSON imports, areas accepted from polygons and the
+quaternary lookup (issue #288, roadmap WP-3.12, `152_catchment_map.sql`,
+[maps.md](./maps.md)). Geometry is GeoJSON in WGS84 longitude/latitude, 2D;
+every geometry is checked and every area computed on the server
+(`backend/src/geo`). Nothing here changes the model except `area-from-map`,
+and the quaternary lookup only proposes.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
+| POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one | editor |
+| PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
+| DELETE | `/projects/:id/map/features/:fid` | – | `204`; its import goes with its last feature. A node whose area came from it keeps the area and loses the link | editor |
+| POST | `/projects/:id/map/import` | `{ fileName, kind, text }`: the GeoJSON file's text (≤ 5 MB; this route has its own body limit, 7 MB of JSON), `kind` what its features are | `201 { source: { id, fileName, sha256 }, features }`. A `catchment_boundary` file's polygons become one boundary (replacing the current one); other kinds one feature each, linked to a node of the same name (case-insensitive) and a fitting kind. `422 { error, details: { feature: n \| null, message }[] }` with every problem, per feature (nothing is imported); `409` for the same file twice (SHA-256); `413` over the limit | editor |
+| POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm or a feature without an area; `404` for another project's feature | editor |
+| GET | `/projects/:id/map/quaternary` | `?lon=&lat=` | `{ point: [lon, lat], quaternary: QuaternaryProposal \| null, datasets: { dataset, count }[] }`: the quaternary in the loaded dataset that contains the point (null: none does, or none is loaded). Writes nothing | viewer |
+
+- `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
+  'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
+  areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
+  `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
+  points and lines; `center` is a point itself, a polygon's centroid (its
+  largest part's), a line's middle vertex; `properties` holds only
+  `description` and `ref` from a file. A boundary or parcel is a Polygon or
+  MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
+  dam a Point or polygon, `other` any of these. A parcel or dam stands for a
+  farm or water user, a gauge for a gauge; a boundary or river for nothing.
+- `QuaternaryProposal = { code, dataset, synthetic, areaKm2, mapMm, marMm3,
+  monthlyMm3 (12, Oct … Sep, Mm³) | null, periodStart, periodEnd, source,
+  loadedAt }`. `synthetic` is true for the repo's invented dataset. The
+  client fills the WR2012 check's form from it value by value; saving goes
+  through `PATCH /projects/:id` like any typed value.
+- Each write is in the audit log (`map.imported`, `map.feature_created`,
+  `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
+  geometry). Farmers and applicants get `403` on every route here (RLS lets
+  them read the boundary, gauges, rivers and their own farm's features, for a
+  later farm view).
 
 ## Notes
 

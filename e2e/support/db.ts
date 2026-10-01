@@ -417,3 +417,15 @@ export async function plantEwrForecastAlert(projectId: string, runId: string, la
 export async function ageReproductionEngine(packId: string, engine: string): Promise<void> {
 	await withDb((db) => db.query('UPDATE pack_reproduction SET engine_version = $2 WHERE pack_id = $1', [packId, engine]));
 }
+
+/**
+ * Make a run look as if an older engine made it (issue #103, the known-defect
+ * flag): only its recorded engine_version changes, so the API flags the errata
+ * of that version (docs/engine-errata.md).
+ */
+export async function plantRunEngine(runId: string, engineVersion: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query('UPDATE model_run SET engine_version = $2 WHERE id = $1', [runId, engineVersion]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}

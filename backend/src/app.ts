@@ -20,6 +20,7 @@ import { logEvent } from './logging/logEvent.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { myInviteRoutes, projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
+import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
@@ -128,7 +129,9 @@ export function createApp() {
 	// POST /projects/import carries a whole project and sets its own cap (the
 	// export cap, IMPORT_MAX_BYTES) on the route; only that exact path skips this one.
 	const generalBodyLimit = bodyLimit({ maxSize: 4 * 1024 * 1024, onError: (c) => c.json({ error: 'request too large' }, 413) });
-	app.use('*', (c, next) => (c.req.method === 'POST' && c.req.path === '/projects/import' ? next() : generalBodyLimit(c, next)));
+	// POST /projects/:id/map/import likewise carries a GeoJSON file of up to 5 MB, with its own cap (geo/routes.ts MAP_IMPORT_BODY_MAX).
+	const ownLimit = (c: { req: { method: string; path: string } }) => c.req.method === 'POST' && (c.req.path === '/projects/import' || MAP_IMPORT_PATH.test(c.req.path));
+	app.use('*', (c, next) => (ownLimit(c) ? next() : generalBodyLimit(c, next)));
 
 	app.get('/health', (c) => c.json({ ok: true }));
 
@@ -161,6 +164,7 @@ export function createApp() {
 	projects.route('/', autoCalibrationRoutes);
 	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);
+	projects.route('/', mapRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);

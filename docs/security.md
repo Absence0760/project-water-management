@@ -2380,6 +2380,48 @@ database:
   (`allocations/water-use.db.test.ts`, the WUA's preview as positive
   control).
 
+### Map uploads (152_catchment_map.sql)
+
+The Map tab (issue #288, [maps.md](./maps.md)) takes GeoJSON files and
+placed points. The server never trusts the browser with geometry:
+
+- Every geometry is parsed and checked in `backend/src/geo/geojson.ts`
+  before it is stored, whatever the client sent: WGS84 ranges (a projected
+  file is refused, never reprojected by guess), 2D, the five supported
+  types, closed rings with an area that don't cross themselves, holes
+  inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
+  50 000 positions per feature; the self-crossing sweep stops at 5 million
+  comparisons and refuses the ring, so a crafted file can't cost quadratic
+  time. The import route has its own body limit (7 MB of JSON, `app.ts`
+  exempts that one path from the general 4 MB), and the parse is
+  `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
+  there is no archive to bomb), no external references.
+- Every **area is computed on the server** (`geo/area.ts`); a client's figure
+  is never accepted. An area reaches the model only through
+  `area-from-map`, an editor's explicit action recorded as a model revision.
+- **Properties are allowlisted** (`name`, `description`, `ref`; capped):
+  a GIS attribute table can carry owners' names, ID numbers or phone numbers,
+  and anything else is dropped before storage (POPIA minimisation, as the
+  allocations import refuses such columns). The file's name and SHA-256 are
+  kept for provenance; its text is not.
+- Feature names and descriptions render through Svelte's escaping, and map
+  markers are DOM buttons built with `createElement`, labelled with
+  `setAttribute` and `textContent`-free SVG (no `innerHTML`;
+  `rawHtml.test.ts`).
+- RLS: viewers read, editors write; a farmer or applicant reads only the
+  boundary, gauges, rivers and their own farm's features (no route serves
+  them yet). `quaternary_reference` is public reference data, readable by any
+  signed-in user and written by no app role (the operator loads it as the
+  schema owner).
+- No third-party origin: MapLibre is bundled, its worker is same-origin
+  (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
+  with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and
+  bundle](./maps.md#csp-and-bundle)).
+- Account deletion: `geo_source.imported_by` and `map_feature.created_by`
+  are `SET NULL` (the features are the project's; catalogue guard). A map
+  feature holds no personal information about its creator, so the
+  data-subject export doesn't list them.
+
 ## Personal information (POPIA)
 
 What the app keeps about people, why, for how long, and what happens on a
@@ -2470,6 +2512,7 @@ PDF someone else asked for kept the person as a recipient
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
 | Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
+| Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
@@ -2487,7 +2530,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, their "Was this useful?" answers and comments on alert emails (`alertFeedback`, 147), evidence pack emails sent (`packNotices`, 133), their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, their "Was this useful?" answers and comments on alert emails (`alertFeedback`, 151), evidence pack emails sent (`packNotices`, 133), known engine bug emails sent (`erratumNotices`, 153), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
@@ -3140,6 +3183,17 @@ nothing else.
   (an editor gets the pack's page; the applicant the public verify page and
   their own copy, 131's projection, never the editors' pack page).
   `evidence/notices.db.test.ts` checks each refusal beside its control.
+- **Who is emailed about a known engine bug** (153_erratum_notices,
+  [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Only the worker's own context sweeps (`app_erratum_sweep`, refused under a
+  user or an API key), and the errata it sweeps come from the engine's
+  generated list, never a request. Recipients are the affected project's
+  owners (project owner or team admin) with a confirmed, unsuppressed
+  address; `water_app` holds only `SELECT` on `erratum_notice` and there is
+  no write policy. Each email is built as its recipient under RLS, the role
+  and address checked again at send, and carries the erratum's published
+  text, the project's name and a count of runs: never a figure.
+  `errata/notices.db.test.ts` checks each refusal beside its control.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the
   job queue: it reads nothing but through `app_verify_pack`; in the route

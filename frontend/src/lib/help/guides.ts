@@ -26,6 +26,13 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 /** The workspace tabs the setup path walks, in the order a catchment is set up. */
 export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
 
+/**
+ * Tabs under *Build the model* that the setup path skips: optional, not a
+ * step every catchment needs (the Map, issue #288: a model builds and runs
+ * without one). "Getting around a project" still names them in place.
+ */
+export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
+
 /** Project workspace tabs a guide can point at (`?tab=`). */
 export type TabId = (typeof SETUP_TABS)[number] | 'compare' | 'river' | 'supply';
 
@@ -144,7 +151,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network (whose header opens the **Map**), Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
 					},
 					{
 						type: 'p',
@@ -164,7 +171,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Tables** and **+ Add node**; Crops & demand **Tables** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables** and **+ Add node**; Crops & demand **Tables** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
@@ -751,6 +758,10 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'p',
 						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on ([[evidence-run]]). A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model, made before engine 1.0.0 removed it (badged **Workbook comparison**), can’t be nominated.'
+					},
+					{
+						type: 'p',
+						text: 'A run made by an engine with a known bug (or with parameters from a calibration that had one) is tagged **May be affected** in the run list, and its header shows **May be affected by a known bug**. Each bug changes results only under its own conditions: press the badge to open the run’s **Validation statement**, whose errata table says when, then re-run on the current engine and compare. The project’s owners are emailed once when a new bug is confirmed.'
 					},
 					{
 						type: 'note',

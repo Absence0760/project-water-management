@@ -132,7 +132,12 @@ import type {
 	YieldJob,
 	YieldRequest,
 	YieldResult,
-	AutoCalibration
+	AutoCalibration,
+	MapFeature,
+	MapFeatureInput,
+	MapFeatureKind,
+	MapFeatureList,
+	QuaternaryLookup
 } from './types';
 
 export class ApiError extends Error {
@@ -885,6 +890,31 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)
+		},
+		/**
+		 * The catchment map (docs/api.md § Catchment map, issue #288): features,
+		 * GeoJSON imports (checked and measured on the server), an area accepted
+		 * into a farm, and the quaternary lookup, which only proposes.
+		 */
+		map: {
+			list: (id: string) => request<MapFeatureList>('GET', `${p(id)}/map/features`),
+			create: (id: string, body: MapFeatureInput & { kind: MapFeatureKind }) =>
+				request<{ feature: MapFeature }>('POST', `${p(id)}/map/features`, body).then((r) => r.feature),
+			update: (id: string, fid: string, body: MapFeatureInput) =>
+				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
+			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
+			/** 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already. */
+			import: (id: string, body: { fileName: string; kind: MapFeatureKind; text: string }) =>
+				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
+			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; areaKm2: number; areaSource: 'map'; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/area-from-map`,
+					{ featureId }
+				),
+			quaternary: (id: string, lon: number, lat: number) =>
+				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

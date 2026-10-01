@@ -116,6 +116,13 @@ function packName(s: Record<string, unknown>, capital = false): string {
 	return `${capital ? 'Evidence' : 'evidence'} pack${v ? ` version ${v}` : ''}${code ? ` (${code})` : ''}`;
 }
 
+/** A map feature as the log names it: its kind and name ("the gauge “Weir”"). */
+const MAP_KIND: Record<string, string> = { catchment_boundary: 'the catchment boundary', farm_parcel: 'a farm parcel', dam: 'a dam', gauge: 'a gauge', river: 'a river', other: 'a feature' };
+function mapFeature(s: Record<string, unknown>): string {
+	const kind = MAP_KIND[str(s.kind)] ?? 'a feature';
+	return str(s.name) ? `${kind} “${str(s.name)}”` : kind;
+}
+
 export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 	const s = e.subject ?? {};
 	const who = str(s.displayName) || 'someone';
@@ -274,6 +281,17 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const n = num(s.rows) ?? 0;
 			return `Imported ${plural(n, 'registered volume')} from ${str(s.fileName)}`;
 		}
+		// The Map tab (152, issue #288): what was placed or imported, by kind and name; never the geometry.
+		case 'map.imported': {
+			const n = num(s.features) ?? 0;
+			return `Imported ${plural(n, 'map feature')} from ${str(s.fileName)}`;
+		}
+		case 'map.feature_created':
+			return `Placed ${mapFeature(s)} on the map`;
+		case 'map.feature_changed':
+			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
+		case 'map.feature_deleted':
+			return `Deleted ${mapFeature(s)} from the map`;
 		case 'allocation.import_deleted':
 			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'scenario.submitted':

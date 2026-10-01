@@ -1,4 +1,5 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import { realpathSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -8,8 +9,13 @@ const WORKERS = [
 	// Calibration: the fit, the uncertainty ensemble, the sensitivity runs (lib/calibration/runner.ts).
 	{ file: fileURLToPath(new URL('./src/lib/calibration/autocal.worker.ts', import.meta.url)), id: 'virtual:autocal-worker-url', name: 'autocal.worker' },
 	// Preview: the engine on inputs the page holds, never stored (WP-1.17; the Yield panel's preview, lib/preview/runner.ts).
-	{ file: fileURLToPath(new URL('./src/lib/preview/engine.worker.ts', import.meta.url)), id: 'virtual:preview-worker-url', name: 'preview.worker' }
-] as const;
+	{ file: fileURLToPath(new URL('./src/lib/preview/engine.worker.ts', import.meta.url)), id: 'virtual:preview-worker-url', name: 'preview.worker' },
+	// MapLibre's own worker (the catchment map, issue #288): its ES module build imports the code it shares with
+	// the main thread (maplibre-gl-shared.mjs), so as an entry of the page build that file is one shared chunk,
+	// not a second copy (~150 KB gzip). lib/components/map/CatchmentMap.svelte hands this URL to setWorkerUrl;
+	// same-origin, so CSP worker-src 'self' holds (no blob:).
+	{ file: realpathSync(fileURLToPath(new URL('./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url))), id: 'virtual:maplibre-worker-url', name: 'maplibre.worker', vendor: true }
+] as const satisfies readonly { file: string; id: string; name: string; vendor?: boolean }[];
 
 /**
  * The engine's Web Workers as chunks of the page build (issue #9).
@@ -45,6 +51,8 @@ export function workerChunks(): Plugin {
 			if (!w) return undefined;
 			if (options?.ssr) return 'export default "";';
 			// What Vite itself serves for `new Worker(new URL('./<name>.ts', import.meta.url), { type: 'module' })`.
+			// A vendor worker is plain ES modules already: in dev Vite serves the file as it is, outside the root through /@fs/.
+			if (serve && 'vendor' in w) return `export default ${JSON.stringify('/@fs' + w.file.split(sep).join('/'))};`;
 			if (serve) return `export default ${JSON.stringify('/' + relative(root, w.file).split(sep).join('/') + '?worker_file&type=module')};`;
 			const ref = this.emitFile({ type: 'chunk', id: w.file });
 			return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
@@ -176,15 +184,18 @@ export function chunkModuleMap(): Plugin {
 type BundleChunk = { type: 'chunk'; moduleIds: string[]; viteMetadata?: { importedCss: Set<string> } } | { type: 'asset' };
 
 /** chunkModuleMap's content: every chunk's modules under `root` (no virtual or outside ids), and its own CSS files. */
-export function chunkModules(bundle: Record<string, BundleChunk>, root: string): Record<string, { modules: string[]; css: string[] }> {
-	const out: Record<string, { modules: string[]; css: string[] }> = {};
+export function chunkModules(bundle: Record<string, BundleChunk>, root: string): Record<string, { modules: string[]; css: string[]; packages: string[] }> {
+	const out: Record<string, { modules: string[]; css: string[]; packages: string[] }> = {};
 	for (const [file, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
-		const modules = chunk.moduleIds
-			.filter((id) => !id.startsWith('\0'))
-			.map((id) => relative(root, id.replace(/\?.*$/, '')).split(sep).join('/'))
-			.filter((p) => !p.startsWith('..'));
-		out[file] = { modules: [...new Set(modules)], css: [...(chunk.viteMetadata?.importedCss ?? [])] };
+		const ids = chunk.moduleIds.filter((id) => !id.startsWith('\0')).map((id) => id.replace(/\?.*$/, '').split(sep).join('/'));
+		const modules = ids.map((id) => relative(root, id).split(sep).join('/')).filter((p) => !p.startsWith('..'));
+		// The npm packages the chunk holds code of (the bundle guard's map ceiling finds MapLibre's chunks by them).
+		const packages = ids.flatMap((id) => {
+			const m = /\/node_modules\/((?:@[^/]+\/)?[^/]+)\/(?!.*\/node_modules\/)/.exec(id);
+			return m ? [m[1]!] : [];
+		});
+		out[file] = { modules: [...new Set(modules)], css: [...(chunk.viteMetadata?.importedCss ?? [])], packages: [...new Set(packages)].sort() };
 	}
 	return out;
 }

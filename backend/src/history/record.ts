@@ -216,6 +216,11 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
+	| 'map.imported'
+	| 'map.feature_created'
+	| 'map.feature_changed'
+	| 'map.feature_deleted'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

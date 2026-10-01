@@ -1275,6 +1275,35 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
   (`USER_FK_COVERAGE`: the `packNotices` section).
 
+### Engine errata notices (153_erratum_notices.sql)
+
+The known-defect procedure's emails ([legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+issue #103). The errata themselves live in code (`ENGINE_ERRATA`, from
+[engine-errata.md](./engine-errata.md)); the database records only which
+were swept and who was mailed.
+
+- **`erratum_sweep`**: one row per erratum id with the range it was swept
+  with (`keyed_on`, `first_affected`, `fixed_in`). Public facts; a signed-in
+  person reads it (`erratum_sweep_read`; never an API key, which sees only its
+  own series), only `app_erratum_sweep` writes it.
+- **`erratum_notice`**: one email per erratum, project and recipient, ever
+  (the primary key), with `run_count` (the project's runs in range when
+  swept) and pack_notice's life (pending → sending → sent | skipped |
+  failed). Personal: cascades with the account, in the data export
+  (`erratumNotices`), purged **30 days** after it is settled. RLS: SELECT
+  your own rows (`erratum_notice_own`); `water_app` holds `SELECT` only.
+- **`app_erratum_sweep(errata jsonb)`**: the worker's context only. For each
+  erratum not yet swept with its range, finds the projects with a run whose
+  engine (`model_run.engine_version`, or for a `fit` erratum
+  `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
+  in), compared numerically (`engine_version_key`), and queues each owner
+  (project owner or team admin) with a confirmed, unsuppressed address.
+- **`app_erratum_notice_claim`**, **`app_erratum_notice_finish`**,
+  **`app_purge_erratum_notices(age ≥ 30 days)`**: as pack notices'.
+- Guards: `errata/notices.db.test.ts`, the catalogue (`READ_ONLY`,
+  `APP_USER_ON_DELETE`: cascade), `auth/personal-data.security.db.test.ts`
+  (`USER_FK_COVERAGE`: the `erratumNotices` section).
+
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
@@ -1346,6 +1375,53 @@ water-use volumes per farm or water user.
   controls: an editor reads names, the owner reads the rows a stranger can't,
   a farmer reads their own farm's), the catalogue tests and the route
   inventories.
+
+
+### Catchment map (152_catchment_map.sql)
+
+Issue #288, roadmap WP-3.12, [maps.md](./maps.md). GeoJSON in `jsonb`, no
+PostGIS (areas and point-in-polygon are computed in `backend/src/geo`; room
+is left for PostGIS when Step 4 needs cross-catchment spatial queries).
+
+- **`geo_source`**: an imported GeoJSON file. `id`, `project_id` (cascade),
+  `file_name` (1–255), `sha256`, `crs` (always `EPSG:4326`: the server takes
+  WGS84 only), `imported_by` (→ `app_user`, `SET NULL`), `imported_at`.
+  Unique `(project_id, sha256)`. Deleting it deletes its features; the API
+  deletes it with its last feature.
+- **`map_feature`**: `id`, `project_id`, `kind` (`catchment_boundary` |
+  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100),
+  `node_id` (→ `node`, `SET NULL`; same project by `assert_same_project`; a
+  parcel or dam stands for a farm or water user, a gauge for a gauge, a
+  boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
+  geometry; CHECKs hold the type to the kind), `properties` (allowlisted
+  strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
+  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
+  `created_at`, `updated_at`. At most one `catchment_boundary` per project
+  (partial unique index). It is Step 2's `catchment_geometry` source for the
+  feeds' polygon extraction (wiring the fetcher to it is a follow-up).
+- **`node.area_source`** (`typed` | `map`, default `typed`) and
+  **`node.area_feature_id`** (composite key `(area_feature_id, project_id)`
+  → `map_feature (id, project_id)`, `ON DELETE SET NULL (area_feature_id)`):
+  where a node's `area_km2` came from. `POST …/nodes/:nodeId/area-from-map`
+  sets `map` and the feature; a model save that changes the area (or the
+  node's kind) sets `typed` and clears the feature (`model/store.ts`).
+  Deleting the feature keeps the area. Not part of the engine's model.
+- **`quaternary_reference`**: the dataset the quaternary lookup proposes
+  from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
+  label; `synthetic` for the committed fixture, region Z), `geometry`
+  (Polygon or MultiPolygon), its bounding box (`min_lon`, `min_lat`,
+  `max_lon`, `max_lat`, indexed for the lookup's first pass), `area_km2`,
+  `map_mm`, `mar_mm3`, `monthly_mm3` (12, Oct … Sep), `period_start`,
+  `period_end`, `source` (1–500, shown with every proposed value),
+  `loaded_at`. Global (no project): loaded by the operator as the schema
+  owner (`pnpm import:quaternaries`), read-only to `water_app`.
+- **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
+  farmer or contributor reads the boundary, gauges and rivers and the
+  features tied to their own linked nodes (`app_farm_nodes`), never another
+  farm's; no route serves them yet. `quaternary_reference` is readable by
+  anyone signed in (public reference data) and written by no app role.
+  Covering indexes on every foreign key.
 
 ### Import reports (017_project_import.sql)
 
@@ -2985,7 +3061,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
-| `alert_feedback` | "Was this useful?" on an alert email (147, issue #74): one row per email a person got, made when the worker builds it (`app_alert_answer_slot`, as the recipient, only for a delivery of theirs being sent). `project_id`, `user_id` (`ON DELETE CASCADE`), `event_id` (the alert, a digest's first line; `SET NULL` when the alert is purged), `kind` (the alert's, or `digest`), `nonce` (32 random bytes), `token_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, `"wm-alert-feedback/v1/"` + nonce); unique), `sent_at`, then once answered `useful`, `comment` (1–500 characters, optional) and `answered_at`. Unique `(user_id, event_id)`: a retried mail reuses the row and its link. **Retention**: unanswered 30 days after `sent_at` (the link stops working then), an answer 365 days after `answered_at` (`app_purge_alert_answers`, from the tick). No open or click is ever recorded: a row says only that the email offered the question, which `alert_delivery` already holds |
+| `alert_feedback` | "Was this useful?" on an alert email (151, issue #74): one row per email a person got, made when the worker builds it (`app_alert_answer_slot`, as the recipient, only for a delivery of theirs being sent). `project_id`, `user_id` (`ON DELETE CASCADE`), `event_id` (the alert, a digest's first line; `SET NULL` when the alert is purged), `kind` (the alert's, or `digest`), `nonce` (32 random bytes), `token_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, `"wm-alert-feedback/v1/"` + nonce); unique), `sent_at`, then once answered `useful`, `comment` (1–500 characters, optional) and `answered_at`. Unique `(user_id, event_id)`: a retried mail reuses the row and its link. **Retention**: unanswered 30 days after `sent_at` (the link stops working then), an answer 365 days after `answered_at` (`app_purge_alert_answers`, from the tick). No open or click is ever recorded: a row says only that the email offered the question, which `alert_delivery` already holds |
 
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
