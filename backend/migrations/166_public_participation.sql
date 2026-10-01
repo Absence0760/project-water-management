@@ -57,6 +57,9 @@
 --
 --  6. app_subject_participation(): a person's own public comments with how
 --     they were posted and whether they consented, for the data export.
+--
+--  7. app_link_comment_author(note): a link comment's author name for the
+--     project's members (the link shows it; app_user_visible wouldn't).
 
 -- ---------------------------------------------------------------------------
 -- 1. Where objections go
@@ -189,6 +192,22 @@ COMMENT ON FUNCTION app_share_comment(bytea, text, boolean) IS
 	'A public-participation comment through one live share link, by the signed-in person, with no project role (166): the only writer of note.share_link_id. 10 an hour per account.';
 REVOKE ALL ON FUNCTION app_share_comment(bytea, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_share_comment(bytea, text, boolean) TO water_app;
+
+-- A link participant isn't a member, so app_user_visible (073) hides their
+-- name from the project's members, who would read "a former member" on a
+-- comment the link itself shows with the name. The name of a link comment's
+-- author, for a member of its project; NULL for anything else.
+CREATE FUNCTION app_link_comment_author(p_note uuid) RETURNS text
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	SELECT u.display_name FROM note n JOIN app_user u ON u.id = n.author_id
+	WHERE n.id = p_note AND n.share_link_id IS NOT NULL AND n.visibility = 'public_participation'
+	  AND app_project_role(n.project_id) IS NOT NULL
+	$$;
+COMMENT ON FUNCTION app_link_comment_author(uuid) IS
+	'The display name of a comment posted through a share link (166), for a member of its project: the link shows it publicly, but its author is no member, so app_user_visible hides it.';
+REVOKE ALL ON FUNCTION app_link_comment_author(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_link_comment_author(uuid) TO water_app;
 
 -- ---------------------------------------------------------------------------
 -- 4. The reg 19 material for one application

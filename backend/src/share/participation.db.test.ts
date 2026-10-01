@@ -173,7 +173,14 @@ describe('link participants', () => {
 		expect((await ngo.call('GET', `${P()}/notes?scenarioId=${app1}`)).status).toBe(404);
 		expect((await ngo.call('GET', `${P()}/scenarios/${app1}`)).status).toBe(404);
 		expect(await withUser(ngo.id, async (db) => (await db.query('SELECT id FROM note WHERE project_id = $1', [projectId])).rows)).toEqual([]);
-		expect((await assessor.call('GET', `${P()}/notes?scenarioId=${app1}`)).status).toBe(200);
+		// The members read the link comment with its author's name, as the link shows it (control for "a former member").
+		const seen = (await assessor.call('GET', `${P()}/notes?scenarioId=${app1}`)).body.notes as { body: string; author: string | null }[];
+		expect(seen.find((n) => n.body === 'The river needs this water.')?.author).toBe('Ppngo');
+		const [n] = await asOwner(`SELECT id FROM note WHERE author_id = $1 AND body = 'The river needs this water.'`, [ngo.id]);
+		const nameAs = async (u: User) => (await withUser(u.id, (db) => db.query<{ a: string | null }>('SELECT app_link_comment_author($1) AS a', [n!.id]))).rows[0]!.a;
+		// Never to someone outside the project (control: a member gets it).
+		expect(await nameAs(busy)).toBeNull();
+		expect(await nameAs(viewer)).toBe('Ppngo');
 	});
 
 	it('water_app never names a share link on a note; only app_share_comment does', async () => {

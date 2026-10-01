@@ -158,7 +158,9 @@ export function toNote(r: NoteRow, userId: string, role: Role): Note {
 
 // The API lists no deleted note, not even to the editors RLS lets see them.
 const SELECT_NOTES = `
-	SELECT n.id, n.body, n.author_id, u.display_name AS author_name, n.created_at, n.edited_at,
+	SELECT n.id, n.body, n.author_id,
+		-- A link participant is no member (166): their name, which the link shows, comes from app_link_comment_author.
+		COALESCE(u.display_name, CASE WHEN n.share_link_id IS NOT NULL THEN app_link_comment_author(n.id) END) AS author_name, n.created_at, n.edited_at,
 		n.node_id, nd.name AS node_name, n.run_id, n.setting_key, n.scenario_id, n.pack_id, n.visibility
 	FROM note n
 	LEFT JOIN app_user u ON u.id = n.author_id
