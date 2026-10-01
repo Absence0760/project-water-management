@@ -181,6 +181,46 @@ feature is deleted (the area stays; the link goes). The area is the farm's
 sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
 
+## Checks
+
+A **Checks** panel on the Map tab (`MapChecks.svelte`, issue #326 A4) lists
+what looks inconsistent between the map and the model. They are **warnings
+only**: nothing stops a save or a run. Each warning names its features as
+buttons that select them on the map and in the list; "No problems found"
+when there are none. The checks are pure and in the browser
+(`lib/components/map/mapChecks.ts`, no dependency; `mapChecks.test.ts`), the
+thresholds named constants there:
+
+- **Units with no parcel**: a hydrological unit (farm node) that no farm
+  parcel is linked to.
+- **Outside the boundary** (only with a boundary): a parcel, dam, point or
+  line with any vertex outside the catchment boundary (a hole in it counts as
+  outside). A vertex within `OUTSIDE_TOLERANCE_M` (10 m) of the boundary's
+  line counts as on it. The warning says how many of the feature's points are
+  out.
+- **Overlapping parcels**: two farm parcels whose interiors overlap, found
+  without a geometry library: a vertex of one inside the other, two edges
+  crossing, or a point just inside one edge's middle lying inside the other
+  (which catches a parcel imported twice). Within `OVERLAP_TOLERANCE_M`
+  (5 m) nothing counts, so shared edges, touching corners and rounding
+  slivers don't.
+- **Units against the boundary**: the units' areas (as the model has them)
+  added up, against the boundary's server-computed area. Flagged when they
+  differ by more than `UNITS_VS_BOUNDARY_TOLERANCE` (10 %), giving both:
+  "The units add up to 184.0 km², 12 % less than the boundary's 210.2 km²"
+  (the seeded Sandspruit example, whose boundary has a margin round its
+  farms).
+- **Typed area against the parcel**: a unit whose area was typed (not taken
+  from the map) and differs from its linked parcel's area (the parcels'
+  sum, if several) by more than `TYPED_VS_PARCEL_TOLERANCE` (10 %).
+- **Gauges off the rivers** (only with river lines): a gauge further than
+  `GAUGE_RIVER_DISTANCE_M` (100 m) from every river line, measured to the
+  nearest point of any segment (great-circle distance), with how far it is.
+
+Geometry is in metres on a local equirectangular projection around the
+features (well under 1 % off over a catchment); people read haversine
+distances and the server's areas.
+
 ## Quaternary lookup
 
 Settings → WR2012 check → **Propose from the map** looks up the quaternary
