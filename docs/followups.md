@@ -4662,19 +4662,12 @@ own. Loop in the CISO or security analyst before acting on any of them.
       of #112 waits on the information officer (#90): confirming the rule,
       and the items below (deleted notes' bodies, backups after an erasure,
       D12, the lawful bases). Trigger: the #90 answers.
-- [ ] **Two owners leaving a project (or admins a team) at the same moment
-      can leave it with none.** `project_member_keep_owner` and
-      `team_member_keep_admin` (001, 002) are deferred and take no lock, and
-      the leave and remove routes' `assertNotLastOwner` / `assertNotLastAdmin`
-      read without one: each transaction still sees the other's uncommitted
-      delete as an owner, so both pass. `DELETE /auth/me` locks the rows
-      first (`auth/deleteAccount.ts` `lockOwnRoles`, issue #112), and any
-      change it races now waits for it, but two plain leaves (or two
-      operator deletes) don't. Durable fix: the same `FOR UPDATE` on the
-      project's owner rows (the team's admin rows) before the check in the
-      member routes, or a lock in the triggers themselves, with a two-at-once
-      test like `delete-me.db.test.ts`'s. Trigger: before public
-      registration opens, or the next change to the member routes.
+- [x] **Two owners leaving a project (or admins a team) at the same moment
+      can leave it with none** (2026-10-01, PR #320). The member routes lock
+      the owner (admin) rows before `assertNotLastOwner` /
+      `assertNotLastAdmin`, and migration 149 has the keep-owner and
+      keep-admin triggers take a per-project (per-team) lock before counting;
+      `last-owner-race.db.test.ts` forces both orders.
 - [ ] **A DWS or CMA responsible party may have to keep the maker's name**
       (National Archives Act, operator agreement notes for counsel, clause
       8.4). Durable fix: a per-team setting that keeps a snapshot of the name
