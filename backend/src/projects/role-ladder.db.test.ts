@@ -110,7 +110,6 @@ const OWNER_ONLY = new Map<string, string>([
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in'],
-	['POST /projects/:id/members/:userId/registration-checks', 'the host’s check of a member’s registration against the public register, which verify then shows (167); an editor only once an owner marks them as acting for the responsible authority (163)'],
 	['PUT /projects/:id/registration-check-required', 'whether issuing a pack waits for the signers’ registration checks (167)']
 ]);
 

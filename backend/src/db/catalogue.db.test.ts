@@ -35,8 +35,8 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A membership's project, user and join date are fixed; an owner changes its role, party and authority flag (163_licensing_authority.sql).
-	project_member: ['acts_for_authority', 'party', 'role'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
+	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
