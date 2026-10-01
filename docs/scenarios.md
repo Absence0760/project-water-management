@@ -837,12 +837,20 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   the dry run, drafts and other bases refused, RLS with a positive control,
   copied ops, write-once, a deleted team scenario).
 
+### The evidence report reads it
+
+Page 1's row over the other applications (C26, report format
+`evidence-11`) reads a completed assessment of exactly the report's
+application and every other submitted or approved one on its baseline, with
+their current ops: the combined change and the interaction at the outlet.
+Without one the report checks the combination itself (`checkCombination`,
+no model run) and names any conflict, or says the applications haven't been
+assessed together ([evidence-pack.md § The other applications
+together](./evidence-pack.md#the-other-applications-together)). Tests:
+`evidence/report-combined.db.test.ts`.
+
 ### Not yet
 
-- The **evidence report's cumulative row** (C26, `evidence/report.ts`
-  `cumulativeOf`) still sums other applications' separate runs and says so;
-  reading a combined run instead (its trigger was this work package) is
-  tracked in [followups.md](./followups.md).
 - **Yield and reliability per dam** together (WP-3.6's yield on the combined
   input), and a **full-allocation background** (WP-3.10) as the baseline
   column, are not in the report yet ([followups.md](./followups.md)).

@@ -181,13 +181,13 @@ Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
 sign-in, `amr` in the session, and the requirement for project owners, team
 admins and assessors at the route (security.md § Two-step sign-in). Open:
 
-- [ ] **No app-wide prompt yet.** An owner, team admin or assessor without an
-      authenticator learns of the requirement on the Account page (its
-      warning) or from the `403 mfa_required` of the action they tried; the
-      workspace shows that message, with no link. A banner in the app shell
-      (from `GET /auth/mfa` `required && !enrolled`) and, for `mfa_step_up`,
-      a "sign in again" button are the durable fix. Trigger: before the
-      first production deploy with client data (#62).
+- [x] **No app-wide prompt yet** (done 2026-10-01). A banner on the
+      workspace (`layout/MfaBanner.svelte`, from `GET /auth/mfa`
+      `required && !enrolled`, and from any `403 mfa_required`) links to the
+      Account page's panel; a password-only session of a role that needs it,
+      or any `403 mfa_step_up`, gets **Sign in again** (security.md §
+      Two-step sign-in, § The prompt). `required` now reads false while
+      `MFA_REQUIRED=false`.
 - [ ] **The requirement is checked at the route, not in RLS.** Every owner
       route goes through `requireRole(…, 'owner')`, so a new one is covered
       without a decision, but a route that checks the owner role some other
@@ -2513,7 +2513,7 @@ role and not before it.
       `auth/account-tokens.security.db.test.ts` (unknown, unconfirmed and
       verified addresses get the same answer and row, with a positive
       control), `invites/invites.db.test.ts`, `sharing.spec.ts`.
-- [ ] **An invite outlives its sender's right to send it** (review of
+- [x] **An invite outlives its sender's right to send it** (review of
       issue #136, 2026-09-29). `invite` RLS checks owner/admin only when the
       invite is written, so if the owner who sent it is removed or demoted
       before it is accepted, the invitee still joins with the invited role
@@ -2525,6 +2525,12 @@ role and not before it.
       they lose that role (a trigger on `project_member`/`team_member`),
       with a DB test for each path. **Trigger:** before a catchment has more
       than one owner outside the operator's own team.
+      **Done** (155_invite_sender_role.sql): every function that lists,
+      describes or accepts an invite checks its sender at that moment
+      (`app_invite_sender_holds`), chosen over a role-change trigger because
+      it fails closed on every way a role is lost; owners see a lapsed invite
+      flagged (`senderLapsed`) to re-send or revoke. Tests:
+      `invites/invites.db.test.ts`, `farms/invites.db.test.ts`.
 
 ## Features left half-way
 
@@ -3967,17 +3973,29 @@ the assessors' **Assess together** view
 ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
 Left:
 
-- [ ] **The evidence report's cumulative row reads a combined run.** C26
-      (`packages/engine/src/evidence/report.ts` `cumulativeOf`, § 4 and
-      page 1's *Other applications on this baseline, summed*) still adds up
-      other applications' separate runs and says so. The durable fix: the
-      report's backend (`backend/src/evidence/report.ts`) combines this
-      application with every other submitted or approved one on the baseline
-      (`combineScenarios`), runs it, and the row shows the combined change
-      and the interaction; a conflict makes the row *Not assessed* with the
-      conflicts named, never a silent merge. It changes the report's
-      content, so `REPORT_VERSION` and the evidence pack's manifest move with
-      it. Trigger: now (WP-3.11 landed); needs the report version decision.
+- [x] **The evidence report's cumulative row reads a combined run.** C26.
+      Built (report format `evidence-11`): page 1's row, now *This and the
+      other applications on this baseline, together*, and § 4's combined
+      table read a completed assessment of exactly this application and
+      every other submitted or approved one on the baseline with their
+      current ops (the combined change and the interaction at the outlet);
+      without one the backend checks the combination itself
+      (`checkCombination`, no model run), so a conflict makes the row *Not
+      assessed* with the conflicts named, never a silent merge. Chosen over
+      running the combination in the report request, which is up to 8 + 2
+      model runs per GET, pack draft and issue check. A pack drafted before
+      it keeps its frozen sum ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
+- [ ] **The reproduction bundle carries the combined row's runs.** An
+      `evidence-11` pack's combined row cites an assessment, whose runs (the
+      baseline, each alone, all together, on the assessment's engine) the
+      bundle doesn't hold, so `reproduce:pack` re-runs the baseline and the
+      application but not that row. Durable fix: the bundle adds the
+      assessment's members (ops and hashes, as `scenario.json` does for the
+      application) and its stored report, and `reproduce:pack` re-runs the
+      combination with `combineScenarios` and compares the outlet rows.
+      Trigger: the first issued pack whose combined row is assessed, or an
+      assessor asking to reproduce it.
 - [ ] **Yield and reliability per dam, together.** The report covers the EWR
       sites, the Reserve, the outlet and existing users' supply; a firm
       yield of each dam on the combined input (WP-3.6) is not in it. Durable
@@ -4610,19 +4628,37 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       compares their results digests. The bundle carries each run's own
       stored inputs rather than the project's `export.json`: those are what
       the runs used, where the export is the project as it is now.
-- [ ] **Re-run both runs on the server after issue.** Issue checks the
-      bundle's files, hashes and manifest but doesn't re-run the runs (it
-      takes as long as the runs, too long for a request); today the
-      assessor does that with `reproduce:pack`. Durable fix: a
-      `pack_reproduce` job queued at issue that runs `checkPackBundle` with
-      the re-run on the stored bundle and records the outcome and engine on
-      the pack (shown on the pack page, not on verify, since it is the
-      app's own claim). Trigger: with the pack view, or the first pack whose
-      runs don't reproduce. The same job is where the bundle's build would
-      move if a catchment's issue ever nears the API's 30 s (it is built in
-      the issue's transaction today, estimated 5–10 s at 300 outputs × 30
-      years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
-      trigger for that part, an issue slower than 15 s in the API's logs.
+- [x] **Re-run both runs on the server after issue.** Issue checks the
+      bundle's files, hashes and manifest but didn't re-run the runs (it
+      takes as long as the runs, too long for a request). Built
+      (154_pack_reproduce, 2026-10-01): the issue's transaction queues a
+      `pack_reproduce` job that reads the stored bundle back, checks it is
+      the recorded bytes, runs `checkPackBundle` with the re-run and the
+      pack's manifest hash, and records the outcome (`reproduced`,
+      `not_reproduced`, `other_engine`, `no_bundle`), the engine and every
+      check in `pack_reproduction`, through `app_record_pack_reproduction`
+      from that job only. The pack page's bar shows it; verify doesn't
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [ ] **Re-run a pack again on the server.** The `pack_reproduce` job runs
+      once, at issue (3 attempts). When it gives up (the packs bucket
+      unreachable for all three) the pack page says the re-run couldn't be
+      done, and nothing asks again; and after an engine upgrade nothing
+      re-runs older packs on the new engine (one outcome per pack and
+      engine is recorded, so the table already holds a second). Durable
+      fix: an editor's `POST …/packs/:packId/reproduce`, as
+      `POST …/packs/:packId/pdf` asks again for a PDF (queue
+      `queuePackReproduce` while no outcome is recorded for the server's
+      engine; route inventory, role ladder, mass-assignment and write-route
+      entries), with a "Try again" on the pack page. Trigger: the first
+      `pack_reproduce` job that goes dead in production, or an engine
+      version bump after the first pack is issued.
+- [ ] **Move the bundle's build to a job if issue nears the timeout.** The
+      bundle is built in the issue's transaction today, estimated 5–10 s at
+      300 outputs × 30 years a run
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+      If a catchment's issue ever nears the API's 30 s, the build moves to
+      a job (the `pack_reproduce` job's place, before its check). Trigger:
+      an issue slower than 15 s in the API's logs.
 - [x] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
       same engine version, isn't shown. Built: `app_verify_pack` (132) also
@@ -4923,14 +4959,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       neither). Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before farmers are invited.
-- [ ] **A stale EWR-forecast alert says nothing.** A firing
+- [x] **A stale EWR-forecast alert says nothing.** A firing
       `ewr_forecast_fail` event is left as it is while its forecast is behind
       the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast
       neither opens nor clears), but when no new forecast is made (the
-      forecast feed failing) the workspace's Active alerts shows it as
-      current. Show "forecast out of date since …" on the event (the
-      `feed_failing` alert already fires for the feed). Trigger: before a
-      forecast feed runs on production.
+      forecast feed failing) the workspace's Active alerts showed it as
+      current. Done: the API's `forecastOutOfDate` (derived at read time,
+      `newestForecast`; api.md § Alerts) puts "Forecast out of date: made …
+      on the rain recorded to …, but rain is now recorded to …" under the
+      event on Active alerts (ui.md § Alerts), and a mail of it sent
+      meanwhile says the same (`mail.alert.ewr.outOfDate`). The farm page
+      and the farmer alert pages show no EWR event (staff only).
 - [ ] **A log of restriction decisions** (WUA persona): which restriction
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.

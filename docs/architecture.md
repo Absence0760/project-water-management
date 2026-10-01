@@ -927,7 +927,8 @@ flowchart LR
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
    is held, and while that run is behind the recorded rain: its
-   `lastObserved` before the rain's last recorded day), the data feeds (staleness per feed, each at its own level) and
+   `lastObserved` before the rain's last recorded day; Active alerts and
+   the mails then say the firing event's forecast is out of date), the data feeds (staleness per feed, each at its own level) and
    the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly
@@ -1440,6 +1441,14 @@ What differs from a report:
   (`evidence/packPdf.ts`); an editor asks again after a failure with
   `POST …/packs/:packId/pdf`. The download is a report's: a 60-second
   signed URL on `/packs/*` (`GET …/packs/:packId/pdf`).
+
+The issue also queues a `pack_reproduce` job (`jobs/handlers/pack-reproduce.ts`,
+154_pack_reproduce; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+the worker reads the pack's reproduction bundle back from the packs bucket
+(the same `s3:GetObject` on `packs/*` it HEADs PDFs with), checks it is the
+recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
+records the outcome through `app_record_pack_reproduction`. The pack's page
+shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 ## Key choices
 

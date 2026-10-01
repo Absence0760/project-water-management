@@ -261,6 +261,15 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			sent: sentFor('packId', id)
 		})
 	},
+	pack_reproduce: {
+		// B's issued pack (planted without a bundle), and B's re-run of it: it records no_bundle (154_pack_reproduce).
+		async queue(owner, b) {
+			const packId = await issuedPack(b.projectId, b.runId, owner.id);
+			const { job } = await enqueue(owner, b.projectId, 'pack_reproduce', { packId });
+			return { jobId: job.id, ref: packId };
+		},
+		effect: async (id) => (await asOwner('SELECT outcome FROM pack_reproduction WHERE pack_id = $1', [id])).map((r) => r.outcome)
+	},
 	sweep: {
 		async queue(owner, b) {
 			const res = await owner.call('POST', `/projects/${b.projectId}/sweeps`, { name: 's', baseRunId: b.runId, members: [{ name: 'm', ops: [{ op: 'demand.scale', factor: 0.9 }] }] });

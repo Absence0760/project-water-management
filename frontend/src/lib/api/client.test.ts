@@ -49,6 +49,30 @@ describe('createApi', () => {
 		expect([init.method, url, JSON.parse(init.body as string)]).toEqual([method, `http://x${path}`, body]);
 	});
 
+	// The app-wide two-step sign-in prompt hears of a 403 mfa_* from any request this way (lib/auth/mfaPrompt.svelte.ts).
+	it('onError hears every error answer before the caller does, and stops after unsubscribing', async () => {
+		const api = createApi('http://x', mockFetch(403, { error: 'sign in again', code: 'mfa_step_up' }));
+		const heard: (string | null)[] = [];
+		const stop = api.onError((e) => heard.push(e.code));
+		const thrower = api.onError(() => {
+			throw new Error('a listener bug');
+		});
+		await expect(api.request('POST', '/x')).rejects.toMatchObject({ status: 403, code: 'mfa_step_up', message: 'sign in again' });
+		expect(heard).toEqual(['mfa_step_up']);
+		stop();
+		thrower();
+		await expect(api.request('POST', '/x')).rejects.toBeInstanceOf(ApiError);
+		expect(heard).toEqual(['mfa_step_up']);
+	});
+
+	it('onError is not told of a success', async () => {
+		const api = createApi('http://x', mockFetch(200, { ok: true }));
+		const fn = vi.fn();
+		api.onError(fn);
+		await api.request('GET', '/x');
+		expect(fn).not.toHaveBeenCalled();
+	});
+
 	it('posts to /auth/logout-everywhere and returns undefined (204)', async () => {
 		const f = mockFetch(204);
 		const api = createApi('http://x', f);

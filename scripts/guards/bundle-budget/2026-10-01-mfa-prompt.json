@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Two-step sign-in prompt (issue #282 follow-up): the workspace banner (layout/MfaBanner.svelte, a 1.2 KB gz lazy chunk loaded only while it has something to say), the prompt state (lib/auth/mfaPrompt.svelte.ts, 0.5 KB gz, shared by the root layout and the Account page) and the API client's onError hook. Measured: total 1438 KB against a 1435 KB ceiling before this entry; 0 KB headroom left."
+}

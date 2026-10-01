@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-1 strings: 0 on the site, 1 in emails, 0 in the glossary.
+2 strings: 0 on the site, 2 in emails, 0 in the glossary.
 
 ## Emails
 
@@ -28,4 +28,5 @@ Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm da
 
 | Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
+| `mail.alert.ewr.outOfDate` | This forecast is out of date: it used the rain recorded to {observedTo}, rain has since been recorded to {rainUntil}, and no newer forecast has been made yet. Check the forecast data feed. | Keep: {observedTo}, {rainUntil} |  |
 | `mail.alert.stale.seriesWhat` | API data behind |  |  |

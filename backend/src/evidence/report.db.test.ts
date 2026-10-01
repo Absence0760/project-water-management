@@ -8,6 +8,7 @@
 // ensemble and recomputes the paired Reserve share, lists every start, and
 // refuses what isn't evidence.
 import {
+	COMBINED_CONFLICT,
 	declaredRuleRequest,
 	licenceImpactSection,
 	runEnsemble,
@@ -228,7 +229,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-11');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -326,8 +327,12 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect(second.ewrDays).toBe((await days(teamSubmittedNewest)) - base);
 		expect(c.total.ewrDays).toBe(c.applications.reduce((t, x) => t + x.ewrDays!, 0));
 		expect(c.withThis?.ewrDays).toBe(c.total.ewrDays! + (await days(appRun)) - base);
+		// Page 1's row reads one combined run, not this sum (evidence-11): these all set Upper's dam, so they conflict and it isn't assessed, naming each conflict.
 		const r = (await report(owner, appRun)).body.report as EvidenceReport;
-		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: null, change: { run: c.total.ewrDays, band: null } });
+		expect(r.cumulative.combined!.applications.map((x) => x.scenarioName)).toEqual(['Upper dam', 'Applicant dam', 'Approved weir', 'Second dam']);
+		expect(r.cumulative.combined!.conflicts.length).toBeGreaterThan(0);
+		expect(r.cumulative.combined!.conflicts[0]).toMatch(/both change node "Upper": damCapacityM3$/);
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT(r.cumulative.combined!.conflicts), change: null });
 	});
 
 	it('hides from a viewer the submitted application only editors may read, and lists no draft (RLS)', async () => {
@@ -424,7 +429,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-11');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([
