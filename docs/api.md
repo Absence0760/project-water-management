@@ -2655,7 +2655,9 @@ quaternary lookup (issue #288, roadmap WP-3.12, `152_catchment_map.sql`,
 [maps.md](./maps.md)). Geometry is GeoJSON in WGS84 longitude/latitude, 2D;
 every geometry is checked and every area computed on the server
 (`backend/src/geo`). Nothing here changes the model except `area-from-map`,
-and the quaternary lookup only proposes.
+`dam-capacity-from-register` and `dam-area-from-map` (one value each, an
+editor's explicit action), and the quaternary lookup and the dam proposals
+only propose.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -2668,6 +2670,9 @@ and the quaternary lookup only proposes.
 | POST | `/projects/:id/map/import` | `{ fileName, text }` and either `features: { index, kind, name?, nodeId? }[]` (every feature of the file once, as reviewed; `name` omitted keeps the file's, `nodeId` omitted links by name, `null` none) or `kind` (every feature that kind), and `replaceBoundary?: boolean` (with `features`). The file ≤ 5 MB; this route has its own body limit, 7 MB of JSON | `201 { source: { id, fileName, sha256 }, features }`. With `kind`: a `catchment_boundary` file's polygons become one boundary; other kinds one feature each, linked to a node of the same name (case-insensitive) and a fitting kind. A boundary replaces the project's current one: with `features`, only with `replaceBoundary: true` (else `409` naming the current boundary, and nothing is imported); the one-kind `kind: 'catchment_boundary'` import names the whole file the boundary and replaces it without the flag, as before. A file holds at most one. `422 { error, details: { feature: n \| null, message }[] }` with every problem, per feature (a kind that doesn't fit the geometry, a node of a kind the feature can't stand for, two boundaries, a refused geometry; nothing is imported); `400` for both or neither of `kind`/`features`, a feature listed twice or missing, or another project's node; `409` for the same file twice (SHA-256; the same answer when two identical imports race past the check and the unique index stops the second) or a reviewed boundary that would replace the current one without `replaceBoundary: true`; `413` over the limit | editor |
 | POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm, a feature without an area, or a dam or the catchment boundary (only a `farm_parcel` or an `other` polygon is a unit's catchment area; `AREA_KINDS`); `404` for another project's feature | editor |
 | GET | `/projects/:id/map/quaternary` | `?lon=&lat=` | `{ point: [lon, lat], quaternary: QuaternaryProposal \| null, datasets: { dataset, count }[] }`: the quaternary in the loaded dataset that contains the point (null: none does, or none is loaded). Writes nothing | viewer |
+| GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
+| POST | `/projects/:id/nodes/:nodeId/dam-capacity-from-register` | `{ registerNo }` | `200 { nodeId, damCapacityM3, registerNo, revisionId }`: the unit's `damCapacityM3` set to the registered dam's capacity, recorded as a model revision whose reason names the dam, its number, capacity, distance and source line. The server re-derives the proposals: `400` for a node that isn't a farm, a unit with no dam on the map, a register number not within 1 km of it (or not loaded), or an entry without a capacity; `404` for another project's node. The number is matched case-insensitively | editor |
+| POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
 
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
@@ -2684,6 +2689,13 @@ and the quaternary lookup only proposes.
   loadedAt }`. `synthetic` is true for the repo's invented dataset. The
   client fills the WR2012 check's form from it value by value; saving goes
   through `PATCH /projects/:id` like any typed value.
+- `RegisterDamProposal = { registerNo, name, river, farm, lon, lat,
+  distanceM, capacityM3, wallHeightM, surfaceAreaM2, completionYear,
+  dataset, synthetic, source, loadedAt }`, from `dam_register_reference`
+  (154). `synthetic` is true for the repo's invented register. The wall
+  height and completion year are for reference: the model has no field for
+  them. A capacity or area accepted from a proposal is an ordinary model
+  value afterwards: a later typed change replaces it (History keeps both).
 - Each write is in the audit log (`map.imported`, `map.feature_created`,
   `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
   geometry). Farmers and applicants get `403` on every route here (RLS lets

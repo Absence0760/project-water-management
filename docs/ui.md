@@ -1237,6 +1237,34 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart.
+- **Proposed from the register and the map** (issue #326 B-dams,
+  `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
+  sources and rules in [maps.md § Dams from the register and the
+  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
+  cards (and under the empty state), shown whenever the model has a
+  hydrological unit. **Dam of** picks the unit (the dams first in the
+  cards' order, then the other units; it opens on `dam=`'s, else the first
+  card's). The box says which dam on the map it searched from (its name,
+  "its polygon's centre" or "a point", the coordinates, **Show on map**),
+  then a table: one row per registered dam within 1 km ("Capacity:
+  Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
+  river and farm under it) and one for the dam polygon's area ("Full-supply
+  area: “Grootdraai dam”"), each with **Saved now** (the saved model's
+  value, "Not set (estimated from capacity)" for no area), **Proposed**,
+  **Source** (the register's dataset and source line, or "The map: …") and
+  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
+  m²), or "Nothing to use" for a register entry without a capacity. **Use**
+  asks first (`confirmWords`: the unit, the old and new value, the source;
+  "Use this capacity" / "Use this area"), saves that one value on the
+  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
+  the register of dams (Z100/07). Run the model to see its effect.") and
+  reloads the saved model and the proposals. Use is disabled while the model
+  has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
+  editor can use a value."). Other states: no dam on the map linked to the
+  unit (with **Open the Map**), no register loaded (the loader's command),
+  no registered dam within 1 km, and a "Synthetic test data" warning when a
+  row comes from the committed fixture. The table scrolls in its own box on
+  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
 
 ## Project
 

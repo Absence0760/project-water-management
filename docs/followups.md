@@ -3436,8 +3436,26 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       C1 (2026-10-01): editors draw polygons and lines, place points by
       click, and reshape them, with paste-a-shape and keyboard placement as
       the non-pointer paths ([maps.md § Drawing](./maps.md#drawing)).
-- [ ] **Dam polygons → the area–volume curve**: a dam polygon's area is
-      measured but not proposed to the dam's full-supply area yet.
+- [x] **Dam polygons → the full-supply area** (2026-10-01, issue #326
+      B-dams): a dam polygon linked to a unit proposes its area as the dam's
+      `damAreaFullM2` on Dams → Proposed from the register and the map, with
+      Use and a model revision naming the polygon ([maps.md § Dams from the
+      register and the map](./maps.md#dams-from-the-register-and-the-map)).
+      What stays open is the rest of the curve: a polygon gives one point
+      (the area when full), not the area–volume shape below it, which needs
+      a survey or a DEM (the "A resized dam follows its own area–volume
+      relation" item, and B-delineate's DEM).
+- [ ] **Decision: the DWS register of dams' licence** (operator; maps.md §
+      Sources). The Dam Safety Office's List of Registered Dams and its
+      Google Earth overlay state no licence, and DWS's data terms elsewhere
+      restrict use to academic, research or personal purposes. The dam
+      proposals are built and tested against the synthetic register; ask
+      DWS (Dam Safety Office) for written permission for commercial use
+      before a client deployment loads the real list. Trigger: the first
+      client who wants register capacities proposed.
+- [ ] **Loading the register of dams in production**: the same missing path
+      as the quaternary dataset above (the loader runs as the schema owner
+      from a workstation). Do both together, once either licence allows.
 
 ## Crop factors (issue #54 item 1)
 

@@ -332,11 +332,12 @@ the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
 The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
 with nothing else: features are drawn on a plain background, and GeoJSON
-uploads, points, areas and the quaternary lookup all work. Two optional
-pieces:
+uploads, points, areas, the quaternary lookup and the dam proposals all
+work. Optional pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
+pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
 pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, hundreds of MB at maxzoom 13):
 pnpm dev:tiles:fetch
 pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
@@ -353,9 +354,14 @@ hydrological unit, each parcel drawn to the unit's modelled area), the two
 gauges and the four streams, all inside the synthetic quaternaries
 (`backend/scripts/examples/map.ts`). As analyst@, **Use … km²** on a parcel
 proposes the area the model already has, and the WR2012 check's **Propose
-from the map** finds a quaternary. Real DWS/WR2012
+from the map** finds a quaternary. On **Dams**, **Proposed from the register
+and the map** proposes, for most units' dams, an invented registered dam's
+capacity (the synthetic register sits a few hundred metres from the seeded
+dams; Bosrand's is 1.5 km off, so none) and the dam polygon's area; as
+analyst@, **Use** saves one value and History names its source. Real DWS/WR2012
 data is loaded the same way from your own download ([maps.md § Quaternary
-dataset](./maps.md#quaternary-dataset)); never commit it.
+dataset](./maps.md#quaternary-dataset)); never commit it. The DWS register of dams is
+blocked until its licence is confirmed ([maps.md § Sources](./maps.md#sources)).
 
 ## Import the client catchment (demo data)
 
