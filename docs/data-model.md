@@ -1385,7 +1385,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `period_end`, `source` (1–500, shown with every proposed value),
   `loaded_at`. Global (no project): loaded by the operator as the schema
   owner (`pnpm import:quaternaries`), read-only to `water_app`.
-- **`gauge_station_reference`** (`153_gauge_stations.sql`, issue #326
+- **`gauge_station_reference`** (`156_gauge_stations.sql`, issue #326
   B-gauge): the gauging stations the nearest-gauge proposal reads. `code`
   (primary key, a DWS station code `^[A-Z][0-9][A-Z][0-9]{3}$`, e.g.
   `A2H012`; the third character is the station type, H a river gauge),

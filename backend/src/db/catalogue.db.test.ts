@@ -156,7 +156,7 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * someone else. The quaternary reference dataset is loaded by the operator as
  * the schema owner (152_catchment_map.sql, `pnpm import:quaternaries`); the
  * app only proposes from it. So is the gauging-station list
- * (153_gauge_stations.sql, `pnpm import:gauge-stations`).
+ * (156_gauge_stations.sql, `pnpm import:gauge-stations`).
  */
 const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'gauge_station_reference']);
 /**

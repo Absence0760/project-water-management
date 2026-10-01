@@ -1,4 +1,4 @@
--- 153_gauge_stations — the gauging stations the map proposes as a catchment's
+-- 156_gauge_stations — the gauging stations the map proposes as a catchment's
 -- observed-flow source (issue #326 Part B, "B-gauge"; docs/maps.md § Gauging
 -- stations, docs/data-model.md § Catchment map).
 --
@@ -45,7 +45,7 @@ CREATE INDEX gauge_station_reference_pos_idx ON gauge_station_reference (lat, lo
 CREATE INDEX gauge_station_reference_dataset_idx ON gauge_station_reference (dataset);
 
 COMMENT ON TABLE gauge_station_reference IS
-	'Flow-gauging stations (code, river, position, record dates), loaded by the operator (pnpm import:gauge-stations), read-only to the app; the map proposes the nearest as the observed-flow source (153, issue #326). The repo ships a synthetic dataset only.';
+	'Flow-gauging stations (code, river, position, record dates), loaded by the operator (pnpm import:gauge-stations), read-only to the app; the map proposes the nearest as the observed-flow source (156, issue #326). The repo ships a synthetic dataset only.';
 
 -- ---------------------------------------------------------------------------
 -- RLS

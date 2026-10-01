@@ -726,7 +726,7 @@ code, which names its source.
 
 ### Gauging-station dataset
 
-The proposal reads `gauge_station_reference` (153), which the **operator**
+The proposal reads `gauge_station_reference` (156), which the **operator**
 loads as the schema owner; the app never writes it.
 
 - **Committed: synthetic only.** `backend/fixtures/geo/gauge-stations.synthetic.geojson`

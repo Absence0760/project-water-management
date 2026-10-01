@@ -4,7 +4,7 @@
 // Settings → Data feeds, which fills the DWS feed's station field; they still
 // attach the feed themselves. Nothing is written here.
 //
-// The stations come from gauge_station_reference (153), which the operator
+// The stations come from gauge_station_reference (156), which the operator
 // loads (`pnpm import:gauge-stations`). The repo ships an invented dataset
 // (region Z, `dataset: 'synthetic'`); a proposal from it says so.
 import type { Db } from '../db/tx.js';

@@ -1,5 +1,5 @@
 // GET /projects/:id/map/stations (issue #326 B-gauge; docs/api.md § Catchment
-// map): the nearest river gauges in gauge_station_reference (153), measured
+// map): the nearest river gauges in gauge_station_reference (156), measured
 // from a given point or from the catchment's outlet by the rule in
 // geo/stations.ts outletPoint (the map gauge linked to the outflow gauge node,
 // else the boundary's centre). A viewer reads it (positive control); a farmer
