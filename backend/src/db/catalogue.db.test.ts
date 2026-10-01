@@ -142,9 +142,11 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * written by the migration runner from the engine's language table
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
- * no caller can choose a recipient.
+ * no caller can choose a recipient. The quaternary reference dataset is
+ * loaded by the operator as the schema owner (146_catchment_map.sql,
+ * `pnpm import:quaternaries`); the app only proposes from it.
  */
-const READ_ONLY = new Set(['language', 'pack_notice']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'quaternary_reference']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -195,6 +197,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'evidence_pack.created_by': 'set null',
 	'evidence_pack.issued_by': 'set null',
 	'farm_link.added_by': 'set null',
+	// A map feature and its import are the project's; who placed or imported them is cleared (146_catchment_map.sql).
+	'geo_source.imported_by': 'set null',
+	'map_feature.created_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',

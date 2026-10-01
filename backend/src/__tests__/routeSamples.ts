@@ -96,6 +96,17 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/allocations': (c) => ({ body: { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 } }),
 	// A PATCH changes only what it sends (issue #72), so an empty one is refused before the role check.
 	'PATCH /projects/:id/allocations/:aid': () => ({ body: { reference: 'ladder' } }),
+	'POST /projects/:id/map/features': () => ({ body: { kind: 'gauge', name: 'Ladder gauge', lon: 21.3, lat: -33.6 } }),
+	'PATCH /projects/:id/map/features/:fid': () => ({ body: { name: 'Ladder feature' } }),
+	'POST /projects/:id/map/import': () => ({
+		body: {
+			fileName: `ladder-${crypto.randomUUID()}.geojson`,
+			kind: 'other',
+			text: JSON.stringify({ type: 'Feature', properties: { name: crypto.randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+		}
+	}),
+	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
+	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),
@@ -155,6 +166,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const sid = await made('/scenarios', { name: 'Team scenario', baseRunId: runId, ops: [] }, (b) => b.scenario.id);
 	const feedId = await made('/feeds', { source: 'dws', config: { station: 'X0H000' } }, (b) => b.feed.id);
 	const scheduleId = await made('/report-schedules', { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [owner!.id] }, (b) => b.schedule.id);
+	const fid = await made('/map/features', { kind: 'farm_parcel', name: 'Ladder parcel', nodeId: a.id, geometry: { type: 'Polygon', coordinates: [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]] } }, (b) => b.feature.id);
 	const aid = await made('/allocations', { nodeId: a.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 }, (b) => b.allocation.id);
 	const linkId = await made('/share-links', { label: 'Ladder link', expiresInDays: 7 }, (b) => b.link.id);
 	const keyId = await made('/api-keys', { name: 'Ladder key' }, (b) => b.key.id);
@@ -188,6 +200,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			feedId,
 			scheduleId,
 			aid,
+			fid,
 			linkId,
 			keyId,
 			inviteId,

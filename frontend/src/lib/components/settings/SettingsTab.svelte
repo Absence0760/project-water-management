@@ -1081,6 +1081,7 @@
 			bind:value={s.wr2012}
 			bind:error={wr2012Error}
 			{readonly}
+			projectId={project.id}
 			modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
 		/>
 	</div>

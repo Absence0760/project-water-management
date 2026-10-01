@@ -13,6 +13,7 @@ import {
 	newEntry,
 	pageBuildWorkerViolations,
 	landingChunks,
+	mapChunks,
 	measure,
 	parseEntry,
 	readBudgetEntries,
@@ -21,7 +22,7 @@ import {
 	violations,
 } from './check_web_bundle_budget.mjs';
 
-const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6 };
+const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6, mapKb: 20 };
 
 test('kb rounds up once, not per file', () => {
 	assert.equal(kb(0), 0);
@@ -118,24 +119,30 @@ test('a spreadsheet worker has its own ceiling, apart from the calibration worke
 	assert.equal(measure([{ path: '_app/immutable/workers/csvexport.worker-z.js', gzipBytes: 1024 }]).largestSpreadsheetWorker.kb, 0);
 });
 
-test("the calibration and preview workers must share the page build's chunks (issue #9, WP-1.17)", () => {
+test("the calibration, preview and map workers must share the page build's chunks (issue #9, WP-1.17, issue #288)", () => {
 	const shared = { path: '_app/immutable/workers/autocal.worker-Ab1.js', text: 'import{c as f}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
 	const preview = { path: '_app/immutable/workers/preview.worker-Cd2.js', text: 'import{r}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
+	const mapWorker = { path: '_app/immutable/workers/maplibre.worker-Ef3.js', text: 'import{D as e}from"../chunks/Dcg1s4G.js";' };
 	const spreadsheet = { path: '_app/immutable/workers/export.worker-x.js', text: 'self.onmessage=()=>{}' };
-	assert.deepEqual(pageBuildWorkerViolations([shared, preview, spreadsheet]), []);
+	assert.deepEqual(pageBuildWorkerViolations([shared, preview, mapWorker, spreadsheet]), []);
+	// MapLibre's worker built on its own would carry its own copy of MapLibre's shared code.
+	const ownMap = pageBuildWorkerViolations([shared, preview, { path: mapWorker.path, text: 'self.onmessage=()=>{}' }]);
+	assert.equal(ownMap.length, 1);
+	assert.match(ownMap[0], /map worker .*'virtual:maplibre-worker-url'/);
 	// Built on its own (new Worker(new URL(…))): no import from chunks/.
-	const own = pageBuildWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }, preview]);
+	const own = pageBuildWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }, preview, mapWorker]);
 	assert.equal(own.length, 1);
 	assert.match(own[0], /calibration worker .* imports nothing from the page build's chunks/);
-	const ownPreview = pageBuildWorkerViolations([shared, { path: preview.path, text: 'const e=1;self.onmessage=()=>{}' }]);
+	const ownPreview = pageBuildWorkerViolations([shared, { path: preview.path, text: 'const e=1;self.onmessage=()=>{}' }, mapWorker]);
 	assert.equal(ownPreview.length, 1);
 	assert.match(ownPreview[0], /preview worker .*'virtual:preview-worker-url'/);
 	// Vite's own worker build puts its chunks under workers/chunks/: that is not sharing.
-	assert.equal(pageBuildWorkerViolations([{ path: shared.path, text: 'import{c}from"./chunks/x.js"' }, preview]).length, 1);
+	assert.equal(pageBuildWorkerViolations([{ path: shared.path, text: 'import{c}from"./chunks/x.js"' }, preview, mapWorker]).length, 1);
 	const missing = pageBuildWorkerViolations([spreadsheet]);
-	assert.equal(missing.length, 2);
+	assert.equal(missing.length, 3);
 	assert.match(missing[0], /Expected one calibration worker/);
 	assert.match(missing[1], /Expected one preview worker/);
+	assert.match(missing[2], /Expected one map worker/);
 });
 
 test('the tab modules are the LOAD map of the workspace page, nothing else', () => {
@@ -340,4 +347,42 @@ test('the landing page is found by its modules, summed with its CSS, and has its
 	assert.match(landingChunks({}).errors.join('\n'), /Found no chunk holding/);
 	const inLayout = landingChunks({ '_app/immutable/nodes/0.js': { modules: ['src/routes/+layout.svelte', 'src/lib/components/landing/Landing.svelte'], css: [] } });
 	assert.match(inLayout.errors.join('\n'), /in the chunk of src\/routes\/\+layout\.svelte/);
+});
+
+test('the map library has a ceiling of its own, outside the total and the per-chunk ceiling, and must stay lazy (issue #288)', () => {
+	const chunks = {
+		'_app/immutable/chunks/Map1.js': { modules: [], css: [], packages: ['maplibre-gl'] },
+		'_app/immutable/chunks/Map2.js': { modules: ['src/lib/components/map/maplibre.ts'], css: ['_app/immutable/assets/ml.css'], packages: ['maplibre-gl'] },
+		'_app/immutable/chunks/Pm.js': { modules: [], css: [], packages: ['fflate', 'pmtiles'] },
+		'_app/immutable/workers/maplibre.worker-a.js': { modules: [], css: [], packages: ['maplibre-gl'] },
+		'_app/immutable/chunks/App.js': { modules: ['src/lib/components/map/MapTab.svelte'], css: [], packages: [] },
+	};
+	const { files, errors } = mapChunks(chunks, ['src/lib/components/map/MapTab.svelte']);
+	assert.deepEqual(errors, []);
+	assert.deepEqual([...files].sort(), ['_app/immutable/assets/ml.css', '_app/immutable/chunks/Map1.js', '_app/immutable/chunks/Map2.js', '_app/immutable/chunks/Pm.js']);
+	const m = measure(
+		[
+			{ path: '_app/immutable/chunks/Map1.js', gzipBytes: 9 * 1024 },
+			{ path: '_app/immutable/chunks/Map2.js', gzipBytes: 8 * 1024 },
+			{ path: '_app/immutable/assets/ml.css', gzipBytes: 1024 },
+			{ path: '_app/immutable/chunks/Pm.js', gzipBytes: 1024 },
+			{ path: '_app/immutable/chunks/App.js', gzipBytes: 2 * 1024 },
+		],
+		new Set(),
+		new Set(),
+		files,
+	);
+	assert.equal(m.mapKb, 19);
+	assert.equal(m.totalCodeKb, 2, 'the map library is not in the total');
+	assert.equal(m.largestChunk.kb, 2, 'nor against the per-chunk ceiling');
+	assert.deepEqual(violations(m, budget), []);
+	const over = violations(measure([{ path: 'm.js', gzipBytes: 21 * 1024 }, { path: 'app.js', gzipBytes: 1024 }], new Set(), new Set(), new Set(['m.js'])), budget);
+	assert.equal(over.length, 1);
+	assert.match(over[0], /map library is 21 KB, over the 20 KB map budget/);
+	// MapLibre pulled into a tab's or the workspace page's chunk is an error; finding no map chunk is one too.
+	const eager = mapChunks({ 'x.js': { modules: ['src/lib/components/map/MapTab.svelte'], css: [], packages: ['maplibre-gl'] } }, ['src/lib/components/map/MapTab.svelte']);
+	assert.match(eager.errors.join('\n'), /MapLibre is in the chunk of src\/lib\/components\/map\/MapTab\.svelte/);
+	const inPage = mapChunks({ 'y.js': { modules: [WORKSPACE_PAGE], css: [], packages: ['pmtiles'] } });
+	assert.match(inPage.errors.join('\n'), /routes\/projects\/\[id\]\/\+page\.svelte/);
+	assert.match(mapChunks({}).errors.join('\n'), /Found no chunk holding maplibre-gl or pmtiles/);
 });

@@ -19,6 +19,8 @@ export type TabGroup = 'core' | 'inputs' | 'assess';
 export const TAB_GROUP = {
 	overview: 'core',
 	network: 'inputs',
+	// The catchment map (issue #288, WP-3.12): the boundary, parcels, dams and gauges on a basemap, and areas from polygons.
+	map: 'inputs',
 	crops: 'inputs',
 	transfers: 'inputs',
 	series: 'core',
@@ -54,6 +56,7 @@ export type TabId = keyof typeof TAB_GROUP;
 export const TAB_LABELS: Record<TabId, string> = {
 	overview: 'Summary',
 	network: 'Network',
+	map: 'Map',
 	crops: 'Crops & demand',
 	transfers: 'Transfers',
 	series: 'Data',
@@ -199,7 +202,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  */
 export const NAV_SECTIONS = [
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
-	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 

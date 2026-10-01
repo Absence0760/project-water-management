@@ -6,6 +6,7 @@
 	// identity stable, which is what lazy.ts memoises on.
 	const LOAD = {
 		network: () => import('$lib/components/network/NetworkTab.svelte'),
+		map: () => import('$lib/components/map/MapTab.svelte'),
 		crops: () => import('$lib/components/crops/CropsTab.svelte'),
 		transfers: () => import('$lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
@@ -98,6 +99,8 @@
 		units: 'supply',
 		farms: 'supply',
 		changes: 'history',
+		gis: 'map',
+		'catchment-map': 'map',
 		details: 'project',
 		members: 'project',
 		sharing: 'project'
@@ -738,6 +741,10 @@
 					<IssueList issues={editor.issues} area="network" />
 					<Lazy load={LOAD.network}>
 						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} bind:reason={saveReason} />{/snippet}
+					</Lazy>
+				{:else if tab === 'map'}
+					<Lazy load={LOAD.map}>
+						{#snippet children(MapTab)}<MapTab {projectId} {editor} {canEdit} onModelChanged={reloadInputs} />{/snippet}
 					</Lazy>
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />

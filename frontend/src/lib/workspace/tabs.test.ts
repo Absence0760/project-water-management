@@ -199,7 +199,7 @@ describe('navSections', () => {
 	it('puts the outcomes first (the Summary a project opens on at the top), then the model, then review', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 		]);
 	});

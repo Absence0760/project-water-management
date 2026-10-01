@@ -26,6 +26,13 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 /** The workspace tabs the setup path walks, in the order a catchment is set up. */
 export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
 
+/**
+ * Tabs under *Build the model* that the setup path skips: optional, not a
+ * step every catchment needs (the Map, issue #288: a model builds and runs
+ * without one). "Getting around a project" still names them in place.
+ */
+export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
+
 /** Project workspace tabs a guide can point at (`?tab=`). */
 export type TabId = (typeof SETUP_TABS)[number] | 'compare' | 'river' | 'supply';
 
@@ -144,7 +151,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Map, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
 					},
 					{
 						type: 'p',

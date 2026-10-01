@@ -1306,6 +1306,53 @@ water-use volumes per farm or water user.
   a farmer reads their own farm's), the catalogue tests and the route
   inventories.
 
+
+### Catchment map (146_catchment_map.sql)
+
+Issue #288, roadmap WP-3.12, [maps.md](./maps.md). GeoJSON in `jsonb`, no
+PostGIS (areas and point-in-polygon are computed in `backend/src/geo`; room
+is left for PostGIS when Step 4 needs cross-catchment spatial queries).
+
+- **`geo_source`**: an imported GeoJSON file. `id`, `project_id` (cascade),
+  `file_name` (1–255), `sha256`, `crs` (always `EPSG:4326`: the server takes
+  WGS84 only), `imported_by` (→ `app_user`, `SET NULL`), `imported_at`.
+  Unique `(project_id, sha256)`. Deleting it deletes its features; the API
+  deletes it with its last feature.
+- **`map_feature`**: `id`, `project_id`, `kind` (`catchment_boundary` |
+  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100),
+  `node_id` (→ `node`, `SET NULL`; same project by `assert_same_project`; a
+  parcel or dam stands for a farm or water user, a gauge for a gauge, a
+  boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
+  geometry; CHECKs hold the type to the kind), `properties` (allowlisted
+  strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
+  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
+  `created_at`, `updated_at`. At most one `catchment_boundary` per project
+  (partial unique index). It is Step 2's `catchment_geometry` source for the
+  feeds' polygon extraction (wiring the fetcher to it is a follow-up).
+- **`node.area_source`** (`typed` | `map`, default `typed`) and
+  **`node.area_feature_id`** (composite key `(area_feature_id, project_id)`
+  → `map_feature (id, project_id)`, `ON DELETE SET NULL (area_feature_id)`):
+  where a node's `area_km2` came from. `POST …/nodes/:nodeId/area-from-map`
+  sets `map` and the feature; a model save that changes the area (or the
+  node's kind) sets `typed` and clears the feature (`model/store.ts`).
+  Deleting the feature keeps the area. Not part of the engine's model.
+- **`quaternary_reference`**: the dataset the quaternary lookup proposes
+  from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
+  label; `synthetic` for the committed fixture, region Z), `geometry`
+  (Polygon or MultiPolygon), its bounding box (`min_lon`, `min_lat`,
+  `max_lon`, `max_lat`, indexed for the lookup's first pass), `area_km2`,
+  `map_mm`, `mar_mm3`, `monthly_mm3` (12, Oct … Sep), `period_start`,
+  `period_end`, `source` (1–500, shown with every proposed value),
+  `loaded_at`. Global (no project): loaded by the operator as the schema
+  owner (`pnpm import:quaternaries`), read-only to `water_app`.
+- **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
+  farmer or contributor reads the boundary, gauges and rivers and the
+  features tied to their own linked nodes (`app_farm_nodes`), never another
+  farm's; no route serves them yet. `quaternary_reference` is readable by
+  anyone signed in (public reference data) and written by no app role.
+  Covering indexes on every foreign key.
+
 ### Import reports (017_project_import.sql)
 
 When a project is imported in the browser (a b023 workbook, or a project

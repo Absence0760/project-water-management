@@ -1444,6 +1444,19 @@ must build WP-2.15 Phase B.
 
 ### WP-3.12 Catchment map
 
+- **Status (2026-10-01): phases 1–2 built** (issue #288): migration 146
+  (`map_feature`, `geo_source`, `node.area_source` / `area_feature_id`, and
+  `quaternary_reference`), `backend/src/geo/` (GeoJSON checks, the geodesic
+  area on the ellipsoid, the routes), the **Map** tab (MapLibre and PMTiles
+  lazy, a self-hosted basemap that is optional locally and off in
+  production until `/tiles/*` is deployed; D8 (b) as the bundle guard's
+  `mapKb`), areas accepted from polygons, and phase 2: Settings → WR2012
+  check → **Propose from the map**, a point → its quaternary → the reference
+  values used one by one, from a synthetic dataset in the repo and the
+  operator's own DWS/WR2012 download otherwise ([maps.md](../maps.md)).
+  Left: shapefiles, the production basemap and dataset loading, the WR2012
+  licence decision, contributor-owned features, feeds from the boundary
+  ([followups.md § Catchment map](../followups.md#catchment-map-issue-288)).
 - **Goal.**
   - Upload the catchment boundary (GeoJSON or zipped shapefile);
   - place farms, dams and gauges;
