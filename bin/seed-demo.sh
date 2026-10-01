@@ -7,6 +7,17 @@
 # the repo: project names and data/ folders are derived at run time.
 #
 #   pnpm seed:demo            # uses $PYTHON, else .venv/bin/python, else python3 (needs openpyxl)
+#   pnpm seed:demo:fixed      # the same, from the fixed workbooks instead (--fixed)
+#
+# --fixed imports each fixed workbook in $WBT_SOURCE_DIR/Fixed/workbooks/
+# (*_WBT_b023_*_FIXED_recalculated.xlsx: the client workbook with the review's
+# formula fixes, recalculated so its cells hold computed values; the source
+# repo's Fixed/README.md) instead of Original/, as "<Name> (fixed)" into
+# data/client-<name>-fixed-app/, beside the originals. The per-workbook
+# settings below apply to both. The app reads only the workbook's inputs and
+# recomputes everything, so the two load almost the same model; what differs
+# is what a fix changed in the inputs themselves (a client decision such as a
+# later record start).
 #
 # Local dev only — the demo password is not a secret and the user only exists
 # in your docker Postgres.
@@ -41,6 +52,14 @@
 # again with a changed setting.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+FIXED=0
+for arg in "$@"; do
+	case "$arg" in
+	--fixed) FIXED=1 ;;
+	*) echo "usage: $0 [--fixed]" >&2; exit 2 ;;
+	esac
+done
 
 # Must match backend/scripts/seed-examples.ts (DEMO).
 EMAIL="${DEMO_EMAIL:-demo@example.com}"
@@ -96,21 +115,30 @@ if ! "$PY" -c 'import openpyxl' 2>/dev/null; then
 fi
 
 # The client workbooks: $WBT_CLIENT_WORKBOOK alone if set, else every b023
-# workbook in Original/ that isn't the Blank template. Each becomes its own
-# project, named from its file name (the part before _WBT_b023, CamelCase
-# split: "SomeRiver_WBT_b023_…" → "Some River"), at run time only.
+# workbook in Original/ that isn't the Blank template (with --fixed, every
+# fixed workbook in Fixed/workbooks/). Each becomes its own project, named
+# from its file name (the part before _WBT_b023, CamelCase split:
+# "SomeRiver_WBT_b023_…" → "Some River", plus " (fixed)" with --fixed), at
+# run time only.
+if [ "$FIXED" = 1 ]; then
+	folder="Fixed/workbooks"
+	pattern="*_WBT_b023_*_FIXED_recalculated.xlsx"
+else
+	folder="Original"
+	pattern="*_WBT_b023_*.xlsm"
+fi
 shopt -s nullglob
 if [ -n "${WBT_CLIENT_WORKBOOK:-}" ]; then
 	workbooks=("$WBT_CLIENT_WORKBOOK")
 else
 	workbooks=()
-	for f in "$WBT_SOURCE_DIR"/Original/*_WBT_b023_*.xlsm; do
+	for f in "$WBT_SOURCE_DIR/$folder"/$pattern; do
 		case "$(basename "$f")" in Blank_*) ;; *) workbooks+=("$f") ;; esac
 	done
 fi
 shopt -u nullglob
 if [ "${#workbooks[@]}" -eq 0 ]; then
-	echo "✗ no client workbook in $WBT_SOURCE_DIR/Original/ — skipping" >&2
+	echo "✗ no client workbook in $WBT_SOURCE_DIR/$folder/ — skipping" >&2
 fi
 
 imported=0
@@ -118,6 +146,11 @@ for wb in "${workbooks[@]}"; do
 	prefix=$(basename "$wb" | sed 's/_WBT_b023.*//')
 	slug=$(printf '%s' "$prefix" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')
 	name=$(printf '%s' "$prefix" | sed 's/\([a-z]\)\([A-Z]\)/\1 \2/g')
+	suffix=""
+	if [ "$FIXED" = 1 ]; then
+		name="$name (fixed)"
+		suffix="-fixed"
+	fi
 	# Per-workbook import settings (the gauge scaling), beside the workbooks:
 	# $WBT_SOURCE_DIR/wbt-import.<prefix>.env, read in a subshell so one
 	# workbook's settings never reach the next.
@@ -137,7 +170,7 @@ for wb in "${workbooks[@]}"; do
 		if [ "${WBT_RUN_OF_RIVER:-0}" = 1 ]; then
 			import_args+=(--run-of-river)
 		fi
-		out="data/client-$slug-app"
+		out="data/client-$slug$suffix-app"
 		extract "$wb" "$out" "${import_args[@]}" || exit 1
 		# A settings patch and a fit, applied to the document before it is imported (never to data/).
 		project_args=()
