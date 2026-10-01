@@ -27,6 +27,7 @@
 	"type": "module",
 	"dependencies": {
 		"@water-management/engine": "workspace:*",
-		"uplot": "1.6.32"
+		"uplot": "1.6.32",
+		"uqr": "0.1.3"
 	}
 }

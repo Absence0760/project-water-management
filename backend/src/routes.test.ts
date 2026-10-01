@@ -20,6 +20,10 @@ const PUBLIC = new Set([
 	// "Send the link again" on the sign-in page (issue #57): the same 202 for any address.
 	'POST /auth/resend-confirmation',
 	'POST /auth/invite-info',
+	// Two-step sign-in's second step (issue #282): the challenge cookie that
+	// only a right password gets is the credential, under the code throttle
+	// (auth/mfa.db.test.ts).
+	'POST /auth/mfa/verify',
 	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
 	// render token is the credential, and the session it buys reads one
 	// project and run only (reports/reports.db.test.ts).
@@ -122,6 +126,16 @@ describe('route auth inventory', () => {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
+	});
+
+	// Two-step sign-in (issue #282): everything but the sign-in step needs a session (auth/mfa.db.test.ts).
+	it('inventories the two-step sign-in routes: the sign-in step public, the rest auth-gated', () => {
+		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('POST /auth/mfa/verify');
+		expect(PUBLIC.has('POST /auth/mfa/verify')).toBe(true);
 	});
 
 	// The data feeds (WP-2.10): auth-gated like every project route.
@@ -411,6 +425,7 @@ describe('route auth inventory', () => {
 		'POST /auth/resend-confirmation',
 		'POST /auth/invite-info',
 		'POST /auth/render-session',
+		'POST /auth/mfa/verify',
 		'POST /share/view',
 		'POST /share/series',
 		'POST /share/pack',

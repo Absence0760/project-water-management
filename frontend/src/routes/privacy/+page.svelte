@@ -69,6 +69,10 @@
 	<h3>Information you give us</h3>
 	<ul>
 		<li><strong>Account:</strong> your email address, display name and password (stored only as a one-way hash, never readable).</li>
+		<li>
+			<strong>Two-step sign-in, if you turn it on:</strong> the key your authenticator app shares with us (stored encrypted) and
+			your recovery codes (stored only as one-way hashes).
+		</li>
 		<li><strong>Settings:</strong> your language, the unit volumes are shown in, the sections you hid from your sidebar, and which alert emails you get.</li>
 		<li>
 			<strong>What you write in a project:</strong> notes, the reason you give for a change, a sign-off (the name and professional
@@ -91,7 +95,7 @@
 	<h3>Information collected as you use the service</h3>
 	<ul>
 		<li><strong>Activity record:</strong> who changed what in a project, and when (the project’s history, kept as an audit trail).</li>
-		<li><strong>Security records:</strong> sign-in attempts per email address, the number of account emails sent, and your network address as seen by our servers, used to stop password guessing and abuse.</li>
+		<li><strong>Security records:</strong> sign-in attempts per email address, wrong two-step sign-in codes, the number of account emails sent, and your network address as seen by our servers, used to stop password guessing and abuse; and when you turned two-step sign-in on or off or used a recovery code, so you can see it.</li>
 		<li>
 			<strong>Emails we send you:</strong> which alert emails went out, and whether an address bounced. We don’t track whether you open
 			an email or follow its links: our emails carry no tracking pixels or tracked links.
@@ -169,7 +173,8 @@
 	<ul>
 		<li><strong>Your account and settings:</strong> until the account is deleted.</li>
 		<li><strong>Links in emails:</strong> a password-reset link lasts 1 hour, a confirmation link 48 hours, an invitation 7 days (then it is kept, marked expired, for 90 days and deleted).</li>
-		<li><strong>Sign-in attempts:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours.</li>
+		<li><strong>Sign-in attempts and wrong two-step sign-in codes:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours.</li>
+		<li><strong>Two-step sign-in:</strong> the key and recovery codes until you turn it off (a used recovery code is deleted at once); the record of when you turned it on or off until the account is deleted.</li>
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
 			<strong>Feedback on alert emails:</strong> an answer and its comment, 1 year after you gave it. A “Was this useful?” link works
@@ -209,9 +214,10 @@
 	</p>
 
 	<h2 id="cookies">8. Cookies and your browser</h2>
-	<p>We use two cookies, both strictly necessary, so there is nothing to opt into:</p>
+	<p>We use three cookies, all strictly necessary, so there is nothing to opt into:</p>
 	<ul>
 		<li><code>wm_session</code>: keeps you signed in (up to 7 days).</li>
+		<li><code>wm_mfa</code>: with two-step sign-in on, holds your sign-in for up to 5 minutes between your password and your code.</li>
 		<li><code>wm_device</code>: remembers, for up to 180 days, that this browser proved it can reach your inbox, so someone guessing your password can’t lock you out.</li>
 	</ul>
 	<p>Your browser also keeps some things on your device, in its own storage:</p>
@@ -228,7 +234,8 @@
 	<h2 id="security">9. How we protect it</h2>
 	<p>
 		Connections are encrypted. Passwords are stored only as a strong one-way hash, and the links we email are stored only as hashes
-		too. The database itself enforces who can see each project’s rows, so one organisation’s information can’t reach another’s.
+		too. You can add two-step sign-in (a code from an authenticator app after your password); its key is stored encrypted and its
+		recovery codes only as hashes, and project owners, team admins and assessors must use it. The database itself enforces who can see each project’s rows, so one organisation’s information can’t reach another’s.
 		Access to the systems is limited to what running the service needs. If a breach affects your personal information, we will
 		tell you and the Information Regulator as POPIA s22 requires.
 	</p>
