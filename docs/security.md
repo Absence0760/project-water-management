@@ -2904,6 +2904,12 @@ nothing else.
   transaction, never a route's), under the key it derives itself
   (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
   only once: a second recording changes nothing and returns false.
+  The server's re-run outcome isn't a pack column: it is
+  `pack_reproduction` (154_pack_reproduce), which `water_app` only reads,
+  written by `app_record_pack_reproduction` from a *running*
+  `pack_reproduce` job of that pack as its acting user, for the bundle the
+  pack records, once per engine, so no member can mark a pack reproduced.
+  It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in
   the same transaction* (`issued_at = now()`), so only the issue route

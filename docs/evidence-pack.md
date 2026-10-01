@@ -31,7 +31,9 @@ to an issued pack with public comments on it
 applicant's own copy of their application's issued packs, with share links
 ([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
 "pack issued" and "pack withdrawn" emails to the editors and the applicant
-([§ Notices](#notices), 133_pack_notices, 2026-09-30). What is left is
+([§ Notices](#notices), 133_pack_notices, 2026-09-30); and the server's
+re-run of both runs from the stored bundle after issue, shown on the pack's
+page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -258,8 +260,10 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   In the same transaction it builds the pack's reproduction bundle, checks
   it, stores it and records its hash ([§ Reproduction](#reproduction)); if
   that fails, nothing is issued. Re-running both runs to prove they
-  reproduce is not done at issue: it takes as long as the runs, and the
-  bundle lets anyone do it (`pnpm reproduce:pack`).
+  reproduce takes as long as the runs, so it isn't done in the request: the
+  issue queues a `pack_reproduce` job that does it on the server from the
+  stored bundle ([§ Reproduction](#reproduction), "Re-run on the server"),
+  and the bundle lets anyone do it again (`pnpm reproduce:pack`).
 - **One issued at a time.** An application (or the project's baseline
   evidence) has at most one issued pack: a second is refused at issue
   (`409`), and the database holds it at commit (`evidence_pack_one_issued`).
@@ -490,6 +494,50 @@ engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 `scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
 MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
 both a baseline and an application pack; the setter's refusals).
+
+**Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
+bundle as `--no-run` would; the re-run takes as long as the runs, so the
+issue's transaction queues a `pack_reproduce` job instead
+(`backend/src/jobs/handlers/pack-reproduce.ts`, as the issuer, one pending
+per pack, 3 attempts). The worker runs it as that editor, under RLS:
+
+1. It reads the bundle back from the packs bucket under the pack's
+   `bundle_key` (`getPackBundle`, checksum mode on) and hashes it against the
+   pack's `bundle_sha256`, as an assessor checks the download against
+   verify's `bundleSha256`. That is the `stored` check.
+2. It runs the engine's `checkPackBundle` with the re-run and the pack's
+   manifest hash as `--expect`: what `pnpm reproduce:pack --expect <hash>`
+   prints, check for check.
+3. It records the outcome through `app_record_pack_reproduction` in the
+   job's transaction: `reproduced` (every check passed), `not_reproduced`
+   (any check failed: the stored bytes, a file, the manifest, the inputs,
+   the stored results or a re-run), `other_engine` (only the re-runs
+   differ, and a run was made with another engine version than the one the
+   server runs: expected, not a fault; check out that engine to reproduce
+   it), or `no_bundle` (a pack issued without one). With it go the engine
+   that re-ran the runs, the runs' own engines, the bundle's hash and every
+   check (`pack_reproduction`,
+   [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:
+   the first outcome for an engine stands.
+
+A bundle that doesn't reproduce is an outcome, recorded, and the job is
+done; only what another attempt can fix (the store unreachable) fails the
+job, which retries and then gives up. The pack's page says what it found, in
+its bar (never printed): reproduced, with the engine and date; not
+reproduced, with each failed check; another engine; still re-running; or
+that the re-run couldn't be done, with why (`reproduction` on
+`GET …/packs/:packId`, [api.md § Evidence packs](./api.md#evidence-packs)).
+It is **not on verify**: it is the app's own claim about its own stored
+bytes, not something the pack's hash covers, and an assessor repeats it
+with the bundle rather than trusting it. Tests:
+`jobs/handlers/pack-reproduce.test.ts` (each outcome, against a real bundle
+of the engine's synthetic pack), `evidence/packs.db.test.ts` (queued at
+issue, recorded as reproduced; a stored bundle replaced by other bytes
+recorded as not reproduced; the writer's refusals), and the pack PDF e2e
+(`e2e/tests/evidence-pack-pdf.spec.ts`, the page showing it).
+
+Not built: an editor's "re-run again" after the job gave up, or under a
+newer engine ([followups.md](./followups.md#evidence-report-issue-71)).
 
 ## Sharing and comments
 
