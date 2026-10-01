@@ -4,6 +4,12 @@
 	// role="menu"/menuitem, so no arrow-key contract to keep). In the app
 	// sidebar's foot it opens upward (`up`); in the phone bar, downward, and
 	// `compact` shows the initials only.
+	//
+	// While the person's role still needs two-step sign-in (set up, or a
+	// sign-in with a code; lib/auth/mfaPrompt.svelte.ts `pendingKind`), the
+	// avatar carries a badge and the menu leads with the way to do it, so the
+	// need stays in sight after the banner is dismissed (docs/ui.md, the
+	// two-step sign-in banner).
 
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { tick } from 'svelte';
@@ -11,6 +17,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
+	import { mfaPrompt, pendingKind } from '$lib/auth/mfaPrompt.svelte';
 	import { session } from '$lib/auth/session.svelte';
 	import { clearAllSaved } from '$lib/components/farm/savedCopy';
 	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
@@ -22,6 +29,8 @@
 	let accountRoot: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
 	const menuId = 'account-menu';
+
+	const mfaNeeded = $derived(pendingKind(mfaPrompt, session.user?.id ?? null));
 
 	const onAccountPage = $derived((page.url.pathname.slice(base.length) || '/') === '/account');
 
@@ -83,6 +92,24 @@
 		await finishSignOut();
 	}
 
+	/** A password-only session: sign out, then the sign-in page (password, then the code), back to this page after. */
+	async function signInAgain() {
+		closeMenu();
+		signingOut = true;
+		const next = page.url.pathname + page.url.search;
+		try {
+			await api.auth.logout();
+		} catch {
+			// Drop the local session either way.
+		}
+		clearAllSaved();
+		clearNoteCounts();
+		session.user = null;
+		signingOut = false;
+		await tick();
+		await goto(`${base}/login?next=${encodeURIComponent(next)}`);
+	}
+
 	async function signOutEverywhere() {
 		closeMenu();
 		const ok = await confirmDialog({
@@ -109,13 +136,17 @@
 			type="button"
 			class="account-trigger"
 			bind:this={trigger}
-			aria-label="Account menu for {session.user.displayName}"
+			aria-label="Account menu for {session.user.displayName}{mfaNeeded ? ', two-step sign-in needed' : ''}"
+			data-mfa-badge={mfaNeeded ?? undefined}
 			aria-expanded={menuOpen}
 			aria-controls={menuId}
 			disabled={signingOut}
 			onclick={() => (menuOpen = !menuOpen)}
 		>
-			<span class="avatar" aria-hidden="true">{initials}</span>
+			<span class="avatar" aria-hidden="true">
+				{initials}
+				{#if mfaNeeded}<span class="mfa-badge">i</span>{/if}
+			</span>
 			<span class="who">
 				<span class="name">{session.user.displayName}</span>
 				<span class="email">{session.user.email}</span>
@@ -123,6 +154,21 @@
 			<span aria-hidden="true" class="caret">▾</span>
 		</button>
 		<ul id={menuId} class="menu" hidden={!menuOpen}>
+			{#if mfaNeeded === 'setup'}
+				<li>
+					<a class="item item-warning" href="{base}/account#two-step" onclick={() => closeMenu()}>
+						<span class="label">Set up two-step sign-in</span>
+						<span class="hint" aria-hidden="true">Your role needs it</span>
+					</a>
+				</li>
+			{:else if mfaNeeded === 'step-up'}
+				<li>
+					<button type="button" class="item item-warning" onclick={signInAgain} disabled={signingOut}>
+						<span class="label">Sign in again with a code</span>
+						<span class="hint" aria-hidden="true">This session used your password only</span>
+					</button>
+				</li>
+			{/if}
 			<li>
 				<a
 					class="item"
@@ -187,6 +233,7 @@
 		color: var(--text-muted);
 	}
 	.avatar {
+		position: relative;
 		flex: none;
 		display: inline-grid;
 		place-items: center;
@@ -197,6 +244,28 @@
 		color: var(--accent);
 		font-size: 0.75rem;
 		font-weight: 700;
+	}
+	/* Two-step sign-in still needed: a small "i" on the avatar's corner, in the banner's warning colour. */
+	.mfa-badge {
+		position: absolute;
+		top: -3px;
+		right: -3px;
+		display: inline-grid;
+		place-items: center;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		border: 1.5px solid var(--surface);
+		background: var(--warning);
+		color: var(--surface);
+		font-size: 0.6rem;
+		font-weight: 700;
+		font-style: italic;
+		line-height: 1;
+	}
+	.item-warning .label {
+		color: var(--warning);
+		font-weight: 600;
 	}
 	.who {
 		display: flex;
