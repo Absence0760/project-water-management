@@ -732,6 +732,20 @@ run "edge_behaviours" {
     condition     = alltrue([for o in aws_cloudfront_distribution.frontend.origin : length(o.custom_header) == 0 if o.origin_id != "lambda-api"])
     error_message = "Only the API origin carries the shared secret; an S3 origin must never be sent it."
   }
+
+  # Response streaming (WP-1.29a): the URL streams, so an export past 6 MB
+  # downloads; backend/src/lambda.ts exports the matching streaming handler
+  # (pinned from that side in backend/src/http/lambdaStream.test.ts). A
+  # stream past 6 MB is paced at ~2 MB/s, and CloudFront waits up to its read
+  # timeout between packets, which stays above the Lambda's own timeout.
+  assert {
+    condition     = aws_lambda_function_url.backend.invoke_mode == "RESPONSE_STREAM"
+    error_message = "The API's Function URL must be RESPONSE_STREAM: the handler in backend/src/lambda.ts streams, and a BUFFERED URL stops every response at 6 MB (the CSV exports answer 413 or fail)."
+  }
+  assert {
+    condition     = alltrue([for o in aws_cloudfront_distribution.frontend.origin : o.custom_origin_config[0].origin_read_timeout > var.lambda_timeout_seconds if o.origin_id == "lambda-api"])
+    error_message = "The API origin's read timeout must stay above the Lambda timeout, so a long stream or run ends as the Lambda's own error, not a CloudFront 504."
+  }
 }
 
 # ---------------------------------------------------------------------------

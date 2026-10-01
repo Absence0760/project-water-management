@@ -162,6 +162,36 @@ test('colour farms by dam level (end of the latest run), with its own words', as
 	await expect(colourBy.locator('option')).toHaveText(['Nothing', 'Supply, latest run', 'Dam level, end of latest run']);
 });
 
+// The colouring's "Loading the latest run's results…" sat in the map card's header, wrapped it onto a
+// second row at 1280 px and moved the map ~25 px when the load ended. It lies over the map now.
+test('the map stays put while the latest run’s results load and after', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network loading line');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route(
+		(url) => url.pathname.endsWith(`/projects/${project.id}/runs/${runId}`),
+		async (route) => {
+			if (route.request().method() === 'GET') await held;
+			await route.fallback();
+		}
+	);
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const status = page.locator('.map-card .map-body').getByRole('status');
+	await expect(status).toHaveText('Loading the latest run’s results…');
+	await expect(page.locator('svg.schematic g.node').first()).toBeVisible();
+	const before = (await page.locator('.map-card .map-body').boundingBox())!;
+
+	release();
+	await expect(page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' })).toHaveAttribute('data-supply', /^(met|short|low)$/);
+	await expect(status).toHaveText('');
+	const after = (await page.locator('.map-card .map-body').boundingBox())!;
+	expect(after.y).toBe(before.y);
+	expect(after.height).toBe(before.height);
+});
+
 test('after a dam capacity edit the card’s Dam at end of run agrees with the map’s dam colouring: both read the run’s capacity (issue #173)', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network dam end of run');

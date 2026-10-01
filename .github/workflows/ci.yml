@@ -90,7 +90,8 @@ jobs:
       - name: CSP meta policy present
         run: node infra/scripts/check-csp.mjs frontend/build
 
-      # Ceilings and their change log: scripts/guards/check_web_bundle_budget.mjs.
+      # Ceilings: scripts/guards/check_web_bundle_budget.mjs; the total's raises are
+      # entry files in scripts/guards/bundle-budget/ (its README).
       - name: Web bundle budget
         run: pnpm check:bundle
 

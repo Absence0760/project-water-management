@@ -353,6 +353,22 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		for (const population of [-1, Number.POSITIVE_INFINITY, 'many']) expect(ModelBody.safeParse(body({ ...monthly, population })).success, String(population)).toBe(false);
 	});
 
+	it('takes where an object’s number comes from (engine 1.56.0): not recorded by default, one of the four, sized as it says', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
+		const perUnit = { sizing: 'perUnit', count: 300, litresPerUnitDay: 230, category: 'domestic' };
+		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.source).toBeNull();
+		for (const [o, source] of [[monthly, 'meter'], [monthly, 'aadd'], [perUnit, 'perCapita'], [monthly, 'other'], [perUnit, 'other']] as const) {
+			const parsed = ModelBody.parse(body({ ...o, source }));
+			expect(parsed.demandObjects![0]!.source).toBe(source);
+			expect(modelProblems(parsed), source).toEqual([]);
+		}
+		for (const source of ['survey', 'Meter', 3, '']) expect(ModelBody.safeParse(body({ ...monthly, source })).success, String(source)).toBe(false);
+		// A meter record or an AADD is a volume; a per-capita norm is a count × litres.
+		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'meter' }))).join()).toMatch(/a meter record is a volume, so size it by month/);
+		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'aadd' }))).join()).toMatch(/an AADD is a volume/);
+		expect(modelProblems(ModelBody.parse(body({ ...monthly, source: 'perCapita' }))).join()).toMatch(/population × litres a day is sized per unit/);
+	});
+
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {

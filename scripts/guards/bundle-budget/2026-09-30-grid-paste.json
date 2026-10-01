@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "2026-09-30 total 1370 → 1376 KB (issue #285: paste a block from a spreadsheet into the node table and the planted-areas grid, the preview dialog (model/GridPasteDialog.svelte, a chunk shared by both grids), the block mapper and CSV template (spreadsheet/paste/) and each grid's mapping (nodePaste.ts, areaPaste.ts)). Measured 1364 locally against main @ 4a17d615's 1357 (+7 KB), CI ~2 KB above. Re-measured with main @ the #293 merge (#289's crop work, 1370): 1371 locally, CI ~2 KB above. Headroom ~3 KB. (moved from the old change log when entry files arrived, #308)"
+}

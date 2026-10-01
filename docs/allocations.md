@@ -21,7 +21,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 
 | Field | Meaning |
 | --- | --- |
-| Authorisation | `registration` (WARMS, GN R1352 of 1999), `licence` (s40), `general_authorisation` (s39, e.g. GN 538), `existing_lawful_use` (s32, verified under s35) |
+| Authorisation | `registration` (WARMS, GN R1352 of 1999), `licence` (s40), `general_authorisation` (s39, e.g. GN 538), `schedule_1` (Schedule 1 permissible use, s22(1)(a)(i); 136), `existing_lawful_use_claimed` (s32, claimed or registered, not verified; 136), `existing_lawful_use` (s32, verified under s35). A registration is not an entitlement and doesn't confirm lawfulness; only s35 verification does ([DWS verification guide](https://www.dws.gov.za/WAR/documents/VerificationGuideDec06.pdf), issue #281) |
 | Purpose | `irrigation`, `domestic`, `livestock`, `industry`, `mining`, `municipal`, `other` |
 | Water source | `surface` or `groundwater` |
 | Volume | m³ per year, ≥ 0 |
@@ -96,6 +96,14 @@ is listed as "not read", never guessed.
   from after valid to, no registration number, property or farm to match by.
   A WARMS extract without an authorisation column is read as registrations;
   the template must say.
+- **Authorisation words** (`parseAuthorisation`, issue #281): "existing",
+  "ELU", "existing lawful use", "s32" or "claimed" / "unverified" ELU read as
+  `existing_lawful_use_claimed`; only an explicit "verified" (ELU) or "s35"
+  reads as `existing_lawful_use` (verified). "Schedule 1", "Sch 1" or
+  "permissible use" read as `schedule_1`, never as a general authorisation
+  ("GA", "s39"). Migration 136 moved imported rows stored as verified before
+  this to the claimed value, since the cell's words weren't kept; rows typed
+  in by hand keep what was picked.
 - **Matching** a row to a node, in order: an earlier allocation with the same
   registration number, then the same property, then a farm or water user
   whose **name** equals the row's farm (or property), ignoring case and
@@ -177,7 +185,8 @@ decides what the volumes do to a run
   units it leaves alone, and the Allocations tab says the run was capped.
 - **Full allocation**: each unit's demand is scaled, year by year, to ask
   for exactly its volumes, keeping its seasonal shape: the river if every
-  registered user took their entitlement, the background of a cumulative
+  registered or licensed volume were taken in full (a registration is not an
+  entitlement), the background of a cumulative
   assessment (WP-3.11). A scenario can switch it on for one run
   (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
 

@@ -81,7 +81,12 @@ regenerate. A conflict in a generated file (`ids.generated.ts`,
 `limitations.generated.ts`, a translation sheet): regenerate it with its
 `gen:*` script, never merge it by hand. Two migrations with the same number:
 renumber yours after the latest on `main` (the runner refuses a pending file
-that sorts before the latest applied one).
+that sorts before the latest applied one). A conflict on `BUDGET.totalCodeKb`
+or the old change log in `scripts/guards/check_web_bundle_budget.mjs`: the
+branch predates bundle-budget entry files. Take `main`'s copy of the guard
+and turn the branch's raise into an entry file (`pnpm gen:bundle-budget`),
+as `scripts/guards/bundle-budget/README.md` § Converting says; no rebuild
+needed, CI measures the merged build.
 
 ## Reviews
 

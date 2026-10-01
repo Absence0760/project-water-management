@@ -12,7 +12,8 @@
 //     says it is the model's estimate from the published figures, not a
 //     measurement or an instruction (a farmer's words "your dam", "your WUA";
 //     the WUA's staff get the same in the third person); an EWR forecast alert (staff only) says it comes from
-//     the newest forecast run, which may not be published; a restriction
+//     the newest forecast run, which may not be published; a farms-short
+//     alert (staff only) says an auto run published its figures unchecked; a restriction
 //     notice says it is the WUA's own words. The WUA's operational alerts
 //     (stale or failing feeds, dead jobs) are no model figure, so they get none.
 import { language } from '@water-management/engine/languages';
@@ -28,9 +29,16 @@ export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 export type AlertFacts =
 	| { kind: 'dam_below'; farm: string; pct: number; threshold: number; source: 'latest' | 'forecast'; date: string; madeOn?: string | null }
 	| { kind: 'ewr_forecast_fail'; days: number; of: number; from: string; to: string; madeOn: string; threshold: number }
-	| { kind: 'data_stale'; threshold: number; feeds: { label: string; newest: string; overdue: number }[] }
+	| {
+			kind: 'data_stale';
+			threshold: number;
+			feeds: { label: string; newest: string; overdue: number }[];
+			/** An ingest-key series' rule (141), not a data feed's: the lines name the series. */
+			series?: boolean;
+	  }
 	| { kind: 'feed_failing'; threshold: number; feeds: { label: string; failures: number }[] }
 	| { kind: 'job_dead'; count: number }
+	| { kind: 'farms_short'; count: number; of: number; from: string; to: string; publishedAt: string; threshold: number }
 	| {
 			kind: 'restriction_published';
 			level: RestrictionLevel;
@@ -136,9 +144,9 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			};
 		case 'data_stale':
 			return {
-				what: tr.t('mail.alert.stale.what'),
+				what: tr.t(f.series ? 'mail.alert.stale.seriesWhat' : 'mail.alert.stale.what'),
 				body: [
-					tr.tn('mail.alert.stale.body', f.threshold, { threshold: f.threshold }),
+					tr.tn(f.series ? 'mail.alert.stale.seriesBody' : 'mail.alert.stale.body', f.threshold, { threshold: f.threshold }),
 					...f.feeds.map((x) => tr.tn('mail.alert.stale.line', x.overdue, { feed: x.label, newest: dateText(x.newest, lang), overdue: x.overdue }))
 				]
 			};
@@ -149,6 +157,20 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			};
 		case 'job_dead':
 			return { what: tr.t('mail.alert.jobs.what'), body: [tr.tn('mail.alert.jobs.body', f.count, { count: f.count })] };
+		case 'farms_short':
+			return {
+				what: tr.t('mail.alert.short.what'),
+				body: [
+					tr.t('mail.alert.short.body', {
+						publishedAt: dateText(f.publishedAt, lang, timeZone),
+						from: dateText(f.from, lang),
+						to: dateText(f.to, lang),
+						count: f.count,
+						of: f.of,
+						threshold: f.threshold
+					})
+				]
+			};
 		case 'restriction_published': {
 			const date = dateText(f.publishedAt, lang, timeZone);
 			if (f.lifted) return { what: tr.t('mail.alert.restriction.liftedWhat'), body: [tr.t('mail.alert.restriction.lifted', { project, date })] };
@@ -178,6 +200,8 @@ export function liabilityKey(kind: AlertKind, farmer: boolean): MailKey | null {
 			return farmer ? 'mail.alert.model' : 'mail.alert.model.dam.staff';
 		case 'ewr_forecast_fail':
 			return 'mail.alert.model.staff';
+		case 'farms_short':
+			return 'mail.alert.model.short.staff';
 		case 'restriction_published':
 			return 'mail.alert.restriction.wua';
 		case 'data_stale':
@@ -187,7 +211,7 @@ export function liabilityKey(kind: AlertKind, farmer: boolean): MailKey | null {
 	}
 }
 
-const LIABILITY_ORDER = ['mail.alert.model', 'mail.alert.model.dam.staff', 'mail.alert.model.staff', 'mail.alert.restriction.wua'] as const;
+const LIABILITY_ORDER = ['mail.alert.model', 'mail.alert.model.dam.staff', 'mail.alert.model.staff', 'mail.alert.model.short.staff', 'mail.alert.restriction.wua'] as const;
 
 /** The liability lines for a set of alerts to one reader: each distinct one once, in a fixed order. */
 function liabilityLines(kinds: AlertKind[], farmer: boolean, tr: MailTranslator): string[] {

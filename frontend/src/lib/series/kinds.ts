@@ -1,19 +1,8 @@
-import { SERIES_KINDS, type SeriesKind } from '@water-management/engine';
+import { SERIES_KIND_LABELS, SERIES_KINDS } from '@water-management/engine';
 
-const LABELS: Record<SeriesKind, string> = {
-	rain_catchment_mm: 'Rainfall — catchment',
-	rain_catchment_alt_mm: 'Rainfall — alternative catchment gauge',
-	rain_chirps_mm: 'Rainfall — CHIRPS',
-	rain_reanalysis_mm: 'Rainfall — reanalysis (e.g. ERA5)',
-	rain_forecast_mm: 'Rainfall — forecast',
-	flow_observed_m3s: 'Flow — observed gauge',
-	flow_logger_m3s: 'Flow — logger',
-	flow_reference_m3s: 'Flow — reference gauge (other catchment)',
-	evap_apan_mm: 'Evaporation — A-pan, daily'
-};
-
+/** The engine's one table (SERIES_KIND_LABELS), which the backend's alert mails name series by too. */
 export function kindLabel(kind: string): string {
-	return (LABELS as Record<string, string>)[kind] ?? kind;
+	return (SERIES_KIND_LABELS as Record<string, string>)[kind] ?? kind;
 }
 
 /** Default unit implied by the kind's suffix. */
