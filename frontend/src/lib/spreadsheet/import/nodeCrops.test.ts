@@ -136,12 +136,31 @@ describe('readNodeCrops: headers', () => {
 	});
 
 	it('reads areas in hectares as m² when the header says hectares and never m²', async () => {
-		const b = syntheticNodeBased().set('Crop_Areas', 'E2', 'Total (ha)').set('Crop_Areas', 'A3', 'Farm North').set('Crop_Areas', 'B3', 12);
+		const b = syntheticNodeBased().set('Crop_Areas', 'C1', 'Areas (ha)').set('Crop_Areas', 'B3', 12);
 		const set = await read(b);
 		expect(set.farms[0]!.areas[0]).toEqual({ crop: 'Lucerne', m2: 120000 });
 		expect(codes(set)).toEqual(['areas-in-hectares']);
 		// The synthetic header says m²: no conversion.
 		expect((await read(syntheticNodeBased())).farms[0]!.areas[0]!.m2).toBe(120000);
+	});
+
+	it('reads hectare crop columns as hectares even beside a "Total area m²" column, and drops the unit from the crop names', async () => {
+		const b = syntheticNodeBased().row('Crop_Areas', 'B2', ['Lucerne (ha)', 'Olives (ha)', 'Wine grapes (ha)', 'Total area m²']).row('Crop_Areas', 'B3', [12, 0, 4.5, 165000]);
+		const set = await read(b);
+		expect(set.areaCrops).toEqual(['Lucerne', 'Olives', 'Wine grapes']);
+		expect(set.farms[0]!.areas).toEqual([
+			{ crop: 'Lucerne', m2: 120000 },
+			{ crop: 'Olives', m2: 0 },
+			{ crop: 'Wine grapes', m2: 45000 }
+		]);
+		expect(codes(set)).toEqual(['areas-in-hectares']);
+	});
+
+	it('a crop column saying m² wins over a hectare title above another column', async () => {
+		const b = syntheticNodeBased().set('Crop_Areas', 'A1', 'Farm areas (ha)').set('Crop_Areas', 'B2', 'Lucerne (m²)');
+		const set = await read(b);
+		expect(set.farms[0]!.areas[0]).toEqual({ crop: 'Lucerne', m2: 120000 });
+		expect(set.warnings).toEqual([]);
 	});
 
 	it('takes the first A-pan row when there are two', async () => {
