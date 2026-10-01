@@ -28,7 +28,7 @@ import { safeError } from '../logging/safeError.js';
 import { alertMail, digestMail, type AlertFacts, type MailProject, type Recipient } from '../mail/alerts.js';
 import { sendMail, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
-import { alertsEnabled } from './evaluate.js';
+import { alertsEnabled, newestForecast } from './evaluate.js';
 import type { AlertKind, AlertMode } from './rules.js';
 import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
 import { logEvent } from '../logging/logEvent.js';
@@ -160,8 +160,21 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 			if (!n[0]) return 'cannot see this farm';
 			return { kind: 'dam_below', farm: n[0].name, pct: Number(d.pct), threshold: e.threshold, source: d.source === 'forecast' ? 'forecast' : 'latest', date: String(d.date), madeOn: d.madeOn ?? null };
 		}
-		case 'ewr_forecast_fail':
-			return { kind: 'ewr_forecast_fail', days: Number(d.days), of: Number(d.of), from: String(d.from), to: String(d.to), madeOn: String(d.madeOn), threshold: e.threshold };
+		case 'ewr_forecast_fail': {
+			// A digest line sent after rain was recorded past the forecast, with no newer one made, says so
+			// (the event is left as it is meanwhile: evaluate.ts newestForecast). Calendar days only, so no time zone.
+			const outOfDate = e.state === 'firing' ? ((await newestForecast(db, c.project_id, DEFAULT_TIME_ZONE))?.outOfDate ?? null) : null;
+			return {
+				kind: 'ewr_forecast_fail',
+				days: Number(d.days),
+				of: Number(d.of),
+				from: String(d.from),
+				to: String(d.to),
+				madeOn: String(d.madeOn),
+				threshold: e.threshold,
+				outOfDate: outOfDate && { observedTo: outOfDate.observedTo, rainUntil: outOfDate.rainUntil }
+			};
+		}
 		case 'data_stale':
 			return { kind: 'data_stale', threshold: e.threshold, feeds: Array.isArray(d.feeds) ? d.feeds : [], series: d.series === true };
 		case 'feed_failing':

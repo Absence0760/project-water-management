@@ -96,6 +96,12 @@ describe('alertMail', () => {
 		expect(alertMail(wua, project, { kind: 'ewr_forecast_fail', days: 5, of: 14, from: '2026-09-27', to: '2026-10-10', madeOn: '2026-09-26', threshold: 3 }, unsub).text).toContain(
 			'missed on 5 of the 14 forecast days (27 Sept 2026 to 10 Oct 2026)'
 		);
+		// A forecast behind the recorded rain, with no newer one made, says so (positive control: the current one above doesn't).
+		const ewr = ONE_OF_EACH.ewr_forecast_fail as Extract<AlertFacts, { kind: 'ewr_forecast_fail' }>;
+		expect(alertMail(wua, project, ewr, unsub).text).not.toContain('out of date');
+		expect(alertMail(wua, project, { ...ewr, outOfDate: { observedTo: '2026-09-25', rainUntil: '2026-09-28' } }, unsub).text).toContain(
+			'This forecast is out of date: it used the rain recorded to 25 Sept 2026, rain has since been recorded to 28 Sept 2026, and no newer forecast has been made yet. Check the forecast data feed.'
+		);
 		expect(alertMail(wua, project, { kind: 'data_stale', threshold: 3, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 10 }] }, unsub).text).toContain(
 			'DWS gauge flow: newest day 2 Jan 2026, 10 days late'
 		);

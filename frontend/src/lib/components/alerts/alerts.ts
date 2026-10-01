@@ -55,6 +55,17 @@ export function eventText(e: AlertEvent): string {
 	}
 }
 
+/**
+ * A firing EWR forecast alert whose forecast is behind the recorded rain (no
+ * newer forecast made, typically a failing forecast feed), as a sentence
+ * under it; null when the forecast is current (docs/ui.md § Alerts).
+ */
+export function outOfDateText(e: Pick<AlertEvent, 'forecastOutOfDate'>): string | null {
+	const o = e.forecastOutOfDate;
+	if (!o) return null;
+	return `Forecast out of date: made ${day(o.madeOn)} on the rain recorded to ${day(o.observedTo)}, but rain is now recorded to ${day(o.rainUntil)} and no newer forecast has been made. Check the forecast data feed.`;
+}
+
 /** How a rule's threshold is typed in the editor: a dam level in percent, everything else as stored. */
 export function thresholdToInput(kind: AlertKind, threshold: number): number {
 	return kind === 'dam_below' ? Math.round(threshold * 1000) / 10 : threshold;

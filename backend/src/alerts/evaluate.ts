@@ -180,6 +180,50 @@ const md5 = (s: string | null) => createHash('md5').update(s ?? '').digest('hex'
 /** A feed as the feeds page, the rule editor and the alert mails name it. */
 export const feedLabel = (source: FeedSource, targetName: string) => (targetName ? `${SOURCES[source].label} (${targetName})` : SOURCES[source].label);
 
+/**
+ * A forecast run behind the recorded rain: it used rain to `observedTo`, but
+ * rain has since been recorded to `rainUntil` (and `madeOn` is the day it was
+ * made). Shown on a firing ewr_forecast_fail event (routes.ts, the digest
+ * mail) while no newer forecast has been made, typically because the
+ * forecast feed is failing (feed_failing fires for that).
+ */
+export interface ForecastOutOfDate {
+	madeOn: string;
+	observedTo: string;
+	rainUntil: string;
+}
+
+/**
+ * The project's newest forecast run (scenario-free), as RLS lets the caller
+ * read it, with whether it is out of date. One made before rain was recorded
+ * for days it ran as dry (or on forecast rain) describes a past that didn't
+ * happen: it can say "the river fails" where a fresh one says it doesn't. It
+ * neither opens nor clears an event (evaluateAlerts); the re-made forecast
+ * run (the auto re-run queues it, jobs/handlers/rerun.ts) decides. Until it
+ * comes, the pages that show the firing event say it is out of date. A
+ * forecast with no lastObserved (no recorded rain at all when it ran) is
+ * never out of date.
+ */
+export async function newestForecast(db: Db, projectId: string, timeZone: string) {
+	const { rows } = await db.query<{
+		id: string;
+		created_at: Date;
+		f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number; lastObserved?: string | null } | null;
+	}>(
+		`SELECT id, created_at, summary->'forecast' AS f
+		 FROM model_run WHERE project_id = $1 AND scenario_id IS NULL AND trigger = 'forecast'
+		 ORDER BY created_at DESC LIMIT 1`,
+		[projectId]
+	);
+	const r = rows[0];
+	if (!r?.f) return null;
+	const madeOn = localDate(r.created_at, timeZone);
+	const rainUntil = r.f.lastObserved ? await recordedRainUntil(db, projectId) : null;
+	const outOfDate: ForecastOutOfDate | null =
+		rainUntil && r.f.lastObserved && r.f.lastObserved < rainUntil ? { madeOn, observedTo: r.f.lastObserved, rainUntil } : null;
+	return { runId: r.id, madeOn, stale: outOfDate !== null, outOfDate, ...r.f };
+}
+
 /** Evaluate every rule of the project once. As an editor (RLS), inside the job's transaction. */
 export async function evaluateAlerts(db: Db, projectId: string, { now = new Date() }: { now?: Date } = {}): Promise<EvalOutcome> {
 	const { rows: proj } = await db.query<{ time_zone: string }>('SELECT time_zone FROM project WHERE id = $1', [projectId]);
@@ -223,27 +267,9 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		return () => (p ??= f());
 	};
 	const forecast = lazy(async () => {
-		const { rows } = await db.query<{
-			id: string;
-			created_at: Date;
-			f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number; lastObserved?: string | null } | null;
-		}>(
-			`SELECT id, created_at, summary->'forecast' AS f
-			 FROM model_run WHERE project_id = $1 AND scenario_id IS NULL AND trigger = 'forecast'
-			 ORDER BY created_at DESC LIMIT 1`,
-			[projectId]
-		);
-		const r = rows[0];
+		const f = await newestForecast(db, projectId, timeZone);
 		// A forecast whose days have all passed says nothing about what's coming.
-		if (!r?.f || r.f.to < today) return null;
-		// One made before rain was recorded for days it ran as dry (or on
-		// forecast rain) describes a past that didn't happen: it can say "the
-		// river fails" where a fresh one says it doesn't. It neither opens nor
-		// clears an event; the re-made forecast run (the auto re-run queues it,
-		// jobs/handlers/rerun.ts) decides.
-		const rainUntil = r.f.lastObserved ? await recordedRainUntil(db, projectId) : null;
-		const stale = !!rainUntil && !!r.f.lastObserved && r.f.lastObserved < rainUntil;
-		return { runId: r.id, madeOn: localDate(r.created_at, timeZone), stale, ...r.f };
+		return f && f.to >= today ? f : null;
 	});
 	const held = lazy(() => heldSinceLastRun(db, projectId));
 	const feeds = lazy(async () => {

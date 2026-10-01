@@ -11,11 +11,13 @@
 // a title that stays). A save that fails puts the switch back where the
 // server has it, and a muted catchment's note turns its alert emails back on,
 // focusing the card's title. An editor sets a
-// staleness level per data feed on Overview's rule editor.
+// staleness level per data feed on Overview's rule editor. A firing EWR
+// forecast alert whose forecast is behind the recorded rain says so on
+// Overview's Active alerts.
 import { expectNoViolations } from '../support/a11y.ts';
-import { acceptInvites, addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { acceptInvites, addMember, createProject, createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { words } from '../support/lang.ts';
-import { plantAlertSubscription } from '../support/db.ts';
+import { plantAlertSubscription, plantEwrForecastAlert } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { simulateBounce } from '../support/jobs.ts';
@@ -420,4 +422,32 @@ test('an editor sets a staleness level for a series an API key sends, starting f
 	const saved = await page.request.get(`${API_URL}/projects/${project.id}/alert-rules`);
 	const rule = ((await saved.json()).rules as { kind: string; seriesId: string | null; threshold: number; enabled: boolean }[]).find((r) => r.seriesId === seriesId)!;
 	expect(rule).toMatchObject({ kind: 'data_stale', threshold: 4, enabled: true });
+});
+
+// docs/followups.md: a firing EWR forecast alert is left as it is while its
+// forecast is behind the recorded rain; with no newer forecast made (the
+// forecast feed failing), Active alerts says the forecast is out of date.
+test('a firing EWR forecast alert says its forecast is out of date once rain is recorded past it', async ({ page, owner }) => {
+	void owner;
+	// seedRunnableProject's rain runs 120 days from 1 Oct 2021, to 28 Jan 2022.
+	const project = await seedRunnableProject(page.request, 'Forecast behind catchment');
+	const runId = await createRun(page.request, project.id, 'forecast');
+	const panel = page.getByRole('region', { name: 'Active alerts' });
+	const alert = panel.locator('li[data-alert-kind="ewr_forecast_fail"]');
+
+	// Positive control: a forecast continuing from the last recorded day is current.
+	await plantEwrForecastAlert(project.id, runId, '2022-01-28');
+	await page.goto(`/projects/${project.id}`);
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await expect(alert).toContainText('EWR at the outlet at risk on 5 of 16 forecast days (alert at 3)');
+	await expect(alert.locator('[data-forecast-out-of-date]')).toHaveCount(0);
+
+	// Behind: it continued from 20 Jan, but rain is recorded to 28 Jan.
+	await plantEwrForecastAlert(project.id, runId, '2022-01-20');
+	await page.reload();
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await expect(alert.locator('[data-forecast-out-of-date]')).toContainText(
+		'on the rain recorded to 20 Jan 2022, but rain is now recorded to 28 Jan 2022 and no newer forecast has been made. Check the forecast data feed.'
+	);
+	await expectNoViolations(page, { include: '.alerts' });
 });

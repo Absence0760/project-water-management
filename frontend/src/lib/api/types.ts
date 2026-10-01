@@ -519,6 +519,12 @@ export interface AlertEvent {
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
 	detail: Record<string, unknown>;
+	/**
+	 * A firing ewr_forecast_fail event whose forecast is behind the recorded
+	 * rain, with no newer forecast made since: the day it was made, its last
+	 * recorded rain day, and the recorded rain's last day now. null otherwise.
+	 */
+	forecastOutOfDate: { madeOn: string; observedTo: string; rainUntil: string } | null;
 }
 
 /** POST /alerts/unsubscribe (the landing page's JSON form). */
