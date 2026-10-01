@@ -111,6 +111,20 @@
 		}
 	}
 
+	// The party's appointed specialist (167_signers): signs its applications' evidence packs.
+	async function setSpecialist(m: Member, next: boolean) {
+		busy = m.userId;
+		error = null;
+		try {
+			const updated = await api.members.setSpecialist(projectId, m.userId, next);
+			members = members.map((x) => (x.userId === m.userId ? updated : x));
+		} catch (err) {
+			error = msg(err);
+			await load();
+		} finally {
+			busy = null;
+		}
+	}
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
 		const ok = await confirmDialog(
@@ -202,6 +216,20 @@
 										<span class="muted small party">{m.party}</span>
 									{/if}
 								{/if}
+								{#if m.party && isOwner}
+									<label class="specialist small">
+										<input
+											type="checkbox"
+											checked={m.specialist}
+											disabled={busy === m.userId}
+											onchange={(e) => setSpecialist(m, e.currentTarget.checked)}
+											data-testid="member-specialist"
+										/>
+										Specialist for this party
+									</label>
+								{:else if m.specialist}
+									<span class="badge small">Specialist for {m.party}</span>
+								{/if}
 							</td>
 							<td class="act">
 								{#if isOwner || m.userId === currentUserId}
@@ -244,7 +272,8 @@
 			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
 			run it; owners also manage members. An applicant sees only the published baseline, their own hydrological units and their own
 			applications (a licence applicant or their consultant). Put an applicant and their consultant in the same applying
-			party: they can share applications only with each other.
+			party: they can share applications only with each other. Tick “Specialist for this party” for the registered professional
+			the applicant appointed: they sign the evidence packs of the party’s applications (an editor still drafts and issues them).
 		</p>
 		<PendingInvites
 			bind:invites
@@ -278,6 +307,12 @@
 		display: block;
 		margin-top: 0.25rem;
 		max-width: 12rem;
+	}
+	.specialist {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin-top: 0.25rem;
 	}
 	.skeleton td {
 		height: 37px;

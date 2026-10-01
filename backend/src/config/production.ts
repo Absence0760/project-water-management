@@ -146,7 +146,7 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	REGISTRATION_CHECK_REQUIRED: {
 		why: 'false lets every project issue a pack without a recorded check of its specialist signers\' registrations, whatever the project\'s own setting (signoffs/registrationCheck.ts, 167_signers), for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
-		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
+		checks: { api: optional(oneOf('true')) }
 	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },

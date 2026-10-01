@@ -23,6 +23,7 @@
 	import { projectAnchor } from './links';
 	import { modelFacts, otherNodesLine } from './modelFacts';
 	import MembersPanel from './MembersPanel.svelte';
+	import RegistrationChecksPanel from './RegistrationChecksPanel.svelte';
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
@@ -182,6 +183,8 @@
 		<div class="col access">
 			<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
 			<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
+			<!-- The host's checks of signers' registrations (167_signers): editors read them, owners record them. -->
+			{#if canEdit}<RegistrationChecksPanel projectId={project.id} {isOwner} />{/if}
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
