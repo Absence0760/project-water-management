@@ -45,6 +45,12 @@ describe('loadShare', () => {
 		expect(api.calls).toEqual([`view ${TOKEN}`, 'series simulated_outflow', 'series ewr']);
 	});
 
+	it('keeps every month of the run: the page draws the latest, the member summary its period', async () => {
+		const many = Array.from({ length: 40 }, (_, i) => i);
+		const r = await loadShare(fakeApi({ series: async (_t, key) => series(key, many) }), TOKEN);
+		expect(r.state === 'ready' && r.months?.length).toBe(40);
+	});
+
 	it('is a dead link on the view’s 404, and an error on anything else', async () => {
 		expect(await loadShare(fakeApi({ view: async () => Promise.reject(new ApiError(404, 'not found')) }), TOKEN)).toEqual({ state: 'dead' });
 		expect(await loadShare(fakeApi({ view: async () => Promise.reject(new ApiError(0, 'Could not reach the server')) }), TOKEN)).toEqual({ state: 'error', message: 'Could not reach the server' });

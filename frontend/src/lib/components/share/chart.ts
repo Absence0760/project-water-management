@@ -30,6 +30,9 @@ export function addMonths(month: string, n: number): string {
 	return `${yy}-${String(mm + 1).padStart(2, '0')}`;
 }
 
+/** The months the page's chart draws: the latest FLOW_MONTHS. */
+export const recentMonths = (months: readonly FlowMonth[]) => months.slice(Math.max(0, months.length - FLOW_MONTHS));
+
 /** The last `max` months of the flow series, each with the reserve of the same month (null where either has none). */
 export function flowMonths(flow: ShareSeries, ewr: ShareSeries, max = FLOW_MONTHS): FlowMonth[] {
 	const reserve = new Map(ewr.monthly.values.map((v, i) => [addMonths(ewr.monthly.startMonth, i), v]));
@@ -94,20 +97,41 @@ export function flowChart(months: readonly FlowMonth[], width: number): FlowChar
 			x,
 			y
 		),
-		labels: months.flatMap((m, i) => ((months.length - 1 - i) % every === 0 ? [{ x: x(i), label: fmtMonthShort(m.month) }] : []))
+		labels: months.length > FLOW_MONTHS ? yearLabels(months, x, step) : months.flatMap((m, i) => ((months.length - 1 - i) % every === 0 ? [{ x: x(i), label: fmtMonthShort(m.month) }] : []))
 	};
+}
+
+/**
+ * Past two years (the member summary's whole run) a month name says nothing
+ * without its year: label the Januaries with their year, every few years so
+ * they never collide (about one per 48 px).
+ */
+function yearLabels(months: readonly FlowMonth[], x: (i: number) => number, step: number): { x: number; label: string }[] {
+	const everyYears = Math.max(1, Math.ceil(48 / (step * 12)));
+	return months.flatMap((m, i) => {
+		const year = Number(m.month.slice(0, 4));
+		return m.month.endsWith('-01') && year % everyYears === 0 ? [{ x: x(i), label: String(year) }] : [];
+	});
 }
 
 /** Months whose mean flow was below the mean reserve. */
 export const monthsBelow = (months: readonly FlowMonth[]) => months.filter((m) => m.flow != null && m.ewr != null && m.flow < m.ewr);
 
+/** "The mean flow was below the reserve in 3 of the 24 months." (the summary sentence's verdict; the member summary prints it). */
+export function flowVerdict(months: readonly FlowMonth[]): string {
+	// i18n-section: share.chart
+	const below = monthsBelow(months).length;
+	return below === 0
+		? t('The mean flow was above the reserve in every month.')
+		: below === months.length
+			? t('The mean flow was below the reserve in every month.')
+			: t('The mean flow was below the reserve in {n} of the {months} months.', { n: below, months: months.length });
+}
+
 /** The chart's visually hidden summary. */
 export function flowSummary(months: readonly FlowMonth[]): string {
-	// i18n-section: share.chart
 	if (!months.length) return t('No flows to show.');
-	const below = monthsBelow(months).length;
-	const verdict =
-		below === 0 ? t('The mean flow was above the reserve in every month.') : below === months.length ? t('The mean flow was below the reserve in every month.') : t('The mean flow was below the reserve in {n} of the {months} months.', { n: below, months: months.length });
+	const verdict = flowVerdict(months);
 	return t('River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below.', { from: fmtMonthLongYear(months[0]!.month), to: fmtMonthLongYear(months[months.length - 1]!.month), verdict });
 }
 

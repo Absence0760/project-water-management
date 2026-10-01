@@ -77,7 +77,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await expect(shared).toHaveURL(/\/share$/);
 	expect(await shared.evaluate(() => location.hash)).toBe('');
 	await expect(shared.getByRole('heading', { level: 1 })).toHaveText('Shared catchment');
-	await expect(shared.getByText(/^Published by Owner \d+ on /)).toBeVisible();
+	// The printed member summary repeats it, hidden on screen (issue #118): the screen's line.
+	await expect(shared.getByText(/^Published by Owner \d+ on /).filter({ visible: true })).toBeVisible();
 	// Under the heading, where the reliance happens (docs/legal/disclaimer-review.md § 3).
 	await expect(shared.getByTestId('share-caveat')).toHaveText(
 		'A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.'
@@ -144,9 +145,9 @@ test('a catchment with too few farms shows its status without the flow chart, an
 	const shared = await stranger.newPage();
 	await shared.goto(link.url);
 	await expect(shared.getByRole('region', { name: 'The river’s ecological reserve' })).toBeVisible();
-	await expect(shared.getByText(/^The flow chart isn’t shown for this catchment/)).toBeVisible();
+	await expect(shared.getByText(/^The flow chart isn’t shown for this catchment/).filter({ visible: true })).toBeVisible();
 	await expect(shared.getByRole('region', { name: /^River flow each month/ })).toHaveCount(0);
-	await expect(shared.getByText(/^2\s+hydrological units in the catchment\.$/)).toBeVisible();
+	await expect(shared.getByText(/^2\s+hydrological units in the catchment\.$/).filter({ visible: true })).toBeVisible();
 
 	await shared.goto('/share');
 	await expect(shared.getByRole('alert')).toHaveText(/^This page needs the whole link\./);
@@ -210,5 +211,71 @@ test('a share link fits a laptop screen in two columns and a phone in one', asyn
 		await shared.emulateMedia({ colorScheme });
 		await expectNoViolations(shared);
 	}
+	await stranger.close();
+});
+
+/** A PDF's page count: its page objects, not the page tree (backend reports/render.ts countPdfPages). */
+const pdfPages = (pdf: Buffer) => pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0;
+
+// The member summary (issue #118): a WUA prints the shared catchment view, or
+// saves it as a PDF, for its members, over a period it picks. On paper only
+// the summary shows (no header, no buttons, never the link), in the period
+// chosen, on at most two A4 pages, and with no farm named.
+test('a share link prints a member summary of one or two pages over the period chosen', async ({ page, owner, browser }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Printed catchment');
+	const model = fiveFarms(project.model);
+	await putModel(page.request, project.id, model);
+	await publish(page.request, project.id);
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/share-links`, { data: { label: 'Members', expiresInDays: 7 } });
+	expect(made.status()).toBe(201);
+	const { link } = (await made.json()) as { link: { url: string } };
+	const token = new URLSearchParams(new URL(link.url).hash.slice(1)).get('t')!;
+
+	const stranger = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-ZA', timezoneId: 'UTC', colorScheme: 'dark' });
+	const shared = await stranger.newPage();
+	await shared.goto(link.url);
+	const card = shared.getByRole('region', { name: 'Print a summary for members' });
+	await expect(card).toBeVisible();
+	const period = card.getByLabel('Period');
+	// The season first: what a WUA sends members most.
+	await expect(period).toHaveValue('season');
+	await expect(period.locator('option')).toHaveText(['The last 30 days', 'This season', 'The whole model run']);
+	// The chosen period's dates under it, never cut off inside the select.
+	await expect(card.locator('#summary-dates')).toHaveText(/^\d{1,2} \w{3,4} \d{4} to \d{1,2} \w{3,4} \d{4}$/);
+	expect(await period.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	await expect(card.getByRole('button', { name: 'Print or save as PDF' })).toBeVisible();
+	// On screen the paper copy isn't there.
+	await expect(shared.getByTestId('member-summary')).toBeHidden();
+	await expectNoViolations(shared);
+
+	await shared.emulateMedia({ media: 'print' });
+	const paper = shared.getByTestId('member-summary');
+	await expect(paper).toBeVisible();
+	for (const hidden of [shared.locator('.share-header'), card, shared.getByRole('region', { name: 'About this page' })]) await expect(hidden).toBeHidden();
+	await expect(paper.getByRole('heading', { level: 1 })).toHaveText('Printed catchment');
+	await expect(paper).toContainText(/This season: \d{1,2} \w{3,4} \d{4} to \d{1,2} \w{3,4} \d{4}/);
+	await expect(paper).toContainText('Water is short on the river.');
+	await expect(paper.getByText(/^At the catchment outlet (Below|Kept) its reserve on .+ from .+ to .+\.$/)).toBeVisible();
+	await expect(paper.locator('svg polyline.flow').first()).toBeVisible();
+	await expect(paper).toContainText(/Printed on \d{1,2} \w{3,4} \d{4}\./);
+	const text = await paper.innerText();
+	for (const name of model.nodes.map((n) => n.name as string)) expect(text).not.toContain(name);
+	expect(text).not.toContain('Staff only');
+	expect(await shared.locator('body').innerText()).not.toContain(token);
+	// White paper, whatever the screen's theme.
+	expect(await paper.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)');
+
+	for (const choice of ['last30', 'season', 'run'] as const) {
+		await shared.emulateMedia({ media: 'screen' });
+		await period.selectOption(choice);
+		await shared.emulateMedia({ media: 'print' });
+		await expect(paper).toHaveAttribute('data-window', choice);
+		const pdf = await shared.pdf({ format: 'A4' });
+		const pages = pdfPages(pdf);
+		expect(pages, choice).toBeGreaterThanOrEqual(1);
+		expect(pages, choice).toBeLessThanOrEqual(2);
+	}
+	await expect(paper).toContainText(/The whole model run: /);
 	await stranger.close();
 });

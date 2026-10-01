@@ -61,6 +61,8 @@ export const SECTIONS: Record<string, string> = {
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',
+	'share.summary':
+		'Shared view, printed: the “member summary”, one or two printed pages of the shared catchment view that a water user association prints or saves as a PDF and sends to its members (irrigation farmers), over a period the reader picks (the last 30 days, this season, or the whole model run). Dates are written out (“1 Oct 2023”); {period} is the period’s name, {dates} two dates like “1 Oct 2023 to 10 Jan 2024”, {days} is like “102 days”.',
 	'share.scenario':
 		'Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.',
 	'share.pack':

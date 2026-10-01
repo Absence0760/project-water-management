@@ -15,24 +15,35 @@
 	// comes back here with the token from this tab's sessionStorage. An
 	// evidence pack link (`k=pack`, 128_pack_share_notes) opens PackView the
 	// same way.
-	import { onMount } from 'svelte';
+	// The catchment view prints as a member summary (issue #118): the period
+	// is chosen on the page (SummaryControls), and in print only
+	// MemberSummary shows, on A4, black on white.
+	import { flushSync, onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
+	import { recentMonths } from '$lib/components/share/chart';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
 	import { loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '$lib/components/share/load';
 	import PackView from '$lib/components/share/PackView.svelte';
 	import { readShareKind, SHARE_RETURN_KEY } from '$lib/components/share/scenario';
+	import MemberSummary from '$lib/components/share/MemberSummary.svelte';
 	import ScenarioView from '$lib/components/share/ScenarioView.svelte';
 	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '$lib/components/share/share';
+	import { DEFAULT_WINDOW, type SummaryWindow } from '$lib/components/share/summary';
+	import SummaryControls from '$lib/components/share/SummaryControls.svelte';
+	import { localIsoDate } from '$lib/format/number';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	let token = $state<string | null>(null);
 	let kind: 'scenario' | 'pack' | null = null;
 	let result = $state<ShareLoad | ScenarioShareLoad | PackShareLoad | null>(null);
+	/** The member summary's period (issue #118). */
+	let period = $state<SummaryWindow>(DEFAULT_WINDOW);
+	let today = $state(localIsoDate());
 	/** What the loaded link opens: the catchment view (null), an application or an evidence pack. */
 	let shown = $state<'scenario' | 'pack' | null>(null);
 
@@ -78,6 +89,21 @@
 		load();
 	}
 
+	// The member summary prints on A4. Its colours are its own (MemberSummary), so it prints black on white whatever the screen's theme.
+	$effect(() => {
+		if (!ready) return;
+		const pageRule = document.createElement('style');
+		pageRule.textContent = '@page { size: A4; margin: 14mm 12mm; }';
+		document.head.append(pageRule);
+		// "Printed on" is the day of the print, not of the page load (a tab left open overnight).
+		const stamp = () => flushSync(() => (today = localIsoDate()));
+		addEventListener('beforeprint', stamp);
+		return () => {
+			pageRule.remove();
+			removeEventListener('beforeprint', stamp);
+		};
+	});
+
 	onMount(() => {
 		open();
 		// A link pasted into this tab changes only the fragment, which is no new page load.
@@ -98,7 +124,7 @@
 <div class="share">
 	<!-- The app's name with "Shared view" under it, so the header stays one
 	     row on a 360 px phone with the EN | AF switch beside it. -->
-	<header class="share-header">
+	<header class="share-header screen-only">
 		<div class="header-in">
 			<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">Water Management</span><span class="tag">{t('Shared view')}</span></span></span>
 			<LanguageSwitch compact />
@@ -127,7 +153,7 @@
 			{@const view = ready.view}
 			{@const cv = view.publication.catchmentView}
 			{@const notice = shareNotice(view)}
-			<div class="head">
+			<div class="head screen-only">
 				<h1>{view.project.name}</h1>
 				<p class="sub">{t('Catchment water balance, shared read-only')}</p>
 				<p class="dates">{publishedLine(view)}</p>
@@ -138,7 +164,7 @@
 			<!-- Phone: one column, the notice and the reserve first. From 860 px
 			     wide: those two on the left, the flow chart and About on the
 			     right, so the whole result fits a laptop screen. -->
-			<div class="cols">
+			<div class="cols screen-only">
 				<div class="col">
 					<NoticeCard {notice} noneText={t('No restriction from the WUA')} pageLang={wordsLang()} />
 
@@ -163,11 +189,13 @@
 							{/each}
 						</ul>
 					</section>
+
+					<SummaryControls {cv} bind:period />
 				</div>
 
 				<div class="col">
 					{#if ready.months}
-						<FlowChart months={ready.months} />
+						<FlowChart months={recentMonths(ready.months)} />
 					{:else}
 						<p class="fine" role={ready.chartFailed ? 'status' : undefined}>{ready.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
 					{/if}
@@ -182,8 +210,11 @@
 						<p class="fine">{t('It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.')}</p>
 						<p class="fine legal-links"><a href="{base}/terms">{t('Terms of use')}</a> · <a href="{base}/privacy">{t('Privacy notice')}</a></p>
 					</section>
+
 				</div>
 			</div>
+
+			<MemberSummary {view} {notice} months={ready.months} chartFailed={ready.chartFailed} {period} {today} pageLang={wordsLang()} />
 		{/if}
 	</main>
 </div>
@@ -296,6 +327,25 @@
 	}
 	.dead {
 		gap: 12px;
+	}
+
+	/* Printing the catchment view prints the member summary alone (issue #118), on white paper. */
+	@media print {
+		.share:has(:global(.paper)) {
+			background: #fff;
+			min-height: 0;
+		}
+		.share:has(:global(.paper)) .screen-only {
+			display: none;
+		}
+		.share:has(:global(.paper)) .share-main {
+			max-width: none;
+			padding: 0;
+		}
+		:global(html:has(.paper)),
+		:global(body:has(.paper)) {
+			background: #fff;
+		}
 	}
 
 	/* The farm view's card language (FarmShell), for this page and the cards it borrows. */
