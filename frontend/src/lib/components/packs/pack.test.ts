@@ -189,12 +189,18 @@ describe('lists of packs', () => {
 
 describe('issueChecklist', () => {
 	it('lists the three checks in order, each with its done or to-do words', () => {
-		const all = issueChecklist({ issuable: true, runsVerified: true, signed: true });
-		expect(all.map((c) => c.id)).toEqual(['issuable', 'runsVerified', 'signed']);
+		const all = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: true });
+		expect(all.map((c) => c.id)).toEqual(['issuable', 'runsVerified', 'errataRecorded', 'signed']);
 		expect(all.every((c) => c.ok)).toBe(true);
-		const unsigned = issueChecklist({ issuable: true, runsVerified: true, signed: false });
+		const unsigned = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: false });
 		expect(unsigned.find((c) => !c.ok)).toMatchObject({ id: 'signed' });
-		expect(unsigned[2]!.todo).toMatch(/Appendix B\.2/);
+		expect(unsigned[3]!.todo).toMatch(/Appendix B\.2/);
+	});
+
+	it('fails a draft missing an erratum found since it was made, saying to draft it again', () => {
+		const stale = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: false, signed: true });
+		expect(stale.filter((c) => !c.ok).map((c) => c.id)).toEqual(['errataRecorded']);
+		expect(stale[2]!.todo).toMatch(/can’t be issued\. Draft the pack again/);
 	});
 });
 
@@ -263,7 +269,7 @@ describe('errataFoundSinceNote', () => {
 	it('says "since this draft was made" before issue, with the way to record them (a draft again)', () => {
 		const n = errataFoundSinceNote(pack({ status: 'draft', issuedAt: null }));
 		expect(n.heading).toBe('Errata found since this draft was made');
-		expect(n.note).toMatch(/draft the pack again/);
+		expect(n.note).toMatch(/so it can’t be issued: draft the pack again/);
 		// A pack withdrawn before it was issued was never issued either.
 		expect(errataFoundSinceNote(pack({ status: 'withdrawn', issuedAt: null })).heading).toBe('Errata found since this draft was made');
 	});

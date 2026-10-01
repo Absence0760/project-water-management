@@ -155,9 +155,13 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   recorded hash; the frozen report may be issued; there is a sign-off of the
   *current* pack statement (a new known limitation or erratum since the
   signature means signing again); both runs' server stamps still match their
-  rows ([security.md § Run stamps](./security.md)); and the live report may
-  still be issued (the nomination, the declared rule and the cited ensemble
-  haven't moved since the draft). Then it stamps the issue (`issued_at`,
+  rows ([security.md § Run stamps](./security.md)); no erratum found since
+  the draft was made applies to either run's engine or its fit's (the pack's
+  `errataFoundSince` is empty; otherwise `409` `pack_errata_since_draft`,
+  naming them: the manifest would never list them, so the pack is drafted
+  again, which records them, and that draft is signed and issued); and the
+  live report may still be issued (the nomination, the declared rule and the
+  cited ensemble haven't moved since the draft). Then it stamps the issue (`issued_at`,
   `issued_by`, set by the database, never the caller) and, for a new
   version, marks the predecessor superseded, naming the successor.
   In the same transaction it builds the pack's reproduction bundle, checks
@@ -287,7 +291,11 @@ erratum shows on verify once the API that carries it is deployed.
 The pack's own page (`GET …/packs/:packId`, `errataFoundSince`) lists them
 too, in its bar above the report, which is never printed: the pack and its
 PDF print only what the manifest recorded. On a draft they are the errata
-found since the draft was made; drafting the pack again records them.
+found since the draft was made, and issue refuses it
+(`pack_errata_since_draft`, [§ Lifecycle](#lifecycle)) until the pack is
+drafted again, which records them. So a pack is only ever issued with every
+erratum known at its issue; `errataFoundSince` on verify lists only those
+found after it.
 
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
@@ -477,7 +485,7 @@ row; they read a projection the database builds (D2's recommended default,
 | the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
 | their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| every other farm or water user in both runs: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users, anonymised: ranked per kind in the order of a hash of the node's id, so the number says nothing of its name or place; a rank within this pack, not a label, so "Farm 3" in one version need not be "Farm 3" in the next |
+| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the application's own units now, as the results view; when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the
@@ -492,8 +500,10 @@ verify page). An anonymised printable copy for the applicant is a follow-up
 
 **Share links.** The application's owner (not the consultant they shared it
 with) makes a link to their own pack while it is issued, and lists and
-revokes the links they made, whatever its standing; the editors still list
-and revoke every link. The link shows the public projection above
+revokes the links they made, whatever its standing, while they are still
+its party; the editors still list and revoke every link. Someone who made a
+link as an editor and was demoted since, and isn't a party, no longer sees
+or revokes it. The link shows the public projection above
 ([§ Sharing and comments](#sharing-and-comments)), which names no unit, the
 applicant's own included.
 
@@ -511,8 +521,11 @@ Tests: `backend/src/evidence/applicant-packs.db.test.ts`,
 `evidence/applicantPacks.test.ts`,
 `frontend/src/lib/components/packs/applicantPack.test.ts` and
 `e2e/tests/applicant-pack.spec.ts` (the applicant opens their issued pack
-from the Application panel, sees their farm by name and the neighbour as
-"Farm 1", makes a link, and it opens signed out).
+from the Application panel, sees their farm by name and not the neighbour
+beside it, which isn't downstream, as in their results view, makes a link,
+and it opens signed out); `evidence/applicant-pack-units.db.test.ts` (the other units are the
+results view's downstream units under the same names; no upstream or side
+unit).
 
 ## Notices
 
@@ -540,9 +553,11 @@ follows the alert mails' pattern ([architecture.md § Alert emails](./architectu
 
 **Who gets it.** Everyone whose role on the project, direct or through its
 team, is editor or owner (they issue and withdraw packs), and, for an
-application's pack, the scenario's owner while they still hold a role above
-farmer (an applicant is a contributor). Never a viewer, a farmer, another
-applicant or a non-member, and never the person who issued or withdrew it:
+application's pack, the scenario's owner while they still hold any role above
+farmer (an applicant is a contributor; one since ranked viewer still gets it,
+as the application's party who still reads its packs). Otherwise never a
+viewer, a farmer, another applicant or a non-member, and never the person
+who issued or withdrew it:
 they just did it. Once per pack, person and event (the primary key).
 
 **Which events** (decided 2026-09-30):

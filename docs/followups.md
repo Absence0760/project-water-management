@@ -190,6 +190,25 @@ collected as a checklist in issue #46; tick it there as they answer.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Validation signature thresholds and parameters to confirm**
+      (engine 1.55.0, CR-16, [model.md §2.10d](./model.md), *Validation
+      signatures*). Built on these engineering defaults; put each as
+      "confirm or change": the Hughes et al. (2003) filter at α 0.995,
+      β 0.5 and one forward pass (or three, as §2.9d's Lyne–Hollick); the
+      Eckhardt (2005) filter's a 0.98 (or a from the record's recessions,
+      Eckhardt 2008) and BFImax 0.25 (hard-rock perennial; 0.50 or 0.80
+      elsewhere); the provisional warning limits: the simulated BFI more
+      than 0.15 from the observed by either filter, the low-flow FDC's slope
+      bias or %BiasFLV beyond ±50 % (the slope bias only where both curves
+      flow above 0.001 m³/s at Q95), and a held-out recession skill below 0
+      with 8 or more segments ("not judged" with fewer); the Q70–Q95 slope
+      segment; holding out every third segment; and keeping the quality-flagged days in the BFI and FDC (the
+      recession segments leave them out). The thresholds are the engine's
+      constants (`BFI_WARN_DIFF`, `FDC_LOW_WARN_PCT`, `HOLDOUT_SKILL_WARN`,
+      `RECESSION_MIN_SEGMENTS` in `plausibility/signatures.ts` and
+      `recession/check.ts`); the Runs panel reads them through
+      `PROVISIONAL_SIGNATURE_LIMITS`, so the answer changes one place, and
+      a change to a warning bumps `ENGINE_VERSION`.
 - [ ] **Demand sources to confirm** (engine 1.56.0, issue #54 Q11,
       [model.md §2.7f](./model.md) "The source"). Built on these readings of
       the client's rule; put each as "confirm or change": a per-head norm
@@ -1241,6 +1260,17 @@ the suggested order (the IDs carry the detail):
       the median flow (indicative warnings with 8 or more segments, "Not
       judged" below), in the Plausibility checks panel and the summary CSV
       (model.md §2.10d). CR-18's flags joined its day mask in engine 1.22.0.
+- [ ] **Run comparison: the recession diagnostics (engine 1.19.0) and the
+      validation signatures (engine 1.55.0, CR-16) aren't set side by side.**
+      The Compare page shows neither: `packages/engine/src/plausibility/compare.ts`
+      compares checks 1–4 only
+      ([run-comparison.md](./run-comparison.md#plausibility-checks)), so a
+      before-and-after refit can't show a recession rate or a BFI moving.
+      Durable fix: add rows to `RunComparison.plausibility` for the recession
+      rate ratio and b difference, each signature's difference or bias and the
+      held-out skill, as each run stored them (nothing recomputed), with their
+      pass or fail. Trigger: the next change to the Compare page's plausibility
+      table, or a hydrologist asking to compare refits.
 - [x] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which MAR estimate to trust (CR-7). CR-18 is
@@ -1248,8 +1278,9 @@ the suggested order (the IDs carry the detail):
       with the defaults issue #65 built on (CR-5, CR-13, CR-21, CR-28,
       CR-34, the dry → wet ranking), are in issue #90.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
-      proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
-      uncertainty and BFI, CR-24 alternative
+      proxy basin (issue #4 item 3), CR-10 GR6J, CR-15 fitted recession with
+      uncertainty (CR-16's BFI, low-flow FDC slope and held-out recessions
+      are built, engine 1.55.0), CR-24 alternative
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.
@@ -3337,6 +3368,21 @@ from the WP:
       15 Feb) keeps its printed factor rather than being prorated, and the
       stage-to-month rule for vegetables (model.md §2.3 item 8). Trigger:
       their answer on #46.
+- [x] **b023 crop-table slips flagged on import** (2026-09-30, issue #289).
+      Rows copied from another crop, a negative factor, a lone 0, a lone
+      spike or dip of more than 0.3 and a factor above 1.0 each give an
+      import-report warning (`crop-factors-copied`, `crop-factors-suspect`),
+      both importers alike; the factors import unchanged ([model.md §2.3
+      item 3](./model.md)).
+- [ ] **The Load crop factors dialog doesn't show those warnings.** Loading
+      a b023 workbook's factors into an existing project (Crops tab, *Load
+      crop factors*, `LoadCropFactorsDialog.svelte`) runs the same import
+      but keeps only the crops, so a copied or suspect row arrives without
+      its warning. Durable fix: keep the result's `crop-factors-*` notes with
+      the workbook source and list them under it in the dialog, beside each
+      affected crop's diff row. Trigger: after the other #289 changes to that
+      dialog (the Kp default, the node-based source) have merged, to avoid
+      three branches editing it at once.
 - [ ] **A node-based workbook's crop sheets can't be loaded.** The browser importer reads
       b023 only (it needs b023's named ranges); node-based `Crop_Factors` /
       `Crop_Areas` sheets have none. Durable fix: a small
@@ -3411,7 +3457,7 @@ from the WP:
       reading it the same way. Trigger: a client supplying such a record for
       a demand whose pattern windows can't describe.
 - [x] **Demand objects: a structured demand source** (engine 1.56.0,
-      2026-09-30, migration 134; issue #54 Q11, confirmed in issue #90). A
+      2026-09-30, migration 136; issue #54 Q11, confirmed in issue #90). A
       `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
       not recorded, the note kept for the detail); `meter` and `aadd` must be
       sized `monthly`, `perCapita` `perUnit` (modelRules `doSourceSizing`).
@@ -4389,7 +4435,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `errataFoundSince` (`errataFor` over the current list, less the
       recorded ids) and never returns itself; the verify page lists them
       under "Errata found since issue", and the pack's page in its unprinted
-      bar (on a draft, "found since this draft was made"). The manifest, its
+      bar (on a draft, "found since this draft was made"). Issue refuses a
+      draft with any (`409` `pack_errata_since_draft`, the checklist's
+      `errataRecorded`): draft it again, which records them. The manifest, its
       hash and `errata` are unchanged
       ([evidence-pack.md § Verification](./evidence-pack.md#verification)).
 - [x] **Applicants' access to their own application's packs** (WP-3.15):
@@ -4399,8 +4447,9 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       packs, never a draft, through `SECURITY DEFINER` functions rather than
       a row policy (the manifest names every unit, and RLS can't hide a
       column): verify's fields, a pack link's figures and D2's units (their
-      own by name, every other as "Farm n" with its change in whole points;
-      none when a baseline assumption changed). `GET
+      own by name, the others downstream of the application under the names
+      the results view gives them, with their change in whole points; none
+      when a baseline assumption changed). `GET
       …/scenarios/:sid/packs[/:packId]`, the Application panel's list and
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner

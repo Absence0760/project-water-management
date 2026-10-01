@@ -252,6 +252,55 @@ describe('engine invariants on random networks', () => {
 		}
 	});
 
+	it('engine 1.55.0: the validation signatures stay in range and only report (CR-16, model.md §2.10d)', () => {
+		const inRange = (v: number) => v >= 0 && v <= 1;
+		let seen = 0;
+		for (let seed = 1; seed <= 60 && seen < 8; seed++) {
+			const input = randomInput(seed);
+			const out = runModel(input);
+			const sig = out.summary.plausibility?.signatures;
+			if (!sig) continue;
+			const bf = sig.baseflow;
+			if (bf) {
+				seen++;
+				expect(bf.days).toBeGreaterThanOrEqual(365);
+				expect(bf.days).toBeLessThanOrEqual(out.days);
+				for (const p of [bf.hughes, bf.eckhardt]) {
+					if (!p) continue;
+					// A BFI is a share of the flow: base flow never exceeds flow on any day.
+					expect(inRange(p.observed) && inRange(p.simulated), `seed ${seed}`).toBe(true);
+					expect(p.difference).toBe(p.simulated - p.observed);
+				}
+			}
+			const fdc = sig.lowFlowFdc;
+			if (fdc) {
+				expect(fdc.days).toBeLessThanOrEqual(out.days);
+				// Q70 is at least Q95 on any duration curve, so neither slope is negative.
+				expect(fdc.observedQ70M3s).toBeGreaterThanOrEqual(fdc.observedQ95M3s);
+				expect(fdc.simulatedQ70M3s).toBeGreaterThanOrEqual(fdc.simulatedQ95M3s);
+				expect(Math.min(fdc.observedSlope, fdc.simulatedSlope)).toBeGreaterThanOrEqual(0);
+			}
+			const h = sig.recessionHoldout;
+			if (h) {
+				expect(h.heldOut.length).toBe(Math.floor(h.segments / h.every));
+				for (const [a, b] of h.heldOut) expect(0 <= a && a < b && b < out.days).toBe(true);
+				expect(h.modelSegments).toBeLessThanOrEqual(h.heldOut.length);
+				expect(h.modelDays).toBeLessThanOrEqual(h.days);
+				// A skill against no recession is at most 1 (a perfect fall).
+				for (const v of [h.modelSkill, h.lawSkill]) if (v !== null) expect(v).toBeLessThanOrEqual(1);
+			}
+			// Only a report: without the observed records the flows are the same to the bit.
+			if (seed % 4 === 0) {
+				const bare = structuredClone(input);
+				delete bare.series.flow_observed_m3s;
+				delete bare.series.flow_logger_m3s;
+				const flow = (o: typeof out) => o.series.find((x) => x.nodeId === null && x.key === 'simulated_outflow')?.values;
+				expect(flow(runModel(bare)), `seed ${seed}`).toEqual(flow(out));
+			}
+		}
+		expect(seen).toBe(8);
+	});
+
 	it('engine 0.32.0: the water account closes in a dry year of a long run (seed 1486)', () => {
 		// Summed from prefix sums over the run, a 5 m³ year carried the whole
 		// run's rounding: a residual of 3e-9 m³ (network/reliability.ts dailyTotals).
