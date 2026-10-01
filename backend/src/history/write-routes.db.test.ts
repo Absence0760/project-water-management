@@ -465,6 +465,16 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('DELETE', `${at(c)}/feeds/${c.feedId}`)
 	},
 	{
+		// The rain feed from the map's boundary (#326 B-rain): records feed.configured naming the boundary.
+		route: `POST ${P}/feeds/chirps/from-boundary`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-boundary`, { featureId: b.body.feature.id, updatedAt: b.body.feature.updatedAt });
+		}
+	},
+	{
 		route: `POST ${P}/report-schedules`,
 		records: ['report_schedule.configured'],
 		call: async (c) => {

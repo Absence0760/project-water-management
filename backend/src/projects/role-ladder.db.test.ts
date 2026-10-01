@@ -102,6 +102,7 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/feeds', 'a feed writes into the project’s series on a schedule, unattended'],
 	['PATCH /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['DELETE /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
+	['POST /projects/:id/feeds/chirps/from-boundary', 'it attaches or changes a feed, which writes into the project’s series on a schedule, unattended (#326 B-rain)'],
 	['GET /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
@@ -177,7 +178,8 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
 	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
-	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules']
+	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
+	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)']
 ]);
 
 type Ctx = LadderCtx;

@@ -299,6 +299,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		return { body: { source: 'dws', config: { station: 'X0H001' } } };
 	},
 	'PATCH /projects/:id/feeds/:feedId': async () => ({ params: { feedId: await currentFeed() }, body: { enabled: false } }),
+	// The rain feed from the boundary (#326 B-rain): a boundary on the map, and no feed in the way of a new one.
+	'POST /projects/:id/feeds/chirps/from-boundary': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
+		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
+	},
 	'POST /projects/:id/feeds/:feedId/run-now': async () => {
 		const feedId = await currentFeed();
 		await ok(ctx.owner.call('PATCH', `${at()}/feeds/${feedId}`, { enabled: true }));
