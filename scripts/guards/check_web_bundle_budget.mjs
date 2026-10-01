@@ -1634,13 +1634,25 @@
 //             held-out recession skill, with the drought rule's 1.54.0 now on
 //             main @ the #273 merge). Measured 1360 locally; CI ~2 KB above.
 //             Headroom ~3 KB.
-// 2026-09-30  total 1365 → 1450 KB (issue #285: paste a block from a
+// 2026-09-30  total 1365 → 1370 KB (issue #289, #293 with #291, #292 and
+//             #294 merged: Load crop factors' Kp default by crop-set shape
+//             with its why line, the node-based workbook as the third source
+//             and the workbook warnings list). Measured 1361 locally against
+//             #294's 1360 (+1 KB), plus CI's ~3 KB over local; headroom ~1 KB
+//             on CI. The import worker is now 31 of 32 KB
+//             (largestSpreadsheetWorkerKb, the node-based reader in it), so
+//             the next addition there trips that ceiling.
+//             Re-measured with main @ 11b181da merged (engine 1.55.0, #267's
+//             1365): 1365 locally, CI ~3 KB above. Headroom ~2 KB on CI.
+// 2026-09-30  total 1370 → 1376 KB (issue #285: paste a block from a
 //             spreadsheet into the node table and the planted-areas grid,
 //             the preview dialog (model/GridPasteDialog.svelte, a chunk
 //             shared by both grids), the block mapper and CSV template
 //             (spreadsheet/paste/) and each grid's mapping (nodePaste.ts,
 //             areaPaste.ts)). Measured 1364 locally against main @
-//             4a17d615's 1357 (+7 KB), CI ~2 KB above. Headroom ~1 KB.
+//             4a17d615's 1357 (+7 KB), CI ~2 KB above. Re-measured with main
+//             @ the #293 merge (#289's crop work, 1370): 1371 locally, CI ~2 KB
+//             above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1651,7 +1663,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1450,
+	totalCodeKb: 1376,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

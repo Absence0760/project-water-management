@@ -393,9 +393,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
-     optional Kp (default 1). A-pan tables and b023 factors already multiply
-     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀) needs
-     about 0.75 (issue #54).
+     optional Kp, defaulted by the source's shape (issue #289). A-pan tables
+     and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
+     an FAO-56 Kc set (against ET₀; a node-based workbook's
+     [Crop_Factors], the dialog's third source) defaults to 0.75, a mid value of FAO-56
+     Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
+     and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values
      from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
      WRC orchard studies should be checked. The engine's maths is unchanged
@@ -8353,6 +8356,14 @@ table is already general enough to hold such nodes.
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
   whole system, per water-year month.
+- **Crop sheets:** `[Crop_Factors]` (A-pan evaporation, rainfall and
+  effective-rainfall rows, then a crop per row with twelve factors, Oct..Sep,
+  and an irrigation efficiency) and `[Crop_Areas]` (a farm per row, a crop
+  per column, m²). The factors are FAO-56 Kc values (against ET₀) that the
+  workbook applies to A-pan with no pan coefficient (§2.3). The browser
+  reads these two sheets (`frontend/src/lib/spreadsheet/import/nodeCrops.ts`,
+  issue #289) and marks the set FAO-shaped, so a Kp of about 0.75 applies
+  before the factors stand as A-pan factors.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
