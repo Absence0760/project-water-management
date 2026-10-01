@@ -7161,15 +7161,26 @@ the catalogue, [§ Language](#language)); both unit-tested.
 - **Summary → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
   attention): the alerts firing now, each as a sentence ("Farm One: dam
   about 8 % on 20 Sep 2026 (alert below 30 %)", "EWR at the outlet at risk
-  on 5 of 14 forecast days (alert at 3)", the late or failing feeds), or "No
-  alert is firing". An editor gets **Set up alert emails**, which loads the
+  on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
+  series sent by API key (headed **API data behind**, its email's subject
+  too), "3 of 14 hydrological units short from … to …, in figures
+  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
-  restriction notice, background jobs failed, data feed failing), per farm
-  dam, and, under **Data feeds behind**, per data feed ("CHIRPS daily
-  rainfall (Upper)", "(feed switched off)" when it is), each with its level
-  (dam % of capacity; days, a feed's past its own usual delay, defaulting by
-  source; failures or jobs; range-checked in the form and by the API), a
+  restriction notice, background jobs failed, data feed failing,
+  hydrological units short (automatic publications)), per farm dam, under
+  **Data feeds behind**, per data feed ("CHIRPS daily rainfall (Upper)",
+  "(feed switched off)" when it is), and under **API data behind**, per
+  series an API key writes, named as the Data page names it (its name, else
+  its kind's label, `seriesDisplayName` in the engine, which the mails use
+  too), "(no API key sends it now)" once a person wrote over the key's days
+  (issue #120: a hand-uploaded series has none), each with its level (dam % of capacity;
+  days, a feed's past its own usual delay, defaulting by source, a series'
+  with no new reading past yesterday's, 2 by default; failures, jobs or
+  units short in the last 7 days; range-checked in the form and by the
+  API; while staleness alerts are on for anything, an unsaved feed's or
+  series' rule shows as on, since the next evaluation switches it on and
+  Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
@@ -7186,13 +7197,18 @@ the catalogue, [§ Language](#language)); both unit-tested.
   which only the WUA's staff can get (`mail.alert.model.staff`), says it
   comes from the newest forecast run, which may not be published yet, and
   is an estimate, not a measurement or a restriction; its body ends
-  "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
+  "Forecasts change." The units-short alert, staff only too
+  (`mail.alert.model.short.staff`), says it is the model's estimate from
+  figures an auto run published by itself, without a person checking them
+  first, and not a measurement or a restriction; its body gives counts
+  only ("… from 20 Sept 2026 to 26 Sept 2026: 3 of 14"), never a farm's
+  name. A restriction notice (`mail.alert.restriction.wua`)
   says it is the WUA's own, shown as published, and that questions go to the
   WUA; its percentage reads as a cut, "a 20 % cut in registered water use",
   written whole as the farm page writes it (`cutPctText`: never "12.5 %"),
   and the WUA's own words are marked with their `lang` when they are in
-  another language than the mail (issue #51). The operational alerts (data feed behind, data feed failing,
-  background jobs failed) are no model figure and carry no liability line.
+  another language than the mail (issue #51). The operational alerts (data feed behind, API data
+  behind, data feed failing, background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
@@ -7215,7 +7231,8 @@ the catalogue, [§ Language](#language)); both unit-tested.
   warns, "Warns when the model puts your dam below 30 %. Your WUA sets this
   level." (also the row's description; `thresholdLine` in
   `alerts/words.ts`, issue #51); a viewer
-  also the opt-in kinds (dam alerts for every farm, the EWR forecast);
+  also the opt-in kinds (dam alerts for every farm, the EWR forecast, units
+  short of water);
   editors and owners the operational kinds. A choice saves when made
   ("Saved." in the card's head); the switch stays usable while it saves
   (disabling it dropped the keyboard's focus), and a catchment's saves go

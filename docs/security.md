@@ -1080,6 +1080,10 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   mail for every other farm's name (`alerts.db.test.ts`, `mail/alerts.test.ts`).
   The dam figure is the **published** projection's, never an unpublished
   run's: a farmer is told only what the WUA stands behind.
+  The `farms_short` alert (141, issue #120) carries **counts only** (farms
+  short, of how many, the dates), never a farm's name, and goes only to the
+  WUA's staff (editors and owners; viewers by choice; never a farmer): the
+  shortfall counts are the staff-only part of a publication.
 - **The unsubscribe token.**
   - Each subscription has a random 32-byte nonce; its token is
     HMAC-SHA256(`ALERTS_TOKEN_SECRET`, nonce), base64url (43 characters),

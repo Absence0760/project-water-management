@@ -846,7 +846,10 @@ Settings → Automatic runs.
   self-checks failed and it raises no warning the published run didn't (the
   same sentence with other numbers or dates is the same warning), carrying
   the WUA's notice and next-update date over; the audit event says `auto:
-  true`. There is no "always".
+  true`, and so does the publication (`run_publication.auto`, 141), which
+  is what the `farms_short` alert watches: a publication no person made
+  mails the WUA's staff when farms went short in its last week of data
+  (issue #120). There is no "always".
 - **Waking the worker**: a route wakes it after commit only when the re-run
   is due at once (a debounce of 0, handy in dev); a debounced one is found
   by the next poll (15 s locally) or the production tick (5 minutes) once
@@ -1163,7 +1166,9 @@ merges into:
   `disabled`. A feed not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
   `data_stale` or `feed_failing` alert on emails its owners and editors
-  ([§ Alert emails](#alert-emails)).
+  ([§ Alert emails](#alert-emails)); `data_stale` also watches each series
+  an API key sends (a logger pushing to `/ingest`, which has no feed):
+  days with no new value, from its last non-blank day (141, issue #120).
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 

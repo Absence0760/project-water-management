@@ -1075,8 +1075,8 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | GET | `/me/alerts` | – | `{ projects: ProjectAlerts[] }`: every catchment you can open (never an applicant's), by name | signed in |
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
 | POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
-| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, and a `data_stale` per data feed (057); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's) | editor |
-| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
+| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, a `data_stale` per data feed (057), and a `data_stale` per series an API key writes (141; by kind and name); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's; a series': 2). An unsaved feed's or series' rule is `enabled: true` while any `data_stale` rule is on (the next evaluation switches it on) | editor |
+| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
 
@@ -1087,15 +1087,21 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   | `dam_below` (per farm) | the published projection's dam level on its last day of data, or the published forecast's lowest, is below the threshold; re-arms at threshold + 5 points | 0 < t < 1 (0.3) | that farm's farmers, editors, owners | viewers |
   | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2. A forecast run behind the recorded rain (its `lastObserved` before the last day with a catchment or CHIRPS value) is ignored: it neither opens nor clears an event until the re-made one | whole days 1–60 (3) | editors, owners | viewers |
   | `data_stale` (per feed) | that feed, enabled, is more than t days past its own usual delay (`feeds/health.ts` `staleAfterDays`, or the feed's config); re-arms under t | whole days 1–60 (by source: CHIRPS 3, CHIRPS-GEFS 2, DWS 30) | editors, owners | – |
+  | `data_stale` (per series, 141) | a series an API key writes (a logger) has had no value for more than t days past yesterday (its last non-blank day, `series/lastDay.ts`, not its last stored day; today's reading isn't whole yet); re-arms under t. A hand-uploaded series gets no rule: it is stale by nature (issue #120) | whole days 1–60 (2) | editors, owners | – |
+  | `farms_short` (141) | the current publication was made by an auto run (`run_publication.auto`, `settings.autoRun.publish`) and t or more farms went short on a day of its last 7 days of data (`catchmentView.recent.farmsShort7`); re-arms at 0. A person's publication has no value (the WUA made it and saw its figures), so it clears a firing alert, unmailed | whole farms 1–1000 (1) | editors, owners | viewers |
   | `restriction_published` | the current publication's restriction level, percentage or notice changes (a lift too) | 0 | farmers, viewers and up | – |
   | `feed_failing` | an enabled feed failed t times in a row; re-arms at 0 | 1–20 (3) | owners | editors |
   | `job_dead` | t jobs died in the last 24 hours; re-arms at 0 | 1–100 (1) | owners | editors |
 
   Applicants (contributors) never get alerts. A `threshold` outside its
   range, a `dam_below` rule without a farm (or another kind with one), or a
-  `data_stale` rule without a feed (or another kind with one) is `400`; a
-  farm or feed of another project `404`. Once `data_stale` is on for any
-  feed, a feed added later gets its own rule, on, at its source's default.
+  `data_stale` rule without exactly one of a feed and a series (or another
+  kind with either) is `400`; a farm, feed or series of another project, or
+  a series no API key writes (and with no rule yet), `404`. Once
+  `data_stale` is on for any feed or series, a feed added later gets its own
+  rule, on, at its source's default, and so does a series an API key starts
+  writing, at 2 days. A series keeps its rule after a person writes over the
+  key's days.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
   `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn, threshold }`:
   `mode` is what you get now (the database's own rule,
@@ -1113,14 +1119,21 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   a farmer's dam alert, and `daily_digest` for `all`; a farmer naming a farm
   that isn't theirs gets `404`. Turning a choice back on (from `off`) draws a
   new unsubscribe token, so a link in an older email no longer works.
-- `AlertRule = { id, kind, nodeId, nodeName, feedId, feedName, feedEnabled, threshold, enabled, firing }`
-  (`feedName` as the feeds page names the feed, e.g. "CHIRPS daily rainfall (Upper)").
-- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, openedAt, clearedAt, detail }`.
+- `AlertRule = { id, kind, nodeId, nodeName, feedId, feedName, feedEnabled, seriesId, seriesName, seriesKeyFed, threshold, enabled, firing }`
+  (`feedName` as the feeds page names the feed, e.g. "CHIRPS daily rainfall (Upper)";
+  `seriesName` the series as the Data page names it, its name else its kind's label, e.g. "Weir" or
+  "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
+  key's days).
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail }`.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
   madeOn }`; `data_stale` `{ feedId, feeds: [{ label, newest, overdue }] }` (its one feed;
-  `overdue` counts to today in the project's time zone);
+  `overdue` counts to today in the project's time zone), or for a series'
+  rule `{ seriesId, series: true, feeds: [{ label, newest, overdue }] }`;
+  `farms_short` `{ publicationId, farmsShort7, farmsShort30, of, from, to,
+  publishedAt }` (counts only, never a farm's name; `of` the publication's
+  farms);
   `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
   `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
   While an event fires, its `value` and `detail` follow the figure. A
