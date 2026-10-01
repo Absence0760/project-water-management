@@ -946,7 +946,7 @@ flowchart LR
    (a farmer's names only their farm). The unsubscribe token is derived
    there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`),
    and so is the "Was this useful?" token, whose row the recipient's
-   transaction makes (`app_alert_answer_slot`, 147); the answer comes back
+   transaction makes (`app_alert_answer_slot`, 151); the answer comes back
    through the public `POST /alerts/feedback`, never by tracking.
    The mail goes out after that transaction, and `app_alert_finish` records
    `sent`, `skipped` (why) or a retry.
