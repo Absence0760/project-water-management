@@ -2002,7 +2002,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - **Soft delete, then erasure after 90 days.** `deleted_at` / `deleted_by`:
   the note is hidden at once, and its row, body and earlier texts stay for
   90 days so a mistake or a complaint can be looked into. Then the job tick
-  erases them (`app_purge_deleted_notes`, 156_note_purge.sql, called with
+  erases them (`app_purge_deleted_notes`, 158_note_purge.sql, called with
   `DELETED_NOTE_RETENTION_DAYS` in `jobs/runner.ts`; `note_revision` goes by
   its cascade). The `note.deleted` audit event, which never held the body,
   stays. A note on a scenario past draft (submitted, withdrawn, decided) or
@@ -2865,7 +2865,7 @@ functions and changes no table, policy or grant:
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
 
-### Erasure log (157_erasure_log.sql)
+### Erasure log (159_erasure_log.sql)
 
 `erasure_log (id, kind, subject_id, erased_at)`: one row for every deleted
 `app_user` (`account`), `project` and `team`, written by an `AFTER DELETE`

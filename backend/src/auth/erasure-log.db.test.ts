@@ -1,4 +1,4 @@
-// The erasure log (157_erasure_log.sql): every deleted account, project and
+// The erasure log (159_erasure_log.sql): every deleted account, project and
 // team leaves its internal id, so a database restore can re-apply erasures
 // made after its restore point (docs/deployment.md § Restoring the database,
 // step 6a). Both account-deletion paths write it (the operator's SQL and
@@ -20,7 +20,7 @@ beforeAll(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe('erasure_log (157)', () => {
+describe('erasure_log (159)', () => {
 	it('records an account deleted by the operator, as the schema owner', async () => {
 		const gone = await signUp('ElOperatorPath');
 		expect(await logged('account', gone.id)).toBe(0);

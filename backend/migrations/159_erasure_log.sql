@@ -1,4 +1,4 @@
--- 157_erasure_log — a list of what was erased, kept long enough that a
+-- 159_erasure_log — a list of what was erased, kept long enough that a
 -- database restore can re-apply every erasure made after its restore point
 -- (POPIA s14(4)-(5), s24; provisional position, pre-counsel research,
 -- 2026-10-01: docs/security.md § Personal information, docs/deployment.md
@@ -43,7 +43,7 @@ CREATE TABLE erasure_log (
 	erased_at  timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE erasure_log IS
-	'What was erased (an account, project or team, by internal id only), so a restore can re-apply erasures made after its restore point (157). Owner-only; purged after 40 days, above the 35-day backup maximum.';
+	'What was erased (an account, project or team, by internal id only), so a restore can re-apply erasures made after its restore point (159). Owner-only; purged after 40 days, above the 35-day backup maximum.';
 CREATE INDEX erasure_log_erased_at_idx ON erasure_log (erased_at);
 
 ALTER TABLE erasure_log ENABLE ROW LEVEL SECURITY;

@@ -171,7 +171,7 @@ variable "db_max_allocated_storage_gb" {
 }
 
 variable "db_backup_retention_days" {
-  description = "Automated backup + point-in-time-recovery window in days. Must stay below the erasure log's 40 days (backend/src/jobs/runner.ts ERASURE_LOG_RETENTION_DAYS, migration 157), so a restore can always re-apply the erasures made after its restore point; raising the 35-day cap means raising that too."
+  description = "Automated backup + point-in-time-recovery window in days. Must stay below the erasure log's 40 days (backend/src/jobs/runner.ts ERASURE_LOG_RETENTION_DAYS, migration 159), so a restore can always re-apply the erasures made after its restore point; raising the 35-day cap means raising that too."
   type        = number
   default     = 7
   validation {

@@ -15,7 +15,7 @@ const NO_RLS = new Set(['schema_migrations']);
 /**
  * Owner-only tables: RLS on, no policy, and no grant of any kind to
  * water_app. The erasure log holds the ids of deleted accounts, projects and
- * teams for a restore to re-apply (157_erasure_log.sql); its triggers and its
+ * teams for a restore to re-apply (159_erasure_log.sql); its triggers and its
  * purge write it as SECURITY DEFINER functions, and only the operator, as the
  * schema owner, reads it (deployment.md § Restoring the database).
  */
@@ -126,7 +126,7 @@ const APPEND_ONLY = new Set([
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
  * soft-deleted and hidden (037_notes.sql); 90 days later the tick erases it
  * through app_purge_deleted_notes, a SECURITY DEFINER function, the only path
- * that removes a note row (156_note_purge.sql), so water_app still has no
+ * that removes a note row (158_note_purge.sql), so water_app still has no
  * DELETE on it. An API key too: audit events name it
  * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
  * only by the operator, as the schema owner, on a POPIA request

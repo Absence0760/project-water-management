@@ -1,5 +1,5 @@
 // A deleted note's text is erased 90 days after it was deleted, with its
-// earlier texts, by the job tick (156_note_purge.sql, jobs/runner.ts
+// earlier texts, by the job tick (158_note_purge.sql, jobs/runner.ts
 // DELETED_NOTE_RETENTION_DAYS; docs/data-model.md § Notes). A note on a
 // licence record (a scenario or evidence pack past draft) is kept, hidden;
 // a note that was never deleted is never touched (positive control); and the
@@ -100,7 +100,7 @@ beforeAll(async () => {
 	});
 }, 60_000);
 
-describe('app_purge_deleted_notes (156)', () => {
+describe('app_purge_deleted_notes (158)', () => {
 	it('refuses any caller but the worker, and an age under 30 days', async () => {
 		await expect(withUser(owner.id, (db) => db.query("SELECT app_purge_deleted_notes(interval '90 days')"))).rejects.toMatchObject({ code: '42501' });
 		await expect(purge(29)).rejects.toMatchObject({ code: '22023' });

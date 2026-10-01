@@ -91,11 +91,11 @@ export const ALERT_CHECK_GAP = '1 hour';
 export const ALERT_RETENTION_DAYS = 180;
 /**
  * A deleted note (its text and earlier texts) is erased this long after it was deleted, unless it belongs to a
- * licence record (156_note_purge; Privacy §7). Long enough for a complaint about what was written to surface.
+ * licence record (158_note_purge; Privacy §7). Long enough for a complaint about what was written to surface.
  */
 export const DELETED_NOTE_RETENTION_DAYS = 90;
 /**
- * An erasure log entry (157_erasure_log) is kept this long: above the longest automated backup
+ * An erasure log entry (159_erasure_log) is kept this long: above the longest automated backup
  * (`db_backup_retention_days`, at most 35), so a restore can always re-apply the erasures after its restore point.
  */
 export const ERASURE_LOG_RETENTION_DAYS = 40;
@@ -143,9 +143,9 @@ export interface TickResult {
 	purged: number;
 	/** Lapsed invites deleted (invites/invites.ts purgeInvites). */
 	invitesPurged: number;
-	/** Notes deleted more than DELETED_NOTE_RETENTION_DAYS ago, erased with their earlier texts (156_note_purge). */
+	/** Notes deleted more than DELETED_NOTE_RETENTION_DAYS ago, erased with their earlier texts (158_note_purge). */
 	notesPurged: number;
-	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (157_erasure_log). */
+	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (159_erasure_log). */
 	erasuresPurged: number;
 	claimed: number;
 	done: number;

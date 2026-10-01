@@ -498,7 +498,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		clearDevice(c);
 		// The account's random id only, never an address or a name: if the database instance itself is lost, a restore
 		// re-applies the erasures since LatestRestorableTime from these lines (deployment.md § Restoring the database,
-		// step 6a); otherwise the erasure_log table on the old instance has them (157).
+		// step 6a); otherwise the erasure_log table on the old instance has them (159).
 		logEvent('info', { event: 'account_deleted', via: 'self', accountId: userId });
 		await trySendMail(accountDeletedMail(account.email, outcome.left, account.locale));
 		return c.body(null, 204);

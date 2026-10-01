@@ -1,4 +1,4 @@
--- 156_note_purge — a deleted note's text is erased 90 days after it was
+-- 158_note_purge — a deleted note's text is erased 90 days after it was
 -- deleted (POPIA s14(1), s14(4)-(5); provisional position, pre-counsel
 -- research, 2026-10-01: docs/security.md § Personal information,
 -- docs/data-model.md § Notes, docs/followups.md "Retention of deleted notes'
@@ -69,4 +69,4 @@ GRANT EXECUTE ON FUNCTION app_purge_deleted_notes(interval) TO water_app;
 CREATE INDEX note_deleted_idx ON note (deleted_at) WHERE deleted_at IS NOT NULL;
 
 COMMENT ON TABLE note IS
-	'Plain-text notes on a node, run, setting, scenario, pack or the project, visible to the team or also to the linked farmers (037, WP-2.7). Soft-deleted by the app; a deleted note is erased 90 days later by app_purge_deleted_notes (156), unless it belongs to a licence record (a scenario or pack past draft).';
+	'Plain-text notes on a node, run, setting, scenario, pack or the project, visible to the team or also to the linked farmers (037, WP-2.7). Soft-deleted by the app; a deleted note is erased 90 days later by app_purge_deleted_notes (158), unless it belongs to a licence record (a scenario or pack past draft).';

@@ -5099,7 +5099,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       on the evidence (its own migration), on for such a team. Trigger: D1
       (#50) puts the published baseline with a CMA or DWS, or counsel says
       the Act applies.
-- [x] **Retention of deleted notes' bodies.** Done (156_note_purge.sql;
+- [x] **Retention of deleted notes' bodies.** Done (158_note_purge.sql;
       provisional position, pre-counsel research, 2026-10-01): a deleted
       note's text and earlier texts are erased 90 days after deletion by the
       tick (`app_purge_deleted_notes`, `DELETED_NOTE_RETENTION_DAYS`); the
@@ -5111,7 +5111,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
 - [x] **Backups after an erasure.** Done (provisional position, pre-counsel
       research, 2026-10-01): backups age out (≤ 35 days) and a restore
       re-applies erasures and revocations before traffic is back.
-      `erasure_log` (157) keeps the id of every deleted account, project and
+      `erasure_log` (159) keeps the id of every deleted account, project and
       team for 40 days, written by triggers so both deletion paths are
       covered; the restore runbook's step 6a reads it, and the audit log's
       revocations, on the old instance (deployment.md § Restoring the
