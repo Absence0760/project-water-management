@@ -301,7 +301,13 @@ async function loadProjectionRun(
  * its catchment view, and one projection per farm that still exists as a
  * farm. One transaction (the caller's), one publish at a time per project.
  */
-export async function publishRun(db: Db, projectId: string, body: z.infer<typeof PublishBody>): Promise<{ publication: Publication; farms: number }> {
+export async function publishRun(
+	db: Db,
+	projectId: string,
+	body: z.infer<typeof PublishBody>,
+	/** `auto`: an auto run publishing on its own (autoPublish.ts), recorded as run_publication.auto (141; the farms_short alert reads it). */
+	{ auto = false }: { auto?: boolean } = {}
+): Promise<{ publication: Publication; farms: number }> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('run_publication:' || $1::text, 0))`, [projectId]);
 	const loaded = await loadProjectionRun(db, projectId, body.runId);
 	if (!loaded) throw new ApiError(400, 'no such run in this project');
@@ -333,9 +339,9 @@ export async function publishRun(db: Db, projectId: string, body: z.infer<typeof
 	await db.query('UPDATE run_publication SET superseded_at = now() WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 	const r = body.restriction ?? { level: 'none' as const, pct: null, notice: {} };
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO run_publication (project_id, run_id, published_by, note, restriction_level, restriction_pct, notice, next_expected_on, catchment_view)
-		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8) RETURNING id`,
-		[projectId, body.runId, body.note ?? '', r.level, r.pct, JSON.stringify(r.notice), body.nextExpectedOn ?? null, JSON.stringify(stored)]
+		`INSERT INTO run_publication (project_id, run_id, published_by, note, restriction_level, restriction_pct, notice, next_expected_on, catchment_view, auto)
+		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+		[projectId, body.runId, body.note ?? '', r.level, r.pct, JSON.stringify(r.notice), body.nextExpectedOn ?? null, JSON.stringify(stored), auto]
 	);
 	const pubId = rows[0]!.id;
 	if (views.length) {

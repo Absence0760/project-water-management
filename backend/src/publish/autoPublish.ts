@@ -13,7 +13,9 @@
 //   - publishRun accepts it (not a legacy-runoff run, a projectable summary).
 // The WUA's restriction notice and next-update date carry over unchanged,
 // since a new run is no reason to lift or change a restriction. The note says
-// it was published automatically, and the audit event carries `auto: true`.
+// it was published automatically, the audit event carries `auto: true`, and
+// so does the publication (run_publication.auto, 141: the farms_short alert
+// watches automatic publications only).
 import type { NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
@@ -75,16 +77,21 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 	const since = localDate(current.published_at, tz[0]?.time_zone ?? DEFAULT_TIME_ZONE);
 	let result;
 	try {
-		result = await publishRun(db, projectId, {
-			runId,
-			note: `Published automatically: this auto run raised no warning the run published on ${since} didn't.`,
-			restriction: {
-				level: current.restriction_level,
-				pct: current.restriction_pct === null ? null : Number(current.restriction_pct),
-				notice: current.notice
+		result = await publishRun(
+			db,
+			projectId,
+			{
+				runId,
+				note: `Published automatically: this auto run raised no warning the run published on ${since} didn't.`,
+				restriction: {
+					level: current.restriction_level,
+					pct: current.restriction_pct === null ? null : Number(current.restriction_pct),
+					notice: current.notice
+				},
+				nextExpectedOn: current.next_expected_on
 			},
-			nextExpectedOn: current.next_expected_on
-		});
+			{ auto: true }
+		);
 	} catch (err) {
 		// publishRun refuses before it writes anything (a legacy-runoff run, a
 		// summary it can't project); that leaves publishing to a person.
