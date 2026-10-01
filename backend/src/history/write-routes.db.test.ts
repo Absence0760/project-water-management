@@ -620,7 +620,7 @@ describe('every write route records its change', () => {
 		expect((await owner!.call('PUT', `/projects/${ctx.projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
 	}, 60_000);
 
-	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render); nothing here runs it, so no later file's tick may claim it.
+	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render) and its re-run (pack_reproduce, 154_pack_reproduce); nothing here runs them, so no later file's tick may claim them.
 	afterAll(() => retirePendingJobs(ctx.packProjectId as string | undefined));
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);
