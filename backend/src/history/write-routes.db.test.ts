@@ -529,6 +529,10 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
 	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
+	{
+		route: `POST ${P}/assessments`,
+		exempt: 'queues an assessment job (or with dryRun only checks); the assessment row keeps who asked, its base run, each member’s ops copied from its scenario and the engine version, and no input changes (145_assessment.sql)'
+	},
 	{ route: `POST ${P}/sweeps`, exempt: 'queues a sweep job; the scenario_sweep row keeps who asked, its base run, its members’ ops and the engine version, and no input changes (062_scenario_sweeps.sql)' },
 	{ route: `POST ${P}/outlooks`, exempt: 'queues an outlook job; the seasonal_outlook row keeps who asked, its base run, season, levels and share and the engine version, and no input changes (063_seasonal_outlook.sql)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' },
