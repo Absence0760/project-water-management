@@ -4,7 +4,10 @@ import { localDate } from '../projects/timeZone.js';
 import {
 	attachment,
 	BOM,
-	collectCsv,
+	csvBytes,
+	csvChunks,
+	csvStream,
+	MAX_CSV_EXPORT_BYTES,
 	csvRow,
 	dailyCsvLines,
 	dayRange,
@@ -90,8 +93,8 @@ describe('result CSV comments: legacy run (audit H1) and disclaimer', () => {
 		expect(LEGACY_RUN_CSV_COMMENT).toMatch(/^# runoff_model=legacy;/);
 	});
 
-	it('lands as the first line of the collected CSV body, ahead of the BOM-prefixed header', () => {
-		const body = collectCsv(withResultComments(true, ['date,x', '2020-01-01,1']));
+	it('lands as the first line of the CSV body, ahead of the BOM-prefixed header', () => {
+		const body = [...csvChunks(withResultComments(true, ['date,x', '2020-01-01,1']))].join('');
 		expect(body).toBe(`${BOM}${LEGACY_RUN_CSV_COMMENT}\r\n${CSV_DISCLAIMER_COMMENT}\r\ndate,x\r\n2020-01-01,1\r\n`);
 	});
 });
@@ -161,14 +164,19 @@ describe('run provenance line on the daily CSVs', () => {
 	});
 });
 
-describe('collectCsv', () => {
-	it('prefixes a UTF-8 BOM and ends every record with CRLF', () => {
-		expect(collectCsv(['a,b', '1,2'])).toBe(`${BOM}a,b\r\n1,2\r\n`);
+/** A streamed body, read to the end as UTF-8 text (BOM kept). */
+async function read(body: ReadableStream<Uint8Array>): Promise<string> {
+	return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await new Response(body).arrayBuffer());
+}
+
+describe('csvBytes', () => {
+	it('counts the BOM, each line in UTF-8 bytes and its CRLF', () => {
+		expect(csvBytes(['a,b', '1,2'])).toBe(3 + 5 + 5);
+		expect(csvBytes(['m³'], 3 + 3 + 2)).toBe(8); // BOM 3 + "m³" 3 + CRLF 2
+		expect(csvBytes(['m³'], 7)).toBeNull();
 	});
 
-	it('returns null as soon as the body would exceed the cap (counting UTF-8 bytes)', () => {
-		expect(collectCsv(['m³'], 3 + 3 + 2)).toBe(`${BOM}m³\r\n`); // BOM 3 + "m³" 3 + CRLF 2
-		expect(collectCsv(['m³'], 7)).toBeNull();
+	it('stops as soon as the body would pass the cap, instead of walking everything', () => {
 		let pulled = 0;
 		function* many() {
 			for (;;) {
@@ -176,16 +184,88 @@ describe('collectCsv', () => {
 				yield 'x'.repeat(100);
 			}
 		}
-		expect(collectCsv(many(), 1000)).toBeNull();
-		expect(pulled).toBeLessThan(20); // stops early instead of building everything
+		expect(csvBytes(many(), 1000)).toBeNull();
+		expect(pulled).toBeLessThan(20);
 	});
 
-	it('sizes a full node export over a long record well under the cap', () => {
-		// 45 years (16 437 days) × 13 series of 7-digit volumes: the documented worst realistic case.
-		const cols = Array.from({ length: 13 }, (_, i) => ({ header: `Series ${i} (m³/day)`, values: new Array(16_437).fill(1234567) }));
-		const body = collectCsv(dailyCsvLines('1980-01-01', cols, { offset: 0, days: 16_437 }));
-		expect(body).not.toBeNull();
-		expect(Buffer.byteLength(body!, 'utf8')).toBeLessThan(2 * 1024 * 1024);
+	it('caps the streamed CSVs at 50 MB: a century of a farm’s daily file fits, and the JSON cap stays 5 MB', () => {
+		expect(MAX_CSV_EXPORT_BYTES).toBe(50 * 1024 * 1024);
+		// ≈ 400 KB a year for a farm's full-precision daily CSV (docs/api.md § Export).
+		expect(100 * 400 * 1024).toBeLessThan(MAX_CSV_EXPORT_BYTES);
+	});
+});
+
+describe('csvChunks', () => {
+	it('joins to the BOM and every line + CRLF, in pieces of about the chunk size', () => {
+		const lines = Array.from({ length: 1000 }, (_, i) => `2000-01-01,${i}`);
+		const chunks = [...csvChunks(lines, 1024)];
+		expect(chunks.join('')).toBe(`${BOM}${lines.map((l) => `${l}\r\n`).join('')}`);
+		expect(chunks.length).toBeGreaterThan(10);
+		for (const c of chunks.slice(0, -1)) expect(c.length).toBeGreaterThanOrEqual(1024);
+	});
+
+	it('is the BOM alone for no lines', () => {
+		expect([...csvChunks([])]).toEqual([BOM]);
+	});
+});
+
+describe('csvStream', () => {
+	it('streams the same body the lines make joined, with its measured size', async () => {
+		const lines = () => withResultComments(true, ['date,m³', '2020-01-01,1', '2020-01-02,']);
+		const csv = csvStream(lines)!;
+		const text = await read(csv.body);
+		expect(text).toBe(`${BOM}${[...lines()].map((l) => `${l}\r\n`).join('')}`);
+		expect(csv.bytes).toBe(Buffer.byteLength(text, 'utf8'));
+	});
+
+	it('is null past the cap, before anything is streamed', () => {
+		expect(csvStream(() => ['x'.repeat(100)], 50)).toBeNull();
+	});
+
+	it('streams a multi-decade node export past 6 MB without building it whole', async () => {
+		// 60 years (21 915 days) × 32 full-precision columns: past the old buffered cap, well under the new one.
+		const cols = Array.from({ length: 32 }, (_, i) => ({ header: `Series ${i} (m³/day)`, values: Array.from({ length: 21_915 }, (_, d) => d + i / 7) }));
+		const csv = csvStream(() => dailyCsvLines('1960-01-01', cols, { offset: 0, days: 21_915 }))!;
+		expect(csv.bytes).toBeGreaterThan(6 * 1024 * 1024);
+		expect(csv.bytes).toBeLessThan(MAX_CSV_EXPORT_BYTES);
+		const reader = csv.body.getReader();
+		let total = 0;
+		let pieces = 0;
+		for (let r = await reader.read(); !r.done; r = await reader.read()) {
+			total += r.value.byteLength;
+			pieces++;
+			expect(r.value.byteLength).toBeLessThan(1024 * 1024); // memory stays flat: no piece is the whole file
+		}
+		expect(total).toBe(csv.bytes);
+		expect(pieces).toBeGreaterThan(50);
+	});
+
+	it('errors the stream, never ends it short, when the second walk differs from the measured one', async () => {
+		let walk = 0;
+		const csv = csvStream(() => (walk++ === 0 ? ['a', 'b'] : ['a']))!;
+		await expect(read(csv.body)).rejects.toThrow(/measured/);
+	});
+
+	it('refuses a factory that hands back the same, spent, generator', async () => {
+		const once = withResultComments(false, ['date,x']);
+		const csv = csvStream(() => once)!;
+		await expect(read(csv.body)).rejects.toThrow(/fresh iterable/);
+	});
+
+	it('stops reading the lines when the client cancels', async () => {
+		let pulled = 0;
+		function* many() {
+			for (let i = 0; i < 100_000; i++) {
+				pulled++;
+				yield 'x'.repeat(100);
+			}
+		}
+		const csv = csvStream(many)!;
+		pulled = 0;
+		const reader = csv.body.getReader();
+		await reader.read();
+		await reader.cancel();
+		expect(pulled).toBeLessThan(2000);
 	});
 });
 
