@@ -2409,8 +2409,18 @@ placed points. The server never trusts the browser with geometry:
   `setAttribute` and `textContent`-free SVG (no `innerHTML`;
   `rawHtml.test.ts`).
 - RLS: viewers read, editors write; a farmer or applicant reads only the
-  boundary, gauges, rivers and their own farm's features (no route serves
-  them yet). `quaternary_reference` is public reference data, readable by any
+  boundary, gauges, rivers and their own farm's features. The one route that
+  serves them to a farmer is the farm view's map,
+  `GET /projects/:id/farm/:nodeId/map` (issue #326 A3): `requireFarm` first
+  (another farm answers 404), then a query that names the farm, so it
+  answers that farm's own parcels and dams plus the boundary, rivers and
+  gauges even for a viewer previewing it, with no node id, properties or
+  author; RLS is the second layer. No status comes with it: the page colours
+  the land from the farm view's own published band. Guarded by
+  `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
+  as the positive control) and the farmer-privacy sweep, which now seeds a
+  neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
+  orientation kinds only). `quaternary_reference` is public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin

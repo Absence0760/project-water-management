@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cachedMappedNodes, clearMappedNodes, loadMappedNodes, mappedNodeIds, mapNodeHref } from './mapLinks';
+import { cachedMappedNodes, clearMappedNodes, loadMappedNodes, mapNodeHref } from './mapLinks';
 import { MappedNodes } from './mappedNodes.svelte';
 
-const list = (nodeIds: (string | null)[]) => async () => ({ features: nodeIds.map((nodeId) => ({ nodeId })) });
+const list = (nodeIds: string[]) => async () => ({ nodeIds });
 
 describe('Show on map links (issue #326 A2)', () => {
 	beforeEach(() => clearMappedNodes());
@@ -13,9 +13,12 @@ describe('Show on map links (issue #326 A2)', () => {
 		expect(new URLSearchParams(mapNodeHref('a b&c').slice(1)).get('node')).toBe('a b&c');
 	});
 
-	it('takes only the nodes a feature is linked to, once each', () => {
-		expect([...mappedNodeIds([{ nodeId: 'n1' }, { nodeId: null }, { nodeId: 'n2' }, { nodeId: 'n1' }])].sort()).toEqual(['n1', 'n2']);
-		expect(mappedNodeIds([]).size).toBe(0);
+	it('asks the lightweight linked-nodes read for the project, not the feature list', async () => {
+		const asked: string[] = [];
+		const ids = await loadMappedNodes('p1', async (p) => (asked.push(p), { nodeIds: ['n1', 'n2'] }));
+		expect(asked).toEqual(['p1']);
+		expect([...ids].sort()).toEqual(['n1', 'n2']);
+		expect((await loadMappedNodes('p2', list([]))).size).toBe(0);
 	});
 
 	it('remembers the last set per project for the next page’s first frame', async () => {
@@ -24,7 +27,7 @@ describe('Show on map links (issue #326 A2)', () => {
 		expect([...cachedMappedNodes('p1')!]).toEqual(['n1']);
 		expect(cachedMappedNodes('p2')).toBeUndefined();
 		// A later visit refreshes it: a feature unlinked on the Map tab loses its node's link.
-		await loadMappedNodes('p1', list([null]));
+		await loadMappedNodes('p1', list([]));
 		expect(cachedMappedNodes('p1')!.size).toBe(0);
 	});
 
@@ -55,7 +58,7 @@ describe('Show on map links (issue #326 A2)', () => {
 	});
 
 	it('follows a project switch, and drops a late answer for the earlier project', async () => {
-		type List = { features: { nodeId: string | null }[] };
+		type List = { nodeIds: string[] };
 		let project = 'p1';
 		const pending: ((v: List) => void)[] = [];
 		const slow = () => new Promise<List>((r) => pending.push(r));
@@ -64,11 +67,11 @@ describe('Show on map links (issue #326 A2)', () => {
 		// The workspace switches project before p1's list arrives.
 		project = 'p2';
 		const second = m.load();
-		pending[1]!({ features: [{ nodeId: 'p2-node' }] });
+		pending[1]!({ nodeIds: ['p2-node'] });
 		await second;
 		expect(m.has('p2-node')).toBe(true);
 		// p1's answer lands late: it doesn't replace p2's set.
-		pending[0]!({ features: [{ nodeId: 'p1-node' }] });
+		pending[0]!({ nodeIds: ['p1-node'] });
 		await first;
 		expect(m.has('p2-node')).toBe(true);
 		expect(m.has('p1-node')).toBe(false);
@@ -85,7 +88,7 @@ describe('Show on map links (issue #326 A2)', () => {
 
 	it('a page without a project never asks', async () => {
 		let asked = false;
-		const m = new MappedNodes(() => '', async () => ((asked = true), { features: [] }));
+		const m = new MappedNodes(() => '', async () => ((asked = true), { nodeIds: [] }));
 		await m.load();
 		expect(asked).toBe(false);
 		expect(m.has('n1')).toBe(false);

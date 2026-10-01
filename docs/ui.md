@@ -1870,8 +1870,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
       only when a map feature is linked to the node, issue #326 A2; which
-      nodes have one comes from the map's feature list, fetched once the page
-      has drawn, `workspace/mapLinks.ts`, as on Hydrological units and Dams) and
+      nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
+      fetched once the page has drawn, `workspace/mapLinks.ts`, as on
+      Hydrological units and Dams) and
       **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
@@ -2389,11 +2390,14 @@ map" card) stays the schematic; this is the geography.
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), and for editors **Upload GeoJSON**
-  and **Place a point**, each a link that opens its sheet. Slim notices
-  under it: what an upload or a placed point did (Dismiss), the no-basemap
-  note (owners and editors only), and "No catchment boundary yet" when there
-  are features but no boundary.
+  (frames every feature; with features), and for editors **Draw a shape**
+  and **Place a point** (each puts the map in a drawing mode, below; pressed
+  while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
+  notices under it: what an upload, a placed point or a saved drawing did
+  (Dismiss), the no-basemap note (owners and editors only), and "No
+  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
+  (WGS84)." with **Draw the boundary** when there are features but no
+  boundary.
 - **Layout.** The map on the left and a side column on the right
   (`clamp(18rem, 30%, 24rem)`) once the page's container
   (`container: map-page`) is 56rem wide (784 px at the 14 px root);
@@ -2411,8 +2415,29 @@ map" card) stays the schematic; this is the geography.
   other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
   drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
   (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
-  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live). A1's
-  measure picker goes in the key's row.
+  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live).
+- **Results on the map** (#326 A1, the key row under the map,
+  `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
+  (`measure=`: Days short, the default and so absent from the URL;
+  `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
+  colours above) and, for editors and owners when there is more than one run,
+  **Run** (`run=`; each option "name · day · published"). Both are history
+  entries, so Back undoes a change. The run is the published one by default;
+  an editor with nothing published sees their newest; below editor only the
+  published run, a `run=` link is ignored, and with nothing published one line
+  says so ("Nothing is published yet, so the map shows each feature’s kind.";
+  an editor with no run at all: "No run yet, …"). A line names the run ("From
+  the published run “…”, ran 2026-10-01."). The legend names the measure and
+  each band in words with what it means and how many units it holds ("**OK**
+  95% or more of demand days met (2 units)"); areas with no figure, or not
+  linked to a unit, take "No figure"'s colour. A line counts the EWR sites met
+  and missed; the key keeps the boundary, river and point swatches. The
+  picked feature's card adds the measure's line ("Days short: 1 089 of 4 558
+  days short · watch") or a gauge's **EWR** ("EWR missed on 12 days (outlet) ·
+  short"), and Every feature adds **Result** and **Band** columns, so the map
+  is never the only way to read a colour. Loading and a failed load (with
+  Retry) show beside the pickers; dam level loads the run's dam levels as the
+  Network does. The page fits 1440×960 with thirty units and the legend.
 - **The picked feature's card** (top of the side column): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
@@ -2425,10 +2450,36 @@ map" card) stays the schematic; this is the geography.
   area to the model, recorded in History with the feature named; disabled
   while the model has unsaved edits (a line says why) and reading **In use**
   when that feature's area is the unit's. **From**: the file it came in.
-  **Delete** (editors) asks first. With nothing picked: "Select a feature on
-  the map or in the list to see it here."; with nothing on the map, the one
-  empty-state line ("Nothing on the map yet. Upload a catchment boundary …
-  or place a point."; D4 makes it lead with drawing).
+  **Edit the shape** (a single line or one-ring polygon) or **Move the
+  point** (editors) puts it in the drawing mode, and **Delete** asks first.
+  With nothing picked: "Select a feature on the map or in the list to see it
+  here."; with nothing on the map, the empty state leads with drawing (#326
+  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
+  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
+  file (WGS84), or place a point.".
+- **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
+  [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
+  library decision). A **draw bar** sits over the map while a shape is drawn,
+  a point placed or a feature edited: what is being made (a select of
+  Catchment boundary, Farm parcel, Dam, River, Other area, Other line; or of
+  Gauge, Dam, Other for a point; "Editing “name”" for an edit), how (a line
+  that changes with the phase, saying tap on a phone), the last change in a
+  live region, why it can't be saved yet ("Its outline crosses itself…"), and
+  **Use my location** (phones, placing), **Enter coordinates** (points) or
+  **Paste a shape** (lines and polygons), **Undo**, **Finish** (while
+  drawing), **Remove the picked corner**, **Cancel** (drops the drawing at
+  once; Escape, on the map or in the bar, asks "Discard this drawing?" first
+  once there is work to lose: two corners or more, a finished shape or a
+  changed edit, [maps.md § Drawing](./maps.md#drawing)) and, once drawn,
+  **Save…** (**Save the shape** / **Save the position** for an edit, saved at
+  once). Entering a mode gives the map the keyboard focus. Save… on a new
+  shape opens **Save the drawing** (a side sheet: "This shape is" a kind its
+  geometry allows, Name, Stands for; "It replaces the current catchment
+  boundary." when it would; **Back to the map** keeps the drawing), and on a
+  new point the Place sheet. **Paste a shape** is a side sheet with a
+  GeoJSON-or-WKT field, an example for the shape being drawn and the error
+  in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
+  is picked.
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
@@ -2448,7 +2499,8 @@ map" card) stays the schematic; this is the geography.
   `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
   one rather than through the model's save row): a table in the list's order
   with Feature (picks it and closes the modal), Kind, Area or position,
-  Stands for, Unit’s area, and for editors Area into the model and Delete
+  Stands for, Unit’s area, Result and Band while a measure shows (A1), and
+  for editors Area into the model and Delete
   (the same controls as the card); "Areas are computed on the server from
   each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
   came from** (every unit, including those with no parcel, with the count
@@ -2456,20 +2508,42 @@ map" card) stays the schematic; this is the geography.
   **Imported files**. In a narrow modal each row becomes a labelled card.
   `?tab=network&grid=map-features` (any other tab) lands on the Map with
   it open.
-- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors): what the
-  file holds (each kind with what it takes), the file (WGS84, at most 5 MB;
-  a `.zip`/`.shp` is turned away with how to export GeoJSON from QGIS),
-  **Upload**. A refused file lists every problem by feature and imports
-  nothing, and the sheet stays open; a taken one closes the sheet and picks
-  its first feature. Under the form, **Imported files**: each file with its
-  feature count, date, who imported it and its SHA-256 cut to 12
-  characters (the full hash in the tooltip) with **Copy**. D2's review table
-  goes here.
-- **Place a point** (`place=1`, a side sheet, editors): kind (gauge, dam,
-  other), name, latitude and longitude in decimal degrees ("-33.61" or
-  "33.61 S", a decimal comma taken), and what it stands for. Errors show
-  under each field on submit; a saved point closes the sheet and is picked.
-  (D1 replaces this form with click-to-place.)
+- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
+  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
+  at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
+  from QGIS) and **Review**, which reads it on the server
+  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Check each kind
+  before you import; nothing is saved until then"), **Set every row’s
+  kind** (a default for the Kind column: each row whose shape can be that
+  kind takes it, and the line under it counts those that can't), and a
+  table, one row per feature: #, Name (editable), Shape (point, line or
+  polygon, with its area), Kind (only the kinds its shape can be, with
+  "from the file" or "from its shape" under it, and why a kind the file gave
+  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
+  boundary or river) and Problems. While a row is marked as the boundary
+  and the project has one, a warning over the table says "Importing
+  replaces the current catchment boundary “X”: it goes from the map." with
+  a **Replace the current boundary** tick (off for every file); **Import**
+  waits for it, and the server refuses the import without it. Two rows
+  marked as the boundary, a
+  refused feature, or a file imported already (by SHA-256) show in an alert
+  over the table and disable **Import n features**; **Choose another file**
+  goes back. A refused file imports nothing; a taken one closes the sheet
+  and picks its first feature. On a phone each row is a card of labelled
+  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  it, **Imported files**: each file with its feature count, date, who
+  imported it and its SHA-256 cut to 12 characters (the full hash in the
+  tooltip) with **Copy**.
+- **Place a point** (`place=1`, a side sheet, editors; #326 D1): kind
+  (gauge, dam, other; the bar's choice), name, what it stands for, and the
+  position. From a clicked or located point it says "Put on the map at
+  33.6200° S, 21.3400° E…" with the latitude and longitude behind an **Enter
+  coordinates** disclosure, filled in from it; opened with no position (the
+  bar's Enter coordinates, a direct `place=1`) the disclosure is open.
+  Decimal degrees ("-33.61" or "33.61 S", a decimal comma taken); errors show
+  under each field on submit (opening the disclosure); a saved point closes
+  the sheet, ends the drawing mode and is picked.
 - **URL.** `feature=<id>` picks a feature; `node=<nodeId>` picks that
   node's farm parcel (the largest), else its first linked feature
   (`mapList.ts` `pickedFeature`), so the Network and results can link "Show
@@ -2478,10 +2552,24 @@ map" card) stays the schematic; this is the geography.
   sheet or the grid drops its parameter in place; a viewer's `upload=1` or
   `place=1` is dropped. Old aliases `?tab=gis` and `?tab=catchment-map`
   still open the tab.
+- Drawing is tested in `e2e/tests/map-draw.spec.ts` through its non-pointer
+  paths (paste a shape, typed coordinates, the keyboard crosshair, the entry
+  points) and one deterministic mouse-drawn polygon read back from the list,
+  with axe light and dark while drawing; the helpers in
+  `lib/components/map/draw/*.test.ts`.
 - Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways
   scroll), axe light and dark, wide and phone, with the grid open too.
+  `e2e/tests/map-import-review.spec.ts`: a mixed file's proposed kinds and
+  links, one changed and renamed, two boundaries refused in the table, the
+  list grouped after import; a file with a refused feature lists it on its
+  row and imports nothing; the phone's cards, axe.
+  Results: `e2e/tests/map-results.spec.ts` (the seeded Sandspruit as owner
+  and viewer, every parcel's figure in the table, the measure and run in the
+  URL with Back, published-only below editor, the fills re-read on a theme
+  switch through the key row's `data-fill-theme` and each band's
+  `data-colour` against its token, thirty units, axe wide and phone).
 
 ## Crops & demand
 
@@ -7258,7 +7346,22 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
+  alone if that fails); **Your hydrological unit on the map** (issue #326
+  A3, `farm/FarmMapCard.svelte`, wording in `farm/farmMap.ts`, section
+  `farm.map`), only when the farm has a parcel or dam of its own on the map
+  (`GET …/map`, [maps.md § The farmer's map](./maps.md#the-farmers-map)):
+  what the map shows and that it shows no other hydrological unit, "Your land
+  is coloured by the model’s look back: **Model: watch**" (no line without a
+  band), each feature in words ("Your land: Vaalbank (3 000 ha)", "Your dam:
+  …", "Rivers: …", "Gauges: …", "The catchment boundary"), "Where: about
+  33.684° S, 21.320° E.", and "There is no background map here, so only these
+  are drawn." when the build has no basemap tiles; then the map itself, a
+  280 px `CatchmentMap` loaded as its own chunk (`farm/FarmMapCanvas.svelte`,
+  MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
+  the reader's language, and a one-line key (the land in its band's colour,
+  "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
+  map draws them). A failed request says so in one line; the offline view
+  leaves it out; "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file (the farm's last 365
   days to `dataUntil`, in whole m³, headed by the series keys; api.md
   § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the

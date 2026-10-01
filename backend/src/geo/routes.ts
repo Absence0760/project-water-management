@@ -2,10 +2,12 @@
 // docs/api.md § Catchment map, docs/maps.md).
 //
 //   GET    /projects/:id/map/features                   features, sources, nodes' area sources (viewer)
+//   GET    /projects/:id/map/linked-nodes               the ids of the nodes a feature is linked to (viewer)
 //   POST   /projects/:id/map/features                   place one feature: a point from the coordinates form, or a geometry (editor)
 //   PATCH  /projects/:id/map/features/:fid              rename, re-kind, link to a node, move (editor)
 //   DELETE /projects/:id/map/features/:fid              (editor); its import goes with its last feature
-//   POST   /projects/:id/map/import                     a GeoJSON file, checked on the server (editor)
+//   POST   /projects/:id/map/import/preview             a GeoJSON file read and checked, each feature's kind proposed; saves nothing (editor)
+//   POST   /projects/:id/map/import                     a GeoJSON file, checked on the server, with the reviewed kinds (editor)
 //   POST   /projects/:id/nodes/:nodeId/area-from-map    accept a polygon's area as a farm's area (editor)
 //   GET    /projects/:id/map/quaternary?lon=&lat=       the quaternary at a point and its reference values, proposed (viewer)
 //
@@ -24,7 +26,20 @@ import { beginModelChange, recordAudit, recordModelRevision } from '../history/r
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { centerOf, checkGeometry, FEATURE_NAME_MAX, GEO_MAX_BYTES, parseGeoJson, type Geometry, type ParsedFeature, type Position } from './geojson.js';
+import {
+	centerOf,
+	checkGeometry,
+	FEATURE_NAME_MAX,
+	GEO_MAX_BYTES,
+	GEO_MAX_FEATURES,
+	KIND_GEOMETRY,
+	parseGeoJson,
+	proposeKinds,
+	type GeoProblem,
+	type Geometry,
+	type ParsedFeature,
+	type Position
+} from './geojson.js';
 import { quaternaryAt, quaternaryDatasets } from './quaternary.js';
 
 export const MAP_FEATURE_KINDS = ['catchment_boundary', 'farm_parcel', 'dam', 'gauge', 'river', 'other'] as const;
@@ -32,18 +47,11 @@ export type MapFeatureKind = (typeof MAP_FEATURE_KINDS)[number];
 
 /** The import's own body cap: the file (GEO_MAX_BYTES) as a JSON string, with room for its escapes (app.ts exempts this path from the general 4 MB). */
 export const MAP_IMPORT_BODY_MAX = GEO_MAX_BYTES + 2 * 1024 * 1024;
-/** The path app.ts lets past the general body limit, to this route's own. */
-export const MAP_IMPORT_PATH = /^\/projects\/[^/]+\/map\/import$/;
+/** The paths app.ts lets past the general body limit, to these routes' own (the import and its preview). */
+export const MAP_IMPORT_PATH = /^\/projects\/[^/]+\/map\/import(\/preview)?$/;
 
 /** The geometry types each kind may have (the 152 CHECKs, said first for a clear 400). */
-const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = {
-	catchment_boundary: ['Polygon', 'MultiPolygon'],
-	farm_parcel: ['Polygon', 'MultiPolygon'],
-	dam: ['Point', 'Polygon', 'MultiPolygon'],
-	gauge: ['Point'],
-	river: ['LineString', 'MultiLineString'],
-	other: ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']
-};
+const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = KIND_GEOMETRY;
 /**
  * The kinds whose polygon may become a hydrological unit's catchment area: a
  * farm parcel, or an "other" polygon the editor drew for the purpose. A dam's
@@ -102,11 +110,41 @@ export const EditFeature = z
 	.refine((b) => b.geometry === undefined || (b.lon === undefined && b.lat === undefined), 'give either a longitude and latitude, or a geometry')
 	.refine((b) => (b.lon === undefined) === (b.lat === undefined), 'give both a longitude and a latitude');
 
+/** One feature of the file as the editor reviewed it (issue #326 D2): its place in the file, the kind, the name and the node it stands for. */
+const ReviewedFeature = z
+	.object({
+		index: z.number().int().min(1),
+		kind: z.enum(MAP_FEATURE_KINDS),
+		/** Omitted: the name read from the file. */
+		name: Name.optional(),
+		/** Omitted: linked by name, as a one-kind import does; null: no node. */
+		nodeId: uuid.nullable().optional()
+	})
+	.strict();
+
 export const ImportBody = z
 	.object({
 		fileName: z.string().trim().min(1).max(255),
-		/** What the file's features are: one catchment boundary (its polygons together), or features of one kind. */
-		kind: z.enum(MAP_FEATURE_KINDS),
+		/** Every feature one kind: one catchment boundary (its polygons together), or features of that kind (the one-kind import, kept for API callers). */
+		kind: z.enum(MAP_FEATURE_KINDS).optional(),
+		/** Or each feature's own kind, name and node, from the review (every feature in the file, once). */
+		features: z.array(ReviewedFeature).min(1).max(GEO_MAX_FEATURES).optional(),
+		/**
+		 * With `features`: a reviewed row marked as the boundary replaces the
+		 * project's current one only with this set (the review's "Replace the
+		 * current boundary" tick); without it that import is refused (409). The
+		 * one-kind `kind: 'catchment_boundary'` import names the whole file the
+		 * boundary and replaces it as before.
+		 */
+		replaceBoundary: z.boolean().optional(),
+		text: z.string().min(1)
+	})
+	.strict()
+	.refine((b) => (b.kind === undefined) !== (b.features === undefined), 'give either one kind for the whole file, or each feature’s kind');
+
+export const ImportPreviewBody = z
+	.object({
+		fileName: z.string().trim().min(1).max(255),
 		text: z.string().min(1)
 	})
 	.strict();
@@ -219,6 +257,14 @@ async function removeBoundary(db: Db, projectId: string): Promise<string | null>
 	return rows[0]?.id ?? null;
 }
 
+/** The project's catchment boundary (its name), or null when it has none. */
+async function currentBoundary(db: Db, projectId: string): Promise<{ name: string } | null> {
+	const { rows } = await db.query<{ name: string }>(`SELECT name FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at LIMIT 1`, [projectId]);
+	return rows[0] ? { name: rows[0].name } : null;
+}
+
+const DUPLICATE_FILE = 'This file was imported already. Delete its features first to import it again.';
+
 async function dropSourceIfEmpty(db: Db, projectId: string, sourceId: string) {
 	await db.query('DELETE FROM geo_source s WHERE s.id = $1 AND s.project_id = $2 AND NOT EXISTS (SELECT 1 FROM map_feature f WHERE f.source_id = s.id)', [
 		sourceId,
@@ -226,20 +272,36 @@ async function dropSourceIfEmpty(db: Db, projectId: string, sourceId: string) {
 	]);
 }
 
-/** The features an import makes of a file's features: one boundary (all its polygons together), or one feature each. */
-function importedFeatures(kind: MapFeatureKind, parsed: ParsedFeature[], fileName: string): { problems: { feature: number | null; message: string }[]; rows: { name: string; geometry: Geometry; areaM2: number | null; properties: Record<string, string> }[] } {
-	const problems = parsed
-		.filter((f) => !KIND_TYPES[kind].includes(f.geometry.type))
-		.map((f) => ({ feature: f.index, message: `is a ${f.geometry.type}; ${KIND_LABEL[kind]} is a ${KIND_TYPES[kind].join(' or ')}` }));
+/** A feature an import inserts. `nodeId` undefined: linked to the node of the same name, if one of a fitting kind. */
+interface ImportRow {
+	kind: MapFeatureKind;
+	name: string;
+	nodeId?: string | null;
+	geometry: Geometry;
+	areaM2: number | null;
+	properties: Record<string, string>;
+}
+type Made = { problems: GeoProblem[]; rows: ImportRow[] };
+
+const boundaryName = (name: string, fileName: string) => name || fileName.replace(/\.(geo)?json$/i, '').slice(0, FEATURE_NAME_MAX);
+const mismatch = (f: ParsedFeature, kind: MapFeatureKind): GeoProblem => ({
+	feature: f.index,
+	message: `is a ${f.geometry.type}; ${KIND_LABEL[kind]} is a ${KIND_TYPES[kind].join(' or ')}`
+});
+
+/** The features an import makes of a file's features, all one kind: one boundary (all its polygons together), or one feature each. */
+function importedFeatures(kind: MapFeatureKind, parsed: ParsedFeature[], fileName: string): Made {
+	const problems = parsed.filter((f) => !KIND_TYPES[kind].includes(f.geometry.type)).map((f) => mismatch(f, kind));
 	if (problems.length) return { problems, rows: [] };
-	if (kind !== 'catchment_boundary') return { problems, rows: parsed.map((f) => ({ name: f.name, geometry: f.geometry, areaM2: f.areaM2, properties: f.properties })) };
+	if (kind !== 'catchment_boundary') return { problems, rows: parsed.map((f) => ({ kind, name: f.name, geometry: f.geometry, areaM2: f.areaM2, properties: f.properties })) };
 	const polygons = parsed.flatMap((f) => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : []));
 	const geometry: Geometry = polygons.length === 1 ? { type: 'Polygon', coordinates: polygons[0]! } : { type: 'MultiPolygon', coordinates: polygons };
 	return {
 		problems,
 		rows: [
 			{
-				name: parsed[0]!.name || fileName.replace(/\.(geo)?json$/i, '').slice(0, FEATURE_NAME_MAX),
+				kind,
+				name: boundaryName(parsed[0]!.name, fileName),
 				geometry,
 				areaM2: parsed.reduce((s, f) => s + (f.areaM2 ?? 0), 0),
 				properties: parsed.length === 1 ? parsed[0]!.properties : {}
@@ -247,6 +309,73 @@ function importedFeatures(kind: MapFeatureKind, parsed: ParsedFeature[], fileNam
 		]
 	};
 }
+
+/**
+ * The features an import makes from the review (issue #326 D2): each feature
+ * the kind, name and node the editor gave it. Every feature of the file must
+ * be listed once; each kind must fit its geometry, each node its kind (the
+ * same rules as placing a feature), and a file holds at most one boundary.
+ */
+async function reviewedFeatures(db: Db, projectId: string, parsed: ParsedFeature[], reviewed: z.infer<typeof ReviewedFeature>[], fileName: string): Promise<Made> {
+	const byIndex = new Map(reviewed.map((r) => [r.index, r]));
+	if (byIndex.size !== reviewed.length || reviewed.length !== parsed.length || parsed.some((f) => !byIndex.has(f.index))) {
+		throw new ApiError(400, `List every feature in the file once: it has ${parsed.length}.`);
+	}
+	const problems: GeoProblem[] = [];
+	const boundaries = reviewed.filter((r) => r.kind === 'catchment_boundary').map((r) => r.index);
+	if (boundaries.length > 1) {
+		problems.push({ feature: null, message: `A file holds at most one catchment boundary; features ${boundaries.join(', ')} are each marked as one.` });
+	}
+	const nodeIds = [...new Set(reviewed.flatMap((r) => (r.nodeId ? [r.nodeId] : [])))];
+	const { rows: nodes } = nodeIds.length
+		? await db.query<{ id: string; kind: string }>('SELECT id, kind::text AS kind FROM node WHERE project_id = $1 AND id = ANY($2::uuid[])', [projectId, nodeIds])
+		: { rows: [] };
+	const nodeKind = new Map(nodes.map((n) => [n.id, n.kind]));
+	const rows: ImportRow[] = [];
+	for (const f of parsed) {
+		const r = byIndex.get(f.index)!;
+		if (!KIND_TYPES[r.kind].includes(f.geometry.type)) {
+			problems.push(mismatch(f, r.kind));
+			continue;
+		}
+		if (r.nodeId) {
+			const k = nodeKind.get(r.nodeId);
+			// Not a choice the review offers: a request naming another project's node is refused outright, as placing a feature is.
+			if (!k) throw new ApiError(400, `Feature ${f.index} stands for a node that is not in this project.`);
+			if (!KIND_NODES[r.kind].includes(k)) {
+				problems.push({ feature: f.index, message: KIND_NODES[r.kind].length ? `is ${KIND_LABEL[r.kind]}, which can stand for a ${KIND_NODES[r.kind].join(' or ')} node, not a ${k}` : `is ${KIND_LABEL[r.kind]}, which stands for no node` });
+			}
+		}
+		const name = r.name ?? f.name;
+		rows.push({
+			kind: r.kind,
+			name: r.kind === 'catchment_boundary' ? boundaryName(name, fileName) : name,
+			...(r.nodeId !== undefined ? { nodeId: r.nodeId } : {}),
+			geometry: f.geometry,
+			areaM2: f.areaM2,
+			properties: f.properties
+		});
+	}
+	return problems.length ? { problems, rows: [] } : { problems, rows };
+}
+
+const sha256Of = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+
+type NodeRef = { id: string; name: string; kind: string };
+const projectNodes = async (db: Db, projectId: string) =>
+	(await db.query<NodeRef>('SELECT id, name, kind::text AS kind FROM node WHERE project_id = $1 ORDER BY sort_order, name', [projectId])).rows;
+
+/** A feature named like a node of a kind it can stand for is linked to it (the editor can change the link); nothing else follows from it. */
+const nodeByName =
+	(nodes: readonly NodeRef[]) =>
+	(kind: MapFeatureKind, name: string): string | null =>
+		name.trim() ? (nodes.find((n) => KIND_NODES[kind].includes(n.kind) && n.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null) : null;
+
+const importLimit = () =>
+	bodyLimit({
+		maxSize: MAP_IMPORT_BODY_MAX,
+		onError: (c) => c.json({ error: `GeoJSON file larger than ${GEO_MAX_BYTES / 1024 / 1024} MB; simplify it or split it` }, 413)
+	});
 
 export const mapRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/features', async (c) =>
@@ -271,6 +400,20 @@ export const mapRoutes = new Hono<AuthEnv>()
 				nodes: nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, areaKm2: n.area_km2, areaSource: n.area_source, areaFeatureId: n.area_feature_id })),
 				quaternaryDatasets: await quaternaryDatasets(db)
 			});
+		})
+	)
+	// Which nodes get a "Show on map" link on the Network, Hydrological units and
+	// Dams pages (issue #326): only the ids, never a geometry. Viewer, like the
+	// feature list: a farmer gets 403 (their farm view has no map).
+	.get('/:id/map/linked-nodes', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const id = c.req.param('id');
+			await requireRole(db, id, 'viewer');
+			const { rows } = await db.query<{ node_id: string }>(
+				'SELECT DISTINCT node_id FROM map_feature WHERE project_id = $1 AND node_id IS NOT NULL ORDER BY node_id',
+				[id]
+			);
+			return c.json({ nodeIds: rows.map((r) => r.node_id) });
 		})
 	)
 	.post('/:id/map/features', async (c) => {
@@ -327,50 +470,98 @@ export const mapRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		});
 	})
-	.post(
-		'/:id/map/import',
-		bodyLimit({
-			maxSize: MAP_IMPORT_BODY_MAX,
-			onError: (c) => c.json({ error: `GeoJSON file larger than ${GEO_MAX_BYTES / 1024 / 1024} MB; simplify it or split it` }, 413)
-		}),
-		async (c) => {
-			const body = ImportBody.parse(await readJson(c));
-			const id = c.req.param('id');
-			return withUser(c.get('userId'), async (db) => {
-				await requireRole(db, id, 'editor');
-				const parsed = parseGeoJson(body.text);
-				const made = parsed.problems.length ? { problems: parsed.problems, rows: [] } : importedFeatures(body.kind, parsed.features, body.fileName);
-				if (made.problems.length) throw new ApiError(422, 'The file was not imported: fix the problems listed and upload it again.', made.problems);
-				const sha256 = createHash('sha256').update(body.text, 'utf8').digest('hex');
-				const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
-				if (dup[0]) throw new ApiError(409, 'This file was imported already. Delete its features first to import it again.');
-				if (body.kind === 'catchment_boundary') await removeBoundary(db, id);
-				const { rows: src } = await db.query<{ id: string }>(
+	.post('/:id/map/import/preview', importLimit(), async (c) => {
+		// The review before an import (issue #326 D2): the file read and checked as the import will, each feature's kind proposed; nothing is saved.
+		const body = ImportPreviewBody.parse(await readJson(c));
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const parsed = parseGeoJson(body.text);
+			const sha256 = sha256Of(body.text);
+			const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
+			const boundary = await currentBoundary(db, id);
+			const proposals = proposeKinds(parsed.features, { hasBoundary: boundary !== null });
+			const nodes = await projectNodes(db, id);
+			const link = nodeByName(nodes);
+			const refused = parsed.problems.flatMap((p) => (p.feature === null ? [] : [p.feature]));
+			const features = [
+				...parsed.features.map((f, i) => {
+					const p = proposals[i]!;
+					return {
+						index: f.index,
+						geometryType: f.geometry.type,
+						name: f.name,
+						areaM2: f.areaM2,
+						kind: p.kind,
+						kindFrom: p.from,
+						...(p.note ? { note: p.note } : {}),
+						nodeId: link(p.kind, f.name)
+					};
+				}),
+				...[...new Set(refused)].map((index) => ({ index, geometryType: null, name: '', areaM2: null, kind: null, kindFrom: null, nodeId: null }))
+			].sort((x, y) => x.index - y.index);
+			// currentBoundary: a row imported as the boundary replaces it, so the review warns and asks for the tick.
+			return c.json({ fileName: body.fileName, sha256, duplicate: dup.length > 0, currentBoundary: boundary, features, problems: parsed.problems, nodes });
+		});
+	})
+	.post('/:id/map/import', importLimit(), async (c) => {
+		const body = ImportBody.parse(await readJson(c));
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const parsed = parseGeoJson(body.text);
+			const made: Made = parsed.problems.length
+				? { problems: parsed.problems, rows: [] }
+				: body.features
+					? await reviewedFeatures(db, id, parsed.features, body.features, body.fileName)
+					: importedFeatures(body.kind!, parsed.features, body.fileName);
+			if (made.problems.length) throw new ApiError(422, 'The file was not imported: fix the problems listed and upload it again.', made.problems);
+			const sha256 = sha256Of(body.text);
+			const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
+			if (dup[0]) throw new ApiError(409, DUPLICATE_FILE);
+			if (made.rows.some((r) => r.kind === 'catchment_boundary')) {
+				// A reviewed boundary row never replaces the current boundary silently: the editor ticks it (the one-kind import names the file the boundary).
+				const boundary = body.features ? await currentBoundary(db, id) : null;
+				if (boundary && body.replaceBoundary !== true) {
+					throw new ApiError(
+						409,
+						`Importing this file replaces the current catchment boundary${boundary.name ? ` “${boundary.name}”` : ''}. Tick “Replace the current boundary” to import it, or set that row to another kind.`
+					);
+				}
+				await removeBoundary(db, id);
+			}
+			// Two identical imports at once both pass the check above; the unique index (geo_source_sha_idx) stops the second, which gets the same answer.
+			const { rows: src } = await db
+				.query<{ id: string }>(
 					`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
 					[id, body.fileName, sha256]
+				)
+				.catch((err: unknown) => {
+					if ((err as { code?: string; constraint?: string }).code === '23505' && (err as { constraint?: string }).constraint === 'geo_source_sha_idx') throw new ApiError(409, DUPLICATE_FILE);
+					throw err;
+				});
+			const sourceId = src[0]!.id;
+			const link = nodeByName(await projectNodes(db, id));
+			const ids: string[] = [];
+			for (const r of made.rows) {
+				const { rows: ins } = await db.query<{ id: string }>(
+					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, source_id, created_by)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, app_current_user_id()) RETURNING id`,
+					[id, r.kind, r.name, r.nodeId !== undefined ? r.nodeId : link(r.kind, r.name), JSON.stringify(r.geometry), JSON.stringify(r.properties), r.areaM2, sourceId]
 				);
-				const sourceId = src[0]!.id;
-				// A feature named like a node of a kind it can stand for is linked to it (the editor can change the link); nothing else follows from it.
-				const { rows: nodes } = await db.query<{ id: string; name: string; kind: string }>('SELECT id, name, kind::text AS kind FROM node WHERE project_id = $1', [id]);
-				const byName = (name: string) => nodes.find((n) => KIND_NODES[body.kind].includes(n.kind) && n.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null;
-				const ids: string[] = [];
-				for (const r of made.rows) {
-					const { rows: ins } = await db.query<{ id: string }>(
-						`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, source_id, created_by)
-						 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, app_current_user_id()) RETURNING id`,
-						[id, body.kind, r.name, r.name ? byName(r.name) : null, JSON.stringify(r.geometry), JSON.stringify(r.properties), r.areaM2, sourceId]
-					);
-					ids.push(ins[0]!.id);
-				}
-				await recordAudit(db, id, 'map.imported', { sourceId, fileName: body.fileName, kind: body.kind, features: made.rows.length, sha256 });
-				// In the file's order (one transaction: created_at can't tell them apart).
-				const { rows } = await db.query<FeatureRow>(`${SELECT_FEATURES} AND f.source_id = $2`, [id, sourceId]);
-				const at = new Map(ids.map((x, i) => [x, i]));
-				rows.sort((a, b) => at.get(a.id)! - at.get(b.id)!);
-				return c.json({ source: { id: sourceId, fileName: body.fileName, sha256 }, features: rows.map(toFeature) }, 201);
-			});
-		}
-	)
+				ids.push(ins[0]!.id);
+			}
+			const kinds: Partial<Record<MapFeatureKind, number>> = {};
+			for (const r of made.rows) kinds[r.kind] = (kinds[r.kind] ?? 0) + 1;
+			const kindNames = Object.keys(kinds);
+			await recordAudit(db, id, 'map.imported', { sourceId, fileName: body.fileName, kind: kindNames.length === 1 ? kindNames[0] : 'mixed', kinds, features: made.rows.length, sha256 });
+			// In the file's order (one transaction: created_at can't tell them apart).
+			const { rows } = await db.query<FeatureRow>(`${SELECT_FEATURES} AND f.source_id = $2`, [id, sourceId]);
+			const at = new Map(ids.map((x, i) => [x, i]));
+			rows.sort((a, b) => at.get(a.id)! - at.get(b.id)!);
+			return c.json({ source: { id: sourceId, fileName: body.fileName, sha256 }, features: rows.map(toFeature) }, 201);
+		});
+	})
 	.post('/:id/nodes/:nodeId/area-from-map', async (c) => {
 		const body = AreaFromMap.parse(await readJson(c));
 		const { id, nodeId } = c.req.param();

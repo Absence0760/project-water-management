@@ -275,7 +275,9 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
 			'GET /projects/:id/farm/:nodeId/export.csv',
-			'GET /projects/:id/farm/:nodeId/access'
+			'GET /projects/:id/farm/:nodeId/access',
+			// The farm's map (issue #326 A3).
+			'GET /projects/:id/farm/:nodeId/map'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);

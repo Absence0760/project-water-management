@@ -745,7 +745,7 @@
 					</Lazy>
 				{:else if tab === 'map'}
 					<Lazy load={LOAD.map}>
-						{#snippet children(MapTab)}<MapTab {projectId} {editor} {canEdit} onModelChanged={reloadInputs} />{/snippet}
+						{#snippet children(MapTab)}<MapTab {projectId} {editor} {canEdit} {runs} role={project!.role} onModelChanged={reloadInputs} />{/snippet}
 					</Lazy>
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />

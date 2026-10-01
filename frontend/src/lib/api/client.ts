@@ -51,6 +51,7 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	FarmMap,
 	AddFarmerResult,
 	FarmRole,
 	BulkFarmerResult,
@@ -137,6 +138,9 @@ import type {
 	MapFeatureInput,
 	MapFeatureKind,
 	MapFeatureList,
+	MapImportPreview,
+	MapImportReviewed,
+	MapLinkedNodes,
 	QuaternaryLookup
 } from './types';
 
@@ -480,6 +484,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
 			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
+			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
+			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
@@ -898,13 +904,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		map: {
 			list: (id: string) => request<MapFeatureList>('GET', `${p(id)}/map/features`),
+			/** Which nodes have a linked feature, ids only: the "Show on map" links (issue #326). */
+			linkedNodes: (id: string) => request<MapLinkedNodes>('GET', `${p(id)}/map/linked-nodes`),
 			create: (id: string, body: MapFeatureInput & { kind: MapFeatureKind }) =>
 				request<{ feature: MapFeature }>('POST', `${p(id)}/map/features`, body).then((r) => r.feature),
 			update: (id: string, fid: string, body: MapFeatureInput) =>
 				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
 			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
-			/** 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already. */
-			import: (id: string, body: { fileName: string; kind: MapFeatureKind; text: string }) =>
+			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
+			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
+			/**
+			 * Import a file, every feature one `kind` or each its own (`features`, from the review).
+			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already, or a
+			 * reviewed boundary row would replace the current boundary without `replaceBoundary: true`.
+			 */
+			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[]; replaceBoundary?: boolean })) =>
 				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
 			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>

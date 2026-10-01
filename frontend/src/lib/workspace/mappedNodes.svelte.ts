@@ -5,16 +5,16 @@
 // project switch, so the project is read through a getter, a set answers only
 // for the project it was read for, and a late answer for an earlier project
 // is dropped.
-import { cachedMappedNodes, loadMappedNodes, type ListFeatures } from './mapLinks';
+import { cachedMappedNodes, loadMappedNodes, type ListLinkedNodes } from './mapLinks';
 
 export class MappedNodes {
 	#ids = $state.raw<{ projectId: string; ids: Set<string> } | undefined>();
 	readonly #projectId: () => string;
-	readonly #list: ListFeatures;
+	readonly #list: ListLinkedNodes;
 	#asked = 0;
 
-	/** `projectId`: the page's current project; `list`: the map's feature list (`api.map.list`). */
-	constructor(projectId: () => string, list: ListFeatures) {
+	/** `projectId`: the page's current project; `list`: the nodes with a linked feature (`api.map.linkedNodes`). */
+	constructor(projectId: () => string, list: ListLinkedNodes) {
 		this.#projectId = projectId;
 		this.#list = list;
 		const p = projectId();

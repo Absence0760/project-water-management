@@ -106,6 +106,12 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 			text: JSON.stringify({ type: 'Feature', properties: { name: crypto.randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
 		}
 	}),
+	'POST /projects/:id/map/import/preview': () => ({
+		body: {
+			fileName: 'ladder.geojson',
+			text: JSON.stringify({ type: 'Feature', properties: { name: 'Ladder' }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+		}
+	}),
 	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),

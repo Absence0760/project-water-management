@@ -21,7 +21,8 @@ Two rules hold throughout:
   value, and then **Save**.
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
-  placed by typing coordinates, and areas can still be typed on the Network.
+  placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
+  areas can still be typed on the Network.
 
 ## Basemap
 
@@ -44,7 +45,7 @@ server and no tile CDN: the file is served from the app's own storage.
   (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
-  Protomaps daily build at maxzoom 13 into
+  Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
   anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
@@ -52,9 +53,21 @@ server and no tile CDN: the file is served from the app's own storage.
   (`http://localhost:9002/tiles/south-africa.pmtiles`); restart `pnpm dev`.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
-  defaults. **Size: measure before choosing** (decision D7): maxzoom 13 is
-  enough to recognise farm dams; expect hundreds of MB at 12–13 and a few GB
-  at 15.
+  defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
+  or tracing a parcel (drawing, below) needs a closer zoom than 13. Measured
+  2026-10-01 with `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the
+  Protomaps build of 2026-09-30, the bbox above), which reads only the
+  archive's directories, not the tiles:
+
+  | maxzoom | tiles | archive |
+  | --- | --- | --- |
+  | 13 | 130,243 | 250 MB |
+  | 14 | 443,416 | 490 MB |
+  | 15 | 1,408,748 | 1.0 GB |
+
+  15 is under the ~2 GB the decision allowed, and is the Protomaps build's
+  deepest zoom (MapLibre overzooms past it), so it is the default.
+  `TILES_MAXZOOM=13` keeps a laptop's cache small.
 - **Production**: not deployed yet. The plan (WP-3.12) is the same file in
   S3 under a `tiles/` prefix behind a same-origin CloudFront behaviour
   `/tiles/*` (Range and `ETag` forwarded, long cache), and
@@ -119,9 +132,95 @@ server and no tile CDN: the file is served from the app's own storage.
 - The app loads **no third-party script, style, font or tile**: MapLibre is
   bundled, the basemap is self-hosted, and there are no glyphs.
 
+## Drawing
+
+Editors draw, place and reshape features on the map itself (issue #326 C1,
+D1, D4; the screen is in [ui.md § Map](./ui.md#map-tabmap)). Nothing is sent
+until a sheet's confirm, and every save goes through the same
+`POST`/`PATCH /projects/:id/map/features` as before, so the server's checks
+(`checkGeometry`: closed, non-crossing rings, the vertex limits, a kind's
+geometry types) and the audit events are unchanged. Viewers get no tools.
+
+- **What can be drawn** (`draw/shape.ts` `DRAW_CHOICES`): a polygon for a
+  catchment boundary (it replaces the current one, and the save sheet says
+  so), a farm parcel, a dam's water's edge or an "other" area; a line for a
+  river or an "other" line; a point (Place a point) for a gauge, a dam or
+  "other".
+- **Pointer.** A click adds a corner; a click on the first corner (or
+  **Finish**) closes a polygon, a second click on the last point (or a double
+  click, or Finish) ends a line; a dashed line runs from the last corner to
+  the pointer. Once drawn: drag a corner (or the point) to move it, click an
+  edge's middle to add a corner, click a corner to pick it and press Delete
+  (or **Remove the picked corner**) to remove it, never below three corners
+  (two points for a line). **Undo** steps back through every change (a drag
+  is one step; up to 200); **Cancel** drops the drawing at once. **Escape**
+  does too while there is nothing to lose (one corner, a placed point, an
+  edit not yet changed), but with two corners or more, a finished or pasted
+  shape, or a changed edit it asks first (the app's confirmation dialog,
+  "Discard this drawing?" / "Discard your changes?", **Keep drawing** first
+  and taking the focus; `Draft.escape`), since a key can be a slip and a
+  named button can't, the way a half-typed note asks before its sheet
+  closes. While
+  drawing, clicks shape the drawing rather than picking what is under them,
+  and point markers let clicks through.
+- **Keyboard** (WCAG 2.1.1): from the map's focus (entering a drawing mode
+  puts it there), a crosshair marks the map's middle; the arrow keys pan the
+  map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
+  (places or moves the point), **Backspace** removes the last corner while
+  drawing, **Delete** the picked one after, Escape cancels (asking first, as
+  above; focus comes back to the map either way). The canvas's
+  accessible name says which keys do what in each phase, and the draw bar
+  names the last change in a polite live region ("Corner 3 at 33.6100° S,
+  21.3400° E.").
+- **Paste a shape** (`draw/parseShape.ts`; WCAG 2.1.1, 2.5.7: the
+  non-pointer way to make or replace a shape, and the way in for coordinates
+  copied from QGIS or a survey): GeoJSON (a geometry, a Feature, or a
+  FeatureCollection of one) or WKT (`POINT`, `LINESTRING`, `POLYGON`,
+  `MULTILINESTRING`, `MULTIPOLYGON`, an optional `SRID=4326;`), longitude
+  first, WGS84. An outline left open is closed; 3D, another SRID or a named
+  projected CRS, coordinates outside longitude/latitude ("looks projected"),
+  several features and unsupported types are refused with a sentence. The
+  pasted shape must be the shape being drawn (a line for River), replaces the
+  drawing, and is framed; one of several parts (or with holes) is kept whole:
+  it saves as it is but has no corners to drag.
+- **Points (D1).** Click to place is the main way: the point is drawn as a
+  draft, can be dragged (or clicked elsewhere to move it), and **Save…**
+  opens the Place sheet with its position; the coordinates are behind
+  **Enter coordinates** there, filled in from the click so a published
+  position can be typed exactly. **Use my location** (on a phone: a coarse
+  pointer or a window under 700 px, with `navigator.geolocation`) asks the
+  browser only when tapped; the position becomes the draft point and goes
+  nowhere else until the point is saved.
+- **Editing a saved feature:** the picked card's **Edit the shape** (a
+  single line, or a polygon of one ring) or **Move the point**; the feature
+  is drawn as the draft and saved with **Save the shape** (`PATCH` with the
+  geometry; the server recomputes its area). A unit whose area was taken from
+  it keeps that area until **Use** is pressed again (the card then offers
+  it, since the areas differ). Shapes of several parts or with holes are
+  replaced by uploading or pasting, not reshaped.
+- **Without WebGL** the draw bar leads with Paste a shape and Enter
+  coordinates; both work with no map.
+- **Why our own drawing mode, not a library.** Both candidates were
+  measured on 2026-10-01 (esbuild, minified, gzip -9, MapLibre external):
+  [Terra Draw](https://github.com/JamesLMilner/terra-draw) 1.35.0 with
+  `terra-draw-maplibre-gl-adapter` 1.4.1 is MIT, actively maintained
+  (MapLibre ≥ 4 peer, so 6.10 works), has undo, and no `eval`, but is
+  **36 KB** gzipped with the modes this needs; `@mapbox/mapbox-gl-draw` 1.5.2
+  is ISC and 18 KB plus its CSS, but is written for Mapbox GL (MapLibre needs
+  class-name shims) and its keyboard support is Escape/Enter/Delete only.
+  Neither lets keyboard placement add a corner to the shape being drawn
+  (WCAG 2.1.1 needs that to share one drawing with the pointer), and both
+  keep layers a theme switch's `setStyle` drops. The mode here
+  (`draw/attachDrawing.ts` on MapLibre's own events, `draw/drawLayers.ts`
+  for one `draft` GeoJSON source and its layers, re-added after every style
+  load, `draw/draft.svelte.ts` for the state) is a few KB in the map's own
+  chunk, adds no dependency, and needs no CSP change: no `blob:`, no
+  `eval`, no new origin.
+
 ## Uploads
 
-`POST /projects/:id/map/import` takes a **GeoJSON** file's text; the server
+`POST /projects/:id/map/import` (and its review,
+`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text; the server
 parses and checks it (`backend/src/geo/geojson.ts`), whatever the browser
 did, and refuses the whole file on any problem, listing them per feature:
 
@@ -146,11 +245,49 @@ did, and refuses the whole file on any problem, listing them per feature:
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
-  can't be imported twice into a project.
-- A **catchment boundary** file's polygons become one boundary (a
-  MultiPolygon if several), replacing the project's current one. A parcel,
-  dam or gauge named like a node of a fitting kind is linked to it; the
-  editor can change the link.
+  can't be imported twice into a project (409). Two identical imports at
+  once both pass the duplicate check; the unique index `geo_source_sha_idx`
+  stops the second, which gets the same 409, never a bare "already exists".
+- **A file may mix kinds** (issue #326 D2). `POST …/map/import/preview`
+  reads and checks the file as the import will, saves nothing, and proposes
+  each feature's kind (`proposeKinds` in `geojson.ts`):
+  - from a `kind`, `type` or `layer` property (the key's case ignored), when
+    its value names a kind that fits the feature's geometry. Case,
+    `_`/`-`/spaces and a plural `s` are ignored, with synonyms: boundary,
+    catchment → catchment boundary; parcel, farm, field → farm parcel;
+    reservoir → dam; gage, weir, station → gauge; stream → river. The
+    property is read for this only, never kept;
+  - else from the shape: a line is a river, a point a gauge, a polygon a
+    farm parcel, and the largest polygon whose inside holds every other
+    feature's centre the catchment boundary. A lone polygon is the boundary
+    only while the project has none. A property that names no kind, or one
+    the shape can't be, falls back to the shape with a note saying so.
+
+  Each feature is also proposed the node of the same name (case-insensitive)
+  of a kind it can stand for. The editor reviews every row (kind, name,
+  Stands for) in the upload sheet, then `POST …/map/import` sends
+  `features: [{ index, kind, name, nodeId }]` for every feature of the file.
+  The server checks it all again: each kind fits its geometry, each node is
+  the project's and of a kind the feature can stand for, and **a file holds
+  at most one boundary**, which replaces the project's current one. Any
+  problem refuses the whole file (422, per feature).
+  **Replacing the boundary is never silent:** the preview names the
+  project's current boundary (`currentBoundary`), and while a row is marked
+  as the boundary and one exists, the review shows "Importing replaces the
+  current catchment boundary “X”: it goes from the map." with a **Replace
+  the current boundary** tick, off for every file, that Import waits for.
+  The server holds the same line: a reviewed boundary row with a boundary
+  in place and no `replaceBoundary: true` is refused (409) and nothing is
+  imported. The import's audit
+  event records the count of each kind (`kind: 'mixed'` when there are
+  several).
+- The one-kind import (`kind` instead of `features`, kept for API callers):
+  every feature that kind; a **catchment boundary** file's polygons become
+  one boundary (a MultiPolygon if several), replacing the project's current
+  one without the flag: naming the whole file the boundary is the intent,
+  and the seeding scripts and API callers rely on it (the app's upload sheet
+  always sends `features`). A parcel, dam or gauge named like a node of a fitting kind is linked
+  to it; the editor can change the link.
 
 **Shapefiles are not read yet** (WP-3.12 plans `shpjs` and proj4 in the
 browser, with Hartebeesthoek94 Lo projections from the `.prj`); the form
@@ -223,13 +360,16 @@ Geometry is in metres on a local equirectangular projection around the
 features (well under 1 % off over a catchment); people read haversine
 distances and the server's areas.
 
-## Results on the map (data)
+## Results on the map
 
-Issue #326 A1 (decision D-A1) colours each parcel by one run's figures. This
-section is the data layer, `frontend/src/lib/components/map/mapStatus.ts`
-(pure, `mapStatus.test.ts`). **Not wired to the page yet:** the map's
-colours, measure picker, legend and the table beside it are the next round
-of #326, and nothing on the Map tab calls this module today.
+Issue #326 A1 (decision D-A1) colours each parcel, and each dam polygon
+through its node, by one run's figures. The data layer is
+`frontend/src/lib/components/map/mapStatus.ts` (pure, `mapStatus.test.ts`);
+the page's side is `mapResults.ts` (the `measure=` words, the legend's rows,
+a feature's figure, the "no figure" fill for unlinked areas;
+`mapResults.test.ts`), `mapResults.svelte.ts` (the run's record through the
+Runs cache, its dam levels, the fills) and `MapKeyRow.svelte` (the pickers and
+the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
 
 - **No new route.** Every figure is in the run's summary, which
   `GET /projects/:id/runs/:runId` already returns (`api.runs.get`), with the
@@ -242,7 +382,7 @@ of #326, and nothing on the Map tab calls this module today.
   published; anyone below editor gets the published run only, and nothing
   when nothing is published. This is a choice of view, not an access rule:
   viewers can already read every run on the Runs page. Farmers can't read
-  runs at all (`403`); their farm map (A3) reads the farm view instead.
+  runs at all (`403`); their farm map (A3, [§ The farmer's map](#the-farmers-map)) reads the farm view instead.
 - **Measures** (`unitStatuses`), per hydrological unit and water user, each
   as `{ nodeId, measure, value, band, label }` with `band` one of `ok`,
   `watch`, `short` or `none` (no figure), and `label` the figure in words so
@@ -277,7 +417,38 @@ of #326, and nothing on the Map tab calls this module today.
   the app's theme at the time of the call. The caller must call it again on
   `watchAppTheme` and pass the new `fills`: CatchmentMap redraws a theme
   change with the `fills` it was given, so stale ones keep the old theme's
-  colours. The boundary and rivers are never filled.
+  colours. The boundary and rivers are never filled. The tab does: its band
+  colours are derived from the theme it watches, so CatchmentMap's
+  `setStyle` on a switch reads the new `fills`. Areas with no figure (not
+  linked, or no status) get the `none` colour (`resultFills`), so a parcel's
+  own green never reads as OK.
+- **Contrast.** `RESULT_FILL_OPACITY` (0.75) is not held to 3:1 against the
+  basemap: the fill isn't what marks the shape out. Every parcel keeps its
+  cased outline (`ov-casing` under `ov-parcel-line`, ≥ 3:1 against the
+  basemap, `mapStyle.test.ts`), and the fill's meaning is also in words (the
+  legend, the card, Every feature's Result and Band), so WCAG 1.4.1 and
+  1.4.11 rest on the outline and the words, not the fill.
+- **Gauges' markers are not yet coloured** met or missed: the markers are
+  CatchmentMap's DOM buttons, which don't read `fills`. The EWR is in the
+  card, the table and the legend's count line meanwhile.
+
+## The farmer's map
+
+Issue #326 A3 (decision D-A1/A3): the farm view (`/farm/[projectId]`) shows
+a small map of the farmer's **own** land (parcels) and dam, with the
+boundary, rivers and gauges for orientation, from
+`GET /projects/:id/farm/:nodeId/map` ([api.md § Farm](./api.md#farm)); never
+a neighbour's parcel or status. Farmers can't read runs, so the land is
+coloured by the farm view's own published band (the "Model: …" chip,
+`FarmProjection.river.band`) with the same tokens as `mapStatus.ts`
+`BAND_TOKEN` (`farm/farmMap.ts`, `farmMap.test.ts` keeps them one). The card
+says everything in words first (the land with its area, the dam, the streams
+and gauges by name, the place in degrees, and that no other unit is shown),
+and is left out when the farm has nothing of its own on the map. The map
+reuses `CatchmentMap.svelte` in a chunk of its own (`farm/FarmMapCanvas.svelte`),
+passing its words in the reader's language (`words`, `farmMap.ts`
+`mapWords`), since the shared component imports no catalogue. The screen is
+in [ui.md § Farmer view](./ui.md#farmer-view-farm).
 
 ## Quaternary lookup
 
