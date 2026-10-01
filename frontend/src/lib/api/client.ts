@@ -106,7 +106,7 @@ import type {
 	ScenarioBase,
 	ApplicantResults,
 	ApplicantResultsRun,
-	ScenarioOutcome,
+	DecideRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -115,6 +115,11 @@ import type {
 	ShareView,
 	ShareScenario,
 	SharePack,
+	SharedComment,
+	SpecialistDraft,
+	ParticipationExport,
+	RegistrationCheck,
+	RegistrationCheckRequest,
 	NoteRevision,
 	Team,
 	TeamMember,
@@ -170,6 +175,9 @@ export class ApiError extends Error {
 }
 
 type FetchFn = typeof fetch;
+
+/** The 401's code when an action needs a code from the authenticator from the last 10 minutes (backend auth/stepUp.ts requireFreshCode). */
+export const FRESH_CODE = 'mfa_fresh_code';
 
 /** ApiError.code for the WAF's CAPTCHA answer (set here; the API never sends it). */
 export const CAPTCHA_REQUIRED = 'captcha_required';
@@ -235,7 +243,26 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		return err;
 	}
 
+	/**
+	 * Asked for a code from the authenticator when an action answers 401
+	 * `mfa_fresh_code` (a sign-off, issuing or withdrawing an evidence pack
+	 * need one from the last 10 minutes; backend auth/stepUp.ts). True once
+	 * the code was accepted (POST /auth/mfa/step-up): the action is sent again,
+	 * once. Set by routes/+layout.svelte (lib/auth/freshCode.svelte.ts).
+	 */
+	let freshCodeHandler: (() => Promise<boolean>) | null = null;
+
 	async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+		try {
+			return await send<T>(method, path, body, extraHeaders);
+		} catch (e) {
+			if (!(e instanceof ApiError) || e.status !== 401 || e.code !== FRESH_CODE || !freshCodeHandler) throw e;
+			if (!(await freshCodeHandler())) throw e;
+			return send<T>(method, path, body, extraHeaders);
+		}
+	}
+
+	async function send<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
 		const headers = { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders };
 		try {
@@ -287,6 +314,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			errorListeners.add(fn);
 			return () => errorListeners.delete(fn);
 		},
+		/** Who asks for a code on a 401 mfa_fresh_code (see freshCodeHandler); returns the unset. */
+		onFreshCode(fn: () => Promise<boolean>): () => void {
+			freshCodeHandler = fn;
+			return () => {
+				if (freshCodeHandler === fn) freshCodeHandler = null;
+			};
+		},
 		auth: {
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			/**
@@ -315,7 +349,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				/** A new set of recovery codes, the old ones void (a code from the app). */
 				regenerate: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/recovery-codes', { code }).then((r) => r.recoveryCodes),
 				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
-				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code })
+				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code }),
+				/** A code again inside the session, for the actions that need one from the last 10 minutes (401 mfa_fresh_code). */
+				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code })
 			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
@@ -452,6 +488,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Put an applicant in an applying party, or take them out (null); owners only. */
 			setParty: (id: string, userId: string, party: string | null) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
+			/** Appoint a party member its specialist, who signs its applications' packs, or end it (167); owners only, 409 without a party. */
+			setSpecialist: (id: string, userId: string, specialist: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { specialist }).then((r) => r.member),
+			/** Mark or unmark a member as acting for the responsible authority (owner; 163). */
+			setActsForAuthority: (id: string, userId: string, actsForAuthority: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { actsForAuthority }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -640,6 +682,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			report: (id: string, runId: string) =>
 				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
 		},
+		/** The host's checks of members' registrations against the public register (167, docs/api.md § Sign-offs). */
+		registrationChecks: {
+			/** The project's checks, newest first, and whether issuing waits for them (editor). */
+			list: (id: string) => request<{ checks: RegistrationCheck[]; required: boolean }>('GET', `${p(id)}/registration-checks`),
+			/** Record a check of a member's registration (owner). */
+			record: (id: string, userId: string, body: RegistrationCheckRequest) =>
+				request<{ check: RegistrationCheck }>('POST', `${p(id)}/members/${enc(userId)}/registration-checks`, body).then((r) => r.check),
+			/** Whether issuing a pack waits for each specialist signer's check (owner). */
+			setRequired: (id: string, required: boolean) =>
+				request<{ required: boolean }>('PUT', `${p(id)}/registration-check-required`, { required }).then((r) => r.required)
+		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
 			list: (id: string, runId: string) => request<SignoffList>('GET', `${p(id)}/runs/${enc(runId)}/signoffs`),
@@ -696,6 +749,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Change the current publication's notice, note or next date without re-publishing (editor). */
 			update: (id: string, pubId: string, body: PublicationPatch) =>
 				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication),
+			/** Endorse a published baseline for the responsible authority, once (an editor acting for it; 163). */
+			endorse: (id: string, pubId: string, note: string) =>
+				request<{ publication: PublicationMeta }>('POST', `${p(id)}/publication/${enc(pubId)}/endorse`, { note }).then((r) => r.publication),
 			/** One run's publication and the changes since the one before (viewer; the printable report). */
 			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
 		},
@@ -790,7 +846,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** A scenario link (WP-3.15), signed out; 404 for any dead link. */
 			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token }),
 			/** An evidence pack link (128): its figures while issued, else its standing; 404 for any dead link. */
-			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token })
+			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token }),
+			/**
+			 * A public comment through an application's or a pack's link, signed in, with no project role (166). 401 signed
+			 * out, 404 for a dead or closed link, 429 comment_throttled past 10 an hour.
+			 */
+			comment: (token: string, body: string, registerConsent: boolean) =>
+				request<{ comment: SharedComment }>('POST', '/share/comment', { token, body, registerConsent }).then((r) => r.comment)
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */
@@ -815,6 +877,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			list: (id: string) => request<{ scenarios: Scenario[] }>('GET', `${p(id)}/scenarios`).then((r) => r.scenarios),
 			/** An application's issued packs, newest first, for its parties (131; an applicant reads no pack row). */
 			packs: (id: string, sid: string) => request<{ packs: ApplicantPackMeta[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => r.packs),
+			/** The same, with the drafts the caller may sign as the application's appointed specialist (167; empty for anyone else). */
+			packsAndDrafts: (id: string, sid: string) =>
+				request<{ packs: ApplicantPackMeta[]; toSign?: SpecialistDraft[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => ({ packs: r.packs, toSign: r.toSign ?? [] })),
+			/**
+			 * The application's public comments for the applicant's reg 19 report (166): its owner and the editors; 404 for
+			 * anyone else. `csvUrl` is the same as a CSV download, one row per text.
+			 */
+			participationExport: (id: string, sid: string) => request<ParticipationExport>('GET', `${p(id)}/scenarios/${enc(sid)}/participation-export`),
+			participationCsvUrl: (id: string, sid: string) => `${base}${p(id)}/scenarios/${enc(sid)}/participation-export?format=csv`,
 			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
 			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
@@ -831,6 +902,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					purposeAndNeed?: string;
 					mitigation?: string;
 					monitoring?: string;
+					/** Where written objections go and by when, as the notice gives them (166): a draft application's only; null clears. */
+					objectionAddress?: string | null;
+					objectionClosingDate?: string | null;
 					ops?: ScenarioOp[];
 					ownedNodeIds?: string[];
 					status?: ScenarioStatus;
@@ -859,9 +933,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
-			/** The assessor's decision: an editor who didn't make the application. */
-			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
-				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
+			/**
+			 * Record the responsible authority's decision (163): an editor the owner marks as acting for
+			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 */
+			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),

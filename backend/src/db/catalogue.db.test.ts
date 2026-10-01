@@ -35,14 +35,20 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
+	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
 	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
 	report: ['bytes', 'error', 'finished_at', 'pages', 'status'],
-	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql).
+	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql),
+	// and the responsible authority's endorsement, once (163_licensing_authority.sql).
 	run_publication: [
+		'endorsed_at',
+		'endorsed_by',
+		'endorsement_note',
 		'next_expected_on',
 		'note',
 		'notice',
@@ -161,7 +167,21 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
  * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction', 'gauge_station_reference', 'dam_register_reference']);
+const READ_ONLY = new Set([
+	'language',
+	'pack_notice',
+	'alert_feedback',
+	'erratum_notice',
+	'erratum_sweep',
+	'quaternary_reference',
+	'pack_reproduction',
+	'gauge_station_reference',
+	'dam_register_reference',
+	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
+	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
+	'registration_check',
+	'signoff_registration_check'
+]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -239,6 +259,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// What the WUA published to farmers stays with who published or ended it cleared (106).
 	'outlook_publication.ended_by': 'set null',
 	'outlook_publication.published_by': 'set null',
+	'run_publication.endorsed_by': 'set null',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
 	'run_uncertainty.created_by': 'set null',
@@ -259,6 +280,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
+	// A registration check stays as the record of what verify showed when a pack was issued, without the account (167_signers).
+	'registration_check.user_id': 'set null',
+	'registration_check.recorded_by': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).

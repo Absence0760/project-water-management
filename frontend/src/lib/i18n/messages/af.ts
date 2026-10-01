@@ -1199,8 +1199,6 @@ export const af: Catalogue = {
 	'8883bbbe': 'Jou kommentaar is geplaas.',
 	// Sign in to comment.
 	'eb271459': 'Teken in om kommentaar te lewer.',
-	// Only members of this project can comment. Ask its owner to invite you.
-	'6ffb150a': 'Net lede van hierdie projek kan kommentaar lewer. Vra sy eienaar om jou uit te nooi.',
 	// Licensing evidence pack, version {version}, shared read-only
 	'119a99c5': 'Bewyspakket vir ’n lisensieaansoek, weergawe {version}, leesalleen gedeel',
 	// This pack was withdrawn
@@ -1261,16 +1259,12 @@ export const af: Catalogue = {
 	'6cbfca10': 'Kommentaar is gesluit: hierdie pakket staan nie meer nie.',
 	// Add a comment
 	'b34ab8fe': 'Lewer kommentaar',
-	// Shown with your name to everyone this pack is shared with. Plain text; every edit is kept.
-	'bcad8655': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie pakket gedeel is. Gewone teks; elke wysiging word bewaar.',
 	// Posting…
 	'44539655': 'Plaas tans…',
 	// Post comment
 	'11065b5e': 'Plaas kommentaar',
 	// Sign in to comment
 	'954cf5cd': 'Teken in om kommentaar te lewer',
-	// Commenting needs an account in this project, so every comment has a name.
-	'e87f8a59': 'Om kommentaar te lewer, het jy ’n rekening in hierdie projek nodig, sodat elke kommentaar ’n naam het.',
 	// About this page
 	'254af6c5': 'Oor hierdie bladsy',
 	// A licensing evidence pack: the model results an applicant attaches to a water-use licence application, signed by a registered professional and fixed once issued. This page shows part of it, read-only, and names no hydrological unit.
@@ -1291,8 +1285,6 @@ export const af: Catalogue = {
 	'479ef2ba': 'Die besluit',
 	// The catchment’s totals
 	'd14cdcfe': 'Die opvanggebied se totale',
-	// Shown with your name to everyone this application is shared with. Plain text; every edit is kept.
-	'c476d7ee': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie aansoek gedeel is. Gewone teks; elke wysiging word bewaar.',
 	// An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.
 	'243c85d3': '’n Aansoek om water in hierdie opvanggebied te gebruik, gemodelleer op grond van die opvanggebied se gepubliseerde basislyn. Dit is leesalleen, en dit noem geen ander hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn, while the application is submitted or decided.
@@ -1437,12 +1429,6 @@ export const af: Catalogue = {
 	'caff1997': 'Gemiddelde lewering aan die hidrologiese eenhede',
 	// Hydrological units short of 95 % of their demand
 	'f0f6ca6b': 'Hidrologiese eenhede wat minder as 95 % van hul waterbehoefte kry',
-	// Approved
-	'c699109a': 'Goedgekeur',
-	// Approved with conditions
-	'8451eca8': 'Goedgekeur met voorwaardes',
-	// Refused
-	'9155ad83': 'Geweier',
 	// Decided
 	'99f42a3f': 'Besluit',
 	// {outcome} on {date}.

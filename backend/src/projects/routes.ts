@@ -24,6 +24,7 @@ import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
+import { resolveResponsibleAuthority } from './authoritySettings.js';
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
@@ -52,6 +53,8 @@ type ProjectRow = {
 	published_at: Date | null;
 	/** When the project's pending re-run is due, or null (042_auto_rerun). */
 	rerun_queued_for: Date | null;
+	/** The caller acts for the responsible authority (163, app_acts_for_authority): editor or above and marked by an owner. */
+	acts_for_authority: boolean;
 };
 
 const summary = (r: ProjectRow) => ({
@@ -68,14 +71,22 @@ const summary = (r: ProjectRow) => ({
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
-// settings.autoRun, settings.outcomes and settings.outlook aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
+// settings.autoRun, settings.outcomes, settings.outlook and settings.responsibleAuthority aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
 // rerunQueuedFor: when the pending re-run is due (the header's "Re-run queued for 14:05"), or null.
 const full = (r: ProjectRow) => ({
 	...summary(r),
 	timeZone: r.time_zone,
 	wuaName: r.wua_name,
-	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings), outcomes: resolveOutcomes(r.settings), outlook: resolveOutlook(r.settings) },
-	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null
+	settings: {
+		...mergeSettings(r.settings),
+		autoRun: resolveAutoRun(r.settings),
+		outcomes: resolveOutcomes(r.settings),
+		outlook: resolveOutlook(r.settings),
+		responsibleAuthority: resolveResponsibleAuthority(r.settings)
+	},
+	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null,
+	// Whether the caller may record the authority's decision and endorse a baseline (163).
+	actsForAuthority: r.acts_for_authority
 });
 
 // RLS already limits rows to projects the user can see (directly or via a
@@ -83,7 +94,7 @@ const full = (r: ProjectRow) => ({
 // visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
 	SELECT p.id, p.name, p.description, p.time_zone, p.wua_name, p.settings, p.created_at, p.updated_at, p.team_id,
-		t.name AS team_name, app_project_role(p.id) AS role,
+		t.name AS team_name, app_project_role(p.id) AS role, app_acts_for_authority(p.id) AS acts_for_authority,
 		-- Data freshness and last run for the project list, in the same query
 		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
 		-- Freshness is recorded rain (catchment or CHIRPS): what a run is driven
@@ -179,14 +190,15 @@ const stableJson = (v: unknown): string =>
 		x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x
 	);
 const withoutRunPolicy = (settings: unknown) => {
-	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, ...rest } = settings as Record<string, unknown>;
+	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ...rest } = settings as Record<string, unknown>;
 	return rest;
 };
 
 /**
  * A patch that changes nothing but settings.autoRun (when the project re-runs
  * itself, not how), settings.outcomes (how the outcome matrix reads a
- * sweep) or settings.outlook (how a seasonal outlook is set up) leaves
+ * sweep), settings.outlook (how a seasonal outlook is set up) or
+ * settings.responsibleAuthority (who decides its applications, 163) leaves
  * updated_at alone: updated_at is "the inputs changed since the latest run"
  * to the Runs tab, and none of them changes an input. The Settings
  * form sends every setting, so this compares the settings as they'd be
@@ -434,7 +446,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
 			const { rows } = await db.query(
-				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party
+				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist, m.acts_for_authority AS "actsForAuthority"
 				 FROM project_member m JOIN app_user u ON u.id = m.user_id
 				 WHERE m.project_id = $1 ORDER BY m.role DESC, u.display_name`,
 				[c.req.param('id')]
@@ -472,7 +484,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 	})
 	// A member's role, and their applying party (049: an applicant shares
 	// applications only within their own party; '' or null takes them out of
-	// every party, and a change ends the shares it no longer allows).
+	// every party, and a change ends the shares it no longer allows), and
+	// whether they act for the responsible authority (163: as an editor or
+	// owner they then record its decisions and endorse a baseline). Nobody
+	// who edits the project may be in a party (163's conflict guard: 409
+	// role_conflict).
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z
 			.object({
@@ -483,32 +499,47 @@ export const projectRoutes = new Hono<AuthEnv>()
 					.max(80)
 					.nullable()
 					.optional()
-					.transform((p) => (p === '' ? null : p))
+					.transform((p) => (p === '' ? null : p)),
+				// The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party.
+				specialist: z.boolean().optional(),
+				actsForAuthority: z.boolean().optional()
 			})
 			.strict()
-			.refine((b) => b.role !== undefined || b.party !== undefined, 'give a role, a party or both')
+			.refine(
+				(b) => b.role !== undefined || b.party !== undefined || b.specialist !== undefined || b.actsForAuthority !== undefined,
+				'give a role, a party, specialist, actsForAuthority or a mix'
+			)
 			.parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			if (body.role !== undefined && body.role !== 'owner') await assertNotLastOwner(db, id, userId);
-			const { rows: was } = await db.query<{ role: string; party: string | null }>('SELECT role, party FROM project_member WHERE project_id = $1 AND user_id = $2', [
-				id,
-				userId
-			]);
+			const { rows: was } = await db.query<{ role: string; party: string | null; specialist: boolean; actsForAuthority: boolean }>(
+				'SELECT role, party, specialist, acts_for_authority AS "actsForAuthority" FROM project_member WHERE project_id = $1 AND user_id = $2',
+				[id, userId]
+			);
+			const party = body.party !== undefined ? body.party : (was[0]?.party ?? null);
+			if (body.specialist && party === null) throw new ApiError(409, 'only a member of an applying party can be its specialist: give them a party first');
 			const { rows } = await db.query(
-				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END FROM app_user u
+				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END,
+					specialist = COALESCE($6::boolean, m.specialist), acts_for_authority = COALESCE($7::boolean, m.acts_for_authority) FROM app_user u
 				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
-				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party`,
-				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null]
+				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party, m.specialist, m.acts_for_authority AS "actsForAuthority"`,
+				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null, body.specialist ?? null, body.actsForAuthority ?? null]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			if ((was[0]?.specialist ?? false) !== rows[0].specialist) {
+				await recordAudit(db, id, 'member.specialist', { userId, displayName: rows[0].displayName, specialist: rows[0].specialist, party: rows[0].party });
+			}
 			if (body.role !== undefined && was[0]?.role !== body.role) {
 				await recordAudit(db, id, 'member.role', { userId, displayName: rows[0].displayName, from: was[0]?.role ?? null, to: body.role });
 			}
 			if (body.party !== undefined && (was[0]?.party ?? null) !== rows[0].party) {
 				await recordAudit(db, id, 'member.party', { userId, displayName: rows[0].displayName, from: was[0]?.party ?? null, to: rows[0].party });
+			}
+			if (body.actsForAuthority !== undefined && was[0]?.actsForAuthority !== rows[0].actsForAuthority) {
+				await recordAudit(db, id, 'member.authority', { userId, displayName: rows[0].displayName, actsForAuthority: rows[0].actsForAuthority });
 			}
 			return c.json({ member: rows[0] });
 		});

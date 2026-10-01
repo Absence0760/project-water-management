@@ -4223,9 +4223,14 @@ Applicant view and the Applications tab. Left:
 - [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and results (downstream
       units as a whole percentage, nothing but the EWR for a run with a
-      baseline assumption) and the outcome words
-      (`approved`, `approved_with_conditions`, `refused`) are **pending the
-      client and the licensing authority**. Trigger: the client's answers.
+      baseline assumption) are **pending the client and the licensing
+      authority**. D1 (who decides: the responsible authority, members acting
+      for it, the endorsement and the conflict guard) and the outcome words
+      (D14: `licence_issued`, `licence_refused`, `application_rejected`,
+      `not_considered`) are built on provisional positions (pre-counsel
+      research, 2026-10-01, 163_licensing_authority) and wait for the client,
+      the pilot authority's house style and counsel (#92). Trigger: the
+      client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -4275,7 +4280,7 @@ Applicant view and the Applications tab. Left:
       each Applications row) with the `assessors`, `parties` and
       `public_participation` audiences, the read/write matrix in
       [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
-      edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
+      edit of one kept in `note_revision`. An NGO (since 166 with no role, through the link) opens the
       link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
 - [x] **Pack targets for share links and notes** (WP-3.15, the pack half):
       done in `128_pack_share_notes` (2026-09-30, issue #71). An editor
@@ -4298,16 +4303,15 @@ Applicant view and the Applications tab. Left:
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
       ([ui.md § Evidence pack](./ui.md#evidence-pack)).
-- [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
-      as a `viewer` to comment, and the e2e does so; but a viewer reads every
-      farm's figures, every team note and every decided application, far
-      more than commenting needs and everything the share link redacts. A
-      member contributor with no farm links can already post
-      `public_participation` and reads almost nothing (045). Durable fix: a
-      comment-only role or scope (or invite NGOs as linkless contributors,
-      if the client accepts that they could then file applications).
-      Trigger: the first real NGO invited to comment (client decision,
-      step-3 D5).
+- [x] **A comment-only role for NGOs** (WP-3.15). Done 2026-10-01
+      (166_public_participation; licensing positions item 7, provisional
+      position, pre-counsel research): no role at all. Anyone signed in
+      comments through a live link to an application or an issued pack (a
+      *link participant*, `POST /share/comment`, 10 an hour), reads only what
+      the link shows, and is never made a viewer; the e2e
+      (`scenario-share.spec.ts`, `pack-share.spec.ts`) comments as a
+      non-member ([scenarios.md § Sharing and
+      comments](./scenarios.md#sharing-and-comments-wp-315)).
 - [x] **The owner's inventory of every public link.** Done 2026-09-30:
       the Project page's Share links list is every link in the project
       (`GET …/share-links?scope=all`, owner only), the baseline's and each

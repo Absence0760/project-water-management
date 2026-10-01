@@ -21,14 +21,26 @@
 // outside a request (the job runner acting for whoever queued a job) has no
 // store and isn't stepped up: no job kind needs more than editor, and the
 // request that queued the job was checked.
+//
+// A fresh code (licensing positions item 9, provisional position, pre-counsel
+// research, 2026-10-01): a sign-off (of a run or an evidence pack), issuing a
+// pack and withdrawing one also need a code from the authenticator within the
+// last ten minutes (FRESH_CODE_MS), not only at sign-in: a sign-off publishes
+// a professional statement under a real name on the public verify page, so a
+// session left open on a shared computer mustn't make one. requireFreshCode
+// answers 401 `mfa_fresh_code` when the session's last code (the `otp_at`
+// claim) is older; the client asks for a code, POSTs it to
+// /auth/mfa/step-up, and repeats the action (lib/api/client.ts).
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import type { Amr } from './session.js';
+import { FRESH_CODE_MS, type Amr } from './session.js';
 
 export interface RequestAuth {
 	userId: string;
 	amr: Amr;
+	/** When the session last gave a code (epoch ms), or null. */
+	otpAt?: number | null;
 }
 
 export const requestAuth = new AsyncLocalStorage<RequestAuth>();
@@ -78,3 +90,25 @@ export async function requireStepUp(db: Db): Promise<void> {
 	const refusal = await stepUpRefusal(db);
 	if (refusal) throw refusal;
 }
+
+/**
+ * requireStepUp, and a code from the authenticator within the last ten
+ * minutes (FRESH_CODE_MS): 401 `mfa_fresh_code` otherwise, which the client
+ * answers by asking for a code (POST /auth/mfa/step-up) and trying again. For
+ * a sign-off and for issuing or withdrawing an evidence pack. Off with the
+ * requirement (MFA_REQUIRED=false) and outside a request, as requireStepUp.
+ */
+export async function requireFreshCode(db: Db, now = Date.now()): Promise<void> {
+	await requireStepUp(db);
+	const auth = requestAuth.getStore();
+	if (!auth || !mfaRequired()) return;
+	if (!freshCode(auth.otpAt ?? null, now)) {
+		throw ApiError.coded(401, 'mfa_fresh_code', 'this needs a code from your authenticator app from the last 10 minutes: enter one, then try again');
+	}
+}
+
+/** Whether a code given at `otpAt` (epoch ms) still counts at `now`: no older than FRESH_CODE_MS, and not from the future beyond a minute's clock skew. */
+export function freshCode(otpAt: number | null, now = Date.now()): boolean {
+	return otpAt !== null && now - otpAt <= FRESH_CODE_MS && otpAt - now <= 60_000;
+}
+

@@ -22,6 +22,7 @@
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '$lib/components/packs/pack';
+	import { registrationHeading, SIGNOFF_KIND_LABEL } from '$lib/components/liability/signoffForm';
 	import { fmtDate } from '$lib/format/number';
 
 	const code = $derived(page.params.code ?? '');
@@ -172,7 +173,11 @@
 					<dl class="kv signer" aria-label="Sign-off by {s.fullName}">
 						<div><dt>Name</dt><dd>{s.fullName}</dd></div>
 						<div><dt>Signed</dt><dd>{fmtDate(s.signedAt, true)}</dd></div>
-						<div class="wide"><dt>Registration (self-declared)</dt><dd>{line ?? `${s.registrationBody} ${s.registrationNo} (category and field not recorded)`}</dd></div>
+						<div><dt>Signed as</dt><dd data-testid="verify-signer-kind">{SIGNOFF_KIND_LABEL[s.kind ?? 'specialist']}</dd></div>
+						<div class="wide">
+							<dt data-testid="verify-registration-heading">{registrationHeading(s.registrationCheck ?? null, (d) => fmtDate(d))}</dt>
+							<dd>{line ?? `${s.registrationBody} ${s.registrationNo} (category and field not recorded)`}</dd>
+						</div>
 						{#if register}
 							<div class="wide">
 								<dt>Check it</dt>
@@ -183,7 +188,10 @@
 				{:else}
 					<p class="muted">No sign-off is recorded.</p>
 				{/each}
-				<p class="small muted">Registration details are each signer’s own declaration: this app doesn’t check them against the professional body’s register. Check them there.</p>
+				<p class="small muted">
+					Registration details are each signer’s own declaration unless marked “checked against the register”: the project’s host checks them against the
+					professional body’s register and records when and by whom; this app itself checks nothing. Check them there.
+				</p>
 			</section>
 
 			<section class="card" aria-labelledby="errata-h">

@@ -144,6 +144,10 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'false turns off the second-factor requirement for owners, team admins and assessors (auth/stepUp.ts) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
 		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
 	},
+	REGISTRATION_CHECK_REQUIRED: {
+		why: 'false lets every project issue a pack without a recorded check of its specialist signers\' registrations, whatever the project\'s own setting (signoffs/registrationCheck.ts, 167_signers), for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
+		checks: { api: optional(oneOf('true')) }
+	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
 	PASSWORD_HASH_COST: { why: 'bcrypt cost override for the local e2e server; auth/password.ts refuses it in Lambda.', checks: { api: optional(oneOf('12')), worker: optional(oneOf('12')) } },

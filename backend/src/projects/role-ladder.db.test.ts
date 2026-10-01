@@ -86,7 +86,9 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	['POST /projects/:id/scenarios/:sid/reopen', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/members', { why: 'an applicant shares their own application; a team scenario has nothing to share', viewer: 409 }],
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { why: 'an applicant unshares their own application; only they remove someone else', viewer: 403 }],
-	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }]
+	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }],
+	// The applicant's appointed specialist signs their party's application's draft pack (167_signers); a viewer still can't.
+	['POST /projects/:id/packs/:packId/signoffs', { why: 'an editor, or the application’s appointed specialist (app_pack_specialist, 167); a viewer signs nothing', viewer: 403 }]
 ]);
 
 /** Routes only an owner may call, and why. */
@@ -107,7 +109,8 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
-	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in']
+	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in'],
+	['PUT /projects/:id/registration-check-required', 'whether issuing a pack waits for the signers’ registration checks (167)']
 ]);
 
 /**
@@ -170,7 +173,12 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],
 	['GET /projects/:id/jobs', { min: 'contributor', why: 'the job status list RLS lets the caller read (a contributor: their own yield jobs, 096), so the Yield panel follows one' }],
 	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],
-	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }]
+	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }],
+	// The applicant's appointed specialist (167_signers): a draft pack of their party's application, through app_specialist_pack.
+	['GET /projects/:id/packs/:packId/signoffs', { min: 'contributor', why: 'the sign-off statement of a draft pack the caller may sign as the application’s appointed specialist; any other contributor 403' }],
+	['POST /projects/:id/packs/:packId/signoffs', { min: 'contributor', why: 'the application’s appointed specialist signs their party’s draft pack, as the specialist only (signoff_insert_specialist)' }],
+	// The reg 19 record (166_public_participation): the application's owner, through app_participation_export; anyone else 404.
+	['GET /projects/:id/scenarios/:sid/participation-export', { min: 'contributor', why: 'an application’s public comments for its owner’s reg 19 report, and its editors; any other contributor 404 (app_participation_export)' }]
 ]);
 
 /** Reads that need editor, and why. */
@@ -180,7 +188,8 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
-	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)']
+	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)'],
+	['GET /projects/:id/registration-checks', 'the host’s checks of members’ professional registrations, for the people who issue packs (167)']
 ]);
 
 type Ctx = LadderCtx;

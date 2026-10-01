@@ -26,7 +26,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app, anon, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, app, anon, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { type Db, withApiKey, withoutUser, withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -277,10 +277,11 @@ describe('an applicant', () => {
 			expect((await owner.call('PATCH', `/projects/${projectId}/members/${u.id}`, { party })).status).toBe(200);
 		}
 		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${applicant.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		await actForAuthority(owner, projectId, assessor.id);
 		const [{ run_id: base }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 		own = await apply(applicant, 'Raise the dam', base);
 		expect((await applicant.call('POST', `/projects/${projectId}/scenarios/${own}/submit`)).status).toBe(200);
-		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${own}/decide`, { outcome: 'approved' })).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${own}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		shared = await apply(consultant, 'Consultant draft', base);
 		for (const u of [applicant, partner]) {
 			expect((await consultant.call('POST', `/projects/${projectId}/scenarios/${shared}/members`, { userId: u.id })).status).toBe(201);
@@ -392,6 +393,7 @@ describe('the SECURITY DEFINER lookups', () => {
 // since 138: their account may be deleted, and the row stays with no name.
 const INNER_JOINS = new Map<string, string>([
 	['projects/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
+	['signoffs/registrationCheck.ts JOIN app_user u ON u.id = m.user_id', 'current project members (the member whose check is recorded)'],
 	['farms/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['farms/routes.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible'],
 	['history/record.ts JOIN app_user u ON u.id = fl.user_id', 'a linked farmer is a current member'],

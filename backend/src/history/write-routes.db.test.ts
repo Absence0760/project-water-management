@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 
@@ -128,6 +128,26 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/members/${c.member.id}`, { role: 'editor' })
 	},
 	{
+		// The host's check of a member's registration (167_signers), recorded before the member leaves below.
+		route: `POST ${P}/members/:userId/registration-checks`,
+		records: ['registration.checked'],
+		call: (c) =>
+			c.owner.call('POST', `${at(c)}/members/${c.member.id}/registration-checks`, {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999/20',
+				registerName: 'Guard Member',
+				outcome: 'registered',
+				checkedByOrg: 'Guard WUA',
+				checkedAt: '2026-01-01'
+			})
+	},
+	{
+		route: `PUT ${P}/registration-check-required`,
+		records: ['registration.requirement'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
+	},
+	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/members/${c.member.id}`)
@@ -222,6 +242,15 @@ const WRITE_ROUTES: Entry[] = [
 		route: `PATCH ${P}/publication/:pubId`,
 		records: ['publication.notice_changed'],
 		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } })
+	},
+	{
+		route: `POST ${P}/publication/:pubId/endorse`,
+		records: ['publication.endorsed', 'member.authority'],
+		call: async (c) => {
+			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
+			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
+		}
 	},
 	{
 		route: `POST ${P}/share-links`,
@@ -438,7 +467,8 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { outcome: 'approved' });
+			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
 	},
 	{
@@ -860,6 +890,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'POST /share/comment', exempt: 'a public comment through a share link (166_public_participation): the note is the record, with its author and the link it came through, and its edits are kept (note_revision)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/pack', exempt: 'reads one evidence pack through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'PATCH /auth/me', exempt: 'the caller’s own account settings; history rows keep a snapshot of the name as it was (actor_label)' },
@@ -879,6 +910,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/mfa/totp/confirm', exempt: 'the caller’s own authenticator turned on; recorded as mfa.enrolled in the account’s own security log, not a project’s history' },
 	{ route: 'DELETE /auth/mfa/totp', exempt: 'the caller’s own authenticator turned off; recorded as mfa.disabled in the account’s own security log, not a project’s history' },
 	{ route: 'POST /auth/mfa/recovery-codes', exempt: 'a new set of the caller’s own recovery codes; recorded as mfa.recovery_regenerated in the account’s own security log' },
+	{ route: 'POST /auth/mfa/step-up', exempt: 'a code again inside the caller’s own session (a sign-off, issuing or withdrawing a pack need one from the last 10 minutes); a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },

@@ -25,7 +25,7 @@ import { runEnsemble } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
 import { APP_USER_EXPORTED, USER_FK_COVERAGE } from './export.js';
@@ -148,13 +148,16 @@ beforeAll(async () => {
 	const rain = Array.from({ length: 60 }, (_, i) => (i % 5 === 0 ? 12 : 0));
 	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-10-01', values: rain });
 	await call(subject, 'PATCH', `/projects/${projectId}`, { settings: { lakeEvapFactor: 0.9 } });
-	// member.party names them in the log (pseudonymised on deletion, 048).
-	await call(owner, 'PATCH', `/projects/${projectId}/members/${subject.id}`, { party: 'WUA' });
+	// member.authority names them in the log (pseudonymised on deletion, 048). An owner can't be in an
+	// applying party any more (163's conflict guard), which member.party used to stand in for here.
+	await actForAuthority(owner, projectId, subject.id);
 	await call(subject, 'POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
 	await call(subject, 'PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked' });
 	const pub = await call(subject, 'POST', `/projects/${projectId}/publication`, { runId });
 	await call(subject, 'PATCH', `/projects/${projectId}/publication/${pub.publication.id}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } });
+	// They endorse it for the responsible authority (163): run_publication.endorsed_by, cleared on deletion.
+	await call(subject, 'POST', `/projects/${projectId}/publication/${pub.publication.id}/endorse`, { note: 'Accepted as the baseline.' });
 	const key = await call(subject, 'POST', `/projects/${projectId}/api-keys`, { name: 'logger' });
 	await call(subject, 'DELETE', `/projects/${projectId}/api-keys/${key.key.id}`);
 	const link = await call(subject, 'POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 });
@@ -174,6 +177,17 @@ beforeAll(async () => {
 		scope: 'water balance',
 		confirmed: statement.confirmations.map((k: { id: string }) => k.id),
 		statementSha256
+	});
+	// The host's check of their own registration, recorded by them as a member acting for the authority (167):
+	// registration_check.user_id and .recorded_by. No issued pack rests on it, so the deletion removes it.
+	await call(subject, 'POST', `/projects/${projectId}/members/${subject.id}/registration-checks`, {
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationNo: `R-${tag}`,
+		registerName: TYPED_NAME,
+		outcome: 'registered',
+		checkedByOrg: 'Personal-data WUA',
+		checkedAt: '2026-01-01'
 	});
 	await call(subject, 'PUT', `/projects/${projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: farm.id, threshold: 0.25, enabled: false }] });
 	await call(subject, 'PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'daily_digest' }] });
@@ -231,7 +245,7 @@ beforeAll(async () => {
 	// A comment on the application, then edited by them (115): the text before the edit is a note_revision (edited_by).
 	const comment = await call(subject, 'POST', `/projects/${projectId}/notes`, { body: `application comment ${tag}`, scenarioId: sid });
 	await call(subject, 'PATCH', `/projects/${projectId}/notes/${comment.note.id}`, { body: `application comment ${tag}, edited` });
-	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'refused', note: 'Too little left in dry years.' });
+	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused', note: 'Too little left in dry years.' });
 	// A sweep, an outlook and a yield result they asked for; the workers aren't under test.
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
 	await withUser(subject.id, async (tx) => {

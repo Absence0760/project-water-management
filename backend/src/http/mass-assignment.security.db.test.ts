@@ -211,6 +211,10 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		// The next step's code: confirming used this one, and a step is accepted once.
 		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
 	},
+	'POST /auth/mfa/step-up': async () => {
+		const { u, key } = await enrolledUser('Mstepup');
+		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
 	'POST /auth/mfa/verify': async () => {
 		const { u, key } = await enrolledUser('Mverify');
 		const login = await app.request('/auth/login', {
@@ -250,6 +254,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /share/scenario': () => ({ as: null, body: { token: ctx.shareToken } }),
 	// The same baseline token: the pack read answers it 404 too (128_pack_share_notes).
 	'POST /share/pack': () => ({ as: null, body: { token: ctx.shareToken } }),
+	// The same baseline token, signed in: a comment goes only through a live application or pack link (166).
+	'POST /share/comment': () => ({ as: ctx.owner, body: { token: ctx.shareToken, body: 'A comment', registerConsent: false } }),
 	'POST /ingest/v1/series/merge': () => ({
 		as: null,
 		headers: { authorization: `Bearer ${ctx.apiKey}` },
@@ -348,7 +354,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/scenarios/:sid/submit': () => scenario([]),
 	'POST /projects/:id/scenarios/:sid/withdraw': () => scenario(['submit']),
 	'POST /projects/:id/scenarios/:sid/reopen': () => scenario(['submit', 'withdraw']),
-	'POST /projects/:id/scenarios/:sid/decide': async () => ({ ...(await scenario(['submit'])), body: { outcome: 'approved' } }),
+	// The owner acts for the responsible authority (163), as the decision needs.
+	'POST /projects/:id/scenarios/:sid/decide': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
+	},
 	// An applicant shares their own application with someone of their party (049).
 	'POST /projects/:id/scenarios/:sid/members': async () => {
 		const app = await ok(ctx.contributor.call('POST', `${at()}/scenarios`, { name: `Mass application ${crypto.randomUUID()}`, baseRunId: ctx.runId, ops: [] }));
@@ -376,6 +386,12 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		params: { pubId: (await ok(ctx.owner.call('GET', `${at()}/publication`))).current.id },
 		body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } }
 	}),
+	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (163).
+	'POST /projects/:id/publication/:pubId/endorse': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		const pub = await ok(ctx.owner.call('POST', `${at()}/publication`, { runId: ctx.runId }));
+		return { params: { pubId: pub.publication.id }, body: { note: 'Accepted' } };
+	},
 	// The owner can't demote themselves as the last owner; change the viewer instead.
 	'PATCH /projects/:id/members/:userId': () => ({ params: { userId: ctx.viewer.id }, body: { role: 'editor' } })
 };
@@ -395,6 +411,7 @@ const NO_WRITE = new Map<string, string>([
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 	['POST /share/scenario', { why: 'a read (app_share_scenario); the ladder link is a baseline link, which opens no scenario', legit: 404 }],
 	['POST /share/pack', { why: 'a read (app_share_pack); the ladder link is a baseline link, which opens no pack', legit: 404 }],
+	['POST /share/comment', { why: 'app_share_comment writes only through a live application or pack link; the ladder link is a baseline link', legit: 404 }],
 	[
 		'POST /projects/:id/packs',
 		{

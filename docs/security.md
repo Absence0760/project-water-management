@@ -166,8 +166,9 @@ decide a licence application.
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
-  deciding an application (`…/decide`), issuing or withdrawing an
-  evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  recording the authority's decision on an application (`…/decide`),
+  endorsing a published baseline (`…/publication/:pubId/endorse`), issuing
+  or withdrawing an evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
   `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
   needs an authenticator: a sign-off is the professional record an
   authority relies on, and without it is only as strong as the signer's
@@ -188,6 +189,30 @@ decide a licence application.
   `GET /auth/mfa` says whether the person's roles need it (`required`,
   false while the switch below is off, so the prompts say what the routes
   do).
+- **A fresh code for signing, issuing and withdrawing** (licensing
+  positions item 9; provisional position, pre-counsel research,
+  2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
+  specialist's included), issuing a pack and withdrawing one also need a
+  code from the authenticator **within the last 10 minutes**, not only at
+  sign-in: a sign-off publishes a professional statement under a real name
+  on the public verify page, and a session left open on a shared computer
+  mustn't make one (a false one would be a GN R267 reg 20 offence by whoever
+  made it, and a POPIA s19 failure by us). The session JWT carries `otp_at`
+  (epoch ms), set only where a code was just checked (`…/mfa/verify`,
+  `…/totp/confirm`, `POST /auth/mfa/step-up`) and never carried over by a
+  re-issue (changing the password keeps `amr`, not `otp_at`); a token whose
+  `otp_at` isn't a number or comes without `otp` is invalid.
+  `requireFreshCode` (`auth/stepUp.ts`) answers `401 mfa_fresh_code` when
+  it is older than 10 minutes (or more than a minute ahead), after
+  `requireStepUp`, so enrolment still comes first (`403 mfa_required` before
+  a first sign-off). The workspace asks for a code in a dialog
+  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`),
+  POSTs it to `/auth/mfa/step-up` (same throttle as every code check; a
+  recovery code works and is recorded) and sends the action again, once
+  (`lib/api/client.ts`). The step-up also turns a password-only session into
+  a two-step one. Off with the switch below. Tests:
+  `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
+  control), `lib/api/client.test.ts` (the retry).
 - **The prompt.** A person whose role needs it learns so before an action
   is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
   its own chunk, mounted by `routes/+layout.svelte`; the state is
@@ -968,11 +993,38 @@ differences:
 - **Comments** need an account (step-3 D5 (a)): a member of the project
   posts a `public_participation` note, allowed only while the scenario is
   open for comment (a live scenario link, or decided after it was ever
-  shared). **Known gap:** the roadmap has an NGO join as a `viewer`, which
-  reads far more than commenting needs (every farm's figures, team notes,
-  decided applications); a comment-only role is a follow-up
-  ([followups.md](./followups.md#applicants-wp-33)). A linkless
-  contributor can comment and reads almost nothing.
+  shared).
+- **Link participants** (`166_public_participation`; licensing positions
+  item 7, provisional position, pre-counsel research, 2026-10-01). Anyone
+  signed in comments through a live link to a submitted or decided
+  application, or to an issued pack, with **no project role**: an NGO is
+  never made a `viewer` to comment, since a viewer reads every farm's
+  figures (POPIA s10). `POST /share/comment` (a session and the token)
+  calls `SECURITY DEFINER app_share_comment`, which writes one
+  `public_participation` note on the link's own target as the signed-in
+  person, stamped with `note.share_link_id`; `note_insert` refuses a
+  `share_link_id` from water_app, so nothing else can claim a link. No
+  grant or policy reaches the project for them: they read what the link
+  shows and their own data export, nothing else. 10 such comments an hour
+  per account, counted under a lock on the account's row (`429
+  comment_throttled`), on top of the WAF's per-address limit. Every dead,
+  revoked, baseline or closed link is the same `404`. The project's members
+  see the author's name as the link does (`app_link_comment_author`, since
+  `app_user_visible` hides non-members). Tests:
+  `share/participation.db.test.ts`.
+- **The objection warning.** Every public-participation comment box says
+  that a comment in the app is not a written objection (only a timeous
+  written objection keeps a right to appeal, NWA s148(1)(f)), and prints
+  the notice's address and closing date when the applicant gave them
+  (`app_share_objection`).
+- **The register opt-in and the reg 19 record.** `note.register_consent`
+  (the commenter's tick, fixed at insert, public comments only) is the only
+  way a commenter's email reaches the applicant: `app_participation_export`
+  (`SECURITY DEFINER`, since a contributor reads no other account's email)
+  answers the application's owner and the editors who read it, and puts the
+  email in only where the tick is; a withdrawn or removed comment's words
+  go to the editors only. Every download is audited
+  (`scenario.participation_exported`, with the number of emails).
 - **Only the run the backend stored, and its labels.** The function returns
   the newest five runs of the current ops; the API shows the newest whose
   stamp verifies, and takes each change's proposal / baseline class from
@@ -1915,6 +1967,32 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **Only a member acting for the responsible authority records its
+    decision** (163_licensing_authority; provisional position, pre-counsel
+    research, 2026-10-01: under the National Water Act only the responsible
+    authority decides a licence, s27, s41, s42). `project_member.acts_for_authority`
+    is set by an owner only (`project_member_authority` refuses anyone else,
+    and an insert, an invite or a new project, always starts it false;
+    water_app's `UPDATE` on `project_member` is the columns `role`, `party`
+    and `acts_for_authority` only). `scenario_guard` refuses the move to
+    `decided` unless `app_acts_for_authority` (editor or above **and**
+    marked), and the route says so first (`403`). The same right, checked
+    by `run_publication_endorse`, endorses a published baseline; an
+    endorsement is set once and never changes (`run_publication_final`),
+    except that the endorser's account going clears `endorsed_by`.
+    `projects/authority.db.test.ts` tries each through the route and past
+    it, with a marked editor as the positive control.
+  - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
+    Someone who edits the project (editor or owner, directly or through its
+    team, `app_member_role`) can't be in an applying party, own an
+    application or be shared one there: `AFTER` triggers on
+    `project_member`, `team_member`, `project` (moving into a team),
+    `scenario` and `scenario_member` raise `role_conflict`, which the API
+    answers as `409 role_conflict` with fixed words (never the database's
+    text). Otherwise an editor of a consultancy-hosted project could read
+    every submitted application and decide with their own client's in view.
+    Rows that conflicted before 163 aren't rewritten; their next change is
+    refused until it resolves the conflict.
   - **Cumulative assessments are the editors' alone** (145_assessment,
     WP-3.11): an assessment names every application in it and shows what
     each does, so `assessment` and `assessment_member` are read and written
@@ -2519,6 +2597,7 @@ PDF someone else asked for kept the person as a recipient
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
+| Public comments through a share link (166): the author, the link it came through, whether they agreed to give their name and email to the applicant for the I&AP register (GN R267 reg 18); the applicant's download of them (the reg 19 record, with the emails agreed to) | `note` (`share_link_id`, `register_consent`); the applicant's own copy once downloaded | As notes; the applicant keeps their copy for their register (reg 18: while the application is considered and two years after a licence is granted), as its responsible party | Author cleared; body stays (as notes); a copy already downloaded is the applicant's | Deleted |
 | A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
 | Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
@@ -2532,6 +2611,7 @@ PDF someone else asked for kept the person as a recipient
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), for the life of that record: the licence or decision it supports and any appeal or review of it, after which the operator removes the project on the client's confirmation (§ Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b)) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, for the life of the licence record (as sign-offs) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |

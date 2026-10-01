@@ -31,6 +31,9 @@ export interface ScenarioRow {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/** Where and by when written objections go, as the application's notice gives them (166_public_participation); null: not given. */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -51,6 +54,16 @@ export interface ScenarioRow {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
+	/**
+	 * The authority's decision as recorded (163_licensing_authority): its
+	 * name, the date on its decision letter (null on a decision recorded
+	 * before 163), its licence or file reference ('' = none) and whether its
+	 * written reasons were received (null before 163). All null/'' until decided.
+	 */
+	decisionAuthority: string | null;
+	decisionDate: string | null;
+	decisionReference: string;
+	reasonsReceived: boolean | null;
 	/** Who else reads an application (scenario_member): the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -74,12 +87,15 @@ export const APPLICATION_RUNS_KEPT = 5;
 // and a new run show them in full. Everyone else reads the stored list, the
 // record the assessors judge.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
-	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.base_run_id AS "baseRunId",
+	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring,
+	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate", s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256",
 	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
 	u.display_name AS owner, s.status, s.origin, s.submitted_at AS "submittedAt", s.decided_at AS "decidedAt",
 	du.display_name AS "decidedBy", s.outcome, s.decision_note AS "decisionNote",
+	s.decision_authority AS "decisionAuthority", to_char(s.decision_date, 'YYYY-MM-DD') AS "decisionDate",
+	s.decision_reference AS "decisionReference", s.reasons_received AS "reasonsReceived",
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
 	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
 	s.created_at AS "createdAt", s.updated_at AS "updatedAt",

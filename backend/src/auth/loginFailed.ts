@@ -40,7 +40,8 @@ export type LoginFailureRoute =
 	| '/auth/mfa/totp/enrol'
 	| '/auth/mfa/totp/confirm'
 	| '/auth/mfa/totp'
-	| '/auth/mfa/recovery-codes';
+	| '/auth/mfa/recovery-codes'
+	| '/auth/mfa/step-up';
 
 /** Log `{"event":"login_failed","route","reason"}`: nothing that names a person. */
 export function logLoginFailed(route: LoginFailureRoute, reason: LoginFailureReason): void {

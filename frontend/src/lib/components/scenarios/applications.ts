@@ -76,6 +76,7 @@ export function statusPill(a: Pick<Scenario, 'status' | 'outcome'>): { text: str
 	if (a.status === 'submitted') return { text: 'Awaiting a decision', tone: 'awaiting' };
 	if (a.status === 'withdrawn') return { text: 'Withdrawn', tone: 'neutral' };
 	if (a.status === 'draft') return { text: 'Draft', tone: 'neutral' };
-	const TONE: Record<ScenarioOutcome, 'good' | 'mixed' | 'bad'> = { approved: 'good', approved_with_conditions: 'mixed', refused: 'bad' };
+	// The authority's words (163_licensing_authority): a licence issued always carries conditions (NWA s28(1)(d)).
+	const TONE: Record<ScenarioOutcome, 'good' | 'mixed' | 'bad'> = { licence_issued: 'good', licence_refused: 'bad', application_rejected: 'bad', not_considered: 'mixed' };
 	return a.outcome ? { text: OUTCOME_LABEL[a.outcome], tone: TONE[a.outcome] } : { text: 'Decided', tone: 'neutral' };
 }

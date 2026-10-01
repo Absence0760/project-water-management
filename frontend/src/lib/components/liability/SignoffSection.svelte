@@ -8,7 +8,7 @@
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { registrationBody, registrationLine } from '@water-management/engine';
-	import { shortHash, type SignoffTarget } from './signoffForm';
+	import { registrationHeading, shortHash, SIGNOFF_KIND_LABEL, type SignoffTarget } from './signoffForm';
 
 	const loadDialog = () => import('./SignoffDialog.svelte');
 
@@ -33,9 +33,10 @@
 			<dl class="kv" aria-label="Sign-off by {s.fullName}">
 				<div><dt>Signed by</dt><dd>{s.fullName}</dd></div>
 				<div><dt>Signed</dt><dd>{fmtDate(s.signedAt, true)}</dd></div>
+				{#if s.packId}<div><dt>Signed as</dt><dd data-testid="signoff-kind">{SIGNOFF_KIND_LABEL[s.kind ?? 'specialist']}</dd></div>{/if}
 				<!-- The credential, then where to check it (a visible URL: reports are printed), then the scope it limits. -->
 				<div class="wide">
-					<dt>Registration (self-declared)</dt>
+					<dt data-testid="signoff-registration-heading">{registrationHeading(s.registrationCheck ?? null, (d) => fmtDate(d))}</dt>
 					<dd>{line ?? `${s.registrationBody} ${s.registrationNo} (category and field not recorded)`}</dd>
 				</div>
 				{#if register}
@@ -53,8 +54,8 @@
 		{/each}
 		<p class="muted small">
 			Each signer confirmed, {target.kind === 'pack' ? 'for this evidence pack as its manifest SHA-256 identifies it' : 'for this run as it was made'}, the statement of the version recorded with their sign-off, and read its known limitations.
-			Registration details are the signer’s own declaration: this app does not check them against the professional body’s register. A
-			sign-off can’t be changed or withdrawn.
+			Registration details are the signer’s own declaration unless marked as checked: the project’s host checks them against the professional
+			body’s register and records that check; the app itself checks nothing. A sign-off can’t be changed or withdrawn.
 		</p>
 		{#if list.signoffs.some((s) => s.statementVersion !== list.statement.version)}
 			<p class="muted small">

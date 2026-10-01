@@ -440,6 +440,16 @@ With no map features § 1 says *No locality map: the project has no map
 features*; a pack drafted before `evidence-12` says the figure isn't part of
 it ([evidence-pack.md § The locality map](../evidence-pack.md#the-locality-map)).
 
+**Report version `evidence-13`** (163_licensing_authority; provisional
+position, pre-counsel research, 2026-10-01): the identity block has a
+*For* row naming the project's responsible authority (DWS or a CMA, and its
+office), and *Baseline* says whether that authority endorsed it, when and by
+whom; without an endorsement page 1 carries the caution *Baseline not
+endorsed by the responsible authority.* (a fixed flag, G6). § 4's decided
+applications carry the Act's outcome words; only a licence issued counts
+among the other applications. A pack drafted before `evidence-13` has
+neither ([evidence-pack.md § The responsible authority](../evidence-pack.md#the-responsible-authority)).
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 

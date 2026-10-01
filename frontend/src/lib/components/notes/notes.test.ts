@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOTE_MAX, type NoteCounts } from '$lib/api/types';
+import { NOTE_MAX, type NoteCounts, type NoteVisibility } from '$lib/api/types';
 import {
 	AUDIENCE_BADGE,
 	AUDIENCE_LABEL,
@@ -39,6 +39,15 @@ describe('createBody', () => {
 		expect(createBody(run, 'x', 'farm')).toEqual({ body: 'x', runId: 'r1', visibility: 'team' });
 		expect(createBody({ kind: 'project' }, 'x', 'farm')).toEqual({ body: 'x', visibility: 'team' });
 		expect(createBody(settingTarget('ewr'), 'x', 'team')).toEqual({ body: 'x', settingKey: 'ewr', visibility: 'team' });
+	});
+
+	// The register opt-in (GN R267 reg 18; 166_public_participation): sent only with a public comment.
+	it('sends the register opt-in with a public comment only', () => {
+		const sc = { kind: 'scenario' as const, scenarioId: 's1', name: 'App', audiences: ['parties', 'public_participation'] as NoteVisibility[] };
+		expect(createBody(sc, 'x', 'public_participation', true)).toEqual({ body: 'x', scenarioId: 's1', visibility: 'public_participation', registerConsent: true });
+		expect(createBody(sc, 'x', 'parties', true)).toEqual({ body: 'x', scenarioId: 's1', visibility: 'parties' });
+		expect(createBody(sc, 'x', 'public_participation')).toEqual({ body: 'x', scenarioId: 's1', visibility: 'public_participation' });
+		expect(createBody(farm, 'x', 'farm', true)).toEqual({ body: 'x', nodeId: 'n1', visibility: 'farm' });
 	});
 });
 

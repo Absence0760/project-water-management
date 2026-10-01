@@ -9,7 +9,7 @@
 // signed off, and the application is decided once the forged runs are gone;
 // a tampered run verifies again once its rows are put back as they were.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { RUN_UNVERIFIED } from './stamp.js';
 
@@ -75,6 +75,7 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
 	}
 	expect((await owner.call('PUT', `${P()}/farmers/${applicant.id}`, { nodeIds: [rooikloof.id] })).status).toBe(200);
+	await actForAuthority(owner, projectId, assessor.id);
 	const made = await applicant.call('POST', `${P()}/scenarios`, {
 		name: 'Raise Rooikloof',
 		baseRunId: published,
@@ -147,13 +148,13 @@ describe('a run written past the API', () => {
 	it("keeps the application from being decided until they're gone (then it is)", async () => {
 		const s = await assessor.call('GET', `${P()}/scenarios/${sid}`);
 		expect([...s.body.unverifiedRunIds].sort()).toEqual([forged, replayed].sort());
-		const refused = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' });
+		const refused = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		expect(refused.status, JSON.stringify(refused.body)).toBe(409);
 		expect(refused.body.code).toBe('run_unverified');
 		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).body.scenario.status).toBe('submitted');
 		// The assessor deletes them; the application is then decided on its genuine run.
 		for (const id of [forged, replayed]) expect((await assessor.call('DELETE', `${P()}/runs/${id}`)).status).toBe(204);
-		const decided = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' });
+		const decided = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
 		expect(decided.body.unverifiedRunIds).toEqual([]);
 	});

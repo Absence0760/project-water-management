@@ -129,7 +129,8 @@
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
 	const cum = $derived(report.cumulative);
-	const OUTCOME: Record<string, string> = { approved: 'approved', approved_with_conditions: 'approved with conditions' };
+	// The authority's words (163_licensing_authority, evidence-13); a pack drafted before keeps its frozen approved / approved_with_conditions.
+	const OUTCOME: Record<string, string> = { licence_issued: 'licence issued', approved: 'approved', approved_with_conditions: 'approved with conditions' };
 	const statusText = (o: EvidenceReport['cumulative']['applications'][number]) => (o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome}` : 'submitted');
 	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
 		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');

@@ -63,6 +63,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Raise the dam', outcome: 'approved_with_conditions' }))).toBe(
 			'Decided the application “Raise the dam”: approved with conditions'
 		);
+		// 163_licensing_authority: the authority's decision, recorded (an event before it keeps "Decided", above).
+		expect(
+			eventLine(ev('scenario.decided', { scenarioId: 's', name: 'Raise the dam', outcome: 'licence_refused', authority: 'Breede-Olifants CMA', decisionDate: '2026-09-30' }))
+		).toBe('Recorded Breede-Olifants CMA’s decision on the scenario “Raise the dam”: licence refused');
+		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
+			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
+		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
 		// A team scenario keeps its name, as before.
@@ -81,6 +88,23 @@ describe('what an item says', () => {
 		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: null, to: 'Rooikloof Trust' }))).toBe('Put Ben in the applying party Rooikloof Trust');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: 'Rooikloof Trust', to: null }))).toBe('Took Ben out of the applying party Rooikloof Trust');
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: true, party: 'Rooikloof Trust' }))).toBe(
+			'Appointed Ben specialist for the applying party Rooikloof Trust'
+		);
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: false, party: null }))).toBe('Ben is no longer the specialist for their applying party');
+		expect(eventLine(ev('scenario.participation_exported', { application: true, comments: 3, emails: 1 }))).toBe(
+			'Downloaded the public comments on an application (3 comments, 1 emails given for the register)'
+		);
+		expect(eventLine(ev('signoff.created', { packId: 'p1', kind: 'review', fullName: 'Dr R', registrationBody: 'SACNASP', registrationNo: '1' }))).toMatch(
+			/^Signed off an evidence pack as the authority’s reviewer as Dr R/
+		);
+		expect(
+			eventLine(ev('registration.checked', { displayName: 'Ben', registrationBody: 'sacnasp', registrationNo: '400999/20', outcome: 'registered', checkedByOrg: 'Pack WUA' }))
+		).toBe('Recorded Ben’s SACNASP registration 400999/20 as on the register, checked by Pack WUA');
+		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
+		expect(eventLine(ev('publication.endorsed', { publicationId: 'p', runId: 'r', note: '' }))).toBe('Endorsed a published baseline for the responsible authority');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');

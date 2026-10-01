@@ -170,7 +170,19 @@ export const issuedOf = (packs: readonly Pack[], scenarioId: string | null) => p
 export const packHref = (base: string, projectId: string, packId: string) => `${base}/projects/${encodeURIComponent(projectId)}/packs/${encodeURIComponent(packId)}`;
 
 /** A draft's checklist before issue, from the API's `issue` (an editor's read of a draft), in the order to do them. */
-export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks; ok: boolean; done: string; todo: string }[] {
+export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks | 'registrationChecked'; ok: boolean; done: string; todo: string }[] {
+	const unchecked = c.registrationUnchecked ?? [];
+	// The registration check (167_signers): listed only while the project requires it.
+	const registration = c.registrationCheckRequired
+		? [
+				{
+					id: 'registrationChecked' as const,
+					ok: unchecked.length === 0,
+					done: 'Each specialist signer’s registration has a current check against the professional register.',
+					todo: `The registration of ${unchecked.join(', ')} hasn’t been checked against the professional register: an owner records the check on the Project tab (Registration checks).`
+				}
+			]
+		: [];
 	return [
 		{
 			id: 'issuable',
@@ -195,7 +207,8 @@ export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks;
 			ok: c.signed,
 			done: 'Signed off under the current pack statement.',
 			todo: 'Not signed under the current pack statement: a registered professional signs it in Appendix B.2 (again, if the statement changed since).'
-		}
+		},
+		...registration
 	];
 }
 

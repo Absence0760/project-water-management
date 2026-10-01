@@ -682,11 +682,20 @@ the result change?", and put back any earlier version.
   `report_schedule.configured`, `scenario.created/changed/deleted`, the
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
-  it is decided),
+  it is decided; since 163 `scenario.decided` also carries the `authority`
+  and `decisionDate`), `member.authority` (163: an owner marked or unmarked
+  a member as acting for the responsible authority, `actsForAuthority`),
+  `publication.endorsed` (163: `publicationId`, `runId`, `note`),
+  `member.specialist` (167: an owner appointed or ended a party's
+  specialist, `specialist`, `party`), `registration.checked` (167: a
+  member's registration check recorded: body, number, outcome, the checking
+  organisation), `registration.requirement` (167: the owner's switch,
+  `required`), `scenario.participation_exported` (166: the reg 19 record
+  downloaded: `format`, how many `comments` and `emails`, no name),
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
-  registration, statement version and hash),
+  registration, statement version and hash; since 167 its `kind`),
   `calibration_rules.signed_off` / `calibration_rules.sign_off_withdrawn`
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
@@ -963,7 +972,12 @@ run's stored input (above), never the live model.
   new policy or grant: 045's scenario policies and 024's table-level grant
   cover them, so who reads and writes them is who reads and writes the
   scenario. Like `description`, a submission doesn't freeze them; a
-  decision can't change them (`scenario_guard`, below).
+  decision can't change them (`scenario_guard`, below). Since
+  `166_public_participation`, `objection_address` (≤ 500, trimmed) and
+  `objection_closing_date`: where and by when written objections go, as the
+  application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii)); an
+  application's only (`scenario_objection_application`), and frozen once it
+  is submitted (`scenario_objection_frozen`, its own trigger).
 - **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
   end of the statement, so deleting a whole project (which cascades to both
   `model_run` and `scenario`) still works, as for `run_nomination`. Any other
@@ -1076,6 +1090,23 @@ results for plausibility; and that they read its known limitations
   data export (`app_subject_export`, 054; the registration columns since
   092; `packId` since 112). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
+
+- **Who signed as what (167_signers).** `signoff.kind`: `specialist` (the
+  professional statement issue needs) or `review` (an authority-side
+  reviewer's second sign-off of a pack, by an editor; `signoff_review_pack`:
+  never a run's).
+- **The registration check (167).** `registration_check`: `project_id` (→
+  `project`, cascade), `user_id` (→ `app_user`, `SET NULL`), body, category,
+  number, `register_name`, `outcome` (`registered` | `not_registered`),
+  `checked_by_org`, `checked_at`, `note`, `recorded_by` (→ `app_user`,
+  `SET NULL`), `recorded_at`; insert-only (`registration_check_insert_only`)
+  and written only by `app_record_registration_check` (an owner, or a member
+  acting for the authority). `signoff_registration_check (signoff_id,
+  check_id)` binds a sign-off to the check that stood at issue
+  (`app_pack_bind_registration_checks`). `registration_check_forget` deletes
+  an unbound check whose account is gone. `project.require_registration_check`
+  (boolean, default true; only an owner changes it,
+  `project_registration_check_owner`): issue waits for the checks.
 
 ### Evidence packs (112_evidence_pack.sql)
 
@@ -1664,14 +1695,27 @@ projection's read and narrows their series further:
 - **`scenario.origin`** `'team' | 'applicant'`, stamped by `scenario_guard`
   from the creator's role and never changed, plus the decision:
   `submitted_at`, `decided_at`, `decided_by → app_user` (covering index),
-  `outcome` (`approved`, `approved_with_conditions`, `refused`; only when
-  decided) and `decision_note` (≤ 4000). A partial index
+  `outcome` (since 163_licensing_authority, the responsible authority's
+  outcome in the Act's words: `licence_issued`, `licence_refused`,
+  `application_rejected`, `not_considered`; only when decided; 163 mapped
+  `approved` and `approved_with_conditions` to `licence_issued`, `refused`
+  to `licence_refused`) and `decision_note` (≤ 4000), plus the authority's
+  record (163): `decision_authority` (1–200, trimmed; NOT NULL exactly when
+  there is an outcome, `scenario_decision_recorded`: every decided
+  application, never a team scenario an editor only marks decided; "Not recorded (before 163)" on an
+  older decision), `decision_date` (the decision letter's date; `decided_at`
+  is the app's stamp), `decision_reference` (≤ 200, `''` = none) and
+  `reasons_received` (boolean); the last three are empty unless decided
+  (`scenario_decision_fields`), and NULL only on a decision before 163. A partial index
   `(project_id, status) WHERE origin = 'applicant'` serves the Applications
   list. `scenario_guard` (from 024's body) also: an application's base is a
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
-  its owner decides it, with an outcome and nothing else changed; the
-  decision is set once. The one change it lets through is the assessor's
+  its owner **and acts for the responsible authority** (163,
+  `app_acts_for_authority`; also for an outcome on a team scenario, though
+  an editor may still mark a team scenario decided without one) decides it, with an
+  outcome, the authority, the date and the reasons flag, and nothing else
+  changed; the decision and its record are set once. The one change it lets through is the assessor's
   account going (052): an update whose only change is `decided_by` becoming
   NULL, once the account it named no longer exists (the foreign key's
   `SET NULL`), passes untouched, so the decision stays with no assessor.
@@ -1698,6 +1742,33 @@ projection's read and narrows their series further:
   applicant names someone, so no answer says who else is a member.
   `project_member_prune_shares` (after a change of party or role) deletes
   the shares the rule no longer allows.
+- **`project_member.specialist`** (167_signers, boolean, default false,
+  needs a party: `project_member_specialist_party`): the applying party's
+  appointed specialist, who signs the draft evidence packs of the party's
+  applications (`app_pack_specialist`; `signoff_insert_specialist`,
+  `signoff_select_specialist`). Set by an owner (`member_update`); a party
+  change clears it unless the same update sets it. water_app's column
+  `UPDATE` grant now includes it.
+- **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
+  default false): the owner marks the members who act for the project's
+  responsible authority (`settings.responsibleAuthority`, backend
+  `projects/authoritySettings.ts`, no model input). `project_member_authority`
+  forces it false on insert and refuses a change by anyone but an owner of
+  the project; water_app's `UPDATE` grant on `project_member` is now the
+  columns `role`, `party` and `acts_for_authority`. `app_acts_for_authority(project)`
+  (`SECURITY DEFINER`, pinned `search_path`): the current user is editor or
+  above and marked. It gates the decision (`scenario_guard`) and the
+  baseline endorsement (`run_publication_endorse`).
+- **The conflict guard** (163, D1 (c)): `app_member_role(project, user)`
+  (any user's effective role, direct or through the team; not granted to
+  water_app) and `app_assert_no_role_conflict(project, user)`, called by
+  `AFTER` triggers on `project_member` (insert, role, party), `team_member`
+  (insert, role: every project of the team), `project` (moving into a team:
+  every member of it), `scenario` (an application's insert) and
+  `scenario_member` (insert, update). It raises `check_violation` with the
+  constraint name `role_conflict` when an editor or owner is in an applying
+  party, owns an application or is shared one; the API answers `409
+  role_conflict`. Existing conflicts aren't rewritten.
 - **Who reads a scenario** is one function, `app_scenario_visible(project,
   id, origin, status, owner)` (taking columns so the insert's `RETURNING`
   passes it); `app_scenario_readable(id)` looks the row up and calls it. A
@@ -1771,7 +1842,16 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
-  `published_by`, `updated_by`.
+  `published_by`, `updated_by`, `endorsed_by`.
+- **The responsible authority's endorsement** (163_licensing_authority):
+  `endorsed_by → app_user SET NULL`, `endorsed_at`, `endorsement_note`
+  (≤ 2000), granted to water_app's `UPDATE`. `run_publication_endorse`
+  stamps `endorsed_at` and `endorsed_by` itself and refuses anyone but
+  `app_acts_for_authority`; `run_publication_final` (from 067's) lets an
+  endorsement onto a superseded publication too (an application may rest on
+  it) and refuses any change to one once made, except the endorser's
+  account going clearing `endorsed_by`. The `run_publication_endorsement`
+  CHECK keeps `endorsed_by` and the note empty without `endorsed_at`.
 - **The notice, by language (081_notice_languages.sql, issue #58).**
   `notice` is one jsonb object from a language code to the WUA's words in
   that language, `{"en": "…", "af": "…"}`; `{}` is no notice (never NULL).
@@ -1983,9 +2063,10 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     cascade away with a withdrawn application; deleting the project still
     takes it. A farmer reads and writes none of them. A
     note's author always reads it, and a deleted one stays readable to its
-    author and to editors, as for every note. In practice: an NGO joins as a
-    viewer and posts `public_participation`; the applicant and their
-    consultant talk to the assessors in `parties` or `assessors`.
+    author and to editors, as for every note. In practice: an NGO comments
+    through the link with no role (a link participant, below); the
+    applicant and their consultant talk to the assessors in `parties` or
+    `assessors`.
   - **A pack note** (128, WP-3.15) is `team` or `public_participation`
     only (`note_pack_audience`):
 
@@ -1998,6 +2079,22 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     `issued` and has a live pack link. A pack past draft is never deleted
     (112), so its comments stay; a draft's team notes go with it (cascade).
     Every edit of a scenario or pack note is kept (`note_write_revision`).
+  - **Link participants (166_public_participation).** `note.share_link_id`
+    (→ `share_link`, `SET NULL`, covering index; `public_participation`
+    only): the link a comment was posted through, written only by
+    `app_share_comment` (`SECURITY DEFINER`; `note_insert` refuses a
+    `share_link_id` from water_app). Any signed-in account comments through a
+    live link to a submitted or decided application, or an issued pack, with
+    no `project_member` row, 10 an hour per account; they read nothing of the
+    project. `note.register_consent` (boolean, `public_participation` only,
+    fixed at insert): the commenter agreed to give their name and email to
+    the applicant for the GN R267 reg 18 register.
+    `app_participation_export(project, scenario)` builds the reg 19 record
+    for the application's owner and its editors (emails only where
+    consented); `app_share_objection(token hash)` the notice's details for a
+    share page; `app_subject_participation()` a person's own public comments
+    for their export; `app_link_comment_author(note)` a link comment's author
+    name for the project's members.
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
 - **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
   for the audit trail. `water_app` has no `DELETE` (the catalogue test's

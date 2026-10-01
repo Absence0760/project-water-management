@@ -132,7 +132,7 @@ describe('route auth inventory', () => {
 
 	// Two-step sign-in (issue #282): everything but the sign-in step needs a session (auth/mfa.db.test.ts).
 	it('inventories the two-step sign-in routes: the sign-in step public, the rest auth-gated', () => {
-		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes']) {
+		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes', 'POST /auth/mfa/step-up']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -271,6 +271,8 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/publication',
 			'POST /projects/:id/publication',
 			'PATCH /projects/:id/publication/:pubId',
+			// The responsible authority's endorsement of a published baseline (163).
+			'POST /projects/:id/publication/:pubId/endorse',
 			'GET /projects/:id/runs/:runId/publication',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',

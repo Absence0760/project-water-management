@@ -76,7 +76,9 @@
 		<li><strong>Settings:</strong> your language, the unit volumes are shown in, the sections you hid from your sidebar, and which alert emails you get.</li>
 		<li>
 			<strong>What you write in a project:</strong> notes, the reason you give for a change, a sign-off (the name and professional
-			registration you type), and any data or model you upload or edit.
+			registration you type), and any data or model you upload or edit. If the project’s host checks your registration against the
+			professional body’s public register, its record of that check (the name and number it found, who checked and when). On a public
+			comment, whether you asked to be on the applicant’s register of interested and affected parties.
 		</li>
 		<li>
 			<strong>Feedback on alert emails:</strong> if you use the “Was this useful?” link in an alert email and press Send, your yes or
@@ -144,6 +146,16 @@
 			licence application, or an issued evidence pack, never a farm’s figures, a name or a private note. Two things on those pages
 			do name people: a comment you post for public participation shows with your display name, and an evidence pack shows the
 			names and registrations of the professionals who signed it, as its public verify page does.
+		</li>
+		<li>
+			<strong>The applicant, when you comment publicly on their licence application</strong> (in the app or through a share link of
+			the application or its evidence pack): your comment, your display name and when you posted it go into the record of public
+			comments the applicant downloads for their public participation report to the responsible authority (GN R267 reg 19), as do
+			any comment you withdraw or a moderator removes (its words go to the assessors only). Your email goes with them only if you tick
+			“Give my name and email to the applicant for the register of interested and affected parties” (GN R267 reg 18), which the
+			applicant must keep while the application is considered and for two years after a licence is granted. Once the applicant has
+			downloaded it, that copy is theirs to keep and protect. Commenting through a link needs an account but no role in the project:
+			the account reads only what the link shows.
 		</li>
 		<li>
 			<strong>Our service providers</strong>, who process information only on our instructions: Amazon Web Services (hosting, the

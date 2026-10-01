@@ -210,6 +210,69 @@ Tracked in issue #103.
   changed" list is rewritten with each new version. Only the app is gated;
   the API doesn't refuse other calls from such an account.
 
+### Licensing positions (pre-counsel, 2026-10-01)
+
+Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
+nothing here is approved by counsel), built so the app can ship before the
+client and counsel confirm them (issue #90; counsel review #92). Each is a
+row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
+
+- [ ] **D1, who hosts the baseline / who decides.** *Position:* the
+  National Water Act fixes who decides a licence (the responsible
+  authority: DWS, or a CMA the power is assigned or delegated to; s1, s40(1),
+  s41, s42) and whose evidence it accepts (s41(2)), not who hosts the model.
+  *Built (163_licensing_authority):* each project names its responsible
+  authority; only members the owner marks as acting for it record its
+  decision or endorse a published baseline; packs print whom they are for
+  and whether the baseline was endorsed; a database conflict guard keeps
+  editors out of applying parties, so a consultancy host can't also act for
+  applicants. *For counsel:* whether a WUA or consultancy host changes the
+  POPIA responsible party and the PAIA regime (a CMA, and probably a WUA,
+  is a public body), and whether a marked member's endorsement can stand for
+  the authority's acceptance of evidence under s41(2).
+- [ ] **D14, the outcome words.** *Position:* "approved with conditions"
+  has no meaning of its own (every licence carries conditions, s28(1)(d)),
+  and no app user decides. *Built (163):* the outcomes are *Licence issued
+  (see its conditions)*, *Licence refused*, *Application rejected (formal
+  requirements)* and *Not considered: use already authorised*; the action is
+  **Record the authority's decision**, with the authority's name, the
+  decision letter's date, its reference and whether written reasons were
+  received; the app says appeals run from the decision letter and computes
+  no deadline. Older decisions were mapped. *For counsel and the pilot
+  authority:* the exact labels (its house style), and whether the R267
+  "rejection" stages need their own record.
+- [ ] **D5, public participation (item 7).** *Position:* only someone who
+  timeously lodged a written objection may appeal (NWA s148(1)(f)) and is
+  told of the decision (s42(a)); the objection goes to the notice's address
+  (R267 reg 17(4)(b)(vii)); the applicant keeps the I&AP register and
+  compiles the participation report (regs 18–19). *Built
+  (166_public_participation):* every public comment box and share page says
+  a comment is not a written objection and prints the notice's address and
+  closing date when the applicant gives them; anyone signed in comments
+  through a live link with no project role (an NGO is never a viewer); the
+  applicant and the assessors download the reg 19 record (CSV and a print
+  page under Annexure D item 8's headings), with a commenter's email only
+  where they ticked the reg 18 box, with the POPIA s18 notice at the box and
+  Privacy §5. *For counsel:* whether the warning's words are enough to
+  protect an NGO's standing, whether the operator or the host is the
+  responsible party for the emails handed to the applicant, and whether the
+  record meets reg 19(1)(a) as a submission.
+- [ ] **D16, signers (item 9).** *Position:* neither the NWA nor R267
+  requires a registered signer, but consulting for a fee is practising
+  (NSP Act s20(1)); the evidence is the applicant's (s41(2)(a)(ii)).
+  *Built (167_signers):* the applicant's appointed specialist signs
+  (`specialist`), an editor may add a `review`; a sign-off, issue and
+  withdrawal need a code from the authenticator within 10 minutes; the host
+  (an owner, or a member acting for the authority) records its check of
+  the signer's registration against the public register, which verify then
+  shows ("checked … by <org>, <date>", else "self-declared"), and issue
+  waits for it while the project requires it (on by default); the dialog
+  and Terms §3 say an in-app sign-off is not the signature the authority
+  requires (ECTA s13(1)). *For counsel:* whether the sign-off wording is a
+  material Terms change; whether the host's recorded check creates any
+  assurance by the operator; whether an integrated (NEMA) application's
+  SACNASP-registration protocol (GN 320 of 2020) changes the product rule.
+
 ## Change log
 
 - 2026-09-27: first drafts; linked from the landing footer, under every
