@@ -1,9 +1,9 @@
 // The drawing mode's keys (attachDrawing.ts): Enter adds at the crosshair
 // (the map's middle) for the keyboard, and at the mouse pointer while the
-// mouse is over the map, until an arrow key or the mouse leaving brings the
-// crosshair back. A fake map stands in for MapLibre: its events by name, a
+// mouse is over the map, until an arrow key, the mouse leaving, the map
+// taking the focus or a touch brings the crosshair back. A fake map stands in for MapLibre: its events by name, a
 // centre and an unproject.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { attachDrawing, type DrawMap } from './attachDrawing';
 import { Draft } from './draft.svelte';
 import { DRAW_CHOICES } from './shape';
@@ -12,7 +12,12 @@ const parcel = DRAW_CHOICES.find((c) => c.id === 'farm_parcel')!;
 
 function setup() {
 	const handlers = new Map<string, ((e: unknown) => void)[]>();
-	const canvas = { style: { cursor: '' } } as unknown as HTMLCanvasElement;
+	const canvasListeners = new Map<string, () => void>();
+	const canvas = {
+		style: { cursor: '' },
+		addEventListener: (type: string, l: () => void) => canvasListeners.set(type, l),
+		removeEventListener: (type: string) => canvasListeners.delete(type)
+	} as unknown as HTMLCanvasElement;
 	const map: DrawMap = {
 		on: (type, listener) => void handlers.set(type as string, [...(handlers.get(type as string) ?? []), listener as (e: unknown) => void]),
 		off: (type, listener) => void handlers.set(type as string, (handlers.get(type as string) ?? []).filter((h) => h !== listener)),
@@ -37,7 +42,8 @@ function setup() {
 	const aims: boolean[] = [];
 	const detach = attachDrawing(map, draft, keysOn, (p) => aims.push(p));
 	const move = (x: number, y: number) => fire('mousemove', { point: { x, y }, lngLat: map.unproject([x, y]) });
-	return { draft, press, move, fire, aims, detach };
+	const focus = () => canvasListeners.get('focus')?.();
+	return { draft, press, move, fire, focus, aims, detach };
 }
 
 describe('attachDrawing: where Enter adds', () => {
@@ -70,6 +76,34 @@ describe('attachDrawing: where Enter adds', () => {
 		press('Enter');
 		expect(draft.coords[1]).toEqual([21, -34]);
 		expect(aims).toEqual([true, false, true, false]);
+	});
+
+	it('the map taking the focus (a Tab with the mouse resting over it) goes back to the crosshair', () => {
+		const { draft, press, move, focus, aims } = setup();
+		move(200, 300);
+		focus();
+		press('Enter');
+		expect(draft.coords).toEqual([[21, -34]]);
+		expect(aims).toEqual([true, false]);
+	});
+
+	it('a touch, and the mouse events made up after a tap, never aim at the pointer', () => {
+		vi.useFakeTimers();
+		try {
+			const { draft, press, move, fire, aims } = setup();
+			fire('touchstart');
+			move(200, 300);
+			press('Enter');
+			expect(draft.coords).toEqual([[21, -34]]);
+			// A real mouse, a while later (a laptop with a touch screen): the pointer again (positive control).
+			vi.advanceTimersByTime(1500);
+			move(200, 300);
+			press('Enter');
+			expect(draft.coords[1]).toEqual([20.02, -33.03]);
+			expect(aims).toEqual([true]);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('detaching forgets the pointer', () => {

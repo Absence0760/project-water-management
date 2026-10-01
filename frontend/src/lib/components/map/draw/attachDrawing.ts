@@ -11,8 +11,9 @@
 // Keyboard, from the map's focus: the arrow keys pan the map under a
 // crosshair at its middle (MapLibre's own keyboard handler), Enter adds a
 // corner (places or moves the point) at the crosshair, or, while the mouse
-// is over the map (moved there since the last arrow key), at the mouse
-// pointer, where the person is looking; Backspace removes the
+// is over the map (moved there since the map took the focus and since the
+// last arrow key or touch), at the mouse pointer, where the person is
+// looking; Backspace removes the
 // last corner while drawing (the picked one after), Delete the picked one,
 // Escape cancels (asking first when that would drop work: Draft.escape).
 import type { MapPosition } from '$lib/api/types';
@@ -81,8 +82,19 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 		if (!!p !== !!pointer) onaim?.(!!p);
 		pointer = p;
 	};
-	const onMouseMove = (e: Ev) => aim(e.point);
+	/** A touch, and the mouse events a browser makes up after a tap for a while: never the pointer. */
+	let touchedAt = -Infinity;
+	const TOUCH_GHOST_MS = 1000;
+	const onMouseMove = (e: Ev) => {
+		if (performance.now() - touchedAt > TOUCH_GHOST_MS) aim(e.point);
+	};
+	const onTouch = () => {
+		touchedAt = performance.now();
+		aim(null);
+	};
 	const onMouseOut = () => aim(null);
+	// The focus arriving (a Tab to the map, Place a point's button): the crosshair, until the mouse moves over the map.
+	const onFocus = () => aim(null);
 
 	const onClick = (e: Ev) => {
 		if (!draft.active || dragging !== null) return;
@@ -174,6 +186,8 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 	map.on('mousemove', onMove);
 	map.on('mousemove', onMouseMove);
 	map.on('mouseout', onMouseOut);
+	map.on('touchstart', onTouch);
+	canvas.addEventListener('focus', onFocus);
 	map.on('touchmove', onMove);
 	map.on('mousedown', startDrag);
 	map.on('touchstart', startDrag);
@@ -186,6 +200,8 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 		map.off('mousemove', onMove);
 		map.off('mousemove', onMouseMove);
 		map.off('mouseout', onMouseOut);
+		map.off('touchstart', onTouch);
+		canvas.removeEventListener('focus', onFocus);
 		map.off('touchmove', onMove);
 		map.off('mousedown', startDrag);
 		map.off('touchstart', startDrag);

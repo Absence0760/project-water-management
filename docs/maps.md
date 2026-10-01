@@ -223,9 +223,11 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   (places or moves the point), **Backspace** removes the last corner while
   drawing, **Delete** the picked one after, Escape cancels (asking first, as
   above; focus comes back to the map either way). With the mouse over the
-  map (moved there since the last arrow key), **Enter** adds at the mouse
-  pointer instead, where a click would, and the crosshair hides; an arrow
-  key, or the mouse leaving the map, brings the crosshair back
+  map (moved there since the map took the focus, the last arrow key and the
+  last touch), **Enter** adds at the mouse pointer instead, where a click
+  would, and the crosshair hides; an arrow key, the mouse leaving the map,
+  the focus arriving (a Tab with the mouse resting there) or a touch (and
+  the mouse events a browser makes up after a tap) brings the crosshair back
   (`draw/attachDrawing.ts`, tested in `attachDrawing.test.ts` and
   `e2e/tests/map-draw.spec.ts`). The canvas's
   accessible name says which keys do what in each phase, and the draw bar

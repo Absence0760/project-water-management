@@ -12,15 +12,12 @@
 	// two-step sign-in banner).
 
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { tick } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { mfaPrompt, pendingKind } from '$lib/auth/mfaPrompt.svelte';
 	import { session } from '$lib/auth/session.svelte';
-	import { clearAllSaved } from '$lib/components/farm/savedCopy';
-	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
+	import { loginReturningTo, signOutTo } from '$lib/auth/signOut';
 
 	let { up = false, compact = false }: { up?: boolean; compact?: boolean } = $props();
 
@@ -68,47 +65,16 @@
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
 
-	// Let the layout's route guard react first (it would send us to
-	// /login?next=<this page>); the explicit navigation below then wins, so
-	// the next person to sign in isn't dropped onto this user's page.
-	async function finishSignOut() {
-		// The farmer view's saved copies stay on the phone only while signed in (design §9).
-		clearAllSaved();
-		clearNoteCounts();
-		session.user = null;
-		signingOut = false;
-		await tick();
-		await goto(`${base}/login`);
-	}
-
-	async function signOut() {
+	/** Sign out (`end`, this device by default), then the sign-in page (`to`). */
+	async function signOut(to?: string, end?: () => Promise<unknown>) {
 		closeMenu();
 		signingOut = true;
-		try {
-			await api.auth.logout();
-		} catch {
-			// Even if the call fails, drop the local session and go to login.
-		}
-		await finishSignOut();
+		await signOutTo(to, end);
+		signingOut = false;
 	}
 
 	/** A password-only session: sign out, then the sign-in page (password, then the code), back to this page after. */
-	async function signInAgain() {
-		closeMenu();
-		signingOut = true;
-		const next = page.url.pathname + page.url.search;
-		try {
-			await api.auth.logout();
-		} catch {
-			// Drop the local session either way.
-		}
-		clearAllSaved();
-		clearNoteCounts();
-		session.user = null;
-		signingOut = false;
-		await tick();
-		await goto(`${base}/login?next=${encodeURIComponent(next)}`);
-	}
+	const signInAgain = () => signOut(loginReturningTo(page.url.pathname + page.url.search));
 
 	async function signOutEverywhere() {
 		closeMenu();
@@ -119,13 +85,7 @@
 			danger: true
 		});
 		if (!ok) return;
-		signingOut = true;
-		try {
-			await api.auth.logoutEverywhere();
-		} catch {
-			// Even if the call fails, drop the local session and go to login.
-		}
-		await finishSignOut();
+		await signOut(undefined, () => api.auth.logoutEverywhere());
 	}
 </script>
 
@@ -158,14 +118,14 @@
 				<li>
 					<a class="item item-warning" href="{base}/account#two-step" onclick={() => closeMenu()}>
 						<span class="label">Set up two-step sign-in</span>
-						<span class="hint" aria-hidden="true">Your role needs it</span>
+						<span class="hint">Your role needs it</span>
 					</a>
 				</li>
 			{:else if mfaNeeded === 'step-up'}
 				<li>
 					<button type="button" class="item item-warning" onclick={signInAgain} disabled={signingOut}>
 						<span class="label">Sign in again with a code</span>
-						<span class="hint" aria-hidden="true">This session used your password only</span>
+						<span class="hint">This session used your password only</span>
 					</button>
 				</li>
 			{/if}
@@ -181,7 +141,7 @@
 				</a>
 			</li>
 			<li>
-				<button type="button" class="item" onclick={signOut} disabled={signingOut}>
+				<button type="button" class="item" onclick={() => signOut()} disabled={signingOut}>
 					<span class="label">Sign out</span>
 					<span class="hint" aria-hidden="true">Just this device</span>
 				</button>
