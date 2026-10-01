@@ -2344,11 +2344,14 @@ map" card) stays the schematic; this is the geography.
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), and for editors **Upload GeoJSON**
-  and **Place a point**, each a link that opens its sheet. Slim notices
-  under it: what an upload or a placed point did (Dismiss), the no-basemap
-  note (owners and editors only), and "No catchment boundary yet" when there
-  are features but no boundary.
+  (frames every feature; with features), and for editors **Draw a shape**
+  and **Place a point** (each puts the map in a drawing mode, below; pressed
+  while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
+  notices under it: what an upload, a placed point or a saved drawing did
+  (Dismiss), the no-basemap note (owners and editors only), and "No
+  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
+  (WGS84)." with **Draw the boundary** when there are features but no
+  boundary.
 - **Layout.** The map on the left and a side column on the right
   (`clamp(18rem, 30%, 24rem)`) once the page's container
   (`container: map-page`) is 56rem wide (784 px at the 14 px root);
@@ -2380,10 +2383,33 @@ map" card) stays the schematic; this is the geography.
   area to the model, recorded in History with the feature named; disabled
   while the model has unsaved edits (a line says why) and reading **In use**
   when that feature's area is the unit's. **From**: the file it came in.
-  **Delete** (editors) asks first. With nothing picked: "Select a feature on
-  the map or in the list to see it here."; with nothing on the map, the one
-  empty-state line ("Nothing on the map yet. Upload a catchment boundary …
-  or place a point."; D4 makes it lead with drawing).
+  **Edit the shape** (a single line or one-ring polygon) or **Move the
+  point** (editors) puts it in the drawing mode, and **Delete** asks first.
+  With nothing picked: "Select a feature on the map or in the list to see it
+  here."; with nothing on the map, the empty state leads with drawing (#326
+  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
+  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
+  file (WGS84), or place a point.".
+- **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
+  [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
+  library decision). A **draw bar** sits over the map while a shape is drawn,
+  a point placed or a feature edited: what is being made (a select of
+  Catchment boundary, Farm parcel, Dam, River, Other area, Other line; or of
+  Gauge, Dam, Other for a point; "Editing “name”" for an edit), how (a line
+  that changes with the phase, saying tap on a phone), the last change in a
+  live region, why it can't be saved yet ("Its outline crosses itself…"), and
+  **Use my location** (phones, placing), **Enter coordinates** (points) or
+  **Paste a shape** (lines and polygons), **Undo**, **Finish** (while
+  drawing), **Remove the picked corner**, **Cancel** and, once drawn,
+  **Save…** (**Save the shape** / **Save the position** for an edit, saved at
+  once). Entering a mode gives the map the keyboard focus. Save… on a new
+  shape opens **Save the drawing** (a side sheet: "This shape is" a kind its
+  geometry allows, Name, Stands for; "It replaces the current catchment
+  boundary." when it would; **Back to the map** keeps the drawing), and on a
+  new point the Place sheet. **Paste a shape** is a side sheet with a
+  GeoJSON-or-WKT field, an example for the shape being drawn and the error
+  in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
+  is picked.
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
@@ -2420,11 +2446,15 @@ map" card) stays the schematic; this is the geography.
   feature count, date, who imported it and its SHA-256 cut to 12
   characters (the full hash in the tooltip) with **Copy**. D2's review table
   goes here.
-- **Place a point** (`place=1`, a side sheet, editors): kind (gauge, dam,
-  other), name, latitude and longitude in decimal degrees ("-33.61" or
-  "33.61 S", a decimal comma taken), and what it stands for. Errors show
-  under each field on submit; a saved point closes the sheet and is picked.
-  (D1 replaces this form with click-to-place.)
+- **Place a point** (`place=1`, a side sheet, editors; #326 D1): kind
+  (gauge, dam, other; the bar's choice), name, what it stands for, and the
+  position. From a clicked or located point it says "Put on the map at
+  33.6200° S, 21.3400° E…" with the latitude and longitude behind an **Enter
+  coordinates** disclosure, filled in from it; opened with no position (the
+  bar's Enter coordinates, a direct `place=1`) the disclosure is open.
+  Decimal degrees ("-33.61" or "33.61 S", a decimal comma taken); errors show
+  under each field on submit (opening the disclosure); a saved point closes
+  the sheet, ends the drawing mode and is picked.
 - **URL.** `feature=<id>` picks a feature; `node=<nodeId>` picks that
   node's farm parcel (the largest), else its first linked feature
   (`mapList.ts` `pickedFeature`), so the Network and results can link "Show
@@ -2433,6 +2463,11 @@ map" card) stays the schematic; this is the geography.
   sheet or the grid drops its parameter in place; a viewer's `upload=1` or
   `place=1` is dropped. Old aliases `?tab=gis` and `?tab=catchment-map`
   still open the tab.
+- Drawing is tested in `e2e/tests/map-draw.spec.ts` through its non-pointer
+  paths (paste a shape, typed coordinates, the keyboard crosshair, the entry
+  points) and one deterministic mouse-drawn polygon read back from the list,
+  with axe light and dark while drawing; the helpers in
+  `lib/components/map/draw/*.test.ts`.
 - Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways

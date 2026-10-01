@@ -21,7 +21,8 @@ Two rules hold throughout:
   value, and then **Save**.
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
-  placed by typing coordinates, and areas can still be typed on the Network.
+  placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
+  areas can still be typed on the Network.
 
 ## Basemap
 
@@ -44,7 +45,7 @@ server and no tile CDN: the file is served from the app's own storage.
   (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
-  Protomaps daily build at maxzoom 13 into
+  Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
   anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
@@ -52,9 +53,21 @@ server and no tile CDN: the file is served from the app's own storage.
   (`http://localhost:9002/tiles/south-africa.pmtiles`); restart `pnpm dev`.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
-  defaults. **Size: measure before choosing** (decision D7): maxzoom 13 is
-  enough to recognise farm dams; expect hundreds of MB at 12–13 and a few GB
-  at 15.
+  defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
+  or tracing a parcel (drawing, below) needs a closer zoom than 13. Measured
+  2026-10-01 with `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the
+  Protomaps build of 2026-09-30, the bbox above), which reads only the
+  archive's directories, not the tiles:
+
+  | maxzoom | tiles | archive |
+  | --- | --- | --- |
+  | 13 | 130,243 | 250 MB |
+  | 14 | 443,416 | 490 MB |
+  | 15 | 1,408,748 | 1.0 GB |
+
+  15 is under the ~2 GB the decision allowed, and is the Protomaps build's
+  deepest zoom (MapLibre overzooms past it), so it is the default.
+  `TILES_MAXZOOM=13` keeps a laptop's cache small.
 - **Production**: not deployed yet. The plan (WP-3.12) is the same file in
   S3 under a `tiles/` prefix behind a same-origin CloudFront behaviour
   `/tiles/*` (Range and `ETag` forwarded, long cache), and
@@ -118,6 +131,83 @@ server and no tile CDN: the file is served from the app's own storage.
   (only SvelteKit's meta policy, which sets `script-src`).
 - The app loads **no third-party script, style, font or tile**: MapLibre is
   bundled, the basemap is self-hosted, and there are no glyphs.
+
+## Drawing
+
+Editors draw, place and reshape features on the map itself (issue #326 C1,
+D1, D4; the screen is in [ui.md § Map](./ui.md#map-tabmap)). Nothing is sent
+until a sheet's confirm, and every save goes through the same
+`POST`/`PATCH /projects/:id/map/features` as before, so the server's checks
+(`checkGeometry`: closed, non-crossing rings, the vertex limits, a kind's
+geometry types) and the audit events are unchanged. Viewers get no tools.
+
+- **What can be drawn** (`draw/shape.ts` `DRAW_CHOICES`): a polygon for a
+  catchment boundary (it replaces the current one, and the save sheet says
+  so), a farm parcel, a dam's water's edge or an "other" area; a line for a
+  river or an "other" line; a point (Place a point) for a gauge, a dam or
+  "other".
+- **Pointer.** A click adds a corner; a click on the first corner (or
+  **Finish**) closes a polygon, a second click on the last point (or a double
+  click, or Finish) ends a line; a dashed line runs from the last corner to
+  the pointer. Once drawn: drag a corner (or the point) to move it, click an
+  edge's middle to add a corner, click a corner to pick it and press Delete
+  (or **Remove the picked corner**) to remove it, never below three corners
+  (two points for a line). **Undo** steps back through every change (a drag
+  is one step; up to 200); **Escape** or **Cancel** drops the drawing. While
+  drawing, clicks shape the drawing rather than picking what is under them,
+  and point markers let clicks through.
+- **Keyboard** (WCAG 2.1.1): from the map's focus (entering a drawing mode
+  puts it there), a crosshair marks the map's middle; the arrow keys pan the
+  map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
+  (places or moves the point), **Backspace** removes the last corner while
+  drawing, **Delete** the picked one after, Escape cancels. The canvas's
+  accessible name says which keys do what in each phase, and the draw bar
+  names the last change in a polite live region ("Corner 3 at 33.6100° S,
+  21.3400° E.").
+- **Paste a shape** (`draw/parseShape.ts`; WCAG 2.1.1, 2.5.7: the
+  non-pointer way to make or replace a shape, and the way in for coordinates
+  copied from QGIS or a survey): GeoJSON (a geometry, a Feature, or a
+  FeatureCollection of one) or WKT (`POINT`, `LINESTRING`, `POLYGON`,
+  `MULTILINESTRING`, `MULTIPOLYGON`, an optional `SRID=4326;`), longitude
+  first, WGS84. An outline left open is closed; 3D, another SRID or a named
+  projected CRS, coordinates outside longitude/latitude ("looks projected"),
+  several features and unsupported types are refused with a sentence. The
+  pasted shape must be the shape being drawn (a line for River), replaces the
+  drawing, and is framed; one of several parts (or with holes) is kept whole:
+  it saves as it is but has no corners to drag.
+- **Points (D1).** Click to place is the main way: the point is drawn as a
+  draft, can be dragged (or clicked elsewhere to move it), and **Save…**
+  opens the Place sheet with its position; the coordinates are behind
+  **Enter coordinates** there, filled in from the click so a published
+  position can be typed exactly. **Use my location** (on a phone: a coarse
+  pointer or a window under 700 px, with `navigator.geolocation`) asks the
+  browser only when tapped; the position becomes the draft point and goes
+  nowhere else until the point is saved.
+- **Editing a saved feature:** the picked card's **Edit the shape** (a
+  single line, or a polygon of one ring) or **Move the point**; the feature
+  is drawn as the draft and saved with **Save the shape** (`PATCH` with the
+  geometry; the server recomputes its area). A unit whose area was taken from
+  it keeps that area until **Use** is pressed again (the card then offers
+  it, since the areas differ). Shapes of several parts or with holes are
+  replaced by uploading or pasting, not reshaped.
+- **Without WebGL** the draw bar leads with Paste a shape and Enter
+  coordinates; both work with no map.
+- **Why our own drawing mode, not a library.** Both candidates were
+  measured on 2026-10-01 (esbuild, minified, gzip -9, MapLibre external):
+  [Terra Draw](https://github.com/JamesLMilner/terra-draw) 1.35.0 with
+  `terra-draw-maplibre-gl-adapter` 1.4.1 is MIT, actively maintained
+  (MapLibre ≥ 4 peer, so 6.10 works), has undo, and no `eval`, but is
+  **36 KB** gzipped with the modes this needs; `@mapbox/mapbox-gl-draw` 1.5.2
+  is ISC and 18 KB plus its CSS, but is written for Mapbox GL (MapLibre needs
+  class-name shims) and its keyboard support is Escape/Enter/Delete only.
+  Neither lets keyboard placement add a corner to the shape being drawn
+  (WCAG 2.1.1 needs that to share one drawing with the pointer), and both
+  keep layers a theme switch's `setStyle` drops. The mode here
+  (`draw/attachDrawing.ts` on MapLibre's own events, `draw/drawLayers.ts`
+  for one `draft` GeoJSON source and its layers, re-added after every style
+  load, `draw/draft.svelte.ts` for the state) is a few KB in the map's own
+  chunk, adds no dependency, and needs no CSP change: no `blob:`, no
+  `eval`, no new origin.
 
 ## Uploads
 

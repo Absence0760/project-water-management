@@ -3432,8 +3432,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
 - [ ] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): polygon-based
       CHIRPS extraction from the `catchment_boundary` feature in place of the
       bounding box (`backend/src/feeds/`).
-- [ ] **Drawing polygons on the map** (D9 (b)): only upload and point
-      placement now; full drawing if hydrologists ask.
+- [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
+      C1 (2026-10-01): editors draw polygons and lines, place points by
+      click, and reshape them, with paste-a-shape and keyboard placement as
+      the non-pointer paths ([maps.md § Drawing](./maps.md#drawing)).
 - [ ] **Dam polygons → the area–volume curve**: a dam polygon's area is
       measured but not proposed to the dam's full-supply area yet.
 
