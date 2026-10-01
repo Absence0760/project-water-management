@@ -114,13 +114,13 @@ describe('applyScenario: each op', () => {
 
 	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {
 		const set = (id: string, field: string, value: unknown) => ({ op: 'node.set', nodeId: id, field, value }) as ScenarioOp;
-		// Estimated area (capacity ÷ 3 m): doubling 100 000 m³ gives 33 333 × 2^0.7 = 54 150 m², not 66 667.
+		// Estimated area (7.2 × C^0.77, engine ≥ 1.63.0): doubling 100 000 m³ gives 50 972 × 2^0.7 = 82 804 m², not 101 944.
 		const b = base();
 		nodeOf(b, 'A')!.damCapacityM3 = 100_000;
 		const r = applyScenario(b, [set('A', 'damCapacityM3', 200_000)]);
 		expect(r.problems).toEqual([]);
-		expect(nodeOf(r.input, 'A')!.damAreaFullM2).toBeCloseTo((100_000 / 3) * 2 ** 0.7, 6);
-		expect(r.applied[0]!.notes[0]).toMatch(/33333 → 54150 m² .*from the capacity ÷ 3 m estimate/);
+		expect(nodeOf(r.input, 'A')!.damAreaFullM2).toBeCloseTo(7.2 * 100_000 ** 0.77 * 2 ** 0.7, 6);
+		expect(r.applied[0]!.notes[0]).toMatch(/50972 → 82804 m² .*from the 7\.2 × capacity\^0\.77 estimate/);
 		// An entered area and exponent: A_full × ratio^b; the same capacity changes nothing.
 		const e = base();
 		Object.assign(nodeOf(e, 'A')!, { damAreaFullM2: 50_000, damAreaExponent: 0.8 });
@@ -204,6 +204,9 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
 		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);
 		expect(one({ op: 'node.set', nodeId: 'A', field: 'damInitialPct', value: 1.5 }).problems[0]).toMatch(/at most 1/);
+		// No basin has a dam area exponent above 1 (engine ≥ 1.63.0, issue #90); 1 itself is allowed.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'damAreaExponent', value: 1.5 }).problems[0]).toMatch(/damAreaExponent.*at most 1/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'damAreaExponent', value: 1 }).problems).toEqual([]);
 		// Not a field at all (a caller bypassing the types): refused, not written.
 		const r = one({ op: 'node.set', nodeId: 'A', field: 'downstreamNodeId', value: 'B' } as unknown as ScenarioOp);
 		expect(r.problems).toHaveLength(1);

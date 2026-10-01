@@ -45,6 +45,7 @@ export async function collectAudit(
 			startDate: farm.startDate,
 			days,
 			apanDailyDays: run.summary.apanDaily?.dailyDays ?? 0,
+			engineVersion: run.engineVersion,
 			farm: byKey(farm),
 			catchment: byKey(catchment)
 		},

@@ -196,6 +196,20 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      difference on the catchment's own row and areas before anything is
      applied.
 
+   **The crop set (issue #90 Q9; provisional decision 2026-10-01, to be confirmed by the client's hydrologist).** The recommendation is
+   adopted: the client catchment's crop set should be the **ARC/SABI
+   winter-rainfall A-pan tables** (item 8), with the workbook's set kept for
+   comparison at Kp 0.75. The SABI Irrigation Design Manual's A-pan factors
+   are South Africa's published design values for exactly this use
+   (f = kp × kc against A-pan, eq. 4.7); a set that is FAO-56 Kc (against
+   ET₀) needs the pan coefficient, which the workbook doesn't apply. With
+   the SABI set the workbook's stone-fruit peak timing, onion season and
+   pecan-on-the-apple-curve questions fall away (the library's pecan is
+   Table 4.10's). It is a project data choice, not an engine default: no
+   project changes until the hydrologist loads the set through the Load crop
+   factors dialog, which shows the demand difference first. Still open, and
+   the client's: whether the workbook's A-pan row is really S-pan (§2.4a).
+
    **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
    demand]` table has rows pasted from another crop and one-month slips (issue
    #54 item 1). Both importers (`crops.ts` `cropTableNotes`,
@@ -229,7 +243,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    of the FAO-56 root-zone balance (Allen et al. 1998, ch. 8), sized by
    `settings.effectiveRainStoreMm` (mm over the cropped area, default **25 mm**:
    0.5 × 100 mm/m × 0.5 m, the readily available water of 0.5 m of roots in a
-   soil holding 100 mm/m, FAO-56 Tables 19 and 22). Each day, in this order:
+   soil holding 100 mm/m, FAO-56 Tables 19 and 22). Kept (provisional decision 2026-10-01, to be confirmed by the client's hydrologist,
+   issue #90 N3): FAO-56's RAW = p × TAW over typical irrigated root depths
+   (0.3–0.6 m) and soils (sandy loam to loam, about 60–150 mm/m) spans about
+   10–45 mm, and 25 mm sits in it. The store is one value per project; the
+   client's soils and root depths per farm are the data that would refine it.
+   Each day, in this order:
 
    ```
    Pe        = croppedArea × effRain / 1000 × rainUsed[t]          (m³)
@@ -297,6 +316,14 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    supply, deficit, the fraction supplied and the curtailment report are all
    measured against it, so "100 % supplied" means the crop got its whole
    requirement (crop use = e × G = F). The workbook has no such step (e = 1).
+   Kept (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 N1): the SABI design crop factors
+   (f = kp × kc, eq. 4.7, item 8) give the crop's net requirement, and SABI
+   designs the gross by the system's efficiency, so the factors don't include
+   application losses and dividing by e doesn't count them twice. β (the
+   share of the losses returning, 0.5 for a new farm) stays an estimate: drip
+   and surface losses are mostly deep percolation that returns, sprinkler
+   losses partly evaporation and drift that doesn't, and no South African
+   source gives a split; it is per farm and the hydrologist can set it.
 
 6. **Irrigation efficiency per crop (engine ≥ 0.43.0, issue #54 item 1).**
    A crop may carry its own `irrigationEfficiency` (0 < e ≤ 1), for the
@@ -330,7 +357,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    blend rather than that month's; over the year the weighting by requirement
    keeps the totals close. A per-month e* would need the network step to take
    a daily efficiency (a larger change, for the hydrologist to ask for if the
-   farms warrant it). The crop factors themselves are unchanged: which crop
+   farms warrant it). Kept (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 Q17): the
+   blend is weighted by each crop's yearly requirement, so the year's total
+   stays close, and a month's abstraction is off by at most the
+   ratio of the farm's extreme efficiencies (drip 0.90 against sprinkler 0.80:
+   at most 12.5 %, in a month entirely on one of them; less in a mixed one). Trigger for the
+   per-month e*: a farm whose seasons are on systems more than 0.15 apart. The crop factors themselves are unchanged: which crop
    set a catchment uses, and which system each farm's crops are under,
    awaits the hydrologist (issue #54, Q9/Q10; the client chose drip as the
    new-farm default, issue #90).
@@ -382,14 +414,21 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    - **Conversions**, both reproducible and tested: the tables' Jan–Dec to
      the model's Oct–Sep; a blank Table 4.14 cell is 0 (not in the ground),
      and a part month at planting or harvest keeps its printed factor
-     (not prorated). Table 4.15 gives a factor per fifth of the growing
+     (not prorated): SABI's method multiplies each month's design factor by
+     that month's A-pan (eq. 4.7), and the harvest-month values are already
+     the low late-season ones (wheat harvested 15 September: 0.40 against
+     August's 0.65), so prorating them would cut them twice (provisional
+     decision 2026-10-01, to be confirmed by the client's hydrologist, issue
+     #90; it also errs to the higher demand). Table 4.15 gives a factor per fifth of the growing
      season, so a vegetable needs a planting date and a season length, which
      the modeller gives (the dialog offers Table 4.7's season lengths, e.g.
      onions, autumn transplant, 160 days; it assumes no planting date). Day
      *k* of the season takes the factor of its fifth, `stages[⌊5k ÷ days⌋]`,
      and a month's factor is the sum over its days ÷ its days (days outside
      the season 0), rounded to 3 decimals, so area × factor × A-pan gives the
-     month's requirement.
+     month's requirement. This stage-to-month rule is kept (provisional
+     decision 2026-10-01, issue #90): it builds FAO-56's crop curve from the
+     stage factors and averages it by day, as a monthly model must.
    - **Irrigation systems**: efficiency ranges from the [SABI Agricultural
      Design Norms 2021](https://sabi.co.za/wp-content/uploads/2023/02/SABI-Norms-Agricultural-2021.pdf),
      Table 4 (drip 90–95 %, micro-sprinkler 80–85 %, centre pivot / linear
@@ -2010,8 +2049,13 @@ The part of each day's flow up to the low-flow threshold loses the low-flow
 share and the part above it the other share, so the reduction is continuous
 and never larger on a smaller flow. This applies the Pitman/WR2012 idea
 (separate reductions to total and low flows, per unit, applied to the natural
-runoff before the users take water) to a daily flow; which daily split the
-hydrologist accepts is open (followups.md). The share of MAR removed is then
+runoff before the users take water) to a daily flow. **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90):
+the split at the **Q75 natural flow** is kept: Scott & Smith's (1997)
+curves give separate reductions to total and to low flows, and Q75 is the
+usual South African low-flow index for them, so the low-flow share applies
+to the low flows and the other to the rest (the paper's own low-flow
+definition wasn't re-read; the hydrologist should check it). Which covers matter and their condensed areas are client data;
+land cover stays off until they are entered. The share of MAR removed is then
 close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
 
 - **Its own series**, never inside calibration: `landcover_reduction` per
@@ -2102,6 +2146,13 @@ The workbook has two blocks of columns:
   first). Within one priority, rules into one destination share its room and
   rules from one source share its free water, each pro rata to its own limit
   (MIN(maxDaily, srcFree)), so results never depend on the list order.
+  **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): the room cap, the fixed release's floor, settling before
+  irrigation and the priority-then-pro-rata sharing are kept. A dam can't
+  hold more than its room, and a transfer that spilled on arrival would be a
+  river release under another name; ranking by priority with equal
+  priorities sharing in proportion is how South African system models
+  allocate (WRYM/WRPM priority classes) and is order-free. How the client's
+  schemes are actually operated is client data (the full record: [engine-audit.md § Provisional decisions 2026-10-01](./engine-audit.md#provisional-decisions-2026-10-01-network-supply-crops-and-dams)).
   **Engine ≥ 1.36.0 ([audit N6](./engine-audit.md#findings), found
   reviewing issue #73):** each rule draws only above its **own** reserve.
   The water in a source is split into bands at its rules' reserves (highest
@@ -2437,17 +2488,37 @@ room (engine ≥ 0.19.0), E and Sp before the MINs above: when the room
 binds, the transfer brings enough that neither MIN bites.
 
 - `A_full` is `node.damAreaFullM2`. When it is not known (null), the run
-  estimates `capacity ÷ 3 m`, about the median mean depth of South African
-  minor dams (Mantel & Hughes 2023), and warns **W6** with the number of dams
-  (and their names) that used the estimate.
+  estimates **A = 7.2 · C^0.77 m²** for a capacity C in m³
+  (`estimatedDamAreaM2`, engine ≥ 1.63.0), and warns **W6** with the number
+  of dams (and their names) that used the estimate. The relation is Maaren &
+  Moolman's (1985, *The effects of farm dams on hydrology*, Proc. 2nd SA
+  National Hydrology Symposium, ACRU Report 22, 428–441) generalised one for
+  South African farm dams of all shapes, as quoted by Sawunyama (2013,
+  *Small farm dam capacity estimations from simple geometric relationships …
+  Inkomati*, IAHS Publ. 362, p. 59). A small dam is shallower than a large
+  one: mean depth C ÷ A is about 1.2 m at 10 000 m³, 2.0 m at 100 000 m³ and
+  3.3 m at 1 000 000 m³. Sawunyama found such generalised relations a poor
+  guide to any *one* dam (R² < 0.8) but usable over many dams, which is how a
+  catchment model uses them; the warning says so and asks for the area.
+  **Changed in engine 1.63.0** (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 N2): before it the estimate
+  was capacity ÷ 3 m, a constant 3 m mean depth attributed to "Mantel &
+  Hughes 2023", a reference that could never be found or verified. Against
+  the SA-derived relation it understated the area, and so the evaporation, of
+  every dam smaller than about 630 000 m³ (by 35 % at 100 000 m³ and 61 % at
+  10 000 m³). A stored run keeps its own engine's estimate: its audit
+  workbook recomputes the area as that engine did
+  (`estimatedDamAreaForEngine`).
 - `b` is `node.damAreaExponent`, default **0.7** (`DAM_AREA_EXPONENT`, Liebe
   et al. 2005, small reservoirs; published small-reservoir fits give b ≈
-  0.65–0.85); allowed 0 < b ≤ 3. WR2012's Pitman theory manual (WRC TT
-  690/16 §2.2) gives 0.6 as "the average for all reservoirs in South
-  Africa" (calibration-research.md CR-32). **Pending the hydrologist:**
-  switching the default to 0.6, and the unknown-area fallback from
-  capacity ÷ 3 m to A = 7.2 · C^0.77 m² (Sawunyama 2013); either shifts
-  every such dam's evaporation, so neither is made without them. The
+  0.65–0.85); a save takes 0 < b ≤ 1 (engine ≥ 1.63.0, below). WR2012's
+  Pitman theory manual (WRC TT 690/16 §2.2) gives 0.6 as "the average for
+  all reservoirs in South Africa" (calibration-research.md CR-32).
+  **Kept at 0.7** (provisional decision 2026-10-01, to be confirmed by the client's hydrologist): the 0.6 is an average over all reservoirs, large
+  ones included, and the manual is behind the WR2012 login, so it couldn't be
+  re-read; a farm dam in a V-shaped valley (V ∝ h³) gives b = 2/3, and
+  small-reservoir fits give 0.65–0.85, so 0.7 sits inside the evidence for
+  farm dams. The choice moves little: between 30 % and 100 % full, b = 0.6
+  and 0.7 differ by at most 13 % in area (at 30 % full; 7 % at half full). The
   dam's own b resizes it along its own relation (§2.13, engine ≥ 1.10.0).
 - **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
   start-of-day surface to the whole day. When the surface grows faster than
@@ -2468,8 +2539,13 @@ binds, the transfer brings enough that neither MIN bites.
   already keeps the order, so default dams are unchanged. A single power law
   with b > 1 is not a real basin shape (any area–stage power law gives
   b = m/(m + 1) < 1; published small-reservoir fits give b ≈ 0.65–0.85), so
-  the allowed range is due to narrow to b ≤ 1 ([followups.md](./followups.md),
-  "Dam area exponent above 1").
+  the allowed range was narrowed to 0 < b ≤ 1 in engine 1.63.0
+  (`DAM_AREA_EXPONENT_MAX`; provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90): the API, the node form and a
+  scenario's `node.set` refuse b > 1. The database column still allows up
+  to 3, so a stored node with b > 1 loads and runs as entered, with the
+  limiter and a run warning that a save now needs b ≤ 1, until it is next
+  saved (no migration: nothing is deployed yet). The limiter stays for those
+  documents and the random-network soak still draws b up to 3.
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
@@ -2536,7 +2612,11 @@ curves: a segment would need more than ~200 m² of new surface per m³ stored.
 
 **2. Dead storage** is the dam's minimum operating level, `node.damMinPct`
 (engine 0.16.0, audit Q5): irrigation and a fixed release draw only above
-it, and it still evaporates. It interacts with WP-1.19's irrigation reserve
+it, and it still evaporates. Provisional decision 2026-10-01, to be
+confirmed by the client's hydrologist (issue #90): kept as the level for
+irrigation and transfers alike; which dams keep a reserve is client data, so
+the default stays 0 % and the node form says "Irrigation may empty this dam"
+until a level is entered. It interacts with WP-1.19's irrigation reserve
 by the higher of the two applying (transfers keep MAX(rule minimum, the
 dam's minimum)); no new field.
 
@@ -2664,7 +2744,15 @@ Sources and caveats:
   warns when the note names a preset whose values at the current A-pan no
   longer match (`lakeFactorPresetStale`). A WR90 preset refuses a project
   with any month's A-pan at 0 (not entered yet) or below its floor (above).
-- Which preset the client's catchment takes is the hydrologist's
+- **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): the default stays flat 0.75 × A-pan, and no preset
+  is filled on the client project yet. 0.75 is the top of the published
+  range (Linsley et al.; USGS 0.60–0.80), so it errs towards more
+  evaporation and less water for users, the cautious side for licensing; the
+  WR90 lake factors (Taljaard 2023 found them still accurate) give about
+  0.66–0.68 × A-pan over a year. The WR90 + Taljaard preset is the
+  recommended one once the client's A-pan row is confirmed to be A-pan and
+  not S-pan (§2.3, Q9): filling a conversion on an S-pan row would convert
+  it twice. Which preset the client's catchment takes is the hydrologist's
   ([followups.md § Hydrologist](./followups.md#hydrologist)).
 
 The source note is recorded with each run (its settings snapshot), so run
@@ -2952,7 +3040,23 @@ take less what they return), so a site's charged part is split between farms
 and users pro rata. A user's whole charge is met by taking less (no storage
 part). The EWR sites table's "farms upstream" and "charged" include the users.
 
-**Curtailment (decided, pending the hydrologist).** Other users are **outside
+**Curtailment** (provisional decision 2026-10-01, to be confirmed by the
+client's hydrologist, issue #90: kept as built; the NWA reading below is the
+target once the client gives each senior user's population). Of the
+two readings put to the hydrologist, the one the National Water Act
+supports is **"exempt only the basic-human-needs share"**: the Reserve
+(basic human needs and the ecological Reserve, s16–18) is the only use with
+priority over every other, and every lawful use, a town's above basic needs
+included, can be restricted (Schedule 3 item 6; DWS restriction notices cut
+domestic and urban use too, by a smaller share). The model can't apply it
+yet: an other water user has no population, so its basic-needs share (25 l
+a person a day) isn't known, and cutting it without that could take a town
+below basic needs. So a senior user stays uncurtailed and its standing
+charge is shown in the curtailment table and the share-the-pain board
+("its EWR charge … stands"), never moved onto the farms. Needs client data:
+the population each senior user serves (the durable fix is followups.md §
+Hydrologist, *Drought restrictions on the other water users*, option b).
+Other users are **outside
 the irrigation equitable-share benchmark** (§2.11): their demand is not
 irrigation, and the benchmark's totals and fraction stay farms only. They get
 their own rows (`CurtailmentSummary.otherUsers`):
@@ -3094,8 +3198,11 @@ node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
   the store's content at the end is depletion still to come.
   `checkGroundwater` asserts both and every day's recursion.
 - *The river never goes negative, and the deficit is carried over (engine ≥
-  1.10.0, hydrologist persona review of issue #46, item 15; pending the
-  hydrologist).* Depletion due on a day with no flow left at the node is owed:
+  1.10.0, hydrologist persona review of issue #46, item 15; provisional decision 2026-10-01, to be confirmed by the client's hydrologist,
+  issue #90 WP-1.34: the method and the carry-over are kept; d and k, and
+  whether the boreholes pumped while the calibration record was measured, are
+  client data (the run already warns that a record measured while they
+  pumped needs them in the calibrated model)).* Depletion due on a day with no flow left at the node is owed:
   the deficit Dd, which comes off the first flow at the node, before any new
   depletion, and persists until repaid. When a reach is dry the pumped
   aquifer's drawdown doesn't vanish; it is repaid from the stream when flow
@@ -3181,6 +3288,12 @@ the release left, and the farm balance also subtracts the seepage lost:
 4. supplemental, direct:   MIN(room, D − Gs − GW)                     then emergency, direct, while Q[t−1] < level × cap
 ```
 
+The order (a release first, then boreholes into the dam, then irrigation;
+primary and emergency dam-target boreholes only on a day the dam is drawn
+for demand, engine ≥ 1.8.0) is a provisional decision 2026-10-01, to be confirmed by the client's hydrologist (issue #90): a release is a
+licence condition that binds before anything is taken, and pumping into a
+dam with nothing to irrigate takes the room winter inflow needs and spills.
+
 When a supplemental dam-target unit pumped all it was asked for, the dam holds
 exactly Dr above dead storage and step 3 takes Dr itself (engine ≥ 1.24.0).
 In floats `S0 + M + O + K + J + GWd − dead storage` gives Dr back only to an
@@ -3256,7 +3369,11 @@ water year, m³. The app shows modelled use against the caps and the GN 538
 volume and **never decides whether a use is lawful**.
 
 **The GN 538 volume per property (engine ≥ 1.12.0, issue #46 item 7; a
-draft from the hydrologist persona, pending the real hydrologist).** GN 538
+draft from the hydrologist persona; provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90: kept as
+min(property ha × the Table 2 rate, 40 000 m³/a) with the any-12-months
+check, the gazette's own rule; the rate stays an input until the quaternary
+schedule can be verified row by row, and each property's rate is client
+data).** GN 538
 of 2 September 2016 (Government Gazette 40243) lets a property take
 groundwater under the general authorisation up to its size × the rate Table 2
 (Appendix B) gives its quaternary catchment, one of 0, 45, 75, 150, 275 or 400
@@ -3371,8 +3488,22 @@ form, since G carries Gr in and U carries it out. Supplemental boreholes fill
 what the river and the dam leave; a supplemental dam-target borehole fills the
 dam only for the demand the river leaves.
 
-**Decisions, pending the hydrologist** (roadmap WP-3.8; the conservative
-reading of this document where it didn't settle them):
+**Decisions** (roadmap WP-3.8; the conservative reading of this document
+where it didn't settle them). **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): all kept. The pump not
+protecting the EWR by default is kept for exploring and for the baseline's
+existing users (current use, which didn't observe the Reserve while the
+calibration record was measured); a licence application's own new or
+changed river take must keep the EWR or a hands-off flow, and every river
+pump a pack rests on needs a capacity, or the evidence pack isn't issued
+(Q15 and Q16, `evidence-10`, [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river)):
+NWA s18 requires a licence decision to give effect to the Reserve. A
+capacity isn't required to save a model, since a b023 import has none, but
+every run without one warns. The real capacities, and which units really
+pump straight from the river, are client data: the importers flag the
+probable run-of-river units (and, from 2026-10-01, near-empty placeholder
+pools that take less than all the upstream inflow, issue #90 Q18), and a
+run warns on a dam-less unit whose upstream or runoff share still routes
+water to an absent dam (Q19). The decisions:
 
 - *The pump draws only on the flow below the dam, S*, as the roadmap says,
   never on the dam's inflow (that is K, M and the diversion O).
@@ -3531,8 +3662,15 @@ meter records (report format `evidence-9`, [evidence-pack.md](./evidence-pack.md
 catchment has meter records the modeller skipped) is the modeller's call; the
 app records it and never guesses one.
 
-**Decisions, pending the hydrologist** (the issue #54 research; the
-conservative reading where it didn't settle them):
+**Decisions** (the issue #54 research; the conservative reading where it
+didn't settle them). **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90) on the municipal defaults: a new
+municipal object keeps **loss 0 %** (its monthly AADD or metered volume
+already includes the system's losses; losses apply to per-unit sizing only)
+and **return 50 %**. No South African standard return share was found (the
+Red Book puts outdoor use at 0–60 % of demand, and only indoor use returns),
+so 50 % stays an estimate the run's inputs show: the client's treatment
+works inflow records against the abstraction are the data that would
+replace it. The rest:
 
 - *Objects share the unit's sources.* An object is supplied from the same
   dam, river pump and boreholes as the unit's crops, never from the river
@@ -3734,10 +3872,23 @@ its surveyed capacity. Firm yield (§2.13) resizes the entered capacity and
 keeps each day's factor.
 
 Scenarios can set all four (`node.set`, [scenarios.md](./scenarios.md)), so
-a proposal can add a dam from a future date. Pending the hydrologist
-(issue #90, [engine-audit.md S1](./engine-audit.md)): the linear rate run
-both ways, how far back it should run, and the choice to scale dead storage
-and the triggers with the capacity.
+a proposal can add a dam from a future date. **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90,
+[engine-audit.md S1](./engine-audit.md)): all kept. **Linear**: South
+African practice states sediment as a yearly yield (Rooseboom's sediment
+yield map; Msadala et al. 2010, *Sediment yield prediction for South
+Africa: 2010 edition*, WRC), a constant loss a year; a trap-efficiency
+(Brune 1953) or exponential decline slows the loss only as a dam fills, and
+needs the inflow and sediment yield the model doesn't have. Linear
+overstates late-life loss, the cautious side for storage. **How far back**:
+to the in-service date and no further, since the dam holds nothing before
+it; the run's warning above 1.25 × now asks for that date when it is
+missing (engine 1.63.0), instead of a fixed cap. **Dead storage and the
+triggers** keep scaling with the capacity (sediment spreads through a
+reservoir, not only the dead pool; filling dead storage first would leave
+the usable storage untouched for years and overstate the yield). **The
+full-supply area** stays: deposits fill the bottom and the tail, and keeping
+the area errs towards more evaporation. The rate itself is client data
+(a survey, or the quaternary's sediment yield).
 
 ### 2.7h Hands-off flow and River to dam by month (engine ≥ 1.32.0, roadmap WP-3.8, issue #204)
 
@@ -7332,7 +7483,10 @@ the days *D(y)* of *y* inside the run:
   the groundwater take and the storage are separate registered uses), so the
   surface side nets it out: the year's dam draw is taken to be the pumped
   water first, up to what was pumped into the dam that water year. Why this
-  rule (pending the hydrologist's confirmation):
+  rule (provisional decision 2026-10-01, to be confirmed by the client's
+  hydrologist, issue #90: kept, since WARMS registers the s21(a) groundwater
+  take and the s21(b) storage as separate uses, so the pumped water is
+  already counted once):
   - **Per water year, not per day.** Pumped water is stored and drawn later
     (a primary dam-target borehole keeps the dam topped up between
     irrigations), so a per-day MIN would miss most of it; the water year is
@@ -7628,8 +7782,12 @@ calibration reuses it). A probe replaces the dam node's crop requirement
 with *F*(*t*) = *x* × *p*(*t*) × *e*, so its abstraction demand D = F / e is
 the draft, and runs `simulateNetwork` on it. Other nodes keep their own
 demand. The dam's **boreholes are removed** for the search, those that pump
-into the dam (WP-3.9) included, pending the hydrologist: the yield is
-the dam's, not the dam's plus groundwater. The drought restriction rule
+into the dam (WP-3.9) included (provisional decision 2026-10-01, to be
+confirmed by the client's hydrologist, issue #90: kept): the yield is
+the dam's, not the dam's plus groundwater. A dam's firm yield is a
+surface-water figure, and the boreholes are a separate resource with their
+own registration and GN 538 limit, so adding them would let a borehole's
+volume pass as the dam's. The drought restriction rule
 (engine ≥ 1.54.0, §2.7i) is dropped too, on every node: the yield is what
 the dam can give, not what a restriction policy asks of it (pending the
 hydrologist). When no transfer touches the dam
@@ -7659,8 +7817,10 @@ of a job.
 dead storage as the same fractions of capacity. A transfer rule drawing from
 it keeps its reserve as the same fraction. Its surface follows **the dam's
 own area–volume relation** (engine ≥ 1.10.0, `network/damResize.ts`; drafted
-from the hydrologist persona's review of issue #46, item 11, **pending the
-hydrologist**): a dam of another size at the same site is the same basin
+from the hydrologist persona's review of issue #46, item 11; **provisional
+decision 2026-10-01, to be confirmed by the client's hydrologist**, issue
+#90: kept, with a surveyed curve entered on the scenario, `node.set` of
+`damCurve`, preferred whenever the enlarged dam has one): a dam of another size at the same site is the same basin
 filled to another level, so its full-supply area is the dam's own area at
 that volume.
 
@@ -8496,9 +8656,9 @@ from the workbook.
 | --- | --- | --- | --- |
 | Q1 | Farm sheet K/L | **"Upstream inflow above dam %" was applied backwards. Resolved (client, 2026-09; engine 0.9.0).** The column's label says "above dam", but the formula put `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). The label, the sibling column "Farm runoff above (into) dam %", the `[Models]` sheet ("100%" for a stand-alone dam, "0%" for a natural area) and the South African convention (the Pitman/WRSM farm-dam parameter is the share of the catchment that drains *into* the dams) all mean the share entering the dam, and the client confirmed that meaning. **Fixed:** `K = H × pctUpstreamToDam`, `L = H − K`; the DB column `pct_upstream_to_dam` already has the right name. The client catchment regression replays the workbook with `1 − pct`. The change matters most for a dam with little or no diversion capacity. | Existing projects keep their stored values, which now mean what the label says. A project built on the old behaviour with 0 (all into the dam) needs 1 instead. New farms (the editor, the DB column default and the importer's fallback for a farm missing from `[Farm spec]`) start at 1, a dam on the river. |
 | Q2 | `[Transfers]` (blank template) | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q). Every other transfer column seen reads Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
-| Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** a rule is capped at the destination's room, cap − storage[t−1] + its demand that day (§2.6; from 0.19.0 the storage after that day's rain on the dam, evaporation and seepage); transfers stay settled before irrigation, so the source doesn't irrigate first. | Confirm both rules. |
+| Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** a rule is capped at the destination's room, cap − storage[t−1] + its demand that day (§2.6; from 0.19.0 the storage after that day's rain on the dam, evaporation and seepage); transfers stay settled before irrigation, so the source doesn't irrigate first. | Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist ([§2.6](#26-transfers-transfers)). |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client workbook's Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. Attribution is Q17 (decided, engine 0.17.0). | Only the doc was wrong; results unchanged. |
-| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
+| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist; which dams keep a reserve, and how much, is client data (the node form flags a dam irrigation may empty). |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). Since engine 1.0.0 only the offset reads the threshold: GR4J has none (§2.4a). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In a workbook the Hi+Lo area sum can differ slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
@@ -8511,7 +8671,7 @@ from the workbook.
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client workbook some farm rows' M cells are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. A workbook on the Area method is unaffected, but switching it to Hi/Lo or Specific would give those farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.5.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
-| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment regression doesn't exercise it. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
+| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment regression doesn't exercise it. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist ([§2.6](#26-transfers-transfers)). |
 
 ---
 

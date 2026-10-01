@@ -218,6 +218,33 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **Network, supply, crops and dams: provisional decisions 2026-10-01**
+      (issue #90, the hydrologist list from *Supply order at a dam* to
+      *WP-1.35 Land-cover split*). Each item was researched against published
+      South African practice and decided **provisionally, to be confirmed by
+      the client's hydrologist**; the record, one row per item with its
+      source, is [engine-audit.md § Provisional decisions
+      2026-10-01](./engine-audit.md#provisional-decisions-2026-10-01-network-supply-crops-and-dams),
+      and model.md marks each section. Built where the evidence clearly
+      pointed elsewhere (engine 1.63.0): an unknown dam area is 7.2 · C^0.77
+      m² (Maaren & Moolman 1985, via Sawunyama 2013) instead of capacity ÷
+      3 m, whose source was never found; a save takes a dam area exponent
+      0 < b ≤ 1; the sediment warning asks for a dam's in-service date; and
+      both importers flag a near-empty placeholder pool (Q18). Everything
+      else was kept. **Still the client's data**, each surfaced in the app:
+      which dams keep a reserve (form hint), Q18 pools (import warning), Q19
+      upstream-to-dam % per farm (run warning on a dam-less farm), which
+      units are run of river and their pump capacities (import flag, run
+      warning, evidence-pack gate), each senior user's population (for the
+      NWA basic-needs exemption), each property's GN 538 rate (run warning),
+      municipal return shares (treatment works records), soils and root
+      depths (the 25 mm store), the A-pan row's pan type (before a WR90
+      preset or the SABI crop set is applied), sediment rates and surveys,
+      borehole d and k and whether they pumped during the calibration
+      record, and land-cover classes and areas. Trigger: the hydrologist's
+      answers on #90; a reversal becomes a new engine version with its
+      engine-audit.md entry.
+
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
@@ -351,7 +378,10 @@ runs and accumulations are real) can't be decided without the client.
       suits small farm dams; and whether a site study or the quaternary's
       WR2012 evaporation zone should replace the national monthly factors.
       Once chosen, fill it on the client project (it is a project setting,
-      not a default).
+      not a default). **Provisional decision 2026-10-01** (issue #90, to be
+      confirmed by the client's hydrologist): keep flat 0.75 as the default
+      and fill no preset yet; WR90 lake factors with Taljaard's conversion
+      once the client's A-pan row is confirmed to be A-pan, not S-pan.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -399,6 +429,11 @@ runs and accumulations are real) can't be decided without the client.
         per node. Trigger: the first licence application with boreholes. Also: one depletion lag
         per node is shared by its boreholes; per-borehole lags if a
         geohydrology report gives different response times.
+      - **Provisional decision 2026-10-01** (issue #90, to be confirmed by
+        the client's hydrologist) on WP-1.34 and WP-1.35: the lagged
+        reservoir and the deficit carry-over, the GN 538 volume rule and the
+        Q75 daily split are kept; the values, areas and classes are client
+        data (engine-audit.md § Provisional decisions 2026-10-01).
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
         catchment (invasives, plantations, riparian stands) and their
         condensed areas? The class reductions are indicative mature-stand
@@ -418,7 +453,11 @@ runs and accumulations are real) can't be decided without the client.
       WR2012 (TT 690/16 §2.2) gives 0.6 as the South African average, and an
       unknown dam's area could follow A = 7.2 · C^0.77 m² (Sawunyama 2013)
       instead of capacity ÷ 3 m. Both change every such dam's evaporation,
-      so both wait on the hydrologist (model.md §2.7a).
+      so both wait on the hydrologist (model.md §2.7a). **Provisional
+      decision 2026-10-01** (issue #90, to be confirmed by the client's
+      hydrologist): the resize rule and the 0.7 exponent kept; the unknown
+      area changed to 7.2 · C^0.77 (Maaren & Moolman 1985) in engine 1.63.0,
+      since the 3 m depth's source was never found.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
@@ -439,7 +478,11 @@ runs and accumulations are real) can't be decided without the client.
         dam and seepage; unknown areas use capacity ÷ 3 m (warning W6).
         Needs each dam's area when full, and confirming the "Mantel & Hughes
         2023" 3 m median depth reference (not verified). Rain on a dam is
-        partly double-counted with land runoff.
+        partly double-counted with land runoff. **Provisional decision
+        2026-10-01** (issue #90): the reference was never found, so engine
+        1.63.0 estimates an unknown area as 7.2 · C^0.77 m² (Maaren &
+        Moolman 1985); N1, N3, N4/Q3/Q18 and Q5 are provisionally kept
+        (engine-audit.md § Provisional decisions 2026-10-01).
       - N4/Q3/Q18 (0.16.0): transfers capped at the receiver's room; an
         explicit priority, with equal priorities sharing pro rata.
       - Q17/Q13/Q11 (0.17.0): EWR shortfall charged to upstream farms pro
@@ -490,9 +533,12 @@ runs and accumulations are real) can't be decided without the client.
       three passes (the Desktop Reserve method used one, Hughes et al. 2003);
       τ 0.2; outcome cut-offs 0.95 / 0.85 and the 5 % / 20 % days; the 0.9
       annual assurance threshold; senior users exempt only for basic human
-      needs, with an optional restriction %; the dam area exponent 0.6
+      needs, with an optional restriction % (provisionally 2026-10-01: the
+      NWA basic-needs reading adopted as the target, applied once each senior
+      user's population is known); the dam area exponent 0.6
       (WR2012) instead of 0.7 and the fallback area 7.2·C^0.77 (Sawunyama
-      2013) instead of capacity ÷ 3 m; which dam evaporation preset (the
+      2013) instead of capacity ÷ 3 m (provisionally 2026-10-01: 0.7 kept,
+      the fallback changed in engine 1.63.0); which dam evaporation preset (the
       WR90 monthly presets are built, engine 1.49.0, but 0.75 × A-pan, the
       top of SA practice, stays the default; see "Which dam evaporation
       preset" above); plantation classes by
@@ -1966,7 +2012,17 @@ the suggested order (the IDs carry the detail):
       `order.test.ts` (one case per sum, on values whose sum depends on the
       order), `run.invariants.test.ts` › "engine 0.26.1: …" pins the seeds
       of both models; `runoff/legacy.test.ts` now adds the area in id order.
-- [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
+- [x] **Dam area exponent above 1** (done 2026-10-01, engine 1.63.0, issue
+      #90; provisional decision, to be confirmed by the client's hydrologist).
+      Narrowed to 0 < b ≤ 1 (`DAM_AREA_EXPONENT_MAX`) in zod, the node form,
+      the frontend model check and the scenario ops; `damLosses` runs an
+      older document's b > 1 as entered, with the limiter and a warning that
+      a save now needs b ≤ 1; the engine's random-network soak still draws b
+      up to 3 for those documents, the scenario fuzz only up to 1. No
+      migration: every write path (the model PUT, a project import, a history
+      restore) parses through `ModelBody`, so the column's wider check holds
+      only rows from before, and nothing is deployed yet. Was: validation
+      allowed 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,
       `verify/checks.ts`), but a single area–storage power law with b > 1 is
@@ -1981,7 +2037,8 @@ the suggested order (the IDs carry the detail):
       limiter stays for runs saved before. Deferred because it narrows what
       users may enter, so it is the real hydrologist's call. Trigger: the
       hydrologist review of N2 (engine-audit.md), or the first real dam
-      entered with b > 1.
+      entered with b > 1. (Resolved as above; the migration it proposed
+      proved unnecessary.)
 - [x] **Excel audit workbook export** (issue #68, 2026-09-29; the operator
       asked for it ahead of the trigger below). The Runs tab's Download menu
       offers **Audit workbook — *unit* (.xlsx)** after each farm's daily CSV:
@@ -3688,7 +3745,10 @@ from the WP:
       the applicant's unit puts its river take under the check; the EWR
       kept counts as protection even in a model whose EWR is 0 (the
       Reserve rows then say *Not assessed*, so nothing is hidden). Trigger:
-      the hydrologist's answer to Q15 and Q16.
+      the hydrologist's answer to Q15 and Q16. **Provisional decision 2026-10-01**
+      (issue #90, to be confirmed by the client's hydrologist): Q15 and Q16
+      as built, required for licensing evidence and not to save or run a
+      model (NWA s18; a b023 import has no capacities).
 - [ ] **A dam-less unit under river first or trigger bypasses its pump**
       (engine 1.60.0 warns, model.md §2.7e). Only run of river zeroes the
       dam split and River to dam, so on a unit with no dam the other rules

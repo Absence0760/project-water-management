@@ -12,7 +12,7 @@ import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
-import { asRunOfRiver, type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, type FarmSpec, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
 import { duplicateLogger, type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
@@ -182,12 +182,14 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			report.note('probable-run-of-river', note, { sheet: 'Farm spec', element: n.name });
 			flagged.push(n);
 		}
+		const pool = placeholderPoolNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day);
+		if (pool) report.note('placeholder-pool', pool, { sheet: 'Farm spec', element: n.name });
 	}
 	const dams =nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
 	if (dams.length) {
 		report.note(
 			'dam-area-unknown',
-			`${dams.length} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam ` +
+			`${dams.length} dam(s) have no surface area in the workbook; runs estimate it as 7.2 x capacity^0.77 m2 for dam ` +
 				'evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure',
 			{ sheet: 'Farm spec' }
 		);

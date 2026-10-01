@@ -2065,7 +2065,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
-  the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+  the 7.2 × capacity^0.77 m² estimate the run will use (N2, warning W6;
+  engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
   **+ Add other user** (next to + Add node, in both layouts) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's

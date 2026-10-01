@@ -95,6 +95,17 @@ describe('the capacity factor', () => {
 		const w: string[] = [];
 		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('1990-01-01'), 60, w);
 		expect(w.join()).toMatch(/holds up to 1\.62 × its surveyed capacity/);
+		// No in-service date: the warning asks for one (provisional decision 2026-10-01, engine-audit.md S1).
+		expect(w.join()).toMatch(/enter the date it came into service/);
+		const dated: string[] = [];
+		capacityScaleOf(
+			node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02, damInServiceFrom: '1985-01-01' }),
+			toEpochDay('1990-01-01'),
+			60,
+			dated
+		);
+		expect(dated.join()).toMatch(/holds up to 1\.62 ×/);
+		expect(dated.join()).not.toMatch(/came into service/);
 		const quiet: string[] = [];
 		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('2019-01-01'), 60, quiet);
 		expect(quiet).toEqual([]);

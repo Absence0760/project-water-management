@@ -1325,7 +1325,9 @@ each rule's `transfer_rule@<id>` (what it took, before losses), and
 `summary.waterBalance` and the water account gain `conveyanceLossM3` (what
 was lost, net of the seepage returned);
 nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
-(nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
+(nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
+with a larger value from before loads and runs, with a warning, and must be
+brought to 1 or below to save) and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
 
 Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)):

@@ -32,6 +32,18 @@ describe('modelProblems', () => {
 	});
 });
 
+describe('dam area exponent (engine ≥ 1.63.0, issue #90)', () => {
+	it('takes 0 < b ≤ 1 and refuses b > 1, which no basin has (the DB column still holds an older row)', () => {
+		const out = node('Gauge', null);
+		const parse = (b: number) => ModelBody.safeParse({ nodes: [out, node('A', out.id, { damAreaExponent: b })], crops: [], cropAreas: [], transfers: [] }).success;
+		expect(parse(0.7)).toBe(true);
+		expect(parse(1)).toBe(true);
+		expect(parse(1.01)).toBe(false);
+		expect(parse(3)).toBe(false);
+		expect(parse(0)).toBe(false);
+	});
+});
+
 describe('other water users (WP-1.33)', () => {
 	it('accepts a user node and fills the inert defaults on a farm; refuses crops and transfers on a user', () => {
 		const out = node('Gauge', null);
