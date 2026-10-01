@@ -51,6 +51,7 @@
 	import DrawBar from './draw/DrawBar.svelte';
 	import PasteSheet from './draw/PasteSheet.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
+	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
 	import UploadSheet from './UploadSheet.svelte';
 
@@ -457,6 +458,8 @@
 			{#if canEdit && draft.mode !== 'draw'}<button type="button" class="btn btn-sm" onclick={() => startDraw('catchment_boundary')}>Draw the boundary</button>{/if}
 		</p>
 	{/if}
+	<!-- The rain feed from the boundary (#326 B-rain): a line when no CHIRPS feed reads it yet. -->
+	{#if data && boundary && canEdit}<MapRainLink {projectId} {boundary} />{/if}
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
