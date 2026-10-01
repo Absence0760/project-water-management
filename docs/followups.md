@@ -5078,12 +5078,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `assertNotLastAdmin`, and migration 149 has the keep-owner and
       keep-admin triggers take a per-project (per-team) lock before counting;
       `last-owner-race.db.test.ts` forces both orders.
-- [ ] **A DWS or CMA responsible party may have to keep the maker's name**
-      (National Archives Act, operator agreement notes for counsel, clause
-      8.4). Durable fix: a per-team setting that keeps a snapshot of the name
-      on the evidence (its own migration), on for such a team. Trigger: D1
-      (#50) puts the published baseline with a CMA or DWS, or counsel says
-      the Act applies.
+- [ ] **A DWS or CMA responsible party keeps the maker's name** (National
+      Archives Act s13(2)(a), operator agreement 3A.2). **Built 2026-10-01
+      (161):** the operator-set `team.public_records` keeps the name in that
+      team's project history after account deletion, and the team and its
+      projects are kept until `team.records_disposal_confirmed_on`
+      (provisional position, pre-counsel research). Left: Privacy §7's
+      sentence for such a team ("If the organisation responsible for a
+      project is a government body that must keep its records by law …, your
+      name stays in that project's history after your account is deleted"),
+      a `LEGAL_VERSION` bump with it and an email to that team's members
+      first (Privacy §12). Trigger: the first DWS or CMA client signs 3A.2.
 - [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
       body for editors for the life of the project (037). Decide a limit (for
       example a year, then purge the body and keep the event). Who: client.
@@ -5101,11 +5106,15 @@ own. Loop in the CISO or security analyst before acting on any of them.
       the id in that log line with log retention at least the backups', or
       a write to a separate store. Decide it with the answer, in the same
       change as the runbook step (deployment.md § Rollback).
-- [ ] **D12 confirmation.** The audit log is pseudonymised on account
-      deletion ("Deleted user", 048) as the roadmap recommends; the
-      information officer confirms it (or asks for full deletion of the
-      events, which would weaken the regulator's trail). Trigger: with the
-      privacy notice.
+- [x] **D12 confirmation** (2026-10-01, provisional position, pre-counsel
+      research). Pseudonymising is enough: s24(1)(b) reaches only what s14
+      no longer authorises, and s14(1)(b) authorises the audit trail. The
+      events stay, treated as personal information (not de-identified).
+      Migration 160 also blanks the deleted account's masked address in
+      invitation entries (`app_mask_email`, paired with `maskEmail` by
+      `mask-email.db.test.ts`); Privacy §7 says so. If counsel wants the
+      events de-identified, the remaining step is clearing `subject.userId`
+      and node names in events about the person.
 - [x] **Personal-information incident procedure** for the "a farmer sees the
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data

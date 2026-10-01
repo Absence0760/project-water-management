@@ -2521,7 +2521,7 @@ PDF someone else asked for kept the person as a recipient
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
 | A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
-| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
+| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail; POPIA s14(1)(b)) | Pseudonymised: "Deleted user" as actor and subject (D12, 048), and the masked address in invitation entries blanked to `•••` (160). The entries stay and are **still treated as personal information** (owners and editors read them; deleted with the project), not as de-identified. Provisional position (pre-counsel research, 2026-10-01): s24(1)(b) reaches only what s14 no longer authorises, and s14(1)(b) authorises the audit trail. A team that keeps public records (`team.public_records`, 161) keeps the name in its projects' entries | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
@@ -2531,8 +2531,8 @@ PDF someone else asked for kept the person as a recipient
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
-| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), for the life of that record: the licence or decision it supports and any appeal or review of it, after which the operator removes the project on the client's confirmation (§ Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b)) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
-| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, for the life of the licence record (as sign-offs) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
+| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
@@ -2591,9 +2591,21 @@ PDF someone else asked for kept the person as a recipient
   pass), and fired again inside the request by `SET CONSTRAINTS ALL
   IMMEDIATE` (`delete-me.db.test.ts` runs two at once). The operator's path
   is refused at commit. A responsible party
-  that is DWS or a CMA may need the name kept under the National Archives
-  Act; that waits on counsel and on D1 (#50), and would be a per-team
-  setting in its own migration ([followups.md §
+  that is DWS or a CMA keeps the name in its own record: the National
+  Archives and Records Service of South Africa Act 43 of 1996 s13(2)(a)
+  forbids erasing a governmental body's public record without the National
+  Archivist's authorisation, which is a law requiring retention (POPIA
+  s14(1)(a)). The operator sets `team.public_records` (161; the app can't)
+  only on the client's written confirmation (operator agreement 3A.2): then
+  account deletion still deletes the account, but the audit log of that
+  team's projects keeps the person's name, and the team and its projects
+  can't be deleted until the client confirms it holds its records or has a
+  disposal authority (`team.records_disposal_confirmed_on`; the delete
+  routes answer `409`). Off for every team; a WUA is not treated as a
+  governmental body unless it says it is (counsel question). Provisional
+  position (pre-counsel research, 2026-10-01). Privacy §7's sentence for
+  such a team, and its `LEGAL_VERSION` bump, wait until such a client signs
+  ([followups.md §
   POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
@@ -3028,8 +3040,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     sign-in; requiring it for every signer waits on a decision,
     followups.md), so a sign-off is as strong as the signer's sign-in. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
-    with the account cleared, for the life of the licence record it supports
-    ([§ Personal information](#personal-information-popia)).
+    with the account cleared, until the closing date of the licence record it
+    supports (161; [§ Personal information](#personal-information-popia)).
 
 ## Evidence packs
 

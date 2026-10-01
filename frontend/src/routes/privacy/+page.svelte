@@ -183,10 +183,11 @@
 		<li>
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
 			as the project exists, as its audit trail. Deleting a project deletes them, except that a project that has put a run forward
-			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record for the life of the
-			record (the licence or decision it supports, and any appeal or review of it), and then deleted when the organisation
-			responsible for the project confirms the record has closed. Model runs are pruned as a project goes on: its newest 12
-			published results and 20 unpublished runs are kept.
+			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record until three years after
+			the licence expires, or three years after the application is refused or withdrawn. Until the outcome is recorded, the
+			organisation must confirm every five years that the record is still needed. Then the record is deleted, once the
+			organisation responsible for the project confirms it. Model runs are pruned as a project goes on: its newest 12 published
+			results and 20 unpublished runs are kept.
 		</li>
 		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>
 		<li>
@@ -196,7 +197,9 @@
 		</li>
 	</ul>
 	<p>
-		When your account is deleted, your name is removed from the project history (it reads “Deleted user”). What you made for a
+		When your account is deleted, your name is removed from the project history (it reads “Deleted user”), as is the partly
+		hidden email address in invitation entries. The entries themselves stay, because they are the project’s record of who
+		changed what, and are deleted with the project. What you made for a
 		project (the project itself, a team, model runs, a run put forward as evidence, uncertainty results, scenarios, a licence
 		application you submitted, an import) stays as the project’s record, with your name removed. It is never put in someone
 		else’s name. An uncertainty result you started and never finished, and a licence application still in draft, are deleted
@@ -205,8 +208,10 @@
 	<p>
 		Two things keep your name, because they are a signature or a record handed to others: a sign-off’s typed name and
 		registration, and the names printed in an evidence pack (who made its runs and, for an application, who applied), which
-		can’t be changed without breaking the pack’s seal. Both are kept only as long as the project or licence record they belong to
-		(above).
+		can’t be changed without breaking the pack’s seal. Both are kept only as long as the project they belong to, and in a
+		licence record only until three years after the licence expires, or three years after the application is refused or
+		withdrawn. Until the outcome is recorded, the organisation must confirm every five years that the record is still needed.
+		Then the record is deleted.
 	</p>
 	<p>
 		If you are the only owner of a project or the only admin of a team, someone else needs to take that role before the account
