@@ -325,6 +325,8 @@ export interface InvitedFarmer {
 	invitedBy: string;
 	expiresAt: string;
 	locale: InviteLocale;
+	/** Its sender no longer owns the project: nobody can accept it until an owner re-sends it (155); absent from servers before it. */
+	senderLapsed?: boolean;
 }
 
 /** A row of GET /projects/:id/farmers: a farmer, or (owners only) a pending farmer invite. */
@@ -552,6 +554,12 @@ export interface Invite {
 	createdAt: string;
 	expiresAt: string;
 	expired: boolean;
+	/**
+	 * Its sender no longer owns the project (administers the team), so nobody
+	 * can accept it until an owner re-sends it (155_invite_sender_role); absent
+	 * from servers before it.
+	 */
+	senderLapsed?: boolean;
 }
 
 /** What an invite link is for (POST /auth/invite-info). */
