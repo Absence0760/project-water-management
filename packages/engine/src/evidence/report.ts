@@ -1243,7 +1243,7 @@ function combinedRow(c: EvidenceCombined): EvidenceRow {
 		notAssessed: c.notAssessed,
 		note:
 			m && at
-				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} days: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
+				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} ${Math.abs(Math.round(m.interaction)) === 1 ? 'day' : 'days'}: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
 				: null
 	};
 }

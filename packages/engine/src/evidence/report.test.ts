@@ -1342,7 +1342,7 @@ describe('page 1’s combined row: every application together (evidence-11, find
 		const row = r.rows.at(-1)!;
 		expect(row).toMatchObject({ id: 'otherApplications', label: COMBINED_LABEL, basis: COMBINED_BASIS, notAssessed: null, baseline: outlet.baseline, application: outlet.combined });
 		expect(row.change).toEqual({ run: outlet.combinedChange, band: null, bandNote: COMBINED_NO_BAND, worse: null });
-		expect(row.note).toMatch(/^2 applications together: “Farm two dam” \(this one\), “Farm one dam”\. Interaction [+−]\d+ days: .*Assessment “Both dams” \(2026-09-10, engine /);
+		expect(row.note).toMatch(/^2 applications together: “Farm two dam” \(this one\), “Farm one dam”\. Interaction [+−]\d+ days?: .*Assessment “Both dams” \(2026-09-10, engine /);
 	});
 
 	it('is not assessed when the applications conflict, naming each conflict, and reads no figure (positive control above)', () => {
