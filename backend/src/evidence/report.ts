@@ -16,11 +16,13 @@ import {
 	KNOWN_LIMITATIONS,
 	METHODOLOGY,
 	summarisePaired,
+	withLocalitySvgHash,
 	type EnsembleHeader,
 	type EnsembleSummary,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
 	type EvidenceInput,
+	type EvidenceMapFeatureInput,
 	type EvidenceReport,
 	type EvidenceRunInput,
 	type MemberResult,
@@ -30,6 +32,7 @@ import {
 	type RunSummary
 } from '@water-management/engine';
 import { Hono } from 'hono';
+import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { differingKinds, storedValues } from '../compare/routes.js';
@@ -304,6 +307,42 @@ async function loadImpactInput(db: Db, projectId: string, baselineRunId: string,
 	};
 }
 
+/**
+ * § 1's locality map (evidence-12, issue #326 A5): the project's map features
+ * as they are now (no run records them, so the report, and a pack's manifest,
+ * freezes them as drafted), under the reader's RLS, with the file each came
+ * from. `other` features aren't drawn, so they aren't read. Ordered by kind
+ * and id, so the same features give the same report.
+ */
+async function loadMapFeatures(db: Db, projectId: string): Promise<EvidenceMapFeatureInput[]> {
+	const { rows } = await db.query<{
+		kind: EvidenceMapFeatureInput['kind'];
+		name: string;
+		nodeId: string | null;
+		geometry: EvidenceMapFeatureInput['geometry'];
+		updatedAt: Date;
+		fileName: string | null;
+		sha256: string | null;
+		importedAt: Date | null;
+	}>(
+		`SELECT f.kind, f.name, f.node_id AS "nodeId", f.geometry, f.updated_at AS "updatedAt",
+			s.file_name AS "fileName", s.sha256, s.imported_at AS "importedAt"
+		 FROM map_feature f
+		 LEFT JOIN geo_source s ON s.id = f.source_id AND s.project_id = f.project_id
+		 WHERE f.project_id = $1 AND f.kind <> 'other'
+		 ORDER BY f.kind, f.id`,
+		[projectId]
+	);
+	return rows.map((r) => ({
+		kind: r.kind,
+		name: r.name,
+		nodeId: r.nodeId,
+		geometry: r.geometry,
+		updatedAt: iso(r.updatedAt)!,
+		source: r.sha256 && r.fileName && r.importedAt ? { fileName: r.fileName, sha256: r.sha256, importedAt: iso(r.importedAt)! } : null
+	}));
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
@@ -390,13 +429,16 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		applicationRuns,
 		...others,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version },
-		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null
+		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null,
+		mapFeatures: await loadMapFeatures(db, projectId)
 	};
 }
 
-/** The report for one run, as the engine builds it. */
+const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+
+/** The report for one run, as the engine builds it, with § 1's locality map's SVG hashed (the engine has no hash of its own). */
 export async function buildEvidenceReport(db: Db, projectId: string, runId: string): Promise<EvidenceReport> {
-	return evidenceReport(await loadEvidenceInput(db, projectId, runId));
+	return withLocalitySvgHash(evidenceReport(await loadEvidenceInput(db, projectId, runId)), sha256);
 }
 
 export const evidenceReportRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/evidence-report', async (c) => {

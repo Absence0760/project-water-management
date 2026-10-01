@@ -5,6 +5,7 @@
 // render session that reads that pack only, stores the PDF in MinIO under its
 // SHA-256, and records the hash on the pack once. The download is those very
 // bytes: their SHA-256 is what the pack and the public verify lookup answer.
+// The pack has a map, so its § 1 prints the locality map (evidence-12).
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it). Locally, without it the spec
 // is skipped and says why; in CI it never skips.
@@ -13,6 +14,7 @@ import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { box } from '../support/map.ts';
 
 const S3 = process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9002';
 /** The rule the project declares, and the ensemble the River tab runs to it (evidence-report.spec.ts). */
@@ -31,6 +33,10 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', evidenceUncertaintyRule: RULE });
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the pack PDF test');
+	// A map, so the pack's § 1 prints its locality map (evidence-12): the figure is an image of the SVG in the page the renderer prints.
+	expect(
+		(await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.3, -33.7, 0.1)] } } })).status()
+	).toBe(201);
 
 	// The ensemble the pack cites, run to the declared rule on River & reserve.
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);

@@ -25,7 +25,8 @@
 // application's input changes and both runs' summaries, so the inputs and
 // stored results are checked against it. The results digest (runResultsText)
 // covers the summary and every daily output, so a re-run that matches it
-// reproduces the run exactly. checkPackBundle does all of it.
+// reproduces the run exactly. checkPackBundle does all of it, and draws § 1's
+// locality map again from the manifest (evidence-12) and compares its SHA-256.
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
 import { canonicalJson, seriesDigest } from '../manifest';
@@ -33,6 +34,7 @@ import type { DailySeries, ModelInput } from '../project';
 import { runModelChecked } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { ZipArchive, zip, type ZipEntry } from '../zip';
+import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 
 /** Bumped whenever the bundle's layout changes; bundle.json records it. */
@@ -211,6 +213,9 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'```',
 		'',
 		'It checks that every file matches its hash in bundle.json, that manifest.json hashes to the manifest hash, that the inputs and stored results are the ones the manifest lists, and then re-runs each run from its stored inputs and compares the results digest. It exits non-zero on any mismatch.',
+		...(m.report.localityMap
+			? ["It also draws § 1's locality map again from the map features in manifest.json and checks the SVG against the SHA-256 the manifest names (`figure:locality`)."]
+			: []),
 		'Add `--expect <manifest hash>` to also require the hash the verify lookup returned, and `--no-run` to check the files without re-running.',
 		'',
 		'## Files',
@@ -409,6 +414,27 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 		if (packManifestText(manifest) !== mText) problems.push('manifest.json is not in its canonical (RFC 8785) form');
 		if (manifest.pack?.id !== index.pack.id || manifest.pack?.version !== index.pack.version) problems.push('manifest.json names another pack or version than bundle.json');
 		if (!add('manifest', problems.length === 0, problems.join('; ') || `manifest.json hashes to the pack's manifest hash ${sha}`)) return result(index.pack, runEngines);
+	}
+
+	// § 1's locality map (evidence-12): drawn again from the manifest's features, the SVG hashes to the one it names.
+	const loc = manifest.report.localityMap;
+	if (loc) {
+		const builtBy = manifest.report.builtBy;
+		try {
+			if (loc.version !== LOCALITY_MAP_VERSION) add('figure:locality', false, `the locality map was drawn with ${String(loc.version)}; this code draws ${LOCALITY_MAP_VERSION}: check out the engine that built the report (${builtBy})`);
+			else {
+				const sha = await hash(localityMapSvg(loc).svg);
+				add(
+					'figure:locality',
+					sha === loc.svgSha256,
+					sha === loc.svgSha256
+						? `the locality map drawn again from the manifest's ${loc.features.length} map features hashes to ${sha}, the SHA-256 the manifest names`
+						: `the locality map drawn again hashes to ${sha}, not the ${String(loc.svgSha256)} the manifest names (the report was built by engine ${builtBy}; this is ${ENGINE_VERSION})`
+				);
+			}
+		} catch (e) {
+			add('figure:locality', false, `the locality map can't be drawn from the manifest: ${message(e)}`);
+		}
 	}
 
 	// The runs are the manifest's.

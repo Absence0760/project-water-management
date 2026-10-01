@@ -6855,7 +6855,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
-  - **1 The river**: per rule-table site, the site strip (source, component,
+  - **1 The river**: first the **locality map** (`LocalityMap.svelte`,
+    report format `evidence-12`): Figure 1, the engine's SVG of the
+    project's map features as an image from a `data:` URL, with its SHA-256
+    under it and its legend, labels and notes as visually hidden text; *No
+    locality map: the project has no map features* without any, and, on a
+    pack drafted before `evidence-12`, that it isn't part of the pack
+    ([evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)).
+    Then, per rule-table site, the site strip (source, component,
     unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
     against the determination's, and, when there are any, the months whose
     natural flow is drier than the table's driest point, where the

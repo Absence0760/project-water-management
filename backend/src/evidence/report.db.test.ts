@@ -10,12 +10,14 @@
 import {
 	declaredRuleRequest,
 	licenceImpactSection,
+	localityMapSvg,
 	runEnsemble,
 	runPairedEnsemble,
 	type DeclaredUncertaintyRule,
 	type EvidenceReport,
 	type ModelInput
 } from '@water-management/engine';
+import { createHash } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { monthly, node, signUp } from '../__tests__/helpers.js';
 
@@ -228,7 +230,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-12');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -424,7 +426,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-12');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([
@@ -441,5 +443,60 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		expect(d.bySource[0]!.share).toBeCloseTo(30 / 99, 6);
 		expect(r.flags.find((f) => f.id === 'demandSource')?.text).toBe('Most of the applicant’s demand objects’ demand isn’t from meter records: 30 % is, and 70 % has no source recorded (§ 6).');
 		expect(r.questions.some((q) => q.startsWith('1 of the applicant’s demand objects has no source recorded (§ 6)'))).toBe(true);
+	});
+});
+
+describe('§ 1’s locality map (evidence-12, issue #326 A5)', () => {
+	const sq = (lon: number, lat: number, d: number) => [
+		[lon, lat],
+		[lon + d, lat],
+		[lon + d, lat + d],
+		[lon, lat + d],
+		[lon, lat]
+	];
+	const add = async (body: Record<string, unknown>) => {
+		const res = await owner.call('POST', `/projects/${projectId}/map/features`, body);
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		return res.body.feature.id as string;
+	};
+
+	it('is null with no map features; with them, it draws the applicant’s unit by name, another parcel unnamed, and names the SVG’s SHA-256', async () => {
+		// No map features: the report says there is no locality map (null), and still builds.
+		expect(((await report(viewer, appRun)).body.report as EvidenceReport).localityMap).toBeNull();
+
+		const ids = [
+			await add({ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [sq(21.3, -33.7, 0.1)] } }),
+			await add({ kind: 'farm_parcel', name: 'Upper block', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [sq(21.31, -33.69, 0.03)] } }),
+			await add({ kind: 'farm_parcel', name: 'Neighbour block', geometry: { type: 'Polygon', coordinates: [sq(21.36, -33.66, 0.02)] } }),
+			await add({ kind: 'river', name: 'Sand River', geometry: { type: 'LineString', coordinates: [[21.3, -33.6], [21.4, -33.7]] } }),
+			await add({ kind: 'gauge', name: 'Weir G1', geometry: { type: 'Point', coordinates: [21.39, -33.69] } }),
+			await add({ kind: 'other', name: 'Pump house', geometry: { type: 'Point', coordinates: [21.35, -33.65] } })
+		];
+		try {
+			const r = (await report(viewer, appRun)).body.report as EvidenceReport;
+			const loc = r.localityMap!;
+			expect(loc.applicant).toBe(true);
+			expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+				['boundary', null],
+				['parcel', null],
+				['applicantParcel', 'Upper'],
+				['river', null],
+				['gauge', 'Weir G1']
+			]);
+			// Another unit's parcel and an "other" feature leave nothing that names them.
+			for (const hidden of ['Neighbour block', 'Pump house', 'Upper block', 'Sand River']) expect(JSON.stringify(loc)).not.toContain(hidden);
+			expect(loc.drawnInApp).toBe(5);
+			expect(loc.sources).toEqual([]);
+			expect(loc.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+			// The SHA-256 is the figure's, drawn from the report as served.
+			expect(loc.svgSha256).toBe(createHash('sha256').update(localityMapSvg(loc).svg, 'utf8').digest('hex'));
+			// Baseline evidence: no applicant, every parcel drawn alike.
+			const b = ((await report(viewer, baseRun)).body.report as EvidenceReport).localityMap!;
+			expect(b.applicant).toBe(false);
+			expect(b.features.filter((f) => f.layer === 'parcel')).toHaveLength(2);
+			expect(b.features.some((f) => f.label === 'Upper')).toBe(false);
+		} finally {
+			for (const id of ids) expect((await owner.call('DELETE', `/projects/${projectId}/map/features/${id}`)).status).toBe(204);
+		}
 	});
 });

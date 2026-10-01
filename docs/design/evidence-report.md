@@ -409,6 +409,25 @@ before `evidence-10` keeps its frozen checks; issuing it checks the live
 report, which has both ([evidence-pack.md § What stops issue on the
 river](../evidence-pack.md#what-stops-issue-on-the-river)).
 
+**Report version `evidence-12`** (issue #326 A5): § 1 opens with a site
+locality map, as a licence application normally carries one. It is drawn
+from the project's map features (152 `map_feature`) as they are when the
+report is built: the catchment boundary, the applicant's unit (its parcels
+and dam, from the application's owned nodes, named), every other unit's
+parcels and dams drawn neutrally and never named, rivers, gauges, and the
+gauges that are the report's Reserve sites, with a scale bar, a north arrow,
+coordinate ticks, a legend, the features' date and source files, and "Base:
+the project's map features; no basemap". No tiles: the figure is one SVG the
+engine writes (`geo/localityMap.ts`, a local equirectangular projection on
+the WGS84 radii), the same bytes in the browser, the server's PDF and
+`pnpm reproduce:pack`, so the report names its SHA-256 and a pack's manifest
+freezes both. Judgement: in § 1 rather than on page 1, which stays the
+change table; a figure, not a section, so the section list doesn't move.
+With no map features § 1 says *No locality map: the project has no map
+features*; a pack drafted before `evidence-12` says the figure isn't part of
+it ([evidence-pack.md § The locality map](../evidence-pack.md#the-locality-map)).
+(`evidence-11` is the combined cumulative row's, PR #330.)
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 
