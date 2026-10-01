@@ -22,7 +22,8 @@
 		onedit,
 		projectId = '',
 		saved = false,
-		farmHref
+		farmHref,
+		mapHref = null
 	}: {
 		node: NetworkNode;
 		nodes: readonly NetworkNode[];
@@ -42,6 +43,8 @@
 		saved?: boolean;
 		/** Opens this farm's planted areas (the farm drawer) over the page as it is. */
 		farmHref: string;
+		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
+		mapHref?: string | null;
 	} = $props();
 
 	const KIND = { farm: 'hydrological unit', gauge: 'gauge', user: 'other water user' } as const;
@@ -61,6 +64,7 @@
 			{#if projectId && saved}
 				<NotesDrawer {projectId} compact target={{ kind: 'node', nodeId: node.id, name: node.name, isFarm: node.kind === 'farm' }} />
 			{/if}
+			{#if mapHref}<a class="btn btn-sm" href={mapHref} data-testid="node-card-map">Show on map<span class="visually-hidden"> ({name})</span></a>{/if}
 			<button type="button" class="btn btn-sm" onclick={onedit}>{readonly ? 'Details' : 'Edit'}<span class="visually-hidden"> {name}</span></button>
 		</div>
 	</div>

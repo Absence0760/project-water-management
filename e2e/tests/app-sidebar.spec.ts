@@ -25,6 +25,7 @@ const OWNER_TABS = [
 	'Scenarios',
 	'Allocations',
 	'Network',
+	'Map',
 	'Crops & demand',
 	'Transfers',
 	'Data',
@@ -35,8 +36,8 @@ const OWNER_TABS = [
 ];
 /** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
 const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
-/** One sidebar row (the rows are 34 px): the room left for one more section. */
-const ROW = 34;
+/** One sidebar row (the rows are 32 px since the Map took the spare one, #326 D3): the room left for one more section. */
+const ROW = 32;
 
 const sidebar = (page: Page) => page.locator('aside.app-sidebar');
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });

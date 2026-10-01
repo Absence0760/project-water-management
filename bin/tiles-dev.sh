@@ -5,24 +5,53 @@
 #
 #   bin/tiles-dev.sh fetch    extract South Africa from the Protomaps daily
 #                             build into ~/.cache/water-management-tiles/ and
-#                             upload it to the local MinIO (pnpm dev:s3:up)
+#                             upload it to the local MinIO (pnpm dev:s3:up),
+#                             then the labels' fonts (as `fonts`)
+#   bin/tiles-dev.sh fonts    only the labels' glyph ranges (#326 A6): Noto Sans
+#                             (SIL OFL 1.1) from the Protomaps basemaps-assets
+#                             repository at a pinned commit, uploaded under
+#                             tiles/fonts/ (no pmtiles CLI needed)
 #   bin/tiles-dev.sh status   what is cached and whether MinIO serves it
-#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL line for frontend/.env.development.local
+#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL
+#                             lines for frontend/.env.development.local
 #
 # `fetch` needs the `pmtiles` CLI (go-pmtiles, https://github.com/protomaps/go-pmtiles
 # releases; a single static binary, put it on PATH). It reads only the byte
 # ranges of the bbox from the public build, so it downloads the extract, not
-# the planet. TILES_MAXZOOM (default 13, decision D7: enough to recognise farm
-# dams; measure the size before going higher), TILES_BBOX and TILES_BUILD
-# (a build date, YYYYMMDD; default yesterday's) override it.
+# the planet. TILES_MAXZOOM (default 15, the Protomaps build's deepest zoom:
+# close enough to place a dam or trace a parcel; #326 D5 measured the extract
+# at about 1.0 GB, against 490 MB at 14 and 250 MB at 13, docs/maps.md §
+# Basemap), TILES_BBOX and TILES_BUILD (a build date, YYYYMMDD; default
+# yesterday's) override it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/water-management-tiles"
 FILE="$CACHE/south-africa.pmtiles"
 BBOX="${TILES_BBOX:-16.3,-35.0,33.0,-22.0}"
-MAXZOOM="${TILES_MAXZOOM:-13}"
+MAXZOOM="${TILES_MAXZOOM:-15}"
 URL="http://localhost:9002/tiles/south-africa.pmtiles"
+GLYPHS="http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf"
+# The fonts: protomaps/basemaps-assets at a pinned commit (docs/maps.md § Sources).
+FONTS_REF="${TILES_FONTS_REF:-028c18f713baecad011301ff7a69acc39bcc2ae7}"
+FONT_STACKS=("Noto Sans Regular" "Noto Sans Medium" "Noto Sans Italic")
+FONTS="$CACHE/fonts"
+
+fetch_fonts() {
+	mkdir -p "$CACHE"
+	local tgz="$CACHE/basemaps-assets-$FONTS_REF.tar.gz" top="basemaps-assets-$FONTS_REF"
+	if [ ! -f "$tgz" ]; then
+		echo "Downloading the label fonts (protomaps/basemaps-assets@${FONTS_REF:0:12}) …"
+		curl -fsSL -o "$tgz.part" "https://codeload.github.com/protomaps/basemaps-assets/tar.gz/$FONTS_REF"
+		mv "$tgz.part" "$tgz"
+	fi
+	rm -rf "$FONTS" && mkdir -p "$FONTS"
+	local members=("$top/fonts/OFL.txt")
+	for f in "${FONT_STACKS[@]}"; do members+=("$top/fonts/$f"); done
+	tar -xzf "$tgz" -C "$FONTS" --strip-components=2 "${members[@]}"
+	du -sh "$FONTS"
+	(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --fonts "$FONTS")
+}
 
 case "${1:-}" in
 	fetch)
@@ -33,17 +62,25 @@ case "${1:-}" in
 		pmtiles extract "https://build.protomaps.com/$build.pmtiles" "$FILE" --bbox="$BBOX" --maxzoom="$MAXZOOM"
 		du -h "$FILE"
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE")
+		fetch_fonts
+		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev)."
+		;;
+	fonts)
+		fetch_fonts
 		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev)."
 		;;
 	status)
 		if [ -f "$FILE" ]; then du -h "$FILE"; else echo "No extract in $CACHE (pnpm dev:tiles:fetch)."; fi
 		if curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; then echo "MinIO serves $URL"; else echo "MinIO doesn't serve $URL (pnpm dev:s3:up, then pnpm dev:tiles:fetch)."; fi
+		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
+		if curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
 	env)
 		echo "PUBLIC_TILES_URL=$URL"
+		echo "PUBLIC_TILES_GLYPHS_URL=$GLYPHS"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh fetch | status | env" >&2
+		echo "usage: bin/tiles-dev.sh fetch | fonts | status | env" >&2
 		exit 2
 		;;
 esac

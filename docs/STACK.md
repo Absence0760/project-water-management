@@ -129,8 +129,11 @@ pnpm test:e2e               # Playwright, incl. the new-catchment golden path (f
 
 pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm setup runs it);
                              # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
+pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm setup runs it);
+                             # <list.csv> <overlay.kml> --dataset <label> --source "<list, edition>" loads your own DSO download, once its licence allows (maps.md § Sources)
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
+pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
                              # [--settings <patch.json>] [--transfers <patch.json>] [--fit [--fit-seed n] [--fit-starts n] [--fit-budget n]]:
                              # patch the settings and transfer rules (by end-node names), fit GR4J before importing (model.md §2.10b)

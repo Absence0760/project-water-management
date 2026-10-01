@@ -841,11 +841,24 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 		const f = await dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.31, lat: -33.61 });
 		return dual.call('PATCH', `/projects/${h.projectId}/map/features/${f.body.feature.id}`, { nodeId: r.farmId });
 	},
+	// The review's per-feature node (issue #326 D2): one point, standing for the farm.
+	'POST /projects/:id/map/import features.nodeId': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/map/import`, {
+			fileName: `xref-${randomUUID()}.geojson`,
+			text: JSON.stringify({ type: 'Feature', properties: { name: randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } }),
+			features: [{ index: 1, kind: 'dam', nodeId: r.farmId }]
+		}),
 	// The feature is made in the referenced project, then named from the home one.
 	'POST /projects/:id/nodes/:nodeId/area-from-map featureId': async (h, r) => {
 		const square = [[[21.3, -33.7], [21.31, -33.7], [21.31, -33.69], [21.3, -33.69], [21.3, -33.7]]];
 		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'other', geometry: { type: 'Polygon', coordinates: square } });
 		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/area-from-map`, { featureId: f.body.feature.id });
+	},
+	// A dam polygon linked to the referenced project's farm, named from the home one (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.302, -33.7], [21.302, -33.698], [21.3, -33.698], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'dam', nodeId: r.farmId, geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
 	},
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
@@ -911,8 +924,9 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
-	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId'],
+	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
+	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':

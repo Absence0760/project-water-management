@@ -283,6 +283,16 @@ export const af: Catalogue = {
 	'18996e5e': 'Waarskuwings',
 	// Choose your alert emails
 	'ebbd21ba': 'Kies jou waarskuwings-e-posse',
+	// The map of your hydrological unit could not be loaded. Check your connection, then reload the page.
+	'f3211cec': 'Die kaart van jou hidrologiese eenheid kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
+	// There is no background map here, so only these are drawn.
+	'e165ec6f': 'Daar is hier geen agtergrondkaart nie, so net hierdie word geteken.',
+	// Key
+	'cd1ac90c': 'Legende',
+	// The map could not be loaded. Check your connection, then reload the page.
+	'e9dad5bd': 'Die kaart kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
+	// Reload page
+	'4abb303f': 'Herlaai bladsy',
 	// Notes about your hydrological unit
 	'7541e733': 'Notas oor jou hidrologiese eenheid',
 	// Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this hydrological unit.
@@ -663,6 +673,64 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
+	// Your land
+	'61a5a97f': 'Jou grond',
+	// Gauge
+	'e70f7a10': 'Meetstasie',
+	// River
+	'ee96b1b1': 'Rivier',
+	// Catchment boundary
+	'bb1336f6': 'Grens van die opvanggebied',
+	// Drawing the map…
+	'02cfe82a': 'Teken tans die kaart…',
+	// The map can’t be drawn in this browser. Everything on it is written above.
+	'f6ccc2da': 'Die kaart kan nie in hierdie blaaier geteken word nie. Alles wat daarop is, staan hierbo geskryf.',
+	// The background map couldn’t be loaded, so the map is drawn on a plain background.
+	'b2446bd7': 'Die agtergrondkaart kon nie gelaai word nie, so die kaart word op ’n gewone agtergrond geteken.',
+	// use the arrow keys to move the map, + and − to zoom
+	'12e34785': 'gebruik die pyltjiesleutels om die kaart te skuif, + en − om in en uit te zoem',
+	// Zoom in
+	'a3583899': 'Zoem in',
+	// Zoom out
+	'8570fe3a': 'Zoem uit',
+	// {deg}° S
+	'1044c926': '{deg}° S',
+	// {deg}° N
+	'2d44f6cd': '{deg}° N',
+	// {deg}° W
+	'1444cf72': '{deg}° W',
+	// {deg}° E
+	'2244e57c': '{deg}° O',
+	// {n} ha
+	'1d026b76': '{n} ha',
+	// Your land: {names} ({area})
+	'fbd73469': 'Jou grond: {names} ({area})',
+	// Your land: {area}
+	'50f1344e': 'Jou grond: {area}',
+	// Your dam: {names}
+	'63b51164': 'Jou dam: {names}',
+	// Rivers: {names}
+	'da9c7f56': 'Riviere: {names}',
+	// A river
+	'65386656': '’n Rivier',
+	// Gauges: {names}
+	'c1821a57': 'Meetstasies: {names}',
+	// A gauge
+	'8960dcff': '’n Meetstasie',
+	// The catchment boundary
+	'e15a5fef': 'Die grens van die opvanggebied',
+	// Your land · {band}
+	'4d65bf5b': 'Jou grond · {band}',
+	// Your hydrological unit on the map
+	'20e93559': 'Jou hidrologiese eenheid op die kaart',
+	// The map shows your own land and dam, with the catchment boundary, the rivers and the gauges to find your way. It shows no other hydrological unit.
+	'02a5b058': 'Die kaart wys jou eie grond en dam, met die grens van die opvanggebied, die riviere en die meetstasies om jou pad te vind. Dit wys geen ander hidrologiese eenheid nie.',
+	// Your land is coloured by the model’s look back: **{band}**.
+	'0b672772': 'Jou grond is ingekleur volgens die model se terugblik: **{band}**.',
+	// Where: about {place}.
+	'357474ee': 'Waar: ongeveer {place}.',
+	// Map of your hydrological unit
+	'a38186d8': 'Kaart van jou hidrologiese eenheid',
 	// Before you look at your farm
 	'72542aec': 'Voordat jy na jou plaas kyk',
 	// The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
@@ -1507,8 +1575,6 @@ export const af: Catalogue = {
 	'9df7013d': 'Iets het verkeerd geloop. Probeer weer.',
 	// The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.
 	'25601c1d': 'Die herinnering om jou e-posadres te bevestig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
-	// Reload page
-	'4abb303f': 'Herlaai bladsy',
 	// Enter a display name.
 	'a7f2031b': 'Tik ’n vertoonnaam in.',
 	// Use at most 100 characters.

@@ -50,7 +50,7 @@ import type { EnsembleHeader, MemberMetrics, MemberResult } from '../uncertainty
 import { ENSEMBLE_MEASURES_SINCE } from '../version';
 import type { ScenarioOp } from '../scenario/ops';
 import { cumulativeImpact } from '../scenario/cumulative';
-import type { EvidenceAssessmentInput, EvidenceCombinedInput, EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
+import type { EvidenceAssessmentInput, EvidenceCombinedInput, EvidenceEnsembleInput, EvidenceInput, EvidenceMapFeatureInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -329,7 +329,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -887,7 +887,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-11');
+		expect(got.version).toBe('evidence-12');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1395,7 +1395,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1451,7 +1451,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1528,5 +1528,61 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		expect(none.demandObjects).toEqual({ notAssessed: DEMAND_OBJECTS_NONE, objects: [], bySource: [], demandM3Day: 0 });
 		expect(none.flags.some((x) => x.id === 'demandSource')).toBe(false);
 		expect(evidenceReport(input({ application: null, changes: [] })).demandObjects).toBeNull();
+	});
+});
+
+describe('§ 1’s locality map (evidence-12)', () => {
+	const sq = (lon: number, lat: number, d: number): [number, number][] => [
+		[lon, lat],
+		[lon + d, lat],
+		[lon + d, lat + d],
+		[lon, lat + d],
+		[lon, lat]
+	];
+	const feature = (kind: EvidenceMapFeatureInput['kind'], nodeId: string | null, geometry: EvidenceMapFeatureInput['geometry'], name = ''): EvidenceMapFeatureInput => ({
+		kind,
+		name,
+		nodeId,
+		geometry,
+		updatedAt: '2026-09-30T08:00:00.000Z',
+		source: null
+	});
+	const features = [
+		feature('catchment_boundary', null, { type: 'Polygon', coordinates: [sq(21.3, -33.7, 0.1)] }),
+		feature('farm_parcel', 'F1', { type: 'Polygon', coordinates: [sq(21.36, -33.66, 0.02)] }, 'Farm one parcel'),
+		feature('farm_parcel', 'F2', { type: 'Polygon', coordinates: [sq(21.31, -33.69, 0.03)] }),
+		feature('gauge', 'G', { type: 'Point', coordinates: [21.35, -33.65] })
+	];
+
+	it('is null when the project has no map features (the report says so), and the report still builds', () => {
+		expect(evidenceReport(input()).localityMap).toBeNull();
+		expect(evidenceReport(input({ mapFeatures: [] })).localityMap).toBeNull();
+	});
+
+	it('names the applicant’s unit from the run’s model, draws the other unit neutrally, and the gauge by its node’s name', () => {
+		const loc = evidenceReport(input({ mapFeatures: features })).localityMap!;
+		expect(loc.applicant).toBe(true);
+		expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+			['boundary', null],
+			['parcel', null],
+			['applicantParcel', 'Farm two'],
+			['gauge', 'Gauge']
+		]);
+		// The other unit's parcel carries nothing that says whose it is.
+		expect(JSON.stringify(loc)).not.toContain('Farm one');
+		expect(JSON.stringify(loc)).not.toContain('F1');
+	});
+
+	it('baseline evidence has no applicant: every parcel is drawn alike, none named', () => {
+		const loc = evidenceReport(input({ application: null, mapFeatures: features })).localityMap!;
+		expect(loc.applicant).toBe(false);
+		expect(loc.features.filter((f) => f.layer === 'parcel')).toHaveLength(2);
+		expect(loc.features.some((f) => f.layer === 'applicantParcel')).toBe(false);
+	});
+
+	it('is the same document for the same features, so a pack’s hash covers it', () => {
+		const a = canonicalJson(evidenceReport(input({ mapFeatures: features })).localityMap);
+		const b = canonicalJson(evidenceReport(input({ mapFeatures: structuredClone(features) })).localityMap);
+		expect(b).toBe(a);
 	});
 });
