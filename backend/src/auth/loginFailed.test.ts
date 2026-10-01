@@ -25,7 +25,7 @@ describe('logLoginFailed', () => {
 		// the typed email even by mistake (a type error), and every reason's
 		// line has exactly these three keys.
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const reasons: LoginFailureReason[] = ['unknown_account', 'bad_password', 'locked', 'invalid_link'];
+		const reasons: LoginFailureReason[] = ['unknown_account', 'bad_password', 'locked', 'invalid_link', 'bad_code'];
 		for (const reason of reasons) logLoginFailed('/auth/reset-password', reason);
 		const lines = warn.mock.calls.map((c) => JSON.parse(c[0] as string) as Record<string, unknown>);
 		expect(lines.map((l) => Object.keys(l).sort())).toEqual(reasons.map(() => ['event', 'reason', 'route']));
