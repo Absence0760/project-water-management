@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import {
+	applyWords,
+	boundaryFeedState,
 	targetHint,
 	conflictMessage,
 	cellsUsedNote,
@@ -51,7 +53,7 @@ describe('parseCells', () => {
 		['0, 181', /longitude must be between/],
 		['0, 1, 0', /weight must be above 0 and at most 1000/],
 		['0, 1, 1001', /weight must be above 0 and at most 1000/],
-		[Array.from({ length: 26 }, () => '1,2').join('\n'), /At most 25/]
+		[Array.from({ length: 101 }, () => '1,2').join('\n'), /At most 100/]
 	])('refuses %j', (text, message) => {
 		const r = parseCells(text);
 		expect('error' in r && r.error).toMatch(message);
@@ -302,6 +304,46 @@ describe('feedsApi', () => {
 			'PATCH /projects/p%2F1/feeds/f%201',
 			'DELETE /projects/p%2F1/feeds/f1',
 			'POST /projects/p%2F1/feeds/f1/run-now'
+		]);
+	});
+});
+
+describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => {
+	const boundary = { featureId: 'b1', name: 'Sandspruit catchment', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 210.2 };
+	const cells = [{ lat: -33.675, lon: 21.225, weight: 0.8 }, { lat: -33.675, lon: 21.275, weight: 0.4 }];
+
+	it('describes a feed’s boundary cells by the boundary', () => {
+		expect(describePlace({ source: 'chirps', config: { cells, boundary } })).toBe('2 cells of the catchment boundary “Sandspruit catchment”, area weighted');
+		expect(describePlace({ source: 'chirps', config: { cells: cells.slice(0, 1), boundary: { ...boundary, name: '' } } })).toBe('1 cell of the catchment boundary, area weighted');
+	});
+
+	it('knows whether a CHIRPS feed reads this version of the boundary, an older one, or none', () => {
+		const feed = (b?: typeof boundary, source: 'chirps' | 'chirps_gefs' = 'chirps') => ({ source, config: { cells, ...(b ? { boundary: b } : {}) } });
+		const now = { id: 'b1', updatedAt: '2026-10-01T08:00:00Z' };
+		expect(boundaryFeedState([feed(boundary)], now)).toBe('current');
+		expect(boundaryFeedState([feed({ ...boundary, updatedAt: '2026-09-01T08:00:00.000Z' })], now)).toBe('changed');
+		expect(boundaryFeedState([feed(), feed(boundary, 'chirps_gefs')], now)).toBe('none');
+		expect(boundaryFeedState([feed({ ...boundary, featureId: 'other' })], now)).toBe('none');
+	});
+
+	it('says what Apply will do', () => {
+		const feeds = [{ id: 'f1', targetKind: 'rain_chirps_mm', targetName: '' }];
+		expect(applyWords({ apply: { action: 'none', feedId: 'f1' } }, feeds)).toMatch(/already reads this boundary/);
+		expect(applyWords({ apply: { action: 'update', feedId: 'f1', targetKind: 'rain_chirps_mm', targetName: '' } }, feeds)).toMatch(/^Apply gives the CHIRPS feed into .* these cells in place of its own/);
+		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: '' } }, feeds)).toMatch(/^Apply attaches a new CHIRPS feed into .*\. It reads the last 60 days/);
+		expect(applyWords({ apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary' } }, feeds)).toMatch(/“?CHIRPS boundary.*A series of its own/);
+	});
+
+	it('calls the proposal and Apply, naming the boundary version and what to apply', async () => {
+		const request = vi.fn(async (..._a: unknown[]) => ({ feed: { id: 'f' } }) as never);
+		const f = feedsApi({ request } as never, 'p1');
+		await f.boundaryProposal();
+		await f.applyBoundary({ boundary, apply: { action: 'create', targetKind: 'rain_chirps_mm', targetName: 'CHIRPS boundary' } });
+		await f.applyBoundary({ boundary, apply: { action: 'update', feedId: 'f1', targetKind: 'rain_chirps_mm', targetName: '' } });
+		expect(request.mock.calls).toEqual([
+			['GET', '/projects/p1/feeds/chirps/from-boundary'],
+			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, targetName: 'CHIRPS boundary' }],
+			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, feedId: 'f1' }]
 		]);
 	});
 });

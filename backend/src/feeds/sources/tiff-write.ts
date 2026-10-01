@@ -24,6 +24,12 @@ export interface GridSpec {
 	bigEndian?: boolean;
 	/** Rows per strip (default 1, like the CHC files); the last strip may be shorter. */
 	rowsPerStrip?: number;
+	/**
+	 * Store identical strips once, every one of them pointing at the same
+	 * bytes (TIFF allows repeated offsets). The fixture server's wide grid
+	 * repeats its rows (feeds/fixtures.ts), so this keeps writing a day's file cheap.
+	 */
+	shareStrips?: boolean;
 }
 
 const CLEAR = 256;
@@ -86,12 +92,17 @@ export function writeGrid(spec: GridSpec): Uint8Array {
 	const le = !spec.bigEndian;
 	const rowsPerStrip = spec.rowsPerStrip ?? 1;
 	const strips: Uint8Array[] = [];
+	const seen = new Map<string, Uint8Array>();
 	for (let r0 = 0; r0 < height; r0 += rowsPerStrip) {
 		const rows = Math.min(rowsPerStrip, height - r0);
 		const strip = new Uint8Array(rows * width * 4);
 		const dv = new DataView(strip.buffer);
 		for (let i = 0; i < rows * width; i++) dv.setFloat32(i * 4, Number(spec.values[r0 * width + i] ?? NaN), le);
-		strips.push(compression === 5 ? lzwEncode(strip) : strip);
+		const key = spec.shareStrips ? strip.join(',') : '';
+		const known = spec.shareStrips ? seen.get(key) : undefined;
+		const encoded = known ?? (compression === 5 ? lzwEncode(strip) : strip);
+		if (spec.shareStrips) seen.set(key, encoded);
+		strips.push(encoded);
 	}
 
 	const chunks: Uint8Array[] = [];
@@ -99,7 +110,14 @@ export function writeGrid(spec: GridSpec): Uint8Array {
 	const header = new Uint8Array(8);
 	chunks.push(header);
 	const offsets: number[] = [];
+	const placed = new Map<Uint8Array, number>();
 	for (const s of strips) {
+		const at = placed.get(s);
+		if (at !== undefined) {
+			offsets.push(at);
+			continue;
+		}
+		placed.set(s, pos);
 		offsets.push(pos);
 		chunks.push(s);
 		pos += s.length;

@@ -141,7 +141,10 @@ import type {
 	MapImportPreview,
 	MapImportReviewed,
 	MapLinkedNodes,
-	QuaternaryLookup
+	QuaternaryLookup,
+	QuaternaryLayer,
+	GaugeStationLookup,
+	DamProposals
 } from './types';
 
 export class ApiError extends Error {
@@ -928,7 +931,34 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					{ featureId }
 				),
 			quaternary: (id: string, lon: number, lat: number) =>
-				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`)
+				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),
+			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
+			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
+			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
+			}
+		},
+		/**
+		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
+		 * docs/api.md § Catchment map). Each accept is one value, saved to the model as a revision naming the source.
+		 */
+		damProposals: {
+			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
+			capacityFromRegister: (id: string, nodeId: string, registerNo: string) =>
+				request<{ nodeId: string; damCapacityM3: number; registerNo: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-capacity-from-register`,
+					{ registerNo }
+				),
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; damAreaFullM2: number; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-area-from-map`,
+					{ featureId }
+				)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

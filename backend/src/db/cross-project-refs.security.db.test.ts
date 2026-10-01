@@ -854,6 +854,12 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'other', geometry: { type: 'Polygon', coordinates: square } });
 		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/area-from-map`, { featureId: f.body.feature.id });
 	},
+	// A dam polygon linked to the referenced project's farm, named from the home one (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.302, -33.7], [21.302, -33.698], [21.3, -33.698], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'dam', nodeId: r.farmId, geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+	},
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
 			...modelOf(h),
@@ -920,6 +926,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
 	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
+	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':

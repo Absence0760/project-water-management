@@ -76,12 +76,29 @@ export const CHIRPS_PRODUCT_FIRST_DAY: Record<ChirpsDailyProduct, string> = { sa
 
 /** The CHIRPS grid's cell size in degrees; its cell edges fall on multiples of it (the product's grid starts at 180° W, 60° S / 60° N). */
 export const CHIRPS_CELL_DEG = 0.05;
-/** The most cells a bounding box may cover, and the most grid rows (a fetch reads one strip per row per day, sources/tiff.ts). */
+/** The most cells a bounding box (or a list of cells) may cover, and the most grid rows (a fetch reads one strip per row per day, sources/tiff.ts). */
 export const BBOX_MAX_CELLS = 100;
 export const BBOX_MAX_ROWS = 25;
 export const BBOX_LIMIT_MESSAGE = `a bounding box covers at most ${BBOX_MAX_CELLS} of the 0.05° grid cells in at most ${BBOX_MAX_ROWS} rows (about 0.5° × 0.5°, and at most 1.25° from south to north)`;
 
 const Cell = z.object({ lat: Lat, lon: Lon, weight: z.number().finite().positive().max(1000).default(1) }).strict();
+/**
+ * Where a feed's listed cells came from, when the map proposed them
+ * (issue #326 B-rain, feeds/fromBoundary.ts): the project's catchment
+ * boundary as it was (its id, name, and when it was last changed) and its
+ * area. Only the from-boundary route writes it; the plain feed routes refuse
+ * it, and a new list of cells drops it. A boundary changed since is how the
+ * Map tab and the panel know to propose the cells again.
+ */
+const BoundaryMark = z
+	.object({
+		featureId: z.uuid(),
+		name: z.string().max(100),
+		updatedAt: z.iso.datetime({ offset: true }),
+		areaKm2: z.number().finite().nonnegative()
+	})
+	.strict();
+export type BoundaryMark = z.output<typeof BoundaryMark>;
 /**
  * A box in degrees (south < north, west < east, no antimeridian crossing).
  * The feed reads every 0.05° cell the box overlaps, weighted by area (gridCells).
@@ -146,13 +163,16 @@ export function bboxCellCount(b: Bbox): { rows: number; cells: number } {
 
 /**
  * CHIRPS / CHIRPS-GEFS: the rainfall is the weighted mean of these 0.05°
- * cells (`cells`, 1–25 points, each naming the cell that holds it), or of
+ * cells (`cells`, 1–100 points in at most 25 grid rows, each naming the
+ * cell that holds it; the catchment boundary's, feeds/boundaryCells.ts), or of
  * the cells a bounding box overlaps (`bbox`, gridCells). Exactly one of the two.
  */
 export const GridConfig = z
 	.object({
-		cells: z.array(Cell).min(1).max(25).optional(),
+		cells: z.array(Cell).min(1).max(BBOX_MAX_CELLS).optional(),
 		bbox: Bbox.optional(),
+		/** Listed cells only: the catchment boundary they were computed from (BoundaryMark). */
+		boundary: BoundaryMark.optional(),
 		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
 		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional(),
@@ -171,9 +191,18 @@ export const GridConfig = z
 			ctx.addIssue({ code: 'custom', path: ['skipNoData'], message: 'only a bounding box can leave out its sea cells; listed cells must each have data' });
 			return;
 		}
+		if (g.boundary !== undefined && g.cells === undefined) {
+			ctx.addIssue({ code: 'custom', path: ['boundary'], message: 'only listed cells come from the catchment boundary' });
+			return;
+		}
 		if ((g.cells === undefined) === (g.bbox === undefined)) {
 			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'give either grid cells or a bounding box (bbox), not both' });
 			return;
+		}
+		if (g.cells) {
+			// The same read cost as a box: one strip per grid row per day.
+			const rows = new Set(g.cells.map((c) => Math.floor(c.lat / CHIRPS_CELL_DEG + EDGE_EPS))).size;
+			if (rows > BBOX_MAX_ROWS) ctx.addIssue({ code: 'custom', path: ['cells'], message: `listed cells may lie in at most ${BBOX_MAX_ROWS} rows of the 0.05° grid; these lie in ${rows}` });
 		}
 		if (g.bbox) {
 			const n = bboxCellCount(g.bbox);

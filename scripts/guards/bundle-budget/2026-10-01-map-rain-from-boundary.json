@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #326 B-rain: the rain feed from the map's boundary (feeds/BoundaryRain.svelte in the data feeds panel's chunk, map/MapRainLink.svelte + feeds/boundaryState.ts in the Map tab's chunk). Measured 1482 KB on origin/feat/326-map-round-3, 1485 KB with this change; no headroom left."
+}

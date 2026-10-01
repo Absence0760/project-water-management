@@ -3559,7 +3559,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       forwarded, long cache), `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles`
       in the web release, and `infra/scripts/check-csp.mjs` run on it. Until
       then production draws the plain background. Decide D7 (maxzoom, by the
-      measured extract size) first.
+      measured extract size) first. With it, the labels' glyphs (#326 A6):
+      the `fonts/` tree from `bin/tiles-dev.sh fonts` under `tiles/fonts/`,
+      and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
+      (maps.md § Labels); no CSP change.
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading
@@ -3569,19 +3572,58 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
       WR2012 values are loaded only from the operator's own registered
       download, never committed or shipped.
+- [ ] **Decision: the DWS station catalogue's licence** (operator; maps.md
+      § Sources, issue #326 B-gauge, decision D-B). The Verified data pages
+      answer 403 outside South Africa, and DWS's information pages restrict
+      use to "academic, research or personal purposes". Ask DWS Hydrological
+      Services in writing whether station metadata may be reused in a
+      commercial service; until then the nearest-gauge proposal reads only
+      the synthetic list. On a yes: record it in the sources table, load the
+      catalogue with `pnpm import:gauge-stations`, and add it to the
+      production loading path above (same gap as the quaternaries).
 - [ ] **Contributor-owned features** (WP-3.3 × WP-3.12): `map_feature.scenario_id`
       so an applicant places their own scenario's features, with the RLS
       the WP describes. Today only editors write; farmers and applicants
       read (RLS) but no route serves them.
-- [ ] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): polygon-based
-      CHIRPS extraction from the `catchment_boundary` feature in place of the
-      bounding box (`backend/src/feeds/`).
+- [x] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): done in issue
+      #326 B-rain (2026-10-01): Settings → Data feeds → **Use the catchment
+      boundary** proposes the CHIRPS cells the boundary covers, weighted by
+      the share of each inside (exact clipping), and an owner applies it
+      ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
+- [ ] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
+      B-rain): new cells (from the boundary, or a redrawn one) go only to a
+      feed whose series is empty, else to a new feed in a separate series,
+      because a feed's existing days were averaged over its old cells and it
+      never splices two areas. Durable fix: a staged same-product
+      replacement, like the version replacement of issue #40c (backfill the
+      whole record over the new cells in `feed_stage`, swap it in whole),
+      so the boundary feed can take over the default series. Trigger: a
+      hydrologist wanting the boundary's rain in an existing CHIRPS series
+      without comparing two series.
 - [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
       C1 (2026-10-01): editors draw polygons and lines, place points by
       click, and reshape them, with paste-a-shape and keyboard placement as
       the non-pointer paths ([maps.md § Drawing](./maps.md#drawing)).
-- [ ] **Dam polygons → the area–volume curve**: a dam polygon's area is
-      measured but not proposed to the dam's full-supply area yet.
+- [x] **Dam polygons → the full-supply area** (2026-10-01, issue #326
+      B-dams): a dam polygon linked to a unit proposes its area as the dam's
+      `damAreaFullM2` on Dams → Proposed from the register and the map, with
+      Use and a model revision naming the polygon ([maps.md § Dams from the
+      register and the map](./maps.md#dams-from-the-register-and-the-map)).
+      What stays open is the rest of the curve: a polygon gives one point
+      (the area when full), not the area–volume shape below it, which needs
+      a survey or a DEM (the "A resized dam follows its own area–volume
+      relation" item, and B-delineate's DEM).
+- [ ] **Decision: the DWS register of dams' licence** (operator; maps.md §
+      Sources). The Dam Safety Office's List of Registered Dams and its
+      Google Earth overlay state no licence, and DWS's data terms elsewhere
+      restrict use to academic, research or personal purposes. The dam
+      proposals are built and tested against the synthetic register; ask
+      DWS (Dam Safety Office) for written permission for commercial use
+      before a client deployment loads the real list. Trigger: the first
+      client who wants register capacities proposed.
+- [ ] **Loading the register of dams in production**: the same missing path
+      as the quaternary dataset above (the loader runs as the schema owner
+      from a workstation). Do both together, once either licence allows.
 
 ## Crop factors (issue #54 item 1)
 
@@ -4416,6 +4458,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       real behaviour.
 
 ## Housekeeping
+
+- [ ] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
+      (found 2026-10-01, issue #326 round 3). "loads the committed env file and
+      points both URLs at the checkout database" fails on any machine whose
+      `backend/.env.development.local` sets `DATABASE_URL` to another database
+      (an override to run a preview database), since `loadDevEnv` reads that
+      file and it wins. The code is right; the test isn't isolated. Durable fix:
+      give `loadDevEnv` the directory to read (or the file list) and point the
+      test at a temp directory holding only a copy of the committed file.
+      Trigger: the next change to `config/devEnv.ts`, or a second report of
+      the failure.
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted

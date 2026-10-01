@@ -1277,6 +1277,34 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart.
+- **Proposed from the register and the map** (issue #326 B-dams,
+  `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
+  sources and rules in [maps.md § Dams from the register and the
+  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
+  cards (and under the empty state), shown whenever the model has a
+  hydrological unit. **Dam of** picks the unit (the dams first in the
+  cards' order, then the other units; it opens on `dam=`'s, else the first
+  card's). The box says which dam on the map it searched from (its name,
+  "its polygon's centre" or "a point", the coordinates, **Show on map**),
+  then a table: one row per registered dam within 1 km ("Capacity:
+  Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
+  river and farm under it) and one for the dam polygon's area ("Full-supply
+  area: “Grootdraai dam”"), each with **Saved now** (the saved model's
+  value, "Not set (estimated from capacity)" for no area), **Proposed**,
+  **Source** (the register's dataset and source line, or "The map: …") and
+  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
+  m²), or "Nothing to use" for a register entry without a capacity. **Use**
+  asks first (`confirmWords`: the unit, the old and new value, the source;
+  "Use this capacity" / "Use this area"), saves that one value on the
+  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
+  the register of dams (Z100/07). Run the model to see its effect.") and
+  reloads the saved model and the proposals. Use is disabled while the model
+  has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
+  editor can use a value."). Other states: no dam on the map linked to the
+  unit (with **Open the Map**), no register loaded (the loader's command),
+  no registered dam within 1 km, and a "Synthetic test data" warning when a
+  row comes from the committed fixture. The table scrolls in its own box on
+  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
 
 ## Project
 
@@ -2386,11 +2414,24 @@ core tab: owners, editors and viewers see it (it becomes a results view with
 A1); viewers get no edit tools. The Network's own picture (its "Catchment
 map" card) stays the schematic; this is the geography.
 
+- **Rain from the boundary** (editors; issue #326 B-rain,
+  `MapRainLink.svelte`): a slim line under the header while the map has a
+  boundary and no CHIRPS feed reads it ("No rain feed reads this catchment
+  boundary yet. **Set up the rain feed from the boundary**"), or one read it
+  before it was redrawn ("**Propose its cells again**"). The link opens
+  Settings → Data feeds with the proposal showing. Its wrapper's
+  `data-state` (`loading`, `current`, `changed`, `none`, `error`) says when
+  the feed list is in.
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), and for editors **Draw a shape**
+  (frames every feature; with features), **Measure** (anyone, while the map
+  draws; below), **Download GeoJSON** (anyone, with features: the features
+  as a `.geojson` file named after the project and the day, built from the
+  list; the notice says "Downloaded 23 features as
+  example-sandspruit-map-2026-10-01.geojson."; [maps.md §
+  Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
   while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
@@ -2480,6 +2521,30 @@ map" card) stays the schematic; this is the geography.
   GeoJSON-or-WKT field, an example for the shape being drawn and the error
   in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
   is picked.
+- **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
+  Measure](./maps.md#measure)): the drawing mode with nothing saved. A
+  **measure bar** over the map: "Measuring", how ("Click the map to add each
+  point (or press Enter at the crosshair); click the first point, or Close
+  the shape, for its area."), the result in a live region ("Distance: 1.24
+  km (3 points)." while adding; "Area: 52.3 ha. Perimeter: 3.10 km." once
+  closed), the points by coordinates under **The 3 points** (a disclosure),
+  and **Undo**, **Close the shape**, **Start again** and **Done**. Escape (on
+  the map or in the bar) ends it at once: a measurement has nothing to lose.
+  Drawing, placing or editing ends a measurement; Measure is off while a
+  drawing is open. Not in the URL.
+- **Layers** (#326 A6, a small box under the list): **Quaternary
+  catchments**, a checkbox in the URL (`layers=quaternaries`; a history
+  entry, so Back undoes it and a reload keeps it) with a dashed swatch in the
+  layer's colour. On, the map draws the loaded quaternaries around the
+  features as dashed purple outlines under the features, and the box lists
+  them: "6 quaternaries around the catchment, from synthetic." (with
+  **Synthetic test data, never real outlines.** for the repo's dataset;
+  "(the first by code; there are more)" past 100) and their codes as toggle
+  buttons; a code picked there, or a click inside a quaternary on the map
+  where no feature is, draws its outline heavier. The codes are labels on
+  the map only when glyphs are configured. No features: "Nothing on the map
+  yet to show the quaternaries around."; none near: "No quaternary catchment
+  in the loaded dataset is near this catchment." (or that none is loaded).
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
@@ -4159,12 +4224,36 @@ part of the Settings tab's chunk; WP-2.10,
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **Use the catchment boundary** (editors and owners; issue #326 B-rain,
+  `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)): opens **Rain from the
+  catchment boundary** under the list with the proposal: the boundary (name,
+  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
+  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
+  source, what **Apply** does (attach a new feed, or give an empty feed the
+  cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners get **Apply**; editors read "An owner of the
+  project applies it". The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link opens it at once
+  (`?rain=boundary`). Without a boundary the error says so, with a link to
+  the map.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
-  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
+  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
+  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
+  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
+  of the catchment's outlet, nearest first: a sentence names the point used
+  (the outflow gauge's point on the map, else the boundary's centre, else it
+  asks for either on the Map tab), then a table of station (code, name and
+  source), river, distance, record (years and span) and **Use** (named "Use
+  Z1H001"). **Use** fills the station field and moves focus there; the row
+  then reads "In the field". Nothing is attached until **Attach feed**. A
+  synthetic list is badged **Sample stations**; no list loaded, or none in
+  range, says so and points back to typing the code. The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
@@ -6833,7 +6922,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
-  - **1 The river**: per rule-table site, the site strip (source, component,
+  - **1 The river**: first the **locality map** (`LocalityMap.svelte`,
+    report format `evidence-12`): Figure 1, the engine's SVG of the
+    project's map features as an image from a `data:` URL, with its SHA-256
+    under it and its legend, labels and notes as visually hidden text; *No
+    locality map: the project has no map features* without any, and, on a
+    pack drafted before `evidence-12`, that it isn't part of the pack
+    ([evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)).
+    Then, per rule-table site, the site strip (source, component,
     unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
     against the determination's, and, when there are any, the months whose
     natural flow is drier than the table's driest point, where the
