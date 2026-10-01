@@ -2,7 +2,7 @@
 // already imports statically (frontend/vite.config.ts, preloadDedupe; issue
 // #9). They are loaded before the importer's code runs, so preloading them
 // again does nothing but ship their names (~2.3 KB gzip across the bundle,
-// scripts/guards/check_web_bundle_budget.mjs's change log).
+// the bundle budget's history, scripts/guards/bundle-budget/README.md).
 import { describe, expect, it } from 'vitest';
 import config, { preloadDedupe } from '../../vite.config';
 

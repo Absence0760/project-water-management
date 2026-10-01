@@ -987,7 +987,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - the UI stays responsive (typing never blocks) on the largest example.
 - **Size:** M.
 - **Depends on:** – (the bundle budget: the worker chunk carries the engine;
-  record any ceiling raise in `check_web_bundle_budget.mjs`'s change log).
+  record any ceiling raise as `scripts/guards/bundle-budget/README.md`
+  says).
 
 ### WP-1.18 Automatic calibration
 
