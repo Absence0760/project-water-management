@@ -4,7 +4,7 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -108,6 +108,22 @@ export interface ScenarioCheck {
 	renamed: MaskedRename[];
 	/** An application's new items moved off a hidden item's id (applyScenario's `reIds`). Never shown to a contributor. */
 	reIds: MaskedReId[];
+	/** `problems` in the real words of every rule, hidden names restored (applyScenario's `assessorProblems`, 162). Never shown to a contributor. */
+	assessorProblems: string[];
+	/** The problem lines a hidden rule broke, with their ops and the rules' kinds (applyScenario's `maskedRules`): what "Ask the assessors why" quotes. */
+	maskedRules: MaskedRuleRef[];
+}
+
+/**
+ * How many farm holders an application's hidden farms have, capped at
+ * FARMER_K (app_application_hidden_holders, 162): what lets the check give a
+ * catchment-wide rule's aggregate (engine MASKED_RULE_AGGREGATE). 0 for a
+ * team scenario or one the caller can't read. Server-side only.
+ */
+export async function hiddenHolders(db: Db, s: Pick<ScenarioRow, 'id' | 'origin'>): Promise<number> {
+	if (s.origin !== 'applicant') return 0;
+	const { rows } = await db.query<{ n: number }>('SELECT app_application_hidden_holders($1) AS n', [s.id]);
+	return rows[0]?.n ?? 0;
 }
 
 /**
@@ -158,10 +174,10 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
  * hidden item's id or name answers as a free one, and nothing counts what
  * they can't see (docs/scenarios.md § Applications).
  */
-export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>): ScenarioCheck {
-	const options = s.origin === 'applicant' ? { mask: applicationMask(base, s.ownedNodeIds) } : {};
-	const { input, applied, problems, renamed, reIds } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, reIds, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>, holders = 0): ScenarioCheck {
+	const options = s.origin === 'applicant' ? { mask: { ...applicationMask(base, s.ownedNodeIds), hiddenHolders: holders } } : {};
+	const { input, applied, problems, renamed, reIds, assessorProblems, maskedRules } = applyScenario(base, s.ops, options);
+	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /** Who may run a scenario, and the scenario as they read it: the route's check, made when the run is read and again when it is stored. */
@@ -182,7 +198,7 @@ interface ScenarioRunPlan {
  */
 export async function prepareScenarioRun(db: Db, projectId: string, scenario: ScenarioRow, label: string | undefined, role: Role): Promise<ScenarioRunPlan> {
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
-	const check = checkScenario(base, scenario);
+	const check = checkScenario(base, scenario, await hiddenHolders(db, scenario));
 	// Ops, not problem lines: an edit group that breaks a rule is one line for all its ops.
 	const skipped = scenario.ops.length - check.applied.length;
 	if (check.problems.length)

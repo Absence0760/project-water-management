@@ -39,6 +39,22 @@
 --                              run, or of an application run they read
 --                              (app_contributor_scenario_runs, 118), at any
 --                              holder count; the impacted keys as before.
+--
+-- 3. Masked-rule wording (build item 6). A rule an application breaks
+--    because of data its applicant can't see read only "doesn't apply to the
+--    catchment as modelled", to the assessors too. The engine now gives the
+--    assessors the real words (`assessorProblems`, editors and up only) and,
+--    for the catchment-wide rules (flow shares, area), the applicant the
+--    catchment's value and the hidden units' aggregate when those units have
+--    5 or more holders (MASKED_RULE_AGGREGATE): an aggregate over that many
+--    relates to no one of them. The engine can't count holders, so:
+--      app_application_hidden_holders
+--                              new: the farm holders of the farms outside an
+--                              application's stored own nodes, its owner
+--                              left out, counted as app_share_series counts
+--                              them and capped at 5 (all the check needs),
+--                              for a caller who reads the application; 0
+--                              otherwise. The server's only: never returned.
 
 -- ---------------------------------------------------------------------------
 -- 1. The applicant's units, frozen at issue
@@ -252,3 +268,34 @@ CREATE POLICY run_series_select_contributor ON run_series FOR SELECT
 			)
 		)
 	);
+
+-- ---------------------------------------------------------------------------
+-- 3. The hidden units' holders, for the masked-rule aggregate
+-- ---------------------------------------------------------------------------
+
+CREATE FUNCTION app_application_hidden_holders(p_scenario uuid) RETURNS integer
+	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		s record;
+		n integer;
+	BEGIN
+		SELECT project_id, origin, status, owner_user_id, owned_node_ids INTO s FROM scenario WHERE id = p_scenario;
+		IF NOT FOUND OR s.origin <> 'applicant' OR NOT app_scenario_visible(s.project_id, p_scenario, s.origin, s.status, s.owner_user_id) THEN
+			RETURN 0;
+		END IF;
+		SELECT count(DISTINCT h.holder) INTO n
+		FROM (
+			SELECT coalesce((SELECT min(fl.user_id::text) FROM farm_link fl WHERE fl.node_id = nd.id), 'node:' || nd.id::text) AS holder
+			FROM node nd
+			WHERE nd.project_id = s.project_id AND nd.kind = 'farm' AND NOT (nd.id = ANY (s.owned_node_ids))
+		) h
+		-- The applicant's own other farms tell them nothing they don't know: not a holder that protects anyone.
+		WHERE h.holder IS DISTINCT FROM s.owner_user_id::text;
+		RETURN least(n, 5);
+	END
+	$$;
+COMMENT ON FUNCTION app_application_hidden_holders(uuid) IS
+	'The farm holders of an application''s hidden farms (outside its stored own nodes, its owner left out), capped at 5, for the check''s masked-rule aggregate (162_applicant_visibility). Server only.';
+REVOKE ALL ON FUNCTION app_application_hidden_holders(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_application_hidden_holders(uuid) TO water_app;

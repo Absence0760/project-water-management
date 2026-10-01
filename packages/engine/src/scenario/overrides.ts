@@ -39,6 +39,8 @@ import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 import type { AllocationEntry } from '../allocations/compare';
+import { inputFlowShares } from '../network/shares';
+import { FARMER_K } from '../views/farmView';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
 export interface AppliedOp {
@@ -75,6 +77,28 @@ export interface ScenarioResult {
 	 * base by id). For the assessor only: it says a hidden item has that id.
 	 */
 	reIds: MaskedReId[];
+	/**
+	 * `problems` as the assessors read them (162_applicant_visibility, build
+	 * item 6): line for line the same, except that a rule the mask reported
+	 * as MASKED_RULE (or MASKED_RULE_AGGREGATE) gives its real words, with
+	 * every hidden node and item under its real name. For the assessors
+	 * only: never in what an applicant reads. Without a mask, `problems`.
+	 */
+	assessorProblems: string[];
+	/**
+	 * With `mask`: each problem line a hidden rule broke (`problem`, its index
+	 * in `problems`), the ops it names (0-based) and the rules' ids (the
+	 * structure issue's kind: `shares`, `area`, `supplyTrigger`…; never an id
+	 * or a name). What an applicant's "Ask the assessors why" quotes.
+	 */
+	maskedRules: MaskedRuleRef[];
+}
+
+/** A problem line a hidden rule broke (ScenarioResult.maskedRules). */
+export interface MaskedRuleRef {
+	problem: number;
+	ops: number[];
+	rules: string[];
 }
 
 /**
@@ -110,10 +134,38 @@ export interface ScenarioMask {
 	allocations?: readonly string[];
 	/** Demand objects (engine ≥ 1.45.0, demandObject.*): those on units the applicant can't see. */
 	demandObjects?: readonly string[];
+	/**
+	 * How many farm holders the hidden farms have, the applicant left out
+	 * (counted by the server, which knows the farm links; it may cap the count
+	 * at FARMER_K). At FARMER_K or more, the catchment-wide rules (flow shares,
+	 * area) say the catchment's total and the hidden units' aggregate
+	 * (MASKED_RULE_AGGREGATE); below, or absent, only MASKED_RULE.
+	 */
+	hiddenHolders?: number;
 }
 
 /** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #90). */
 export const MASKED_RULE = "doesn't apply to the catchment as modelled";
+
+/** The catchment-wide rules that may give an aggregate over the hidden units (MASKED_RULE_AGGREGATE). */
+export type AggregateRule = 'shares' | 'area';
+
+const pct = (x: number) => `${(Math.round(x * 1000) / 10).toFixed(1)} %`;
+const km2 = (x: number) => `${(Math.round(x * 100) / 100).toFixed(2)} km²`;
+
+/**
+ * A catchment-wide rule broken because of hidden units, in words that give
+ * the catchment's value and the hidden units' aggregate, for an applicant
+ * whose hidden units have FARMER_K or more holders: an aggregate over that
+ * many holders relates to no one of them (provisional position, pre-counsel
+ * research, 2026-10-01; docs/scenarios.md § Applications). `catchmentValue`:
+ * the shares' sum (0–1) or the land left (km²); `hiddenValue`: the hidden
+ * units' part of it.
+ */
+export const MASKED_RULE_AGGREGATE = (ruleId: AggregateRule, catchmentValue: number, hiddenValue: number): string =>
+	ruleId === 'shares'
+		? `flow shares would total ${pct(catchmentValue)}, more than 100 %; the units you can't see hold ${pct(hiddenValue)} of them between them`
+		: `the catchment would have ${km2(catchmentValue)} of land; the units you can't see hold ${km2(hiddenValue)} between them`;
 
 export interface MaskedRename {
 	kind: 'node' | 'crop';
@@ -148,6 +200,8 @@ interface Masked {
 	ids: Record<IdKind, Map<string, { id: string; name?: string }>>;
 	/** Every opaque id, for spotting a rule issue about a hidden item. */
 	tokens: Set<string>;
+	/** The hidden farms have FARMER_K or more holders: a catchment-wide rule may say its aggregate (MASKED_RULE_AGGREGATE). */
+	aggregates: boolean;
 }
 
 const nameKey = (s: string) => s.trim().toLowerCase();
@@ -212,7 +266,7 @@ function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly
 		}
 		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = swapped.get(a.cropId) ?? a.cropId;
 	}
-	return { model: m, nodes, crops, ids, tokens };
+	return { model: m, nodes, crops, ids, tokens, aggregates: (mask.hiddenHolders ?? 0) >= FARMER_K };
 }
 
 /**
@@ -283,6 +337,42 @@ function hiddenRule(key: string, masked: Masked): boolean {
 	for (const p of ['bhDrought:', 'supplyTrigger:', 'supplyRor:', 'supplyStop:']) if (key.startsWith(p)) return masked.nodes.has(key.slice(p.length));
 	for (const t of masked.tokens) if (key.includes(t)) return true;
 	return false;
+}
+
+/** A rule issue's id for an applicant: the structure key's kind (`supplyTrigger:<node>` → `supplyTrigger`), never an id or a name. */
+const ruleId = (key: string) => {
+	const kind = key.split(':')[0] ?? '';
+	return /^[A-Za-z]+$/.test(kind) ? kind : 'rule';
+};
+
+/** How a hidden rule reads to the applicant: the aggregate past FARMER_K holders for the catchment-wide rules, else MASKED_RULE. */
+function maskedText(key: string, input: ModelInput, masked: Masked): string {
+	if (!masked.aggregates || (key !== 'shares' && key !== 'area')) return MASKED_RULE;
+	const nodes = input.model.nodes;
+	if (key === 'shares') {
+		const { share, sum } = inputFlowShares(input);
+		let hidden = 0;
+		nodes.forEach((n, i) => {
+			if (masked.nodes.has(n.id)) hidden += share[i]!;
+		});
+		return MASKED_RULE_AGGREGATE('shares', sum, hidden);
+	}
+	let all = 0;
+	let hidden = 0;
+	for (const n of nodes) {
+		all += n.areaKm2;
+		if (masked.nodes.has(n.id)) hidden += n.areaKm2;
+	}
+	return MASKED_RULE_AGGREGATE('area', all, hidden);
+}
+
+/** A problem line with every hidden node and item under its real name: for the assessors (ScenarioResult.assessorProblems). */
+function unmaskText(line: string, masked: Masked | null): string {
+	if (!masked) return line;
+	let out = line;
+	for (const [real, mask] of masked.nodes.values()) out = out.replaceAll(`"${mask}"`, `"${real}"`);
+	for (const kind of Object.keys(masked.ids) as IdKind[]) for (const [token, item] of masked.ids[kind]) out = out.replaceAll(token, item.name ?? item.id);
+	return out;
 }
 
 /** What node.remove may count of what it drops: in masked mode, only what the applicant sees. */
@@ -804,6 +894,8 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 	let issues = structureIssues(cur);
 	const applied: AppliedOp[] = [];
 	const problems: string[] = [];
+	const assessorProblems: string[] = [];
+	const maskedRules: MaskedRuleRef[] = [];
 	const before: ModelInput[] = [];
 	// The open group: the input with its ops so far applied, and those ops.
 	let draft = cur;
@@ -820,10 +912,13 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 		} catch (e) {
 			if (!(e instanceof OpError)) throw e;
 			problems.push(`op ${index + 1} (${kind}): ${e.message}`);
+			assessorProblems.push(unmaskText(problems[problems.length - 1]!, masked));
 		}
 		if (sameGroup(op, ops[index + 1]) || !group.length) return;
 		const after = structureIssues(draft);
-		const introduced = [...new Set([...after].filter(([k]) => !issues.has(k)).map(([k, text]) => (masked && hiddenRule(k, masked) ? MASKED_RULE : text)))];
+		const fresh = [...after].filter(([k]) => !issues.has(k));
+		const hidden = fresh.filter(([k]) => masked && hiddenRule(k, masked));
+		const introduced = [...new Set(fresh.map(([k, text]) => (masked && hiddenRule(k, masked) ? maskedText(k, draft, masked) : text)))];
 		if (introduced.length) {
 			// One op: `op 3 (node.set)`, as always. Several: `ops 3–5 (node.set, "Upper farm")`, the node (or demand object) named as it stood before them.
 			const targetName = () =>
@@ -831,7 +926,10 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 					? ((cur.model.demandObjects ?? []).find((o) => o.id === op.demandObjectId)?.name ?? '')
 					: (cur.model.nodes.find((n) => n.id === (op as { nodeId?: unknown }).nodeId)?.name ?? '');
 			const label = group.length === 1 ? `op ${group[0]!.index + 1} (${kind})` : `ops ${opNumbers(group.map((g) => g.index))} (${kind}, "${targetName()}")`;
+			if (hidden.length) maskedRules.push({ problem: problems.length, ops: group.map((g) => g.index), rules: [...new Set(hidden.map(([k]) => ruleId(k)))] });
 			problems.push(`${label}: ${introduced.join('; ')}`);
+			// The assessors' line: the real words of every rule, hidden names restored.
+			assessorProblems.push(unmaskText(`${label}: ${[...new Set(fresh.map(([, text]) => text))].join('; ')}`, masked));
 			if (index === ops.length - 1 && groupable(op)) pending = draft;
 			draft = cur;
 		} else {
@@ -841,7 +939,7 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 		}
 		group = [];
 	});
-	return { input: cur, applied, problems, before, pending: pending ?? draft };
+	return { input: cur, applied, problems, assessorProblems, maskedRules, before, pending: pending ?? draft };
 }
 
 /**
@@ -857,7 +955,7 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
  */
 export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
 	const masked = options.mask ? maskModel(base.model, options.mask, ops) : null;
-	const { input, applied, problems } = step(base, ops, masked);
+	const { input, applied, problems, assessorProblems, maskedRules } = step(base, ops, masked);
 	const renamed: MaskedRename[] = [];
 	const reIds: MaskedReId[] = [];
 	if (masked) {
@@ -866,7 +964,7 @@ export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], opti
 		unmask(input.model.nodes, masked.nodes, 'node', renamed);
 		unmask(input.model.crops, masked.crops, 'crop', renamed);
 	}
-	return { input, applied, problems, renamed, reIds };
+	return { input, applied, problems, renamed, reIds, assessorProblems, maskedRules };
 }
 
 /**

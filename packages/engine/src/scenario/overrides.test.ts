@@ -12,7 +12,8 @@ import type { DemandObject, ModelInput, NetworkNode, RunSeries } from '../projec
 import type { AllocationEntry } from '../allocations/compare';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { MASKED_RULE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
+import { FARMER_K } from '../views/farmView';
+import { MASKED_RULE, MASKED_RULE_AGGREGATE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
 import { structureIssues } from './structure';
 import { validateScenarioOps, type ScenarioOp } from './ops';
 
@@ -2092,6 +2093,55 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(apply(noLand, dry).problems).toEqual([plain[0]!.replace(/: the catchment has no area left.*$/, `: ${MASKED_RULE}`)]);
 		// With no node hidden, nothing to hide: the rule keeps its words.
 		expect(applyScenario(b, [shares], { mask: { crops: ['c2'] } }).problems).toEqual(applyScenario(b, [shares]).problems);
+	});
+
+	it(`gives the catchment's value and the hidden units' aggregate at ${FARMER_K} or more hidden holders, never below (162)`, () => {
+		const b = baseM();
+		(b.settings as Record<string, unknown>).flowShareMethod = 'manual';
+		nodeOf(b, 'C')!.flowShareManual = 0.5;
+		const shares: ScenarioOp = { op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.6 };
+		const at = (hiddenHolders: number) => applyScenario(b, [shares], { mask: { ...mask, hiddenHolders } });
+		const hiddenShare = (['B', 'C'] as const).reduce((x, id) => x + (nodeOf(b, id)!.flowShareManual ?? 0), 0);
+		expect(at(FARMER_K).problems).toEqual([`op 1 (node.set): ${MASKED_RULE_AGGREGATE('shares', 0.6 + hiddenShare, hiddenShare)}`]);
+		expect(at(FARMER_K).problems[0]).toMatch(/flow shares would total \d+\.\d %, more than 100 %; the units you can't see hold \d+\.\d % of them between them/);
+		// Below k the aggregate is a holder's own figure: the generic words (control).
+		expect(at(FARMER_K - 1).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		expect(apply([shares], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		// Never a hidden unit's own name or value, at any count.
+		for (const n of [FARMER_K - 1, FARMER_K]) expect(at(n).problems.join()).not.toMatch(/Farm B|Farm C|Secret/);
+		// The area rule, the same way.
+		const dry = baseM();
+		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
+		expect(applyScenario(dry, noLand, { mask: { ...mask, hiddenHolders: FARMER_K } }).problems[0]).toMatch(
+			/: the catchment would have 0\.00 km² of land; the units you can't see hold 0\.00 km² between them$/
+		);
+		// A rule that isn't catchment-wide stays generic whatever the count.
+		const op: ScenarioOp = { op: 'node.set', nodeId: 'C', field: 'supplyRule', value: 'runOfRiver' };
+		expect(applyScenario(baseM(), [op], { mask: { ...mask, hiddenHolders: FARMER_K } }).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+	});
+
+	it('gives the assessors the real words, hidden names restored, line for line, and the applicant the rules\' ids (162)', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: 'C', field: 'supplyRule', value: 'runOfRiver' },
+			{ op: 'node.set', nodeId: 'C', field: 'damCapacityM3', value: 0 },
+			{ op: 'node.set', nodeId: 'Z', field: 'damCapacityM3', value: 1 }
+		];
+		const r = apply(ops);
+		expect(r.problems).toEqual([`ops 1–2 (node.set, "Farm 2"): ${MASKED_RULE}`, expect.stringMatching(/^op 3 \(node\.set\): /)]);
+		expect(r.assessorProblems).toHaveLength(r.problems.length);
+		// The hidden rule in its real words, under C's real name: what an unmasked check says.
+		expect(r.assessorProblems[0]).toMatch(/^ops 1–2 \(node\.set, "Farm C"\): .*Secret hole/);
+		expect(r.assessorProblems[0]).not.toContain('Farm 2');
+		// A problem no hidden rule broke reads the same to both.
+		expect(r.assessorProblems[1]).toBe(r.problems[1]);
+		// The ref: the line, its ops and the rule's kind, never an id or a name.
+		expect(r.maskedRules).toEqual([{ problem: 0, ops: [0, 1], rules: ['bhEmergency'] }]);
+		expect(JSON.stringify(r.maskedRules)).not.toMatch(/bh1|Secret|Farm/);
+		// Unmasked: the assessors' lines are the problems, and nothing is masked.
+		const plain = applyScenario(baseM(), ops);
+		expect(plain.assessorProblems).toEqual(plain.problems);
+		expect(plain.maskedRules).toEqual([]);
 	});
 
 	it('classifies as it applies: an op on a hidden id meets the applicant’s own item, never the hidden one', () => {
