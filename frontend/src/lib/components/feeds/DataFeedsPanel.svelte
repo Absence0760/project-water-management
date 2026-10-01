@@ -10,6 +10,7 @@
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
+	import NearestGauges from './NearestGauges.svelte';
 	import { kindLabel } from '$lib/series/kinds';
 	import {
 		CHIRPS_PRODUCT_FIRST_DAY,
@@ -120,6 +121,14 @@
 		draft.targetKind = data?.sources.find((x) => x.source === s)?.kinds[0] ?? '';
 		// A problem with the other source's field (or series) no longer applies.
 		formError = formField = takeover = null;
+	}
+
+	/** A proposed station (NearestGauges): it only fills the field; the owner still attaches the feed. */
+	async function useStation(code: string) {
+		draft.station = code;
+		if (formField === 'station') formError = formField = null;
+		await tick();
+		document.getElementById(`${uid}-station`)?.focus();
 	}
 
 	/** Submit the form; `confirmed` once the owner chose to write into the existing series. */
@@ -342,6 +351,7 @@
 					</div>
 				</div>
 				{#if draft.source === 'dws'}
+					<NearestGauges {projectId} current={draft.station} onuse={useStation} />
 					<div class="field">
 						<label for="{uid}-station">DWS station</label>
 						<input

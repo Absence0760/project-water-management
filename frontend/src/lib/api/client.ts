@@ -136,7 +136,8 @@ import type {
 	MapImportPreview,
 	MapImportReviewed,
 	MapLinkedNodes,
-	QuaternaryLookup
+	QuaternaryLookup,
+	GaugeStationLookup
 } from './types';
 
 export class ApiError extends Error {
@@ -872,7 +873,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					{ featureId }
 				),
 			quaternary: (id: string, lon: number, lat: number) =>
-				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`)
+				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),
+			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
+			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
+			}
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

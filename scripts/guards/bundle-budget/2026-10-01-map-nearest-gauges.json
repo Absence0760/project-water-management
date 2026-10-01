@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The nearest-gauging-stations proposal in Settings → Data feeds (NearestGauges.svelte + nearestGauges.ts, issue #326 B-gauge) and api.map.stations: measured 1482 KB total before, 1484 KB after (pnpm build:frontend && pnpm check:bundle), the growth in the Data feeds panel's lazy chunk"
+}
