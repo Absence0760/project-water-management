@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Issue #326 round 2 merged together (results, farmer map, draw, import review, linked-nodes): measured 1482 KB gzipped total on feat/326-map-round-2 against 1481 from the agents' four entries (+22), each measured alone on the round-1 base (1459). The extra 1 KB is the gauge markers' results colour and the merged CatchmentMap (words + drawing). No headroom."
+}

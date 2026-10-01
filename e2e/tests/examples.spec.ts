@@ -71,6 +71,38 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await expect(page.getByRole('heading', { level: 3, name: 'Hydrological unit results' })).toBeVisible();
 });
 
+// Issue #288: Sandspruit's invented map (backend/scripts/examples/map.ts), read from the list, not the map's pixels.
+test('a shared example has a seeded catchment map: a boundary, linked parcels, dams, gauges and streams', async ({ page }) => {
+	await signInAs(page, DEMO);
+	await page.locator('table.projects').getByRole('link', { name: SANDSPRUIT, exact: true }).click();
+	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
+	await page.goto(`${page.url().split('?')[0]}?tab=map`);
+
+	const list = page.getByTestId('map-feature-list');
+	await expect(list.getByRole('listitem')).toHaveCount(23);
+	await expect(page.getByTestId('map-no-boundary')).toHaveCount(0);
+	await expect(page.getByTestId('map-summary')).toHaveText(/^23 features · boundary 210[.,]\d+ km² · 0 of 8 unit areas from the map$/);
+	// Grouped by kind, parcels first (#326 E3); each row its size, what it stands for, and a parcel's unit's area source.
+	await expect(list.getByRole('heading', { level: 3 })).toHaveText([/^Farm parcels/, /^Dams/, /^Gauges/, /^Rivers/, /^Catchment boundary/]);
+	const item = (name: string) => list.getByRole('listitem').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}\\b`) }) }).first();
+	await expect(item('Sandspruit catchment')).toContainText(/210[.,]\d+ km²/);
+	await expect(item('Klipdrift')).toContainText(/km² · linked · area typed/);
+	await expect(item('Klipdrift dam')).toContainText(/ha · Klipdrift/);
+	await expect(item('Melkhout Gauge')).toContainText(/E · linked/);
+	await expect(list.getByRole('group', { name: /Rivers/ }).getByRole('listitem').filter({ hasText: /^\s*Sandspruit\s*1 line\s*$/ })).toHaveCount(1);
+	// The checks (#326 A4): the seeded boundary has a margin round the farms, so the units' total is flagged.
+	await expect(page.getByTestId('map-checks-line')).toHaveText(/^\s*1 warning from the map’s checks\s*Show the checks\s*$/);
+	await page.getByTestId('map-checks-open').click();
+	const sheet = page.getByRole('dialog', { name: 'Map checks' });
+	await expect(sheet.locator('li[data-check="units-vs-boundary"]')).toContainText(/^The units add up to 184[.,]0 km², 12 % less than the boundary's 210[.,]2 km²\./);
+	// A warning's feature button picks it and closes the sheet.
+	await sheet.getByRole('button', { name: 'Show Sandspruit catchment on the map' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(list.getByRole('button', { name: /^Sandspruit catchment/ })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByTestId('map-open-grid').click();
+	await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByText('sandspruit-map.synthetic.geojson', { exact: true })).toBeVisible();
+});
+
 // WP-2.1: the seeded farmers, as the owner manages them and as a farmer's own list shows them.
 test('the owner sees the seeded farmers with their farms, and a farmer sees only their own catchment', async ({ page, browser }) => {
 	await signInAs(page, ANALYST);

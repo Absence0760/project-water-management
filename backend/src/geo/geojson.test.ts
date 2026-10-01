@@ -7,8 +7,10 @@ import {
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	GEO_MAX_VERTICES,
+	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
+	proposeKinds,
 	ringSelfIntersects,
 	type Geometry,
 	type Position
@@ -141,5 +143,78 @@ describe('pointInGeometry and centerOf', () => {
 		expect(centerOf({ type: 'Polygon', coordinates: [box(20, -34, 22, -32)] })).toEqual([21, -33]);
 		expect(centerOf({ type: 'MultiPolygon', coordinates: [[box(0, 0, 1, 1)], [box(10, 0, 14, 4)]] })).toEqual([12, 2]);
 		expect(centerOf({ type: 'LineString', coordinates: [[0, 0], [1, 1], [2, 2]] })).toEqual([1, 1]);
+	});
+});
+
+describe('proposing each feature’s kind (issue #326 D2)', () => {
+	const parsed = (...features: unknown[]) => {
+		const r = parseGeoJson(fc(...features));
+		expect(r.problems).toEqual([]);
+		return r.features;
+	};
+	const kinds = (fs: ReturnType<typeof parsed>, hasBoundary = false) => proposeKinds(fs, { hasBoundary }).map((p) => p.kind);
+	const point = (x: number, y: number) => ({ type: 'Point', coordinates: [x, y] });
+	const line = { type: 'LineString', coordinates: [[1, 1], [5, 5]] };
+
+	it('reads the words a file uses for a kind, case, separators and plurals aside', () => {
+		expect(kindFromWord('Boundary')).toBe('catchment_boundary');
+		expect(kindFromWord('CATCHMENT')).toBe('catchment_boundary');
+		expect(kindFromWord('catchment_boundary')).toBe('catchment_boundary');
+		expect(kindFromWord('Farm parcels')).toBe('farm_parcel');
+		expect(kindFromWord('farm-parcel')).toBe('farm_parcel');
+		expect(kindFromWord('Fields')).toBe('farm_parcel');
+		expect(kindFromWord('reservoir')).toBe('dam');
+		expect(kindFromWord('Weirs')).toBe('gauge');
+		expect(kindFromWord('station')).toBe('gauge');
+		expect(kindFromWord('stream')).toBe('river');
+		expect(kindFromWord('Other')).toBe('other');
+		expect(kindFromWord('road')).toBeNull();
+		expect(kindFromWord('')).toBeNull();
+	});
+
+	it('takes the kind from a `kind`, `type` or `layer` property (any key case), and does not keep it', () => {
+		const fs = parsed(
+			feature(poly(box(0, 0, 10, 10)), { Layer: 'Parcels' }),
+			feature(point(2, 2), { TYPE: 'Reservoir' }),
+			feature(poly(box(1, 1, 2, 2)), { kind: 'boundary' }),
+			feature(line, { kind: 'Stream', type: 'ignored' })
+		);
+		expect(proposeKinds(fs, { hasBoundary: false })).toEqual([
+			{ kind: 'farm_parcel', from: 'property' },
+			{ kind: 'dam', from: 'property' },
+			{ kind: 'catchment_boundary', from: 'property' },
+			{ kind: 'river', from: 'property' }
+		]);
+		expect(fs[0]!.properties).toEqual({});
+	});
+
+	it('infers from the shape: a line a river, a point a gauge, a polygon a parcel, the largest polygon round the rest the boundary', () => {
+		const fs = parsed(feature(poly(box(1, 1, 2, 2))), feature(line), feature(poly(box(0, 0, 10, 10))), feature(point(3, 3)), feature(poly(box(6, 6, 8, 8))));
+		expect(proposeKinds(fs, { hasBoundary: true })).toEqual([
+			{ kind: 'farm_parcel', from: 'geometry' },
+			{ kind: 'river', from: 'geometry' },
+			{ kind: 'catchment_boundary', from: 'geometry' },
+			{ kind: 'gauge', from: 'geometry' },
+			{ kind: 'farm_parcel', from: 'geometry' }
+		]);
+	});
+
+	it('proposes no boundary when the largest polygon leaves a feature outside, or a property already names one', () => {
+		expect(kinds(parsed(feature(poly(box(0, 0, 10, 10))), feature(poly(box(1, 1, 2, 2))), feature(point(20, 20))))).toEqual(['farm_parcel', 'farm_parcel', 'gauge']);
+		expect(kinds(parsed(feature(poly(box(0, 0, 10, 10))), feature(poly(box(1, 1, 2, 2)), { kind: 'catchment' })))).toEqual(['farm_parcel', 'catchment_boundary']);
+	});
+
+	it('makes a lone polygon the boundary only while the project has none', () => {
+		const lone = parsed(feature(poly(box(0, 0, 10, 10))));
+		expect(kinds(lone, false)).toEqual(['catchment_boundary']);
+		expect(kinds(lone, true)).toEqual(['farm_parcel']);
+	});
+
+	it('falls back to the shape, with a note, when the property names no kind or one that can’t be that shape', () => {
+		const fs = parsed(feature(line, { kind: 'Gauge' }), feature(point(1, 1), { type: 'road' }));
+		expect(proposeKinds(fs, { hasBoundary: true })).toEqual([
+			{ kind: 'river', from: 'geometry', note: 'the file says “Gauge”, which can’t be a LineString' },
+			{ kind: 'gauge', from: 'geometry', note: 'the file says “road”, which isn’t a kind the map knows' }
+		]);
 	});
 });

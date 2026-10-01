@@ -12,7 +12,9 @@
 //  - at most GEO_MAX_VERTICES positions per feature and GEO_MAX_FEATURES
 //    features; the file at most GEO_MAX_BYTES (the route's body limit too).
 // A file's problems are listed per feature, so the person can fix them all
-// at once. Properties are dropped except FEATURE_PROPERTIES.
+// at once. Properties are dropped except FEATURE_PROPERTIES; a `kind`,
+// `type` or `layer` property is read only to propose each feature's kind
+// (proposeKinds, issue #326 D2), and is not kept.
 import { geometryAreaM2 } from './area.js';
 
 export type Position = [number, number];
@@ -52,6 +54,92 @@ export interface ParsedFeature {
 	properties: Record<string, string>;
 	/** Geodesic area for polygons (m²), null otherwise. */
 	areaM2: number | null;
+	/** What the file says the feature is (its `kind`, `type` or `layer` property, the first present), for proposeKinds; never stored. */
+	kindHint: string | null;
+}
+
+/** The kinds a map feature can be (geo/routes.ts MAP_FEATURE_KINDS and 152's CHECK; said here so the proposal needs no route module). */
+export type FeatureKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
+
+/** The geometry types each kind may have (152's CHECKs). */
+export const KIND_GEOMETRY: Record<FeatureKind, readonly GeometryType[]> = {
+	catchment_boundary: ['Polygon', 'MultiPolygon'],
+	farm_parcel: ['Polygon', 'MultiPolygon'],
+	dam: ['Point', 'Polygon', 'MultiPolygon'],
+	gauge: ['Point'],
+	river: ['LineString', 'MultiLineString'],
+	other: ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']
+};
+
+/** The properties a feature's kind is read from, in order (the key's case ignored). */
+const KIND_KEYS = ['kind', 'type', 'layer'];
+/** The words a file may use for each kind (lower case, spaces for `_` and `-`; a plural `s` is dropped before looking up). */
+const KIND_WORDS: Record<string, FeatureKind> = {
+	'catchment boundary': 'catchment_boundary',
+	boundary: 'catchment_boundary',
+	boundaries: 'catchment_boundary',
+	catchment: 'catchment_boundary',
+	'farm parcel': 'farm_parcel',
+	parcel: 'farm_parcel',
+	farm: 'farm_parcel',
+	field: 'farm_parcel',
+	dam: 'dam',
+	reservoir: 'dam',
+	gauge: 'gauge',
+	gage: 'gauge',
+	weir: 'gauge',
+	station: 'gauge',
+	river: 'river',
+	stream: 'river',
+	other: 'other'
+};
+
+/** The kind a `kind`/`type`/`layer` value names, case and plural ignored ("Farm parcels" → farm_parcel), or null. */
+export function kindFromWord(word: string): FeatureKind | null {
+	const w = word.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+	return KIND_WORDS[w] ?? (w.endsWith('s') ? (KIND_WORDS[w.slice(0, -1)] ?? null) : null);
+}
+
+export interface KindProposal {
+	kind: FeatureKind;
+	/** Read from the feature's own property, or inferred from its shape. */
+	from: 'property' | 'geometry';
+	/** Why a property the file gave wasn't used (a sentence starting lowercase), if so. */
+	note?: string;
+}
+
+/**
+ * Propose each feature's kind (issue #326 D2, docs/maps.md § Uploads): its
+ * `kind`/`type`/`layer` property when that names a kind that fits its
+ * geometry; else from the geometry: a line is a river, a point a gauge, a
+ * polygon a farm parcel, and the largest polygon containing every other
+ * feature (by its centre) the catchment boundary. A lone polygon is the
+ * boundary only while the project has none. Nothing here is final: the
+ * editor reviews every row before anything is saved.
+ */
+export function proposeKinds(features: readonly ParsedFeature[], opts: { hasBoundary: boolean }): KindProposal[] {
+	const out = features.map((f): KindProposal => {
+		let note: string | undefined;
+		if (f.kindHint !== null) {
+			const k = kindFromWord(f.kindHint);
+			if (k && KIND_GEOMETRY[k].includes(f.geometry.type)) return { kind: k, from: 'property' };
+			note = k ? `the file says “${f.kindHint}”, which can’t be a ${f.geometry.type}` : `the file says “${f.kindHint}”, which isn’t a kind the map knows`;
+		}
+		const t = f.geometry.type;
+		const kind: FeatureKind = t === 'Point' ? 'gauge' : t === 'LineString' || t === 'MultiLineString' ? 'river' : 'farm_parcel';
+		return note ? { kind, from: 'geometry', note } : { kind, from: 'geometry' };
+	});
+	if (out.some((p) => p.kind === 'catchment_boundary')) return out;
+	let largest = -1;
+	features.forEach((f, i) => {
+		if (out[i]!.from === 'geometry' && f.areaM2 !== null && (largest < 0 || f.areaM2 > features[largest]!.areaM2!)) largest = i;
+	});
+	if (largest < 0) return out;
+	const big = features[largest]!;
+	const others = features.filter((_, i) => i !== largest);
+	const containsAll = others.every((f) => pointInGeometry(centerOf(f.geometry), big.geometry));
+	if (containsAll && (others.length > 0 || !opts.hasBoundary)) out[largest] = { ...out[largest]!, kind: 'catchment_boundary' };
+	return out;
 }
 
 export interface GeoProblem {
@@ -223,6 +311,15 @@ function featureName(props: Record<string, unknown>): string {
 	return '';
 }
 
+function kindHint(props: Record<string, unknown>): string | null {
+	for (const k of KIND_KEYS) {
+		const key = Object.keys(props).find((x) => x.toLowerCase() === k);
+		const v = key === undefined ? undefined : props[key];
+		if (typeof v === 'string' && v.trim()) return v.trim().slice(0, FEATURE_NAME_MAX);
+	}
+	return null;
+}
+
 function keptProperties(props: Record<string, unknown>): Record<string, string> {
 	const out: Record<string, string> = {};
 	for (const [k, max] of Object.entries(FEATURE_PROPERTIES)) {
@@ -271,7 +368,7 @@ export function parseGeoJson(text: string): { features: ParsedFeature[]; problem
 		const p = props !== null && typeof props === 'object' && !Array.isArray(props) ? (props as Record<string, unknown>) : {};
 		const checked = checkGeometry((f as { geometry?: unknown }).geometry);
 		if ('problem' in checked) problems.push({ feature: index, message: checked.problem });
-		else features.push({ index, geometry: checked.geometry, name: featureName(p), properties: keptProperties(p), areaM2: checked.areaM2 });
+		else features.push({ index, geometry: checked.geometry, name: featureName(p), properties: keptProperties(p), areaM2: checked.areaM2, kindHint: kindHint(p) });
 	});
 	return { features, problems };
 }

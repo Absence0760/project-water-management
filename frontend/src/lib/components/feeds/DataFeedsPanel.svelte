@@ -10,7 +10,9 @@
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
+	import NearestGauges from './NearestGauges.svelte';
 	import { kindLabel } from '$lib/series/kinds';
+	import BoundaryRain from './BoundaryRain.svelte';
 	import {
 		CHIRPS_PRODUCT_FIRST_DAY,
 		cellsUsedNote,
@@ -120,6 +122,14 @@
 		draft.targetKind = data?.sources.find((x) => x.source === s)?.kinds[0] ?? '';
 		// A problem with the other source's field (or series) no longer applies.
 		formError = formField = takeover = null;
+	}
+
+	/** A proposed station (NearestGauges): it only fills the field; the owner still attaches the feed. */
+	async function useStation(code: string) {
+		draft.station = code;
+		if (formField === 'station') formError = formField = null;
+		await tick();
+		document.getElementById(`${uid}-station`)?.focus();
 	}
 
 	/** Submit the form; `confirmed` once the owner chose to write into the existing series. */
@@ -249,7 +259,7 @@
 	</div>
 	<p class="hint muted">
 		Rainfall and gauge flow that arrive by themselves: CHIRPS daily rainfall and the CHIRPS-GEFS 16-day forecast for grid cells or a box over the
-		catchment, or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
+		catchment (or the cells of the map’s catchment boundary, area weighted), or a DWS gauge’s verified daily flow. Each feed fetches daily and merges its new days into one series; a day the source has
 		no value for never erases what is there. A feed that stops shows as failing or stale here.
 	</p>
 
@@ -319,6 +329,11 @@
 		<div role="status">{#if message}<p class="muted">{message}</p>{/if}</div>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
+		<!-- The rain feed from the map's catchment boundary (issue #326 B-rain): a proposal for editors, applied by an owner. -->
+		{#if data.canRun && !adding}
+			<div class="boundary"><BoundaryRain {projectId} feeds={data.feeds} onapplied={() => reload().then(() => undefined)} /></div>
+		{/if}
+
 		{#if adding}
 			<form class="add" onsubmit={add} novalidate aria-labelledby="{uid}-add-h">
 				<h3 id="{uid}-add-h">Attach a feed</h3>
@@ -342,6 +357,7 @@
 					</div>
 				</div>
 				{#if draft.source === 'dws'}
+					<NearestGauges {projectId} current={draft.station} onuse={useStation} />
 					<div class="field">
 						<label for="{uid}-station">DWS station</label>
 						<input
@@ -565,6 +581,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
+	.boundary {
 		margin-top: 0.4rem;
 	}
 	.add {

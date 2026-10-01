@@ -351,7 +351,11 @@ section it belongs to, with the example that taught it.
   the sidebar short enough to fit a 960 px-high window: with the 15 sections
   an owner saw it measured 1033 px until the rows went to 34 px, the section
   gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare;
-  the Project entry then took one row, leaving room for one more). Below that height the slot scrolls on its own
+  the Project entry then took one row, leaving room for one more). The Map's
+  row (#326 D3) took that one: the last link sat 14 % below the window and a
+  viewer with the inputs shown overflowed 20 px, so the rows went to 32 px
+  (still past the 24 px target) and the gaps to 0.5rem, which keeps a 32 px
+  row to spare with all 17. Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. The slot also
   sets `overflow-x: hidden`, since `overflow-y: auto` alone makes x auto too:
@@ -595,7 +599,7 @@ section it belongs to, with the example that taught it.
 |---|---|
 | Page title, context, actions | `workspace/SectionHeader.svelte` via `fillHeader` |
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
-| Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`) |
+| Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`). A grid that isn't the model's (no save row; the Map's features save one at a time) is a `TAB_GRIDS` entry its tab draws itself, same `grid=` parameter (`map/MapTab.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
@@ -754,6 +758,13 @@ Interaction details that bit:
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
   `input:not([type='checkbox'])`.
+- **Keep a picked row in view when the list's box changes, not only when the
+  pick does.** The Map's `node=` link picks a parcel far down a list that
+  scrolls in its fitted card; on the first render the fit wasn't measured, the
+  list didn't scroll yet, so "keep it in view" did nothing, and the list then
+  shrank under the row. `FeatureList` runs the same check from a
+  `ResizeObserver` on the list's box too (`catchment-map.spec.ts`, thirty
+  units).
 - **Bring a linked item into view inside its list, after the fit is measured.**
   Allocations' `unit=` link named a row far down a list that scrolled in its
   card. `scrollIntoView({ block: 'nearest' })` on mount did nothing: the

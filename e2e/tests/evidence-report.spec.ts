@@ -11,6 +11,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { box } from '../support/map.ts';
 
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 /** The rule the project declares, and the ensemble the River tab runs to it. */
@@ -37,6 +38,14 @@ async function seed(page: Page, name: string) {
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the evidence test');
 	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
 	return { project, baseline, upper };
+}
+
+/** § 1's locality map (evidence-12): an invented boundary, Upper farm's parcel and Lower farm's. */
+async function seedMap(page: Page, projectId: string, nodes: { id: string; name: string }[]) {
+	const post = async (data: Record<string, unknown>) => expect((await page.request.post(`${API_URL}/projects/${projectId}/map/features`, { data })).status()).toBe(201);
+	await post({ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.3, -33.7, 0.1)] } });
+	await post({ kind: 'farm_parcel', name: 'Upper block', nodeId: nodes.find((n) => n.name === 'Upper farm')!.id, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.03)] } });
+	await post({ kind: 'farm_parcel', name: 'Lower block', nodeId: nodes.find((n) => n.name === 'Lower farm')!.id, geometry: { type: 'Polygon', coordinates: [box(21.36, -33.66, 0.02)] } });
 }
 
 async function scenarioRun(page: Page, projectId: string, baseRunId: string, upper: string, name: string, own: boolean, damM3 = 300_000) {
@@ -86,10 +95,23 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
 	await expect(page.getByTestId('scenario-evidence-link')).toHaveAttribute('href', new RegExp(`/report\\?run=${app}&evidence$`));
 
+	await seedMap(page, project.id, project.model.nodes as { id: string; name: string }[]);
 	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
 	await ready(page);
 	const report = page.getByTestId('evidence-report');
 	await expect(report).toHaveAttribute('data-evidence-mode', 'application');
+
+	// § 1's locality map (evidence-12): the applicant's unit named, the neighbour's parcel drawn but never named, read as text.
+	const locality = page.getByTestId('evidence-locality');
+	await expect(locality.getByTestId('evidence-locality-legend').getByRole('listitem')).toHaveText(['Catchment boundary', 'Other units’ parcels (not named)', 'The applicant’s unit (parcel)']);
+	await expect(locality.getByTestId('evidence-locality-labels')).toHaveText('Labelled on the map: Upper farm.');
+	await expect(locality).toContainText('Base: the project’s map features; no basemap.');
+	await expect(locality).not.toContainText('Lower');
+	const src = (await locality.getByTestId('evidence-locality-figure').getAttribute('src'))!;
+	const svg = decodeURIComponent(src.slice(src.indexOf(',') + 1));
+	expect(svg).toContain('>Upper farm</text>');
+	expect(svg).not.toContain('Lower');
+	await expect(locality.getByTestId('evidence-locality-figure')).toHaveAttribute('alt', /^Locality map of the application, north up/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper dam 300 000 m³' })).toBeVisible();
 	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
@@ -226,6 +248,9 @@ test('a run that isn’t the nomination is refused; a baseline-assumption applic
 	await expect(page.getByTestId('evidence-report')).toHaveAttribute('data-evidence-mode', 'baseline');
 	// § 1's site strip prints the rule table's REC (ER9).
 	await expect(page.getByTestId('evidence-rec')).toHaveText('B/C');
+	// No map features: § 1 says there is no locality map (evidence-12).
+	await expect(page.getByTestId('evidence-locality-none')).toHaveText('No locality map: the project has no map features.');
+	await expect(page.getByTestId('evidence-locality-figure')).toHaveCount(0);
 	await expect(page.getByRole('heading', { level: 2, name: 'Appendix C. Applicant’s statement' })).toHaveCount(0);
 
 	// A team scenario owns no node: its change moves a baseline assumption (G3).

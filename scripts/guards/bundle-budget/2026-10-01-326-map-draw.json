@@ -1,0 +1,4 @@
+{
+	"addKb": 10,
+	"why": "Drawing on the catchment map (#326 C1, D1, D4): our own drawing mode instead of a library (Terra Draw would be 36 KB). Measured 2026-10-01 against origin/feat/326-map-round-2: total 1459 -> 1469 KB; the Map tab's chunk 15.2 -> 22.9 KB (draw bar, save and paste sheets, the paste parser, the draft state), CatchmentMap's 2.7 -> 4.7 KB (the pointer and keyboard mode, the draft layers)."
+}

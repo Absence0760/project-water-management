@@ -15,16 +15,6 @@ export const KIND_LABEL: Record<MapFeatureKind, string> = {
 	other: 'Other'
 };
 
-/** The kinds a file can be imported as, in the form's order, with what each takes. */
-export const IMPORT_KINDS: { kind: MapFeatureKind; hint: string }[] = [
-	{ kind: 'catchment_boundary', hint: 'one or more polygons, kept as one boundary (it replaces the current one)' },
-	{ kind: 'farm_parcel', hint: 'polygons, one per parcel; a parcel named like a hydrological unit is linked to it' },
-	{ kind: 'dam', hint: 'points or polygons' },
-	{ kind: 'gauge', hint: 'points' },
-	{ kind: 'river', hint: 'lines' },
-	{ kind: 'other', hint: 'any of points, lines and polygons' }
-];
-
 /** The kinds the coordinates form places (a point). */
 export const POINT_KINDS: MapFeatureKind[] = ['gauge', 'dam', 'other'];
 
@@ -42,6 +32,13 @@ export const KIND_NODES: Record<MapFeatureKind, readonly MapNodeArea['kind'][]> 
 export const GEO_MAX_BYTES = 5 * 1024 * 1024;
 
 export const isPolygon = (g: MapGeometry) => g.type === 'Polygon' || g.type === 'MultiPolygon';
+
+/**
+ * Whether a feature's polygon may become a hydrological unit's catchment area
+ * (the backend's AREA_KINDS, geo/routes.ts): a farm parcel or an "other"
+ * polygon, never a dam's water surface or the whole catchment's boundary.
+ */
+export const takesArea = (f: Pick<MapFeature, 'kind' | 'geometry'>) => (f.kind === 'farm_parcel' || f.kind === 'other') && isPolygon(f.geometry);
 
 /** An area for people: km² with 3 decimals below 10 km², else 2; ha below 1 km². */
 export function areaText(m2: number | null): string {

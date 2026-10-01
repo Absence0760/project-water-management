@@ -1,67 +1,103 @@
 <script module lang="ts">
 	// The map itself is a chunk of its own, and MapLibre one more below it
-	// (CatchmentMap.svelte imports it when it mounts): the list and forms here
-	// load with the tab; the map library only once the map is drawn.
+	// (CatchmentMap.svelte imports it when it mounts): the list and card here
+	// load with the tab; the map library only once the map is drawn. The
+	// sheets stay in the tab's chunk: they are small, and a chunk of their
+	// own cost more in overhead than it saved (ui-playbook § 6).
 	const loadMap = () => import('./CatchmentMap.svelte');
 </script>
 
 <script lang="ts">
-	// Catchment map (?tab=map, issue #288, roadmap WP-3.12; docs/ui.md §
-	// Catchment map, docs/maps.md). The catchment boundary, farm parcels,
-	// dams, gauges and rivers over a self-hosted basemap, beside a list that
-	// does everything the map does (the map is never the only way): select a
-	// feature to frame it, link it to a node, accept a polygon's area into a
-	// hydrological unit (a model change, recorded in History with the feature
-	// named; never automatic), delete it. Editors import a GeoJSON file
-	// (checked and measured on the server, its problems listed per feature) or
-	// place a point from typed coordinates. Viewers read. The quaternary lookup
-	// that proposes the WR2012 check's values is in Settings → WR2012 check.
-	import { untrack } from 'svelte';
-	import { PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, ApiError, type MapFeature, type MapFeatureKind, type MapFeatureList, type MapImportProblem } from '$lib/api';
+	// Catchment map (?tab=map, issue #288, roadmap WP-3.12; laid out as a
+	// Network-style workspace in #326 E3–E6; docs/ui.md § Map, docs/maps.md).
+	// The map on the left, fitted to the window; on the right the picked
+	// feature's card over a compact list grouped by kind. The list does
+	// everything the map does (the map is never the only way). The pick is in
+	// the URL (`feature=<id>`, or `node=<nodeId>` for a node's parcel) so Back
+	// undoes it; Upload (`upload=1`), Place a point (`place=1`) and Every
+	// feature (`grid=map-features`) open over the page from the header and
+	// the list, each in the URL. Viewers read. Editors draw on the map
+	// (#326 C1, D1, D4): Draw a shape and Place a point put the map in a
+	// drawing mode with a draw bar over it (draw/), and a drawing is saved only
+	// through its sheet's confirm. Anyone can Measure (measure/, the drawing
+	// mode with nothing saved) and Download GeoJSON (mapExport.ts, built from
+	// the loaded list); the Layers box turns on the quaternary outlines
+	// (`layers=quaternaries`, #326 A6, A7).
+	import { tick, untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
+	import { api, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fmtDate, fmtNum } from '$lib/format/number';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { saveBlob } from '$lib/export/download';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import {
-		alreadyAccepted,
-		areaTargets,
-		areaText,
-		featureSummary,
-		GEO_MAX_BYTES,
-		IMPORT_KINDS,
-		importProblems,
-		isPolygon,
-		KIND_LABEL,
-		KIND_NODES,
-		parseDegrees,
-		POINT_KINDS,
-		problemText
-	} from './mapData';
+	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { appIsDark, watchAppTheme } from './appTheme';
+	import FeatureList from './FeatureList.svelte';
+	import MapChecks from './MapChecks.svelte';
+	import { mapChecks } from './mapChecks';
+	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
+	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
+	import { glyphsUrl, overlayColours } from './mapStyle';
+	import { exportFileName, geoJsonText } from './mapExport';
+	import { layersOn } from './mapLayers';
+	import MapLayers from './MapLayers.svelte';
+	import { QuaternaryLayer } from './quaternaryLayer.svelte';
+	import MeasureBar from './measure/MeasureBar.svelte';
+	import { MeasureDraft } from './measure/measureDraft.svelte';
+	import MapKeyRow from './MapKeyRow.svelte';
+	import { featureResult, viewLabel } from './mapResults';
+	import { MapResults } from './mapResults.svelte';
+	import { BAND_WORD } from './mapStatus';
+	import PlaceSheet from './PlaceSheet.svelte';
+	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import { Draft } from './draw/draft.svelte';
+	import DraftSheet from './draw/DraftSheet.svelte';
+	import DrawBar from './draw/DrawBar.svelte';
+	import PasteSheet from './draw/PasteSheet.svelte';
+	import { DRAW_CHOICES, editableCorners } from './draw/shape';
+	import MapRainLink from './MapRainLink.svelte';
+	import SourceList from './SourceList.svelte';
+	import UploadSheet from './UploadSheet.svelte';
 
 	let {
 		projectId,
 		editor,
 		canEdit,
+		runs = null,
+		role = null,
+		projectName = null,
 		onModelChanged
 	}: {
 		projectId: string;
 		editor: ModelEditor;
 		canEdit: boolean;
+		/** The project's runs, newest first (null = not loaded): the results on the map read one (#326 A1). */
+		runs?: RunMeta[] | null;
+		/** The caller's role: below editor the map shows the published run only. */
+		role?: Role | null;
+		/** The project's name, for the GeoJSON download's file name. */
+		projectName?: string | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
 
 	const uid = $props.id();
 	const tilesUrl = PUBLIC_TILES_URL?.trim() || null;
+	/** The labels' glyphs (#326 A6): empty = no labels, nothing fetched (docs/maps.md § Labels). */
+	const glyphs = glyphsUrl(PUBLIC_TILES_GLYPHS_URL, typeof location === 'undefined' ? '' : location.origin);
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+	const GRID_ID = 'map-features';
 
 	let data = $state<MapFeatureList | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
-	let selectedId = $state<string | null>(null);
 
 	async function load() {
 		loading = !data;
@@ -80,94 +116,194 @@
 	});
 
 	const features = $derived(data?.features ?? []);
+	const ordered = $derived(inListOrder(features));
 	const boundary = $derived(features.find((f) => f.kind === 'catchment_boundary') ?? null);
 	const nodes = $derived(data?.nodes ?? []);
 	const farms = $derived(areaTargets(nodes));
 	const featureById = $derived(new Map(features.map((f) => [f.id, f])));
 	const fromMap = $derived(farms.filter((n) => n.areaSource === 'map'));
+	const sourceName = $derived(new Map((data?.sources ?? []).map((s) => [s.id, s.fileName])));
 
-	function select(id: string) {
-		selectedId = id;
-		document.getElementById(`${uid}-row-${id}`)?.scrollIntoView({ block: 'nearest' });
+	// --- the pick, in the URL (`feature=<id>`; `node=<nodeId>` picks that node's parcel) ---
+	const params = $derived(page.url.searchParams);
+	const picked = $derived(pickedFeature(features, params.get('feature'), params.get('node')));
+	const selectedId = $derived(picked?.id ?? null);
+	/** Picks a feature: a history entry, so Back goes to the one before. A node link's `node` gives way to it. */
+	function select(id: string): Promise<void> {
+		if (id === selectedId && params.get('feature') === id) return Promise.resolve();
+		const q = new URLSearchParams(page.url.search);
+		q.set('feature', id);
+		q.delete('node');
+		return goto(`?${q}`, { noScroll: true, keepFocus: true });
+	}
+	/**
+	 * A pick from the list. Stacked (a phone, a narrow column) the card sits above the list, so bring
+	 * it into view once it shows the pick; beside the list it is already in view.
+	 */
+	let cardEl: HTMLElement | undefined = $state();
+	async function selectFromList(id: string) {
+		await select(id);
+		if (!layoutEl || getComputedStyle(layoutEl).gridTemplateColumns.trim().split(/\s+/).length > 1) return;
+		await tick();
+		cardEl?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+	}
+	/** The URL with `drop` closed and `id` picked, in place (after a save in a sheet, or a pick from the grid). */
+	function pickInPlace(id: string | null, ...drop: string[]) {
+		const q = new URLSearchParams(page.url.search);
+		for (const d of drop) q.delete(d);
+		q.delete('node');
+		if (id) q.set('feature', id);
+		else q.delete('feature');
+		return goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
-	// --- import a GeoJSON file ---
-	let importKind = $state<MapFeatureKind>('catchment_boundary');
-	let file = $state<File | null>(null);
-	let importing = $state(false);
-	let importError = $state<string | null>(null);
-	let problems = $state<MapImportProblem[]>([]);
-	let fileInput = $state<HTMLInputElement>();
+	// --- the sheets and the grid: open while the URL names them; closing drops the param in place ---
+	function overlay(name: string, value: string, allowed: () => boolean) {
+		let open = $state(false);
+		const asked = $derived(params.get(name) === value && allowed());
+		$effect(() => {
+			open = asked;
+		});
+		$effect(() => {
+			if (!open && untrack(() => params.has(name))) void goto(withoutParam(page.url, name), { replaceState: true, noScroll: true, keepFocus: true });
+		});
+		return {
+			get open() {
+				return open;
+			},
+			set open(v: boolean) {
+				open = v;
+			}
+		};
+	}
+	const upload = overlay('upload', '1', () => canEdit);
+	const place = overlay('place', '1', () => canEdit);
+	const grid = overlay('grid', GRID_ID, () => true);
+	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
+	const checksSheet = overlay('checks', '1', () => true);
+	const checks = $derived(mapChecks(features, nodes));
+	async function pickFromCheck(id: string) {
+		await pickInPlace(id, 'checks');
+	}
 
-	async function importFile(e: SubmitEvent) {
-		e.preventDefault();
-		importError = null;
-		problems = [];
-		if (!file) {
-			importError = 'Choose a GeoJSON file (.geojson or .json).';
+	async function imported(r: { fileName: string; ids: string[] }) {
+		notice = `Imported ${r.ids.length} ${r.ids.length === 1 ? 'feature' : 'features'} from ${r.fileName}.`;
+		await load();
+		await pickInPlace(r.ids[0] ?? selectedId, 'upload');
+	}
+	async function placed(f: MapFeature) {
+		notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draft.cancel();
+		await load();
+		await pickInPlace(f.id, 'place');
+	}
+
+	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
+	const draft = new Draft();
+	let mapState = $state<'loading' | 'ready' | 'failed'>('loading');
+	let drawSaving = $state(false);
+	let drawError = $state<string | null>(null);
+	let draftSheetOpen = $state(false);
+	let pasteOpen = $state(false);
+	/** The features the map draws: the one being edited is drawn as the draft instead. */
+	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
+
+	async function afterStart() {
+		drawError = null;
+		await tick();
+		// The map takes the keyboard focus, so Enter adds a corner at once; its label says how.
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
+	function startDraw(choiceId?: string) {
+		measure.cancel();
+		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
+		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
+		void afterStart();
+	}
+	function startPlace() {
+		measure.cancel();
+		draft.place('gauge');
+		void afterStart();
+	}
+	function startEdit(f: MapFeature) {
+		measure.cancel();
+		if (draft.edit(f)) void afterStart();
+	}
+	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
+	async function saveDraft() {
+		const g = draft.geometry;
+		if (!g) return;
+		if (draft.mode === 'draw') {
+			draftSheetOpen = true;
 			return;
 		}
-		if (file.size > GEO_MAX_BYTES) {
-			importError = `The file is larger than ${GEO_MAX_BYTES / 1024 / 1024} MB; simplify it or split it.`;
+		if (draft.mode === 'place') {
+			await goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true });
 			return;
 		}
-		if (/\.(zip|shp)$/i.test(file.name)) {
-			importError = 'Shapefiles aren’t read yet: export the layer as GeoJSON in WGS84 (EPSG:4326), e.g. from QGIS, and upload that.';
-			return;
-		}
-		importing = true;
+		const f = draft.feature;
+		if (!f) return;
+		drawSaving = true;
+		drawError = null;
 		try {
-			const r = await api.map.import(projectId, { fileName: file.name, kind: importKind, text: await file.text() });
-			notice = `Imported ${r.features.length} ${r.features.length === 1 ? 'feature' : 'features'} from ${r.source.fileName}.`;
-			file = null;
-			if (fileInput) fileInput.value = '';
+			await api.map.update(projectId, f.id, g.type === 'Point' ? { lon: g.coordinates[0], lat: g.coordinates[1] } : { geometry: g });
+			notice = `Saved the new ${g.type === 'Point' ? 'position' : 'shape'} of ${featureName(f)}.`;
+			draft.cancel();
 			await load();
-			if (r.features[0]) selectedId = r.features[0].id;
+			await pickInPlace(f.id);
 		} catch (err) {
-			problems = err instanceof ApiError ? importProblems(err.details) : [];
-			importError = err instanceof ApiError && problems.length ? 'The file was not imported. Fix these and upload it again:' : msg(err);
+			drawError = msg(err);
 		} finally {
-			importing = false;
+			drawSaving = false;
 		}
 	}
-
-	// --- place a point from coordinates ---
-	let pointKind = $state<MapFeatureKind>('gauge');
-	let pointName = $state('');
-	let latText = $state('');
-	let lonText = $state('');
-	let pointNode = $state('');
-	let placing = $state(false);
-	let pointError = $state<string | null>(null);
-	const lat = $derived(parseDegrees(latText, 'lat'));
-	const lon = $derived(parseDegrees(lonText, 'lon'));
-	let triedPoint = $state(false);
-	const pointNodes = $derived(nodes.filter((n) => KIND_NODES[pointKind].includes(n.kind)));
-
-	async function placePoint(e: SubmitEvent) {
-		e.preventDefault();
-		triedPoint = true;
-		pointError = null;
-		if ('error' in lat || 'error' in lon) return;
-		placing = true;
-		try {
-			const f = await api.map.create(projectId, { kind: pointKind, name: pointName.trim(), lat: lat.value, lon: lon.value, nodeId: pointNode || null });
-			notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
-			pointName = '';
-			latText = '';
-			lonText = '';
-			pointNode = '';
-			triedPoint = false;
-			await load();
-			selectedId = f.id;
-		} catch (err) {
-			pointError = msg(err);
-		} finally {
-			placing = false;
-		}
+	async function drafted(f: MapFeature) {
+		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draftSheetOpen = false;
+		draft.cancel();
+		await load();
+		await pickInPlace(f.id);
+	}
+	function pasted(g: MapGeometry) {
+		draft.replace(g);
+		pasteOpen = false;
+		mapRef?.frameGeometry(g);
+	}
+	function located(at: MapPosition) {
+		mapRef?.frameGeometry({ type: 'Point', coordinates: at });
 	}
 
-	// --- per feature: link, area, delete ---
+	// --- measure (#326 A7): the drawing mode with a MeasureDraft, nothing saved; anyone may measure ---
+	const measure = new MeasureDraft();
+	function startMeasure() {
+		if (measure.active) return endMeasure();
+		draft.cancel();
+		measure.start();
+		void afterStart();
+	}
+	function endMeasure() {
+		measure.cancel();
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** What the map is drawing with: the measurement, else the editor's draft. */
+	const mapDraft = $derived(measure.active ? measure : canEdit ? draft : null);
+
+	// --- Download GeoJSON (#326 A7): the loaded features as a file, built here (no route) ---
+	function downloadGeoJson() {
+		const name = exportFileName(projectName, localIsoDate());
+		saveBlob(new Blob([geoJsonText(features)], { type: 'application/geo+json' }), name);
+		notice = `Downloaded ${features.length} ${features.length === 1 ? 'feature' : 'features'} as ${name}.`;
+	}
+
+	// --- layers (#326 A6): the quaternary outlines, on while `layers=quaternaries` ---
+	const quaternaries = new QuaternaryLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('quaternaries'),
+		features: () => features
+	});
+
+	// --- per feature: link, area, delete (from the card and from Every feature) ---
 	let busy = $state<string | null>(null);
 	let rowError = $state<{ id: string; text: string } | null>(null);
 	/** The unit each polygon's area would go to: the linked farm, else the one picked. */
@@ -220,10 +356,12 @@
 		});
 		if (!ok) return;
 		busy = f.id;
+		// Read before the reload: once it's gone, nothing in the list is picked, but the URL still names it.
+		const wasPicked = selectedId === f.id;
 		try {
 			await api.map.remove(projectId, f.id);
-			if (selectedId === f.id) selectedId = null;
 			await load();
+			if (wasPicked) await pickInPlace(null);
 		} catch (err) {
 			rowError = { id: f.id, text: msg(err) };
 		} finally {
@@ -231,325 +369,589 @@
 		}
 	}
 
-	let mapRef = $state<{ showAll: () => void }>();
+	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void }>();
+
+	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
+	let dark = $state(appIsDark());
+	$effect(() => watchAppTheme(() => (dark = appIsDark())));
+	const key = $derived(keyGroups(overlayColours(dark)));
+
+	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
+	const results = new MapResults({
+		projectId: () => projectId,
+		runs: () => runs,
+		role: () => role,
+		nodes: () => editor.model.nodes,
+		features: () => features,
+		params: () => params,
+		dark: () => dark
+	});
+
+	// --- the window fit: the layout is the height left below its top edge (ui-playbook § 2, as the Network) ---
+	let layoutEl: HTMLDivElement | undefined = $state();
+	let layoutTop = $state(0);
+	$effect(() => {
+		if (!layoutEl) return;
+		const measure = () => {
+			if (layoutEl) layoutTop = layoutEl.getBoundingClientRect().top + window.scrollY;
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
+
+	// --- the section header: the context line and the actions ---
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
-<div class="map-tab">
+{#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
+{#snippet headerActions()}
+	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
+	{#if mapState !== 'failed'}
+		<button type="button" class="btn" onclick={startMeasure} aria-pressed={measure.active} disabled={draft.active} data-testid="map-start-measure">Measure</button>
+	{/if}
+	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
+	{#if canEdit}
+		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place'} data-testid="map-start-place">Place a point</button>
+		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
+	{/if}
+{/snippet}
+
+<!-- What a feature stands for: a select of fitting nodes for editors, else the node's name. -->
+{#snippet standsFor(f: MapFeature)}
+	{@const nodeKinds = KIND_NODES[f.kind]}
+	{#if canEdit && nodeKinds.length}
+		<select class="cap" aria-label="What {featureName(f)} stands for" value={f.nodeId ?? ''} disabled={busy === f.id} onchange={(e) => link(f, e.currentTarget.value)}>
+			<option value="">Nothing</option>
+			{#each nodes.filter((n) => nodeKinds.includes(n.kind)) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+		</select>
+	{:else}
+		{f.nodeName ?? '–'}
+	{/if}
+{/snippet}
+
+<!-- Area into the model: a unit and Use, for a parcel or an "other" polygon only (never a dam or the boundary). -->
+{#snippet areaInto(f: MapFeature)}
+	{#if takesArea(f) && farms.length}
+		{@const target = farms.find((n) => n.id === targetOf(f))}
+		<span class="area-into">
+			<select class="cap" aria-label="Hydrological unit to take {f.name || 'this polygon'}’s area" bind:value={() => targetOf(f), (v) => (areaTarget[f.id] = v)} disabled={busy === f.id}>
+				<option value="">Choose a unit…</option>
+				{#each farms as n (n.id)}<option value={n.id}>{n.name} ({fmtNum(n.areaKm2, 3)} km²)</option>{/each}
+			</select>
+			<button
+				type="button"
+				class="btn btn-sm"
+				disabled={!target || busy === f.id || editor.dirty || (target && alreadyAccepted(target, f))}
+				aria-describedby={editor.dirty ? `${uid}-dirty` : undefined}
+				onclick={() => acceptArea(f)}
+			>
+				{target && alreadyAccepted(target, f) ? 'In use' : `Use ${areaText(f.areaM2)}`}
+			</button>
+		</span>
+	{:else}
+		<span class="muted">–</span>
+	{/if}
+{/snippet}
+
+{#snippet deleteButton(f: MapFeature)}
+	<button type="button" class="btn btn-sm btn-ghost" disabled={busy === f.id} onclick={() => remove(f)} aria-label="Delete {featureName(f)}">Delete</button>
+{/snippet}
+
+{#snippet dirtyHint()}
+	{#if canEdit && editor.dirty}
+		<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: an area from the map is saved to the model straight away.</p>
+	{/if}
+{/snippet}
+
+<!-- The picked feature's figure from the run the map shows (#326 A1): the measure's, or a gauge's EWR, in words with its band. -->
+{#snippet resultFacts(f: MapFeature)}
+	{@const r = results.ready ? featureResult(f, results.unitBy, results.ewrBy) : null}
+	{#if r}
+		<dt>{r.measure === 'ewr' ? 'EWR' : viewLabel(results.view)}</dt>
+		<dd data-testid="map-card-result" data-band={r.band}>{r.label} · {BAND_WORD[r.band].toLowerCase()}</dd>
+		{#if r.measure !== 'ewr' && results.ewrBy.get(f.nodeId ?? '')}
+			{@const e = results.ewrBy.get(f.nodeId ?? '')!}
+			<dt>EWR</dt>
+			<dd data-testid="map-card-ewr" data-band={e.band}>{e.label} · {BAND_WORD[e.band].toLowerCase()}</dd>
+		{/if}
+	{/if}
+{/snippet}
+
+<!-- The unit's area, typed or from the map (E6), in words. -->
+{#snippet unitArea(f: MapFeature)}
+	{@const s = areaSourceOf(f, nodes)}
+	{#if s}
+		{s.node.name}: {fmtNum(s.node.areaKm2, 3)} km² ·
+		{#if s.source === 'this'}<span class="badge">From the map</span> this {KIND_LABEL[f.kind].toLowerCase()}
+		{:else if s.source === 'other'}
+			{@const other = s.node.areaFeatureId ? featureById.get(s.node.areaFeatureId) : undefined}
+			<span class="badge">From the map</span> {other ? `“${featureName(other)}”` : 'a feature since deleted'}
+		{:else}typed{/if}
+	{/if}
+{/snippet}
+
+<div class="map-page" data-ready={data ? 'true' : undefined}>
 	{#if notice}
 		<p class="alert alert-info slim" role="status" data-testid="map-notice">
 			{notice}
 			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (notice = null)}>Dismiss</button>
 		</p>
 	{/if}
+	{#if canEdit && !tilesUrl}
+		<p class="alert alert-info slim" data-testid="map-no-tiles">No basemap is configured, so the features are drawn on a plain background (docs/maps.md says how to serve one).</p>
+	{/if}
+	{#if data && features.length && !boundary}
+		<p class="alert alert-info slim" data-testid="map-no-boundary">
+			No catchment boundary yet.{canEdit ? ' Draw it on the map, or upload it as a GeoJSON file (WGS84).' : ''}
+			{#if canEdit && draft.mode !== 'draw'}<button type="button" class="btn btn-sm" onclick={() => startDraw('catchment_boundary')}>Draw the boundary</button>{/if}
+		</p>
+	{/if}
+	<!-- The rain feed from the boundary (#326 B-rain): a line when no CHIRPS feed reads it yet. -->
+	{#if data && boundary && canEdit}<MapRainLink {projectId} {boundary} />{/if}
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
-			{#if !boundary}
-				<p class="alert alert-info slim" data-testid="map-no-boundary">
-					No catchment boundary yet.{canEdit ? ' Upload a catchment boundary (GeoJSON, in WGS84) below to draw it and frame the map.' : ''}
-				</p>
-			{/if}
-
-			<div class="layout">
-				<section class="panel map-panel" aria-labelledby="{uid}-map-h">
-					<div class="panel-head">
-						<h2 id="{uid}-map-h">Map of the catchment</h2>
-						<span class="muted small">
-							{features.length ? `${features.length} feature${features.length === 1 ? '' : 's'}` : 'Nothing on the map yet'}{boundary ? ` · catchment ${areaText(boundary.areaM2)}` : ''}
-						</span>
-						{#if features.length}<button type="button" class="btn btn-sm" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
+			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
+				<section class="panel map-card" aria-label="Map">
+					{#if measure.active}
+						<MeasureBar {measure} ondone={endMeasure} />
+					{/if}
+					{#if canEdit && draft.active}
+						<DrawBar
+							{draft}
+							mapReady={mapState === 'ready'}
+							saving={drawSaving}
+							error={drawError}
+							onsave={saveDraft}
+							onpaste={() => (pasteOpen = true)}
+							oncoords={() => goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+							onlocated={located}
+						/>
+					{/if}
+					<div class="map-body">
+						<Lazy load={loadMap}>
+							{#snippet children(CatchmentMap)}
+								<CatchmentMap
+									bind:this={mapRef}
+									features={mapFeatures}
+									{selectedId}
+									onselect={select}
+									{tilesUrl}
+									label="Map of the catchment"
+									fills={results.fills}
+									fill
+									draft={mapDraft}
+									{glyphs}
+									quaternaries={quaternaries.outlines}
+									pickedQuaternary={quaternaries.picked}
+									onquaternary={(code) => (quaternaries.picked = code)}
+									onstatus={(s) => (mapState = s)}
+								/>
+							{/snippet}
+						</Lazy>
 					</div>
-					<Lazy load={loadMap}>
-						{#snippet children(CatchmentMap)}
-							<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" />
-						{/snippet}
-					</Lazy>
-					{#if !tilesUrl}
-						<p class="small muted" data-testid="map-no-tiles">
-							No basemap is configured, so the features are drawn on a plain background (docs/maps.md says how to serve one).
+					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+				</section>
+
+				<aside class="map-side" aria-label="Features">
+					<section class="panel side-box card" aria-label="Picked feature" data-testid="map-feature-card" bind:this={cardEl}>
+						{#if picked}
+							<h2 class="card-h">{featureName(picked)}</h2>
+							<dl class="facts">
+								<dt>Kind</dt>
+								<dd>{KIND_LABEL[picked.kind]}</dd>
+								<dt>{picked.geometry.type === 'Point' ? 'Position' : isPolygon(picked.geometry) ? 'Area' : 'Shape'}</dt>
+								<dd>{featureSummary(picked)}</dd>
+								{#if KIND_NODES[picked.kind].length}
+									<dt>Stands for</dt>
+									<dd>{@render standsFor(picked)}</dd>
+								{/if}
+								{@render resultFacts(picked)}
+								{#if areaSourceOf(picked, nodes)}
+									<dt>Unit’s area</dt>
+									<dd data-testid="map-card-area-source">{@render unitArea(picked)}</dd>
+								{/if}
+								{#if canEdit && takesArea(picked) && farms.length}
+									<dt>Area into the model</dt>
+									<dd>{@render areaInto(picked)}</dd>
+								{/if}
+								{#if picked.sourceId && sourceName.get(picked.sourceId)}
+									<dt>From</dt>
+									<dd class="file">{sourceName.get(picked.sourceId)}</dd>
+								{/if}
+							</dl>
+							{@render dirtyHint()}
+							{#if rowError?.id === picked.id}<p class="err" role="alert">{rowError.text}</p>{/if}
+							{#if canEdit}
+								<div class="card-actions">
+									{#if editableCorners(picked.geometry) && !(draft.mode === 'edit' && draft.feature?.id === picked.id)}
+										{@const target = picked}
+										<button type="button" class="btn btn-sm" onclick={() => startEdit(target)} data-testid="map-edit-shape">
+											{picked.geometry.type === 'Point' ? 'Move the point' : 'Edit the shape'}
+										</button>
+									{/if}
+									{@render deleteButton(picked)}
+								</div>
+							{/if}
+						{:else if features.length}
+							<p class="muted small pick-hint">Select a feature on the map or in the list to see it here.</p>
+						{:else}
+							<!-- The empty state leads with drawing (#326 D4); uploading a file is the other way in. -->
+							<div class="pick-hint" data-testid="map-no-boundary">
+								<p class="empty-line">Nothing on the map yet.{canEdit ? ' Start with the catchment boundary: draw it on the map.' : ''}</p>
+								{#if canEdit}
+									<p class="empty-line"><button type="button" class="btn btn-primary" onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button></p>
+									<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+								{/if}
+							</div>
+						{/if}
+					</section>
+
+					{#if features.length}
+						<section class="panel side-box list-box" aria-labelledby="{uid}-list-h">
+							<div class="list-head">
+								<h2 class="list-h" id="{uid}-list-h">Features</h2>
+								<a class="btn btn-sm" href={withParam(page.url, 'grid', GRID_ID)} data-testid="map-open-grid">Every feature</a>
+							</div>
+							<FeatureList {features} {nodes} {selectedId} onselect={selectFromList} labelledby="{uid}-list-h" />
+						</section>
+					{/if}
+
+					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed. -->
+					<div class="panel side-box layers-box">
+						<MapLayers {quaternaries} {dark} />
+					</div>
+
+					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
+					{#if features.length}
+						<p class="panel side-box checks-line small" data-testid="map-checks-line">
+							{#if checks.length}
+								<span><strong>{checks.length} {checks.length === 1 ? 'warning' : 'warnings'}</strong> from the map’s checks</span>
+								<a class="btn btn-sm" href={withParam(page.url, 'checks', '1')} data-testid="map-checks-open">Show the checks</a>
+							{:else}
+								<span class="muted">The map’s checks found no problems.</span>
+							{/if}
 						</p>
 					{/if}
-					<p class="small muted key" aria-hidden="true">
-						<span class="k k-boundary"></span>catchment boundary (dashed) <span class="k k-parcel"></span>parcel <span class="k k-river"></span>river ▲ gauge ● dam ◆ other
-					</p>
-				</section>
-
-				<section class="panel list-panel" aria-labelledby="{uid}-list-h">
-					<div class="panel-head">
-						<h2 id="{uid}-list-h">Features</h2>
-					</div>
-					{#if features.length}
-						<ul class="features" data-testid="map-feature-list">
-							{#each features as f (f.id)}
-								<li id="{uid}-row-{f.id}" class:picked={f.id === selectedId} data-kind={f.kind}>
-									<button type="button" class="link name" aria-pressed={f.id === selectedId} onclick={() => select(f.id)}>
-										{f.name || KIND_LABEL[f.kind]}
-									</button>
-									<span class="small muted">{KIND_LABEL[f.kind]} · {featureSummary(f)}{f.nodeName ? ` · ${f.nodeName}` : ''}</span>
-								</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="muted">Nothing on the map yet.</p>
-					{/if}
-				</section>
+				</aside>
 			</div>
 
-			{#if features.length}
-				<section class="panel" aria-labelledby="{uid}-table-h">
-					<div class="panel-head">
-						<h2 id="{uid}-table-h">Every feature</h2>
-						<span class="muted small">Areas are computed on the server from each polygon (geodesic, WGS84).</span>
-					</div>
-					<div class="table-wrap">
-						<table class="data" data-testid="map-feature-table">
-							<caption class="visually-hidden">Map features, what each stands for, and its area</caption>
-							<thead>
-								<tr>
-									<th scope="col">Feature</th>
-									<th scope="col">Kind</th>
-									<th scope="col" class="num">Area or position</th>
-									<th scope="col">Stands for</th>
-									{#if canEdit}<th scope="col">Area into the model</th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
-								</tr>
-							</thead>
-							<tbody>
-								{#each features as f (f.id)}
-									{@const nodeKinds = KIND_NODES[f.kind]}
-									<tr class:picked={f.id === selectedId} data-feature={f.id}>
-										<th scope="row"><button type="button" class="link" onclick={() => select(f.id)}>{f.name || KIND_LABEL[f.kind]}</button></th>
-										<td>{KIND_LABEL[f.kind]}</td>
-										<td class="num">{featureSummary(f)}</td>
-										<td>
-											{#if canEdit && nodeKinds.length}
-												<select
-													aria-label="What {f.name || KIND_LABEL[f.kind]} stands for"
-													value={f.nodeId ?? ''}
-													disabled={busy === f.id}
-													onchange={(e) => link(f, e.currentTarget.value)}
-												>
-													<option value="">Nothing</option>
-													{#each nodes.filter((n) => nodeKinds.includes(n.kind)) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
-												</select>
-											{:else}
-												{f.nodeName ?? '–'}
-											{/if}
-										</td>
-										{#if canEdit}
-											<td class="area-cell">
-												{#if isPolygon(f.geometry) && farms.length}
-													{@const target = farms.find((n) => n.id === targetOf(f))}
-													<select aria-label="Hydrological unit to take {f.name || 'this polygon'}’s area" bind:value={() => targetOf(f), (v) => (areaTarget[f.id] = v)} disabled={busy === f.id}>
-														<option value="">Choose a unit…</option>
-														{#each farms as n (n.id)}<option value={n.id}>{n.name} ({fmtNum(n.areaKm2, 3)} km²)</option>{/each}
-													</select>
-													<button
-														type="button"
-														class="btn btn-sm"
-														disabled={!target || busy === f.id || editor.dirty || (target && alreadyAccepted(target, f))}
-														aria-describedby={editor.dirty ? `${uid}-dirty` : undefined}
-														onclick={() => acceptArea(f)}
-													>
-														{target && alreadyAccepted(target, f) ? 'In use' : `Use ${areaText(f.areaM2)}`}
-													</button>
-												{:else}
-													<span class="muted">–</span>
+			{#if upload.open}
+				<UploadSheet bind:open={upload.open} {projectId} sources={data.sources} onimported={imported} />
+			{/if}
+			{#if checksSheet.open}
+				<Dialog bind:open={checksSheet.open} title="Map checks" side>
+					<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />
+					{#snippet actions()}
+						<button type="button" class="btn" onclick={() => (checksSheet.open = false)}>Close</button>
+					{/snippet}
+				</Dialog>
+			{/if}
+			{#if place.open}
+				<PlaceSheet
+					bind:open={place.open}
+					{projectId}
+					{nodes}
+					at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null}
+					kind={draft.mode === 'place' ? draft.kind : 'gauge'}
+					onplaced={placed}
+				/>
+			{/if}
+			{#if draftSheetOpen && draft.geometry}
+				<DraftSheet bind:open={draftSheetOpen} {projectId} {nodes} geometry={draft.geometry} kind={draft.kind} hasBoundary={!!boundary} onsaved={drafted} />
+			{/if}
+			{#if pasteOpen && draft.active}
+				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />
+			{/if}
+			{#if grid.open}
+				<Dialog bind:open={grid.open} title={TAB_GRIDS[GRID_ID].title} full>
+					<div class="grid-body" data-testid="map-grid">
+						{#if features.length}
+							<p class="muted small grid-note">
+									Areas are computed on the server from each polygon (geodesic, WGS84).
+									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
+								</p>
+							<div class="table-wrap">
+								<table class="data map-table" data-testid="map-feature-table">
+									<caption class="visually-hidden">Map features, what each stands for, and its area</caption>
+									<thead>
+										<tr>
+											<th scope="col">Feature</th>
+											<th scope="col">Kind</th>
+											<th scope="col" class="num">Area or position</th>
+											<th scope="col">Stands for</th>
+											<th scope="col">Unit’s area</th>
+											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
+											{#if canEdit}<th scope="col">Area into the model</th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
+										</tr>
+									</thead>
+									<tbody>
+										{#each ordered as f (f.id)}
+											<tr class:picked={f.id === selectedId} data-feature={f.id}>
+												<th scope="row">
+													<button type="button" class="link" onclick={() => pickInPlace(f.id, 'grid')}>{featureName(f)}</button>
+												</th>
+												<td><span class="cell-label" aria-hidden="true">Kind </span>{KIND_LABEL[f.kind]}</td>
+												<td class="num"><span class="cell-label" aria-hidden="true">Area or position </span>{featureSummary(f)}</td>
+												<td><span class="cell-label" aria-hidden="true">Stands for </span>{@render standsFor(f)}</td>
+												<td><span class="cell-label" aria-hidden="true">Unit’s area </span>{#if areaSourceOf(f, nodes)}{@render unitArea(f)}{:else}<span class="muted">–</span>{/if}</td>
+												{#if results.ready}
+													{@const r = featureResult(f, results.unitBy, results.ewrBy)}
+													<td data-testid="map-grid-result"><span class="cell-label" aria-hidden="true">Result{' '}</span>{#if r}{r.label}{:else}<span class="muted">–</span>{/if}</td>
+													<td data-testid="map-grid-band" data-band={r?.band}><span class="cell-label" aria-hidden="true">Band{' '}</span>{#if r}{BAND_WORD[r.band]}{:else}<span class="muted">–</span>{/if}</td>
 												{/if}
-											</td>
-											<td class="row-actions">
-												<button type="button" class="btn btn-sm btn-ghost" disabled={busy === f.id} onclick={() => remove(f)} aria-label="Delete {f.name || KIND_LABEL[f.kind]}">Delete</button>
-											</td>
-										{/if}
-									</tr>
-									{#if rowError?.id === f.id}
-										<tr><td colspan={canEdit ? 6 : 4}><p class="err" role="alert">{rowError.text}</p></td></tr>
-									{/if}
-								{/each}
-							</tbody>
-						</table>
+												{#if canEdit}
+													<td class="area-cell"><span class="cell-label" aria-hidden="true">Area into the model </span>{@render areaInto(f)}</td>
+													<td class="row-actions">{@render deleteButton(f)}</td>
+												{/if}
+											</tr>
+											{#if rowError?.id === f.id}
+												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
+											{/if}
+										{/each}
+									</tbody>
+								</table>
+							</div>
+							{@render dirtyHint()}
+						{:else}
+							<p class="muted">Nothing on the map yet.</p>
+						{/if}
+
+						{#if farms.length}
+							<section class="grid-section" aria-labelledby="{uid}-areas-h">
+								<h2 id="{uid}-areas-h">Where each hydrological unit’s area came from <span class="muted small">{fromMap.length} of {farms.length} from the map</span></h2>
+								<ul class="areas" data-testid="map-area-sources">
+									{#each farms as n (n.id)}
+										{@const src = n.areaFeatureId ? featureById.get(n.areaFeatureId) : undefined}
+										<li data-node={n.id}>
+											<strong>{n.name}</strong>: {fmtNum(n.areaKm2, 3)} km² ·
+											{#if n.areaSource === 'map'}
+												<span class="badge">From the map</span>
+												{src ? `“${featureName(src)}”` : 'a feature since deleted'}
+											{:else}
+												typed
+											{/if}
+										</li>
+									{/each}
+								</ul>
+								<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=settings#set-wr2012">Settings → WR2012 check</a>.</p>
+							</section>
+						{/if}
+
+						{#if data.sources.length}
+							<section class="grid-section" aria-labelledby="{uid}-src-h">
+								<h2 id="{uid}-src-h">Imported files</h2>
+								<SourceList sources={data.sources} />
+							</section>
+						{/if}
 					</div>
-					{#if canEdit && editor.dirty}
-						<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: an area from the map is saved to the model straight away.</p>
-					{/if}
-				</section>
-			{/if}
-
-			{#if farms.length}
-				<section class="panel" aria-labelledby="{uid}-areas-h">
-					<div class="panel-head">
-						<h2 id="{uid}-areas-h">Where each hydrological unit’s area came from</h2>
-						<span class="muted small">{fromMap.length} of {farms.length} from the map</span>
-					</div>
-					<ul class="areas" data-testid="map-area-sources">
-						{#each farms as n (n.id)}
-							{@const src = n.areaFeatureId ? featureById.get(n.areaFeatureId) : undefined}
-							<li data-node={n.id}>
-								<strong>{n.name}</strong>: {fmtNum(n.areaKm2, 3)} km² ·
-								{#if n.areaSource === 'map'}
-									<span class="badge">From the map</span>
-									{src ? `“${src.name || KIND_LABEL[src.kind]}”` : 'a feature since deleted'}
-								{:else}
-									typed
-								{/if}
-							</li>
-						{/each}
-					</ul>
-					<p class="hint muted">Typing a new area on the Network replaces one from the map. The WR2012 check can propose its quaternary’s values from the map: <a href="?tab=settings#set-wr2012">Settings → WR2012 check</a>.</p>
-				</section>
-			{/if}
-
-			{#if canEdit}
-				<div class="forms">
-					<section class="panel" aria-labelledby="{uid}-import-h">
-						<h2 id="{uid}-import-h">Upload a GeoJSON file</h2>
-						<form onsubmit={importFile} novalidate>
-							<div class="field">
-								<label for="{uid}-ikind">The file holds</label>
-								<select id="{uid}-ikind" bind:value={importKind} aria-describedby="{uid}-ikind-h">
-									{#each IMPORT_KINDS as k (k.kind)}<option value={k.kind}>{KIND_LABEL[k.kind]}</option>{/each}
-								</select>
-								<span class="hint" id="{uid}-ikind-h">{IMPORT_KINDS.find((k) => k.kind === importKind)?.hint}</span>
-							</div>
-							<div class="field">
-								<label for="{uid}-file">GeoJSON file <span class="u">(WGS84, at most 5 MB)</span></label>
-								<input
-									id="{uid}-file"
-									type="file"
-									accept=".geojson,.json,application/geo+json,application/json"
-									bind:this={fileInput}
-									onchange={(e) => (file = e.currentTarget.files?.[0] ?? null)}
-									aria-describedby="{uid}-file-h"
-									data-testid="map-file"
-								/>
-								<span class="hint" id="{uid}-file-h">
-									Longitude and latitude in WGS84 (EPSG:4326). A file in a Lo zone or UTM is refused rather than guessed: reproject it first (QGIS: Export → Save Features As, CRS EPSG:4326).
-								</span>
-							</div>
-							<button type="submit" class="btn btn-primary" disabled={importing}>{importing ? 'Uploading…' : 'Upload'}</button>
-							{#if importError}
-								<div class="alert alert-error" role="alert" data-testid="map-import-error">
-									<p>{importError}</p>
-									{#if problems.length}
-										<ul>
-											{#each problems as p, i (i)}<li>{problemText(p)}</li>{/each}
-										</ul>
-									{/if}
-								</div>
-							{/if}
-						</form>
-					</section>
-
-					<section class="panel" aria-labelledby="{uid}-point-h">
-						<h2 id="{uid}-point-h">Place a point</h2>
-						<form onsubmit={placePoint} novalidate>
-							<div class="form-row">
-								<div class="field">
-									<label for="{uid}-pkind">Kind</label>
-									<select id="{uid}-pkind" bind:value={pointKind} onchange={() => (pointNode = '')}>
-										{#each POINT_KINDS as k (k)}<option value={k}>{KIND_LABEL[k]}</option>{/each}
-									</select>
-								</div>
-								<div class="field">
-									<label for="{uid}-pname">Name <span class="u">(optional)</span></label>
-									<input id="{uid}-pname" maxlength="100" bind:value={pointName} />
-								</div>
-							</div>
-							<div class="form-row">
-								<div class="field">
-									<label for="{uid}-lat">Latitude</label>
-									<input
-										id="{uid}-lat"
-										inputmode="decimal"
-										placeholder="-33.61"
-										bind:value={latText}
-										aria-invalid={triedPoint && 'error' in lat ? 'true' : undefined}
-										aria-describedby="{uid}-lat-e"
-									/>
-									<span class="hint" id="{uid}-lat-e">{#if triedPoint && 'error' in lat}<span class="err">{lat.error}</span>{:else}Decimal degrees; south is negative.{/if}</span>
-								</div>
-								<div class="field">
-									<label for="{uid}-lon">Longitude</label>
-									<input
-										id="{uid}-lon"
-										inputmode="decimal"
-										placeholder="21.34"
-										bind:value={lonText}
-										aria-invalid={triedPoint && 'error' in lon ? 'true' : undefined}
-										aria-describedby="{uid}-lon-e"
-									/>
-									<span class="hint" id="{uid}-lon-e">{#if triedPoint && 'error' in lon}<span class="err">{lon.error}</span>{:else}Decimal degrees; east is positive.{/if}</span>
-								</div>
-							</div>
-							{#if pointNodes.length}
-								<div class="field">
-									<label for="{uid}-pnode">Stands for <span class="u">(optional)</span></label>
-									<select id="{uid}-pnode" bind:value={pointNode}>
-										<option value="">Nothing</option>
-										{#each pointNodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
-									</select>
-								</div>
-							{/if}
-							<button type="submit" class="btn btn-primary" disabled={placing}>{placing ? 'Placing…' : 'Place the point'}</button>
-							{#if pointError}<p class="err" role="alert">{pointError}</p>{/if}
-						</form>
-					</section>
-				</div>
-			{/if}
-
-			{#if data.sources.length}
-				<section class="panel" aria-labelledby="{uid}-src-h">
-					<h2 id="{uid}-src-h">Imported files</h2>
-					<ul class="sources">
-						{#each data.sources as s (s.id)}
-							<li>
-								<strong>{s.fileName}</strong> · {s.features} feature{s.features === 1 ? '' : 's'} · {fmtDate(s.importedAt, true)}{s.importedBy ? ` by ${s.importedBy}` : ''}
-								<span class="mono small" title="SHA-256 of the file">{s.sha256}</span>
-							</li>
-						{/each}
-					</ul>
-				</section>
+					{#snippet actions()}
+						<button type="button" class="btn" onclick={() => (grid.open = false)}>Close</button>
+					{/snippet}
+				</Dialog>
 			{/if}
 		{/if}
 	</LoadState>
 </div>
 
 <style>
-	.map-tab {
+	/* The page's container: the layout's columns follow its width, not the window's (the sidebar takes 240 px). */
+	.map-page {
+		container: map-page / inline-size;
 		display: grid;
-		gap: 1rem;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.75rem;
 	}
-	.layout {
-		display: grid;
-		grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
-		gap: 1rem;
-		align-items: start;
-	}
-	@media (max-width: 900px) {
-		.layout {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-	.panel-head {
+	.slim {
+		padding: 0.5rem 0.75rem;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
+		gap: 0.5rem;
+		align-items: center;
+		margin: 0;
+	}
+	/* Stacked by default (a phone, a narrow column): the map, then the card, the list. */
+	.map-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+	}
+	.map-card,
+	.side-box {
+		margin: 0;
+		min-width: 0;
+	}
+	/* One line, never growing: the warnings themselves are in the checks sheet. */
+	.checks-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex: 0 0 auto;
+	}
+	.map-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.map-body {
+		position: relative;
+		min-height: 0;
+	}
+	.map-side {
+		display: grid;
+		gap: 0.75rem;
+		align-content: start;
+		min-width: 0;
+	}
+	/* 56rem = 784 px at the 14 px root: the side column from about a 1030 px window with the sidebar. */
+	@container map-page (min-width: 56rem) {
+		.map-layout {
+			grid-template-columns: minmax(0, 1fr) clamp(18rem, 30%, 24rem);
+			align-items: start;
+		}
+	}
+	/* Window fit (a dashboard, as the Network): with the side column and a window at least 620 px high,
+	   the layout is the height left below its top, less the gutter and the save bar while it shows.
+	   The map fills its card; the list scrolls inside its own; the page doesn't scroll. */
+	@media (min-height: 620px) {
+		@container map-page (min-width: 56rem) {
+			.map-layout {
+				height: max(30rem, calc(100vh - var(--layout-top, 0px) - var(--dock-h, 0px) - 1rem));
+				align-items: stretch;
+			}
+			.map-card {
+				min-height: 0;
+			}
+			.map-body {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+			}
+			/* The lazy loader's box passes the card's height on to CatchmentMap (`fill`). */
+			.map-body > :global(*) {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				min-height: 0;
+			}
+			.map-side {
+				display: flex;
+				flex-direction: column;
+				min-height: 0;
+			}
+			.card {
+				flex: none;
+				max-height: 55%;
+				overflow-y: auto;
+			}
+			.list-box {
+				flex: 1;
+				min-height: 8rem;
+				display: flex;
+				flex-direction: column;
+			}
+			.list-box :global(.list-scroll) {
+				flex: 1;
+				min-height: 0;
+				overflow-y: auto;
+			}
+		}
+	}
+	.card-h {
+		margin: 0 0 0.5rem;
+		font-size: 1.05rem;
+		overflow-wrap: break-word;
+	}
+	.facts {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.35rem 0.75rem;
+		margin: 0;
 		align-items: baseline;
 	}
-	.features {
-		list-style: none;
+	.facts dt {
+		color: var(--text-muted);
+		font-size: 0.85rem;
+	}
+	.facts dd {
 		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 0.15rem;
-		max-height: min(60vh, 560px);
+		min-width: 0;
+		overflow-wrap: break-word;
+	}
+	.card-actions {
+		margin-top: 0.6rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		justify-content: flex-end;
+	}
+	.empty-line {
+		margin: 0 0 0.5rem;
+	}
+	.pick-hint {
+		margin: 0;
+	}
+	.list-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.4rem;
+	}
+	.list-h {
+		margin: 0;
+		font-size: 0.95rem;
+	}
+	/* A select in a card or a cell stops at ~16rem, not the column's whole width. */
+	.cap {
+		max-width: min(100%, 16rem);
+	}
+	.area-into {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: center;
+	}
+	.err {
+		color: var(--danger);
+		margin: 0.4rem 0 0;
+	}
+	.hint {
+		font-size: 0.85rem;
+		margin: 0.5rem 0 0;
+	}
+	/* Every feature (grid=map-features): the table, then the units' areas and the imported files. */
+	.grid-body {
+		container: map-grid / inline-size;
+		flex: 1;
+		min-height: 0;
 		overflow: auto;
 	}
-	.features li {
-		display: grid;
-		padding: 0.35rem 0.5rem;
-		border-radius: 6px;
+	.grid-note {
+		margin: 0 0 0.5rem;
 	}
-	.features li.picked,
+	.grid-section {
+		margin-top: 1.25rem;
+	}
+	.grid-section h2 {
+		font-size: 1rem;
+		margin: 0 0 0.5rem;
+	}
+	.areas {
+		margin: 0;
+		padding-left: 1.1rem;
+		display: grid;
+		gap: 0.3rem;
+	}
+	.grid-body .table-wrap {
+		max-height: none;
+	}
 	tr.picked {
 		background: var(--accent-soft);
 	}
@@ -564,92 +966,36 @@
 		text-align: left;
 		min-height: 24px;
 	}
-	.area-cell {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		align-items: center;
+	.cell-label {
+		display: none;
 	}
-	.areas,
-	.sources {
-		margin: 0;
-		padding-left: 1.1rem;
-		display: grid;
-		gap: 0.3rem;
-	}
-	.sources .mono {
-		display: block;
-		word-break: break-all;
-	}
-	.forms {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-		gap: 1rem;
-		align-items: start;
-	}
-	form {
-		display: grid;
-		gap: 0.75rem;
-		justify-items: start;
-	}
-	form .field {
-		display: grid;
-		gap: 0.25rem;
-		width: 100%;
-	}
-	.form-row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
-		gap: 0.75rem;
-		width: 100%;
-	}
-	.key {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 0.6rem;
-		align-items: center;
-	}
-	.k {
-		display: inline-block;
-		width: 1.4rem;
-		height: 0;
-		border-top: 3px solid;
-		vertical-align: middle;
-	}
-	.k-boundary {
-		border-top-style: dashed;
-		border-color: #7a3e00;
-	}
-	.k-parcel {
-		border-color: #0b5a73;
-	}
-	.k-river {
-		border-color: #0b4fa0;
-	}
-	.slim {
-		padding: 0.5rem 0.75rem;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		align-items: center;
-		margin: 0;
-	}
-	.err {
-		color: var(--danger);
-		margin: 0;
-	}
-	.hint {
-		font-size: 0.85rem;
-	}
-	@media (prefers-color-scheme: dark) {
-		.k-boundary {
-			border-color: #f2c14e;
+	/* A narrow modal (a phone): each row a card, every cell labelled, rather than a table that scrolls sideways. */
+	@container map-grid (max-width: 46rem) {
+		.map-table thead {
+			display: none;
 		}
-		.k-parcel {
-			border-color: #7fd5e8;
+		.map-table,
+		.map-table tbody,
+		.map-table tr,
+		.map-table th,
+		.map-table td {
+			display: block;
 		}
-		.k-river {
-			border-color: #8ec7ff;
+		.map-table tr {
+			padding: 0.5rem 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.map-table th,
+		.map-table td {
+			border: 0;
+			padding: 0.15rem 0;
+			text-align: left;
+		}
+		.cell-label {
+			display: inline-block;
+			margin-right: 0.4rem;
+			color: var(--text-muted);
+			font-size: 0.85rem;
 		}
 	}
 </style>

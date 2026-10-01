@@ -1,0 +1,120 @@
+{
+ "type": "FeatureCollection",
+ "name": "gauge-stations.synthetic",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1H001",
+    "name": "Sandspruit @ Rietvlei",
+    "river": "Sandspruit",
+    "catchmentKm2": 236.4,
+    "recordStart": "1968-10-01",
+    "recordEnd": "2024-09-30",
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1H001"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.335,
+     -33.804
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1H002",
+    "name": "Wilgerivier @ Bosrand",
+    "river": "Wilgerivier",
+    "catchmentKm2": 48.2,
+    "recordStart": "1975-04-01",
+    "recordEnd": "2019-03-31",
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1H002"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.29,
+     -33.665
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1H003",
+    "name": "Sandspruit @ Brandvlei",
+    "river": "Sandspruit",
+    "catchmentKm2": 512.7,
+    "recordStart": "1931-01-01",
+    "recordEnd": null,
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1H003"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.41,
+     -33.865
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1H004",
+    "name": "Melkhoutspruit @ Klipdrift",
+    "river": "Melkhoutspruit",
+    "catchmentKm2": 31.5,
+    "recordStart": "1988-10-01",
+    "recordEnd": "2002-09-30",
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1H004"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.225,
+     -33.66
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1R001",
+    "name": "Rietvlei Dam",
+    "river": "Sandspruit",
+    "catchmentKm2": 236,
+    "recordStart": "1972-01-01",
+    "recordEnd": null,
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1R001"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.33,
+     -33.8
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "code": "Z1H005",
+    "name": "Doringrivier @ Kromhoek",
+    "river": "Doringrivier",
+    "catchmentKm2": 880.1,
+    "recordStart": "1960-10-01",
+    "recordEnd": "2025-09-30",
+    "source": "SYNTHETIC test data, invented for this repository (not a DWS station): Z1H005"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     21.7,
+     -33.95
+    ]
+   }
+  }
+ ]
+}

@@ -142,7 +142,7 @@ describe('route auth inventory', () => {
 
 	// The data feeds (WP-2.10): auth-gated like every project route.
 	it('inventories the feed routes as auth-gated', () => {
-		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now'];
+		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now', 'GET /projects/:id/feeds/chirps/from-boundary', 'POST /projects/:id/feeds/chirps/from-boundary'];
 		for (const r of feeds) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
@@ -275,7 +275,9 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
 			'GET /projects/:id/farm/:nodeId/export.csv',
-			'GET /projects/:id/farm/:nodeId/access'
+			'GET /projects/:id/farm/:nodeId/access',
+			// The farm's map (issue #326 A3).
+			'GET /projects/:id/farm/:nodeId/map'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);

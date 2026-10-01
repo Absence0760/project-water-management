@@ -34,20 +34,35 @@
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
+	import { mapNodeHref } from '$lib/workspace/mapLinks';
+	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import DamProposalsBox from './DamProposalsBox.svelte';
 
 	let {
 		projectId,
 		editor,
 		runs,
-		readonly
+		readonly,
+		onModelChanged = () => {}
 	}: {
 		projectId: string;
 		editor: ModelEditor;
 		/** The page's runs list (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		readonly: boolean;
+		/** Reload the saved model after a proposal is used (it is saved on the server, issue #326 B-dams). */
+		onModelChanged?: () => Promise<void> | void;
 	} = $props();
+
+	// Which dams have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
+	// page has drawn, so the map's list never delays it (workspace/mapLinks.ts).
+	const mapped = new MappedNodes(() => projectId, api.map.linkedNodes);
+	// After the first paint, and again if the workspace switches project under this tab.
+	$effect(() => {
+		void projectId;
+		void untrack(() => mapped.load());
+	});
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const pick = $derived(pickRuns(runs));
@@ -188,6 +203,13 @@
 	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit, picked.level ? capacityOver(picked.level, pickedSeries.startDate) : undefined) : []);
 	// A fixed plot height: taller beside the cards, where it sits level with the first few.
 	const chartH = $derived(side ? 420 : 260);
+	// --- the proposals box (issue #326 B-dams): every hydrological unit, the dams first in the cards' order ---
+	const proposalUnits = $derived.by(() => {
+		const farms = editor.model.nodes.filter((n) => n.kind === 'farm');
+		const order = new Map(cards.map((c, i) => [c.nodeId, i]));
+		return [...farms].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)).map((n) => ({ id: n.id, name: n.name }));
+	});
+	const proposalStart = $derived(damParam && proposalUnits.some((u) => u.id === damParam) ? damParam : (cards[0]?.nodeId ?? null));
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
@@ -283,6 +305,7 @@
 							{/if}
 							<p class="links small">
 								<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
+								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="dam-map-link">Show on map</a>{/if}
 								{#if c.farm}<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>{/if}
 							</p>
 						</li>
@@ -327,6 +350,10 @@
 			{/if}
 		</div>
 
+	{/if}
+
+	{#if proposalUnits.length}
+		<DamProposalsBox {projectId} units={proposalUnits} initial={proposalStart} {readonly} dirty={editor.dirty} {onModelChanged} />
 	{/if}
 </div>
 
