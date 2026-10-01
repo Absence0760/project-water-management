@@ -2343,3 +2343,39 @@ export interface QuaternaryLookup {
 	quaternary: QuaternaryProposal | null;
 	datasets: { dataset: string; count: number }[];
 }
+
+/** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
+export interface RegisterDamProposal {
+	registerNo: string;
+	name: string;
+	river: string | null;
+	farm: string | null;
+	lon: number;
+	lat: number;
+	/** From the dam's place on the map, m. */
+	distanceM: number;
+	capacityM3: number | null;
+	wallHeightM: number | null;
+	surfaceAreaM2: number | null;
+	completionYear: number | null;
+	dataset: string;
+	/** The repo's invented list: never real values. */
+	synthetic: boolean;
+	source: string;
+	loadedAt: string;
+}
+
+/** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */
+export interface DamProposals {
+	nodeId: string;
+	nodeName: string;
+	/** The saved model's values (the proposals are compared with these, not the unsaved form). */
+	current: { damCapacityM3: number; damAreaFullM2: number | null };
+	/** The dam on the map linked to the unit (a polygon first), or null. */
+	dam: { id: string; name: string; geometryType: MapGeometry['type']; point: MapPosition; areaM2: number | null } | null;
+	radiusM: number;
+	register: RegisterDamProposal[];
+	/** The dam polygon's area, proposed as the full-supply area; null for a point or no dam. */
+	area: { featureId: string; featureName: string; areaM2: number; method: string } | null;
+	datasets: { dataset: string; count: number }[];
+}

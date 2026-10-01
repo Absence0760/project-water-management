@@ -136,7 +136,8 @@ import type {
 	MapImportPreview,
 	MapImportReviewed,
 	MapLinkedNodes,
-	QuaternaryLookup
+	QuaternaryLookup,
+	DamProposals
 } from './types';
 
 export class ApiError extends Error {
@@ -873,6 +874,25 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				),
 			quaternary: (id: string, lon: number, lat: number) =>
 				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`)
+		},
+		/**
+		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
+		 * docs/api.md § Catchment map). Each accept is one value, saved to the model as a revision naming the source.
+		 */
+		damProposals: {
+			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
+			capacityFromRegister: (id: string, nodeId: string, registerNo: string) =>
+				request<{ nodeId: string; damCapacityM3: number; registerNo: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-capacity-from-register`,
+					{ registerNo }
+				),
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; damAreaFullM2: number; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-area-from-map`,
+					{ featureId }
+				)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {
