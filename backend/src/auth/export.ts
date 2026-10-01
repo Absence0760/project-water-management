@@ -60,6 +60,8 @@ export const APP_USER_EXCLUDED: Record<string, string> = {
 export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: string }> = {
 	'account_mail_quota.user_id': { excluded: 'a count of reset / verification emails for the daily cap, a day at most' },
 	'alert_delivery.user_id': { section: 'alertDeliveries' },
+	// Their "Was this useful?" answers and comments, and the unanswered links (151_alert_feedback).
+	'alert_feedback.user_id': { section: 'alertFeedback' },
 	'alert_rule.created_by': { excluded: 'the project’s alert rule; its maker only' },
 	'alert_subscription.user_id': { section: 'alertSubscriptions' },
 	'allocation_source.imported_by': { excluded: 'the project’s import record; the import is audited' },
@@ -244,6 +246,12 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE d.user_id = $1 ORDER BY d.created_at DESC`,
 			[userId]
 		);
+		// Their own "Was this useful?" rows (151): never the token's hash or nonce.
+		const { rows: alertFeedback } = await db.query(
+			`SELECT project_id AS "projectId", kind, sent_at AS "sentAt", useful, comment, answered_at AS "answeredAt"
+			 FROM alert_feedback WHERE user_id = $1 ORDER BY sent_at DESC, id`,
+			[userId]
+		);
 		// Own rows only under RLS (133): the evidence pack emails sent to them.
 		const { rows: packNotices } = await db.query(
 			`SELECT project_id AS "projectId", pack_id AS "packId", event, status, created_at AS "createdAt", sent_at AS "sentAt"
@@ -282,6 +290,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			invites: rest.invites,
 			alertSubscriptions: rest.alertSubscriptions,
 			alertDeliveries,
+			alertFeedback,
 			packNotices,
 			preferences: prefs,
 			twoStepSignIn,

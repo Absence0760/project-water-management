@@ -180,6 +180,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	let alertsPurged = 0;
 	if (o.alerts !== false) {
 		alertsPurged = await withoutUser(async (db) => (await db.query<{ n: number }>('SELECT app_purge_alerts(make_interval(days => $1)) AS n', [ALERT_RETENTION_DAYS])).rows[0]?.n ?? 0);
+		// "Was this useful?" rows: unanswered 30 days, answers 365 (151_alert_feedback).
+		alertsPurged += await withoutUser(async (db) => (await db.query<{ n: number }>('SELECT app_purge_alert_answers() AS n')).rows[0]?.n ?? 0);
 		alertsScheduled = await withoutUser(
 			async (db) => (await db.query<{ n: number }>(`SELECT app_alert_schedule(NULL, interval '${ALERT_CHECK_GAP}', 100) AS n`)).rows[0]?.n ?? 0
 		);

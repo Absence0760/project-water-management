@@ -46,7 +46,9 @@ const STATES: { name: string; path: string; settle: (page: Page) => Promise<void
 	{ name: 'a reset link without its token', path: '/reset-password', settle: (p) => expect(p.getByRole('alert')).toHaveText(/This reset link is invalid/) },
 	{ name: 'a dead confirmation link', path: `/verify-email?token=${DEAD_TOKEN}`, settle: (p) => expect(p.getByRole('alert')).toHaveText(/This confirmation link is invalid/) },
 	{ name: 'stop alert emails', path: `/alerts/unsubscribe#t=${DEAD_TOKEN}`, settle: (p) => expect(p.locator('[data-state="ask"]')).toBeVisible() },
-	{ name: 'an unsubscribe link without its token', path: '/alerts/unsubscribe', settle: (p) => expect(p.locator('[data-state="incomplete"]')).toBeVisible() }
+	{ name: 'an unsubscribe link without its token', path: '/alerts/unsubscribe', settle: (p) => expect(p.locator('[data-state="incomplete"]')).toBeVisible() },
+	{ name: 'was this alert useful', path: `/alerts/feedback#t=${DEAD_TOKEN}&a=yes`, settle: (p) => expect(p.locator('[data-state="ask"]')).toBeVisible() },
+	{ name: 'a feedback link without its token', path: '/alerts/feedback', settle: (p) => expect(p.locator('[data-state="incomplete"]')).toBeVisible() }
 ];
 
 /** Where the page's title and form sit, and whether the page scrolls either way. */
