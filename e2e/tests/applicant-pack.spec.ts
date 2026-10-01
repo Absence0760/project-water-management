@@ -3,7 +3,8 @@
 // applicant's pack view). The assessors draft, sign and issue a pack of a
 // submitted application (through the API: the screens are
 // evidence-pack.spec.ts'); the applicant finds it in their Application panel,
-// opens their copy (their own farm by name, the neighbour only as "Farm 1",
+// opens their copy (their own farm by name; the neighbour beside it, not
+// downstream, not listed, as in their results view;
 // no PDF, manifest or bundle; the errata found since issue when there are
 // any), makes a read-only share link to it, and
 // someone signed out opens the link. axe on the pack view and the Share
@@ -117,7 +118,13 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await expect(view.getByTestId('applicant-pack-standing')).toHaveAttribute('data-status', 'issued');
 	await expect(view.getByTestId('applicant-pack-code')).toHaveText(pack.shortCode);
 	await expect(view.getByTestId('applicant-pack-own').getByRole('rowheader')).toHaveText([/^Upper farm/]);
-	await expect(view.getByTestId('applicant-pack-others').getByRole('rowheader')).toHaveText(['Farm 1']);
+	// The other units are the results view's: those downstream of the application. Lower farm drains to the gauge beside
+	// Upper farm, not below it, so neither the results view nor the pack lists it (131; the downstream case with names is
+	// backend/src/evidence/applicant-pack-units.db.test.ts).
+	const results = await (await a.request.get(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/results`)).json();
+	expect(results.results.downstream).toEqual([]);
+	await expect(view.getByTestId('applicant-pack-others-summary')).toHaveText('No other farm or water user downstream of your application is in both runs.');
+	await expect(view.getByTestId('applicant-pack-others')).toHaveCount(0);
 	await expect(view.getByTestId('applicant-pack-rows')).toBeVisible();
 	// The neighbour is never named, and the assessors' copies aren't offered.
 	await expect(view).not.toContainText('Lower farm');

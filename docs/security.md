@@ -716,8 +716,10 @@ rest, in the fragment with `&k=pack`), with these differences:
   the link shows is the same public projection whoever made it, so an
   applicant's link reveals no more than an editor's (it names no unit,
   their own included). Editors and the owner list and revoke every pack
-  link (`app_share_link_visible`), an applicant the ones they made (a
-  contributor's own `created_by`, as for a scenario link); the owner's
+  link (`app_share_link_visible`), an applicant the ones they made while
+  they are still the pack's party (135: their own `created_by` and
+  `app_applicant_pack_meta` answering them, so an editor demoted since
+  neither reads nor revokes the links they made then); the owner's
   inventory names the pack by its report's title, its status and version,
   through the owner's own RLS, and an applicant's list through
   `app_applicant_pack_meta` (they read no pack row).
@@ -2795,9 +2797,24 @@ nothing else.
   its owner *still* links (`app_application_own_nodes`, so a link removed
   since the draft turns that unit anonymous) and the nodes its proposals
   add, by name with their supply and reliability; every other farm or
-  water user in both runs only as its kind and a number (per kind, by a
-  hash of its id, so it says nothing of its name or place) with its change
-  in share of demand supplied in whole percentage points. No other unit's
+  water user **downstream of the application only** (135_pack_security,
+  after a security audit of #269 and #270), under the anonymous
+  name the applicant already sees on `/base` and the results view ("Farm
+  3", `projectBaseForApplicant`), with its change in share of demand
+  supplied in whole percentage points. The database hands the route those
+  units' node ids for the server only (never in the answer): the route
+  keeps the units downstream of the application's own and added nodes in
+  the application run's stored model (`app_application_run_results`, 118;
+  `downstreamOf`, the results view's rule, `scenarios/applicantResults.ts`)
+  and names them from that run's published base for the application's
+  own units now, exactly as the results view does. So the pack shows the
+  applicant no unit, and no link between a name and a place, that they
+  don't already have; upstream and side-branch units never appear. The
+  frozen manifest holds no network, so the downstream set comes from the
+  run's stored model and the names from the current own units, as in the
+  results view; when that run's base is no longer a published run the
+  names can't be the results view's, and no other unit is shown
+  (`others: null`, the page says why). No other unit's
   name, id, demand, volume or reliability, no holder, allocation, other
   application, flag, question, setting, model, diff, series hash, warning
   or applicant statement, and no person but the signers. No units at all
@@ -2809,17 +2826,23 @@ nothing else.
   `evidence/applicant-packs.db.test.ts` (each "cannot" with its control:
   another applicant, a non-party editor, a draft, a pack never issued, the
   baseline's; the string scan for every other unit's name and id; the
-  anonymiser's grant; the pack-link rights), `evidence/applicantPacks.test.ts`
+  anonymiser's grant; the pack-link rights, a demoted editor's included),
+  `evidence/applicant-pack-units.db.test.ts` (the other units' names equal
+  the results view's and `/base`'s, and no upstream or side unit appears),
+  `evidence/applicantPacks.test.ts`
   (the TypeScript allowlist against a row with planted extras), the role
   ladder and the applicant route sweep.
 - **Who is emailed about a pack** (133_pack_notices, [evidence-pack.md §
   Notices](./evidence-pack.md#notices)). Only the issue and withdraw routes
   queue notices, through `app_pack_notice_queue`, which refuses anyone but
   an editor of the pack's project and a pack not in that state; `water_app`
-  has no write policy on `pack_notice`, so no caller chooses a recipient.
+  holds only `SELECT` on `pack_notice` (135) and there is no write policy, so no
+  caller chooses a recipient (`catalogue.db.test.ts` pins the grant).
   The recipients are fixed by `pack_notice_audience`: the project's editors
-  and owners and the application's own scenario owner (never a viewer, a
-  farmer, another applicant or a non-member), at most once per pack,
+  and owners and the application's own scenario owner at any role above
+  farmer (an owner ranked viewer included: they are the application's
+  party). Never another viewer, a farmer, another applicant or a
+  non-member, at most once per pack,
   person and event. Each email is built as its recipient under RLS, with
   their role and address checked again at send (a member removed or
   demoted since, or an address SES suppressed since, gets nothing), and it

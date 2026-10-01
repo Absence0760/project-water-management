@@ -113,7 +113,7 @@ test('from a b023 workbook: matched by name, times a pan coefficient', async ({ 
 	const d = dialog(page);
 	await d.getByRole('radio', { name: 'A b023 workbook' }).check();
 	await d.getByLabel('Workbook (.xlsx, .xlsm)').setInputFiles(fileURLToPath(WORKBOOK));
-	await expect(d.getByRole('status').filter({ hasText: '5 crops from [Crop demand] in synthetic_b023.xlsx.' })).toBeVisible();
+	await expect(d.getByRole('status').filter({ hasText: '6 crops from [Crop demand] in synthetic_b023.xlsx.' })).toBeVisible();
 	// "Orchard" is in exactly one workbook crop's name, "Orchard A" (invented fixture: Oct 0.45).
 	await expect(d.getByLabel('Load factors for Orchard from')).toHaveValue(/^wb:/);
 	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toContainText('← Orchard A');

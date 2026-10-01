@@ -168,7 +168,7 @@ describe('model store', () => {
 					],
 					// The people it serves, for the basic-needs floor (engine 1.44.0, migration 127): more than its 1 200 stands.
 					population: 4100.5,
-					// Where its number comes from (engine 1.56.0, migration 134).
+					// Where its number comes from (engine 1.56.0, migration 136).
 					source: 'perCapita',
 					note: 'Red Book norm' },
 				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, note: '' }

@@ -1,4 +1,4 @@
--- 134_demand_object_source — where a demand object's number comes from, by
+-- 136_demand_object_source — where a demand object's number comes from, by
 -- rule (engine 1.56.0, issue #54 Q11, docs/model.md §2.7f).
 --
 -- The client confirmed the rule (issue #90): a demand comes from meter

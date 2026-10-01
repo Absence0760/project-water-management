@@ -437,6 +437,8 @@ function runNetwork(
 	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
 	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
 	let outletFlowFlags: Uint8Array | null = null;
+	// The scored record's classes, wherever it is: the validation signatures' recession segments leave its flagged days out.
+	let scoredFlowFlags: Uint8Array | null = null;
 	let flowRecordHistory = false;
 	if (calKind) {
 		const siteId = calSite?.nodeId ?? null;
@@ -462,6 +464,7 @@ function runNetwork(
 		if (kept || hasFlaggedDay(flags)) push(siteId, FLOW_QUALITY_COLUMN.key, FLOW_QUALITY_COLUMN.label, FLOW_QUALITY_COLUMN.unit, flags);
 		// At the outlet these are the outlet record's flags, which the plausibility checks read too.
 		if (siteId === null) outletFlowFlags = flags;
+		scoredFlowFlags = flags;
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
@@ -946,7 +949,12 @@ function runNetwork(
 		outflow: topo.outflow,
 		upstream: topo.upstream,
 		flowFill,
-		outletFlowFlags
+		outletFlowFlags,
+		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
+		scored:
+			calKind && scoredFlowFlags
+				? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -1126,6 +1134,18 @@ function runPlausibility(r: {
 	flowFill?: PreparedRun['flowFill'];
 	/** The outlet record's flags when the run already computed them (the quality column at the outlet), else null. */
 	outletFlowFlags?: Uint8Array | null;
+	/**
+	 * The record the run's calibration statistics score (engine ≥ 1.55.0): the calibration site's or the
+	 * outlet's, the simulated outflow there (m³/day) and its per-day classes (recordFlowFlags, the
+	 * `observed_flow_quality` column's); null without an observed record.
+	 */
+	scored?: {
+		kind: CalibrationFlowKind;
+		observedM3s: (number | null)[];
+		simulatedM3Day: ArrayLike<number>;
+		flags: Uint8Array;
+		site: { nodeId: string; name: string } | null;
+	} | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -1162,6 +1182,10 @@ function runPlausibility(r: {
 	const flowFlagged = kind
 		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
+	// The scored record's flagged days (engine ≥ 1.55.0), for the validation signatures' recession segments: the
+	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
+	const sc = r.scored;
+	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -1184,7 +1208,16 @@ function runPlausibility(r: {
 		reserve: r.reserve,
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
-		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
+		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {}),
+		scored: sc
+			? {
+					flowKind: sc.kind,
+					site: sc.site,
+					observedM3s: sc.observedM3s,
+					simulatedM3Day: sc.simulatedM3Day,
+					segmentMask: scoredFlagged ? Uint8Array.from(excluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : excluded
+				}
+			: null
 	});
 }
 
