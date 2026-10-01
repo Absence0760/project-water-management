@@ -37,6 +37,9 @@ const summary = (r: TickResult) =>
 	(r.packNotices?.sent || r.packNotices?.skipped || r.packNotices?.failed
 		? `pack notices: ${r.packNotices.sent} sent, ${r.packNotices.skipped} skipped, ${r.packNotices.failed} failed; `
 		: '') +
+	(r.erratumNotices?.queued || r.erratumNotices?.sent || r.erratumNotices?.skipped || r.erratumNotices?.failed
+		? `erratum notices: ${r.erratumNotices.queued} queued, ${r.erratumNotices.sent} sent, ${r.erratumNotices.skipped} skipped, ${r.erratumNotices.failed} failed; `
+		: '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;
 

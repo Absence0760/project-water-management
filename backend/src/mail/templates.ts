@@ -359,6 +359,47 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 	);
 }
 
+export type ErratumNoticeFacts = {
+	projectId: string;
+	projectName: string;
+	/** The erratum (docs/engine-errata.md, the engine's ENGINE_ERRATA): its id and what the table says. */
+	erratum: { id: string; keyedOn: 'run' | 'fit'; firstAffected: string; fixedIn: string | null; severity: string; appliesWhen: string; summary: string };
+	/** How many of the project's runs were made by an affected engine (or with an affected fit) when it was swept. */
+	runCount: number;
+};
+
+/**
+ * A confirmed engine bug may affect results in a project (issue #103, the
+ * known-defect procedure; docs/legal/known-defect-procedure.md). Sent once
+ * per erratum, project and owner by the worker (errata/notices.ts), built as
+ * its recipient. It says what goes wrong, when it changes results, how many
+ * runs may be affected and what to do; it never says the results *are*
+ * wrong, since a run is affected only when the erratum's conditions hold.
+ * English, as the workspace is.
+ */
+export function erratumNoticeMail(to: string, f: ErratumNoticeFacts): Mail {
+	const e = f.erratum;
+	const runs = `${f.runCount} ${f.runCount === 1 ? 'run' : 'runs'}`;
+	const made =
+		e.keyedOn === 'fit'
+			? `${runs} in ${f.projectName} ${f.runCount === 1 ? 'uses' : 'use'} parameters from an automatic calibration made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`
+			: `${runs} in ${f.projectName} ${f.runCount === 1 ? 'was' : 'were'} made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`;
+	return render('erratum_notice', to, `Known engine bug ${e.id} may affect ${f.projectName} — ${PRODUCT}`, {
+		heading: `A known engine bug may affect results in ${f.projectName}`,
+		paragraphs: [
+			`We confirmed a bug in the model engine (${e.id}, severity ${e.severity.toLowerCase()}): ${e.summary}.`,
+			`It changes results only when: ${e.appliesWhen}.`,
+			made,
+			e.fixedIn
+				? `It is fixed in engine ${e.fixedIn}. Check whether the conditions apply to your catchment; if they do, re-run on the current engine and compare the two runs. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`
+				: `It is not fixed yet. Check whether the conditions apply to your catchment; if they do, treat the affected figures with care until it is. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`,
+			'If a run you published, signed or put in an evidence pack is affected, consider telling the people who rely on it. An issued pack keeps its own record, and its verify page lists the errata found since it was issued.'
+		],
+		action: { label: 'Open the runs', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=runs`) },
+		footer: [`You get this email because you own ${f.projectName}. The list of known engine bugs is published with the methodology (docs/engine-errata.md).`]
+	});
+}
+
 /** What a deletion did, for its confirmation: the catchments and teams the person left (their names, as they stood). */
 export type AccountDeletedFacts = { projects: string[]; teams: string[] };
 

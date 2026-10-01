@@ -280,6 +280,11 @@ beforeAll(async () => {
 		subject.id,
 		projectId
 	]);
+	// A "known engine bug" email sent to them as an owner (150_erratum_notices): as the schema owner, the pipeline isn't under test.
+	await asOwner(
+		`INSERT INTO erratum_notice (erratum_id, project_id, user_id, run_count, status, sent_at, settled_at) VALUES ('ER-1', $1, $2, 1, 'sent', now(), now())`,
+		[projectId, subject.id]
+	);
 	// Evidence that names its maker (138, issue #112): a project they imported (with its import report) and a team they
 	// made, each with the owner as a second owner or admin; a run of theirs, nominated as evidence, with a completed
 	// ensemble; and a team scenario. All stay after the deletion, with the maker cleared.

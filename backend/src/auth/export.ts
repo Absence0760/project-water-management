@@ -72,6 +72,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'evidence_pack.created_by': { excluded: 'the project’s evidence pack; its maker only, and the drafting is an exported audit event' },
 	'evidence_pack.issued_by': { excluded: 'the project’s evidence pack; its issuer only, and the issue is an exported audit event' },
 	'email_token.user_id': { excluded: 'secrets (verify / reset token hashes), a week at most' },
+	// The "known engine bug" emails sent to the person as an owner (150_erratum_notices), 30 days.
+	'erratum_notice.user_id': { section: 'erratumNotices' },
 	'farm_link.added_by': { excluded: 'links the person made for others; farmer.linked is in auditEvents' },
 	'invite.invited_by': { excluded: 'invites the person sent (another person’s address); invite.sent is in auditEvents' },
 	'job.acting_user_id': { excluded: 'operational queue rows, 30 days; what they change is audited' },
@@ -241,6 +243,12 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 FROM pack_notice WHERE user_id = $1 ORDER BY created_at DESC, pack_id, event`,
 			[userId]
 		);
+		// Own rows only under RLS (150): the known-engine-bug emails sent to them.
+		const { rows: erratumNotices } = await db.query(
+			`SELECT project_id AS "projectId", erratum_id AS "erratumId", status, created_at AS "createdAt", sent_at AS "sentAt"
+			 FROM erratum_notice WHERE user_id = $1 ORDER BY created_at DESC, erratum_id, project_id`,
+			[userId]
+		);
 		// Own row only under RLS (083): one row, or none when they never saved any.
 		const { rows: prefs } = await db.query(
 			`SELECT preferences, updated_at AS "updatedAt" FROM user_preferences WHERE user_id = $1`,
@@ -263,6 +271,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			alertSubscriptions: rest.alertSubscriptions,
 			alertDeliveries,
 			packNotices,
+			erratumNotices,
 			preferences: prefs,
 			reportSubscriptions: rest.reportSubscriptions,
 			// Without a publication's per-farm figures (the decision log, issue #119): the project's figures about others' farms.
