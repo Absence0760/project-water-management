@@ -73,7 +73,7 @@ rows and columns don't break it.
   return flow % r becomes `irrigationEfficiency` e = 1 − r with
   `lossReturnFraction` 1 (r = 0: e = 1, 0), the same mapping as migration
   006 (docs/engine-audit.md N1). The workbook has no dam surface areas:
-  `damAreaFullM2` is null (runs estimate capacity ÷ 3 m and warn, N2),
+  `damAreaFullM2` is null (runs estimate 7.2 × capacity^0.77 m² and warn, N2),
   `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
   b023 has no river abstraction, so a unit that pumps straight from the river
   is entered as a "dummy dam". A farm whose dam takes 100 % of the upstream
@@ -89,6 +89,13 @@ rows and columns don't break it.
   takes 100 % of the upstream inflow gets the same flag with its own text: the
   engine lets a dam-less farm irrigate from the river routed to it with no
   limit, where b023's formula gave it nothing (issue #54). The run warns about it too (docs/model.md §2.7e).
+  A farm whose dam takes **less** than 100 % of the upstream inflow but holds
+  under 100 m³ (less than a day of one hectare's peak irrigation) or under
+  1 % of a day of its diversion capacity gets a `WARNING:` "probable
+  placeholder pool, for the modeller to confirm" (issue #90 Q18): it stores
+  nothing from one day to the next, so it is either a placeholder (set the
+  capacity to 0) or a unit pumping from the river (run of river with a pump
+  capacity). It is imported as it is; `--run-of-river` doesn't convert it.
   **`--run-of-river`** (off by default; the seed turns it on per workbook with
   `WBT_RUN_OF_RIVER=1` in `wbt-import.<Prefix>.env`, bin/seed-demo.sh) imports
   every unit so flagged as run of river instead (issue #54, 2c/2d):

@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Evidence report § 1 locality map (issue #326 A5): the engine's SVG builder (geo/localityMap.ts) and LocalityMap.svelte in the lazy evidence report chunk. Measured 2026-10-01: total 1482 KB without the component, 1486 KB with it; headroom 0 KB."
+}

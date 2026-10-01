@@ -181,21 +181,27 @@ Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
 sign-in, `amr` in the session, and the requirement for project owners, team
 admins and assessors at the route (security.md § Two-step sign-in). Open:
 
-- [ ] **No app-wide prompt yet.** An owner, team admin or assessor without an
-      authenticator learns of the requirement on the Account page (its
-      warning) or from the `403 mfa_required` of the action they tried; the
-      workspace shows that message, with no link. A banner in the app shell
-      (from `GET /auth/mfa` `required && !enrolled`) and, for `mfa_step_up`,
-      a "sign in again" button are the durable fix. Trigger: before the
-      first production deploy with client data (#62).
+- [x] **No app-wide prompt yet** (done 2026-10-01). A banner on the
+      workspace (`layout/MfaBanner.svelte`, from `GET /auth/mfa`
+      `required && !enrolled`, and from any `403 mfa_required`) links to the
+      Account page's panel; a password-only session of a role that needs it,
+      or any `403 mfa_step_up`, gets **Sign in again** (security.md §
+      Two-step sign-in, § The prompt). `required` now reads false while
+      `MFA_REQUIRED=false`.
 - [ ] **The requirement is checked at the route, not in RLS.** Every owner
       route goes through `requireRole(…, 'owner')`, so a new one is covered
       without a decision, but a route that checks the owner role some other
       way would not be. Durable fix: step-4 WP-4.2's `app.auth_mfa`
       transaction setting, with the owner-level policies refusing without it.
       Trigger: organisations (WP-4.1), when the session context is rebuilt.
-- [ ] **Signing a run or a pack doesn’t require it** (below,
-      "Two-step sign-in on sign-off"): the operator's decision.
+- [x] **Signing a run or a pack doesn’t require it** (below,
+      "Two-step sign-in on sign-off"). **Done** (operator decision,
+      2026-10-01): every signer needs it.
+- [x] **The two-step sign-in banner can be dismissed** (from #282). Like the
+      confirm-email banner, it hides until the next refused action or
+      sign-in. **Decided (operator, 2026-10-01): keep it dismissable**,
+      since every refused action brings it back (security.md § Two-step
+      sign-in, The prompt). No change.
 - [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
       "verifikasie-app" and "herstelkode" (§ Afrikaans).
 
@@ -203,6 +209,44 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
 
 Every engine decision marked "pending the hydrologist" in model.md is
 collected as a checklist in issue #46; tick it there as they answer.
+
+**Provisional decisions 2026-10-01.** Issue #90's calibration, data-quality,
+EWR, planning and help-text questions (modelled area to D10) were answered
+from the literature, provisionally, so the app can be called
+production-ready: one row per question, with its source, in
+[calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01). They are **not** the hydrologist's sign-off; each item below
+stays open until they confirm it. Two change the engine (1.62.0):
+validation benchmarks from the calibration period (CR-5, engine-audit C4)
+and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
+(the modelled area, QF-4's ratings, which Reserve table, which zero-rain
+runs and accumulations are real) can't be decided without the client.
+
+- [ ] **Network, supply, crops and dams: provisional decisions 2026-10-01**
+      (issue #90, the hydrologist list from *Supply order at a dam* to
+      *WP-1.35 Land-cover split*). Each item was researched against published
+      South African practice and decided **provisionally, to be confirmed by
+      the client's hydrologist**; the record, one row per item with its
+      source, is [engine-audit.md § Provisional decisions
+      2026-10-01](./engine-audit.md#provisional-decisions-2026-10-01-network-supply-crops-and-dams),
+      and model.md marks each section. Built where the evidence clearly
+      pointed elsewhere (engine 1.63.0): an unknown dam area is 7.2 · C^0.77
+      m² (Maaren & Moolman 1985, via Sawunyama 2013) instead of capacity ÷
+      3 m, whose source was never found; a save takes a dam area exponent
+      0 < b ≤ 1; the sediment warning asks for a dam's in-service date; and
+      both importers flag a near-empty placeholder pool (Q18). Everything
+      else was kept. **Still the client's data**, each surfaced in the app:
+      which dams keep a reserve (form hint), Q18 pools (import warning), Q19
+      upstream-to-dam % per farm (run warning on a dam-less farm), which
+      units are run of river and their pump capacities (import flag, run
+      warning, evidence-pack gate), each senior user's population (for the
+      NWA basic-needs exemption), each property's GN 538 rate (run warning),
+      municipal return shares (treatment works records), soils and root
+      depths (the 25 mm store), the A-pan row's pan type (before a WR90
+      preset or the SABI crop set is applied), sediment rates and surveys,
+      borehole d and k and whether they pumped during the calibration
+      record, and land-cover classes and areas. Trigger: the hydrologist's
+      answers on #90; a reversal becomes a new engine version with its
+      engine-audit.md entry.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
@@ -257,6 +301,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep every default as built ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
       engine 1.44.0, issue #123; to put to the hydrologist through #90).
       A restriction what-if holds a domestic or municipal object's floor
@@ -336,7 +381,10 @@ collected as a checklist in issue #46; tick it there as they answer.
       suits small farm dams; and whether a site study or the quaternary's
       WR2012 evaporation zone should replace the national monthly factors.
       Once chosen, fill it on the client project (it is a project setting,
-      not a default).
+      not a default). **Provisional decision 2026-10-01** (issue #90, to be
+      confirmed by the client's hydrologist): keep flat 0.75 as the default
+      and fill no preset yet; WR90 lake factors with Taljaard's conversion
+      once the client's A-pan row is confirmed to be A-pan, not S-pan.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -384,6 +432,11 @@ collected as a checklist in issue #46; tick it there as they answer.
         per node. Trigger: the first licence application with boreholes. Also: one depletion lag
         per node is shared by its boreholes; per-borehole lags if a
         geohydrology report gives different response times.
+      - **Provisional decision 2026-10-01** (issue #90, to be confirmed by
+        the client's hydrologist) on WP-1.34 and WP-1.35: the lagged
+        reservoir and the deficit carry-over, the GN 538 volume rule and the
+        Q75 daily split are kept; the values, areas and classes are client
+        data (engine-audit.md § Provisional decisions 2026-10-01).
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
         catchment (invasives, plantations, riparian stands) and their
         condensed areas? The class reductions are indicative mature-stand
@@ -403,7 +456,11 @@ collected as a checklist in issue #46; tick it there as they answer.
       WR2012 (TT 690/16 §2.2) gives 0.6 as the South African average, and an
       unknown dam's area could follow A = 7.2 · C^0.77 m² (Sawunyama 2013)
       instead of capacity ÷ 3 m. Both change every such dam's evaporation,
-      so both wait on the hydrologist (model.md §2.7a).
+      so both wait on the hydrologist (model.md §2.7a). **Provisional
+      decision 2026-10-01** (issue #90, to be confirmed by the client's
+      hydrologist): the resize rule and the 0.7 exponent kept; the unknown
+      area changed to 7.2 · C^0.77 (Maaren & Moolman 1985) in engine 1.63.0,
+      since the 3 m depth's source was never found.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
@@ -424,7 +481,11 @@ collected as a checklist in issue #46; tick it there as they answer.
         dam and seepage; unknown areas use capacity ÷ 3 m (warning W6).
         Needs each dam's area when full, and confirming the "Mantel & Hughes
         2023" 3 m median depth reference (not verified). Rain on a dam is
-        partly double-counted with land runoff.
+        partly double-counted with land runoff. **Provisional decision
+        2026-10-01** (issue #90): the reference was never found, so engine
+        1.63.0 estimates an unknown area as 7.2 · C^0.77 m² (Maaren &
+        Moolman 1985); N1, N3, N4/Q3/Q18 and Q5 are provisionally kept
+        (engine-audit.md § Provisional decisions 2026-10-01).
       - N4/Q3/Q18 (0.16.0): transfers capped at the receiver's room; an
         explicit priority, with equal priorities sharing pro rata.
       - Q17/Q13/Q11 (0.17.0): EWR shortfall charged to upstream farms pro
@@ -475,9 +536,12 @@ collected as a checklist in issue #46; tick it there as they answer.
       three passes (the Desktop Reserve method used one, Hughes et al. 2003);
       τ 0.2; outcome cut-offs 0.95 / 0.85 and the 5 % / 20 % days; the 0.9
       annual assurance threshold; senior users exempt only for basic human
-      needs, with an optional restriction %; the dam area exponent 0.6
+      needs, with an optional restriction % (provisionally 2026-10-01: the
+      NWA basic-needs reading adopted as the target, applied once each senior
+      user's population is known); the dam area exponent 0.6
       (WR2012) instead of 0.7 and the fallback area 7.2·C^0.77 (Sawunyama
-      2013) instead of capacity ÷ 3 m; which dam evaporation preset (the
+      2013) instead of capacity ÷ 3 m (provisionally 2026-10-01: 0.7 kept,
+      the fallback changed in engine 1.63.0); which dam evaporation preset (the
       WR90 monthly presets are built, engine 1.49.0, but 0.75 × A-pan, the
       top of SA practice, stays the default; see "Which dam evaporation
       preset" above); plantation classes by
@@ -486,6 +550,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
       issue #68). The suite now compares the N1 columns against an **N1
       replay**: each farm with e < 1 runs with a demand factor of e, so it
@@ -565,6 +630,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       a zero run (50 %, `ZERO_RUN_CHIRPS_SHARE`) and the coverage it needs
       (50 % of the run's days) are constants; the ±5-year window and the 25 %
       scaled-minimum share are too.
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep all four off; deciding needs a semi-arid record with a known drought, which only the client can supply ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
@@ -588,6 +654,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       engine 1.0.0 removed the legacy model (issue #16). The last client
       record of legacy against the workbook is the regression run on engine
       0.45.0 (`run.test.ts`, engine-audit.md § Regression suite).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep linear monthly scaling as the default, the sample and clamp limits; the quantile map stays opt-in, recommended where a month has ≥ 30 wet days on both sides ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **Multi-day rain accumulations (issue #2, audit B4). Built (engine
       0.20.0, model.md §2.4d): detection, spreading by bias-corrected CHIRPS
       (default on), keep-as-recorded and listed windows in Settings → Rain
@@ -604,6 +671,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       with its own threshold (the window's total against corrected CHIRPS),
       once the hydrologist says which; until then the gauge total is kept.
       Trigger: the hydrologist's review of issue #2.
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #2; the hydrologist's answer is on #46). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
@@ -667,6 +735,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       blank run, on a day CHIRPS is dry). None of this is applied: the
       hydrologist decides what to list
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep treating flagged runs as missing; which runs are real dry spells needs the station's records (client data).
 - [x] **CHIRPS fit period / per-segment factors (tracked from audit B3,
       2026-09-24; done, engine 0.29.0, issue #40 (a)).** The double-mass
       check (model.md §2.10a) can find the catchment / CHIRPS ratio breaking
@@ -780,6 +849,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       shared constants are in `packages/engine/src/quantileMap.ts`, the
       heavy-day ones in `rainSourcePeriods.ts` ([model.md §2.4b *Quantile
       map*](./model.md#quantile-map-engine--1530-cr-23)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the defaults as built, the gauge map keeping wet-day counts and the CHIRPS map opt-in ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;
@@ -796,7 +866,10 @@ collected as a checklist in issue #46; tick it there as they answer.
       re-translated and re-checked). **Pending the client's hydrologist**
       (persona drafts, tracked on #46 with D10): base flow described via the Lyne–Hollick filter,
       not GR4J's routing store; the Reserve set for a target category A–D;
-      "IFR" as the older term.
+      "IFR" as the older term. **Provisional decision 2026-10-01:** all
+      three kept, and D10's narrow no-break space too; the `ewr` article now
+      names the Act's term (the Reserve, its ecological part) and the
+      `ecological-category` article says E and F aren't management targets.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
 - [x] **Issue #46 persona drafts, four changes built** (engine 1.11.0,
@@ -1132,7 +1205,7 @@ the reports):
       engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
       hydrologist-review trigger ([plan.md](./plan.md) Decisions,
       [model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)).
-- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it. Asked in issue #90 (2026-09-28).
+- [x] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it. Asked in issue #90 (2026-09-28). **Provisional decision 2026-10-01: not built.** GR6J (CR-10) is the planned structural alternative for low flows and the climatology benchmark already tests GR4J's skill; reopen if the client's hydrologist asks ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -1293,7 +1366,10 @@ the suggested order (the IDs carry the detail):
       the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Both
       have (CR-18/19 in engine 1.22.0): the rule set can now read
       `dayQuality` and the per-day flags; it still waits on the hydrologist
-      signing off the default rules.
+      signing off the default rules. **Provisional decision 2026-10-01:** the
+      default rules are adopted as drafted, but `signedOff` stays false, so a
+      fit they pick is still not evidence until the hydrologist signs them
+      ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
       dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
@@ -1939,7 +2015,17 @@ the suggested order (the IDs carry the detail):
       `order.test.ts` (one case per sum, on values whose sum depends on the
       order), `run.invariants.test.ts` › "engine 0.26.1: …" pins the seeds
       of both models; `runoff/legacy.test.ts` now adds the area in id order.
-- [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
+- [x] **Dam area exponent above 1** (done 2026-10-01, engine 1.63.0, issue
+      #90; provisional decision, to be confirmed by the client's hydrologist).
+      Narrowed to 0 < b ≤ 1 (`DAM_AREA_EXPONENT_MAX`) in zod, the node form,
+      the frontend model check and the scenario ops; `damLosses` runs an
+      older document's b > 1 as entered, with the limiter and a warning that
+      a save now needs b ≤ 1; the engine's random-network soak still draws b
+      up to 3 for those documents, the scenario fuzz only up to 1. No
+      migration: every write path (the model PUT, a project import, a history
+      restore) parses through `ModelBody`, so the column's wider check holds
+      only rows from before, and nothing is deployed yet. Was: validation
+      allowed 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,
       `verify/checks.ts`), but a single area–storage power law with b > 1 is
@@ -1954,7 +2040,8 @@ the suggested order (the IDs carry the detail):
       limiter stays for runs saved before. Deferred because it narrows what
       users may enter, so it is the real hydrologist's call. Trigger: the
       hydrologist review of N2 (engine-audit.md), or the first real dam
-      entered with b > 1.
+      entered with b > 1. (Resolved as above; the migration it proposed
+      proved unnecessary.)
 - [x] **Excel audit workbook export** (issue #68, 2026-09-29; the operator
       asked for it ahead of the trigger below). The Runs tab's Download menu
       offers **Audit workbook — *unit* (.xlsx)** after each farm's daily CSV:
@@ -2238,6 +2325,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
+- [x] **"Unit" wording, the smaller choices** (from #54; operator, #93).
+      Should engine run warnings and API errors say "unit" in the
+      workspace, should the xlsx summary sheets say "Unit summary", and
+      should a new node default to "Unit N"? **Decided (operator,
+      2026-10-01): yes, keep, yes. Done:** the engine's run warnings and
+      save errors and the workspace API's errors say "unit" (engine 1.61.0,
+      words only); a new node is `Unit N`; the xlsx Summary sheet keeps
+      "Farm summary", since it is the summary CSV's block and the CSV is a
+      contract (ui.md § the words). The first automatic run after the
+      upgrade reads the reworded warnings as new, so a person publishes it
+      once.
 - [x] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
       `main`** (tracked on #76; seen 2026-09-27, not caused by it; fails the same on a clean
       checkout): at 1440 px the page itself scrolls 25 px, where the list
@@ -2513,7 +2611,7 @@ role and not before it.
       `auth/account-tokens.security.db.test.ts` (unknown, unconfirmed and
       verified addresses get the same answer and row, with a positive
       control), `invites/invites.db.test.ts`, `sharing.spec.ts`.
-- [ ] **An invite outlives its sender's right to send it** (review of
+- [x] **An invite outlives its sender's right to send it** (review of
       issue #136, 2026-09-29). `invite` RLS checks owner/admin only when the
       invite is written, so if the owner who sent it is removed or demoted
       before it is accepted, the invitee still joins with the invited role
@@ -2525,6 +2623,15 @@ role and not before it.
       they lose that role (a trigger on `project_member`/`team_member`),
       with a DB test for each path. **Trigger:** before a catchment has more
       than one owner outside the operator's own team.
+      **Done** (155_invite_sender_role.sql): every function that lists,
+      describes or accepts an invite checks its sender at that moment
+      (`app_invite_sender_holds`), chosen over a role-change trigger because
+      it fails closed on every way a role is lost; owners see a lapsed invite
+      flagged (`senderLapsed`) to re-send or revoke. Tests:
+      `invites/invites.db.test.ts`, `farms/invites.db.test.ts`.
+      A lapsed invite revives if its sender regains the role: **accepted
+      (operator, 2026-10-01)**, since they could re-send it anyway
+      (security.md § Invites).
 
 ## Features left half-way
 
@@ -2819,6 +2926,10 @@ role and not before it.
   - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
         published into `rain_chirps_mm`; the existing CHIRPS bias correction
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
+        **Provisional decision 2026-10-01 (to be confirmed by the client's
+        hydrologist):** yes, CHIRPS needs one, and the run-time bias
+        correction is it; no separate factor at ingest, so the stored feed
+        stays as published ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
   - [x] Marking a fed series on the Data tab ("from CHIRPS feed", from
         `time_series.feed_id`): built, `SeriesMeta.feed` and the Data tab's
         *Written by the … feed* (#69). Merges are already audited
@@ -3448,7 +3559,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       forwarded, long cache), `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles`
       in the web release, and `infra/scripts/check-csp.mjs` run on it. Until
       then production draws the plain background. Decide D7 (maxzoom, by the
-      measured extract size) first.
+      measured extract size) first. With it, the labels' glyphs (#326 A6):
+      the `fonts/` tree from `bin/tiles-dev.sh fonts` under `tiles/fonts/`,
+      and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
+      (maps.md § Labels); no CSP change.
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading
@@ -3458,17 +3572,58 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
       WR2012 values are loaded only from the operator's own registered
       download, never committed or shipped.
+- [ ] **Decision: the DWS station catalogue's licence** (operator; maps.md
+      § Sources, issue #326 B-gauge, decision D-B). The Verified data pages
+      answer 403 outside South Africa, and DWS's information pages restrict
+      use to "academic, research or personal purposes". Ask DWS Hydrological
+      Services in writing whether station metadata may be reused in a
+      commercial service; until then the nearest-gauge proposal reads only
+      the synthetic list. On a yes: record it in the sources table, load the
+      catalogue with `pnpm import:gauge-stations`, and add it to the
+      production loading path above (same gap as the quaternaries).
 - [ ] **Contributor-owned features** (WP-3.3 × WP-3.12): `map_feature.scenario_id`
       so an applicant places their own scenario's features, with the RLS
       the WP describes. Today only editors write; farmers and applicants
       read (RLS) but no route serves them.
-- [ ] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): polygon-based
-      CHIRPS extraction from the `catchment_boundary` feature in place of the
-      bounding box (`backend/src/feeds/`).
-- [ ] **Drawing polygons on the map** (D9 (b)): only upload and point
-      placement now; full drawing if hydrologists ask.
-- [ ] **Dam polygons → the area–volume curve**: a dam polygon's area is
-      measured but not proposed to the dam's full-supply area yet.
+- [x] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): done in issue
+      #326 B-rain (2026-10-01): Settings → Data feeds → **Use the catchment
+      boundary** proposes the CHIRPS cells the boundary covers, weighted by
+      the share of each inside (exact clipping), and an owner applies it
+      ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
+- [ ] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
+      B-rain): new cells (from the boundary, or a redrawn one) go only to a
+      feed whose series is empty, else to a new feed in a separate series,
+      because a feed's existing days were averaged over its old cells and it
+      never splices two areas. Durable fix: a staged same-product
+      replacement, like the version replacement of issue #40c (backfill the
+      whole record over the new cells in `feed_stage`, swap it in whole),
+      so the boundary feed can take over the default series. Trigger: a
+      hydrologist wanting the boundary's rain in an existing CHIRPS series
+      without comparing two series.
+- [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
+      C1 (2026-10-01): editors draw polygons and lines, place points by
+      click, and reshape them, with paste-a-shape and keyboard placement as
+      the non-pointer paths ([maps.md § Drawing](./maps.md#drawing)).
+- [x] **Dam polygons → the full-supply area** (2026-10-01, issue #326
+      B-dams): a dam polygon linked to a unit proposes its area as the dam's
+      `damAreaFullM2` on Dams → Proposed from the register and the map, with
+      Use and a model revision naming the polygon ([maps.md § Dams from the
+      register and the map](./maps.md#dams-from-the-register-and-the-map)).
+      What stays open is the rest of the curve: a polygon gives one point
+      (the area when full), not the area–volume shape below it, which needs
+      a survey or a DEM (the "A resized dam follows its own area–volume
+      relation" item, and B-delineate's DEM).
+- [ ] **Decision: the DWS register of dams' licence** (operator; maps.md §
+      Sources). The Dam Safety Office's List of Registered Dams and its
+      Google Earth overlay state no licence, and DWS's data terms elsewhere
+      restrict use to academic, research or personal purposes. The dam
+      proposals are built and tested against the synthetic register; ask
+      DWS (Dam Safety Office) for written permission for commercial use
+      before a client deployment loads the real list. Trigger: the first
+      client who wants register capacities proposed.
+- [ ] **Loading the register of dams in production**: the same missing path
+      as the quaternary dataset above (the loader runs as the schema owner
+      from a workstation). Do both together, once either licence allows.
 
 ## Crop factors (issue #54 item 1)
 
@@ -3677,7 +3832,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       the applicant's unit puts its river take under the check; the EWR
       kept counts as protection even in a model whose EWR is 0 (the
       Reserve rows then say *Not assessed*, so nothing is hidden). Trigger:
-      the hydrologist's answer to Q15 and Q16.
+      the hydrologist's answer to Q15 and Q16. **Provisional decision 2026-10-01**
+      (issue #90, to be confirmed by the client's hydrologist): Q15 and Q16
+      as built, required for licensing evidence and not to save or run a
+      model (NWA s18; a b023 import has no capacities).
 - [ ] **A dam-less unit under river first or trigger bypasses its pump**
       (engine 1.60.0 warns, model.md §2.7e). Only run of river zeroes the
       dam split and River to dam, so on a unit with no dam the other rules
@@ -3967,17 +4125,47 @@ the assessors' **Assess together** view
 ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
 Left:
 
-- [ ] **The evidence report's cumulative row reads a combined run.** C26
-      (`packages/engine/src/evidence/report.ts` `cumulativeOf`, § 4 and
-      page 1's *Other applications on this baseline, summed*) still adds up
-      other applications' separate runs and says so. The durable fix: the
-      report's backend (`backend/src/evidence/report.ts`) combines this
-      application with every other submitted or approved one on the baseline
-      (`combineScenarios`), runs it, and the row shows the combined change
-      and the interaction; a conflict makes the row *Not assessed* with the
-      conflicts named, never a silent merge. It changes the report's
-      content, so `REPORT_VERSION` and the evidence pack's manifest move with
-      it. Trigger: now (WP-3.11 landed); needs the report version decision.
+- [x] **The evidence report's cumulative row reads a combined run.** C26.
+      Built (report format `evidence-11`): page 1's row, now *This and the
+      other applications on this baseline, together*, and § 4's combined
+      table read a completed assessment of exactly this application and
+      every other submitted or approved one on the baseline with their
+      current ops (the combined change and the interaction at the outlet);
+      without one the backend checks the combination itself
+      (`checkCombination`, no model run), so a conflict makes the row *Not
+      assessed* with the conflicts named, never a silent merge. Chosen over
+      running the combination in the report request, which is up to 8 + 2
+      model runs per GET, pack draft and issue check. A pack drafted before
+      it keeps its frozen sum ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
+- [x] **The cumulative row's assessment engine** (from #71, C26; operator,
+      #93). The row read the newest complete assessment of the same
+      applications on any engine and printed which, so its baseline figure
+      (the assessment's own run of the baseline) could differ from the
+      report's. **Decided (operator, 2026-10-01): require the baseline
+      run's engine. Done:** `loadCombined` reads only an assessment made on
+      the baseline run's engine; one on another engine makes the row *Not
+      assessed* with why (assessed on X, the baseline ran on Y: assess
+      again), and while the server runs another engine than the baseline's
+      it says to run the baseline again (`staleAssessment`). Tests:
+      `evidence/report-combined.db.test.ts`.
+- [x] **Who sees the combined row** (from #71, C26; operator, #93).
+      Assessments are visible to editors only, so a viewer's report never
+      shows the combined figure (viewers don't see submitted applications
+      at all), and a team scenario counts as an application once it is
+      submitted, as § 4 always did. **Confirmed (operator, 2026-10-01):
+      both stay as built** ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
+- [ ] **The reproduction bundle carries the combined row's runs.** An
+      `evidence-11` pack's combined row cites an assessment, whose runs (the
+      baseline, each alone, all together, on the assessment's engine) the
+      bundle doesn't hold, so `reproduce:pack` re-runs the baseline and the
+      application but not that row. Durable fix: the bundle adds the
+      assessment's members (ops and hashes, as `scenario.json` does for the
+      application) and its stored report, and `reproduce:pack` re-runs the
+      combination with `combineScenarios` and compares the outlet rows.
+      Trigger: the first issued pack whose combined row is assessed, or an
+      assessor asking to reproduce it.
 - [ ] **Yield and reliability per dam, together.** The report covers the EWR
       sites, the Reserve, the outlet and existing users' supply; a firm
       yield of each dam on the combined input (WP-3.6) is not in it. Durable
@@ -4271,6 +4459,17 @@ assume, the questions for counsel); these are the actions, with triggers.
 
 ## Housekeeping
 
+- [ ] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
+      (found 2026-10-01, issue #326 round 3). "loads the committed env file and
+      points both URLs at the checkout database" fails on any machine whose
+      `backend/.env.development.local` sets `DATABASE_URL` to another database
+      (an override to run a preview database), since `loadDevEnv` reads that
+      file and it wins. The code is right; the test isn't isolated. Durable fix:
+      give `loadDevEnv` the directory to read (or the file list) and point the
+      test at a temp directory holding only a copy of the committed file.
+      Trigger: the next change to `config/devEnv.ts`, or a second report of
+      the failure.
+
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
       tests only; the email-first sign-up (2026-09-27) changed the shared
@@ -4361,13 +4560,18 @@ Left, each with its trigger:
       folded shut, in the run's Record group (`#res-validation`) and under
       the scenario's comparison (`liability/ValidationPanel.svelte`, its
       body a lazy chunk; ui.md § Runs & results, § Scenarios).
-- [ ] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
+- [x] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
       sign-in and requires it of owners, team admins and assessors:
-      security.md § Two-step sign-in). Signing a run or a pack doesn't
-      require it yet, since a signer is any editor: a one-line
-      `requireStepUp` in `signoffs/routes.ts` and the pack sign-off route
-      once the operator decides every signer must use it. Until then a
-      sign-off is as strong as the signer's sign-in.
+      security.md § Two-step sign-in). Signing a run or a pack didn't
+      require it, since a signer is any editor, so a sign-off was only as
+      strong as the signer's password. **Decided (operator, 2026-10-01):
+      require it of every signer**, since a sign-off is the professional
+      record an authority relies on. **Done:** `requireStepUp` after the
+      role check in `POST …/runs/:runId/signoffs` and
+      `POST …/packs/:packId/signoffs` (`403 mfa_required` / `mfa_step_up`,
+      which the workspace's two-step banner picks up), and both reads'
+      `cannotSign` say so first (`stepUpRefusal`), so nobody fills in the
+      dialog to be refused. Tests: `auth/stepUp.db.test.ts`.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
       2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion
@@ -4610,19 +4814,44 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       compares their results digests. The bundle carries each run's own
       stored inputs rather than the project's `export.json`: those are what
       the runs used, where the export is the project as it is now.
-- [ ] **Re-run both runs on the server after issue.** Issue checks the
-      bundle's files, hashes and manifest but doesn't re-run the runs (it
-      takes as long as the runs, too long for a request); today the
-      assessor does that with `reproduce:pack`. Durable fix: a
-      `pack_reproduce` job queued at issue that runs `checkPackBundle` with
-      the re-run on the stored bundle and records the outcome and engine on
-      the pack (shown on the pack page, not on verify, since it is the
-      app's own claim). Trigger: with the pack view, or the first pack whose
-      runs don't reproduce. The same job is where the bundle's build would
-      move if a catchment's issue ever nears the API's 30 s (it is built in
-      the issue's transaction today, estimated 5–10 s at 300 outputs × 30
-      years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
-      trigger for that part, an issue slower than 15 s in the API's logs.
+- [x] **Re-run both runs on the server after issue.** Issue checks the
+      bundle's files, hashes and manifest but didn't re-run the runs (it
+      takes as long as the runs, too long for a request). Built
+      (154_pack_reproduce, 2026-10-01): the issue's transaction queues a
+      `pack_reproduce` job that reads the stored bundle back, checks it is
+      the recorded bytes, runs `checkPackBundle` with the re-run and the
+      pack's manifest hash, and records the outcome (`reproduced`,
+      `not_reproduced`, `other_engine`, `no_bundle`), the engine and every
+      check in `pack_reproduction`, through `app_record_pack_reproduction`
+      from that job only. The pack page's bar shows it; verify doesn't
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [x] **Re-run a pack again on the server.** The `pack_reproduce` job runs
+      once, at issue (3 attempts). When it gives up (the packs bucket
+      unreachable for all three) the pack page says the re-run couldn't be
+      done, and nothing asks again; and after an engine upgrade nothing
+      re-runs older packs on the new engine (one outcome per pack and
+      engine is recorded, so the table already holds a second). Durable
+      fix: an editor's `POST …/packs/:packId/reproduce`, as
+      `POST …/packs/:packId/pdf` asks again for a PDF (queue
+      `queuePackReproduce` while no outcome is recorded for the server's
+      engine; route inventory, role ladder, mass-assignment and write-route
+      entries), with a "Try again" on the pack page. Trigger: the first
+      `pack_reproduce` job that goes dead in production, or an engine
+      version bump after the first pack is issued. **Decided (operator,
+      2026-10-01): build it now. Done:** `POST …/packs/:packId/reproduce`
+      (`requestPackReproduce`: idempotent while one is pending, `409` once
+      the server's engine has an outcome), `canRerun` and `serverEngine` on
+      the pack's `reproduction`, and the bar's **Try again** / **Re-run on
+      engine X** (evidence-pack.md § Reproduction, "Re-run again"). Tests:
+      `evidence/packs.db.test.ts`, the four route lists,
+      `packs/pack.test.ts`, `e2e/tests/evidence-pack-pdf.spec.ts`.
+- [ ] **Move the bundle's build to a job if issue nears the timeout.** The
+      bundle is built in the issue's transaction today, estimated 5–10 s at
+      300 outputs × 30 years a run
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+      If a catchment's issue ever nears the API's 30 s, the build moves to
+      a job (the `pack_reproduce` job's place, before its check). Trigger:
+      an issue slower than 15 s in the API's logs.
 - [x] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
       same engine version, isn't shown. Built: `app_verify_pack` (132) also
@@ -4673,6 +4902,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
       Afrikaans words went through the i18n translator and checker (the
       native speaker's review is pending with the rest, § Afrikaans).
+- [x] **"Pack issued" emails: no opt-out, and a rare duplicate** (from #71;
+      operator, #93). They have no opt-out, like report-ready emails, and
+      if SES accepts an email but the call times out the retry can send a
+      second copy, as the alert emails can. **Accepted (operator,
+      2026-10-01)**: they are service messages to the people accountable
+      for the pack ([evidence-pack.md § Notices](./evidence-pack.md#notices)).
 
 ## Alerts (WP-2.13)
 
@@ -4909,7 +5144,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       closed #51, re-checked at 81db5ed), and the 60-farm load timings in
       step-2 WP-2.16 "Load checks" (manual run ≈ 8.7 s on the API Lambda,
       under the 10 s trigger; storage flat over 30 days).
-- [ ] **Hold a key's pushes into a short series?** A series with fewer than
+- [x] **Hold a key's pushes into a short series?** A series with fewer than
       100 non-zero days has no outlier limit, so a key's push into it is
       checked for negatives only (security.md § API keys, Limits). Holding
       every such push is safer but holds a new logger's automatic runs
@@ -4917,20 +5152,36 @@ own. Loop in the CISO or security analyst before acting on any of them.
       record. Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before the first gateway key is issued on production.
-- [ ] **The WUA's cut % beside its own notice.** The farm page and `/share`
-      show "a 20 % cut in registered water use" only when the WUA wrote no
+      **Decided (operator, 2026-10-01): hold auto-publish only (option b),
+      keep automatic runs (option a). Done:** a key's push with no outlier
+      limit records `series.unchecked` and answers `autoPublishHeld: true`;
+      its automatic run runs, and `autoPublish` publishes none while such an
+      event is newer than the latest manual run (`series/hold.ts`
+      `uncheckedSinceLastRun`); the History says "Paused automatic
+      publishing". Tests: `ingest/ingest.db.test.ts`,
+      `history/timeline.test.ts`.
+- [x] **The WUA's cut % beside its own notice.** The farm page and `/share`
+      showed "a 20 % cut in registered water use" only when the WUA wrote no
       notice text; the alert email shows both. Make them agree (both, or
       neither). Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
-      Trigger: before farmers are invited.
-- [ ] **A stale EWR-forecast alert says nothing.** A firing
+      **Decided (operator, 2026-10-01): both everywhere**, since the % is the
+      WUA's decision and the notice its explanation. **Done:** `noticeCard`
+      (farm page) and `shareNotice` (`/share` and its printed member
+      summary) show the line whenever a % was published. Tests:
+      `farm/cards.test.ts`, `share/share.test.ts`, `farm-view.spec.ts`,
+      `share-links.spec.ts`.
+- [x] **A stale EWR-forecast alert says nothing.** A firing
       `ewr_forecast_fail` event is left as it is while its forecast is behind
       the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast
       neither opens nor clears), but when no new forecast is made (the
-      forecast feed failing) the workspace's Active alerts shows it as
-      current. Show "forecast out of date since …" on the event (the
-      `feed_failing` alert already fires for the feed). Trigger: before a
-      forecast feed runs on production.
+      forecast feed failing) the workspace's Active alerts showed it as
+      current. Done: the API's `forecastOutOfDate` (derived at read time,
+      `newestForecast`; api.md § Alerts) puts "Forecast out of date: made …
+      on the rain recorded to …, but rain is now recorded to …" under the
+      event on Active alerts (ui.md § Alerts), and a mail of it sent
+      meanwhile says the same (`mail.alert.ewr.outOfDate`). The farm page
+      and the farmer alert pages show no EWR event (staff only).
 - [ ] **A log of restriction decisions** (WUA persona): which restriction
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.

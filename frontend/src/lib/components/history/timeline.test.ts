@@ -143,6 +143,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
 			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
 		);
+		// Set from the map's catchment boundary (issue #326 B-rain).
+		const boundary = { featureId: 'b', name: 'Sandspruit catchment' };
+		expect(eventLine(ev('feed.configured', { action: 'created', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 14 }))).toBe(
+			'Set up the CHIRPS feed into the Rainfall — CHIRPS series from the catchment boundary “Sandspruit catchment” (14 cells)'
+		);
+		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 1 }))).toBe(
+			'Gave the CHIRPS feed the cells of the catchment boundary “Sandspruit catchment” (1 cell)'
+		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);
@@ -159,6 +167,10 @@ describe('what an item says', () => {
 			'Held automatic runs: an API key added the Flow — logger “weir” series, which runs will read. Check the data, then run the model'
 		);
 		expect(eventLine(ev('series.held', { kind: 'flow_logger_m3s', name: 'weir', negative: 1, newSeries: true }))).toContain('Some of its days look wrong (1 negative day).');
+		// A key's push into a series too short for the outlier limit: runs go on, publishing waits for a person.
+		expect(eventLine(ev('series.unchecked', { kind: 'flow_logger_m3s', name: 'weir', daysChanged: 3 }))).toMatch(
+			/^Paused automatic publishing: an API key added 3 days to .*weir.*Automatic runs go on; run the model to publish automatically again$/
+		);
 		expect(eventLine(ev('publication.published', { restriction: { level: 'restricted', pct: 20 }, farms: 6 }))).toBe('Published a run, restricted (20 %) to 6 farms');
 		expect(eventLine(ev('publication.notice_changed', { fields: ['restriction', 'nextExpectedOn'] }))).toBe(
 			'Changed the publication’s restriction notice and next publication date'

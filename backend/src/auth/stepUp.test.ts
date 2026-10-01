@@ -33,6 +33,7 @@ const NOT_A_GATE: Record<string, string> = {
 	'teams/access.ts': 'requireTeamRole itself: it calls requireStepUp for admin',
 	'alerts/rules.ts': 'a role’s default alert mode, not an action',
 	'feeds/routes.ts': 'the canEdit flag the page shows; the feed writes go through requireRole(…, owner)',
+	'feeds/fromBoundary.ts': 'the canApply flag the boundary-rain proposal shows; applying it goes through requireRole(…, owner) (#326 B-rain)',
 	'evidence/notices.ts': 'who is emailed about a pack, not an action',
 	'errata/notices.ts': 'who is emailed about a known engine bug (still an owner when it is sent), not an action'
 };

@@ -883,7 +883,10 @@ Settings → Automatic runs.
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
   replaces the current publication, never the first one, when none of its
   self-checks failed and it raises no warning the published run didn't (the
-  same sentence with other numbers or dates is the same warning), carrying
+  same sentence with other numbers or dates is the same warning), and no
+  API key has pushed into a series too short for the outlier limit since
+  the latest run a person made (`series.unchecked`, security.md § API keys),
+  carrying
   the WUA's notice and next-update date over; the audit event says `auto:
   true`, and so does the publication (`run_publication.auto`, 141), which
   is what the `farms_short` alert watches: a publication no person made
@@ -927,7 +930,8 @@ flowchart LR
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
    is held, and while that run is behind the recorded rain: its
-   `lastObserved` before the rain's last recorded day), the data feeds (staleness per feed, each at its own level) and
+   `lastObserved` before the rain's last recorded day; Active alerts and
+   the mails then say the firing event's forecast is out of date), the data feeds (staleness per feed, each at its own level) and
    the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly
@@ -977,7 +981,7 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Settings → Data feeds → Use the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
@@ -1440,6 +1444,14 @@ What differs from a report:
   (`evidence/packPdf.ts`); an editor asks again after a failure with
   `POST …/packs/:packId/pdf`. The download is a report's: a 60-second
   signed URL on `/packs/*` (`GET …/packs/:packId/pdf`).
+
+The issue also queues a `pack_reproduce` job (`jobs/handlers/pack-reproduce.ts`,
+154_pack_reproduce; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+the worker reads the pack's reproduction bundle back from the packs bucket
+(the same `s3:GetObject` on `packs/*` it HEADs PDFs with), checks it is the
+recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
+records the outcome through `app_record_pack_reproduction`. The pack's page
+shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 ## Key choices
 

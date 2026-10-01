@@ -31,7 +31,11 @@ to an issued pack with public comments on it
 applicant's own copy of their application's issued packs, with share links
 ([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
 "pack issued" and "pack withdrawn" emails to the editors and the applicant
-([§ Notices](#notices), 133_pack_notices, 2026-09-30). What is left is
+([§ Notices](#notices), 133_pack_notices, 2026-09-30); the server's
+re-run of both runs from the stored bundle after issue, shown on the pack's
+page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
+locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
+report format `evidence-12`, 2026-10-01). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -88,6 +92,15 @@ pack drafted before `evidence-9` has no `demandObjects` in its manifest:
 its stored manifest still hashes to its recorded hash (nothing rebuilds
 it; `packs.db.test.ts` pins one), and its report prints without § 6,
 exactly as it did.
+
+§ 1's locality map (report format `evidence-12`, issue #326 A5) is
+`report.localityMap`: the map features the figure draws and its SVG's
+SHA-256, read when the draft is made, so the manifest freezes the figure
+and its hash covers it ([§ The locality map](#the-locality-map)). No
+manifest version changed, as for `evidence-8`. A pack drafted before it has
+no `localityMap`: its stored manifest still hashes to its recorded hash
+(`packs.db.test.ts` pins one), and its § 1 says the locality map isn't part
+of the pack.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
@@ -182,6 +195,153 @@ made on an uncapped pump can't be issued after this change (`409`, naming
 the two checks; `packs.db.test.ts` pins it); an issued pack stays as it
 was, and its verify and re-render read its frozen document.
 
+## The other applications together
+
+Report format `evidence-11` (finding C26, WP-3.11, issue #287) makes page 1's
+row over the other applications, now *This and the other applications on
+this baseline, together*, read **one combined run** instead of adding up
+the other applications' separate runs: this application with every other
+one the reader can see that is submitted, or decided with approval, and
+based on this baseline (`cumulative.combined`; engine
+`evidence/report.ts` `combinedOf`, backend `evidence/report.ts`
+`loadCombined`).
+
+- **Where the run comes from.** A completed cumulative assessment of exactly
+  these applications with their current ops on this baseline
+  ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)):
+  the `assessment` job already ran the baseline, each alone and all together
+  on one engine, and stored the table. The report reads its outlet rows (days
+  below the pragmatic EWR, Reserve months met): the combined change, the sum
+  of each alone and the **interaction** (combined − Σ each alone). It does
+  not run the model itself: a combination is up to 8 + 2 runs, which a
+  report request (a viewer's GET, a pack draft, the issue route's live
+  check) must not carry. The note names the assessment, its date and engine.
+- **Only one on the baseline run's engine** (operator decision,
+  2026-10-01). The assessment's baseline column is its own run of the
+  baseline, so the row reads only an assessment made on the engine the
+  baseline run used: its baseline figure is then the report's own. One of
+  exactly these applications made on another engine isn't read; the row is
+  *Not assessed* and says why (*they were assessed together on engine X, but
+  the baseline ran on engine Y, …: assess them together again*). An
+  assessment runs on the server's current engine, so while that isn't the
+  baseline's, no new one can match either, and the row says to run the
+  baseline again on the current engine and assess on that run
+  (`staleAssessment`).
+- **A conflict is never merged.** Without a matching assessment the backend
+  still checks the combination (`checkCombination`, pure, no model run), so
+  two applications that change the same thing make the row *Not assessed*
+  with each conflict named (and an op that applies alone but not together
+  likewise), whether or not anyone has asked for an assessment.
+- **Otherwise it says why there is no figure:** no other application
+  (*None*), one under way (*Not assessed yet*), none of exactly these
+  (*an editor runs Applications › Assess together*), more than an assessment
+  takes (8), or this application still a draft. Assessments are an editor's
+  (RLS), so a viewer's report finds none (and a viewer sees no submitted
+  application at all, so their row has no others to put together).
+- **Confirmed (operator, 2026-10-01).** Assessments, and so the combined
+  figure, stay editor-only; and a **team scenario counts as an
+  application** once it is submitted, as § 4 always counted it: the s27
+  question is the cumulative effect of every proposed use on the baseline,
+  whoever proposed it.
+
+§ 4 still lists each other application with its own run's change, without
+the old sum, and prints the combined table (each alone, the sum, all
+together, the interaction) under it. A pack drafted before `evidence-11`
+keeps its frozen sum row and § 4 (no `combined`); its stored manifest still
+hashes to its recorded hash, since nothing rebuilds it (`packs.db.test.ts`
+pins it). The reproduction bundle doesn't carry the assessment's runs yet,
+so `reproduce:pack` re-runs the baseline and the application but not the
+combined row ([followups.md § Cumulative impact](./followups.md#cumulative-impact-wp-311)).
+
+## The locality map
+
+A licence application normally carries a site locality map, so § 1 of the
+report opens with one (report format `evidence-12`, issue #326 A5). It is a
+figure, not a map viewer: one SVG the engine writes from the project's map
+features ([maps.md](./maps.md)), with no basemap, tiles, fonts or network,
+so the browser, the server's PDF renderer and `pnpm reproduce:pack` all have
+the same bytes.
+
+**What it draws** (engine `packages/engine/src/evidence/locality.ts`, read by
+`loadMapFeatures` in `backend/src/evidence/report.ts` as the reader, under
+RLS, when the report is built):
+
+| Layer | From | Named? |
+| --- | --- | --- |
+| Catchment boundary | the `catchment_boundary` feature | no |
+| The applicant's unit (parcel) and dam | `farm_parcel` and `dam` features linked to the application's owned nodes | the unit, by its name in the run's model (the dam only when the unit has no parcel) |
+| Other units' parcels and dams | every other `farm_parcel` and `dam` | **never**: no name and no node in the report, drawn alike in grey and blue; for baseline evidence every unit's are these ("Units' parcels") |
+| River | `river` features | no |
+| Gauge | `gauge` features | by its node's name, else the feature's |
+| EWR site | a `gauge` whose node is one of the report's Reserve sites (§ 1) | as a gauge |
+
+`other` features aren't drawn (they could be anything). Each geometry is
+kept at 6 decimals of a degree (about 0.1 m) and simplified (Douglas–Peucker)
+to a third of a pixel of the figure, so a 50 000-vertex river doesn't swell
+the manifest; the report holds exactly what is drawn. Beside the features:
+the newest change to any of them (*Features as of*), the imported files they
+came from (name, SHA-256, date) and how many were drawn in the app, both
+counting only what may be named: the boundary, rivers, gauges and the
+applicant's own parcels and dams. Another unit's parcel or dam is drawn but
+its import file is never listed, since a file is often named after the farm
+or its owner (baseline evidence names no unit, so it lists no parcel's or
+dam's file).
+
+**How it is drawn** (`packages/engine/src/geo/localityMap.ts`,
+`localityMapSvg`, drawing rules `locality-1`): a local equirectangular
+projection about the features' centre, scaled by the WGS84 ellipsoid's
+meridional and prime-vertical radii there, north up, true to scale at that
+latitude (the east–west scale drifts by cos(lat)/cos(lat₀), under 1 % within
+half a degree); a scale bar of the longest 1, 2 or 5 × 10ⁿ m that fits a
+quarter of the map; a north arrow; coordinate ticks at a round step of
+degrees; the legend; and three notes: *Base: the project's map features; no
+basemap*, the features' date and sources, and the projection. Every
+coordinate is written with one decimal, colours are fixed (printed on white,
+whatever the app's theme) and every layer also differs by line, shape or
+label. Labels are escaped. Any change to what it writes for the same data
+bumps `LOCALITY_MAP_VERSION`; `localityMap.test.ts` pins a fixture's bytes by
+their SHA-256 so a change can't slip by.
+
+**Its hash.** The backend draws the SVG when it builds the report and sets
+`localityMap.svgSha256` (`withLocalitySvgHash`, node:crypto). So a pack's
+manifest names the exact bytes printed, and `reproduce:pack` draws the
+figure again from the manifest and compares (`figure:locality`,
+[§ Reproduction](#reproduction)). The page shows it as an image from a
+`data:` URL of those bytes (`frontend/src/lib/components/report/evidence/LocalityMap.svelte`),
+never parsed into the page as markup, with the hash under it, and its legend,
+labels and notes as text for a screen reader. The server's PDF prints the
+same image.
+
+**Who sees it.** The report's readers (viewers and up) and the pack's: the
+assessors' copy, like the rest of § 1. An applicant's copy of their pack and
+a pack's share link show neither the figure nor its features: both are
+allowlists that list neither ([§ Applicants](#applicants),
+[§ Sharing and comments](#sharing-and-comments)). A farmer's map rule (only
+their own farm, decision D-A1/A3 of issue #326) is a farmer's; farmers read
+no report or pack.
+
+**Without features** § 1 says *No locality map: the project has no map
+features* (`localityMap: null`), and the report and pack are otherwise as
+before. A pack drafted before `evidence-12` has no `localityMap`; its § 1
+says the locality map isn't part of the pack, and its bundle has no
+`figure:locality` check.
+
+Tests: `packages/engine/src/geo/localityMap.test.ts` (projection against the
+textbook series, the scale bar and ticks, determinism and the pinned bytes,
+escaping, neighbours never labelled), `evidence/locality.test.ts` (layers,
+labels, rounding and simplification, sources, the stamped hash),
+`evidence/report.test.ts`, `evidence/bundle.test.ts` and
+`scripts/reproduce-pack/reproduce-pack.test.ts` (`figure:locality` passes,
+fails on a wrong hash or other drawing rules, is absent for an older pack),
+`backend/src/evidence/report.db.test.ts` and `packs.db.test.ts` (the
+features in the manifest with the SVG's hash, a moved parcel changes the
+live report and not the pack, an `evidence-10` pack still verifies, an
+issued pack's bundle reproduces the figure),
+`frontend/…/report/evidence/locality.test.ts`, and e2e
+`evidence-report.spec.ts`, `evidence-pack.spec.ts` (the figure's bytes hash
+to the manifest's `svgSha256`) and `evidence-pack-pdf.spec.ts` (the server
+PDF of a pack with a map).
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text
@@ -195,7 +355,7 @@ WebCrypto, so the engine stays free of Node APIs.
 | the pack's id and version, and its predecessor's id and hash | its status: draft, issued, superseded, withdrawn |
 | the project's id and name at drafting | when it was drafted or issued, and by whom |
 | the engine version (and build, once recorded) | the withdrawal reason and the successor |
-| the whole evidence report: every setting, the model, every input series' hash, the results, the flags and checks, the methodology and errata cited | the sign-offs (each binds the hash in its own statement, below) |
+| the whole evidence report: every setting, the model, every input series' hash, the results, the flags and checks, the methodology and errata cited, and § 1's locality map (its features and its SVG's SHA-256, `evidence-12`) | the sign-offs (each binds the hash in its own statement, below) |
 | | the PDF and the reproduction bundle (each has its own SHA-256; the bundle contains the manifest) |
 
 So a pack moves from draft to issued, superseded or withdrawn with the same
@@ -258,8 +418,10 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   In the same transaction it builds the pack's reproduction bundle, checks
   it, stores it and records its hash ([§ Reproduction](#reproduction)); if
   that fails, nothing is issued. Re-running both runs to prove they
-  reproduce is not done at issue: it takes as long as the runs, and the
-  bundle lets anyone do it (`pnpm reproduce:pack`).
+  reproduce takes as long as the runs, so it isn't done in the request: the
+  issue queues a `pack_reproduce` job that does it on the server from the
+  stored bundle ([§ Reproduction](#reproduction), "Re-run on the server"),
+  and the bundle lets anyone do it again (`pnpm reproduce:pack`).
 - **One issued at a time.** An application (or the project's baseline
   evidence) has at most one issued pack: a second is refused at issue
   (`409`), and the database holds it at commit (`evidence_pack_one_issued`).
@@ -475,6 +637,7 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | --- | --- |
 | `archive`, `files` | the zip reads, every entry is listed in `bundle.json`, and each matches its SHA-256 there |
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
+| `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
 | `runs` | the runs are the ones the manifest names, with its engine versions |
 | `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |
@@ -490,6 +653,63 @@ engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 `scripts/reproduce-pack/reproduce-pack.test.ts` and, against the database and
 MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
 both a baseline and an application pack; the setter's refusals).
+
+**Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
+bundle as `--no-run` would; the re-run takes as long as the runs, so the
+issue's transaction queues a `pack_reproduce` job instead
+(`backend/src/jobs/handlers/pack-reproduce.ts`, as the issuer, one pending
+per pack, 3 attempts). The worker runs it as that editor, under RLS:
+
+1. It reads the bundle back from the packs bucket under the pack's
+   `bundle_key` (`getPackBundle`, checksum mode on) and hashes it against the
+   pack's `bundle_sha256`, as an assessor checks the download against
+   verify's `bundleSha256`. That is the `stored` check.
+2. It runs the engine's `checkPackBundle` with the re-run and the pack's
+   manifest hash as `--expect`: what `pnpm reproduce:pack --expect <hash>`
+   prints, check for check.
+3. It records the outcome through `app_record_pack_reproduction` in the
+   job's transaction: `reproduced` (every check passed), `not_reproduced`
+   (any check failed: the stored bytes, a file, the manifest, the inputs,
+   the stored results or a re-run), `other_engine` (only the re-runs
+   differ, and a run was made with another engine version than the one the
+   server runs: expected, not a fault; check out that engine to reproduce
+   it), or `no_bundle` (a pack issued without one). With it go the engine
+   that re-ran the runs, the runs' own engines, the bundle's hash and every
+   check (`pack_reproduction`,
+   [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:
+   the first outcome for an engine stands.
+
+A bundle that doesn't reproduce is an outcome, recorded, and the job is
+done; only what another attempt can fix (the store unreachable) fails the
+job, which retries and then gives up. The pack's page says what it found, in
+its bar (never printed): reproduced, with the engine and date; not
+reproduced, with each failed check; another engine; still re-running; or
+that the re-run couldn't be done, with why (`reproduction` on
+`GET …/packs/:packId`, [api.md § Evidence packs](./api.md#evidence-packs)).
+It is **not on verify**: it is the app's own claim about its own stored
+bytes, not something the pack's hash covers, and an assessor repeats it
+with the bundle rather than trusting it. Tests:
+`jobs/handlers/pack-reproduce.test.ts` (each outcome, against a real bundle
+of the engine's synthetic pack), `evidence/packs.db.test.ts` (queued at
+issue, recorded as reproduced; a stored bundle replaced by other bytes
+recorded as not reproduced; the writer's refusals), and the pack PDF e2e
+(`e2e/tests/evidence-pack-pdf.spec.ts`, the page showing it).
+
+**Re-run again** (operator decision, 2026-10-01). An editor asks for the
+re-run again from the pack's bar (`POST …/packs/:packId/reproduce`,
+[api.md § Evidence packs](./api.md#evidence-packs)) when the last one gave
+up (**Try again**), when the recorded outcome is an older engine's than the
+server's (**Re-run on engine X**, after an engine upgrade), or for a pack
+issued before re-runs. It queues the same `pack_reproduce` job, as the
+caller; while one is pending the request is idempotent (the pending job
+comes back). On a newer engine the new outcome is recorded **beside** the
+older engine's, never in place of it (one per pack and engine), and the
+newest shows. Once the server's engine has an outcome it stands, and the
+request is refused (`409`). Tests: `evidence/packs.db.test.ts` (refused on
+its own engine, queued once on a newer one, recorded beside the old; a
+re-run that gave up asked for again), `packs/pack.test.ts`
+(`reproductionNote`'s button) and the pack PDF e2e (the button after an
+engine upgrade).
 
 ## Sharing and comments
 
@@ -672,7 +892,11 @@ mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
 recipient's language, English where a key has no translation.
 
 There is no opt-out: like a report-ready email, it goes to the few people
-who act on packs, once per issue or withdrawal. The rows are the person's
+who act on packs, once per issue or withdrawal. And a rare **duplicate** is
+accepted: if SES accepts an email but the call times out, the retry can
+send a second copy, as the alert emails can. Both decided by the operator
+(2026-10-01): these are service messages to the people accountable for the
+pack, and a second copy costs less than a lost one. The rows are the person's
 (in their data export as `packNotices`, deleted with the account) and are
 purged 30 days after they are settled.
 

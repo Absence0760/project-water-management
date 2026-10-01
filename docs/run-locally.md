@@ -200,7 +200,9 @@ application and issuing or withdrawing an evidence pack answer
 demo accounts (`pnpm seed:examples`) start without one: set one up on the
 Account page, or, to try those actions without a phone, put
 `MFA_REQUIRED=false` in `backend/.env.development.local` and restart the
-backend (Lambda refuses that setting). The DB tests and the e2e API server
+backend (Lambda refuses that setting). With it on, an owner without one sees
+a banner on the workspace pages linking to the Account page; with it off,
+neither that banner nor the Account page's warning shows. The DB tests and the e2e API server
 set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
 the feature with it on and off.
 
@@ -289,7 +291,11 @@ answers every source from the synthetic files in `backend/fixtures/feeds/`,
 re-dated to today, and the panel shows a "Sample data" badge. The sample grid
 is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
 25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
-feed), and any river-gauge (H) code for DWS (e.g. `X0H000`).
+feed), and any river-gauge (H) code for DWS (e.g. `X0H000`). Around it the
+files repeat that grid over 21.0–25.4° E, 20.0–34.0° S (no sea there), so on
+the seeded Sandspruit example **Use the catchment boundary** sets up a rain
+feed from its map's boundary that fetches offline too
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
 
 Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
 they fetch daily on their own, and "Run now" fetches at once. Without it:
@@ -366,19 +372,35 @@ the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
 The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
 with nothing else: features are drawn on a plain background, and GeoJSON
-uploads, points, areas and the quaternary lookup all work. Two optional
-pieces:
+uploads, points, areas, the quaternary lookup and the dam proposals all
+work. Optional pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
-pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, hundreds of MB at maxzoom 13):
-pnpm dev:tiles:fetch
-pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
+pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
+pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
+pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
+pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
+pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL; restart pnpm dev
 ```
+
+The fonts come from the Protomaps `basemaps-assets` repository at a pinned
+commit (`TILES_FONTS_REF` overrides it), cached in
+`~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under
+`tiles/fonts/` with their licence (`OFL.txt`). With
+`PUBLIC_TILES_GLYPHS_URL` empty (the committed default) the map draws no
+names and fetches no fonts. The **Quaternary catchments** layer works with
+neither: it draws the synthetic outlines and lists their codes beside the map.
 
 The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
-proposal; anywhere else says no quaternary contains the point.
+proposal; anywhere else says no quaternary contains the point. The
+synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
+round the Sandspruit example's outlet, so its Settings → Data feeds →
+**Attach a feed** → DWS lists them nearest first; a real station list loads
+the same way once its licence allows ([maps.md § Gauging-station
+dataset](./maps.md#gauging-station-dataset)).
 
 To see a map without uploading anything, open the **Sandspruit** example
 (`pnpm seed:examples`; analyst@ owns it, demo@ views it; a database seeded before the map existed keeps its map-less examples until `pnpm dev:db:reset` and a re-seed) and its **Map** tab: an
@@ -387,9 +409,14 @@ hydrological unit, each parcel drawn to the unit's modelled area), the two
 gauges and the four streams, all inside the synthetic quaternaries
 (`backend/scripts/examples/map.ts`). As analyst@, **Use … km²** on a parcel
 proposes the area the model already has, and the WR2012 check's **Propose
-from the map** finds a quaternary. Real DWS/WR2012
+from the map** finds a quaternary. On **Dams**, **Proposed from the register
+and the map** proposes, for most units' dams, an invented registered dam's
+capacity (the synthetic register sits a few hundred metres from the seeded
+dams; Bosrand's is 1.5 km off, so none) and the dam polygon's area; as
+analyst@, **Use** saves one value and History names its source. Real DWS/WR2012
 data is loaded the same way from your own download ([maps.md § Quaternary
-dataset](./maps.md#quaternary-dataset)); never commit it.
+dataset](./maps.md#quaternary-dataset)); never commit it. The DWS register of dams is
+blocked until its licence is confirmed ([maps.md § Sources](./maps.md#sources)).
 
 ## Import the client catchment (demo data)
 

@@ -11,6 +11,7 @@ import * as chart from './chart';
 import * as dam from './dam';
 import * as notice from './farmNotice';
 import { forecastCard } from './forecastCard';
+import { farmMapCard, mapWords } from './farmMap';
 import { vaalbankFixture } from './fixture';
 import * as why from './why';
 
@@ -52,7 +53,19 @@ function everything(v: FarmView): string[] {
 		chart.supplySummary(f.monthly, f.dataUntil),
 		chart.damSummary(f.monthly, f.dataUntil),
 		forecastCard(f, '2024-01-20'),
-		cards.registeredCard(v, 'ML')
+		cards.registeredCard(v, 'ML'),
+		// The farm's map (issue #326 A3): its land, dam, river, gauge and boundary.
+		farmMapCard(
+			[
+				{ id: 'p', kind: 'farm_parcel', name: 'Land', geometry: { type: 'Point', coordinates: [28, -26] }, areaM2: 10_000, center: [28, -26] },
+				{ id: 'd', kind: 'dam', name: 'Dam', geometry: { type: 'Point', coordinates: [28, -26] }, areaM2: null, center: [28, -26] },
+				{ id: 'r', kind: 'river', name: 'River', geometry: { type: 'Point', coordinates: [28, -26] }, areaM2: null, center: [28, -26] },
+				{ id: 'g', kind: 'gauge', name: 'Gauge', geometry: { type: 'Point', coordinates: [28, -26] }, areaM2: null, center: [28, -26] },
+				{ id: 'b', kind: 'catchment_boundary', name: '', geometry: { type: 'Point', coordinates: [28, -26] }, areaM2: null, center: [28, -26] }
+			],
+			f
+		),
+		{ ...mapWords(), kind: undefined }
 	]);
 }
 

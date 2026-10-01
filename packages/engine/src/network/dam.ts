@@ -69,13 +69,13 @@ export function resolveRelease(n: NetworkNode, warnings: string[]): PlanRelease 
 	const rule = n.damReleaseRule ?? 'none';
 	if (rule === 'none' || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return null;
 	if (rule !== 'passInflow' && rule !== 'fixed') {
-		warnings.push(`farm "${n.name}": unknown dam release rule "${String(rule)}"; no release`);
+		warnings.push(`unit "${n.name}": unknown dam release rule "${String(rule)}"; no release`);
 		return null;
 	}
 	const raw = n.damReleaseM3Day;
 	let byMonth: Float64Array | null = null;
 	if (Array.isArray(raw)) {
-		if (raw.length !== 12) warnings.push(`farm "${n.name}": dam release should have 12 monthly values, has ${raw.length}; missing months are 0`);
+		if (raw.length !== 12) warnings.push(`unit "${n.name}": dam release should have 12 monthly values, has ${raw.length}; missing months are 0`);
 		byMonth = new Float64Array(13);
 		for (let m = 1; m <= 12; m++) {
 			const x = Number(raw[waterYearIndex(m)]);
@@ -85,7 +85,7 @@ export function resolveRelease(n: NetworkNode, warnings: string[]): PlanRelease 
 	if (rule === 'fixed' && !byMonth) return null;
 	const cap = n.damOutletCapacityM3Day;
 	const outletM3Day = cap === null || cap === undefined ? Infinity : Number.isFinite(cap) && cap >= 0 ? cap : Infinity;
-	if (cap !== null && cap !== undefined && outletM3Day === Infinity) warnings.push(`farm "${n.name}": outlet capacity ${String(cap)} m³/day is not a size ≥ 0; no limit`);
+	if (cap !== null && cap !== undefined && outletM3Day === Infinity) warnings.push(`unit "${n.name}": outlet capacity ${String(cap)} m³/day is not a size ≥ 0; no limit`);
 	return { rule: rule === 'passInflow' ? 1 : 2, m3DayByMonth: byMonth, outletM3Day };
 }
 

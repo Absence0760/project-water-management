@@ -6,7 +6,7 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_ABS_VALUE, MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
-import { acceptedInput, anomalousPushedDays, type HeldDays, heldFor, othersSuffice } from './hold.js';
+import { acceptedInput, anomalousPushedDays, type HeldDays, heldFor, othersSuffice, outlierLimit } from './hold.js';
 import { queueAutoCalibrationFor, queueRerunFor, type SeriesDaysChanged } from './newData.js';
 import { lastValueDaySql } from './lastDay.js';
 
@@ -634,6 +634,11 @@ export interface MergeIntoResult {
 	rerun: QueuedRerun | null;
 	/** An API key's pushed days the data-quality rules flag: no re-run was queued, and `series.held` records why (series/hold.ts). */
 	held: HeldDays | null;
+	/**
+	 * An API key's push, not held, into a series too short for the outlier limit: its automatic run still
+	 * runs, but isn't published by itself until a person runs the model; `series.unchecked` records it.
+	 */
+	unchecked: boolean;
 }
 
 /**
@@ -679,24 +684,18 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 	// The accepted reference (the latest manual run's input) is read only when the series without the key's days is too short to judge by.
 	// A series the key created is held whatever its days: it becomes the model's input for its kind
 	// (assertKeyMayCreate allows it only when the kind had none), with nothing to judge its days by.
-	const flagged =
-		opts.via === 'api_key' && daysChanged > 0
-			? heldFor(
-					!r.before,
-					anomalousPushedDays(
-						body.kind,
-						r.before,
-						body,
-						r.keyDays,
-						r.before && !othersSuffice(r.before, body, r.keyDays) ? await acceptedInput(db, r.meta.id) : null
-					)
-				)
-			: null;
+	const keyPush = opts.via === 'api_key' && daysChanged > 0;
+	const accepted = keyPush && r.before && !othersSuffice(r.before, body, r.keyDays) ? await acceptedInput(db, r.meta.id) : null;
+	const flagged = keyPush ? heldFor(!r.before, anomalousPushedDays(body.kind, r.before, body, r.keyDays, accepted)) : null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
+	// A key's push not held, into a series too short for any outlier limit (checked for negatives only): its
+	// automatic run goes on, but isn't published by itself until a person runs the model (series/hold.ts).
+	const unchecked = keyPush && !flagged && outlierLimit(body.kind, r.before, body, r.keyDays, accepted) === null;
+	if (unchecked) await recordAudit(db, projectId, 'series.unchecked', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
 	const change: SeriesDaysChanged = { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via };
 	const rerun = flagged ? null : await queueRerunFor(db, projectId, change);
 	// And a run of the calibration rules, when they ask for one (issue #153); held data queues neither.
 	if (!flagged) await queueAutoCalibrationFor(db, projectId, change);
-	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun, held: flagged };
+	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun, held: flagged, unchecked };
 }

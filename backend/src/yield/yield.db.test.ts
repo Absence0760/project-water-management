@@ -83,7 +83,7 @@ describe('POST /projects/:id/yield', () => {
 		const owner = await signUp('YieldBad');
 		const c = await catchment(owner);
 		const post = (body: Record<string, unknown>) => owner.call('POST', `/projects/${c.projectId}/yield`, body);
-		expect((await post({ nodeId: c.outlet.id, runId: c.runId, kind: 'firm' })).body.error).toBe('a yield is for a farm or dam node, not a gauge or other water user');
+		expect((await post({ nodeId: c.outlet.id, runId: c.runId, kind: 'firm' })).body.error).toBe('a yield is for a unit or dam node, not a gauge or other water user');
 		expect((await post({ nodeId: crypto.randomUUID(), runId: c.runId, kind: 'firm' })).body.error).toBe('that node is not in this run or scenario');
 		expect((await post({ nodeId: c.dam.id, kind: 'firm' })).status).toBe(400);
 		expect((await post({ nodeId: c.dam.id, runId: c.runId, scenarioId: crypto.randomUUID(), kind: 'firm' })).status).toBe(400);

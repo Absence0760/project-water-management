@@ -20,6 +20,7 @@
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
 	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
+	import FarmMapCard from '$lib/components/farm/FarmMapCard.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import LookingBack from '$lib/components/farm/LookingBack.svelte';
 	import MonthlyChart from '$lib/components/farm/MonthlyChart.svelte';
@@ -164,6 +165,8 @@
 			<MonthlyChart farm={view.farm} {unit} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
+			<!-- The farm's own land and dam on a small map (issue #326 A3): only when it has some on the map; the map itself loads as its own chunk. -->
+			<FarmMapCard {projectId} farm={view.farm} />
 			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />
 			<nav class="more" aria-label={t('More')}>
 				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download onclick={(e) => downloadCsv(e, api.farm.exportUrl(projectId, view.farm.nodeId))}

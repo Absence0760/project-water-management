@@ -237,6 +237,12 @@ describe('calibrate', () => {
 			expect(p.benchmarks).not.toBeNull();
 			expect(p.intervals == null || p.intervals.years === p.waterYears.length).toBe(true);
 		}
+		// CR-5 (engine 1.62.0): a validation period's benchmarks come from its test's calibration period, the rest from their own days.
+		expect(r.fit.benchmarks!.builtFrom).toBe('period');
+		expect(r.splitSample!.calibration.benchmarks!.builtFrom).toBe('period');
+		expect(r.splitSample!.validation.benchmarks!.builtFrom).toBe('calibration');
+		// The mean-flow benchmark is then the fitted half's mean, so it no longer scores KGE′ 1 − √2 on the other half.
+		expect(r.splitSample!.validation.benchmarks!.meanFlow.kgePrime).not.toBeCloseTo(1 - Math.SQRT2, 6);
 		// Deterministic: the same fit gives the same intervals.
 		expect(calibrate(input, { budget: 50, seed: 2 }).fit.intervals).toEqual(r.fit.intervals);
 	}, 60_000);

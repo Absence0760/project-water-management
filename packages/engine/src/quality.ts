@@ -1051,7 +1051,7 @@ export function areaMismatchWarning(list: readonly AreaMismatch[]): string | nul
 	if (list.length === 0) return null;
 	const parts = list.map((m) => `${m.name}: ${fmt(m.areaKm2)} km² vs ${fmt(m.hiLoKm2)} km²`);
 	return (
-		`Farm area differs from high-MAP + low-MAP area by more than ${AREA_TOLERANCE * 100} % (${parts.join('; ')}). ` +
-		'The area flow share uses the farm area and the hi/lo share uses the split, so the two methods disagree for these farms.'
+		`Unit area differs from high-MAP + low-MAP area by more than ${AREA_TOLERANCE * 100} % (${parts.join('; ')}). ` +
+		'The area flow share uses the unit area and the hi/lo share uses the split, so the two methods disagree for these units.'
 	);
 }

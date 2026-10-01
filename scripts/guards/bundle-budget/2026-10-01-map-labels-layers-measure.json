@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Map tab (#326 A6, A7): quaternary layer toggle + codes list (MapLayers, quaternaryLayer), Measure (MeasureBar, MeasureDraft, measure maths), GeoJSON download, label/quaternary style layers; total measured 1482 → 1486 KB gzipped against origin/feat/326-map-round-3"
+}

@@ -402,7 +402,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	// capacity change alone would resize the dam's area along its own relation (docs/scenarios.md).
 	await expect(pending).toHaveCount(4);
 	await expect(pending.nth(0)).toContainText('Lower farm: Dam capacity 90\u202f000 m³ → 100\u202f000 m³');
-	await expect(pending.nth(1)).toContainText('Lower farm: Dam area when full 32\u202f296 m² → estimated (capacity ÷ 3 m)');
+	await expect(pending.nth(1)).toContainText('Lower farm: Dam area when full 50\u202f598 m² → estimated (7.2 × capacity^0.77)');
 	await expect(pending.nth(2)).toContainText('Lower farm: Orchard 12 ha → 15 ha');
 	await expect(pending.nth(3)).toContainText('The transfer Upper farm → Lower farm:');
 	expect(await liveModel()).toEqual(before);

@@ -13,6 +13,8 @@ import { API_URL, OWNER_E2E_URL } from './env.ts';
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Advisory lock key for loading the dataset (distinct from the examples' seed). */
 const QUATERNARY_LOCK = 288_288;
+/** And for the gauging stations (issue #326 B-gauge). */
+const STATIONS_LOCK = 326_153;
 
 /** A box `d` degrees on a side, south-west corner at (x, y). Around (21.35, -33.65) it lies in the synthetic quaternary Z01B. */
 export const box = (x: number, y: number, d: number): [number, number][] => [
@@ -48,6 +50,17 @@ export const projectedGeoJson = () =>
 export async function loadSyntheticQuaternaries(): Promise<void> {
 	await withSetupLock(QUATERNARY_LOCK, async () => {
 		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-quaternaries.ts'], {
+			cwd: backendDir,
+			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
+			stdio: 'pipe'
+		});
+	});
+}
+
+/** Load the committed synthetic gauging stations into the e2e database (`pnpm import:gauge-stations`; replacing them; idempotent). */
+export async function loadSyntheticStations(): Promise<void> {
+	await withSetupLock(STATIONS_LOCK, async () => {
+		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-gauge-stations.ts'], {
 			cwd: backendDir,
 			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
 			stdio: 'pipe'
@@ -93,17 +106,25 @@ export async function openMap(page: Page, projectId: string, query = ''): Promis
 
 export const geoFile = (name: string, text: string) => ({ name, mimeType: 'application/geo+json', buffer: Buffer.from(text) });
 
-/** Upload a file through the header's Upload GeoJSON sheet; `expectImported` waits for the notice (the sheet closes). */
+/**
+ * Upload a file through the header's Upload GeoJSON sheet (issue #326 D2): choose it, Review, optionally
+ * set every row's kind, then Import. `expectImported` waits for the notice (the sheet closes); without it
+ * the review stays open (a refused file lists its problems and offers no import).
+ */
 export async function uploadThroughSheet(page: Page, kind: string | null, name: string, text: string, expectImported = true): Promise<void> {
 	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
 	if (!(await sheet.isVisible())) {
 		await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
 		await expect(sheet).toBeVisible();
 	}
-	if (kind) await sheet.getByLabel('The file holds').selectOption(kind);
+	const another = sheet.getByRole('button', { name: 'Choose another file' });
+	if (await another.isVisible()) await another.click();
 	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
-	await sheet.getByRole('button', { name: 'Upload', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+	await expect(sheet.getByTestId('map-review-table')).toBeVisible();
+	if (kind) await sheet.getByLabel('Set every row’s kind').selectOption(kind);
 	if (expectImported) {
+		await sheet.getByRole('button', { name: /^Import \d+ features?$/ }).click();
 		await expect(page.getByTestId('map-notice')).toContainText(`from ${name}.`);
 		await expect(sheet).toBeHidden();
 	}

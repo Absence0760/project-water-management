@@ -213,7 +213,7 @@
 	}
 	// Which nodes have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// tab has drawn, so the map's list never delays it (workspace/mapLinks.ts).
-	const mapped = new MappedNodes(() => projectId, api.map.list);
+	const mapped = new MappedNodes(() => projectId, api.map.linkedNodes);
 	onMount(() => loadFarmers());
 	// After the first paint, and again if the workspace switches project under this tab; the grid modal's node table has no card to link from.
 	$effect(() => {

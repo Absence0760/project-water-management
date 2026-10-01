@@ -139,8 +139,8 @@ describe('a pump capacity on other water users (engine 1.58.0)', () => {
 		// A farm's and a gauge's are not a user's pump.
 		expect(userPumpOf(node('A', 'farm', null, { pumpCapacityM3Day: 5 }), [])).toEqual({});
 		const o = run(input([node('G', 'gauge', null, { pumpCapacityM3Day: 10 }), node('U', 'user', 'G', { userDemandM3Day: flat(100), supplyRule: 'riverFirst', pumpCapacityM3Day: 50 }), node('A', 'farm', 'U')], null));
-		expect(o.summary.warnings.some((x) => x.startsWith('user "U": only a farm has a supply rule; ignored'))).toBe(true);
-		expect(o.summary.warnings.some((x) => x.startsWith('gauge "G": only a farm has a supply rule and river pump; ignored'))).toBe(true);
+		expect(o.summary.warnings.some((x) => x.startsWith('user "U": only a unit has a supply rule; ignored'))).toBe(true);
+		expect(o.summary.warnings.some((x) => x.startsWith('gauge "G": only a unit has a supply rule and river pump; ignored'))).toBe(true);
 		// The pump still applies on the user.
 		expect(col(o, 'U', 'supplied')).toEqual([50, 50, 50, 0]);
 	});

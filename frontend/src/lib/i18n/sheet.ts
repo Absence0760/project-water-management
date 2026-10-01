@@ -52,6 +52,7 @@ export const SECTIONS: Record<string, string> = {
 	'farm.outlook': 'Farm view: “This season”, shown only when the WUA published a seasonal outlook. The level is the WUA’s decision; the figures are what that level gave this farm in past years’ weather, never a forecast or a promise.',
 	'farm.compare': 'Farm view: the “Compared with last season” card.',
 	'farm.river': 'Farm view: the “Your hydrological unit on the river” card. Counts only, never a neighbour’s name.',
+	'farm.map': 'Farm view: the “Your hydrological unit on the map” card: a small map of the farmer’s own land (parcels) and dam, with the catchment boundary, rivers and gauges to find the way, its key, and the lines that say the same in words. Never another farm. “Land” is the farm’s own ground on the map; “Model: …” is the band from the “Looking back” card. ° S / ° N / ° E / ° W are compass directions.',
 	'farm.who': 'Farm view: “Who can see my hydrological unit” on the river card.',
 	'farm.notes': 'Farm view: the notes card.',
 	'farm.chart': 'Farm view: the two small charts and their “Show the numbers” tables. The summaries are read by screen readers.',

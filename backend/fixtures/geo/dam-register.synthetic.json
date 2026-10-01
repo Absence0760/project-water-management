@@ -1,0 +1,110 @@
+{
+ "_comment": "SYNTHETIC test data, invented for this repository: every dam, name, farm and number here is made up (register numbers in region Z, which DWS doesn't use). Loaded by `pnpm import:dam-register` with no argument (docs/maps.md § Dams from the register and the map). Capacity in m³.",
+ "dataset": "synthetic",
+ "dams": [
+  {
+   "registerNo": "Z100/01",
+   "name": "Grootdraai Dam",
+   "river": "Wilgerivier",
+   "farm": "Grootdraai 12",
+   "lon": 21.2971,
+   "lat": -33.6915,
+   "capacityM3": 820000,
+   "wallHeightM": 9.5,
+   "surfaceAreaM2": null,
+   "completionYear": 1978,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/01"
+  },
+  {
+   "registerNo": "Z100/02",
+   "name": "Lemoenkraal Dam",
+   "river": "Melkhoutspruit",
+   "farm": "Lemoenkraal 7",
+   "lon": 21.23237,
+   "lat": -33.74377,
+   "capacityM3": 480000,
+   "wallHeightM": 8,
+   "surfaceAreaM2": null,
+   "completionYear": 1985,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/02"
+  },
+  {
+   "registerNo": "Z100/03",
+   "name": "Vaalbank Dam",
+   "river": "Melkhoutspruit",
+   "farm": "Vaalbank 4",
+   "lon": 21.2254,
+   "lat": -33.70159,
+   "capacityM3": 365000,
+   "wallHeightM": 7.5,
+   "surfaceAreaM2": null,
+   "completionYear": 1991,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/03"
+  },
+  {
+   "registerNo": "Z100/04",
+   "name": "Klein Vaalbank Dam",
+   "river": "Melkhoutspruit tributary",
+   "farm": "Vaalbank 4",
+   "lon": 21.23237,
+   "lat": -33.69348,
+   "capacityM3": 95000,
+   "wallHeightM": 6,
+   "surfaceAreaM2": null,
+   "completionYear": 2003,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/04"
+  },
+  {
+   "registerNo": "Z100/05",
+   "name": "Bosrand Dam",
+   "river": "Wilgerivier",
+   "farm": "Bosrand 2",
+   "lon": 21.3106,
+   "lat": -33.65475,
+   "capacityM3": 160000,
+   "wallHeightM": 8,
+   "surfaceAreaM2": null,
+   "completionYear": 1969,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/05"
+  },
+  {
+   "registerNo": "Z100/06",
+   "name": "Wilgerivier Dam",
+   "river": "Wilgerivier",
+   "farm": "Wilgerivier 9",
+   "lon": 21.29441,
+   "lat": -33.73611,
+   "capacityM3": 430000,
+   "wallHeightM": 10,
+   "surfaceAreaM2": 95000,
+   "completionYear": 1974,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/06"
+  },
+  {
+   "registerNo": "Z100/07",
+   "name": "Bo-dam",
+   "river": "Upper stream",
+   "farm": "Synthetic farm 1",
+   "lon": 21.3247,
+   "lat": -33.678,
+   "capacityM3": 140000,
+   "wallHeightM": 6.5,
+   "surfaceAreaM2": null,
+   "completionYear": 1998,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/07"
+  },
+  {
+   "registerNo": "Z100/08",
+   "name": "Kliprivier Dam",
+   "river": "Kliprivier",
+   "farm": "Kliprivier 30",
+   "lon": 21.62,
+   "lat": -33.93,
+   "capacityM3": 2500000,
+   "wallHeightM": 22,
+   "surfaceAreaM2": null,
+   "completionYear": 1962,
+   "source": "SYNTHETIC test data, invented for this repository (not the DWS List of Registered Dams): Z100/08"
+  }
+ ]
+}

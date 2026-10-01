@@ -27,6 +27,12 @@ describe('evidence report number formats', () => {
 	it('prints the other applications’ sum without "run:", with why it has no band', () => {
 		const c = changeText({ unit: 'days', id: 'otherApplications' }, { run: 14, band: null, bandNote: 'no band: a sum of other runs’ own differences', worse: null });
 		expect(c).toEqual({ main: '+14 days', sub: 'no band: a sum of other runs’ own differences', banded: false });
+		// Since evidence-11 the row is one combined run of every application; the same cell.
+		expect(changeText({ unit: 'days', id: 'otherApplications' }, { run: -3, band: null, bandNote: 'no band: one combined run, not an ensemble', worse: null })).toEqual({
+			main: '−3 days',
+			sub: 'no band: one combined run, not an ensemble',
+			banded: false
+		});
 		// Control: any other row without a band keeps "run:".
 		expect(changeText({ unit: 'days', id: 'ewrDays' }, { run: 14, band: null, bandNote: 'no band', worse: null }).main).toBe('run: +14 days');
 	});

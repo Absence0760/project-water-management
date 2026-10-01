@@ -7,7 +7,7 @@
 // control: the same person, signed in with a code, gets through.
 import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { anon, signUp } from '../__tests__/helpers.js';
+import { anon, monthly, node, signUp } from '../__tests__/helpers.js';
 import { SESSION_COOKIE } from './session.js';
 import { base32Decode, totp } from './totp.js';
 
@@ -39,6 +39,7 @@ let projectId: string;
 let ownProjectId: string;
 let teamId: string;
 let linkId: string;
+let ownRunId: string;
 const uuid = () => crypto.randomUUID();
 
 beforeAll(async () => {
@@ -60,6 +61,17 @@ beforeAll(async () => {
 	ownProjectId = (await enrolledOwner.call('POST', '/projects', { name: 'Step-up enrolled' })).body.project.id;
 	teamId = (await owner.call('POST', '/teams', { name: 'Step-up team' })).body.team.id;
 	linkId = (await owner.call('POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 })).body.link.id;
+	// A run to sign on the enrolled owner's project, with the unenrolled editor a member of it.
+	const outlet = node('Outlet', null);
+	const farm = node('Upper', outlet.id);
+	const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+	const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+	expect((await enrolledOwner.call('PUT', `/projects/${ownProjectId}/model`, model)).status).toBe(200);
+	expect((await enrolledOwner.call('PATCH', `/projects/${ownProjectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+	const rain = Array.from({ length: 60 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+	expect((await enrolledOwner.call('PUT', `/projects/${ownProjectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	ownRunId = (await enrolledOwner.call('POST', `/projects/${ownProjectId}/runs`, { label: 'to sign' })).body.run.id;
+	expect((await enrolledOwner.call('POST', `/projects/${ownProjectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
 	enrolledOwnerTwoStep = await enrol(enrolledOwner);
 	// From here on, as in production.
 	vi.stubEnv('MFA_REQUIRED', 'true');
@@ -129,7 +141,19 @@ describe('a team admin’s actions need two-step sign-in', () => {
 	});
 });
 
-describe('the editor actions that publish or decide need two-step sign-in', () => {
+// A well-formed sign-off body: the body is parsed before the role check, so a malformed one would answer 400.
+const SIGNOFF = {
+	fullName: 'Step Signer',
+	registrationBody: 'sacnasp',
+	registrationCategory: 'pr_sci_nat',
+	registrationField: 'water_resources',
+	registrationNo: '1',
+	scope: 'step-up',
+	confirmed: [],
+	statementSha256: '0'.repeat(64)
+};
+
+describe('the editor actions that publish, decide or sign need two-step sign-in', () => {
 	// Each checked right after the role, before the request's own target is looked up, so a made-up id is enough.
 	const actions = (pid: string, id: string): [string, string, unknown][] => [
 		['POST', `/projects/${pid}/publication`, { runId: id }],
@@ -138,7 +162,10 @@ describe('the editor actions that publish or decide need two-step sign-in', () =
 		['DELETE', `/projects/${pid}/outlook-publication`, undefined],
 		['POST', `/projects/${pid}/scenarios/${id}/decide`, { outcome: 'refused' }],
 		['POST', `/projects/${pid}/packs/${id}/issue`, {}],
-		['POST', `/projects/${pid}/packs/${id}/withdraw`, { reason: 'x' }]
+		['POST', `/projects/${pid}/packs/${id}/withdraw`, { reason: 'x' }],
+		// Signing a run or a pack: any editor may sign, so every signer needs it (operator decision, 2026-10-01).
+		['POST', `/projects/${pid}/runs/${id}/signoffs`, SIGNOFF],
+		['POST', `/projects/${pid}/packs/${id}/signoffs`, SIGNOFF]
 	];
 
 	it.each(actions(':id', ':target').map(([m, p], i) => [`${m} ${p}`, i] as const))('%s: an editor without an authenticator gets 403 mfa_required', async (_label, i) => {
@@ -155,11 +182,47 @@ describe('the editor actions that publish or decide need two-step sign-in', () =
 	});
 });
 
+describe('signing a run: the sign-off reads say so before the form is filled in', () => {
+	const at = () => `/projects/${ownProjectId}/runs/${ownRunId}/signoffs`;
+	const signed = (statementSha256: string, confirmed: string[]) => ({ ...SIGNOFF, confirmed, statementSha256 });
+
+	it('an editor without an authenticator: cannotSign says set one up, and the sign-off is refused 403 mfa_required', async () => {
+		const read = await editor.call('GET', at());
+		expect(read.status).toBe(200);
+		expect(read.body.cannotSign).toMatch(/two-step sign-in: set up an authenticator/);
+		const confirmed = read.body.statement.confirmations.map((k: { id: string }) => k.id);
+		expect(await editor.call('POST', at(), signed(read.body.statementSha256, confirmed))).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
+		expect((await editor.call('GET', at())).body.signoffs).toEqual([]);
+	});
+
+	it('an enrolled signer on a password-only session: cannotSign says sign in again', async () => {
+		expect((await enrolledOwner.call('GET', at())).body.cannotSign).toMatch(/sign in again/);
+	});
+
+	it('positive control: the same signer, signed in with a code, may sign, and the sign-off is made', async () => {
+		const read = await anon('GET', at(), undefined, enrolledOwnerTwoStep);
+		expect(read.body.cannotSign).toBeNull();
+		const confirmed = read.body.statement.confirmations.map((k: { id: string }) => k.id);
+		const r = await anon('POST', at(), signed(read.body.statementSha256, confirmed), enrolledOwnerTwoStep);
+		expect(r.status).toBe(201);
+		expect(r.body.signoff.fullName).toBe('Step Signer');
+	});
+});
+
 describe('GET /auth/mfa says whether the person’s roles need it', () => {
 	it('a project owner and a team admin: required; a viewer and an editor of others’ projects: not', async () => {
 		expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: true, enrolled: false });
 		expect((await viewer.call('GET', '/auth/mfa')).body).toMatchObject({ required: false });
 		expect((await editor.call('GET', '/auth/mfa')).body).toMatchObject({ required: false });
 		expect((await anon('GET', '/auth/mfa', undefined, enrolledOwnerTwoStep)).body).toMatchObject({ required: true, enrolled: true, sessionVerified: true });
+	});
+	it('not while the requirement is off (MFA_REQUIRED=false): the workspace’s banner and the Account page say what the routes do', async () => {
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		try {
+			expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: false, enrolled: false });
+		} finally {
+			vi.stubEnv('MFA_REQUIRED', 'true');
+		}
+		expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: true });
 	});
 });

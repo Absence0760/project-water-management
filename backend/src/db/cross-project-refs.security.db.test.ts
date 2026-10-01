@@ -305,6 +305,10 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 	'pack_notice.pack_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_pack_notice_queue, SECURITY DEFINER, copies the project from the pack (133)',
 		premise: 'not writable'
+	},
+	'pack_reproduction.pack_id': {
+		reason: 'water_app writes none of it (SELECT only); app_record_pack_reproduction, SECURITY DEFINER, copies the project from the pack (154), and pack_reproduction_same_project checks it',
+		premise: 'not writable'
 	}
 };
 
@@ -837,11 +841,24 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 		const f = await dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.31, lat: -33.61 });
 		return dual.call('PATCH', `/projects/${h.projectId}/map/features/${f.body.feature.id}`, { nodeId: r.farmId });
 	},
+	// The review's per-feature node (issue #326 D2): one point, standing for the farm.
+	'POST /projects/:id/map/import features.nodeId': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/map/import`, {
+			fileName: `xref-${randomUUID()}.geojson`,
+			text: JSON.stringify({ type: 'Feature', properties: { name: randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } }),
+			features: [{ index: 1, kind: 'dam', nodeId: r.farmId }]
+		}),
 	// The feature is made in the referenced project, then named from the home one.
 	'POST /projects/:id/nodes/:nodeId/area-from-map featureId': async (h, r) => {
 		const square = [[[21.3, -33.7], [21.31, -33.7], [21.31, -33.69], [21.3, -33.69], [21.3, -33.7]]];
 		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'other', geometry: { type: 'Polygon', coordinates: square } });
 		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/area-from-map`, { featureId: f.body.feature.id });
+	},
+	// A dam polygon linked to the referenced project's farm, named from the home one (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.302, -33.7], [21.302, -33.698], [21.3, -33.698], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'dam', nodeId: r.farmId, geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
 	},
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
@@ -907,8 +924,9 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
-	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId'],
+	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
+	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':
@@ -921,6 +939,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',

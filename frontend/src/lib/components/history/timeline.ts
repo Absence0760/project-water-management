@@ -192,6 +192,10 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			}
 			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}).${own} Check the data, then run the model`;
 		}
+		case 'series.unchecked':
+			// An API key pushed days into a series too short for the outlier limit (backend series/hold.ts): the
+			// automatic run goes on, but isn't published by itself until a person runs the model (operator, 2026-10-01).
+			return `Paused automatic publishing: an API key added ${plural(num(s.daysChanged) ?? 0, 'day')} to ${seriesName(s)}, a record too short to check them against its usual range. Automatic runs go on; run the model to publish automatically again`;
 		case 'series.labelled': {
 			// A source change (107_series_source.sql) has `origin` in place of `provenance`.
 			if (s.origin && typeof s.origin === 'object' && !s.provenance) {
@@ -221,6 +225,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'feed.configured': {
 			const feed = `the ${feedName(s.source)} feed`;
+			// Set from the map's catchment boundary (issue #326 B-rain): named, with its cell count.
+			const b = s.boundary as { name?: unknown } | undefined;
+			if (b && typeof b === 'object') {
+				const from = `the catchment boundary${str(b.name) ? ` “${str(b.name)}”` : ''}${typeof s.cells === 'number' ? ` (${plural(s.cells, 'cell')})` : ''}`;
+				if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })} from ${from}`;
+				return `Gave ${feed} the cells of ${from}`;
+			}
 			if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })}`;
 			if (s.action === 'removed') return `Removed ${feed}`;
 			// A confirmation to replace its series (issue #40c) is its own sentence: it is why the series will change.

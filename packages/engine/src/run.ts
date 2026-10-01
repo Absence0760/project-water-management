@@ -65,9 +65,11 @@ import {
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
+	DAM_AREA_EXPONENT_MAX,
 	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
-	ESTIMATED_DAM_DEPTH_M,
+	ESTIMATED_DAM_AREA_LABEL,
+	estimatedDamAreaM2,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
 	parseGaugeSeriesKey,
@@ -1381,7 +1383,7 @@ export function buildNetworkPlan(
 			continue;
 		}
 		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
-			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between farms; skipped`);
+			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
@@ -1421,11 +1423,11 @@ export function buildNetworkPlan(
 	for (const n of nodes) {
 		if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) continue;
 		const bad = damCurveProblem(n.damCurve);
-		if (bad) warnings.push(`farm "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
+		if (bad) warnings.push(`unit "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
 		const top = resolveDamCurve(n)?.volume.at(-1);
 		if (top !== undefined && Math.abs(top - n.damCapacityM3) > DAM_CURVE_CAPACITY_TOLERANCE * n.damCapacityM3)
 			warnings.push(
-				`farm "${n.name}": the dam survey curve tops out at ${Math.round(top)} m³ but the capacity is ${Math.round(n.damCapacityM3)} m³ (more than 1 % apart); ` +
+				`unit "${n.name}": the dam survey curve tops out at ${Math.round(top)} m³ but the capacity is ${Math.round(n.damCapacityM3)} m³ (more than 1 % apart); ` +
 					`above the top row the area stays at its last value. Check the capacity against the survey`
 			);
 	}
@@ -1433,7 +1435,7 @@ export function buildNetworkPlan(
 	if (estimated.length) {
 		warnings.push(
 			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
-				`capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m mean depth (Mantel & Hughes 2023). Enter the area for (${estimated.map((n) => n.name).join('; ')})`
+				`${ESTIMATED_DAM_AREA_LABEL} m², a regional relation that can be far out for any one dam. Enter the area for (${estimated.map((n) => n.name).join('; ')})`
 		);
 	}
 
@@ -1633,16 +1635,16 @@ function storageResetOf(
 		const i = nodes.findIndex((n) => n.id === id);
 		const n = nodes[i];
 		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) {
-			warnings.push(`damStorageReset: "${id}" is not a farm with a dam; ignored`);
+			warnings.push(`damStorageReset: "${id}" is not a unit with a dam; ignored`);
 			continue;
 		}
 		if (typeof v !== 'number' || !Number.isFinite(v)) {
-			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
+			warnings.push(`damStorageReset: unit "${n.name}" storage ${String(v)} is not a number; ignored`);
 			continue;
 		}
 		// Against the capacity on the reset day (engine ≥ 1.30.0: it can change over the run).
 		const cap = damCapacityOn(n, start + day);
-		if (v < 0 || v > cap) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
+		if (v < 0 || v > cap) warnings.push(`damStorageReset: unit "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
 		byNode.set(i, Math.min(Math.max(v, 0), cap));
 	}
 	return byNode.size ? { day, byNode } : null;
@@ -1906,7 +1908,7 @@ function otherUsers(
 					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
 				}
 			} else {
-				warnings.push(`senior user "${n.name}" has no farm with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+				warnings.push(`senior user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
@@ -2047,26 +2049,33 @@ function capYears(
 
 /**
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
- * as entered, or capacity ÷ 3 m when it isn't known (warning W6, in
- * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning);
+ * as entered, or estimatedDamAreaM2 when it isn't known (warning W6, in
+ * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning;
+ * above DAM_AREA_EXPONENT_MAX it runs, with a warning, engine ≥ 1.63.0);
  * seepage per day clamped to 0–1. A node without a dam gets none.
  */
 function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
 	const cap = n.damCapacityM3;
 	if (n.kind !== 'farm' || !(cap > 0)) return { damAreaFullM2: 0, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
-	let area = n.damAreaFullM2 ?? cap / ESTIMATED_DAM_DEPTH_M;
+	let area = n.damAreaFullM2 ?? estimatedDamAreaM2(cap);
 	if (!(Number.isFinite(area) && area >= 0)) {
-		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m`);
-		area = cap / ESTIMATED_DAM_DEPTH_M;
+		warnings.push(`unit "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using ${ESTIMATED_DAM_AREA_LABEL}`);
+		area = estimatedDamAreaM2(cap);
 	}
 	let b = n.damAreaExponent;
 	if (!(b > 0 && b <= 3)) {
-		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
+		warnings.push(`unit "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
 		b = DAM_AREA_EXPONENT;
+	} else if (b > DAM_AREA_EXPONENT_MAX && !resolveDamCurve(n)) {
+		// Engine ≥ 1.63.0 (issue #90): a save no longer takes b > 1, which no basin has; an older document's runs as entered.
+		warnings.push(
+			`unit "${n.name}": dam area exponent ${String(b)} is above ${DAM_AREA_EXPONENT_MAX}, which no real basin has (the surface would grow faster than the volume); ` +
+				`it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ ${DAM_AREA_EXPONENT_MAX}. Use ${DAM_AREA_EXPONENT}, or enter the dam's survey curve`
+		);
 	}
 	const s = n.damSeepagePerDay;
 	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;
-	if (seep !== s) warnings.push(`farm "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
+	if (seep !== s) warnings.push(`unit "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
 	return { damAreaFullM2: area, damAreaExponent: b, damSeepagePerDay: seep };
 }
 
@@ -2080,7 +2089,7 @@ function damStorage(n: NetworkNode, warnings: string[]): { damCurve?: DamCurve; 
 	const curve = resolveDamCurve(n);
 	const release = resolveRelease(n, warnings);
 	const ret = seepageReturnOf(n);
-	if (n.damSeepageReturnPct !== undefined && ret !== n.damSeepageReturnPct) warnings.push(`farm "${n.name}": seepage return ${String(n.damSeepageReturnPct)} is not in [0, 1]; using ${ret}`);
+	if (n.damSeepageReturnPct !== undefined && ret !== n.damSeepageReturnPct) warnings.push(`unit "${n.name}": seepage return ${String(n.damSeepageReturnPct)} is not in [0, 1]; using ${ret}`);
 	return { ...(curve ? { damCurve: curve } : {}), ...(release ? { release } : {}), ...(ret < 1 ? { seepageReturn: ret } : {}) };
 }
 
@@ -2095,13 +2104,13 @@ function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficien
 	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
 	let e = n.irrigationEfficiency;
 	if (!(e > 0 && e <= 1)) {
-		warnings.push(`farm "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
+		warnings.push(`unit "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
 		e = 1;
 	}
 	e = fromCrops(e);
 	const b = n.lossReturnFraction;
 	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
-	if (beta !== b) warnings.push(`farm "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
+	if (beta !== b) warnings.push(`unit "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
 	return { irrigationEfficiency: e, lossReturnFraction: beta };
 }
 
@@ -2553,7 +2562,7 @@ function buildDemand(
 	const crops: Crop[] = cropDefs.map((c) => {
 		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
 		const e = ownCropEfficiency(c.irrigationEfficiency);
-		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the farm's`);
+		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
 		return {
 			id: c.id,
 			name: c.name,
@@ -2604,7 +2613,7 @@ function buildDemand(
 		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
 			if (!cropIds.has(ca.cropId)) {
-				warnings.push(`farm "${node.name}" has an area for an unknown crop; ignored`);
+				warnings.push(`unit "${node.name}" has an area for an unknown crop; ignored`);
 				continue;
 			}
 			areas.set(ca.cropId, (areas.get(ca.cropId) ?? 0) + ca.areaM2);

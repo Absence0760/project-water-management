@@ -63,7 +63,7 @@
 
 	// Which units have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// page has drawn, so the map's list never delays it (workspace/mapLinks.ts).
-	const mapped = new MappedNodes(() => projectId, api.map.list);
+	const mapped = new MappedNodes(() => projectId, api.map.linkedNodes);
 	// After the first paint, and again if the workspace switches project under this tab.
 	$effect(() => {
 		void projectId;

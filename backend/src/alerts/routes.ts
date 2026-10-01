@@ -26,7 +26,8 @@ import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { SOURCES, type FeedSource } from '../feeds/config.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
-import { feedLabel, keyFedSeriesSql, seriesLabel } from './evaluate.js';
+import { feedLabel, keyFedSeriesSql, newestForecast, seriesLabel, type ForecastOutOfDate } from './evaluate.js';
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
 import { queueAlertEval } from './queue.js';
 import { ALERT_KINDS, ALERT_MODES, DEFAULT_THRESHOLDS, defaultMode, SERIES_STALE_ALERT_DAYS, THRESHOLD, type AlertKind, type AlertMode } from './rules.js';
 import { newNonce } from './tokens.js';
@@ -370,6 +371,13 @@ export interface AlertEventView {
 	openedAt: string;
 	clearedAt: string | null;
 	detail: Record<string, unknown>;
+	/**
+	 * A firing ewr_forecast_fail event whose forecast is behind the recorded
+	 * rain, with no newer forecast made since (evaluate.ts newestForecast):
+	 * the event is left as it is, so the page says it is out of date. null
+	 * for a current forecast, a cleared event and every other kind.
+	 */
+	forecastOutOfDate: ForecastOutOfDate | null;
 }
 
 const EventsQuery = z.object({ state: z.enum(['firing', 'all']).default('firing') });
@@ -506,8 +514,16 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 				seriesId: r.series_id,
 				openedAt: r.opened_at.toISOString(),
 				clearedAt: r.cleared_at?.toISOString() ?? null,
-				detail: r.detail
+				detail: r.detail,
+				forecastOutOfDate: null
 			}));
+			// A firing forecast alert while the newest forecast is behind the recorded rain says so.
+			const ewr = events.filter((e) => e.kind === 'ewr_forecast_fail' && e.state === 'firing');
+			if (ewr.length) {
+				const { rows: tz } = await db.query<{ time_zone: string }>('SELECT time_zone FROM project WHERE id = $1', [id]);
+				const outOfDate = (await newestForecast(db, id, tz[0]?.time_zone ?? DEFAULT_TIME_ZONE))?.outOfDate ?? null;
+				for (const e of ewr) e.forecastOutOfDate = outOfDate;
+			}
 			// A farmer sees their own farms' events: never a row naming another farm (RLS already refuses those).
 			return c.json({ events: rank[role] < rank.viewer ? events.filter((e) => e.nodeId === null || e.nodeName !== null) : events });
 		});

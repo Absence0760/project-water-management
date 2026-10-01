@@ -113,7 +113,9 @@ saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
 also takes a recovery code). A project owner, team admin or assessor without
-it sees a warning that their actions need it. Errors are worded from their
+it sees a warning that their actions need it (and, on the workspace, the
+two-step sign-in banner, § Invitations below, which links here:
+the panel is `#two-step`). Errors are worded from their
 codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
 is under § Sign-in pages.
 
@@ -478,11 +480,24 @@ on …", "Open your hydrological unit") and the public `/share` page. The
 client chose it knowing it is more technical for farmers. Engine check
 labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
 
+Engine run warnings, save errors (model rules, scenario ops) and the
+workspace's API errors say **unit** too (engine 1.61.0: `unit "Upper": no
+river pump capacity is set …`, "only a unit has a dam", "unit flow shares
+sum to …"), and a new node is named `Unit N` (operator decision,
+2026-10-01, from #54). Only the words changed, never a field name. A run
+from before 1.61.0 keeps its stored warnings as they were, so the first
+automatic run after the upgrade reads every such warning as new and isn't
+published by itself (`autoPublish` compares warnings by their words): a
+person publishes it once.
+
 What keeps **farm**: the code, database, API and CSV names (`kind: 'farm'`,
 `/farm`, `farms.csv`, `farm_scope`, the invite CSV's `farm` column), URL
-params (`unit=`), test ids, engine and API messages (run warnings, save
-errors, the bulk invite's "no farm named …") and the summary CSV's block
-titles. So do words that mean the real thing rather than the node: a
+params (`unit=`), test ids, the bulk invite's "no farm named …" (the CSV's
+`farm` column), the summary CSV's block titles, and so the xlsx export's
+Summary sheet's "Farm summary" block, which is the summary CSV's own: the
+CSV is a contract other tools read, so its titles stay (the same decision),
+and the evidence report and validation statement, whose words are frozen
+in packs and signed statements. So do words that mean the real thing rather than the node: a
 **farmer** (the person, "Preview as farmer", "farmer views" in the
 publication panel), a **farm dam** (the kind of dam), "a farm, sub-catchment
 or town" where the glossary says what a unit can stand for, the landing
@@ -493,8 +508,7 @@ own decision: the farm notice's title "Before you look at your farm"
 rewording it means a new version every farmer re-accepts), and the Terms
 and Privacy pages (`/terms`, `/privacy`, versioned by `LEGAL_VERSION`). The
 importer's notes keep b023's own terms (and match `extract_project.py`),
-and node names ("Upper farm") are data. A new node is still named
-`Farm N`.
+and node names ("Upper farm") are data.
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
@@ -1263,6 +1277,34 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart.
+- **Proposed from the register and the map** (issue #326 B-dams,
+  `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
+  sources and rules in [maps.md § Dams from the register and the
+  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
+  cards (and under the empty state), shown whenever the model has a
+  hydrological unit. **Dam of** picks the unit (the dams first in the
+  cards' order, then the other units; it opens on `dam=`'s, else the first
+  card's). The box says which dam on the map it searched from (its name,
+  "its polygon's centre" or "a point", the coordinates, **Show on map**),
+  then a table: one row per registered dam within 1 km ("Capacity:
+  Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
+  river and farm under it) and one for the dam polygon's area ("Full-supply
+  area: “Grootdraai dam”"), each with **Saved now** (the saved model's
+  value, "Not set (estimated from capacity)" for no area), **Proposed**,
+  **Source** (the register's dataset and source line, or "The map: …") and
+  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
+  m²), or "Nothing to use" for a register entry without a capacity. **Use**
+  asks first (`confirmWords`: the unit, the old and new value, the source;
+  "Use this capacity" / "Use this area"), saves that one value on the
+  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
+  the register of dams (Z100/07). Run the model to see its effect.") and
+  reloads the saved model and the proposals. Use is disabled while the model
+  has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
+  editor can use a value."). Other states: no dam on the map linked to the
+  unit (with **Open the Map**), no register loaded (the loader's command),
+  no registered dam within 1 km, and a "Synthetic test data" warning when a
+  row comes from the committed fixture. The table scrolls in its own box on
+  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
 
 ## Project
 
@@ -1358,7 +1400,11 @@ it scrolls, and isn't fitted to the window.
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
+  Farmer invites stay out of the Members panel's pending list. In both
+  pending lists, an invite whose sender is no longer an owner (team admin)
+  carries a **Sender can no longer invite** badge: nobody can accept it
+  until it is re-sent, and Resend makes you its sender
+  (155_invite_sender_role.sql).
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this page: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".
@@ -1753,8 +1799,8 @@ parameter in place, so Back closes it.
 traffic lights" until issue #176): every member reads the rule the team's
 statuses are judged by (linking to the project list), "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
-*These are the team's own thresholds* or *These are the default thresholds,
-still to be confirmed by the hydrologist*. Admins get two number inputs,
+*These are the team's own thresholds* or *These are the default thresholds:
+a provisional default, not yet confirmed by the catchment's hydrologist*. Admins get two number inputs,
 *Green below (%)* and *Amber below (%)*, checked as the API checks them (both
 0–100, green below amber; the message sits under the inputs, which carry
 `aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
@@ -1852,8 +1898,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
       only when a map feature is linked to the node, issue #326 A2; which
-      nodes have one comes from the map's feature list, fetched once the page
-      has drawn, `workspace/mapLinks.ts`, as on Hydrological units and Dams) and
+      nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
+      fetched once the page has drawn, `workspace/mapLinks.ts`, as on
+      Hydrological units and Dams) and
       **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
@@ -2051,7 +2098,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
-  the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+  the 7.2 × capacity^0.77 m² estimate the run will use (N2, warning W6;
+  engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
   **+ Add other user** (next to + Add node, in both layouts) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's
@@ -2366,15 +2414,31 @@ core tab: owners, editors and viewers see it (it becomes a results view with
 A1); viewers get no edit tools. The Network's own picture (its "Catchment
 map" card) stays the schematic; this is the geography.
 
+- **Rain from the boundary** (editors; issue #326 B-rain,
+  `MapRainLink.svelte`): a slim line under the header while the map has a
+  boundary and no CHIRPS feed reads it ("No rain feed reads this catchment
+  boundary yet. **Set up the rain feed from the boundary**"), or one read it
+  before it was redrawn ("**Propose its cells again**"). The link opens
+  Settings → Data feeds with the proposal showing. Its wrapper's
+  `data-state` (`loading`, `current`, `changed`, `none`, `error`) says when
+  the feed list is in.
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), and for editors **Upload GeoJSON**
-  and **Place a point**, each a link that opens its sheet. Slim notices
-  under it: what an upload or a placed point did (Dismiss), the no-basemap
-  note (owners and editors only), and "No catchment boundary yet" when there
-  are features but no boundary.
+  (frames every feature; with features), **Measure** (anyone, while the map
+  draws; below), **Download GeoJSON** (anyone, with features: the features
+  as a `.geojson` file named after the project and the day, built from the
+  list; the notice says "Downloaded 23 features as
+  example-sandspruit-map-2026-10-01.geojson."; [maps.md §
+  Download](./maps.md#download-geojson)), and for editors **Draw a shape**
+  and **Place a point** (each puts the map in a drawing mode, below; pressed
+  while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
+  notices under it: what an upload, a placed point or a saved drawing did
+  (Dismiss), the no-basemap note (owners and editors only), and "No
+  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
+  (WGS84)." with **Draw the boundary** when there are features but no
+  boundary.
 - **Layout.** The map on the left and a side column on the right
   (`clamp(18rem, 30%, 24rem)`) once the page's container
   (`container: map-page`) is 56rem wide (784 px at the 14 px root);
@@ -2392,8 +2456,29 @@ map" card) stays the schematic; this is the geography.
   other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
   drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
   (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
-  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live). A1's
-  measure picker goes in the key's row.
+  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live).
+- **Results on the map** (#326 A1, the key row under the map,
+  `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
+  (`measure=`: Days short, the default and so absent from the URL;
+  `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
+  colours above) and, for editors and owners when there is more than one run,
+  **Run** (`run=`; each option "name · day · published"). Both are history
+  entries, so Back undoes a change. The run is the published one by default;
+  an editor with nothing published sees their newest; below editor only the
+  published run, a `run=` link is ignored, and with nothing published one line
+  says so ("Nothing is published yet, so the map shows each feature’s kind.";
+  an editor with no run at all: "No run yet, …"). A line names the run ("From
+  the published run “…”, ran 2026-10-01."). The legend names the measure and
+  each band in words with what it means and how many units it holds ("**OK**
+  95% or more of demand days met (2 units)"); areas with no figure, or not
+  linked to a unit, take "No figure"'s colour. A line counts the EWR sites met
+  and missed; the key keeps the boundary, river and point swatches. The
+  picked feature's card adds the measure's line ("Days short: 1 089 of 4 558
+  days short · watch") or a gauge's **EWR** ("EWR missed on 12 days (outlet) ·
+  short"), and Every feature adds **Result** and **Band** columns, so the map
+  is never the only way to read a colour. Loading and a failed load (with
+  Retry) show beside the pickers; dam level loads the run's dam levels as the
+  Network does. The page fits 1440×960 with thirty units and the legend.
 - **The picked feature's card** (top of the side column): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
@@ -2406,10 +2491,60 @@ map" card) stays the schematic; this is the geography.
   area to the model, recorded in History with the feature named; disabled
   while the model has unsaved edits (a line says why) and reading **In use**
   when that feature's area is the unit's. **From**: the file it came in.
-  **Delete** (editors) asks first. With nothing picked: "Select a feature on
-  the map or in the list to see it here."; with nothing on the map, the one
-  empty-state line ("Nothing on the map yet. Upload a catchment boundary …
-  or place a point."; D4 makes it lead with drawing).
+  **Edit the shape** (a single line or one-ring polygon) or **Move the
+  point** (editors) puts it in the drawing mode, and **Delete** asks first.
+  With nothing picked: "Select a feature on the map or in the list to see it
+  here."; with nothing on the map, the empty state leads with drawing (#326
+  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
+  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
+  file (WGS84), or place a point.".
+- **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
+  [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
+  library decision). A **draw bar** sits over the map while a shape is drawn,
+  a point placed or a feature edited: what is being made (a select of
+  Catchment boundary, Farm parcel, Dam, River, Other area, Other line; or of
+  Gauge, Dam, Other for a point; "Editing “name”" for an edit), how (a line
+  that changes with the phase, saying tap on a phone), the last change in a
+  live region, why it can't be saved yet ("Its outline crosses itself…"), and
+  **Use my location** (phones, placing), **Enter coordinates** (points) or
+  **Paste a shape** (lines and polygons), **Undo**, **Finish** (while
+  drawing), **Remove the picked corner**, **Cancel** (drops the drawing at
+  once; Escape, on the map or in the bar, asks "Discard this drawing?" first
+  once there is work to lose: two corners or more, a finished shape or a
+  changed edit, [maps.md § Drawing](./maps.md#drawing)) and, once drawn,
+  **Save…** (**Save the shape** / **Save the position** for an edit, saved at
+  once). Entering a mode gives the map the keyboard focus. Save… on a new
+  shape opens **Save the drawing** (a side sheet: "This shape is" a kind its
+  geometry allows, Name, Stands for; "It replaces the current catchment
+  boundary." when it would; **Back to the map** keeps the drawing), and on a
+  new point the Place sheet. **Paste a shape** is a side sheet with a
+  GeoJSON-or-WKT field, an example for the shape being drawn and the error
+  in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
+  is picked.
+- **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
+  Measure](./maps.md#measure)): the drawing mode with nothing saved. A
+  **measure bar** over the map: "Measuring", how ("Click the map to add each
+  point (or press Enter at the crosshair); click the first point, or Close
+  the shape, for its area."), the result in a live region ("Distance: 1.24
+  km (3 points)." while adding; "Area: 52.3 ha. Perimeter: 3.10 km." once
+  closed), the points by coordinates under **The 3 points** (a disclosure),
+  and **Undo**, **Close the shape**, **Start again** and **Done**. Escape (on
+  the map or in the bar) ends it at once: a measurement has nothing to lose.
+  Drawing, placing or editing ends a measurement; Measure is off while a
+  drawing is open. Not in the URL.
+- **Layers** (#326 A6, a small box under the list): **Quaternary
+  catchments**, a checkbox in the URL (`layers=quaternaries`; a history
+  entry, so Back undoes it and a reload keeps it) with a dashed swatch in the
+  layer's colour. On, the map draws the loaded quaternaries around the
+  features as dashed purple outlines under the features, and the box lists
+  them: "6 quaternaries around the catchment, from synthetic." (with
+  **Synthetic test data, never real outlines.** for the repo's dataset;
+  "(the first by code; there are more)" past 100) and their codes as toggle
+  buttons; a code picked there, or a click inside a quaternary on the map
+  where no feature is, draws its outline heavier. The codes are labels on
+  the map only when glyphs are configured. No features: "Nothing on the map
+  yet to show the quaternaries around."; none near: "No quaternary catchment
+  in the loaded dataset is near this catchment." (or that none is loaded).
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
@@ -2429,7 +2564,8 @@ map" card) stays the schematic; this is the geography.
   `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
   one rather than through the model's save row): a table in the list's order
   with Feature (picks it and closes the modal), Kind, Area or position,
-  Stands for, Unit’s area, and for editors Area into the model and Delete
+  Stands for, Unit’s area, Result and Band while a measure shows (A1), and
+  for editors Area into the model and Delete
   (the same controls as the card); "Areas are computed on the server from
   each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
   came from** (every unit, including those with no parcel, with the count
@@ -2437,20 +2573,42 @@ map" card) stays the schematic; this is the geography.
   **Imported files**. In a narrow modal each row becomes a labelled card.
   `?tab=network&grid=map-features` (any other tab) lands on the Map with
   it open.
-- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors): what the
-  file holds (each kind with what it takes), the file (WGS84, at most 5 MB;
-  a `.zip`/`.shp` is turned away with how to export GeoJSON from QGIS),
-  **Upload**. A refused file lists every problem by feature and imports
-  nothing, and the sheet stays open; a taken one closes the sheet and picks
-  its first feature. Under the form, **Imported files**: each file with its
-  feature count, date, who imported it and its SHA-256 cut to 12
-  characters (the full hash in the tooltip) with **Copy**. D2's review table
-  goes here.
-- **Place a point** (`place=1`, a side sheet, editors): kind (gauge, dam,
-  other), name, latitude and longitude in decimal degrees ("-33.61" or
-  "33.61 S", a decimal comma taken), and what it stands for. Errors show
-  under each field on submit; a saved point closes the sheet and is picked.
-  (D1 replaces this form with click-to-place.)
+- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
+  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
+  at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
+  from QGIS) and **Review**, which reads it on the server
+  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Check each kind
+  before you import; nothing is saved until then"), **Set every row’s
+  kind** (a default for the Kind column: each row whose shape can be that
+  kind takes it, and the line under it counts those that can't), and a
+  table, one row per feature: #, Name (editable), Shape (point, line or
+  polygon, with its area), Kind (only the kinds its shape can be, with
+  "from the file" or "from its shape" under it, and why a kind the file gave
+  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
+  boundary or river) and Problems. While a row is marked as the boundary
+  and the project has one, a warning over the table says "Importing
+  replaces the current catchment boundary “X”: it goes from the map." with
+  a **Replace the current boundary** tick (off for every file); **Import**
+  waits for it, and the server refuses the import without it. Two rows
+  marked as the boundary, a
+  refused feature, or a file imported already (by SHA-256) show in an alert
+  over the table and disable **Import n features**; **Choose another file**
+  goes back. A refused file imports nothing; a taken one closes the sheet
+  and picks its first feature. On a phone each row is a card of labelled
+  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  it, **Imported files**: each file with its feature count, date, who
+  imported it and its SHA-256 cut to 12 characters (the full hash in the
+  tooltip) with **Copy**.
+- **Place a point** (`place=1`, a side sheet, editors; #326 D1): kind
+  (gauge, dam, other; the bar's choice), name, what it stands for, and the
+  position. From a clicked or located point it says "Put on the map at
+  33.6200° S, 21.3400° E…" with the latitude and longitude behind an **Enter
+  coordinates** disclosure, filled in from it; opened with no position (the
+  bar's Enter coordinates, a direct `place=1`) the disclosure is open.
+  Decimal degrees ("-33.61" or "33.61 S", a decimal comma taken); errors show
+  under each field on submit (opening the disclosure); a saved point closes
+  the sheet, ends the drawing mode and is picked.
 - **URL.** `feature=<id>` picks a feature; `node=<nodeId>` picks that
   node's farm parcel (the largest), else its first linked feature
   (`mapList.ts` `pickedFeature`), so the Network and results can link "Show
@@ -2459,10 +2617,24 @@ map" card) stays the schematic; this is the geography.
   sheet or the grid drops its parameter in place; a viewer's `upload=1` or
   `place=1` is dropped. Old aliases `?tab=gis` and `?tab=catchment-map`
   still open the tab.
+- Drawing is tested in `e2e/tests/map-draw.spec.ts` through its non-pointer
+  paths (paste a shape, typed coordinates, the keyboard crosshair, the entry
+  points) and one deterministic mouse-drawn polygon read back from the list,
+  with axe light and dark while drawing; the helpers in
+  `lib/components/map/draw/*.test.ts`.
 - Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways
   scroll), axe light and dark, wide and phone, with the grid open too.
+  `e2e/tests/map-import-review.spec.ts`: a mixed file's proposed kinds and
+  links, one changed and renamed, two boundaries refused in the table, the
+  list grouped after import; a file with a refused feature lists it on its
+  row and imports nothing; the phone's cards, axe.
+  Results: `e2e/tests/map-results.spec.ts` (the seeded Sandspruit as owner
+  and viewer, every parcel's figure in the table, the measure and run in the
+  URL with Back, published-only below editor, the fills re-read on a theme
+  switch through the key row's `data-fill-theme` and each band's
+  `data-colour` against its token, thirty units, axe wide and phone).
 
 ## Crops & demand
 
@@ -3658,7 +3830,11 @@ which checks every catchment tab).
     over the same columns, with how to read it in its foot (judge by the
     validation columns; the model should clearly beat the mean flow, and in a
     seasonal catchment the climatology; `fit-benchmarks-note`, a note at the
-    panel's end until issue #174), and a warning sentence
+    panel's end until issue #174) and, from engine 1.62.0, a second foot row
+    (`fit-benchmarks-source`) saying where the validation columns'
+    benchmarks came from (the test's calibration period; a column on the
+    other record, or a report from before 1.62.0, its own flows; CR-5), and
+    a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report
     made before 1.19.0 has neither. The formatting lives in
@@ -3958,7 +4134,8 @@ which checks every catchment tab).
   classes**: *Automatic* (terciles, quintiles once the record has 25
   complete years; the default), *Terciles* or *Quintiles*. **Risk
   cut-offs**, one group per measure, each with **Use the default
-  cut-offs** ticked by default and a **Defaults pending the hydrologist**
+  cut-offs** ticked by default and a **Provisional defaults, not yet
+  confirmed by the catchment's hydrologist**
   badge while it is: *Reserve months met* (lower risk from 90 %,
   increasing risk from 75 % of months met) and *Days below the pragmatic
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
@@ -4047,12 +4224,36 @@ part of the Settings tab's chunk; WP-2.10,
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **Use the catchment boundary** (editors and owners; issue #326 B-rain,
+  `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)): opens **Rain from the
+  catchment boundary** under the list with the proposal: the boundary (name,
+  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
+  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
+  source, what **Apply** does (attach a new feed, or give an empty feed the
+  cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners get **Apply**; editors read "An owner of the
+  project applies it". The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link opens it at once
+  (`?rain=boundary`). Without a boundary the error says so, with a link to
+  the map.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
-  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
+  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
+  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
+  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
+  of the catchment's outlet, nearest first: a sentence names the point used
+  (the outflow gauge's point on the map, else the boundary's centre, else it
+  asks for either on the Map tab), then a table of station (code, name and
+  source), river, distance, record (years and span) and **Use** (named "Use
+  Z1H001"). **Use** fills the station field and moves focus there; the row
+  then reads "In the field". Nothing is attached until **Attach feed**. A
+  synthetic list is badged **Sample stations**; no list loaded, or none in
+  range, says so and points back to typing the code. The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
@@ -5381,7 +5582,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 - **Around it**: badges for the **measure**, naming its site (Reserve months
   met at the chosen site when every level has a rule table there, else days
   below the pragmatic EWR at the outlet), the method and number of complete years,
-  and **Risk cut-offs pending the hydrologist** while the measure in use has
+  and **Provisional risk cut-offs, not yet confirmed by the catchment's
+  hydrologist** while the measure in use has
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
   levels have a rule table, or too few years for every class to judge).
@@ -6701,11 +6903,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply,
-    and *Other applications on this baseline, summed* (the other submitted
-    or approved applications' own changes in days below the pragmatic EWR,
-    added up, no band, its basis saying it is a sum of separate runs and not
-    one combined run, WP-3.11; *None* when there are none the reader can
-    see)), with the paired band and "worse in k of n"; then **Impact by year
+    and *This and the other applications on this baseline, together*
+    (`evidence-11`: the change in days below the pragmatic EWR at the outlet
+    with this application and every other submitted or approved one run
+    together, from a cumulative assessment of exactly them, and the
+    interaction in its note; no band; *Not assessed* naming each conflict
+    when they conflict, or saying none of exactly them is assessed yet;
+    *None* when there are none the reader can see; an older pack prints its
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
     class** (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
@@ -6717,7 +6922,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
-  - **1 The river**: per rule-table site, the site strip (source, component,
+  - **1 The river**: first the **locality map** (`LocalityMap.svelte`,
+    report format `evidence-12`): Figure 1, the engine's SVG of the
+    project's map features as an image from a `data:` URL, with its SHA-256
+    under it and its legend, labels and notes as visually hidden text; *No
+    locality map: the project has no map features* without any, and, on a
+    pack drafted before `evidence-12`, that it isn't part of the pack
+    ([evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)).
+    Then, per rule-table site, the site strip (source, component,
     unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
     against the determination's, and, when there are any, the months whose
     natural flow is drier than the table's driest point, where the
@@ -6761,12 +6973,16 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     Then **Other
     applications on this baseline** (`evidence-cumulative`): each other
     submitted or approved application, its status and its own change in days
-    below the pragmatic EWR and in Reserve months met at the outlet, the sum
-    of those counted (same engine, period and runoff model; any other says
-    why it isn't) and the sum with this application; the words say it is a
-    sum of separate runs, not a combined run (WP-3.11), listed as the reader
-    can see them; past 50 the newest 50 are listed and nothing is summed
-    (page 1's row then *Not assessed*).
+    below the pragmatic EWR and in Reserve months met at the outlet from its
+    own newest run, listed as the reader can see them (past 50 the newest 50).
+    Then **All of them together** (`evidence-11`, `evidence-combined`): this
+    application and each other one, its change alone, the sum of each
+    alone, all together and the interaction, in days below the pragmatic EWR
+    and Reserve months met at the outlet, from the cumulative assessment it
+    names (`evidence-combined-source`); or, in their place, why not
+    (`evidence-combined-na`: the conflicts named, not assessed yet, under
+    way). An older pack (before `evidence-11`) prints its frozen sum of the
+    runs counted and the sum with this application instead.
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
@@ -6834,8 +7050,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
-  `e2e/tests/evidence-allocations.spec.ts`, and for § 6 with objects
-  `e2e/tests/evidence-demand-objects.spec.ts`.
+  `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
+  `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
+  together, assessed, `e2e/tests/evidence-combined.spec.ts` (the
+  conflicting pair is in `evidence-report.spec.ts`).
 
 ### Evidence pack
 
@@ -6885,6 +7103,22 @@ their own application's in [their own view](#the-applicants-pack-view).
   its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
   API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
+  Once issued, a line says what the server's re-run of both runs from the
+  stored bundle found (`reproduction`, 154_pack_reproduce;
+  [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction);
+  `packs/pack.ts` `reproductionNote`, `data-testid="pack-reproduction"`
+  with `data-state` the status): *Reproduced on the server* with the engine
+  and date (an info box), *Not reproduced* with each failed check listed (an
+  error), *Not re-run on the runs' own engine* when only the re-runs differ
+  on another engine (a warning), a quiet *re-running* line with **Check
+  again** while its job runs, or that it couldn't be done and why. An editor
+  gets a button to ask for it again (`POST …/reproduce`,
+  `data-testid="pack-reproduce-again"`): **Try again** when it couldn't be
+  done, **Re-run on engine X** when the outcome is an older engine's than
+  the server's (the line adds that the server now runs X and the new
+  outcome is recorded beside this one), **Re-run on the server** for a pack
+  issued before re-runs; never on the server's own engine's outcome. It is
+  the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
   link shows (verify's fields, and while it stands the river's figures, never
@@ -7167,7 +7401,10 @@ published.
   the WUA on …. Data up to …", amber with its age when stale: "Data up to
   10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
   becomes "30 days to 10 Jan 2024"); the WUA's
-  notice first (warning or danger fill, icon and level in words), or "No
+  notice first (warning or danger fill, icon and level in words, the WUA's
+  words, and its percentage as "Set by the WUA: a 20 % cut in registered
+  water use." whenever it published one, beside its words as the alert email
+  has it), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
@@ -7205,7 +7442,22 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
+  alone if that fails); **Your hydrological unit on the map** (issue #326
+  A3, `farm/FarmMapCard.svelte`, wording in `farm/farmMap.ts`, section
+  `farm.map`), only when the farm has a parcel or dam of its own on the map
+  (`GET …/map`, [maps.md § The farmer's map](./maps.md#the-farmers-map)):
+  what the map shows and that it shows no other hydrological unit, "Your land
+  is coloured by the model’s look back: **Model: watch**" (no line without a
+  band), each feature in words ("Your land: Vaalbank (3 000 ha)", "Your dam:
+  …", "Rivers: …", "Gauges: …", "The catchment boundary"), "Where: about
+  33.684° S, 21.320° E.", and "There is no background map here, so only these
+  are drawn." when the build has no basemap tiles; then the map itself, a
+  280 px `CatchmentMap` loaded as its own chunk (`farm/FarmMapCanvas.svelte`,
+  MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
+  the reader's language, and a one-line key (the land in its band's colour,
+  "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
+  map draws them). A failed request says so in one line; the offline view
+  leaves it out; "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file (the farm's last 365
   days to `dataUntil`, in whole m³, headed by the series keys; api.md
   § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the
@@ -7593,6 +7845,20 @@ then.
   invitations**, on every signed-in page but the invitations page, while any
   wait. The count is read once per account, again after an accept or
   decline, and when the tab comes back into view (`auth-extras/inviteCount.svelte.ts`).
+- **The two-step sign-in banner** (`layout/MfaBanner.svelte`, issue #282,
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
+  `routes/+layout.svelte` beside the other banners, on the workspace's
+  pages only, English: not on the account, farm, alert or sign-in pages).
+  For a project owner, team admin or assessor without an authenticator
+  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
+  `403 mfa_required`: what their role needs it for and **Set up two-step
+  sign-in**, linking to the Account page's panel (`/account#two-step`).
+  With an authenticator but a password-only session (`!sessionVerified`),
+  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
+  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  **Dismiss** hides it until the next refusal and moves focus to the page's
+  title. Its own chunk, loaded only while there is something to say
+  (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
   it should have access already.
@@ -7611,7 +7877,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
   series sent by API key (headed **API data behind**, its email's subject
   too), "3 of 14 hydrological units short from … to …, in figures
-  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
+  an auto run published (alert at 1)"), or "No alert is firing". A firing
+  EWR forecast alert whose forecast is behind the recorded rain, with no
+  newer forecast made (the API's `forecastOutOfDate`), has an amber line
+  under it (`data-forecast-out-of-date`, `alerts.ts` `outOfDateText`):
+  "Forecast out of date: made 20 Sep 2026 on the rain recorded to 19 Sep
+  2026, but rain is now recorded to 24 Sep 2026 and no newer forecast has
+  been made. Check the forecast data feed." An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
   restriction notice, background jobs failed, data feed failing,
@@ -7779,7 +8051,9 @@ signed in or out, for someone outside the project, on a phone first.
   responsibility to anyone who relies on this page." (`shareCaveat()`,
   quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language, else English, else
+  restriction from the WUA"; the WUA's percentage, "Set by the WUA: a 20 %
+  cut in registered water use.", beside its words, as on the farm page and
+  in the alert email), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
@@ -7808,7 +8082,7 @@ signed in or out, for someone outside the project, on a phone first.
   k-ruled series). On paper: "Water Management · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
-  when it gave no words, who published it); each EWR site's reserve over
+  beside them, who published it); each EWR site's reserve over
   the period, always with its dates ("Below its reserve on 12 of the 102
   days from 1 Oct 2023 to 10 Jan 2024."); the monthly flow chart over the
   period's months (never fewer than 12, counting back from its last; drawn

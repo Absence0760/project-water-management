@@ -16,18 +16,25 @@
 	// the URL (`feature=<id>`, or `node=<nodeId>` for a node's parcel) so Back
 	// undoes it; Upload (`upload=1`), Place a point (`place=1`) and Every
 	// feature (`grid=map-features`) open over the page from the header and
-	// the list, each in the URL. Viewers read.
+	// the list, each in the URL. Viewers read. Editors draw on the map
+	// (#326 C1, D1, D4): Draw a shape and Place a point put the map in a
+	// drawing mode with a draw bar over it (draw/), and a drawing is saved only
+	// through its sheet's confirm. Anyone can Measure (measure/, the drawing
+	// mode with nothing saved) and Download GeoJSON (mapExport.ts, built from
+	// the loaded list); the Layers box turns on the quaternary outlines
+	// (`layers=quaternaries`, #326 A6, A7).
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type MapFeature, type MapFeatureList } from '$lib/api';
+	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
+	import { api, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { saveBlob } from '$lib/export/download';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { TAB_GRIDS, withParam, withoutParam } from '$lib/workspace/overlays';
 	import { appIsDark, watchAppTheme } from './appTheme';
@@ -36,8 +43,25 @@
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
-	import { overlayColours } from './mapStyle';
+	import { glyphsUrl, overlayColours } from './mapStyle';
+	import { exportFileName, geoJsonText } from './mapExport';
+	import { layersOn } from './mapLayers';
+	import MapLayers from './MapLayers.svelte';
+	import { QuaternaryLayer } from './quaternaryLayer.svelte';
+	import MeasureBar from './measure/MeasureBar.svelte';
+	import { MeasureDraft } from './measure/measureDraft.svelte';
+	import MapKeyRow from './MapKeyRow.svelte';
+	import { featureResult, viewLabel } from './mapResults';
+	import { MapResults } from './mapResults.svelte';
+	import { BAND_WORD } from './mapStatus';
 	import PlaceSheet from './PlaceSheet.svelte';
+	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import { Draft } from './draw/draft.svelte';
+	import DraftSheet from './draw/DraftSheet.svelte';
+	import DrawBar from './draw/DrawBar.svelte';
+	import PasteSheet from './draw/PasteSheet.svelte';
+	import { DRAW_CHOICES, editableCorners } from './draw/shape';
+	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
 	import UploadSheet from './UploadSheet.svelte';
 
@@ -45,17 +69,28 @@
 		projectId,
 		editor,
 		canEdit,
+		runs = null,
+		role = null,
+		projectName = null,
 		onModelChanged
 	}: {
 		projectId: string;
 		editor: ModelEditor;
 		canEdit: boolean;
+		/** The project's runs, newest first (null = not loaded): the results on the map read one (#326 A1). */
+		runs?: RunMeta[] | null;
+		/** The caller's role: below editor the map shows the published run only. */
+		role?: Role | null;
+		/** The project's name, for the GeoJSON download's file name. */
+		projectName?: string | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
 
 	const uid = $props.id();
 	const tilesUrl = PUBLIC_TILES_URL?.trim() || null;
+	/** The labels' glyphs (#326 A6): empty = no labels, nothing fetched (docs/maps.md § Labels). */
+	const glyphs = glyphsUrl(PUBLIC_TILES_GLYPHS_URL, typeof location === 'undefined' ? '' : location.origin);
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const GRID_ID = 'map-features';
 
@@ -158,9 +193,115 @@
 	}
 	async function placed(f: MapFeature) {
 		notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draft.cancel();
 		await load();
 		await pickInPlace(f.id, 'place');
 	}
+
+	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
+	const draft = new Draft();
+	let mapState = $state<'loading' | 'ready' | 'failed'>('loading');
+	let drawSaving = $state(false);
+	let drawError = $state<string | null>(null);
+	let draftSheetOpen = $state(false);
+	let pasteOpen = $state(false);
+	/** The features the map draws: the one being edited is drawn as the draft instead. */
+	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
+
+	async function afterStart() {
+		drawError = null;
+		await tick();
+		// The map takes the keyboard focus, so Enter adds a corner at once; its label says how.
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
+	function startDraw(choiceId?: string) {
+		measure.cancel();
+		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
+		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
+		void afterStart();
+	}
+	function startPlace() {
+		measure.cancel();
+		draft.place('gauge');
+		void afterStart();
+	}
+	function startEdit(f: MapFeature) {
+		measure.cancel();
+		if (draft.edit(f)) void afterStart();
+	}
+	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
+	async function saveDraft() {
+		const g = draft.geometry;
+		if (!g) return;
+		if (draft.mode === 'draw') {
+			draftSheetOpen = true;
+			return;
+		}
+		if (draft.mode === 'place') {
+			await goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true });
+			return;
+		}
+		const f = draft.feature;
+		if (!f) return;
+		drawSaving = true;
+		drawError = null;
+		try {
+			await api.map.update(projectId, f.id, g.type === 'Point' ? { lon: g.coordinates[0], lat: g.coordinates[1] } : { geometry: g });
+			notice = `Saved the new ${g.type === 'Point' ? 'position' : 'shape'} of ${featureName(f)}.`;
+			draft.cancel();
+			await load();
+			await pickInPlace(f.id);
+		} catch (err) {
+			drawError = msg(err);
+		} finally {
+			drawSaving = false;
+		}
+	}
+	async function drafted(f: MapFeature) {
+		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draftSheetOpen = false;
+		draft.cancel();
+		await load();
+		await pickInPlace(f.id);
+	}
+	function pasted(g: MapGeometry) {
+		draft.replace(g);
+		pasteOpen = false;
+		mapRef?.frameGeometry(g);
+	}
+	function located(at: MapPosition) {
+		mapRef?.frameGeometry({ type: 'Point', coordinates: at });
+	}
+
+	// --- measure (#326 A7): the drawing mode with a MeasureDraft, nothing saved; anyone may measure ---
+	const measure = new MeasureDraft();
+	function startMeasure() {
+		if (measure.active) return endMeasure();
+		draft.cancel();
+		measure.start();
+		void afterStart();
+	}
+	function endMeasure() {
+		measure.cancel();
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** What the map is drawing with: the measurement, else the editor's draft. */
+	const mapDraft = $derived(measure.active ? measure : canEdit ? draft : null);
+
+	// --- Download GeoJSON (#326 A7): the loaded features as a file, built here (no route) ---
+	function downloadGeoJson() {
+		const name = exportFileName(projectName, localIsoDate());
+		saveBlob(new Blob([geoJsonText(features)], { type: 'application/geo+json' }), name);
+		notice = `Downloaded ${features.length} ${features.length === 1 ? 'feature' : 'features'} as ${name}.`;
+	}
+
+	// --- layers (#326 A6): the quaternary outlines, on while `layers=quaternaries` ---
+	const quaternaries = new QuaternaryLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('quaternaries'),
+		features: () => features
+	});
 
 	// --- per feature: link, area, delete (from the card and from Every feature) ---
 	let busy = $state<string | null>(null);
@@ -228,12 +369,23 @@
 		}
 	}
 
-	let mapRef = $state<{ showAll: () => void }>();
+	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void }>();
 
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
 	$effect(() => watchAppTheme(() => (dark = appIsDark())));
 	const key = $derived(keyGroups(overlayColours(dark)));
+
+	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
+	const results = new MapResults({
+		projectId: () => projectId,
+		runs: () => runs,
+		role: () => role,
+		nodes: () => editor.model.nodes,
+		features: () => features,
+		params: () => params,
+		dark: () => dark
+	});
 
 	// --- the window fit: the layout is the height left below its top edge (ui-playbook § 2, as the Network) ---
 	let layoutEl: HTMLDivElement | undefined = $state();
@@ -256,9 +408,14 @@
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
+	{#if mapState !== 'failed'}
+		<button type="button" class="btn" onclick={startMeasure} aria-pressed={measure.active} disabled={draft.active} data-testid="map-start-measure">Measure</button>
+	{/if}
+	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
+		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place'} data-testid="map-start-place">Place a point</button>
 		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
-		<a class="btn" href={withParam(page.url, 'place', '1')} data-testid="map-open-place">Place a point</a>
 	{/if}
 {/snippet}
 
@@ -309,6 +466,20 @@
 	{/if}
 {/snippet}
 
+<!-- The picked feature's figure from the run the map shows (#326 A1): the measure's, or a gauge's EWR, in words with its band. -->
+{#snippet resultFacts(f: MapFeature)}
+	{@const r = results.ready ? featureResult(f, results.unitBy, results.ewrBy) : null}
+	{#if r}
+		<dt>{r.measure === 'ewr' ? 'EWR' : viewLabel(results.view)}</dt>
+		<dd data-testid="map-card-result" data-band={r.band}>{r.label} · {BAND_WORD[r.band].toLowerCase()}</dd>
+		{#if r.measure !== 'ewr' && results.ewrBy.get(f.nodeId ?? '')}
+			{@const e = results.ewrBy.get(f.nodeId ?? '')!}
+			<dt>EWR</dt>
+			<dd data-testid="map-card-ewr" data-band={e.band}>{e.label} · {BAND_WORD[e.band].toLowerCase()}</dd>
+		{/if}
+	{/if}
+{/snippet}
+
 <!-- The unit's area, typed or from the map (E6), in words. -->
 {#snippet unitArea(f: MapFeature)}
 	{@const s = areaSourceOf(f, nodes)}
@@ -334,34 +505,56 @@
 	{/if}
 	{#if data && features.length && !boundary}
 		<p class="alert alert-info slim" data-testid="map-no-boundary">
-			No catchment boundary yet.{canEdit ? ' Upload one (GeoJSON, in WGS84) to draw it and frame the map.' : ''}
+			No catchment boundary yet.{canEdit ? ' Draw it on the map, or upload it as a GeoJSON file (WGS84).' : ''}
+			{#if canEdit && draft.mode !== 'draw'}<button type="button" class="btn btn-sm" onclick={() => startDraw('catchment_boundary')}>Draw the boundary</button>{/if}
 		</p>
 	{/if}
+	<!-- The rain feed from the boundary (#326 B-rain): a line when no CHIRPS feed reads it yet. -->
+	{#if data && boundary && canEdit}<MapRainLink {projectId} {boundary} />{/if}
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
 			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
+					{#if measure.active}
+						<MeasureBar {measure} ondone={endMeasure} />
+					{/if}
+					{#if canEdit && draft.active}
+						<DrawBar
+							{draft}
+							mapReady={mapState === 'ready'}
+							saving={drawSaving}
+							error={drawError}
+							onsave={saveDraft}
+							onpaste={() => (pasteOpen = true)}
+							oncoords={() => goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+							onlocated={located}
+						/>
+					{/if}
 					<div class="map-body">
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
-								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" fill />
+								<CatchmentMap
+									bind:this={mapRef}
+									features={mapFeatures}
+									{selectedId}
+									onselect={select}
+									{tilesUrl}
+									label="Map of the catchment"
+									fills={results.fills}
+									fill
+									draft={mapDraft}
+									{glyphs}
+									quaternaries={quaternaries.outlines}
+									pickedQuaternary={quaternaries.picked}
+									onquaternary={(code) => (quaternaries.picked = code)}
+									onstatus={(s) => (mapState = s)}
+								/>
 							{/snippet}
 						</Lazy>
 					</div>
-					<!-- The key, from the map's own colours. A1's measure picker goes beside it, in this row. -->
-					<div class="key-row">
-						<div class="key small" role="group" aria-label="Key" data-testid="map-key">
-							{#each key as g (g.label)}
-								<span class="key-group">
-									<span class="key-h">{g.label}</span>
-									{#each g.items as k (g.label + k.label)}
-										<span class="key-item"><span class="sw sw-{k.swatch}" style:--c={k.colour} aria-hidden="true"></span>{k.label}</span>
-									{/each}
-								</span>
-							{/each}
-						</div>
-					</div>
+					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
 				</section>
 
 				<aside class="map-side" aria-label="Features">
@@ -377,6 +570,7 @@
 									<dt>Stands for</dt>
 									<dd>{@render standsFor(picked)}</dd>
 								{/if}
+								{@render resultFacts(picked)}
 								{#if areaSourceOf(picked, nodes)}
 									<dt>Unit’s area</dt>
 									<dd data-testid="map-card-area-source">{@render unitArea(picked)}</dd>
@@ -392,14 +586,28 @@
 							</dl>
 							{@render dirtyHint()}
 							{#if rowError?.id === picked.id}<p class="err" role="alert">{rowError.text}</p>{/if}
-							{#if canEdit}<div class="card-actions">{@render deleteButton(picked)}</div>{/if}
+							{#if canEdit}
+								<div class="card-actions">
+									{#if editableCorners(picked.geometry) && !(draft.mode === 'edit' && draft.feature?.id === picked.id)}
+										{@const target = picked}
+										<button type="button" class="btn btn-sm" onclick={() => startEdit(target)} data-testid="map-edit-shape">
+											{picked.geometry.type === 'Point' ? 'Move the point' : 'Edit the shape'}
+										</button>
+									{/if}
+									{@render deleteButton(picked)}
+								</div>
+							{/if}
 						{:else if features.length}
 							<p class="muted small pick-hint">Select a feature on the map or in the list to see it here.</p>
 						{:else}
-							<!-- The one empty-state line (D4 makes it lead with drawing, with C1). -->
-							<p class="pick-hint" data-testid="map-no-boundary">
-								Nothing on the map yet.{canEdit ? ' Upload a catchment boundary (GeoJSON, in WGS84) to draw it and frame the map, or place a point.' : ''}
-							</p>
+							<!-- The empty state leads with drawing (#326 D4); uploading a file is the other way in. -->
+							<div class="pick-hint" data-testid="map-no-boundary">
+								<p class="empty-line">Nothing on the map yet.{canEdit ? ' Start with the catchment boundary: draw it on the map.' : ''}</p>
+								{#if canEdit}
+									<p class="empty-line"><button type="button" class="btn btn-primary" onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button></p>
+									<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+								{/if}
+							</div>
 						{/if}
 					</section>
 
@@ -412,6 +620,11 @@
 							<FeatureList {features} {nodes} {selectedId} onselect={selectFromList} labelledby="{uid}-list-h" />
 						</section>
 					{/if}
+
+					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed. -->
+					<div class="panel side-box layers-box">
+						<MapLayers {quaternaries} {dark} />
+					</div>
 
 					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
 					{#if features.length}
@@ -439,13 +652,29 @@
 				</Dialog>
 			{/if}
 			{#if place.open}
-				<PlaceSheet bind:open={place.open} {projectId} {nodes} onplaced={placed} />
+				<PlaceSheet
+					bind:open={place.open}
+					{projectId}
+					{nodes}
+					at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null}
+					kind={draft.mode === 'place' ? draft.kind : 'gauge'}
+					onplaced={placed}
+				/>
+			{/if}
+			{#if draftSheetOpen && draft.geometry}
+				<DraftSheet bind:open={draftSheetOpen} {projectId} {nodes} geometry={draft.geometry} kind={draft.kind} hasBoundary={!!boundary} onsaved={drafted} />
+			{/if}
+			{#if pasteOpen && draft.active}
+				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />
 			{/if}
 			{#if grid.open}
 				<Dialog bind:open={grid.open} title={TAB_GRIDS[GRID_ID].title} full>
 					<div class="grid-body" data-testid="map-grid">
 						{#if features.length}
-							<p class="muted small grid-note">Areas are computed on the server from each polygon (geodesic, WGS84).</p>
+							<p class="muted small grid-note">
+									Areas are computed on the server from each polygon (geodesic, WGS84).
+									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
+								</p>
 							<div class="table-wrap">
 								<table class="data map-table" data-testid="map-feature-table">
 									<caption class="visually-hidden">Map features, what each stands for, and its area</caption>
@@ -456,6 +685,7 @@
 											<th scope="col" class="num">Area or position</th>
 											<th scope="col">Stands for</th>
 											<th scope="col">Unit’s area</th>
+											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
 											{#if canEdit}<th scope="col">Area into the model</th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 										</tr>
 									</thead>
@@ -469,13 +699,18 @@
 												<td class="num"><span class="cell-label" aria-hidden="true">Area or position </span>{featureSummary(f)}</td>
 												<td><span class="cell-label" aria-hidden="true">Stands for </span>{@render standsFor(f)}</td>
 												<td><span class="cell-label" aria-hidden="true">Unit’s area </span>{#if areaSourceOf(f, nodes)}{@render unitArea(f)}{:else}<span class="muted">–</span>{/if}</td>
+												{#if results.ready}
+													{@const r = featureResult(f, results.unitBy, results.ewrBy)}
+													<td data-testid="map-grid-result"><span class="cell-label" aria-hidden="true">Result{' '}</span>{#if r}{r.label}{:else}<span class="muted">–</span>{/if}</td>
+													<td data-testid="map-grid-band" data-band={r?.band}><span class="cell-label" aria-hidden="true">Band{' '}</span>{#if r}{BAND_WORD[r.band]}{:else}<span class="muted">–</span>{/if}</td>
+												{/if}
 												{#if canEdit}
 													<td class="area-cell"><span class="cell-label" aria-hidden="true">Area into the model </span>{@render areaInto(f)}</td>
 													<td class="row-actions">{@render deleteButton(f)}</td>
 												{/if}
 											</tr>
 											{#if rowError?.id === f.id}
-												<tr><td colspan={canEdit ? 7 : 5}><p class="err" role="alert">{rowError.text}</p></td></tr>
+												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
 											{/if}
 										{/each}
 									</tbody>
@@ -652,7 +887,12 @@
 	.card-actions {
 		margin-top: 0.6rem;
 		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 		justify-content: flex-end;
+	}
+	.empty-line {
+		margin: 0 0 0.5rem;
 	}
 	.pick-hint {
 		margin: 0;
@@ -677,74 +917,6 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: center;
-	}
-	.key-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
-		align-items: center;
-	}
-	.key {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 1rem;
-		margin: 0;
-		color: var(--text-2);
-	}
-	.key-group {
-		display: inline-flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 0.6rem;
-		align-items: center;
-	}
-	.key-h {
-		font-weight: 600;
-		color: var(--text);
-	}
-	.key-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-	}
-	/* Each swatch drawn as the map draws its kind, in the colour mapStyle gives it (--c). */
-	.sw {
-		display: inline-block;
-		flex: none;
-	}
-	.sw-dashed,
-	.sw-line,
-	.sw-dotted {
-		width: 1.4rem;
-		height: 0;
-		border-top: 3px solid var(--c);
-	}
-	.sw-dashed {
-		border-top-style: dashed;
-	}
-	.sw-dotted {
-		border-top-style: dotted;
-	}
-	.sw-area {
-		width: 1rem;
-		height: 0.75rem;
-		border: 2px solid var(--c);
-		background: color-mix(in srgb, var(--c) 25%, transparent);
-	}
-	.sw-gauge,
-	.sw-dam,
-	.sw-other {
-		width: 0.85rem;
-		height: 0.85rem;
-		background: var(--c);
-	}
-	.sw-gauge {
-		clip-path: polygon(50% 0, 100% 100%, 0 100%);
-	}
-	.sw-dam {
-		border-radius: 50%;
-	}
-	.sw-other {
-		clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 	}
 	.err {
 		color: var(--danger);

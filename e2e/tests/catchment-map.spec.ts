@@ -41,7 +41,10 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page.getByRole('heading', { name: /^Map/ })).toHaveCount(1);
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 	await expect(page.getByTestId('map-no-boundary')).toHaveCount(1);
-	await expect(page.getByTestId('map-no-boundary')).toContainText('Nothing on the map yet. Upload a catchment boundary');
+	// The empty state leads with drawing (#326 D4); upload is the other way in.
+	await expect(page.getByTestId('map-no-boundary')).toContainText('Nothing on the map yet. Start with the catchment boundary: draw it on the map.');
+	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Draw the boundary' })).toBeVisible();
+	await expect(page.getByTestId('map-no-boundary').getByRole('link', { name: 'upload it as a GeoJSON file' })).toBeVisible();
 	await expect(page.getByTestId('map-no-tiles')).toBeVisible();
 	await expect(header(page).getByRole('button', { name: 'Show everything' })).toHaveCount(0);
 
@@ -117,10 +120,12 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page).not.toHaveURL(/grid=/);
 	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
 
-	// A gauge through the Place sheet, with the form's own checks first.
-	await header(page).getByRole('link', { name: 'Place a point' }).click();
+	// A gauge by typed coordinates (#326 D1: behind the draw bar's Enter coordinates), with the form's own checks first.
+	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-draw-bar').getByRole('button', { name: 'Enter coordinates' }).click();
 	await expect(page).toHaveURL(/[?&]place=1/);
 	const place = page.getByRole('dialog', { name: 'Place a point' });
+	await expect(place.locator('details')).toHaveAttribute('open', '');
 	await place.getByRole('button', { name: 'Place the point' }).click();
 	await expect(place.getByText('Enter the latitude.')).toBeVisible();
 	await place.getByLabel('Name (optional)').fill('Weir pin');
@@ -242,12 +247,14 @@ test('a viewer sees the map, its sidebar row, the list, the card and Every featu
 	await expect(row(v, 'Synthetic catchment')).toBeVisible();
 	await expect(header(v).getByRole('button', { name: 'Show everything' })).toBeVisible();
 	await expect(header(v).getByRole('link', { name: 'Upload GeoJSON' })).toHaveCount(0);
-	await expect(header(v).getByRole('link', { name: 'Place a point' })).toHaveCount(0);
+	await expect(header(v).getByRole('button', { name: 'Place a point' })).toHaveCount(0);
+	await expect(header(v).getByRole('button', { name: 'Draw a shape' })).toHaveCount(0);
 	await expect(v.getByTestId('map-no-tiles')).toHaveCount(0);
 	await row(v, 'Upper farm').click();
 	await expect(card(v).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await expect(card(v).getByRole('combobox')).toHaveCount(0);
 	await expect(card(v).getByRole('button', { name: /^Delete / })).toHaveCount(0);
+	await expect(card(v).getByRole('button', { name: 'Edit the shape' })).toHaveCount(0);
 	// A sheet's link does nothing for a viewer: the param goes.
 	await v.goto(`/projects/${project.id}?tab=map&upload=1`);
 	await expect(v.locator('.map-page[data-ready]')).toBeVisible();

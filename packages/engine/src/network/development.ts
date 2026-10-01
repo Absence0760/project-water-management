@@ -49,7 +49,7 @@ export function developmentProblem(n: Pick<NetworkNode, 'kind' | 'damSurveyDate'
 		if (v !== null && v !== undefined && !isIso(v)) return `the ${label} must be a date (YYYY-MM-DD)`;
 	}
 	if (typeof r === 'number' && r > 0 && !n.damSurveyDate) return 'a sediment rate needs the date the capacity was surveyed';
-	if (n.kind !== 'farm' && (n.damSurveyDate || (typeof r === 'number' && r > 0) || n.damInServiceFrom)) return 'only a farm has a dam';
+	if (n.kind !== 'farm' && (n.damSurveyDate || (typeof r === 'number' && r > 0) || n.damInServiceFrom)) return 'only a unit has a dam';
 	if (n.kind === 'gauge' && n.abstractionFrom) return 'a gauge takes no water';
 	return null;
 }
@@ -110,7 +110,7 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return undefined;
 	const bad = developmentProblem(n);
 	if (bad) {
-		warnings.push(`farm "${n.name}": ${bad}; its dam runs at its entered capacity throughout`);
+		warnings.push(`unit "${n.name}": ${bad}; its dam runs at its entered capacity throughout`);
 		return undefined;
 	}
 	const rate = n.damSedimentPctPerYear ?? 0;
@@ -119,11 +119,12 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	const k = new Float64Array(days);
 	for (let t = 0; t < days; t++) k[t] = damCapacityFactor(n, start + t);
 	// Linear back from a recent survey over a long record makes the dam far larger than surveyed, at the
-	// same full-supply area: said, pending the hydrologist's ruling on how far that may go (engine-audit.md S1).
+	// same full-supply area: said. Provisional decision 2026-10-01 (engine-audit.md S1): the rate runs back to the in-service
+	// date, which the modeller is asked for here, and no further cap is applied.
 	const most = k.reduce((a, v) => Math.max(a, v), 0);
 	if (most > DAM_SEDIMENT_WARN_FACTOR)
 		warnings.push(
-			`farm "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date`
+			`unit "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date${n.damInServiceFrom ? '' : ', and enter the date it came into service (before it the dam holds nothing, so the rate runs back only that far)'}`
 		);
 	return k;
 }
