@@ -222,7 +222,12 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
   (places or moves the point), **Backspace** removes the last corner while
   drawing, **Delete** the picked one after, Escape cancels (asking first, as
-  above; focus comes back to the map either way). The canvas's
+  above; focus comes back to the map either way). With the mouse over the
+  map (moved there since the last arrow key), **Enter** adds at the mouse
+  pointer instead, where a click would, and the crosshair hides; an arrow
+  key, or the mouse leaving the map, brings the crosshair back
+  (`draw/attachDrawing.ts`, tested in `attachDrawing.test.ts` and
+  `e2e/tests/map-draw.spec.ts`). The canvas's
   accessible name says which keys do what in each phase, and the draw bar
   names the last change in a polite live region ("Corner 3 at 33.6100° S,
   21.3400° E.").
