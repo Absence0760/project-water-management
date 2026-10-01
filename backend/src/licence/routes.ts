@@ -1,5 +1,5 @@
 // /projects/:id/licence-record — the licence decision a project's evidence
-// supports, and so how long its licence record is kept (159_licence_record.sql;
+// supports, and so how long its licence record is kept (161_licence_record.sql;
 // docs/api.md § Licence record, docs/evidence-pack.md § Retention). Provisional
 // position (pre-counsel research, 2026-10-01): a sign-off's name and an issued
 // pack's makers are kept until three years after the licence expires, or three

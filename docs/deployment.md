@@ -1637,8 +1637,8 @@ Every step is an ordinary app action by an owner unless it says "operator".
    ensemble they never completed and their **draft** applications, which go;
    sign-offs keep the typed name and registration; the audit log is
    pseudonymised ("Deleted user"), invitation entries' partly hidden
-   address included (158), except in the projects of a team that keeps
-   public records (159), where the name stays. A `23514` error at commit ("a project must
+   address included (160), except in the projects of a team that keeps
+   public records (161), where the name stays. A `23514` error at commit ("a project must
    keep at least one owner", "a team must keep at least one admin") means
    they are the only owner or admin of something: ask them, or the
    project's or team's other members, to hand it over (make someone else

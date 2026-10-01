@@ -2504,7 +2504,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Licence record
 
 How long a project's licence record (its issued packs, nominated runs and
-the names they keep) is kept (159_licence_record; [evidence-pack.md §
+the names they keep) is kept (161_licence_record; [evidence-pack.md §
 Retention](./evidence-pack.md#retention)). Provisional position (pre-counsel
 research, 2026-10-01).
 

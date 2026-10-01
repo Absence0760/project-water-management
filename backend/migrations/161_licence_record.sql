@@ -1,4 +1,4 @@
--- 159_licence_record — "the life of the licence record" becomes dates the app
+-- 161_licence_record — "the life of the licence record" becomes dates the app
 -- holds, and a team can be marked as keeping public records (provisional
 -- positions, pre-counsel research 2026-10-01: evidence that names its maker;
 -- docs/security.md § Personal information (POPIA), docs/evidence-pack.md
@@ -33,7 +33,7 @@
 --     3A.2), and team.records_disposal_confirmed_on, the date the client
 --     confirmed it holds its records or has a disposal authority. water_app
 --     sets neither (team_public_records_guard). For such a team:
---       - app_user_pseudonymise (from 158) leaves the person's name in the
+--       - app_user_pseudonymise (from 160) leaves the person's name in the
 --         audit log of the team's projects (it still deletes the account);
 --       - a project of the team can't be deleted, and the team can't be
 --         deleted, until the disposal is confirmed
@@ -64,11 +64,11 @@ ALTER TABLE project
 			ELSE licence_expires_on IS NULL END
 	);
 COMMENT ON COLUMN project.licence_outcome IS
-	'The licence decision this project''s evidence supports (159): granted, refused or withdrawn; NULL = not recorded. Owners set it (app_set_licence_outcome).';
+	'The licence decision this project''s evidence supports (161): granted, refused or withdrawn; NULL = not recorded. Owners set it (app_set_licence_outcome).';
 COMMENT ON COLUMN project.record_closes_on IS
-	'When the licence record may be deleted (159): the licence''s expiry (granted) or the decision date, + 3 years. Never deleted automatically: the tick tells the owners and the operator.';
+	'When the licence record may be deleted (161): the licence''s expiry (granted) or the decision date, + 3 years. Never deleted automatically: the tick tells the owners and the operator.';
 COMMENT ON COLUMN project.record_review_due_on IS
-	'While no outcome is recorded, when the owners must confirm the record is still needed (159): first pack issue or nomination + 5 years, rolled forward 5 years by each confirmation.';
+	'While no outcome is recorded, when the owners must confirm the record is still needed (161): first pack issue or nomination + 5 years, rolled forward 5 years by each confirmation.';
 
 -- The tick's lookups: due reviews, and records whose closing date passed without a notice.
 CREATE INDEX project_record_review_idx ON project (record_review_due_on) WHERE licence_outcome IS NULL AND record_review_due_on IS NOT NULL;
@@ -235,9 +235,9 @@ ALTER TABLE team
 	ADD COLUMN public_records boolean NOT NULL DEFAULT false,
 	ADD COLUMN records_disposal_confirmed_on date;
 COMMENT ON COLUMN team.public_records IS
-	'The client is a governmental body whose project records are public records (NARSSA s13(2)(a); 159). Set by the operator as the schema owner on the client''s written confirmation (operator agreement 3A.2): account deletion keeps the person''s name in its projects'' history, and its projects are deleted only after records_disposal_confirmed_on.';
+	'The client is a governmental body whose project records are public records (NARSSA s13(2)(a); 161). Set by the operator as the schema owner on the client''s written confirmation (operator agreement 3A.2): account deletion keeps the person''s name in its projects'' history, and its projects are deleted only after records_disposal_confirmed_on.';
 COMMENT ON COLUMN team.records_disposal_confirmed_on IS
-	'When the client confirmed in writing that it holds its records or has a disposal authority (159); set by the operator. Until then a public-records team''s projects, and the team, are kept.';
+	'When the client confirmed in writing that it holds its records or has a disposal authority (161); set by the operator. Until then a public-records team''s projects, and the team, are kept.';
 
 CREATE FUNCTION team_public_records_guard() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
@@ -298,7 +298,7 @@ REVOKE ALL ON FUNCTION team_public_records_guard(), project_public_records_guard
 REVOKE ALL ON FUNCTION app_project_public_records(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_project_public_records(uuid) TO water_app;
 
--- app_user_pseudonymise, from 158: the audit log of a public-records team's
+-- app_user_pseudonymise, from 160: the audit log of a public-records team's
 -- projects keeps the person's name; everything else is as before.
 CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -306,7 +306,7 @@ CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
 	DECLARE
 		v_masked text := app_mask_email(OLD.email::text);
 	BEGIN
-		-- 159: the events of a public-records team's projects are left as they are (each UPDATE below skips them).
+		-- 161: the events of a public-records team's projects are left as they are (each UPDATE below skips them).
 		UPDATE audit_event SET actor_label = 'Deleted user'
 			WHERE actor_user_id = OLD.id AND project_id NOT IN (SELECT p.id FROM project p JOIN team t ON t.id = p.team_id WHERE t.public_records);
 		UPDATE audit_event SET subject = jsonb_set(subject, '{displayName}', to_jsonb('Deleted user'::text))
@@ -319,7 +319,7 @@ CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
 				e.subject->>'authorId' = OLD.id::text
 				OR EXISTS (SELECT 1 FROM note n WHERE n.id::text = e.subject->>'noteId' AND n.author_id = OLD.id)
 			) AND e.project_id NOT IN (SELECT p.id FROM project p JOIN team t ON t.id = p.team_id WHERE t.public_records);
-		-- 158: the masked address in invite.sent / invite.revoked / invite.declined.
+		-- 160: the masked address in invite.sent / invite.revoked / invite.declined.
 		IF v_masked <> '•••' THEN
 			UPDATE audit_event SET subject = jsonb_set(subject, '{email}', to_jsonb('•••'::text))
 				WHERE kind LIKE 'invite.%' AND lower(subject->>'email') = lower(v_masked)

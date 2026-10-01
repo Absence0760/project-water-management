@@ -134,7 +134,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
-			// A team that keeps public records (159, NARSSA s13(2)(a)) is kept until the client confirms
+			// A team that keeps public records (161, NARSSA s13(2)(a)) is kept until the client confirms
 			// their disposal to the operator; team_public_records_guard refuses the DELETE too.
 			const { rows: kept } = await db.query<{ kept: boolean }>('SELECT public_records AND records_disposal_confirmed_on IS NULL AS kept FROM team WHERE id = $1', [id]);
 			if (kept[0]?.kept)

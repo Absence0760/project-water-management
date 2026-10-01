@@ -150,7 +150,7 @@ export interface TickResult {
 	packNotices: NoticeResult & { purged: number };
 	/** The known-defect emails (153_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
 	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
-	/** The licence record's review and closing notices (159_licence_record): owners and the operator, at most once each. */
+	/** The licence record's review and closing notices (161_licence_record): owners and the operator, at most once each. */
 	licenceRecords: LicenceRecordResult;
 }
 
@@ -210,7 +210,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	// fails can't hold them up; an unchanged list costs a lookup per erratum. Its notices go out in the same tick.
 	const erratumQueued = await sweepErrata();
 	result.erratumNotices = { purged: erratumPurged, queued: erratumQueued, ...(await sendErratumNotices()) };
-	// A licence record's review is due, or its closing date passed (159): asked, never deleted.
+	// A licence record's review is due, or its closing date passed (161): asked, never deleted.
 	result.licenceRecords = await sendLicenceRecordNotices();
 	result.stats = await withoutUser(queueStats);
 	return result;

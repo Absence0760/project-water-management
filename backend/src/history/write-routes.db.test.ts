@@ -252,7 +252,7 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
 	},
-	// The licence record (159). Confirmed first: once an outcome is recorded there is no review to confirm.
+	// The licence record (161). Confirmed first: once an outcome is recorded there is no review to confirm.
 	{
 		route: `POST ${P}/licence-record/confirm`,
 		records: ['licence.confirmed'],

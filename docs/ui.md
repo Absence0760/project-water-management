@@ -1431,7 +1431,7 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
-- **Licence record** (159, `project/LicenceRecordPanel.svelte`, words in
+- **Licence record** (161, `project/LicenceRecordPanel.svelte`, words in
   `project/licenceRecord.ts`), editors and owners, under Share links
   (heading id `licence-record`, the target of the licence-record emails):
   how long the issued packs, nominated runs and the names they keep are kept

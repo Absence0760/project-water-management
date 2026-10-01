@@ -1,4 +1,4 @@
-// The tick's licence-record notices (159_licence_record.sql; docs/evidence-pack.md
+// The tick's licence-record notices (161_licence_record.sql; docs/evidence-pack.md
 // § Retention). Provisional position (pre-counsel research, 2026-10-01): a
 // licence record is kept until three years after the licence expires, or
 // three years after the application is refused or withdrawn, and reviewed

@@ -1921,7 +1921,7 @@ export interface AllocationSource {
 	rows: number;
 }
 
-/** The licence decision a project's evidence supports, and how long its licence record is kept (159_licence_record, docs/api.md § Licence record). */
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
 export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
 export interface LicenceRecord {
 	outcome: LicenceOutcome | null;

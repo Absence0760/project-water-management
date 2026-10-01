@@ -1,4 +1,4 @@
-// The Project page's Licence record panel (159_licence_record, docs/ui.md
+// The Project page's Licence record panel (161_licence_record, docs/ui.md
 // § Project): what the record's dates say, in words, and the owner's form
 // turned into the API's body. Provisional position (pre-counsel research,
 // 2026-10-01): the names an issued pack or a sign-off keeps are kept until

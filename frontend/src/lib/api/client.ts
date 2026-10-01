@@ -879,7 +879,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 * modelled use against them (docs/api.md § Allocations). Modelled, not
 		 * metered; the app never decides whether a use is lawful.
 		 */
-		/** The licence record (159): editors read it, owners record the outcome or confirm a review. */
+		/** The licence record (161): editors read it, owners record the outcome or confirm a review. */
 		licenceRecord: {
 			get: (id: string) => request<{ licenceRecord: LicenceRecord }>('GET', `${p(id)}/licence-record`).then((r) => r.licenceRecord),
 			set: (id: string, body: LicenceOutcomeInput) => request<{ licenceRecord: LicenceRecord }>('PUT', `${p(id)}/licence-record`, body).then((r) => r.licenceRecord),

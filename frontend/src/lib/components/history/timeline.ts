@@ -299,7 +299,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
-		// The licence record (159): the outcome, the date the record may be deleted, and why.
+		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);
 			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';

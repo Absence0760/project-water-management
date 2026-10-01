@@ -167,7 +167,7 @@ function packKept(n: number) {
 	);
 }
 
-/** Why a public-records team's project can't be deleted yet (159_licence_record, project_public_records_guard). */
+/** Why a public-records team's project can't be deleted yet (161_licence_record, project_public_records_guard). */
 function publicRecordKept() {
 	return new ApiError(
 		409,
@@ -325,7 +325,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {
 				await checkCalibrationSite(db, id, calSite);
 			}
-			// A public-records team's project stays in the team (159, project_public_records_guard).
+			// A public-records team's project stays in the team (161, project_public_records_guard).
 			if (body.teamId !== undefined && body.teamId !== current.team_id) {
 				const { rows: pr } = await db.query<{ kept: boolean }>('SELECT app_project_public_records($1) AS kept', [id]);
 				if (pr[0]?.kept) throw new ApiError(409, 'this project stays in its team: the team keeps public records (a government body’s records under the National Archives Act)', { publicRecords: true });
@@ -391,7 +391,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[id]
 			);
 			if (evidence[0]) throw evidenceKept(evidence[0]);
-			// A project of a team that keeps public records (159, NARSSA s13(2)(a)) is
+			// A project of a team that keeps public records (161, NARSSA s13(2)(a)) is
 			// deleted only once the client has confirmed its disposal to the operator;
 			// project_public_records_guard refuses the DELETE too.
 			const { rows: publicRecords } = await db.query<{ kept: boolean }>('SELECT app_project_public_records($1) AS kept', [id]);

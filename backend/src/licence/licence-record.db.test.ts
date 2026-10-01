@@ -1,4 +1,4 @@
-// The licence record (159_licence_record.sql; provisional position, pre-counsel
+// The licence record (161_licence_record.sql; provisional position, pre-counsel
 // research 2026-10-01): the outcome owners record and the dates it gives, who
 // may write it, the review the first nomination starts, the tick's notices,
 // and a team that keeps public records (NARSSA): names stay in its projects'

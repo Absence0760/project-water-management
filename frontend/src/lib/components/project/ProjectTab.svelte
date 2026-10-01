@@ -186,7 +186,7 @@
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
-			<!-- How long the licence record (and the names it keeps) is kept (159): editors read it, owners record the outcome. -->
+			<!-- How long the licence record (and the names it keeps) is kept (161): editors read it, owners record the outcome. -->
 			{#if canEdit}<LicenceRecordPanel projectId={project.id} {isOwner} />{/if}
 		</div>
 	</div>

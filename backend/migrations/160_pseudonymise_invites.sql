@@ -1,4 +1,4 @@
--- 158_pseudonymise_invites — account deletion also blanks the person's
+-- 160_pseudonymise_invites — account deletion also blanks the person's
 -- partly hidden email address in invitation entries (decision D12, provisional
 -- position, pre-counsel research 2026-10-01; docs/security.md § Personal
 -- information (POPIA); docs/followups.md "D12 confirmation").
@@ -36,7 +36,7 @@ CREATE FUNCTION app_mask_email(p_email text) RETURNS text
 		END
 	$$;
 COMMENT ON FUNCTION app_mask_email(text) IS
-	'history/record.ts maskEmail in SQL (158): the first character, •••, and everything from the last @; ••• when there is no @ past the first character.';
+	'history/record.ts maskEmail in SQL (160): the first character, •••, and everything from the last @; ••• when there is no @ past the first character.';
 
 -- 2. app_user_pseudonymise, from 138: also the masked address in invitation entries.
 CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
@@ -55,7 +55,7 @@ CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
 				e.subject->>'authorId' = OLD.id::text
 				OR EXISTS (SELECT 1 FROM note n WHERE n.id::text = e.subject->>'noteId' AND n.author_id = OLD.id)
 			);
-		-- 158: the masked address in invite.sent / invite.revoked / invite.declined.
+		-- 160: the masked address in invite.sent / invite.revoked / invite.declined.
 		IF v_masked <> '•••' THEN
 			UPDATE audit_event SET subject = jsonb_set(subject, '{email}', to_jsonb('•••'::text))
 				WHERE kind LIKE 'invite.%' AND lower(subject->>'email') = lower(v_masked);

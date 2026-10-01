@@ -1304,7 +1304,7 @@ were swept and who was mailed.
   `APP_USER_ON_DELETE`: cascade), `auth/personal-data.security.db.test.ts`
   (`USER_FK_COVERAGE`: the `erratumNotices` section).
 
-### Licence record (159_licence_record.sql)
+### Licence record (161_licence_record.sql)
 
 [evidence-pack.md § Retention](./evidence-pack.md#retention). Columns on
 `project` and `team`; provisional position (pre-counsel research,

@@ -461,7 +461,7 @@ the sign-off is the professional's own statement, and the manifest prints
 its makers under the hash the verify page checks (POPIA s14(1)(b), s14(6)(b);
 [security.md § Personal information](./security.md#personal-information-popia)).
 "The life of the licence record" is a date the project holds
-(159_licence_record, the Project page's **Licence record** panel, [api.md §
+(161_licence_record, the Project page's **Licence record** panel, [api.md §
 Licence record](./api.md#licence-record)):
 
 - **Granted**: the licence's expiry date (NWA s28(1)(e), at most 40 years)

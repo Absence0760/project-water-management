@@ -419,7 +419,7 @@ export type LicenceRecordFacts = {
 };
 
 /**
- * The licence record needs a decision (159_licence_record, licence/record.ts):
+ * The licence record needs a decision (161_licence_record, licence/record.ts):
  * the review is due with no outcome recorded, or the record's closing date
  * passed (it can now be deleted). Sent to the project's owners and the
  * operator. Nothing is deleted by the app: the operator deletes on the

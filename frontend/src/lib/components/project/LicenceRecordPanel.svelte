@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The licence record (159_licence_record, docs/ui.md § Project): the licence
+	// The licence record (161_licence_record, docs/ui.md § Project): the licence
 	// decision this project's evidence supports, and so how long the names an
 	// issued pack or a sign-off keeps are kept. Editors read it; owners record
 	// the outcome or confirm a review (the API answers anyone else 403, and

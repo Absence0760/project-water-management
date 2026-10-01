@@ -1,5 +1,5 @@
 // Account deletion blanks the person's partly hidden address in invitation
-// entries (158_pseudonymise_invites.sql, decision D12; docs/security.md
+// entries (160_pseudonymise_invites.sql, decision D12; docs/security.md
 // § Personal information (POPIA)). The trigger finds the entries by the
 // masked text, so app_mask_email must mask exactly as history/record.ts
 // maskEmail does: the pairing test below keeps them from drifting.
