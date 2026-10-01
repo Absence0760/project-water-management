@@ -184,9 +184,7 @@ charge still is.
 
 `KNOWN_DIFFERENCES` in diff.py lists columns where the engine is known to
 depart from its documentation, each with its docs/followups.md item; it is
-empty. `KNOWN_CASES` lists departures recognised by their symptom on a few
-inputs (§ Findings): such a case's disagreements are printed as known and
-don't fail the run.
+empty, and no other disagreement is allowed.
 
 ## The mutation self-test
 
@@ -227,26 +225,33 @@ Phase 2a, 2026-09-30 (engine 1.53.0): the examples, the 12 probes, 800
 random and 800 dense networks (seeds 1–400 and 1000–1399 of each) agree on
 every compared column (71 column kinds and the three allocation summary
 parts; largest difference 6e-6, a dam area in m², 5e-11 of its column's
-largest value) except on four networks, all one engine departure, listed in
-`KNOWN_CASES` and docs/followups.md § Verification:
+largest value) except on four networks, all one engine departure, **fixed in
+engine 1.57.0** (erratum ER-12; the harness now allows no known case):
 
-- **A float-noise demand switches on a dam-target borehole** (§2.7d). The
+- **A float-noise demand switched on a dam-target borehole** (§2.7d). The
   docs say a primary or emergency dam-target borehole pumps only while the
-  dam is drawn for demand, Dr > 0 to within 10⁻¹² × D. The engine switches it
-  on for a rounding residual: random seed 1343, a crop requirement of
+  dam is drawn for demand, Dr > 0 to within 10⁻¹² × D. The engine switched
+  it on for a rounding residual: random seed 1343, a crop requirement of
   1.4e-14 m³ left by the soil-water store (D = 1.4e-12 m³ at e = 0.01), and
-  the emergency borehole pumps 495 m³ into its 495 m³ dam (Python: 0);
+  the emergency borehole pumped 495 m³ into its 495 m³ dam (Python: 0);
   dense seed 86, off-take water arriving at 980.5862268744551 m³ against a
-  demand of 980.5862268744552 m³, and it pumps 1 590 m³ (dam 3 189 vs
-  1 599 m³ after). The same noise demand drops a day from `limitBound` that
-  its documented test counts (random and dense seed 145: 198 days vs 199 in
-  water year 2010).
+  demand of 980.5862268744552 m³, and it pumped 1 590 m³ (dam 3 189 vs
+  1 599 m³ after). The same noise demand made a day of `limitBound` read
+  two ways (random and dense seed 145: 198 days vs 199 in water year 2010).
+  Fixed at the source: rain within 10⁻¹² of the need covers it (§2.3, so no
+  noise requirement arises), the switch judges the rest against the day's
+  full demand, off-take water included (§2.7d), and §2.12a now states
+  `limitBound`'s noise floor (a deficit of 10⁻⁹ m³ or less on a demand under
+  1 m³ doesn't count), which `model.py` follows.
 
 Two more disagreements were the harness's own, fixed here: Python kept the
 factor of the year a forecast tail starts in on the tail's days in the next
 water year (the docs meant that year's tail days only; now written into
 §2.12a), and a noise-level storage in an empty dam showed as an area, and a
-noise-level charge as a binding site (§ Tolerance).
+noise-level charge as a binding site (§ Tolerance). With the engine 1.57.0
+fix, `model.py` also treats a forecast tail that starts on 1 October as
+starting a part year of its own (no historical days to fit on), as the engine
+does and §2.12a now says.
 
 Points the docs left open, settled from `runModel`'s outputs (a probe each)
 and written into docs/model.md:
@@ -262,7 +267,7 @@ and written into docs/model.md:
 | `binding-site-tie` | A tie between two sites' charges goes to the more downstream site (already documented; pinned) | §2.7b |
 | `forecast-tail-warmup` | The warm-up cycles the historical days only, never a forecast tail (already documented; pinned) | §2.4a, §2.4f |
 | `full-allocation-tail-new-year` | Under a full allocation, a later water year a forecast tail runs into is a part year of its own, scaled over its tail days; only the year the tail starts in keeps its historical days' factor | §2.12a |
-| `scaled-no-demand-tail-year` | A no-demand year's `scaled` row lists the volume registered over its run days, except the year a forecast tail starts in, which lists k × demand = 0 (the two readings disagree: docs/followups.md § Verification) | §2.12a |
+| `scaled-no-demand-tail-year` | A no-demand year's `scaled` row lists the volume registered over the days it is scaled on: its run days, the historical days of the year a forecast tail starts in (engine ≥ 1.57.0; before, that year listed k × demand = 0) | §2.12a |
 
 Coverage probes (rules the docs settle, which the random networks rarely
 reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule

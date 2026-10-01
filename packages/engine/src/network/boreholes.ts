@@ -127,11 +127,16 @@ export const unitRoom = (u: PlanBoreholeUnit, usedThisYear: number): number => M
 
 /**
  * Does the dam serve any demand today (WP-3.9, engine ≥ 1.8.0)? `rem` is the
- * demand left after the primary direct units and a river-first pump, `D` the
- * day's demand. A primary or emergency unit that pumps into the dam pumps only
- * then: on a day with nothing to irrigate from the dam, groundwater pumped in
- * would only take the room that inflow later needs, and spill. The tolerance
- * absorbs the float noise of several primary units adding up to D.
+ * demand left after the off-take water used, the primary direct units and a
+ * river-first pump, `D` the day's full demand, off-take water used included.
+ * A primary or emergency unit that pumps into the dam pumps only then: on a
+ * day with nothing to irrigate from the dam, groundwater pumped in would only
+ * take the room that inflow later needs, and spill. The tolerance absorbs the
+ * float noise of several primary units, or off-take water, adding up to D.
+ * Before engine 1.57.0 an off-take day passed the rest after the off-take
+ * water as D, so a rest of an ulp (980.5862268744551 of 980.5862268744552
+ * m³ delivered) measured against itself switched the unit on (verify dense
+ * seed 86: 1 590 m³ pumped).
  */
 export const damDrawnFor = (rem: number, D: number): boolean => rem > D * 1e-12;
 
@@ -162,6 +167,8 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  * today under the node's registered volumes; Infinity = no cap. A capped
  * surface leaves the rest of the demand to the supplemental and emergency
  * units, within their own room.
+ * `dayD` (engine ≥ 1.57.0) is the day's full demand, before off-take water
+ * used took its share of D: the scale `damDrawnFor`'s noise is judged on.
  * Returns [from the dam Gs, groundwater to the crop, into the dam, Σ d × pumped, from the river].
  */
 export function groundwaterDay(
@@ -177,7 +184,8 @@ export function groundwaterDay(
 	river = 0,
 	rule: 1 | 2 | 3 = 1,
 	sRoom = Infinity,
-	gRoom = Infinity
+	gRoom = Infinity,
+	dayD = D
 ): [number, number, number, number, number] {
 	const { units } = b;
 	let dep = 0;
@@ -200,7 +208,7 @@ export function groundwaterDay(
 	// The demand a dam-target unit pumps for: what the primary units and the river pump (river first) leave, within the surface cap.
 	const rem = river > 0 && rule !== 3 ? Math.min(D - g, sRoom) - Math.min(river, D - g, sRoom) : Math.min(D - g, sRoom);
 	// Primary and emergency dam-target units top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
-	const drawn = damDrawnFor(rem, D);
+	const drawn = damDrawnFor(rem, dayD);
 	// A supplemental unit that pumped all it was asked for left the dam holding exactly `rem` above dead storage.
 	let topped = false;
 	for (let k = 0; k < units.length; k++) {

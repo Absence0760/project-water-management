@@ -1407,50 +1407,47 @@ the suggested order (the IDs carry the detail):
       section, in about a third of the random networks and most of a new set
       of dense ones, with 35 more mutants (59 in all) and three coverage
       probes. The examples, the probes and 1 600 random and dense networks
-      agree apart from the float-noise item below; two points §2.12a left
+      agree apart from the float-noise item below (fixed in engine 1.57.0);
+      two points §2.12a left
       open were settled from `runModel` (a later water year a forecast tail
       runs into is its own part year; a no-demand year's `scaled` row) and
       written into model.md. CI's `verify` job runs 200 random and 200 dense
       networks.
-- [ ] **A float-noise demand switches on a dam-target borehole** (found by
-      `verify/` phase 2a, 2026-09-30; engine 1.53.0). A primary or emergency
-      dam-target borehole pumps "only while Dr > 0 (to within 10⁻¹² × D)"
-      (model.md §2.7d), but the engine tests the rest against its own size,
-      so a rounding residual switches it on and it fills the dam by a day's
-      room. Two ways in: the soil-water store leaves a crop requirement of
-      1.4 × 10⁻¹⁴ m³ on a day the effective rain covers it (e = 0.01, so D =
-      1.4 × 10⁻¹² m³), and the emergency borehole pumps 495 m³ into a
+- [x] **A float-noise demand switches on a dam-target borehole** (found by
+      `verify/` phase 2a, 2026-09-30; engine 1.53.0; **fixed in engine
+      1.57.0**, erratum ER-12). A primary or emergency dam-target borehole
+      pumps "only while Dr > 0 (to within 10⁻¹² × D)" (model.md §2.7d), but
+      the engine switched it on for a rounding residual and filled the dam by
+      a day's room. Two ways in: the soil-water store left a crop requirement
+      of 1.4 × 10⁻¹⁴ m³ on a day the effective rain covered it (e = 0.01, so
+      D = 1.4 × 10⁻¹² m³), and the emergency borehole pumped 495 m³ into a
       495 m³ dam (verify random seed 1343, farm day 930); and off-take water
-      that arrives one ulp short of the demand (980.5862268744551 vs
-      980.5862268744552 m³, the loss gross-up and loss not cancelling
-      exactly) leaves a rest of 1.1 × 10⁻¹³ m³, and the emergency borehole
-      pumps 1 590 m³ (dense seed 86, day 46; storage 1 599 vs 3 189 m³ after).
-      The same noise demand (1.4 × 10⁻¹² m³) makes `limitBound` drop a day
-      its documented test counts (deficit > 10⁻⁹ × demand): 198 days against
-      199 in water year 2010 (random and dense seed 145). `verify/diff.py`
-      reports these cases as `KNOWN_CASES` "noise-demand". **Durable fix:**
-      snap noise at the source, a crop requirement below 10⁻¹² of the day's
-      gross demand to 0 and off-take water used within 10⁻¹² × D of D to D,
-      and make the dam-target switch test Dr against 10⁻¹² × the day's full
-      demand D (as documented), not against the rest; then state
-      `limitBound`'s treatment of a noise-level day in §2.12a and drop the
-      `KNOWN_CASES` entry. Bumps `ENGINE_VERSION` (a borehole can pump less).
-      **Trigger:** the next engine change to boreholes (§2.7d), the soil-water
-      store (§2.3) or off-takes (§2.6a), or before a licence evidence pack
-      relies on a dam-target borehole, whichever comes first.
-- [ ] **A no-demand year's `scaled` row reads two ways** (found by `verify/`
-      phase 2a; engine 1.53.0). Under a full allocation a year with no
-      demand can't be scaled; `RunSummary.allocations.scaled` lists the
-      volume registered over its run days (1 263 064 m³), except in the year
-      a forecast tail starts in, where it lists k × demand = 0 (dense seed
-      14: 0 against 973 180 m³ over the year's historical days; probe
-      `scaled-no-demand-tail-year`). model.md §2.12a now says so and the
-      harness pins it. **Durable fix:** one reading for every year, most
-      likely the registered volume over the year's historical days (what
-      the unit would have asked for), in `compareAllocations`' scaled rows;
-      then update §2.12a and the probe. **Trigger:** the next change to
-      full-allocation runs or to the allocation comparison, or a report
-      that shows the scaled rows.
+      that arrived one ulp short of the demand (980.5862268744551 vs
+      980.5862268744552 m³) left a rest of 1.1 × 10⁻¹³ m³ that `groundwaterDay`
+      was handed as the day's demand, so the switch judged it against itself,
+      and the emergency borehole pumped 1 590 m³ (dense seed 86, day 46). The
+      same noise demand made `limitBound` read two ways (198 vs 199 days in
+      water year 2010, seed 145): the engine's test floors the deficit at
+      10⁻⁹ m³, the doc didn't say so. **Fixed at the source:** rain within
+      10⁻¹² of the need covers it (`coveredByRain`, model.md §2.3), so no
+      noise requirement arises; the switch judges the rest against the day's
+      full demand, off-take water used included (`groundwaterDay`'s `dayD`,
+      §2.7d); §2.12a states `limitBound`'s floors. Pinned in `demand.test.ts`,
+      `boreholes.test.ts` and `mode.test.ts`; `verify/diff.py`'s
+      `KNOWN_CASES` allowance is gone. Off-take delivery itself can still
+      arrive an ulp off the demand ((share ÷ (1 − loss)) × (1 − loss)); that
+      is now harmless noise in `offtake_used` (≤ 10⁻¹² × D, below every
+      threshold), so it stays.
+- [x] **A no-demand year's `scaled` row reads two ways** (found by `verify/`
+      phase 2a; engine 1.53.0; **fixed in engine 1.57.0**). Under a full
+      allocation a year with no demand can't be scaled;
+      `RunSummary.allocations.scaled` listed the volume registered over its
+      run days (1 263 064 m³), except in the year a forecast tail starts in,
+      where it listed k × demand = 0 (dense seed 14). Now every such year
+      lists the volume registered over the days it would have been scaled on
+      (its run days; the tail-start year's historical days), what it would
+      have asked for (`fullAllocationFactors`, model.md §2.12a, probe
+      `scaled-no-demand-tail-year`, `mode.test.ts`).
 - [ ] **`verify/` phase 2b: the rest of the model.** Phases 1 and 2a cover
       the daily chain and the optional inputs above; `verify/model.py`'s
       `unsupported()` names what they leave out and the harness refuses an

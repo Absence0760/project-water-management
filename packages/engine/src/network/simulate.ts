@@ -1238,7 +1238,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// What the unit's own sources still have to supply once the off-take water is used.
 			const Dl = Xused > 0 ? Dr - Xused : Dr;
 			const sLeft = Xused > 0 ? sRoom - Xused : sRoom;
-			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom);
+			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom, D);
 			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - dead, 0), room);
 			else Gs = Math.min(Math.max(avail0 - dead, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;

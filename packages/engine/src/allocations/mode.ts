@@ -229,7 +229,9 @@ export function outsideMonths(allocs: readonly AllocationEntry[], source: Alloca
  * keep that factor, so the tail never changes a historical day's demand
  * (engine-audit.md K1); its registered volume is then factor × demand, as a
  * pinned year's. So a year with no demand on its historical days takes
- * nothing on its tail days either, as the run without the tail has it.
+ * nothing on its tail days either, as the run without the tail has it, and
+ * (engine ≥ 1.57.0) lists the volume registered over its historical days, as
+ * every other year with no demand lists the volume over its days.
  * A unit that abstracts only from run day `from` (NetworkNode.abstractionFrom,
  * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
  * it starts in asks for that part of the year's volume, a year wholly before
@@ -267,8 +269,10 @@ export function fullAllocationFactors(
 		let all = d;
 		for (let k = fit + 1; k <= last; k++) all += demand[k]!;
 		// A pinned year was scaled to the capture run's volume for the whole of it, and a year cut by
-		// the forecast tail to its historical days' volume: record what its days got.
-		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || fit < last ? f * all : reg });
+		// the forecast tail to its historical days' volume: record what its days got. A year with no
+		// demand to scale lists the volume registered over the days it would have been scaled on, the
+		// year the tail starts in too (engine ≥ 1.57.0; before, that year listed k × demand = 0).
+		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || (fit < last && d > 0) ? f * all : reg });
 		t = last + 1;
 	}
 	return { factor, years, unscaled };
