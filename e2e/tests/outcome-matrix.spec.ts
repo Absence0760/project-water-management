@@ -115,8 +115,8 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('outcome-settings');
 	await expect(section.getByLabel('Water-year classes')).toHaveValue('auto');
-	await expect(section.getByTestId('cutoffs-pending-reserveMonthsMet')).toHaveText('Defaults pending the hydrologist');
-	await expect(section.getByTestId('cutoffs-pending-daysBelowEwr')).toHaveText('Defaults pending the hydrologist');
+	await expect(section.getByTestId('cutoffs-pending-reserveMonthsMet')).toHaveText('Provisional defaults, not yet confirmed by the catchment’s hydrologist');
+	await expect(section.getByTestId('cutoffs-pending-daysBelowEwr')).toHaveText('Provisional defaults, not yet confirmed by the catchment’s hydrologist');
 	await section.getByLabel('Water-year classes').selectOption('terciles');
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByText('Settings saved.')).toBeVisible();
@@ -150,7 +150,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 
 	await expect(panel.getByTestId('outcome-metric')).toHaveText('Measure: Days below the pragmatic EWR at the outlet');
 	await expect(panel.getByText('Terciles of 9 complete water years')).toBeVisible();
-	await expect(panel.getByTestId('cutoffs-pending')).toHaveText('Risk cut-offs pending the hydrologist');
+	await expect(panel.getByTestId('cutoffs-pending')).toHaveText('Provisional risk cut-offs, not yet confirmed by the catchment’s hydrologist');
 
 	const table = panel.getByTestId('outcome-table');
 	const heads = table.locator('thead th');

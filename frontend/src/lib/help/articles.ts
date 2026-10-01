@@ -98,7 +98,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.12a; docs/allocations.md'
 	},
 	'allocation-band': {
-		long: 'A water year whose modelled use is more than the registered volume × (1 + band) reads “above registered”, less than × (1 − band) “below registered”, anything between “within band”. It changes only how the comparison reads, never the run’s water. The ±10 % default is a placeholder pending the hydrologist.',
+		long: 'A water year whose modelled use is more than the registered volume × (1 + band) reads “above registered”, less than × (1 − band) “below registered”, anything between “within band”. It changes only how the comparison reads, never the run’s water. The ±10 % default is a provisional default (2026-10-01), not yet confirmed by the catchment’s hydrologist: it allows for meter and model error, and is not a legal tolerance.',
 		aliases: ['tolerance', 'allocation tolerance', 'within band'],
 		related: ['allocation-mode'],
 		source: 'docs/allocations.md § The comparison'
@@ -624,7 +624,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 
 	// ---- EWR ----------------------------------------------------------------
 	'ewr': {
-		long: 'In South Africa the legal term is the ecological Reserve; older studies call it the IFR (instream flow requirement). It is derived per river for an ecological category, typically with the Desktop Reserve Model. This model checks every day whether the simulated flow meets it.',
+		long: 'In South Africa the National Water Act’s term is the Reserve: its ecological part, often called the ecological Reserve, is the water kept to protect aquatic ecosystems (the other part is basic human needs). Older studies call it the IFR (instream flow requirement). It is derived per river for an ecological category, typically with the Desktop Reserve Model. This model checks every day whether the simulated flow meets it.',
 		aliases: ['Reserve', 'ecological reserve', 'IFR', 'instream flow requirement', 'environmental flow'],
 		related: ['pragmatic-ewr', 'ewr-shortfall', 'ecological-category', 'desktop-reserve-model'],
 		source: 'b023 EWR Cfg; docs/model.md §7'
@@ -693,7 +693,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
 	},
 	'reserve-low-flows': {
-		long: 'The Desktop Reserve Model gives two assurance tables for a site: the total flow (low flows plus high flows) and the low flows alone, each per month at the 10 % … 99 % points. The low flows fall from the maintenance low flow at the wetter points to the drought low flow at 99 %.\n\nEnter the low-flow table beside a total-flow table and each month is judged twice at the same natural percentile: against the total and against the low flows. A month that meets its low flows but not the total failed only its high flows (the heat map shows ◐); one below its low flows (●) is the more serious failure. The difference between the two requirements is the month’s high-flow part. Pending the hydrologist: both are judged on the month’s total flow volume, unless the Settings choice “Low flows judged on” is set to base flow.',
+		long: 'The Desktop Reserve Model gives two assurance tables for a site: the total flow (low flows plus high flows) and the low flows alone, each per month at the 10 % … 99 % points. The low flows fall from the maintenance low flow at the wetter points to the drought low flow at 99 %.\n\nEnter the low-flow table beside a total-flow table and each month is judged twice at the same natural percentile: against the total and against the low flows. A month that meets its low flows but not the total failed only its high flows (the heat map shows ◐); one below its low flows (●) is the more serious failure. The difference between the two requirements is the month’s high-flow part. As a provisional default, not yet confirmed by the catchment’s hydrologist: both are judged on the month’s total flow volume, unless the Settings choice “Low flows judged on” is set to base flow.',
 		aliases: ['maintenance low flow', 'drought low flow', 'low-flow table', 'low flows', 'base flow requirement'],
 		related: ['reserve-rules', 'reserve-compliance', 'reserve-high-flows', 'desktop-reserve-model'],
 		source: 'Hughes & Hannart (2003); Hughes et al. (2014); docs/model.md §2.9d'
@@ -708,7 +708,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		long: 'The EWR charge (each hydrological unit’s share of the shortfall at the EWR sites below it) and the curtailment it sets follow a daily requirement at each site. By default that is the pragmatic EWR, as in the b023 workbook. Set it to the Reserve rule tables and, at a site with a rule table, each complete calendar month’s requirement from the table (the one the monthly compliance report judges, the daily series ewr_rule) becomes the daily requirement for that month’s days. A site without a table, and a part month at either end of the run, keep the pragmatic EWR, and the run says how many days that was.\n\nThe EWR required and met at each site (under the EWR by month grid on River & reserve) follow the same choice. The shortfall the charge followed at such a site is the daily series ewr_charge_shortfall; the pragmatic EWR, its days not met and the observed-record agreement stay as they are. Which the charge should follow is a question for the hydrologist and the assessor, so the pragmatic EWR stays the default.',
 		aliases: ['charge from the rule table', 'EWR charge basis', 'rule-table charge', 'ewrChargeSource'],
 		related: ['ewr-charge', 'reserve-rules', 'reserve-compliance', 'water-account'],
-		source: 'Pending the hydrologist (plan.md question 17); docs/model.md §2.9c'
+		source: 'Provisional decision 2026-10-01, not yet confirmed by the catchment’s hydrologist (plan.md question 17); docs/model.md §2.9c'
 	},
 	'low-flow-measure': {
 		long: 'A low-flow requirement (a table that covers low flows only, or the low-flow part of a total-flow table) is judged against one figure for the month. By default that is the month’s total flow volume, so a month with a flood can pass its low flows even though the river ran short the rest of the month.\n\nSet it to base flow and the month is judged on its base flow instead: the simulated flow at the site with the quick flow taken out by the Lyne–Hollick digital filter (three passes, α = 0.995, the value found for daily flows in most South African catchments). The total-flow requirement is still judged on the month’s total flow, and the natural-flow percentile still comes from the natural flow. Which measure a Reserve monitoring report uses is a question for the hydrologist, so the total flow stays the default.',
@@ -772,7 +772,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		countries: ['ZA']
 	},
 	'ecological-category': {
-		long: 'The higher the target category, the more flow the Reserve keeps in the river.',
+		long: 'The higher the target category, the more flow the Reserve keeps in the river. A river’s present state can be E or F (seriously or critically modified), but those aren’t management targets: the lowest category a Reserve is set for is D.',
 		aliases: ['EC', 'present ecological state', 'category B'],
 		related: ['ewr'],
 		source: 'docs/model.md §7'
