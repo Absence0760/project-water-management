@@ -305,6 +305,11 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
             f["supplyRule"] = rule
             if rule == "runOfRiver" and rng.random() < 0.8:
                 f["damCapacityM3"] = 0
+                # A pool at the pump (§2.7j), half the time.
+                if rng.random() < 0.5:
+                    f["poolCapacityM3"] = round(rng.choice([rng.uniform(20, 500), rng.uniform(500, 20000)]))
+                    f["poolInitialPct"] = rng.choice([0, 1, round(rng.uniform(0, 1), 2)])
+                    f["poolAreaM2"] = rng.choice([None, 0, round(rng.uniform(50, 5000))])
             f["pumpCapacityM3Day"] = rng.choice([None, 0, round(rng.uniform(50, 3000)), round(rng.uniform(1000, 50000))])
             if rule == "trigger":
                 f["supplyTriggerPct"] = round(rng.uniform(0, 0.7), 2)

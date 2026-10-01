@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { diverts, divertMonthsCell, divertMonthsPreview, divertMonthsTicked, handsOffPreview, handsOffTakers, handsOffTicked, hasSupplySettings, noDamSupplyHint, pumpM3Day, sharedPumpHint } from './supply';
+import { groupedText } from '$lib/components/common/numberText';
+import { diverts, divertMonthsCell, divertMonthsPreview, divertMonthsTicked, handsOffPreview, handsOffTakers, handsOffTicked, hasSupplySettings, noDamSupplyHint, poolHint, pumpM3Day, sharedPumpHint } from './supply';
 
 describe('pumpM3Day', () => {
 	it('is pumps × m³/h per pump × 24 h', () => {
@@ -229,5 +230,17 @@ describe('the boxes that switch a monthly row on', () => {
 	it('start River to dam by month at the one value in every month, so the run is unchanged until a month is edited', () => {
 		expect(divertMonthsTicked(true, 800)).toEqual(new Array(12).fill(800));
 		expect(divertMonthsTicked(false, 800)).toBeNull();
+	});
+});
+
+describe('poolHint (engine 1.64.0)', () => {
+	it('says blank is no pool, and with one what it does and the area the run estimates when none is entered', () => {
+		expect(poolHint({ poolCapacityM3: null })).toBe('Blank is no pool: the pump takes only what flows.');
+		expect(poolHint({ poolCapacityM3: 0 })).toBe('Blank is no pool: the pump takes only what flows.');
+		// 7.2 × 1000^0.77 = 1470.05 m², written as the form writes numbers.
+		expect(poolHint({ poolCapacityM3: 1000, poolAreaM2: null })).toBe(
+			`The pump draws it down once the flow it may take is used; it refills from the flow above what must pass. With no surface area entered, the run estimates ${groupedText(1470)} m² for its evaporation.`
+		);
+		expect(poolHint({ poolCapacityM3: 1000, poolAreaM2: 800 })).not.toMatch(/estimates/);
 	});
 });

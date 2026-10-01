@@ -1267,6 +1267,22 @@ export interface NetworkNode {
 	 * default, no warning), 0 = it takes nothing from the river. A gauge has none.
 	 */
 	pumpCapacityM3Day?: number | null;
+	/**
+	 * Run-of-river farms only (engine ≥ 1.64.0, docs/model.md §2.7j): a pool
+	 * at the river pump's intake, m³ (a natural pool or a weir pool in the
+	 * channel). The pump takes the river's flow first, then draws the pool
+	 * down; the pool refills from the flow above what must pass the farm.
+	 * null / absent / 0 = no pool, every engine before 1.64.0.
+	 */
+	poolCapacityM3?: number | null;
+	/** The pool's storage at the start of the run, fraction (0–1) of its capacity. Default 1 (full). */
+	poolInitialPct?: number;
+	/**
+	 * The pool's surface area when full, m², for its evaporation (the dam's
+	 * area–storage power law with b = DAM_AREA_EXPONENT). null / absent = not
+	 * known: the run estimates it from the capacity (estimatedDamAreaM2) and warns.
+	 */
+	poolAreaM2?: number | null;
 	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
 	supplyTriggerPct?: number;
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
@@ -1348,6 +1364,16 @@ export const SUPPLY_DEFAULTS = {
 	pumpCapacityM3Day: null,
 	supplyTriggerPct: 0.4,
 	supplyStopPct: 0.6
+} as const;
+
+/**
+ * What a node without the pool fields (engine ≥ 1.64.0, docs/model.md §2.7j)
+ * runs as: no pool. A pool, when set, starts full.
+ */
+export const POOL_DEFAULTS = {
+	poolCapacityM3: null,
+	poolInitialPct: 1,
+	poolAreaM2: null
 } as const;
 
 /**
@@ -1583,6 +1609,10 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
+				// A pool at the river pump's intake (engine ≥ 1.64.0): none unless set.
+				if (n.poolCapacityM3 === undefined) n.poolCapacityM3 = POOL_DEFAULTS.poolCapacityM3;
+				n.poolInitialPct ??= POOL_DEFAULTS.poolInitialPct;
+				if (n.poolAreaM2 === undefined) n.poolAreaM2 = POOL_DEFAULTS.poolAreaM2;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -3187,6 +3217,8 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
+	/** Evaporation from the run-of-river pools (engine ≥ 1.64.0); their storage is in the opening and closing storage. Present only with a pool. */
+	poolEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
 	/** Groundwater pumped into supply and (engine ≥ 0.36.0, WP-3.9) into the dams, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */

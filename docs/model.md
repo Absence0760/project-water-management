@@ -4209,6 +4209,70 @@ runs without it (more demand restricts every unit sooner, and a unit
 upstream that takes less leaves more below, as the trigger rule does). The
 Excel audit workbook refuses a farm under a rule, by name.
 
+### 2.7j A pool at a run-of-river pump (engine ≥ 1.64.0)
+
+A run-of-river unit (§2.7e) has no dam, but its pump usually sits in a
+**pool**: a natural pool in the channel or one behind a low weir. Without
+one, the unit can pump only what flows that day, so on the first day the
+river stops it has nothing. The experimental node-based workbook's pumping
+notes name this case ("farms without dams pump directly from passing
+flow/pools"). The pool is optional: `poolCapacityM3` null (the default)
+or 0 is none, and the unit runs exactly as before.
+
+**Fields** (run-of-river farms only; migration 158):
+
+| Field | Meaning |
+| --- | --- |
+| `poolCapacityM3` | the pool's capacity, m³; null / 0 = no pool |
+| `poolInitialPct` | its storage at the start of the run, 0–1 of the capacity; default 1 (full) |
+| `poolAreaM2` | its surface area when full, m², for its evaporation; null = estimated from the capacity as a dam's is (`estimatedDamAreaM2`, 7.2 × C^0.77), with a warning |
+
+**Each day** (§2.7e's names; S = the flow below the absent dam, keep = what
+must pass the unit: the senior users' requirement, a hands-off flow, §2.7h):
+
+```
+A        = pool area when full × (pool[t−1] ÷ capacity)^0.7       (0 when empty; the dams' small-reservoir exponent)
+Ep       = MIN(lake evaporation depth × A ÷ 1000, pool[t−1])     (before the pump runs)
+held     = pool[t−1] − Ep
+free     = MAX(0, S − keep)                                       (the flow the pump may take)
+room     = MIN(pump capacity, free + held)                        (replaces §2.7e's MIN(pump capacity, free))
+Gr       = MIN(room, D − GWp − G_dam)                             (as §2.7e: a transfer into the unit first)
+drawn    = MAX(0, Gr − free)                                      (the pump uses the flow first, then the pool)
+refill   = MIN(capacity − (held − drawn), free − (Gr − drawn))    (from the flow left above keep)
+pool[t]  = held − drawn + refill
+U        = R + S − (Gr − drawn) − refill + T + …                  (the river below loses what the pump took from the flow, and the refill)
+```
+
+The balance gains the pool: V = (§2.7's terms) − (pool[t] − pool[t−1]) −
+Ep. The water account (§2.11b) counts the pool's storage with the dams'
+and its evaporation as an out term of its own (`poolEvaporationM3`).
+
+**Series** (only on a unit with a pool): `pool_storage` (m³, end of day),
+`pool_drawn` (m³/day, part of `river_abstraction`), `pool_evaporation`
+(m³/day) and the working column `pool_area` (m², start of day). A resumed
+run carries the pool's storage in its snapshot (`poolStorageM3`).
+
+**Decisions** (provisional 2026-10-01, to be confirmed by the client's
+hydrologist with the run-of-river units, issue #90 Q18):
+
+- *The pool refills only from flow above what must pass.* The river below
+  never gets less than MIN(S, keep), the same as with no pool, so a pool
+  never weakens a hands-off flow or the senior users' share. Above that, a
+  pool that isn't full takes the flow before it moves on: in-channel
+  storage fills before it spills.
+- *The pool may be drawn while the river is below its hands-off flow.*
+  Drawing it doesn't take today's flow (keep still passes); it lowers the
+  pool, which then refills only from flow above keep. A licence whose
+  hands-off condition stops all pumping would need a switch for it; none
+  is built until a licence asks.
+- *No rain on the pool and no seepage.* A pool's surface is a small part of
+  the unit's land, whose rain is already in its runoff; and a pool in the
+  channel seeps back into the same river. A dam keeps both (§2.7a), since
+  its surface and its losses can be large.
+- *Only under run of river.* A unit with a dam stores in its dam; a pool
+  set under another rule is ignored with a warning, and the API refuses it
+  (`poolRule`).
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |

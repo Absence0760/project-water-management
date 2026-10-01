@@ -4,7 +4,7 @@
 // simulation (./simulate.ts) and the self-checks (../verify/checks.ts) both
 // read a node through these, so a stored value means the same thing to both.
 import { waterYearIndex } from '../calendar';
-import type { NetworkNode } from '../project';
+import { DAM_AREA_EXPONENT, estimatedDamAreaM2, type NetworkNode } from '../project';
 import { damPresence } from './development';
 
 /**
@@ -21,6 +21,22 @@ export interface PlanSupply {
 	triggerM3: number;
 	/** 'trigger': switch back to the dam once the start-of-day storage is at least this (m³, ≥ triggerM3). */
 	stopM3: number;
+	/** Run of river only (engine ≥ 1.64.0): a pool at the pump's intake; absent = none. */
+	pool?: PlanPool;
+}
+
+/**
+ * A pool at a run-of-river farm's pump intake (engine ≥ 1.64.0, docs/model.md
+ * §2.7j): in-channel storage the pump draws down once the flow it may take
+ * is used, refilled from the flow above what must pass the farm.
+ */
+export interface PlanPool {
+	/** Capacity, m³ (> 0). */
+	capM3: number;
+	/** Storage at the start of the run, m³. */
+	initialM3: number;
+	/** Surface area when full, m²: A = areaFullM2 × (storage / capacity)^DAM_AREA_EXPONENT. */
+	areaFullM2: number;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -60,6 +76,7 @@ export function supplyOf(n: NetworkNode, warnings: string[], span?: { start: num
 		return {};
 	}
 	if (rule === 'damFirst') {
+		if (n.poolCapacityM3) warnings.push(`unit "${n.name}": a pool is for a run-of-river unit; ignored under dam only`);
 		// A farm with no dam irrigates from the river routed to it (K, M, O pass through the absent
 		// dam), with no pump limit: b023's stand-in for a river pump, kept, but said (issue #54).
 		const none = noDamOf(n, span);
@@ -87,13 +104,17 @@ export function supplyOf(n: NetworkNode, warnings: string[], span?: { start: num
 		warnings.push(
 			`unit "${n.name}": ${none} what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river`
 		);
+	const hasPool = n.poolCapacityM3 !== null && n.poolCapacityM3 !== undefined && n.poolCapacityM3 !== 0;
 	if (rule === 'runOfRiver') {
 		if (cap > 0) {
 			warnings.push(`unit "${n.name}": run of river has no dam, but this unit has a ${Math.round(cap)} m³ dam; it runs as river first. Set the dam capacity to 0`);
+			if (hasPool) warnings.push(`unit "${n.name}": its pool is ignored, as it runs as river first`);
 			return { supply: { rule: 1, pumpM3Day, triggerM3: 0, stopM3: 0 } };
 		}
-		return { supply: { rule: 3, pumpM3Day, triggerM3: 0, stopM3: 0 } };
+		const pool = hasPool ? poolOf(n, warnings) : undefined;
+		return { supply: { rule: 3, pumpM3Day, triggerM3: 0, stopM3: 0, ...(pool ? { pool } : {}) } };
 	}
+	if (hasPool) warnings.push(`unit "${n.name}": a pool is for a run-of-river unit; ignored under the ${rule === 'riverFirst' ? 'river first' : 'trigger'} supply rule (the dam is its store)`);
 	if (rule === 'riverFirst') return { supply: { rule: 1, pumpM3Day, triggerM3: 0, stopM3: 0 } };
 	if (!(cap > 0)) {
 		warnings.push(`unit "${n.name}": the trigger supply rule needs a dam to trigger on; it runs as river first`);
@@ -107,6 +128,61 @@ export function supplyOf(n: NetworkNode, warnings: string[], span?: { start: num
 	const trigger = clamp(n.supplyTriggerPct, 0, 0.4, 'supply trigger');
 	const stop = clamp(n.supplyStopPct, trigger, 0.6, 'supply stop level');
 	return { supply: { rule: 2, pumpM3Day, triggerM3: trigger * cap, stopM3: stop * cap } };
+}
+
+/**
+ * A run-of-river farm's pool as the simulation runs it (engine ≥ 1.64.0), or
+ * undefined when its capacity isn't a size > 0 (with a warning; the API
+ * refuses it on save). The start share is clamped to 0–1 (default full); an
+ * unknown surface area is estimated from the capacity, as a dam's is, with a
+ * warning.
+ */
+function poolOf(n: NetworkNode, warnings: string[]): PlanPool | undefined {
+	const cap = n.poolCapacityM3;
+	if (!finite(cap) || cap <= 0) {
+		warnings.push(`unit "${n.name}": pool capacity ${String(cap)} m³ is not a size > 0; no pool`);
+		return undefined;
+	}
+	const raw = n.poolInitialPct;
+	const pct = finite(raw) ? Math.min(Math.max(raw, 0), 1) : 1;
+	if (raw !== undefined && pct !== raw) warnings.push(`unit "${n.name}": pool start ${String(raw)} is outside [0, 1]; using ${pct}`);
+	let area = n.poolAreaM2;
+	if (area === null || area === undefined) {
+		area = estimatedDamAreaM2(cap);
+		warnings.push(`unit "${n.name}": the pool's surface area is not set; estimated from its capacity as ${Math.round(area)} m² for its evaporation`);
+	} else if (!finite(area) || area < 0) {
+		warnings.push(`unit "${n.name}": pool area ${String(area)} m² is not a size ≥ 0; no evaporation from it`);
+		area = 0;
+	}
+	return { capM3: cap, initialM3: pct * cap, areaFullM2: area };
+}
+
+/**
+ * The pool's day (engine ≥ 1.64.0, docs/model.md §2.7j) before the pump runs:
+ * its evaporation, from the surface its start-of-day storage `prev` covers
+ * (A = A_full × (prev / capacity)^b, the dams' small-reservoir exponent),
+ * at most what it holds. Returns [area, evaporation].
+ */
+export function poolLosses(pool: PlanPool, prev: number, evapMmDay: number): [number, number] {
+	if (!(prev > 0)) return [0, 0];
+	const A = pool.areaFullM2 * Math.pow(Math.min(prev / pool.capM3, 1), DAM_AREA_EXPONENT);
+	return [A, Math.min((evapMmDay * A) / 1000, prev)];
+}
+
+/**
+ * Split what the river pump took today, `Gr`, between the flow and the pool,
+ * and refill the pool (engine ≥ 1.64.0): the flow it may take, `free` (the
+ * flow below the farm above what must pass it), is used first, then the pool
+ * (holding `held` after evaporation); the pool refills from what is left of
+ * `free`, up to its capacity. Returns [from the flow, from the pool, refill,
+ * storage at the end of the day].
+ */
+export function poolDay(pool: PlanPool, Gr: number, free: number, held: number): [number, number, number, number] {
+	const fromFlow = Math.min(Gr, free);
+	const fromPool = Math.min(Math.max(Gr - fromFlow, 0), held);
+	const after = held - fromPool;
+	const refill = Math.max(0, Math.min(pool.capM3 - after, free - fromFlow));
+	return [fromFlow, fromPool, refill, after + refill];
 }
 
 /**
@@ -235,3 +311,11 @@ export function handsOffToday(h: PlanHandsOff, calendarMonth: number, ewrRequire
 export function divertCapacityToday(n: { divertCapacityM3Day: number; divertM3DayByMonth?: Float64Array }, calendarMonth: number): number {
 	return n.divertM3DayByMonth ? n.divertM3DayByMonth[calendarMonth]! : n.divertCapacityM3Day;
 }
+
+/** A run-of-river pool's result series (engine ≥ 1.64.0, docs/model.md §2.7j): keys, labels and units, for run.ts and the checks. */
+export const POOL_SERIES = {
+	storage: { key: 'pool_storage', label: 'Pool storage at the river pump (end of the day)', unit: 'm³' },
+	drawn: { key: 'pool_drawn', label: 'Pumped from the pool (part of the river abstraction)', unit: 'm³/day' },
+	evaporation: { key: 'pool_evaporation', label: 'Evaporation from the pool', unit: 'm³/day' },
+	area: { key: 'pool_area', label: 'Pool surface area (start of day)', unit: 'm²' }
+} as const;

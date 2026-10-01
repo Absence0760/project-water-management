@@ -204,6 +204,12 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
  * too, and River to dam by month. Farms only (a model rule).
  */
 const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as const;
+/**
+ * A pool at a run-of-river farm's pump (engine ≥ 1.64.0, docs/model.md
+ * §2.7j): its capacity, start and surface area. Run-of-river farms only (a
+ * model rule, poolRule).
+ */
+const POOL = ['poolCapacityM3', 'poolInitialPct', 'poolAreaM2'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -213,7 +219,7 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...POOL, ...OPERATING],
 	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -269,6 +275,9 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	pumpCapacityM3Day: nullable(nonNeg),
 	supplyTriggerPct: frac,
 	supplyStopPct: frac,
+	poolCapacityM3: nullable(nonNeg),
+	poolInitialPct: frac,
+	poolAreaM2: nullable(nonNeg),
 	handsOffM3Day: nullable(monthlyOf(nonNeg)),
 	handsOffEwr: boolean,
 	divertMonthlyM3Day: nullable(monthlyOf(nonNeg)),
@@ -1039,6 +1048,8 @@ const NODE_OPTIONAL = new Set<string>([
 	'damAreaExponent',
 	'damSeepagePerDay',
 	...SUPPLY,
+	// No pool unless given (engine ≥ 1.64.0).
+	...POOL,
 	...OPERATING,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.

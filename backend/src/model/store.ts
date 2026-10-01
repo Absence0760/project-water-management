@@ -1,4 +1,4 @@
-import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, POOL_DEFAULTS, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -30,6 +30,7 @@ const MODEL_JSON = `json_build_object(
 			to_char(dam_in_service_from, 'YYYY-MM-DD') AS "damInServiceFrom", to_char(abstraction_from, 'YYYY-MM-DD') AS "abstractionFrom",
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
 			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct",
+			pool_capacity_m3 AS "poolCapacityM3", pool_initial_pct AS "poolInitialPct", pool_area_m2 AS "poolAreaM2",
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
@@ -142,6 +143,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			pool_capacity_m3, pool_initial_pct, pool_area_m2,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
@@ -151,6 +153,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			pool_capacity_m3, pool_initial_pct, pool_area_m2,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
@@ -175,7 +178,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_in_service_from = EXCLUDED.dam_in_service_from, abstraction_from = EXCLUDED.abstraction_from,
 			supply_rule = EXCLUDED.supply_rule,
 			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
-			supply_stop_pct = EXCLUDED.supply_stop_pct, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
+			supply_stop_pct = EXCLUDED.supply_stop_pct,
+			pool_capacity_m3 = EXCLUDED.pool_capacity_m3, pool_initial_pct = EXCLUDED.pool_initial_pct, pool_area_m2 = EXCLUDED.pool_area_m2,
+			hands_off_m3_day = EXCLUDED.hands_off_m3_day,
 			hands_off_ewr = EXCLUDED.hands_off_ewr, divert_monthly_m3_day = EXCLUDED.divert_monthly_m3_day,
 			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year
@@ -221,6 +226,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
 			supply_stop_pct: n.supplyStopPct ?? 0.6,
+			// A pool at the river pump's intake (engine ≥ 1.64.0, migration 158); absent = none.
+			pool_capacity_m3: n.poolCapacityM3 || null,
+			pool_initial_pct: n.poolInitialPct ?? POOL_DEFAULTS.poolInitialPct,
+			pool_area_m2: n.poolAreaM2 ?? POOL_DEFAULTS.poolAreaM2,
 			// Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114); absent = off.
 			hands_off_m3_day: n.handsOffM3Day ?? OPERATING_DEFAULTS.handsOffM3Day,
 			hands_off_ewr: n.handsOffEwr ?? OPERATING_DEFAULTS.handsOffEwr,

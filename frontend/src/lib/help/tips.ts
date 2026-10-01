@@ -262,6 +262,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
 	},
 	{
+		id: 'river-pool',
+		term: 'Pool at the pump',
+		short: 'A pool in the river at a run-of-river pump’s intake: the pump draws it down once the flow it may take is used, and it refills from the flow above what must pass.',
+		units: 'm³',
+		category: 'network',
+		fields: ['node.poolCapacityM3', 'node.poolInitialPct', 'node.poolAreaM2', 'run.pool_storage', 'run.pool_drawn', 'run.pool_evaporation']
+	},
+	{
 		id: 'drought-restriction',
 		term: 'Drought restrictions',
 		short: 'A model rule: on each review date a level is chosen from the farm dams’ storage; it cuts each part of demand until the next review.',

@@ -52,6 +52,8 @@ export interface ModelNodeState {
 	depletionDeficitM3?: number;
 	/** The river pump was on the day before (a trigger-rule farm). */
 	onRiver: boolean;
+	/** A run-of-river farm's pool storage at the end of the day before (m³, engine ≥ 1.64.0); absent without a pool. */
+	poolStorageM3?: number;
 	/** Each pumping unit's volume so far this water year (m³), in the plan's unit order; null without boreholes. */
 	boreholeUsedM3: number[] | null;
 	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */

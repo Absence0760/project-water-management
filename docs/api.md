@@ -1468,6 +1468,16 @@ a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
 
+A pool at a run-of-river pump (engine ≥ 1.64.0, migration 158,
+[model.md §2.7j](./model.md)): every node carries `poolCapacityM3` (> 0, or
+`null` / 0 = none), `poolInitialPct` (0–1) and `poolAreaM2` (≥ 0, or `null` =
+estimated from the capacity). A body without them gets `null`, 1 and `null`
+(no change to any run). `PUT` refuses a pool on anything but a farm under
+`"runOfRiver"`. Runs of a farm with a pool store the series `pool_storage`
+(m³), `pool_drawn` (m³/day, part of `river_abstraction`), `pool_evaporation`
+(m³/day) and `pool_area` (m²), and the water account's rows gain
+`poolEvaporationM3` (its storage is in the opening and closing storage).
+
 Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114,
 issue #204, [model.md §2.7h](./model.md)): every node carries
 `handsOffM3Day` (12 finite m³/day values ≥ 0 by water-year month, Oct–Sep, or

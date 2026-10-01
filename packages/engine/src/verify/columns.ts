@@ -111,6 +111,32 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{
+		key: 'pool_area',
+		letter: null,
+		formula: 'a run-of-river pool (engine ≥ 1.64.0): its full area × (pool[t−1] ÷ pool capacity)^0.7, 0 when empty; the full area as entered, or 7.2 × pool capacity^0.77',
+		optional: true
+	},
+	{
+		key: 'pool_evaporation',
+		letter: null,
+		formula: 'MIN(lake evaporation depth × pool area ÷ 1000, pool[t−1]), before the pump runs (engine ≥ 1.64.0)',
+		optional: true
+	},
+	{
+		key: 'pool_drawn',
+		letter: null,
+		formula:
+			'what the pump took past the flow it may take, MAX(0, Gr − free), free = MAX(0, S − MAX(Zs, pass-inflow release target, hands-off keep)); with a pool the pump’s room is MIN(pump capacity, free + pool[t−1] − pool evaporation) (engine ≥ 1.64.0)',
+		optional: true
+	},
+	{
+		key: 'pool_storage',
+		letter: null,
+		formula:
+			'pool[t−1] − pool evaporation − pool drawn + refill, refill = MIN(pool capacity − (pool[t−1] − evaporation − drawn), free − (Gr − drawn)): it refills only from the flow above what must pass; U = R + S − Gr − (pool[t] − pool[t−1] + pool evaporation) + T + … (engine ≥ 1.64.0)',
+		optional: true
+	},
+	{
 		key: 'offtake_out',
 		letter: null,
 		formula:

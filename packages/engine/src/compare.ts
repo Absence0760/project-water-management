@@ -1234,6 +1234,10 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
+	// A run-of-river pool (engine ≥ 1.64.0).
+	['poolCapacityM3', 'pool capacity', (v) => (typeof v === 'number' && v > 0 ? `${fmtValue(v, 0)} m³` : 'no pool')],
+	['poolInitialPct', 'pool at the start', pct],
+	['poolAreaM2', 'pool surface area', (v) => (v === null || v === undefined ? 'estimated from its capacity' : `${fmtValue(v, 0)} m²`)],
 	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.

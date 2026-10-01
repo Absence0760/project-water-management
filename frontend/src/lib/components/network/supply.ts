@@ -2,7 +2,7 @@
 // item 2c, docs/model.md §2.7e): the pumps × m³/h calculator and the hint the
 // run gives a farm with no dam. The save rules are in $lib/model/validate.ts
 // (supplyIssues). Pure: no Svelte.
-import { SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-management/engine';
+import { estimatedDamAreaM2, SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-management/engine';
 import { describeMonths, WATER_YEAR_CALENDAR } from '$lib/format/months';
 import { groupedText } from '$lib/components/common/numberText';
 import { monthsOf } from './monthFields';
@@ -12,7 +12,7 @@ export const SUPPLY_RULE_HELP: Record<SupplyRule, string> = {
 	damFirst: 'Irrigation comes from the hydrological unit’s dam only, with no river pump.',
 	riverFirst: 'Pumps from the river below the dam up to the pump capacity; the dam covers the rest.',
 	trigger: 'The dam only until it falls below the switch-to-river level, then river first until it is back at the switch-back level.',
-	runOfRiver: 'No dam: pumps from the river up to the pump capacity; the rest is a shortfall.'
+	runOfRiver: 'No dam: pumps from the river (and a pool at the pump, if there is one) up to the pump capacity; the rest is a shortfall.'
 };
 
 /**
@@ -195,3 +195,15 @@ export const handsOffTicked = (checked: boolean): number[] | null => (checked ? 
 
 /** River to dam by month when its box is ticked: the one value in every month, so the run is unchanged until a month is edited; null when unticked. */
 export const divertMonthsTicked = (checked: boolean, divertCapacityM3Day: number): number[] | null => (checked ? monthsOf(divertCapacityM3Day) : null);
+
+/**
+ * The hint under a run-of-river unit's pool field (engine ≥ 1.64.0,
+ * docs/model.md §2.7j): what a blank means, what a pool does, and the area
+ * the run estimates when none is entered.
+ */
+export function poolHint(n: Pick<NetworkNode, 'poolCapacityM3' | 'poolAreaM2'>): string {
+	const cap = n.poolCapacityM3 ?? null;
+	if (cap === null || !(cap > 0)) return 'Blank is no pool: the pump takes only what flows.';
+	const base = 'The pump draws it down once the flow it may take is used; it refills from the flow above what must pass.';
+	return n.poolAreaM2 == null ? `${base} With no surface area entered, the run estimates ${groupedText(Math.round(estimatedDamAreaM2(cap)))} m² for its evaporation.` : base;
+}

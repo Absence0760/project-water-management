@@ -77,6 +77,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
+				// A pool at the river pump's intake (engine ≥ 1.64.0): run-of-river units only, a model rule
+				// (poolRule); capacity null or 0 = none, area null = estimated from the capacity.
+				poolCapacityM3: nonNeg.max(1e9).nullable().default(null),
+				poolInitialPct: frac.default(1),
+				poolAreaM2: nonNeg.max(1e9).nullable().default(null),
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0, issue #204), m³/day by water-year
 				// month; null = none / the one divertCapacityM3Day. Farms only is a model rule (operatingKind).
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),

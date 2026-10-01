@@ -37,7 +37,7 @@ import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './n
 import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
-import { operatingOf, supplyOf, userPumpOf } from './network/supply';
+import { operatingOf, POOL_SERIES, supplyOf, userPumpOf } from './network/supply';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -337,6 +337,7 @@ function runNetwork(
 			p.initialDepletionStoreM3 = r.depletionStoreM3;
 			if (r.depletionDeficitM3) p.initialDepletionDeficitM3 = r.depletionDeficitM3;
 			p.initialOnRiver = r.onRiver;
+			if (r.poolStorageM3 !== undefined) p.initialPoolM3 = r.poolStorageM3;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
 		});
@@ -586,7 +587,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'pool'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -602,7 +603,7 @@ function runNetwork(
 		['ewrShortfall', 'ewr_shortfall', 'EWR shortfall (negative = not met)'],
 		['ewrShortfallIncremental', 'ewr_shortfall_incremental', 'Reach shortfall (workbook AB; diagnostic, does not set the EWR charge)']
 	];
-	const WORKING_SERIES: [Exclude<keyof FarmWorkings, 'offtakeUsed' | 'offtakeToDam'>, string, string, string][] = [
+	const WORKING_SERIES: [Exclude<keyof FarmWorkings, 'offtakeUsed' | 'offtakeToDam' | 'poolArea'>, string, string, string][] = [
 		['grossDemand', 'gross_demand', 'Gross irrigation demand (before effective rain)', 'm³/day'],
 		['rainOffset', 'effective_rain', 'Effective rain used against demand (from the day\'s rain or the soil store)', 'm³/day'],
 		['soilWater', 'soil_water', 'Soil-water store at the end of the day', 'mm'],
@@ -672,6 +673,12 @@ function runNetwork(
 		if (r.pumpLimited) push(node.id, 'pump_limited', 'Demand the pump capacity left unmet (the river had it)', 'm³/day', r.pumpLimited);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		else if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
+		// A run-of-river pool (engine ≥ 1.64.0, docs/model.md §2.7j): only on a unit with one.
+		if (r.pool) {
+			push(node.id, POOL_SERIES.storage.key, POOL_SERIES.storage.label, POOL_SERIES.storage.unit, r.pool.storage);
+			push(node.id, POOL_SERIES.drawn.key, POOL_SERIES.drawn.label, POOL_SERIES.drawn.unit, r.pool.drawn);
+			push(node.id, POOL_SERIES.evaporation.key, POOL_SERIES.evaporation.label, POOL_SERIES.evaporation.unit, r.pool.evaporation);
+		}
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
@@ -701,6 +708,7 @@ function runNetwork(
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, withObjects ? (OBJECT_LABELS[key] ?? label) : label, unit, w[field]);
 		// Dam releases and seepage lost from the catchment (WP-3.5): only on a dam that has them.
+		if (w.poolArea) push(node.id, POOL_SERIES.area.key, POOL_SERIES.area.label, POOL_SERIES.area.unit, w.poolArea);
 		if (plan.nodes[i]!.release) push(node.id, 'dam_release', 'Released below the dam (before irrigation; joins the outflow)', 'm³/day', w.damRelease);
 		if (plan.nodes[i]!.seepageReturn !== undefined) push(node.id, 'dam_seepage_lost', 'Dam seepage lost from the catchment (the rest joins the outflow)', 'm³/day', w.damSeepageLost);
 		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
@@ -998,6 +1006,7 @@ function runNetwork(
 				groundwaterToDam: r.groundwaterToDam,
 				depletion: r.depletion,
 				storage: r.storage,
+				...(r.pool ? { pool: { storage: r.pool.storage, evaporation: r.pool.evaporation, initialM3: plan.nodes[i]!.initialPoolM3 ?? plan.nodes[i]!.supply!.pool!.initialM3 } } : {}),
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
@@ -1044,6 +1053,7 @@ function runNetwork(
 				depletionStoreM3: net.depletionStoreM3[i]!,
 				...(net.depletionDeficitM3[i]! > 0 ? { depletionDeficitM3: net.depletionDeficitM3[i]! } : {}),
 				onRiver: net.onRiver[i] === 1,
+				...(sim.nodes[i]!.pool ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})

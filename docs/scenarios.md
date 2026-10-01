@@ -166,7 +166,11 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   false) and `divertMonthlyM3Day` (River to dam by month, 12 values ≥ 0 or
   null = the one `divertCapacityM3Day`); farms only (a save rule), each the
   applicant's proposal on their own farm. "Pump only above 300 m³/day" is
-  `handsOffM3Day` → twelve 300s.
+  `handsOffM3Day` → twelve 300s. A pool at a run-of-river pump (engine ≥
+  1.64.0, [model.md §2.7j](./model.md)): `poolCapacityM3` (≥ 0 m³, null or
+  0 = none), `poolInitialPct` (0–1) and `poolAreaM2` (≥ 0 m², null =
+  estimated); run-of-river farms only (a save rule). "What if this farm built
+  a 5,000 m³ weir pool" is `poolCapacityM3` → 5000.
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
   provisional decision 2026-10-01, to be confirmed by the client's

@@ -16,7 +16,7 @@ const inRange = (v: number, lo: number, hi: number) => !Number.isNaN(v) && v >= 
  * beside the fields; validateModel names the node in front.
  */
 export function supplyIssues(
-	n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'supplyRule' | 'pumpCapacityM3Day' | 'supplyTriggerPct' | 'supplyStopPct'>
+	n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'supplyRule' | 'pumpCapacityM3Day' | 'supplyTriggerPct' | 'supplyStopPct' | 'poolCapacityM3' | 'poolInitialPct' | 'poolAreaM2'>
 ): string[] {
 	const out: string[] = [];
 	const rule = n.supplyRule ?? SUPPLY_DEFAULTS.supplyRule;
@@ -27,17 +27,34 @@ export function supplyIssues(
 	if (n.kind === 'user') {
 		if (rule !== 'damFirst') out.push('only a hydrological unit has a supply rule; an other water user always takes from the river, up to its pump capacity. Set the supply rule to dam only.');
 		if (pump !== null && !inRange(pump, 0, Infinity)) out.push("the pump capacity can't be negative.");
-		return out;
+		return [...out, ...poolIssues(n, rule)];
 	}
 	if (n.kind !== 'farm') {
 		if (rule !== 'damFirst' || pump !== null) out.push('only a hydrological unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.');
-		return out;
+		return [...out, ...poolIssues(n, rule)];
 	}
 	if (rule === 'trigger' && !(n.damCapacityM3 > 0)) out.push('the “dam, river when low” supply rule needs a dam to switch on; enter a dam capacity or pick another supply rule.');
 	if (rule === 'runOfRiver' && n.damCapacityM3 > 0) out.push('run of river has no dam; set the dam capacity to 0 or pick another supply rule.');
 	if (pump !== null && !inRange(pump, 0, Infinity)) out.push("the river pump capacity can't be negative.");
 	if (!inRange(trigger, 0, 1) || !inRange(stop, 0, 1)) out.push('the supply switch levels must be between 0% and 100%.');
 	else if (rule === 'trigger' && stop < trigger) out.push('the switch-back level must be at least the switch-to-river level.');
+	return [...out, ...poolIssues(n, rule)];
+}
+
+/**
+ * A pool at the river pump (engine ≥ 1.64.0, docs/model.md §2.7j): a
+ * run-of-river unit's only, a size above 0, starting 0–100 % full, with an
+ * area of 0 or more, as the API refuses it (engine modelRules poolRule …).
+ */
+function poolIssues(n: Pick<NetworkNode, 'kind' | 'poolCapacityM3' | 'poolInitialPct' | 'poolAreaM2'>, rule: string): string[] {
+	const pool = n.poolCapacityM3 ?? null;
+	if (pool === null || pool === 0) return [];
+	const out: string[] = [];
+	if (n.kind !== 'farm' || rule !== 'runOfRiver') out.push('only a run-of-river hydrological unit has a pool at its pump; clear the pool capacity or pick run of river.');
+	if (!inRange(pool, 0, Infinity)) out.push('the pool capacity must be above 0 m³.');
+	if (!inRange(n.poolInitialPct ?? 1, 0, 1)) out.push('the pool’s start must be between 0% and 100% full.');
+	const area = n.poolAreaM2 ?? null;
+	if (area !== null && !inRange(area, 0, Infinity)) out.push("the pool's surface area can't be negative.");
 	return out;
 }
 

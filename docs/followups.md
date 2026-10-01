@@ -238,7 +238,10 @@ runs and accumulations are real) can't be decided without the client.
       which dams keep a reserve (form hint), Q18 pools (import warning), Q19
       upstream-to-dam % per farm (run warning on a dam-less farm), which
       units are run of river and their pump capacities (import flag, run
-      warning, evidence-pack gate), each senior user's population (for the
+      warning, evidence-pack gate), whether a pool sits at each such pump and
+      its size, and the pool's provisional rules (engine 1.64.0, model.md
+      §2.7j: drawn while the river is below the hands-off flow, refilled
+      before the flow moves on), each senior user's population (for the
       NWA basic-needs exemption), each property's GN 538 rate (run warning),
       municipal return shares (treatment works records), soils and root
       depths (the 25 mm store), the A-pan row's pan type (before a WR90

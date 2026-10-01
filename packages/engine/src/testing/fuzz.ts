@@ -360,6 +360,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Supply rules and river pumps (WP-3.8), from their own stream and last, so
 	// the rest of every seed (transfers and boreholes included) is what it was.
 	addSupply(new Rng(seed ^ 0x5be0cd19), nodes);
+	// A pool at a run-of-river pump (engine ≥ 1.64.0): its own stream, so the networks above are unchanged.
+	addPools(new Rng(seed ^ 0x94d049bb), nodes);
 	// Demand objects (engine ≥ 1.7.0), from their own stream and last of all, so every seed's rest is what it was.
 	const demandObjects = randomDemandObjects(new Rng(seed ^ 0x9e3779b9), nodes);
 	// Their schedules (engine ≥ 1.17.0), from their own stream, so the objects themselves are what they were.
@@ -628,6 +630,22 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 		n.supplyTriggerPct = g.frac(0.1, 0.1);
 		n.supplyStopPct = g.bool(0.9) ? g.float(n.supplyTriggerPct, 1) : g.frac();
 		if (rule === 'runOfRiver' && g.bool(0.8)) n.damCapacityM3 = 0;
+	}
+}
+
+/**
+ * A pool at the intake of each run-of-river farm without a dam (engine ≥
+ * 1.64.0, docs/model.md §2.7j), 60 % of the time: a capacity from a few m³
+ * to more than any day's flow, starting anywhere from empty to full, with an
+ * area unknown (estimated), none, or anything up to a large pool's, so it
+ * drains, refills, evaporates dry and stays full on different seeds.
+ */
+function addPools(g: Rng, nodes: NetworkNode[]): void {
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || n.supplyRule !== 'runOfRiver' || n.damCapacityM3 > 0 || !g.bool(0.6)) continue;
+		n.poolCapacityM3 = g.logFloat(5, 1e6);
+		n.poolInitialPct = g.pick([0, 1, g.frac()]);
+		n.poolAreaM2 = g.pick([null, 0, g.logFloat(10, 5e4)]);
 	}
 }
 

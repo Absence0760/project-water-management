@@ -20,12 +20,12 @@ import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { cmpStr } from '../order';
-import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
+import { divertCapacityToday, handsOffToday, operatingOf, POOL_SERIES, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -317,6 +317,13 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const XOUT = get.get(`${n.id}|offtake_out`);
 		// Their conveyance losses seeping back to the river below this unit (engine ≥ 1.42.0), part of its outflow.
 		const XRET = get.get(`${n.id}|offtake_loss_return`);
+		// A run-of-river pool (engine ≥ 1.64.0): its storage and evaporation, exactly when the unit has one.
+		const pool = supplyOf(n, []).supply?.pool;
+		const PS = get.get(`${n.id}|${POOL_SERIES.storage.key}`);
+		const PE = get.get(`${n.id}|${POOL_SERIES.evaporation.key}`);
+		if (!!pool !== !!PS || !!pool !== !!PE) return `${n.id}: pool columns ${pool ? 'missing for its pool' : 'without a pool'}`;
+		let pPrev = pool ? pool.initialM3 : 0;
+		totIn += pPrev;
 		for (let t = 0; t < out.days; t++) {
 			if (SET) {
 				qPrev += SET[t]!;
@@ -332,10 +339,13 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
 			const dep = DEP?.[t] ?? 0;
 			const spl = SPL?.[t] ?? 0;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout;
+			const ps = PS?.[t] ?? 0;
+			const pe = PE?.[t] ?? 0;
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + pPrev;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + ps + pe;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
+			if (pool && (ps < -1e-9 || ps > pool.capM3 + tol(pool.capM3) || pe < 0 || pe > pPrev + tol(pPrev))) return `${where}: pool storage ${ps} outside [0, ${pool.capM3}] or evaporation ${pe} outside [0, ${pPrev}]`;
 			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
 			const capT = ks ? cap * ks[t]! : cap;
@@ -357,10 +367,11 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
 			totIn += I![t]! + pd + gw + xin + xret;
-			totOut += G![t]! - T + ev + dep + spl + xout;
+			totOut += G![t]! - T + ev + dep + spl + xout + pe;
 			qPrev = Q![t]!;
+			pPrev = ps;
 		}
-		totOut += qPrev;
+		totOut += qPrev + pPrev;
 	}
 	const sim = get.get('null|simulated_outflow')!;
 	const outletU = get.get(`${outlet.id}|outflow`)!;
@@ -1189,6 +1200,11 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const RA = g('river_abstraction');
 		if (!!sup !== !!RA) return `${n.id}: river_abstraction column ${RA ? 'without' : 'missing for'} a supply rule that pumps from the river`;
 		let onRiver = false;
+		// A run-of-river pool (engine ≥ 1.64.0): its columns exactly when the unit has one, replayed from its start.
+		const pool = sup?.pool;
+		const [PS, PDR, PEV, PAR] = [POOL_SERIES.storage, POOL_SERIES.drawn, POOL_SERIES.evaporation, POOL_SERIES.area].map((c) => g(c.key));
+		if ([PS, PDR, PEV, PAR].some((c) => !!c !== !!pool)) return `${n.id}: pool columns ${pool ? 'missing for its pool' : 'without a pool'}`;
+		let pPrev = pool ? pool.initialM3 : 0;
 		if ((seepRet < 1) !== !!SPL) return `${n.id}: dam_seepage_lost column ${SPL ? 'with all seepage returning' : 'missing'}`;
 		const Zc = g('ewr_cumulative')!;
 		const e = runEfficiency(input, n);
@@ -1363,14 +1379,26 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gRiv = RA?.[t] ?? 0;
 			let room = 0;
 			let keep = 0;
+			// The pool today: the flow the pump may take, the pool's evaporation (A = A_full × (Q[t−1] / capacity)^0.7) and what it then holds.
+			let free = 0;
+			let pHeld = 0;
+			let pEv = 0;
+			if (pool) {
+				const pa = pPrev > 0 ? pool.areaFullM2 * Math.pow(Math.min(pPrev / pool.capM3, 1), DAM_AREA_EXPONENT) : 0;
+				pEv = Math.min((evapMmDay[t]! * pa) / 1000, pPrev);
+				pHeld = pPrev - pEv;
+				if (!near(PAR![t]!, pa, pa) || !near(PEV![t]!, pEv, pPrev)) return `${where}: pool area ${PAR![t]} / evaporation ${PEV![t]} ≠ ${pa} / ${pEv} (from its storage the day before, ${pPrev})`;
+			}
 			if (sup) {
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
 				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
 				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
-				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
+				free = Math.max(0, ss - keep);
+				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, free + pHeld));
 				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
-				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
+				if (gRiv > free + pHeld + tol(Math.max(ss, keep, pHeld)))
+					return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass${pool ? `, plus the ${pHeld} in its pool` : ''}`;
 			}
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
@@ -1389,7 +1417,19 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				wantGr = Math.max(0, Math.min(room, dsl));
 				wantGs = Math.min(surface, dsl - wantGr);
 			}
-			if (!near(gRiv, wantGr, Math.max(ss, d, keep))) return `${where}: pumped ${gRiv} from the river ≠ ${wantGr} (supply rule ${sup?.rule}, ${onRiver ? 'on the river' : 'on the dam'})`;
+			// The pool: the pump used the flow first, then the pool; the pool refills from the flow left above what must pass.
+			let pTaken = 0;
+			if (pool) {
+				const fromFlow = Math.min(gRiv, free);
+				const fromPool = gRiv - fromFlow;
+				const refill = Math.max(0, Math.min(pool.capM3 - (pHeld - fromPool), free - fromFlow));
+				const pWant = pHeld - fromPool + refill;
+				const ps = PS![t]!;
+				if (!near(PDR![t]!, fromPool, Math.max(gRiv, pPrev))) return `${where}: drawn from the pool ${PDR![t]} ≠ ${fromPool} (what the pump took past the ${free} of flow it may take)`;
+				if (!near(ps, pWant, Math.max(pool.capM3, ss))) return `${where}: pool storage ${ps} ≠ ${pWant} (held ${pHeld} − drawn ${fromPool} + refilled ${refill})`;
+				pTaken = ps - pPrev + pEv;
+			}
+			if (!near(gRiv, wantGr, Math.max(ss, d, keep, pHeld))) return `${where}: pumped ${gRiv} from the river ≠ ${wantGr} (supply rule ${sup?.rule}, ${onRiver ? 'on the river' : 'on the dam'})`;
 			if (!near(gw, rp.direct, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${rp.direct} (borehole supply order and caps)`;
 			if (!near(gd, rp.dam, Math.max(availScale, d, cap))) return `${where}: groundwater into the dam ${gd} ≠ ${rp.dam}`;
 			if (gd > 0 && avail + gd > cap + tol(Math.max(cap, availScale))) return `${where}: pumped ${gd} into a dam with no room for it`;
@@ -1412,12 +1452,13 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				return objs ? `${where}: return flow ${tt} ≠ β·(1 − e) × the crops' part of G + Σ each demand object's return share × its part` : `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			const spl = SPL?.[t] ?? 0;
 			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
-			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x + xpass - dep - xout + xret, Math.max(r, ss, tt, sp, x, xin, xout, xret)))
-				return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${XIN ? ' + off-take water passed on' : ''}${bore ? ' − stream depletion' : ''}${XOUT ? ' − taken by river off-takes' : ''}${XRET ? ' + off-take losses seeping back' : ''}`;
-			const vv = h + i + j + pd + gw + gd + xin + xret - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
-			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd, xin, xout, xret);
+			if (!near(u, r + (ss - gRiv - pTaken) + tt + (sp - spl) + x + xpass - dep - xout + xret, Math.max(r, ss, tt, sp, x, xin, xout, xret, pPrev)))
+				return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''}${pool ? ' − the pool\'s change and evaporation' : ''} + T + returned seepage${rel ? ' + release' : ''}${XIN ? ' + off-take water passed on' : ''}${bore ? ' − stream depletion' : ''}${XOUT ? ' − taken by river off-takes' : ''}${XRET ? ' + off-take losses seeping back' : ''}`;
+			const vv = h + i + j + pd + gw + gd + xin + xret - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl - pTaken;
+			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd, xin, xout, xret, pPrev);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
+			if (pool) pPrev = PS![t]!;
 		}
 	}
 	return null;
@@ -2051,6 +2092,12 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.
 		const ks = capacityScaleOf(n, day0, out.days, []);
+		// A run-of-river pool (engine ≥ 1.64.0): the pump took Gr − drawn from the flow, and the refill took more.
+		const pool = sup?.pool;
+		const PS = pool ? g(POOL_SERIES.storage.key) : undefined;
+		const PE = pool ? g(POOL_SERIES.evaporation.key) : undefined;
+		if (pool && (!PS || !PE)) return `${n.id}: pool columns missing for its pool`;
+		let pPrev = pool ? pool.initialM3 : 0;
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
 			const month = monthOfEpochDay(day0 + t);
@@ -2068,7 +2115,11 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 			if (sup) {
 				const gr = GR![t]!;
 				if (gr < -tol(0) || gr > sup.pumpM3Day + tol(gr)) return `${where}: the river pump took ${gr}, outside [0, its capacity ${sup.pumpM3Day}]`;
-				if (ss - gr < Math.min(ss, keep) - tol(Math.max(ss, keep))) return `${where}: the river pump left ${ss - gr} in the river, less than MIN(the ${ss} before it, the hands-off flow ${keep})`;
+				// From the flow: Gr less what the pool gave, plus its refill = Gr + the pool's change and evaporation.
+				const taken = PS ? gr + PS[t]! - pPrev + PE![t]! : gr;
+				if (ss - taken < Math.min(ss, keep) - tol(Math.max(ss, keep, pPrev)))
+					return `${where}: the river pump${PS ? ' and its pool' : ''} left ${ss - taken} in the river, less than MIN(the ${ss} before it, the hands-off flow ${keep})`;
+				if (PS) pPrev = PS[t]!;
 			}
 		}
 	}

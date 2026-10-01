@@ -7,7 +7,7 @@
 import { curveAreaAt, fixedReleaseFloor, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
-import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
+import { divertCapacityToday, handsOffToday, poolDay, poolLosses, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
 import { PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
@@ -80,6 +80,8 @@ export interface PlanNode {
 	/** The stream-depletion deficit still owed to the river the day before (engine ≥ 1.10.0); absent = 0. */
 	initialDepletionDeficitM3?: number;
 	initialOnRiver?: boolean;
+	/** A run-of-river farm's pool storage the day before (engine ≥ 1.64.0, ../warmstart); absent = the pool's own start. */
+	initialPoolM3?: number;
 	initialBoreholeUsedM3?: readonly number[];
 	/**
 	 * allocationMode 'cap' (engine ≥ 1.18.0, ../allocations/mode.ts,
@@ -314,6 +316,13 @@ export interface NodeResult {
 	 */
 	riverAbstraction?: Float64Array;
 	/**
+	 * A run-of-river farm's pool (engine ≥ 1.64.0, ./supply.ts poolDay,
+	 * docs/model.md §2.7j): its storage at the end of the day, what the pump
+	 * drew from it (part of `riverAbstraction`) and its evaporation, m³ and
+	 * m³/day. Absent without a pool.
+	 */
+	pool?: { storage: Float64Array; drawn: Float64Array; evaporation: Float64Array };
+	/**
 	 * An other water user with a pump capacity (engine ≥ 1.58.0, docs/model.md
 	 * §2.7c): the demand the pump left unmet although the river (within its
 	 * priority and allocation room) had it, m³/day; ≤ deficit. Absent otherwise.
@@ -416,6 +425,8 @@ export interface FarmWorkings {
 	 * it (WP-1.33): the cut in O, then in K and M, that makes S ≥ MIN(Zs, H + I).
 	 */
 	passedForSenior: Float64Array;
+	/** A run-of-river pool's surface area today, from its start-of-day storage (engine ≥ 1.64.0); absent without a pool. */
+	poolArea?: Float64Array;
 	/**
 	 * River off-take water delivered here (engine ≥ 1.14.0): the part that
 	 * met the demand directly and the part that went into the dam (the rest
@@ -434,6 +445,8 @@ export interface NetworkState {
 	depletionDeficitM3: Float64Array;
 	/** 1 = the river pump was on the day before. */
 	onRiver: Uint8Array;
+	/** A run-of-river farm's pool storage the day before (engine ≥ 1.64.0); 0 without a pool. */
+	poolStorageM3: Float64Array;
 	/** Each pumping unit's volume so far this water year (before a 1 October clears it); null without boreholes. */
 	boreholeUsedM3: (number[] | null)[];
 	/** Surface and groundwater use so far this water year under an allocation cap (before a 1 October clears it); null without a cap. */
@@ -515,7 +528,8 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 		damSeepageLost: f(),
 		damRelease: f(),
 		balanceResidual: f(),
-		passedForSenior: f()
+		passedForSenior: f(),
+		...(node.supply?.pool ? { poolArea: f() } : {})
 	};
 }
 
@@ -644,6 +658,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
 		if (n.supply) r.riverAbstraction = new Float64Array(days);
+		if (n.supply?.pool) r.pool = { storage: new Float64Array(days), drawn: new Float64Array(days), evaporation: new Float64Array(days) };
 		if (n.userPumpM3Day !== undefined) {
 			r.riverAbstraction = new Float64Array(days);
 			r.pumpLimited = new Float64Array(days);
@@ -669,6 +684,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const n = nodes[i]!;
 		if (t === resetDay && n.storageResetM3 !== undefined) return Math.min(Math.max(n.storageResetM3, 0), n.damCapacityM3 * capacityK(n, t));
 		return t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!;
+	};
+	/** Node i's pool storage at the start of day t (engine ≥ 1.64.0): the day before's, else its start. */
+	const poolStart = (i: number, t: number): number => {
+		const n = nodes[i]!;
+		const pl = res[i]!.pool;
+		if (!pl) return 0;
+		return t === 0 ? Math.min(Math.max(n.initialPoolM3 ?? n.supply!.pool!.initialM3, 0), n.supply!.pool!.capM3) : pl.storage[t - 1]!;
 	};
 	// Whether each farm under the trigger rule (WP-3.8) pumped from the river yesterday.
 	const onRiver = Uint8Array.from(nodes, (n) => (n.initialOnRiver ? 1 : 0));
@@ -762,6 +784,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		depletionStoreM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionStoreM3 ?? 0) : res[i]!.depletionStore[t - 1]!)),
 		depletionDeficitM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionDeficitM3 ?? 0) : res[i]!.depletionDeficit[t - 1]!)),
 		onRiver: onRiver.slice(),
+		poolStorageM3: Float64Array.from(nodes, (_, i) => poolStart(i, t)),
 		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null)),
 		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null)),
 		// Captured before the day's decision: the levels the day before held, and whether the trigger's site failed that day.
@@ -1249,13 +1272,27 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// capacity. Under the trigger rule only while switched to the river. The hands-off flow
 			// (engine ≥ 1.32.0) is kept too: keep = MAX(Zs, the release's target, hands-off).
 			let room = 0;
+			// A run-of-river pool (engine ≥ 1.64.0, docs/model.md §2.7j): it loses its evaporation first; the pump
+			// may then take the flow above what must pass (`free`) and, past that, what the pool holds.
+			const pool = sup?.pool;
+			let free = 0;
+			let poolPrev = 0;
+			let poolA = 0;
+			let poolE = 0;
 			if (sup) {
 				const river = pumpsRiverToday(sup, onRiver[i] === 1, qLevel);
 				onRiver[i] = river ? 1 : 0;
 				if (river) {
 					const rel = node.release;
 					const target = rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month[t]!]! : Z) : 0;
-					room = riverRoom(sup, S, ho ? Math.max(Zs, target, hk) : Math.max(Zs, target));
+					const keep = ho ? Math.max(Zs, target, hk) : Math.max(Zs, target);
+					room = riverRoom(sup, S, keep);
+					if (pool) {
+						free = Math.max(0, S - keep);
+						poolPrev = poolStart(i, t);
+						[poolA, poolE] = poolLosses(pool, poolPrev, lakeEvapMmDay ? lakeEvapMmDay[t]! : 0);
+						room = Math.max(0, Math.min(sup.pumpM3Day, free + (poolPrev - poolE)));
+					}
 				}
 			}
 			let Gs: number;
@@ -1297,7 +1334,22 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const SpLost = Sp - SpRet;
 			// Stream depletion from pumping (WP-1.34) is taken from the flow leaving the farm.
 			// What the river pump took (WP-3.8) leaves the flow below the dam.
-			let Uriver = Rr + (S - Gr) + T + SpRet;
+			// A pool (engine ≥ 1.64.0): the pump took the flow first, then the pool, which refills from the flow
+			// left above what must pass; the river below loses what the pump took from the flow and the refill.
+			let poolQ = 0;
+			let poolDrawn = 0;
+			let flowTaken = Gr;
+			if (pool) {
+				let fromFlow: number;
+				let refill: number;
+				[fromFlow, poolDrawn, refill, poolQ] = poolDay(pool, Gr, free, poolPrev - poolE);
+				flowTaken = fromFlow + refill;
+				const pl = r.pool!;
+				pl.storage[t] = poolQ;
+				pl.drawn[t] = poolDrawn;
+				pl.evaporation[t] = poolE;
+			}
+			let Uriver = Rr + (S - flowTaken) + T + SpRet;
 			if (Rel > 0) Uriver += Rel;
 			// Off-take water this unit doesn't use or store flows on (engine ≥ 1.14.0).
 			if (Xpass > 0) Uriver += Xpass;
@@ -1396,8 +1448,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				w.damSeepage[t] = Sp;
 				w.damSeepageLost[t] = SpLost;
 				w.damRelease[t] = Rel;
-				w.balanceResidual[t] =
-					Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
+				const V = Xin > 0 || Xout > 0 || Xret > 0 ? H + I + J + Pd + Ggw + Gd + Xin + Xret - Xout - (G - T) - E - (Q - qPrev) - U - Dep - SpLost : H + I + J + Pd + Ggw + Gd - (G - T) - E - (Q - qPrev) - U - Dep - SpLost;
+				// The pool's change and evaporation (engine ≥ 1.64.0).
+				w.balanceResidual[t] = pool ? V - (poolQ - poolPrev + poolE) : V;
+				if (w.poolArea) w.poolArea[t] = poolA;
 				w.passedForSenior[t] = passed;
 				if (w.offtakeUsed) {
 					w.offtakeUsed[t] = Xused;

@@ -166,6 +166,10 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
 	supplyStopPct: { label: 'Supply switch-back level', spec: pct() },
+	// A pool at a run-of-river pump (engine ≥ 1.64.0, docs/model.md §2.7j).
+	poolCapacityM3: { label: 'Pool at the pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
+	poolInitialPct: { label: 'Pool at the start', spec: pct() },
+	poolAreaM2: { label: 'Pool surface area', spec: num('m²', { nullable: true, nullLabel: 'estimated' }) },
 	// Hands-off flow and River to dam by month (engine ≥ 1.32.0, docs/model.md §2.7h).
 	handsOffM3Day: { label: 'Hands-off flow by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	handsOffEwr: { label: 'Hands-off flow keeps the EWR', spec: { t: 'bool' } },

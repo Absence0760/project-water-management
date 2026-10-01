@@ -303,6 +303,30 @@ describe('validateModel', () => {
 						}
 	});
 
+	it('refuses exactly the pools the backend refuses (engine 1.64.0, poolRule)', () => {
+		const g = node('g', 'Gauge', null);
+		for (const kind of ['farm', 'user', 'gauge'] as const)
+			for (const supplyRule of SUPPLY_RULES)
+				for (const damCapacityM3 of [0, 50_000])
+					for (const poolCapacityM3 of [null, 0, 500, -1])
+						for (const poolInitialPct of [1, 0, 1.5])
+							for (const poolAreaM2 of [null, 10, -1]) {
+								const n: NetworkNode = { ...node('a', 'A', 'g'), kind, supplyRule, damCapacityM3, pumpCapacityM3Day: kind === 'gauge' ? null : 1200, poolCapacityM3, poolInitialPct, poolAreaM2 };
+								const backend = [...modelRuleIssues(model([g, n])).keys()].some((k) => k.startsWith('supply') || k.startsWith('pool'));
+								expect(supplyIssues(n).length > 0, JSON.stringify({ kind, supplyRule, damCapacityM3, poolCapacityM3, poolInitialPct, poolAreaM2 })).toBe(backend);
+							}
+	});
+
+	it('names a pool on a unit that isn’t run of river, and one that isn’t a size', () => {
+		const g = node('g', 'Gauge', null);
+		const farm = (over: Partial<NetworkNode>): NetworkNode => ({ ...node('a', 'A', 'g'), kind: 'farm', ...over });
+		expect(messages(model([g, farm({ supplyRule: 'runOfRiver', poolCapacityM3: 3000 })]))).toEqual([]);
+		expect(messages(model([g, farm({ supplyRule: 'riverFirst', damCapacityM3: 5000, poolCapacityM3: 3000 })]))).toEqual([
+			'"A": only a run-of-river hydrological unit has a pool at its pump; clear the pool capacity or pick run of river.'
+		]);
+		expect(messages(model([g, farm({ supplyRule: 'runOfRiver', poolCapacityM3: 3000, poolInitialPct: 2 })]))).toEqual(['"A": the pool’s start must be between 0% and 100% full.']);
+	});
+
 	it('refuses exactly the demand objects the backend refuses (engine 1.7.0)', () => {
 		const g = node('g', 'Gauge', null);
 		const a = node('a', 'A', 'g');

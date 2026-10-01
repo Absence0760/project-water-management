@@ -2172,7 +2172,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   isn't a whole pumps × rate product (an imported or licensed figure) shows as
   it is. Blank is no limit, and the note says the run warns. **Switch to river
   below** and **Back to the dam at** (% of dam) show for dam, river when low
-  only. The save rules show under the fields as alerts and block Save, as the
+  only. Run of river shows **Pool at the pump** (m³, engine ≥ 1.64.0,
+  [model.md §2.7j](./model.md)): blank is no pool ("Blank is no pool: the pump
+  takes only what flows."); with a capacity, **Pool at the start** (% full,
+  default 100) and **Pool surface area** (m², blank = estimated, and the note
+  gives the estimate the run will use) follow. A pool left on a unit under
+  another rule still shows, so it can be cleared, with the save rule's alert
+  (only a run-of-river unit has a pool). The save rules show under the fields as alerts and block Save, as the
   API refuses them (`supplyIssues` in `lib/model/validate.ts`, a test holds it
   to the engine's `modelRuleIssues`): dam, river when low needs a dam; run of
   river with a dam says to set the dam capacity to 0 or pick another rule; the

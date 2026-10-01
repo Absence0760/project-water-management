@@ -116,6 +116,16 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
+		// A pool at the river pump's intake (engine ≥ 1.64.0): a run-of-river unit's, a size > 0, starting 0–100 % full.
+		const pool = n.poolCapacityM3;
+		if (pool !== null && pool !== undefined && pool !== 0) {
+			if (!(n.kind === 'farm' && supply === 'runOfRiver')) add(`poolRule:${n.id}`, `"${n.name}": only a run-of-river unit has a pool (a unit with a dam stores in its dam)`);
+			if (!(Number.isFinite(pool) && pool > 0)) add(`poolCap:${n.id}`, `"${n.name}": the pool capacity must be a size above 0 m³`);
+			const init = n.poolInitialPct ?? 1;
+			if (!(Number.isFinite(init) && init >= 0 && init <= 1)) add(`poolInit:${n.id}`, `"${n.name}": the pool's start must be between 0 and 100 % full`);
+			const area = n.poolAreaM2;
+			if (area !== null && area !== undefined && !(Number.isFinite(area) && area >= 0)) add(`poolArea:${n.id}`, `"${n.name}": the pool's surface area must be 0 m² or more`);
+		}
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
 		// Hands-off flow and River to dam by month (engine ≥ 1.32.0): a farm's, 12 monthly values each.

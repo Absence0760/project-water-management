@@ -1071,9 +1071,20 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs",
+        "basic_needs", "pool_storage", "pool_drawn", "pool_evaporation", "pool_area",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
+
+    # A pool at a run-of-river pump (§2.7j): its capacity, start and full area; none under another rule.
+    def pool_of(x):
+        c = x.get("poolCapacityM3")
+        if supply_rule(x) != "runOfRiver" or c is None or not c > 0:
+            return None
+        a = x.get("poolAreaM2")
+        return {"cap": c, "area": 7.2 * c ** 0.77 if a is None else max(a, 0.0)}
+
+    pools = {f["id"]: pool_of(f) for f in farms}
+    pool_s = {fid: p_["cap"] * min(max(next(f for f in farms if f["id"] == fid).get("poolInitialPct", 1), 0.0), 1.0) for fid, p_ in pools.items() if p_}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
     storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
@@ -1471,6 +1482,16 @@ def run(doc: dict) -> dict:
             pc = math.inf if pc is None else pc
             keep = max(zs, pass_target if pass_target is not None else 0.0, keep_h)
             proom = max(0.0, min(pc, S - keep)) if on else 0.0
+            # The pool (§2.7j): its evaporation first, then the pump may take the free flow and what it holds.
+            pl = pools.get(xid)
+            p_free = p_held = p_ev = p_area = p_prev = 0.0
+            if pl and on:
+                p_prev = pool_s[xid]
+                p_area = pl["area"] * min(p_prev / pl["cap"], 1.0) ** 0.7 if p_prev > 0 else 0.0
+                p_ev = min(k_lake[m] * apan[m] / mdays[m] / 1000 * p_area, p_prev)
+                p_held = p_prev - p_ev
+                p_free = max(0.0, S - keep)
+                proom = max(0.0, min(pc, p_free + p_held))
             # Supply order (§2.7d): primary direct, river first, dam targets, the dam, supplemental.
             GW = 0.0
             for k_, u_ in enumerate(ulist):
@@ -1555,7 +1576,18 @@ def run(doc: dict) -> dict:
             ret = x.get("damSeepageReturnPct", 1)
             if ret is None:
                 ret = 1
-            flow = R + S - Gr + T + Sp * ret + X + passed_on
+            taken_flow = Gr
+            if pl:
+                from_flow = min(Gr, p_free)
+                drawn = min(max(Gr - from_flow, 0.0), p_held)
+                refill = max(0.0, min(pl["cap"] - (p_held - drawn), p_free - from_flow))
+                pool_s[xid] = p_held - drawn + refill
+                taken_flow = from_flow + refill
+                cc["pool_storage"][i] = pool_s[xid]
+                cc["pool_drawn"][i] = drawn
+                cc["pool_evaporation"][i] = p_ev
+                cc["pool_area"][i] = p_area
+            flow = R + S - taken_flow + T + Sp * ret + X + passed_on
             dep = deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i)
             U0 = flow - dep
             lost = Sp * (1 - ret)
@@ -1601,6 +1633,8 @@ def run(doc: dict) -> dict:
             back = back_to.get(xid, 0.0)
             Uo = U0 - taken + back
             V = (H + I + j + pd + GW + GWd + arrives + back) - (G - T) - E - (Q - s_prev) - Uo - dep - lost - taken
+            if pl:
+                V -= pool_s[xid] - p_prev + p_ev
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
@@ -1773,6 +1807,9 @@ def run(doc: dict) -> dict:
                 put(xid, "dam_release", cc["dam_release"])
             if supply_rule(x) != "damFirst" or (x.get("supplyRule") or "damFirst") != "damFirst":
                 put(xid, "river_abstraction", cc["river_abstraction"])
+            if pools.get(xid):
+                for k in ("pool_storage", "pool_drawn", "pool_evaporation", "pool_area"):
+                    put(xid, k, cc[k])
             if any_senior:
                 extra.append("passed_for_senior")
             if xid in ot_from:

@@ -225,7 +225,12 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		'object_demand@': 'demand objects',
 		'object_supplied@': 'demand objects',
 		// The basic-needs floor (engine 1.44.0) is written only on a unit with a demand object.
-		basic_needs: 'demand objects'
+		basic_needs: 'demand objects',
+		// A run-of-river pool (engine 1.64.0) is written only beside its river pump.
+		pool_storage: 'river_abstraction',
+		pool_drawn: 'river_abstraction',
+		pool_evaporation: 'river_abstraction',
+		pool_area: 'river_abstraction'
 	};
 	const base = (key: string) => (key.includes('@') ? key.slice(0, key.indexOf('@') + 1) : key);
 

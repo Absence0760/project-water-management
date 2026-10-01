@@ -6,16 +6,18 @@
 	// with itself), so a saved capacity reloads into the m³/day field with the
 	// calculator empty. Below them, the hands-off flow (engine ≥ 1.32.0, issue
 	// #204, §2.7h): a flow by month and/or the EWR left in the river before the
-	// pump or River to dam takes anything. The node is the editor's own
-	// object, so edits land in the model directly.
-	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
+	// pump or River to dam takes anything. Under run of river, a pool at the
+	// pump (engine ≥ 1.64.0, §2.7j): blank capacity = none; set, its start and
+	// surface area. The node is the editor's own object, so edits land in the
+	// model directly.
+	import { POOL_DEFAULTS, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { operatingIssues, supplyIssues } from '$lib/model/validate';
 	import MonthFields from './MonthFields.svelte';
-	import { handsOffPreview, handsOffTicked, noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
+	import { handsOffPreview, handsOffTicked, noDamSupplyHint, poolHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
@@ -97,6 +99,45 @@
 				</span>
 				<FieldHistoryLine field="node:{node.id}:pumpCapacityM3Day" {unit} />
 			</div>
+		{/if}
+		{#if rule === 'runOfRiver' || (node.poolCapacityM3 ?? null) !== null}
+			<div class="field">
+				<span class="lbl"><label for={id('pool')}>Pool at the pump <span class="u">(m³)</span></label><HelpTip key="node.poolCapacityM3" /></span>
+				<NumberInput
+					id={id('pool')}
+					min={0}
+					grouped
+					nullable
+					placeholder="no pool"
+					disabled={readonly}
+					aria-describedby="{id('pool')}-h"
+					value={node.poolCapacityM3 ?? null}
+					onchange={(v) => (node.poolCapacityM3 = v === 0 ? null : v)}
+				/>
+				<span class="hint" id="{id('pool')}-h" data-testid="pool-note">{poolHint(node)}</span>
+				<FieldHistoryLine field="node:{node.id}:poolCapacityM3" {unit} />
+			</div>
+			{#if (node.poolCapacityM3 ?? 0) > 0}
+				<div class="field">
+					<span class="lbl"><label for={id('pool-init')}>Pool at the start <span class="u">(% full)</span></label><HelpTip key="node.poolInitialPct" /></span>
+					<NumberInput id={id('pool-init')} min={0} max={100} scale={100} disabled={readonly} value={node.poolInitialPct ?? POOL_DEFAULTS.poolInitialPct} onchange={(v) => (node.poolInitialPct = v ?? POOL_DEFAULTS.poolInitialPct)} />
+					<FieldHistoryLine field="node:{node.id}:poolInitialPct" {unit} />
+				</div>
+				<div class="field">
+					<span class="lbl"><label for={id('pool-area')}>Pool surface area <span class="u">(m²)</span></label><HelpTip key="node.poolAreaM2" /></span>
+					<NumberInput
+						id={id('pool-area')}
+						min={0}
+						grouped
+						nullable
+						placeholder="estimated"
+						disabled={readonly}
+						value={node.poolAreaM2 ?? null}
+						onchange={(v) => (node.poolAreaM2 = v)}
+					/>
+					<FieldHistoryLine field="node:{node.id}:poolAreaM2" {unit} />
+				</div>
+			{/if}
 		{/if}
 		{#if rule === 'trigger'}
 			<div class="field">
