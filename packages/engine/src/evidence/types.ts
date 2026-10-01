@@ -12,6 +12,7 @@ import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
 import type { DemandSourceShare } from '../network/demandSources';
 import type { AllocationLimitBound, DemandObjectCategory, DemandObjectDestination, DemandObjectPriority, DemandObjectSizing, DemandObjectSource, RunSummary } from '../project';
+import type { CumulativeReport } from '../scenario/cumulative';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import type { Band } from '../uncertainty/bands';
@@ -57,8 +58,15 @@ import type { ApplicantPrompts } from './prompts';
  * application, `protectsEwr`, the river abstraction its proposals add or change keeps a hands-off
  * flow or the EWR (evidence/riverWorks.ts). A pack drafted before it lists neither check: its frozen
  * report stays as it was, and issuing it checks the live report, which has both.
+ * evidence-11: page 1's row over the other applications (`otherApplications`) reads one combined run
+ * instead of a sum of separate runs (finding C26, WP-3.11): `cumulative.combined`, this application
+ * with every other submitted or approved one on the baseline, from a completed cumulative assessment
+ * of exactly those applications and ops (backend assessments/), with the combined change and the
+ * interaction; a conflict makes it *Not assessed* with the conflicts named, never a silent merge. The
+ * row's label and basis change with it. A pack drafted before it has no `combined`: its frozen § 4
+ * and page-1 row keep the sum, which says it is one.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-10';
+export const EVIDENCE_REPORT_VERSION = 'evidence-11';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -200,6 +208,48 @@ export interface EvidenceOtherApplicationInput {
 	reserveOutlet: { months: number; met: number; rate: number | null } | null;
 }
 
+/** Another application the combined row takes (evidence-11): visible to the reader, submitted or decided with approval, based on this baseline. */
+export interface EvidenceCombinedOtherInput {
+	scenarioId: string;
+	scenarioName: string;
+	status: 'submitted' | 'decided';
+	outcome: string | null;
+}
+
+/** A completed cumulative assessment of exactly the combination's applications and ops on this baseline (backend assessments/). */
+export interface EvidenceAssessmentInput {
+	id: string;
+	name: string;
+	createdAt: string;
+	createdBy: string | null;
+	/** The engine that ran the baseline, each application alone and all together. */
+	engineVersion: string | null;
+	/** Its stored report (engine cumulativeImpact). */
+	report: CumulativeReport;
+}
+
+/**
+ * The combined row's inputs (evidence-11, finding C26): every other
+ * application on the baseline, and either an assessment of all of them with
+ * this one together, or why there is none. The backend checks the
+ * combination itself (combineScenarios), so a conflict is named even when no
+ * one has asked for an assessment.
+ */
+export interface EvidenceCombinedInput {
+	/** The other applications, in name order (this report's own application is not among them). */
+	others: EvidenceCombinedOtherInput[];
+	/** Why the backend couldn't put them together at all (too many for one assessment, a baseline that can't be rebuilt); null otherwise. */
+	unavailable: string | null;
+	/** combineScenarios' conflicts, in words; empty when they combine or weren't checked. */
+	conflicts: string[];
+	/** Ops that don't apply alone or together, each prefixed by its application's name. */
+	problems: string[];
+	/** The assessment the row reads; null when there is none. */
+	assessment: EvidenceAssessmentInput | null;
+	/** An assessment of exactly these is queued or running. */
+	pending: boolean;
+}
+
 export interface EvidenceInput {
 	project: { id: string; name: string };
 	/** The run the report treats as the baseline: the application's base run, or the run itself for baseline evidence. */
@@ -222,6 +272,8 @@ export interface EvidenceInput {
 	otherApplications: EvidenceOtherApplicationInput[];
 	/** More than the backend's cap (the newest 50 are listed): the sum is then not assessed. */
 	otherApplicationsTruncated: boolean;
+	/** The other applications to run together with this one, and what the backend found doing so (evidence-11). */
+	combined: EvidenceCombinedInput;
 	/** What the report cites for its methods and limits (the engine's generated lists). */
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
 	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
@@ -569,6 +621,12 @@ export interface EvidenceCumulativeApplication {
  */
 export interface EvidenceCumulative {
 	applications: EvidenceCumulativeApplication[];
+	/**
+	 * This application with every other one on the baseline in one run, from a
+	 * cumulative assessment (evidence-11): what page 1's row reads. Absent from
+	 * a document before evidence-11, whose row is the sum below.
+	 */
+	combined?: EvidenceCombined;
 	/** Applications counted in the sum (the comparable ones). */
 	counted: number;
 	/** The list was cut at the backend's cap: the sum would understate, so it is not assessed. */
@@ -577,6 +635,56 @@ export interface EvidenceCumulative {
 	total: { ewrDays: number | null; reservePp: number | null };
 	/** The sum with this report's own change added; null for baseline evidence. */
 	withThis: { ewrDays: number | null; reservePp: number | null } | null;
+}
+
+/** One measure at the outlet across the combination (evidence-11): from the assessment's report, one engine for every column. */
+export interface EvidenceCombinedMeasure {
+	baseline: number | null;
+	/** Every application together. */
+	combined: number | null;
+	/** combined − baseline. */
+	change: number | null;
+	/** Σ of each application's own change, alone (the assessment's runs, not the applications' stored runs). */
+	sumOfSingles: number | null;
+	/** change − sumOfSingles: what they do together beyond the sum of each alone. */
+	interaction: number | null;
+}
+
+/** One application in the combination, with its own change alone in the assessment. */
+export interface EvidenceCombinedApplication {
+	scenarioId: string;
+	scenarioName: string;
+	/** The scenario's status: 'submitted' | 'decided' (null when this report's own scenario is gone). */
+	status: string | null;
+	outcome: string | null;
+	/** This report's own application. */
+	isThis: boolean;
+	/** Days below the pragmatic EWR at the outlet, its change alone; null without an assessment. */
+	ewrDays: number | null;
+	/** Reserve months met at the outlet, its change alone; null without an assessment or a rule table at the outlet. */
+	reserveMonths: number | null;
+}
+
+/**
+ * What every application on the baseline does together (evidence-11, finding
+ * C26, WP-3.11): one combined run, read from a completed cumulative
+ * assessment of exactly these applications and ops. Never a merge of
+ * conflicting ops: a conflict makes it not assessed, with the conflicts named.
+ */
+export interface EvidenceCombined {
+	/** This application first, then the others in name order. */
+	applications: EvidenceCombinedApplication[];
+	assessment: { id: string; name: string; createdAt: string; createdBy: string | null; engineVersion: string | null } | null;
+	conflicts: string[];
+	problems: string[];
+	/** Days below the pragmatic EWR at the outlet; null when not assessed. */
+	ewrDays: EvidenceCombinedMeasure | null;
+	/** Reserve months met at the outlet; null when not assessed or without a rule table at the outlet. */
+	reserveMonths: EvidenceCombinedMeasure | null;
+	/** The assessment's own warnings (a run over another window than the baseline's). */
+	warnings: string[];
+	/** Why there is no combined figure, in words; null when there is one. */
+	notAssessed: string | null;
 }
 
 /** One water year of a unit's use from one water source, both runs (§ 5). */
@@ -777,7 +885,7 @@ export interface EvidenceReport {
 	users: EvidenceUser[];
 	/** § 4: users served in full while an EWR site below them fails. */
 	servedWhileFailing: EvidenceServedWhileFailing;
-	/** § 4: the other applications on the baseline and their summed change (evidence-3). */
+	/** § 4: the other applications on the baseline, each one's own change (evidence-3), and all of them together with this one (`combined`, evidence-11). */
 	cumulative: EvidenceCumulative;
 	/** § 5: registered water use against modelled use (WP-3.10). */
 	allocations: EvidenceAllocations;

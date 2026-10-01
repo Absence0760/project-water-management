@@ -19,6 +19,7 @@ import { readJson } from '../http/body.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { countAttempt, lockedMessage, toUser, USER_COLS, type UserRow } from './routes.js';
 import { verifyPassword } from './password.js';
+import { mfaRequired } from './stepUp.js';
 import { trustedDevice, issueDevice } from './device.js';
 import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 import {
@@ -66,7 +67,9 @@ export const mfaRoutes = new Hono<AuthEnv>()
 	.get('/mfa', requireUser, async (c) => {
 		const status = await withUser(c.get('userId'), (db) => mfaStatus(db, c.get('userId')));
 		// Whether this session signed in with a code: the actions that need one (stepUp.ts) check it.
-		return c.json({ ...status, sessionVerified: (c.get('amr') ?? []).includes('otp') });
+		// `required` only while the requirement is on (MFA_REQUIRED, off for the DB tests, the e2e server
+		// and a dev's opt-out): the Account page's warning and the workspace's banner say what the routes do.
+		return c.json({ ...status, required: status.required && mfaRequired(), sessionVerified: (c.get('amr') ?? []).includes('otp') });
 	})
 	// Start adding an authenticator. The current password first, through the
 	// sign-in lockout like change-password: a stolen session must not be able

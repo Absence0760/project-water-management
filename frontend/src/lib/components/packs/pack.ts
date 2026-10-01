@@ -5,7 +5,7 @@
 // itself is WebCrypto's (sha256Hex).
 import { packManifestText, type PackManifest } from '@water-management/engine';
 import { fmtDate } from '$lib/format/number';
-import type { Pack, PackIssueChecks, PackStatus, PackVerification } from '$lib/api';
+import type { Pack, PackBundleCheck, PackIssueChecks, PackReproductionState, PackStatus, PackVerification } from '$lib/api';
 
 /** A pack's status in a word, as its badges say it. */
 export const PACK_STATUS_LABEL: Record<PackStatus, string> = {
@@ -239,5 +239,47 @@ export async function lookUpCode(
 	} catch (e) {
 		if (isNotFound(e)) return { status: 'not-found' };
 		return { status: 'error', error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
+/**
+ * What the pack view says about the server's re-run of the pack from its
+ * stored bundle (detail.reproduction, 154_pack_reproduce): a tone, one
+ * sentence, and the checks that failed. Null when there is nothing to say (a
+ * draft, or a pack issued before re-runs). It is the app's own claim, so it
+ * shows in the view's bar only: never printed, never on verify.
+ */
+export function reproductionNote(r: PackReproductionState): { tone: 'good' | 'bad' | 'warn' | 'quiet'; text: string; failed: PackBundleCheck[] } | null {
+	const failed = r.checks.filter((c) => !c.ok);
+	const when = r.checkedAt ? ` on ${fmtDate(r.checkedAt)}` : '';
+	const reruns = r.checks.filter((c) => c.id.startsWith('reproduce:')).length;
+	const runs = reruns === 1 ? 'its run' : 'both its runs';
+	switch (r.status) {
+		case 'reproduced':
+			return {
+				tone: 'good',
+				text: `Reproduced on the server${when}: re-run with engine ${r.engineVersion} from the stored reproduction bundle, ${runs} gave the same results, and every one of its ${r.checks.length} checks passed. This is the app’s own check; the bundle lets anyone repeat it.`,
+				failed
+			};
+		case 'not_reproduced':
+			return {
+				tone: 'bad',
+				text: `Not reproduced on the server${when}: re-run with engine ${r.engineVersion} from the stored reproduction bundle, ${failed.length === 1 ? '1 check' : `${failed.length} checks`} failed.`,
+				failed
+			};
+		case 'other_engine':
+			return {
+				tone: 'warn',
+				text: `Not re-run on the runs’ own engine${when}: they were made with engine ${r.runEngines.join(' and ')} and the server runs ${r.engineVersion}, on which ${reruns === 1 ? 'the run’s results differ' : 'their results differ'}. Every other check passed; check out engine ${r.runEngines.join(' and ')} to reproduce the bundle.`,
+				failed
+			};
+		case 'no_bundle':
+			return { tone: 'quiet', text: 'Not re-run on the server: this pack was issued without a reproduction bundle.', failed: [] };
+		case 'checking':
+			return { tone: 'quiet', text: 'The server is re-running this pack’s runs from its stored reproduction bundle.', failed: [] };
+		case 'failed':
+			return { tone: 'bad', text: `The server couldn’t re-run this pack${r.error ? `: ${r.error}` : '.'}`, failed: [] };
+		case 'none':
+			return null;
 	}
 }

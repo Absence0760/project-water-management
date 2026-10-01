@@ -181,7 +181,26 @@ decide a licence application.
   outside a request (the job runner) isn't stepped up: no job kind needs
   more than editor, and the request that queued it was checked. Everyone
   else may turn it on, and is asked for a code at sign-in once they have.
-  `GET /auth/mfa` says whether the person's roles need it (`required`).
+  `GET /auth/mfa` says whether the person's roles need it (`required`,
+  false while the switch below is off, so the prompts say what the routes
+  do).
+- **The prompt.** A person whose role needs it learns so before an action
+  is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
+  its own chunk, mounted by `routes/+layout.svelte`; the state is
+  `lib/auth/mfaPrompt.svelte.ts`) from `GET /auth/mfa`, read once per
+  account and again when the tab comes back into view. `required &&
+  !enrolled`: **Set up two-step sign-in**, a link to the Account page's
+  panel (`/account#two-step`). `required && enrolled && !sessionVerified`:
+  **Sign in again**, which signs out and returns to the page after the
+  password and the code. A `403 mfa_required` or `mfa_step_up` from any
+  request shows the same two (the API client's `onError`), for an editor
+  publishing to farmers too, whose role alone doesn't need it; the action's
+  own error message stays where the page shows it. The banner is English
+  and stays off the translated pages (the Account page has its own warning,
+  the farm view's roles never need it). Dismissable until the next refusal;
+  signing out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
+  so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
   the same person signed in with a code as the positive control; outsiders
   and viewers still get their 404 and 403).
@@ -265,6 +284,24 @@ decide a licence application.
   Tests: `auth/account-tokens.security.db.test.ts` "adding someone by
   email doesn't reveal whether the address has an account",
   `invites/invites.db.test.ts`.
+- **An invite is good only while its sender may still send it**
+  (`155_invite_sender_role.sql`). RLS checks the sender only when the
+  invite is written, so every function that lists, describes or accepts one
+  (`app_my_invites`, `app_accept_invite`, `app_invite_for_token`,
+  `app_accept_invites`: the invitations page, a sign-up through the link, a
+  confirmation or password-reset link) takes it only while its `invited_by`
+  still owns the project (directly, or as an admin of the team that owns it)
+  or administers the team (`app_invite_sender_holds`). An owner removed or
+  demoted, or a team admin demoted, leaves invites nobody can accept, at
+  any role; a lapsed invite's link is invalid like an expired one. Checked
+  where the invite is used rather than by deleting invites when a role
+  changes, because a role can be lost in more ways than a trigger list
+  keeps up with: the check fails closed on all of them. The remaining
+  owners see such an invite flagged (`senderLapsed`) and re-send it (which
+  makes them its sender) or revoke it; a deleted sender's invites cascade
+  away with the account. Tests: `invites/invites.db.test.ts` "an invite is
+  good only while its sender may still send it", `farms/invites.db.test.ts`
+  (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -2978,6 +3015,12 @@ nothing else.
   transaction, never a route's), under the key it derives itself
   (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
   only once: a second recording changes nothing and returns false.
+  The server's re-run outcome isn't a pack column: it is
+  `pack_reproduction` (154_pack_reproduce), which `water_app` only reads,
+  written by `app_record_pack_reproduction` from a *running*
+  `pack_reproduce` job of that pack as its acting user, for the bundle the
+  pack records, once per engine, so no member can mark a pack reproduced.
+  It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in
   the same transaction* (`issued_at = now()`), so only the issue route
