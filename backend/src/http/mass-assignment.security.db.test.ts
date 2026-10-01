@@ -23,6 +23,7 @@ import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@wat
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
+import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
@@ -159,6 +160,14 @@ async function plantedIssuedPack() {
  * ones inside it; every other project route takes its role-ladder SAMPLE, as
  * the owner. Each is called afresh per request, so a token is new each time.
  */
+let damFid: string | null = null;
+/** The ladder farm's dam on the map, made once. */
+async function ladderDam(): Promise<string> {
+	const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
+	damFid ??= (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'dam', name: 'Mass dam', nodeId: ctx.farmId, geometry: { type: 'Polygon', coordinates: square } }))).feature.id as string;
+	return damFid;
+}
+
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register', acceptTerms: LEGAL_VERSION } }),
 	'POST /auth/resend-confirmation': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com` } }),
@@ -264,6 +273,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'PATCH /teams/:id/members/:userId': () => ({ params: { id: ctx.teamId, userId: ctx.viewer.id }, body: { role: 'member' } }),
 	// A run with the observed record in its inputs (the SAMPLE of PUT …/series replaces it with two days).
 	// One queued run of the rules per user (calibration/schema.ts AUTO_CALIBRATION_JOBS_PER_USER): clear the last one's job first.
+	// A dam polygon linked to the ladder's farm, round the synthetic register's Z100/07 (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': async () => {
+		await ladderDam();
+		await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/nodes/:nodeId/dam-capacity-from-register']!(ctx);
+	},
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': async () => ({ body: { featureId: await ladderDam() } }),
 	'POST /projects/:id/auto-calibrations': async () => {
 		await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
 		return {};
@@ -344,6 +360,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		return { body: { source: 'dws', config: { station: 'X0H001' } } };
 	},
 	'PATCH /projects/:id/feeds/:feedId': async () => ({ params: { feedId: await currentFeed() }, body: { enabled: false } }),
+	// The rain feed from the boundary (#326 B-rain): a boundary on the map, and no feed in the way of a new one.
+	'POST /projects/:id/feeds/chirps/from-boundary': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
+		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
+	},
 	'POST /projects/:id/feeds/:feedId/run-now': async () => {
 		const feedId = await currentFeed();
 		await ok(ctx.owner.call('PATCH', `${at()}/feeds/${feedId}`, { enabled: true }));

@@ -106,6 +106,42 @@ describe('buildPackBundle + checkPackBundle', () => {
 		await expect(buildPackBundle(bad, hash)).rejects.toThrow(/fails its SHA-256 check/);
 	});
 
+	describe('§ 1’s locality map (evidence-12)', () => {
+		it('draws the figure again from the manifest and checks its SVG’s SHA-256; the README says so', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash, { locality: true }), hash);
+			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual([]);
+			expect(r.checks.map((c) => c.id)).toEqual(['archive', 'files', 'manifest', 'figure:locality', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application']);
+			expect(r.checks.find((c) => c.id === 'figure:locality')!.detail).toMatch(/^the locality map drawn again from the manifest's 4 map features hashes to [0-9a-f]{64}, the SHA-256 the manifest names$/);
+			const archive = await ZipArchive.open(built.bytes);
+			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`figure:locality`');
+		});
+
+		it('a manifest naming another SVG hash fails figure:locality alone', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash, { locality: { svgSha256: 'c'.repeat(64) } }), hash);
+			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['figure:locality']);
+			expect(r.checks.find((c) => c.id === 'figure:locality')!.detail).toContain(`not the ${'c'.repeat(64)} the manifest names`);
+		});
+
+		it('a figure drawn by other drawing rules says which engine to check out', async () => {
+			const input = packBundleFixture(hash, { locality: true });
+			(input.manifest.report.localityMap as { version: string }).version = 'locality-0';
+			const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['figure:locality']);
+			expect(r.checks.find((c) => c.id === 'figure:locality')!.detail).toMatch(/drawn with locality-0; this code draws locality-1: check out the engine that built the report/);
+		});
+
+		it('a pack from before evidence-12 has no figure, and no figure check: it checks as it always did (positive control above)', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash), hash);
+			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
+			expect(r.ok).toBe(true);
+			expect(r.checks.some((c) => c.id === 'figure:locality')).toBe(false);
+			const archive = await ZipArchive.open(built.bytes);
+			expect(new TextDecoder().decode(await archive.read('README.md'))).not.toContain('locality');
+		});
+	});
+
 	describe('tampering', () => {
 		it('a file changed without bundle.json: files fails', async () => {
 			const bytes = (await buildPackBundle(input, hash)).bytes;

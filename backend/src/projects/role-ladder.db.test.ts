@@ -102,6 +102,7 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/feeds', 'a feed writes into the project’s series on a schedule, unattended'],
 	['PATCH /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['DELETE /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
+	['POST /projects/:id/feeds/chirps/from-boundary', 'it attaches or changes a feed, which writes into the project’s series on a schedule, unattended (#326 B-rain)'],
 	['GET /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
@@ -128,6 +129,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/farm/:nodeId/access', { min: 'farmer', why: 'who can see this farm, so a farmer knows who reads their figures' }],
 	['GET /projects/:id/farm/:nodeId/series', { min: 'farmer', why: "one of the farm view's own allowlisted series, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/history', { min: 'farmer', why: "the farm's own figures across publications, the same 404s" }],
+	['GET /projects/:id/farm/:nodeId/map', { min: 'farmer', why: "the farm's own parcels and dams plus the boundary, rivers and gauges, never a neighbour's (#326 A3; farm-map.db.test.ts), the same 404s" }],
 	// Notes (WP-2.7): RLS limits a farmer or contributor to farm notes on their own farms.
 	['GET /projects/:id/notes', { min: 'farmer', why: 'notes RLS lets the caller read (a farmer: farm notes on their farms)' }],
 	['GET /projects/:id/notes/counts', { min: 'farmer', why: 'per-target counts of the same RLS-limited notes' }],
@@ -180,7 +182,8 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
-	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)']
+	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
+	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)']
 ]);
 
 type Ctx = LadderCtx;

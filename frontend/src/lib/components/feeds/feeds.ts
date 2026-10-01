@@ -27,10 +27,28 @@ export interface Bbox {
 	east: number;
 }
 
+/** The catchment boundary a feed's cells were computed from (backend feeds/config.ts BoundaryMark, issue #326 B-rain). */
+export interface BoundaryMark {
+	featureId: string;
+	name: string;
+	/** The boundary's version when its cells were taken (map_feature.updated_at). */
+	updatedAt: string;
+	areaKm2: number;
+}
+
 export interface FeedMeta {
 	id: string;
 	source: FeedSource;
-	config: { cells?: GridCell[]; bbox?: Bbox; skipNoData?: boolean; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
+	config: {
+		cells?: GridCell[];
+		bbox?: Bbox;
+		skipNoData?: boolean;
+		station?: string;
+		startDate?: string;
+		staleAfterDays?: number;
+		product?: ChirpsProduct;
+		boundary?: BoundaryMark;
+	};
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
@@ -106,6 +124,31 @@ export interface FeedBody {
 	replaceSeries?: boolean;
 }
 
+/** A boundary cell in the proposal: its weight in the mean and the share of it inside the boundary. */
+export interface BoundaryCell {
+	lat: number;
+	lon: number;
+	weight: number;
+	share: number;
+}
+
+/** GET …/feeds/chirps/from-boundary (backend feeds/fromBoundary.ts). */
+export interface BoundaryProposal {
+	boundary: BoundaryMark;
+	cells: BoundaryCell[];
+	rows: number;
+	/** The whole area of the cells read, and the part inside the boundary, km². */
+	cellsKm2: number;
+	insideKm2: number;
+	method: string;
+	/** What Apply does: nothing (a feed reads this boundary already), give an empty feed the cells, or attach a new feed. */
+	apply:
+		| { action: 'none'; feedId: string }
+		| { action: 'update'; feedId: string; targetKind: string; targetName: string }
+		| { action: 'create'; targetKind: string; targetName: string };
+	canApply: boolean;
+}
+
 export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 	const base = `/projects/${encodeURIComponent(projectId)}/feeds`;
 	const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
@@ -114,7 +157,18 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 		create: (body: FeedBody) => api.request<{ feed: FeedMeta }>('POST', base, body).then((r) => r.feed),
 		update: (id: string, patch: Partial<FeedBody> & { enabled?: boolean; replaceSeries?: boolean }) => api.request<{ feed: FeedMeta }>('PATCH', one(id), patch).then((r) => r.feed),
 		remove: (id: string) => api.request<void>('DELETE', one(id)),
-		runNow: (id: string) => api.request<{ created: boolean }>('POST', `${one(id)}/run-now`)
+		runNow: (id: string) => api.request<{ created: boolean }>('POST', `${one(id)}/run-now`),
+		/** The CHIRPS cells the map's catchment boundary covers, and what applying them would do (issue #326 B-rain). */
+		boundaryProposal: () => api.request<BoundaryProposal>('GET', `${base}/chirps/from-boundary`),
+		/** Apply the proposal made from this version of the boundary (refused once the boundary has changed). */
+		applyBoundary: (p: Pick<BoundaryProposal, 'boundary' | 'apply'>) =>
+			api
+				.request<{ feed: FeedMeta }>('POST', `${base}/chirps/from-boundary`, {
+					featureId: p.boundary.featureId,
+					updatedAt: p.boundary.updatedAt,
+					...(p.apply.action === 'update' ? { feedId: p.apply.feedId } : p.apply.action === 'create' ? { targetName: p.apply.targetName } : {})
+				})
+				.then((r) => r.feed)
 	};
 }
 
@@ -177,7 +231,7 @@ export function parseCells(text: string): { cells: GridCell[] } | { error: strin
 		.map((l) => l.trim())
 		.filter(Boolean);
 	if (!lines.length) return { error: 'Enter at least one grid cell as “latitude, longitude”.' };
-	if (lines.length > 25) return { error: 'At most 25 cells.' };
+	if (lines.length > BBOX_MAX_CELLS) return { error: `At most ${BBOX_MAX_CELLS} cells.` };
 	const cells: GridCell[] = [];
 	for (const [i, line] of lines.entries()) {
 		const parts = line.split(/[,\s]+/).filter(Boolean);
@@ -325,6 +379,8 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	const deg = (v: number) => (Math.abs(Math.round(v * 100) - v * 100) < 1e-6 ? v.toFixed(2) : String(v));
 	if (b) return `box ${deg(b.south)}, ${deg(b.west)} to ${deg(b.north)}, ${deg(b.east)}${f.config.skipNoData ? ', sea cells left out' : ''}`;
 	const cells = f.config.cells ?? [];
+	const from = f.config.boundary;
+	if (from) return `${cells.length === 1 ? '1 cell' : `${cells.length} cells`} of the catchment boundary${from.name ? ` “${from.name}”` : ''}, area weighted`;
 	if (cells.length === 1) return `cell ${cells[0]!.lat}, ${cells[0]!.lon}`;
 	return `${cells.length} cells`;
 }
@@ -462,4 +518,19 @@ export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
 export function errorText(e: unknown): string {
 	if (e instanceof ApiError && e.message) return e.message.charAt(0).toUpperCase() + e.message.slice(1);
 	return 'Something went wrong. Try again, or reload the page.';
+}
+
+// Whether a CHIRPS feed reads the map's boundary: its own module, so the Map tab's link imports it without this file.
+export { boundaryFeedState } from './boundaryState';
+
+/** "Attach a new CHIRPS feed into Rainfall — CHIRPS" and the like: what Apply will do, in words. */
+export function applyWords(p: Pick<BoundaryProposal, 'apply'>, feeds: readonly Pick<FeedMeta, 'id' | 'targetKind' | 'targetName'>[]): string {
+	const a = p.apply;
+	if (a.action === 'none') return 'A CHIRPS feed already reads this boundary: nothing to apply.';
+	if (a.action === 'update') {
+		const f = feeds.find((x) => x.id === a.feedId);
+		return `Apply gives the CHIRPS feed into ${describeTarget(f ?? a)} these cells in place of its own (its series holds no days yet, so nothing is spliced).`;
+	}
+	const own = a.targetName ? ' A series of its own: the one without a name already holds a record, and a feed never splices two areas into one.' : '';
+	return `Apply attaches a new CHIRPS feed into ${describeTarget(a)}.${own} It reads the last 60 days at its first fetch, then keeps up daily.`;
 }

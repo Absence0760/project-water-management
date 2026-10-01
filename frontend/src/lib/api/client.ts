@@ -53,6 +53,7 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	FarmMap,
 	AddFarmerResult,
 	FarmRole,
 	BulkFarmerResult,
@@ -139,7 +140,13 @@ import type {
 	MapFeatureInput,
 	MapFeatureKind,
 	MapFeatureList,
-	QuaternaryLookup
+	MapImportPreview,
+	MapImportReviewed,
+	MapLinkedNodes,
+	QuaternaryLookup,
+	QuaternaryLayer,
+	GaugeStationLookup,
+	DamProposals
 } from './types';
 
 export class ApiError extends Error {
@@ -482,6 +489,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
 			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
+			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
+			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
@@ -906,13 +915,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		map: {
 			list: (id: string) => request<MapFeatureList>('GET', `${p(id)}/map/features`),
+			/** Which nodes have a linked feature, ids only: the "Show on map" links (issue #326). */
+			linkedNodes: (id: string) => request<MapLinkedNodes>('GET', `${p(id)}/map/linked-nodes`),
 			create: (id: string, body: MapFeatureInput & { kind: MapFeatureKind }) =>
 				request<{ feature: MapFeature }>('POST', `${p(id)}/map/features`, body).then((r) => r.feature),
 			update: (id: string, fid: string, body: MapFeatureInput) =>
 				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
 			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
-			/** 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already. */
-			import: (id: string, body: { fileName: string; kind: MapFeatureKind; text: string }) =>
+			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
+			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
+			/**
+			 * Import a file, every feature one `kind` or each its own (`features`, from the review).
+			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already, or a
+			 * reviewed boundary row would replace the current boundary without `replaceBoundary: true`.
+			 */
+			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[]; replaceBoundary?: boolean })) =>
 				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
 			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>
@@ -922,7 +939,34 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					{ featureId }
 				),
 			quaternary: (id: string, lon: number, lat: number) =>
-				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`)
+				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),
+			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
+			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
+			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
+			}
+		},
+		/**
+		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
+		 * docs/api.md § Catchment map). Each accept is one value, saved to the model as a revision naming the source.
+		 */
+		damProposals: {
+			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
+			capacityFromRegister: (id: string, nodeId: string, registerNo: string) =>
+				request<{ nodeId: string; damCapacityM3: number; registerNo: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-capacity-from-register`,
+					{ registerNo }
+				),
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; damAreaFullM2: number; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-area-from-map`,
+					{ featureId }
+				)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

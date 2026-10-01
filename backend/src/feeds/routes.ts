@@ -52,7 +52,7 @@ const feedId = (id: string) => {
 };
 
 /** A second feed for one series (the unique constraint), as a clear 409. */
-const conflict = (err: unknown): never => {
+export const conflict = (err: unknown): never => {
 	if ((err as { code?: string }).code === '23505') throw new ApiError(409, 'another feed already writes that series');
 	throw err;
 };
@@ -74,7 +74,7 @@ const conflict = (err: unknown): never => {
  * `replaceFrom` undefined: nothing to confirm (or, for a save that doesn't
  * change what the feed writes where, nothing asked).
  */
-async function versionCheck(db: Db, projectId: string, input: FeedInput, changed: boolean): Promise<{ input: FeedInput; replaceFrom?: string }> {
+export async function versionCheck(db: Db, projectId: string, input: FeedInput, changed: boolean): Promise<{ input: FeedInput; replaceFrom?: string }> {
 	const writes = feedProvenance(input.source, input.config);
 	if (!writes) return { input };
 	const series = await targetSeries(db, projectId, input.targetKind, input.targetName);
@@ -111,11 +111,32 @@ async function versionCheck(db: Db, projectId: string, input: FeedInput, changed
 }
 
 /** A feed's configuration as the history records it (never its credentials: feeds carry none). */
-const feedSubject = (
+export const feedSubject = (
 	feedId: string,
 	action: 'created' | 'changed' | 'removed',
 	f: { source: string; targetKind: string; targetName: string; schedule: string; enabled: boolean }
 ) => ({ feedId, action, source: f.source, targetKind: f.targetKind, targetName: f.targetName, schedule: f.schedule, enabled: f.enabled });
+
+/**
+ * Count and insert one attach at a time per project, so concurrent attaches
+ * can't pass the cap together: takes the project's lock, then refuses past MAX_FEEDS.
+ */
+export async function attachSlot(db: Db, projectId: string): Promise<void> {
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('data_feed_cap:' || $1::text, 0))`, [projectId]);
+	const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [projectId]);
+	if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
+}
+
+/**
+ * The boundary mark (config.ts BoundaryMark) is written by the from-boundary
+ * route only (feeds/fromBoundary.ts), which computed the cells it vouches
+ * for; a plain attach or change can't claim it.
+ */
+function refuseBoundaryMark(config: unknown) {
+	if (config !== null && typeof config === 'object' && 'boundary' in config) {
+		throw new ApiError(400, 'a feed’s cells are marked as the catchment boundary’s only by “Use the catchment boundary” (POST …/feeds/chirps/from-boundary)');
+	}
+}
 
 export const feedRoutes = new Hono<AuthEnv>()
 	.get('/:id/feeds', async (c) =>
@@ -135,14 +156,13 @@ export const feedRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/feeds', async (c) => {
-		const input = FeedInput.parse(await readJson(c));
+		const body = await readJson(c);
+		refuseBoundaryMark((body as { config?: unknown } | null)?.config);
+		const input = FeedInput.parse(body);
 		const id = c.req.param('id');
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
-			// Count and insert one attach at a time per project, so concurrent attaches can't pass the cap together.
-			await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('data_feed_cap:' || $1::text, 0))`, [id]);
-			const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [id]);
-			if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
+			await attachSlot(db, id);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
 			const feed = await getFeed(db, id, fid);
@@ -155,6 +175,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 	// makes the saver the feed's acting user.
 	.patch('/:id/feeds/:feedId', async (c) => {
 		const patch = FeedPatch.parse(await readJson(c));
+		// A new config replaces the old one whole, the boundary mark with it; it can't bring its own.
+		refuseBoundaryMark(patch.config);
 		const id = c.req.param('id');
 		const fid = feedId(c.req.param('feedId'));
 		const feed = await withUser(c.get('userId'), async (db) => {

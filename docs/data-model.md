@@ -1445,12 +1445,38 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `period_end`, `source` (1–500, shown with every proposed value),
   `loaded_at`. Global (no project): loaded by the operator as the schema
   owner (`pnpm import:quaternaries`), read-only to `water_app`.
+- **`gauge_station_reference`** (`156_gauge_stations.sql`, issue #326
+  B-gauge): the gauging stations the nearest-gauge proposal reads. `code`
+  (primary key, a DWS station code `^[A-Z][0-9][A-Z][0-9]{3}$`, e.g.
+  `A2H012`; the third character is the station type, H a river gauge),
+  `name`, `river`, `lon`, `lat` (WGS84; indexed `(lat, lon)` for the
+  bounding-box first pass), `catchment_km2`, `record_start`, `record_end`
+  (dates; a NULL end is an open record), `dataset` (`synthetic` for the
+  committed fixture, region Z; indexed), `source` (1–500, shown with every
+  proposal), `loaded_at`. Global: loaded by the operator as the schema owner
+  (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
+  `water_app` (the catalogue guard's `READ_ONLY`).
 - **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
   farmer or contributor reads the boundary, gauges and rivers and the
   features tied to their own linked nodes (`app_farm_nodes`), never another
   farm's; no route serves them yet. `quaternary_reference` is readable by
   anyone signed in (public reference data) and written by no app role.
   Covering indexes on every foreign key.
+- **`dam_register_reference`** (`157_dam_register.sql`, issue #326 B-dams,
+  [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)):
+  the register of dams the dam proposals read. `register_no` (primary key,
+  1–20, the register's "No of dam"; the fixture's are `Z…`), `dataset` (the
+  load's label; `synthetic` for the committed fixture), `name`, `river`,
+  `farm`, `lon`, `lat` (WGS84; indexed `(lat, lon)` for the 1 km box),
+  `capacity_m3` (the register's thousands of m³, converted), `wall_height_m`,
+  `surface_area_m2` (when the source publishes it; the DSO list doesn't),
+  `completion_year`, `source` (1–500, shown with every proposal),
+  `loaded_at`. Global, loaded by the operator as the schema owner
+  (`pnpm import:dam-register`), readable by anyone signed in, written by no
+  app role, like `quaternary_reference`. A capacity or full-supply area
+  accepted from it (or from a dam polygon's `area_m2`) is stored in
+  `node.dam_capacity_m3` / `node.dam_area_full_m2` like a typed one; its
+  provenance is the model revision's reason (no column on `node`).
 
 ### Import reports (017_project_import.sql)
 

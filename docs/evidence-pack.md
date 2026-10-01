@@ -31,9 +31,11 @@ to an issued pack with public comments on it
 applicant's own copy of their application's issued packs, with share links
 ([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
 "pack issued" and "pack withdrawn" emails to the editors and the applicant
-([§ Notices](#notices), 133_pack_notices, 2026-09-30); and the server's
+([§ Notices](#notices), 133_pack_notices, 2026-09-30); the server's
 re-run of both runs from the stored bundle after issue, shown on the pack's
-page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01). What is left is
+page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
+locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
+report format `evidence-12`, 2026-10-01). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -90,6 +92,15 @@ pack drafted before `evidence-9` has no `demandObjects` in its manifest:
 its stored manifest still hashes to its recorded hash (nothing rebuilds
 it; `packs.db.test.ts` pins one), and its report prints without § 6,
 exactly as it did.
+
+§ 1's locality map (report format `evidence-12`, issue #326 A5) is
+`report.localityMap`: the map features the figure draws and its SVG's
+SHA-256, read when the draft is made, so the manifest freezes the figure
+and its hash covers it ([§ The locality map](#the-locality-map)). No
+manifest version changed, as for `evidence-8`. A pack drafted before it has
+no `localityMap`: its stored manifest still hashes to its recorded hash
+(`packs.db.test.ts` pins one), and its § 1 says the locality map isn't part
+of the pack.
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
@@ -242,6 +253,95 @@ pins it). The reproduction bundle doesn't carry the assessment's runs yet,
 so `reproduce:pack` re-runs the baseline and the application but not the
 combined row ([followups.md § Cumulative impact](./followups.md#cumulative-impact-wp-311)).
 
+## The locality map
+
+A licence application normally carries a site locality map, so § 1 of the
+report opens with one (report format `evidence-12`, issue #326 A5). It is a
+figure, not a map viewer: one SVG the engine writes from the project's map
+features ([maps.md](./maps.md)), with no basemap, tiles, fonts or network,
+so the browser, the server's PDF renderer and `pnpm reproduce:pack` all have
+the same bytes.
+
+**What it draws** (engine `packages/engine/src/evidence/locality.ts`, read by
+`loadMapFeatures` in `backend/src/evidence/report.ts` as the reader, under
+RLS, when the report is built):
+
+| Layer | From | Named? |
+| --- | --- | --- |
+| Catchment boundary | the `catchment_boundary` feature | no |
+| The applicant's unit (parcel) and dam | `farm_parcel` and `dam` features linked to the application's owned nodes | the unit, by its name in the run's model (the dam only when the unit has no parcel) |
+| Other units' parcels and dams | every other `farm_parcel` and `dam` | **never**: no name and no node in the report, drawn alike in grey and blue; for baseline evidence every unit's are these ("Units' parcels") |
+| River | `river` features | no |
+| Gauge | `gauge` features | by its node's name, else the feature's |
+| EWR site | a `gauge` whose node is one of the report's Reserve sites (§ 1) | as a gauge |
+
+`other` features aren't drawn (they could be anything). Each geometry is
+kept at 6 decimals of a degree (about 0.1 m) and simplified (Douglas–Peucker)
+to a third of a pixel of the figure, so a 50 000-vertex river doesn't swell
+the manifest; the report holds exactly what is drawn. Beside the features:
+the newest change to any of them (*Features as of*), the imported files they
+came from (name, SHA-256, date) and how many were drawn in the app, both
+counting only what may be named: the boundary, rivers, gauges and the
+applicant's own parcels and dams. Another unit's parcel or dam is drawn but
+its import file is never listed, since a file is often named after the farm
+or its owner (baseline evidence names no unit, so it lists no parcel's or
+dam's file).
+
+**How it is drawn** (`packages/engine/src/geo/localityMap.ts`,
+`localityMapSvg`, drawing rules `locality-1`): a local equirectangular
+projection about the features' centre, scaled by the WGS84 ellipsoid's
+meridional and prime-vertical radii there, north up, true to scale at that
+latitude (the east–west scale drifts by cos(lat)/cos(lat₀), under 1 % within
+half a degree); a scale bar of the longest 1, 2 or 5 × 10ⁿ m that fits a
+quarter of the map; a north arrow; coordinate ticks at a round step of
+degrees; the legend; and three notes: *Base: the project's map features; no
+basemap*, the features' date and sources, and the projection. Every
+coordinate is written with one decimal, colours are fixed (printed on white,
+whatever the app's theme) and every layer also differs by line, shape or
+label. Labels are escaped. Any change to what it writes for the same data
+bumps `LOCALITY_MAP_VERSION`; `localityMap.test.ts` pins a fixture's bytes by
+their SHA-256 so a change can't slip by.
+
+**Its hash.** The backend draws the SVG when it builds the report and sets
+`localityMap.svgSha256` (`withLocalitySvgHash`, node:crypto). So a pack's
+manifest names the exact bytes printed, and `reproduce:pack` draws the
+figure again from the manifest and compares (`figure:locality`,
+[§ Reproduction](#reproduction)). The page shows it as an image from a
+`data:` URL of those bytes (`frontend/src/lib/components/report/evidence/LocalityMap.svelte`),
+never parsed into the page as markup, with the hash under it, and its legend,
+labels and notes as text for a screen reader. The server's PDF prints the
+same image.
+
+**Who sees it.** The report's readers (viewers and up) and the pack's: the
+assessors' copy, like the rest of § 1. An applicant's copy of their pack and
+a pack's share link show neither the figure nor its features: both are
+allowlists that list neither ([§ Applicants](#applicants),
+[§ Sharing and comments](#sharing-and-comments)). A farmer's map rule (only
+their own farm, decision D-A1/A3 of issue #326) is a farmer's; farmers read
+no report or pack.
+
+**Without features** § 1 says *No locality map: the project has no map
+features* (`localityMap: null`), and the report and pack are otherwise as
+before. A pack drafted before `evidence-12` has no `localityMap`; its § 1
+says the locality map isn't part of the pack, and its bundle has no
+`figure:locality` check.
+
+Tests: `packages/engine/src/geo/localityMap.test.ts` (projection against the
+textbook series, the scale bar and ticks, determinism and the pinned bytes,
+escaping, neighbours never labelled), `evidence/locality.test.ts` (layers,
+labels, rounding and simplification, sources, the stamped hash),
+`evidence/report.test.ts`, `evidence/bundle.test.ts` and
+`scripts/reproduce-pack/reproduce-pack.test.ts` (`figure:locality` passes,
+fails on a wrong hash or other drawing rules, is absent for an older pack),
+`backend/src/evidence/report.db.test.ts` and `packs.db.test.ts` (the
+features in the manifest with the SVG's hash, a moved parcel changes the
+live report and not the pack, an `evidence-10` pack still verifies, an
+issued pack's bundle reproduces the figure),
+`frontend/…/report/evidence/locality.test.ts`, and e2e
+`evidence-report.spec.ts`, `evidence-pack.spec.ts` (the figure's bytes hash
+to the manifest's `svgSha256`) and `evidence-pack-pdf.spec.ts` (the server
+PDF of a pack with a map).
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text
@@ -255,7 +355,7 @@ WebCrypto, so the engine stays free of Node APIs.
 | the pack's id and version, and its predecessor's id and hash | its status: draft, issued, superseded, withdrawn |
 | the project's id and name at drafting | when it was drafted or issued, and by whom |
 | the engine version (and build, once recorded) | the withdrawal reason and the successor |
-| the whole evidence report: every setting, the model, every input series' hash, the results, the flags and checks, the methodology and errata cited | the sign-offs (each binds the hash in its own statement, below) |
+| the whole evidence report: every setting, the model, every input series' hash, the results, the flags and checks, the methodology and errata cited, and § 1's locality map (its features and its SVG's SHA-256, `evidence-12`) | the sign-offs (each binds the hash in its own statement, below) |
 | | the PDF and the reproduction bundle (each has its own SHA-256; the bundle contains the manifest) |
 
 So a pack moves from draft to issued, superseded or withdrawn with the same
@@ -580,6 +680,7 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | --- | --- |
 | `archive`, `files` | the zip reads, every entry is listed in `bundle.json`, and each matches its SHA-256 there |
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
+| `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
 | `runs` | the runs are the ones the manifest names, with its engine versions |
 | `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |

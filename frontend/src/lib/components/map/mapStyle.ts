@@ -5,10 +5,14 @@
 // The basemap is the Protomaps vector schema, read from one PMTiles file over
 // HTTP Range (PUBLIC_TILES_URL: MinIO locally, S3 behind CloudFront in
 // production, same-origin there). No tile CDN, no third-party script, no
-// fonts or sprites: the basemap draws land, water, land use, roads and
-// boundaries without labels, so no glyphs are fetched. With no tiles URL (a
-// fresh clone, CI) the map is a plain background with the features drawn.
-import type { MapFeature } from '$lib/api/types';
+// sprites. Place and water names (#326 A6) need glyphs: PBF glyph ranges of
+// Noto Sans (OFL 1.1), self-hosted beside the tiles (PUBLIC_TILES_GLYPHS_URL:
+// MinIO locally, /tiles/fonts/… in production). With no glyphs URL the
+// basemap draws no labels and fetches no glyphs, as before. With no tiles
+// URL (a fresh clone, CI) the map is a plain background with the features
+// drawn. The quaternary outlines (#326 A6) are a layer of their own over the
+// basemap, under the features, empty until the tab's toggle fills them.
+import type { MapFeature, MapGeometry } from '$lib/api/types';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
 export const BASEMAP_ATTRIBUTION = '© Protomaps © OpenStreetMap contributors';
@@ -22,6 +26,81 @@ export interface Style {
 	version: 8;
 	sources: Record<string, Record<string, unknown>>;
 	layers: Layer[];
+	/** The glyph ranges' URL template ({fontstack}, {range}), only when labels are drawn. */
+	glyphs?: string;
+}
+
+/** The fonts the labels use: the Protomaps basemaps-assets set (Noto Sans, OFL 1.1), self-hosted (bin/tiles-dev.sh fetch). */
+export const LABEL_FONTS = { regular: 'Noto Sans Regular', medium: 'Noto Sans Medium', italic: 'Noto Sans Italic' } as const;
+
+/**
+ * The label colours (#326 A6): each text on a halo of the opposite lightness,
+ * at least 4.5:1 against its halo and against every basemap colour it can sit
+ * on (mapStyle.test.ts), so a name reads on land, water and land cover in
+ * both themes. Water names are a darker (dark mode: lighter) blue, italic.
+ */
+export function labelColours(dark: boolean) {
+	return dark
+		? { text: '#eef0ec', water: '#b9dcf5', halo: '#0b0d0c', quaternary: '#e2cfff' }
+		: { text: '#1f2320', water: '#073a57', halo: '#ffffff', quaternary: '#4a2373' };
+}
+
+/**
+ * A glyphs URL as MapLibre needs it: absolute. A same-origin path
+ * (`/tiles/fonts/{fontstack}/{range}.pbf`, production) is put on `origin`
+ * by hand: `new URL` would percent-encode the braces. Empty → null (no labels).
+ */
+export function glyphsUrl(raw: string | null | undefined, origin: string): string | null {
+	const v = raw?.trim();
+	if (!v) return null;
+	return v.startsWith('/') ? `${origin.replace(/\/$/, '')}${v}` : v;
+}
+
+const NAME = ['coalesce', ['get', 'name:en'], ['get', 'name']];
+
+/** The basemap's place and water names, over everything (they need the tiles and the glyphs). */
+export function labelLayers(dark: boolean): Layer[] {
+	const c = labelColours(dark);
+	const src = { source: 'basemap' };
+	const halo = { 'text-halo-color': c.halo, 'text-halo-width': 1.5, 'text-halo-blur': 0.25 };
+	const kindIn = (kinds: string[]) => ['in', ['get', 'kind'], ['literal', kinds]];
+	return [
+		{
+			id: 'bm-label-waterway',
+			type: 'symbol',
+			...src,
+			'source-layer': 'water',
+			minzoom: 11,
+			filter: ['all', ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]], kindIn(['river', 'stream', 'canal']), ['has', 'name']],
+			layout: { 'symbol-placement': 'line', 'text-field': NAME, 'text-font': [LABEL_FONTS.italic], 'text-size': 12, 'text-letter-spacing': 0.1 },
+			paint: { 'text-color': c.water, ...halo }
+		},
+		{
+			id: 'bm-label-water',
+			type: 'symbol',
+			...src,
+			'source-layer': 'water',
+			filter: ['all', ['==', ['geometry-type'], 'Point'], ['has', 'name']],
+			layout: { 'text-field': NAME, 'text-font': [LABEL_FONTS.italic], 'text-size': 12, 'text-max-width': 9 },
+			paint: { 'text-color': c.water, ...halo }
+		},
+		{
+			id: 'bm-label-places',
+			type: 'symbol',
+			...src,
+			'source-layer': 'places',
+			filter: ['all', kindIn(['locality', 'region', 'neighbourhood']), ['has', 'name']],
+			layout: {
+				'text-field': NAME,
+				// Towns that show from far out (min_zoom ≤ 6) in the medium weight; the rest regular.
+				'text-font': ['case', ['<=', ['coalesce', ['get', 'min_zoom'], 99], 6], ['literal', [LABEL_FONTS.medium]], ['literal', [LABEL_FONTS.regular]]],
+				'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 12, 14],
+				'text-max-width': 8,
+				'symbol-sort-key': ['coalesce', ['get', 'sort_key'], ['get', 'min_zoom'], 99]
+			},
+			paint: { 'text-color': c.text, ...halo }
+		}
+	];
 }
 
 /** The basemap: a background, and the Protomaps layers when there is a tiles URL. */
@@ -49,15 +128,41 @@ export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 /** The basemap layers' ids, to drop when the tiles can't be read. */
 export const basemapLayerIds = (style: Style) => style.layers.filter((l) => l.id.startsWith('bm-')).map((l) => l.id);
 
+/** The basemap's own colours (its land, background, water and land cover), for the overlay's contrast checks. */
+export const basemapColours = (dark: boolean) => ({ ...(dark ? DARK : LIGHT) });
+
+/** `#rrggbb` at an opacity, as CSS `rgba()` (MapLibre reads it too), so the map's fills and the key's swatches are one value. */
+export function withAlpha(hex: string, alpha: number): string {
+	const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /**
- * The overlay's colours: dark strokes with a light casing (or the reverse in
- * dark mode), at least 3:1 against both the basemap and the background, and
- * told apart by line style and shape as well as colour (WCAG 1.4.1, 1.4.11).
+ * The overlay's colours (#326 E7): dark strokes with a light casing (or the
+ * reverse in dark mode), at least 3:1 against the basemap and its
+ * background, and told apart by line style and shape as well as colour
+ * (WCAG 1.4.1, 1.4.11). Farm parcels are green (the app's --success), a hue
+ * well away from the water blue that rivers, dams and gauges share, so a
+ * parcel never reads as a dam or a river (mapStyle.test.ts checks the
+ * difference). The `*Fill` entries are the area fills, translucent so the
+ * basemap shows through; a dam's is the water blue, denser than a parcel's,
+ * so a dam drawn as a polygon reads as water. The map's key reads its
+ * swatches from here (MapTab.svelte), so key and map can't drift.
  */
 export function overlayColours(dark: boolean) {
-	return dark
-		? { boundary: '#f2c14e', parcel: '#7fd5e8', water: '#8ec7ff', other: '#e0e0e0', casing: '#000000', selected: '#ff8fd0' }
-		: { boundary: '#7a3e00', parcel: '#0b5a73', water: '#0b4fa0', other: '#3a3d3a', casing: '#ffffff', selected: '#b0006e' };
+	const c = dark
+		? { boundary: '#f2c14e', parcel: '#6cc58a', water: '#5fa8ff', other: '#e0e0e0', casing: '#000000', selected: '#ff8fd0' }
+		: { boundary: '#7a3e00', parcel: '#1f6f3a', water: '#0047b3', other: '#3a3d3a', casing: '#ffffff', selected: '#b0006e' };
+	return { ...c, parcelFill: withAlpha(c.parcel, 0.18), damFill: withAlpha(c.water, 0.45), otherFill: withAlpha(c.other, 0.18) };
+}
+
+/** How opaque a results colour (`fills`, A1) is drawn over a parcel: strong enough to read, the basemap still faintly there. */
+export const RESULT_FILL_OPACITY = 0.75;
+
+/** The fill colour of a polygon: its results colour when it has one (`fill`, from overlayData), else its kind's. */
+export function fillColour(c: ReturnType<typeof overlayColours>): unknown[] {
+	// to-color takes the first argument that parses, so a missing or unparseable `fill` falls back to the kind's colour.
+	return ['to-color', ['get', 'fill'], ['match', ['get', 'kind'], 'dam', c.damFill, 'other', c.otherFill, c.parcelFill]];
 }
 
 /** The overlay layers over the `features` GeoJSON source (polygons and lines; points are DOM markers). */
@@ -69,23 +174,103 @@ export function overlayLayers(dark: boolean): Layer[] {
 	const selected = ['==', ['get', 'selected'], true];
 	const src = { source: 'features' };
 	return [
-		{ id: 'ov-parcel-fill', type: 'fill', ...src, filter: ['all', polygon, ['!', kind('catchment_boundary')]], paint: { 'fill-color': ['match', ['get', 'kind'], 'dam', c.water, 'other', c.other, c.parcel], 'fill-opacity': 0.18 } },
-		{ id: 'ov-casing', type: 'line', ...src, filter: ['any', polygon, line], paint: { 'line-color': c.casing, 'line-width': ['case', selected, 7, ['==', ['get', 'kind'], 'catchment_boundary'], 6, 4], 'line-opacity': 0.85 } },
-		// The boundary: a long dash, thickest; parcels solid; other features dotted; rivers solid blue.
+		{ id: 'ov-parcel-fill', type: 'fill', ...src, filter: ['all', polygon, ['!', kind('catchment_boundary')]], paint: { 'fill-color': fillColour(c), 'fill-opacity': ['case', ['has', 'fill'], RESULT_FILL_OPACITY, 1] } },
+		{ id: 'ov-casing', type: 'line', ...src, filter: ['any', polygon, line], paint: { 'line-color': c.casing, 'line-width': ['case', selected, 7, ['==', ['get', 'kind'], 'catchment_boundary'], 6, ['==', ['get', 'kind'], 'river'], 6, 4], 'line-opacity': 0.85 } },
+		// The boundary: a long dash, thickest; parcels solid green; dams solid blue; other features dotted; rivers thicker solid blue.
 		{ id: 'ov-boundary', type: 'line', ...src, filter: ['all', polygon, kind('catchment_boundary')], paint: { 'line-color': c.boundary, 'line-width': 3, 'line-dasharray': [4, 2] } },
 		{ id: 'ov-parcel-line', type: 'line', ...src, filter: ['all', polygon, ['!', kind('catchment_boundary')], ['!', kind('other')]], paint: { 'line-color': ['match', ['get', 'kind'], 'dam', c.water, c.parcel], 'line-width': 2 } },
 		{ id: 'ov-other-line', type: 'line', ...src, filter: ['all', ['any', polygon, line], kind('other')], paint: { 'line-color': c.other, 'line-width': 2, 'line-dasharray': [1, 1.5] } },
-		{ id: 'ov-river', type: 'line', ...src, filter: ['all', line, kind('river')], paint: { 'line-color': c.water, 'line-width': 2.5 } },
+		{ id: 'ov-river', type: 'line', ...src, filter: ['all', line, kind('river')], paint: { 'line-color': c.water, 'line-width': 3.5 } },
 		{ id: 'ov-selected', type: 'line', ...src, filter: ['all', ['any', polygon, line], selected], paint: { 'line-color': c.selected, 'line-width': 3 } }
 	];
 }
 
-/** The `features` source's data: polygons and lines (points are drawn as markers), each with its id, kind, name and whether it is selected. */
-export function overlayData(features: readonly MapFeature[], selectedId: string | null) {
+/** The quaternary outlines' colour (#326 A6): a purple well apart from every overlay stroke, at least 3:1 on the basemap. */
+export const quaternaryColour = (dark: boolean) => (dark ? '#cf6bff' : '#8f10e0');
+
+/** An outline the quaternary layer draws: its code and polygon (GET …/map/quaternaries). */
+export interface QuaternaryOutline {
+	code: string;
+	geometry: MapGeometry;
+}
+
+/** The `quaternaries` source's data: each outline with its code, and whether it is the one picked. */
+export function quaternaryData(outlines: readonly QuaternaryOutline[] | null | undefined, picked: string | null = null) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (outlines ?? []).map((q) => ({ type: 'Feature' as const, properties: { code: q.code, picked: q.code === picked }, geometry: q.geometry }))
+	};
+}
+
+/** The layer a click on a quaternary hits (an invisible fill: the outline alone is too thin to aim at). */
+export const QUATERNARY_HIT_LAYER = 'qt-fill';
+
+/** The quaternary outlines: dashed, thin, under the features; their codes as labels only when there are glyphs. */
+export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer[]; labels: Layer[] } {
+	const colour = quaternaryColour(dark);
+	const src = { source: 'quaternaries' };
+	const picked = ['==', ['get', 'picked'], true];
+	return {
+		under: [
+			// Opacity 0.01, not 0: an invisible fill still answers queryRenderedFeatures, so a click inside picks the quaternary.
+			{ id: QUATERNARY_HIT_LAYER, type: 'fill', ...src, paint: { 'fill-color': colour, 'fill-opacity': ['case', picked, 0.12, 0.01] } },
+			{ id: 'qt-line', type: 'line', ...src, paint: { 'line-color': colour, 'line-width': ['case', picked, 3, 1.75], 'line-dasharray': [5, 2.5] } }
+		],
+		labels: labels
+			? [
+					{
+						id: 'qt-label',
+						type: 'symbol',
+						...src,
+						layout: { 'text-field': ['get', 'code'], 'text-font': [LABEL_FONTS.medium], 'text-size': 13, 'text-letter-spacing': 0.05 },
+						paint: { 'text-color': labelColours(dark).quaternary, 'text-halo-color': labelColours(dark).halo, 'text-halo-width': 1.5 }
+					}
+				]
+			: []
+	};
+}
+
+export interface StyleOptions {
+	/** The glyphs URL (absolute; glyphsUrl()): place and water names, and the quaternaries' codes. Null: no labels. */
+	glyphs?: string | null;
+	/** The quaternary outlines to draw (null or empty: none). */
+	quaternaries?: ReturnType<typeof quaternaryData>;
+}
+
+/**
+ * The basemap with the overlay over it: one style, so a theme switch
+ * (`setStyle`) redraws both and keeps the features and the selection. Order,
+ * bottom up: the basemap, the quaternary outlines, the features, then every
+ * label (so a results fill never hides a name).
+ */
+export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnType<typeof overlayData>, opts: StyleOptions = {}): Style {
+	const base = basemapStyle(tilesUrl, dark);
+	const glyphs = opts.glyphs || null;
+	const qt = quaternaryLayers(dark, !!glyphs);
+	const style: Style = {
+		...base,
+		sources: { ...base.sources, quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) }, features: { type: 'geojson', data } },
+		layers: [...base.layers, ...qt.under, ...overlayLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
+	};
+	if (glyphs) style.glyphs = glyphs;
+	return style;
+}
+
+/**
+ * The `features` source's data: polygons and lines (points are drawn as
+ * markers), each with its id, kind, name, whether it is selected and, when
+ * `fills` gives one (A1's results colouring), its fill colour.
+ */
+export function overlayData(features: readonly MapFeature[], selectedId: string | null, fills?: Readonly<Record<string, string>>) {
 	return {
 		type: 'FeatureCollection' as const,
 		features: features
 			.filter((f) => f.geometry.type !== 'Point')
-			.map((f) => ({ type: 'Feature' as const, properties: { id: f.id, kind: f.kind, name: f.name, selected: f.id === selectedId }, geometry: f.geometry }))
+			.map((f) => {
+				const fill = fills?.[f.id];
+				const properties: { id: string; kind: MapFeature['kind']; name: string; selected: boolean; fill?: string } = { id: f.id, kind: f.kind, name: f.name, selected: f.id === selectedId };
+				if (fill) properties.fill = fill;
+				return { type: 'Feature' as const, properties, geometry: f.geometry };
+			})
 	};
 }
