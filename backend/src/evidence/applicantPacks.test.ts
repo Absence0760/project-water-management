@@ -71,7 +71,7 @@ const row = (over: Partial<ApplicantPackRow> = {}): ApplicantPackRow => ({
 			{ kind: 'farm', changePts: 1 }
 		],
 		holders: ['Jane Holder'],
-		// For the server only (162): the frozen own units the others are named from.
+		// For the server only (164): the frozen own units the others are named from.
 		ownNodeIds: [UPSTREAM]
 	},
 	application_run_id: RUN,
@@ -148,7 +148,7 @@ describe('toApplicantPack', () => {
 		expect(nameOthers([{ nodeId: 'not-in-the-base', kind: 'farm', changePts: 3 }], { names: new Map(), downstream: new Set(['not-in-the-base']) })).toEqual([]);
 	});
 
-	it('reads the own units the pack froze for the server (162), and never returns them', () => {
+	it('reads the own units the pack froze for the server (164), and never returns them', () => {
 		expect(frozenOwn(obj(row().units))).toEqual([UPSTREAM]);
 		expect(frozenOwn({ ownNodeIds: ['not-a-uuid', 3, UPSTREAM] })).toEqual([UPSTREAM]);
 		expect(frozenOwn({})).toEqual([]);

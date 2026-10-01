@@ -12,7 +12,7 @@
 //    natural flow) at any holder count; its outflow, the outflow series and
 //    the EWR deficit volume only at 5 or more farm holders, since natural
 //    minus outflow is the farms' use (the k rule of the share links and the
-//    contributor's series, 025/046, split in 162); its EWR days not met
+//    contributor's series, 025/046, split in 164); its EWR days not met
 //    always (as the share link);
 //  - their own units (their farm links as they read them now, and the nodes
 //    the application's ops add), in full, when every op was a proposal;
@@ -56,7 +56,7 @@ export interface ApplicantEwrSite {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	/** The use's figure: only at 5 or more farm holders (162); else null. */
+	/** The use's figure: only at 5 or more farm holders (164); else null. */
 	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
@@ -235,7 +235,7 @@ export function projectResultsForApplicant(i: ApplicantResultsInput): ApplicantR
 	const anonName = new Map(baseView.model.nodes.filter((n) => anonymous.has(n.id)).map((n) => [n.id, n.name]));
 	const kindOf = new Map<string, NodeKind>([...i.base.model.nodes, ...i.runModel.nodes].map((n) => [n.id, n.kind]));
 
-	// The k rule, split (162): the river (natural flow, the EWR requirement) whenever the figures may show at all;
+	// The k rule, split (164): the river (natural flow, the EWR requirement) whenever the figures may show at all;
 	// the use (outflow, its series, the EWR deficit) only past k as well.
 	const naturalShown = i.allProposals;
 	const impactedShown = i.allProposals && i.farmHoldersOk;

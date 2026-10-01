@@ -825,7 +825,7 @@ result without signing in, until it expires or its owner revokes it.
 - **The k rule on series.** `app_share_series` returns only the catchment
   allowlist (`natural_flow`, `simulated_outflow`, `observed_flow`, `ewr`,
   `ewr_shortfall`) of the current published run, monthly means plus the last
-  365 days. The rule is **split** (162; provisional position, pre-counsel
+  365 days. The rule is **split** (164; provisional position, pre-counsel
   research, 2026-10-01): **the river** (`natural_flow`, and `ewr`, the
   requirement made from it) is returned at any holder count, since it
   describes the river and no holder's use (it is close to the public WR2012

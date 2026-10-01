@@ -78,7 +78,7 @@ export interface ScenarioResult {
 	 */
 	reIds: MaskedReId[];
 	/**
-	 * `problems` as the assessors read them (162_applicant_visibility, build
+	 * `problems` as the assessors read them (164_applicant_visibility, build
 	 * item 6): line for line the same, except that a rule the mask reported
 	 * as MASKED_RULE (or MASKED_RULE_AGGREGATE) gives its real words, with
 	 * every hidden node and item under its real name. For the assessors

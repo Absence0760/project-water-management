@@ -74,7 +74,7 @@
 	const chartSeries = $derived.by(() => {
 		const s = results?.catchment.series;
 		if (!s || (!s.outflow && !s.ewr)) return null;
-		// The EWR requirement is the river's (shown at any holder count); the outflow only past the k rule (162).
+		// The EWR requirement is the river's (shown at any holder count); the outflow only past the k rule (164).
 		return [
 			...(s.outflow
 				? [

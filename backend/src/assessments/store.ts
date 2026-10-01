@@ -90,7 +90,7 @@ function combineEntry(base: ModelInput, s: Pick<ScenarioRow, 'id' | 'name' | 'op
 /** Each scenario alone, then all together (combineScenarios), on `base`: what refuses an assessment. Pure given the base. */
 export function checkCombination(base: ModelInput, scenarios: readonly Pick<ScenarioRow, 'id' | 'name' | 'ops' | 'origin' | 'ownedNodeIds'>[]): AssessmentCheck {
 	const problems: string[] = [];
-	// The assessors' words (162): an application's hidden rules in full, as only editors read an assessment.
+	// The assessors' words (164): an application's hidden rules in full, as only editors read an assessment.
 	for (const s of scenarios) for (const p of checkScenario(base, s).assessorProblems) problems.push(`"${s.name}" alone: ${p}`);
 	if (problems.length) return { ok: false, conflicts: [], problems };
 	const combined = combineScenarios(
@@ -243,7 +243,7 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		const entry = { id: m.scenarioId ?? m.id, name: m.name, ops: m.ops, origin: m.origin, ownedNodeIds: m.ownedNodeIds };
 		const check = checkScenario(base, entry);
 		if (check.problems.length) {
-			// The assessors' words (162): only editors read an assessment.
+			// The assessors' words (164): only editors read an assessment.
 			await db.query(`UPDATE assessment_member SET status = 'problems', problems = $2 WHERE id = $1`, [m.id, JSON.stringify(check.assessorProblems)]);
 			memberProblems.push(...check.assessorProblems.map((p) => `"${m.name}" alone: ${p}`));
 		} else {

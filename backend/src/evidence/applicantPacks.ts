@@ -171,7 +171,7 @@ export function nameOthers(rows: readonly ApplicantPackOtherRow[], naming: Other
 	});
 }
 
-/** The own units the pack froze (162, `units.ownNodeIds`), for the server only: never returned. */
+/** The own units the pack froze (164, `units.ownNodeIds`), for the server only: never returned. */
 export const frozenOwn = (raw: Record<string, unknown>): string[] => arr(raw.ownNodeIds).flatMap((x) => (typeof x === 'string' && UUID.test(x) ? [x] : []));
 
 /** The units field by field (app_applicant_pack_units, 131 and 135), the others named and filtered by `naming`. */
@@ -213,7 +213,7 @@ export function toApplicantPack(r: Omit<ApplicantPackRow, 'application_run_id'>,
  * model through app_application_run_results (118), its published base as a
  * contributor reads it, the anonymous names projectBaseForApplicant gives
  * the other units for the application's own units as the pack froze them
- * (`own`, 162: never the links its owner holds now), and what lies
+ * (`own`, 164: never the links its owner holds now), and what lies
  * downstream of those and the nodes the run adds. null when the run or its
  * published base can't be read (the base was unpublished since).
  */

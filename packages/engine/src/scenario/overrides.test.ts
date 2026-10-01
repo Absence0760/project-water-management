@@ -2095,7 +2095,7 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(applyScenario(b, [shares], { mask: { crops: ['c2'] } }).problems).toEqual(applyScenario(b, [shares]).problems);
 	});
 
-	it(`gives the catchment's value and the hidden units' aggregate at ${FARMER_K} or more hidden holders, never below (162)`, () => {
+	it(`gives the catchment's value and the hidden units' aggregate at ${FARMER_K} or more hidden holders, never below (164)`, () => {
 		const b = baseM();
 		(b.settings as Record<string, unknown>).flowShareMethod = 'manual';
 		nodeOf(b, 'C')!.flowShareManual = 0.5;
@@ -2121,7 +2121,7 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(applyScenario(baseM(), [op], { mask: { ...mask, hiddenHolders: FARMER_K } }).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
 	});
 
-	it('gives the assessors the real words, hidden names restored, line for line, and the applicant the rules\' ids (162)', () => {
+	it('gives the assessors the real words, hidden names restored, line for line, and the applicant the rules\' ids (164)', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'node.set', nodeId: 'C', field: 'supplyRule', value: 'runOfRiver' },
 			{ op: 'node.set', nodeId: 'C', field: 'damCapacityM3', value: 0 },

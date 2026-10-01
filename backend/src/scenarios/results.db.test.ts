@@ -188,7 +188,7 @@ describe("an applicant's results", () => {
 		expect(text).not.toContain('Lucerne');
 	});
 
-	it('leaves the use out below five farm holders and keeps the river and their own unit (162; control: six, above)', async () => {
+	it('leaves the use out below five farm holders and keeps the river and their own unit (164; control: six, above)', async () => {
 		// One farmer holds all four side farms: holders are A, Waterval and the farmer.
 		expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: others.map((o) => o.id) })).status).toBe(201);
 		const res = await results(applicantA, raise.sid);

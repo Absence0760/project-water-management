@@ -1,4 +1,4 @@
--- 162_applicant_visibility — what an applicant sees, on the licensing
+-- 164_applicant_visibility — what an applicant sees, on the licensing
 -- positions taken before counsel and the client confirm them (provisional
 -- position, pre-counsel research, 2026-10-01; docs/legal-status.md;
 -- docs/evidence-pack.md § Applicants, docs/security.md § The k rule on
@@ -68,7 +68,7 @@ CREATE OR REPLACE FUNCTION app_applicant_pack_units(p_report jsonb, p_own text[]
 		SELECT x.u FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_report->'users') = 'array' THEN p_report->'users' ELSE '[]'::jsonb END) x(u)
 		WHERE jsonb_typeof(x.u) = 'object' AND x.u->>'kind' IN ('farm', 'user') AND jsonb_typeof(x.u->'nodeId') = 'string'
 	), flagged AS (
-		-- Theirs as the frozen report counted it (162), and only a node the application's stored list holds (p_own,
+		-- Theirs as the frozen report counted it (164), and only a node the application's stored list holds (p_own,
 		-- guarded by 071 when it was set): a report can't make a unit the applicant's that the application never held.
 		SELECT u, u->>'nodeId' = ANY (coalesce(p_own, '{}')) AND (jsonb_typeof(u->'own') <> 'boolean' OR (u->>'own')::boolean) AS own
 		FROM u
@@ -111,7 +111,7 @@ CREATE OR REPLACE FUNCTION app_applicant_pack_units(p_report jsonb, p_own text[]
 			) ORDER BY u->>'nodeId')
 			FROM others
 		), '[]'::jsonb),
-		-- For the server only (162): the frozen own units the others are named and filtered from.
+		-- For the server only (164): the frozen own units the others are named and filtered from.
 		'ownNodeIds', coalesce((SELECT jsonb_agg(u->'nodeId' ORDER BY u->>'nodeId') FROM flagged WHERE own), '[]'::jsonb)
 	)
 	$$;
@@ -157,7 +157,7 @@ CREATE OR REPLACE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 		FROM node n WHERE n.project_id = p_project AND n.kind = 'farm';
 		-- A report says so when it changed a baseline assumption; one that doesn't say is taken as changed.
 		v_proposals := coalesce((p.manifest->'report'->>'assumptionsChanged')::boolean, true) = false;
-		-- Frozen (162): the stored list, never the links its owner holds now.
+		-- Frozen (164): the stored list, never the links its owner holds now.
 		SELECT coalesce(array_agg(x::text), '{}') INTO v_own FROM scenario s, unnest(s.owned_node_ids) x WHERE s.id = p.scenario_id;
 
 		RETURN QUERY SELECT
@@ -169,7 +169,7 @@ CREATE OR REPLACE FUNCTION app_applicant_pack(p_project uuid, p_pack uuid)
 	END
 	$$;
 COMMENT ON FUNCTION app_applicant_pack(uuid, uuid) IS
-	'An application''s issued pack for its party (131_applicant_packs, 135_pack_security, 162_applicant_visibility): verify''s fields, a pack link''s figures, D2''s units frozen at issue with the other units'' ids for the server to name (never returned), and the application run. Never the manifest.';
+	'An application''s issued pack for its party (131_applicant_packs, 135_pack_security, 164_applicant_visibility): verify''s fields, a pack link''s figures, D2''s units frozen at issue with the other units'' ids for the server to name (never returned), and the application run. Never the manifest.';
 
 -- ---------------------------------------------------------------------------
 -- 2. The k rule, split: the river always, the use at k ≥ 5
@@ -206,7 +206,7 @@ CREATE OR REPLACE FUNCTION app_share_series(p_hash bytea, p_key text)
 			SELECT rs.meta, rs."values" AS vals, pub.start_date
 			FROM run_series rs JOIN pub ON rs.run_id = pub.run_id AND rs.project_id = pub.project_id
 			WHERE rs.node_id IS NULL AND rs.key = p_key
-			  -- The river (162): natural flow and the requirement made from it, always; the use's series at k ≥ 5.
+			  -- The river (164): natural flow and the requirement made from it, always; the use's series at k ≥ 5.
 			  AND (p_key IN ('natural_flow', 'ewr') OR (SELECT n FROM holders) >= 5)
 		), days AS (
 			SELECT (series.start_date + (u.o - 1)::int) AS d, NULLIF(u.v, 'NaN'::double precision) AS v
@@ -251,7 +251,7 @@ CREATE POLICY run_series_select_contributor ON run_series FOR SELECT
 	USING (
 		-- An application run they read: the application's own nodes.
 		(run_id, node_id) IN (SELECT n.run_id, n.node_id FROM app_contributor_run_nodes() n)
-		-- The river (162): natural flow and the EWR requirement, of a published run or of an application run they read, always.
+		-- The river (164): natural flow and the EWR requirement, of a published run or of an application run they read, always.
 		OR (
 			node_id IS NULL
 			AND key IN ('natural_flow', 'ewr')
@@ -296,6 +296,6 @@ CREATE FUNCTION app_application_hidden_holders(p_scenario uuid) RETURNS integer
 	END
 	$$;
 COMMENT ON FUNCTION app_application_hidden_holders(uuid) IS
-	'The farm holders of an application''s hidden farms (outside its stored own nodes, its owner left out), capped at 5, for the check''s masked-rule aggregate (162_applicant_visibility). Server only.';
+	'The farm holders of an application''s hidden farms (outside its stored own nodes, its owner left out), capped at 5, for the check''s masked-rule aggregate (164_applicant_visibility). Server only.';
 REVOKE ALL ON FUNCTION app_application_hidden_holders(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_application_hidden_holders(uuid) TO water_app;

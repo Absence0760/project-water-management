@@ -4349,7 +4349,7 @@ Applicant view and the Applications tab. Left:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
 - [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
-      split, 162; provisional position, pre-counsel research, 2026-10-01).
+      split, 164; provisional position, pre-counsel research, 2026-10-01).
       The use's catchment series (outflow, observed flow, EWR shortfall) and
       the volume rows show at 5 or more farm holders, but k alone doesn't
       protect a catchment where one holder does almost all the abstraction:

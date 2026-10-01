@@ -2261,7 +2261,7 @@ below work on it too, for an editor.
   and application) and `series` (`{ outflow, ewr }`, the outlet's daily
   series, base and application) only when every op was a proposal, else
   null with `withheld: 'baseline_assumptions'`. Within them the k rule is
-  split (162): natural flow and the `ewr` series at any holder count; the
+  split (164): natural flow and the `ewr` series at any holder count; the
   outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
   `deficitM3` only at five or more farm holders, else null with
   `withheld: 'few_farm_holders'`. `units[]`: their own units
@@ -2444,7 +2444,7 @@ They read no pack row, so the routes above answer them `403`.
   kind: 'farm' | 'user', name, changePts }[] | null }`, or `null` when the
   report changed a baseline assumption. `own`: the units the pack froze as
   the applicant's (the report's own units within the application's stored
-  own nodes, whatever the owner links now; 162) and the nodes it adds;
+  own nodes, whatever the owner links now; 164) and the nodes it adds;
   `others`: the other
   farms and water users downstream of those in the application run, as the
   results view lists them (`GET …/results` `downstream`), under the same
@@ -2717,7 +2717,7 @@ never a farm's row, name or id.
   user count once, an unlinked farm on its own; design
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
   in a smaller catchment natural flow minus outflow would reveal the farms'
-  use (162).
+  use (164).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,
   malformed, revoked or expired token, or nothing published. `/share/series`
   answers the same `404` for a key off the allowlist (every farm key), a key

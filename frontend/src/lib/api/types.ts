@@ -1026,7 +1026,7 @@ export interface ApplicantEwrFigures {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	/** The use's figure: only at 5 or more farm holders (162); else null. */
+	/** The use's figure: only at 5 or more farm holders (164); else null. */
 	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
@@ -1064,7 +1064,7 @@ export interface ApplicantResults {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
 		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		/** The EWR requirement whenever the figures show; the outflow only past the k rule (162). */
+		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
 		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
 		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
 		withheld: ApplicantWithheld | null;

@@ -277,7 +277,7 @@ describe('the series a link reads', () => {
 		expect((await withUser(stranger.id, async (db) => (await db.query("SELECT * FROM app_share_series($1, 'ewr')", [hash])).rows)).length).toBe(1);
 	});
 
-	it(`answers the use's series only from ${FARMER_K} farm holders, counting one user’s farms once; the river's at any count (162)`, async () => {
+	it(`answers the use's series only from ${FARMER_K} farm holders, counting one user’s farms once; the river's at any count (164)`, async () => {
 		// app_share_series writes k as the literal 5 (SQL can't import it): the two move together.
 		expect(FARMER_K).toBe(5);
 		const set = (nodeIds: string[]) => owner.call('PUT', `/projects/${projectId}/farmers/${farmer.id}`, { nodeIds });

@@ -1173,7 +1173,7 @@ scenario is `'team'`, and behaves exactly as above).
   the base and its series hidden, even in an application made before; the
   assessors keep the stored list. An issued evidence pack is the exception:
   its applicant's copy keeps the units it was issued about
-  ([evidence-pack.md § Applicants](./evidence-pack.md#applicants), 162).
+  ([evidence-pack.md § Applicants](./evidence-pack.md#applicants), 164).
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
@@ -1248,7 +1248,7 @@ scenario is `'team'`, and behaves exactly as above).
     mean outlet flow and daily outflow series, and the EWR deficit volumes
     (the use: natural minus outflow is the farms' take), only at five or
     more farm holders (the k rule of the share links and the contributor's
-    series, split in 162; provisional position, pre-counsel research,
+    series, split in 164; provisional position, pre-counsel research,
     2026-10-01); read under the caller's own RLS;
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR

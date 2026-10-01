@@ -192,7 +192,7 @@ describe('projectResultsForApplicant', () => {
 		]);
 	});
 
-	it('leaves the use (outflow, its series, EWR volumes) out below 5 farm holders, and keeps the river and their own units (162)', () => {
+	it('leaves the use (outflow, its series, EWR volumes) out below 5 farm holders, and keeps the river and their own units (164)', () => {
 		const series = { outflow: { base: { startDate: '2020-01-01', values: [1] }, application: { startDate: '2020-01-01', values: [2] } }, ewr: { base: { startDate: '2020-01-01', values: [3] }, application: { startDate: '2020-01-01', values: [3] } } };
 		const few = projectResultsForApplicant(scenario([damRaise], raised, { farmHoldersOk: false, series }));
 		expect(few.catchment.withheld).toBe('few_farm_holders');

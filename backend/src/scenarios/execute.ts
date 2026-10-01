@@ -108,7 +108,7 @@ export interface ScenarioCheck {
 	renamed: MaskedRename[];
 	/** An application's new items moved off a hidden item's id (applyScenario's `reIds`). Never shown to a contributor. */
 	reIds: MaskedReId[];
-	/** `problems` in the real words of every rule, hidden names restored (applyScenario's `assessorProblems`, 162). Never shown to a contributor. */
+	/** `problems` in the real words of every rule, hidden names restored (applyScenario's `assessorProblems`, 164). Never shown to a contributor. */
 	assessorProblems: string[];
 	/** The problem lines a hidden rule broke, with their ops and the rules' kinds (applyScenario's `maskedRules`): what "Ask the assessors why" quotes. */
 	maskedRules: MaskedRuleRef[];
@@ -116,7 +116,7 @@ export interface ScenarioCheck {
 
 /**
  * How many farm holders an application's hidden farms have, capped at
- * FARMER_K (app_application_hidden_holders, 162): what lets the check give a
+ * FARMER_K (app_application_hidden_holders, 164): what lets the check give a
  * catchment-wide rule's aggregate (engine MASKED_RULE_AGGREGATE). 0 for a
  * team scenario or one the caller can't read. Server-side only.
  */

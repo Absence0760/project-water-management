@@ -67,7 +67,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	// Both farms drain to the gauge: nothing lies below theirs. Two farm holders: no catchment flows.
 	await expect(results.getByTestId('applicant-downstream-empty')).toHaveText('No other farm or water user lies downstream of your units.');
 	await expect(results.getByTestId('applicant-catchment-withheld')).toContainText('five or more farm holders');
-	// The river shows at any holder count (162): natural flow, never the outflow.
+	// The river shows at any holder count (164): natural flow, never the outflow.
 	const catchment = results.getByTestId('applicant-catchment');
 	await expect(catchment.getByRole('rowheader', { name: 'Natural flow' })).toBeVisible();
 	await expect(catchment.getByRole('rowheader', { name: 'Flow at the outlet' })).toHaveCount(0);

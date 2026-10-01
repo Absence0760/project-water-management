@@ -160,7 +160,7 @@ describe("the other units in an applicant's pack", () => {
 		expect(res.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);
 	});
 
-	// Last: it unlinks the applicant's farm (162_applicant_visibility, build item 5).
+	// Last: it unlinks the applicant's farm (164_applicant_visibility, build item 5).
 	it('are frozen at issue: the applicant’s farm, unlinked after issue, is still theirs by name in the pack', async () => {
 		const before = await applicant.call('GET', `${P()}/scenarios/${sid}/packs/${pack}`);
 		expect(before.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);

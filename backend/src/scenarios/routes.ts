@@ -56,7 +56,7 @@ import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBod
 function checkView(c: ScenarioCheck, role: Role) {
 	const view = { applied: c.applied, problems: c.problems, classified: c.classified, maskedRules: c.maskedRules };
 	if (role === 'contributor') return view;
-	// The unmasked reasons are the assessors' (162): editors and up, who read every farm anyway. Never a contributor.
+	// The unmasked reasons are the assessors' (164): editors and up, who read every farm anyway. Never a contributor.
 	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
 }
 

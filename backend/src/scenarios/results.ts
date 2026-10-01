@@ -65,7 +65,7 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
 	const base = await loadBaseInput(db, projectId, r.baseRunId, 'contributor');
 	const { reIds } = checkScenario(base, { ops: recorded.ops, ownedNodeIds: recorded.ownedNodeIds ?? [], origin: 'applicant' });
 
-	// The river's series at any holder count, the outflow past the k rule only (162; RLS holds the same line).
+	// The river's series at any holder count, the outflow past the k rule only (164; RLS holds the same line).
 	const series = r.allProposals ? await catchmentSeries(db, projectId, runId, r.startDate, r.baseRunId, r.baseStartDate, r.farmHoldersOk) : null;
 	const results = projectResultsForApplicant({
 		base,
@@ -97,7 +97,7 @@ export async function loadApplicantResults(db: Db, projectId: string, s: Scenari
  * The outflow and EWR series at the outlet of both runs, read under the
  * caller's RLS (run_series_select_contributor: of an application run only
  * when its ops were all proposals, 118; the EWR requirement at any holder
- * count, the outflow only past the k rule, 162). Each pair is null unless
+ * count, the outflow only past the k rule, 164). Each pair is null unless
  * both runs have it; the outflow is not read below k (`impacted`).
  */
 async function catchmentSeries(db: Db, projectId: string, runId: string, runStart: string, baseRunId: string, baseStart: string, impacted: boolean) {
