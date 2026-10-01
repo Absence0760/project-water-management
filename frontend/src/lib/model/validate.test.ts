@@ -133,7 +133,7 @@ describe('validateModel', () => {
 			expect(messages(model([g, l, f, h], { transfers: [{ ...t, lossReturnPct: 0.5, lossReturnNodeId: at }] }))).toContain('Transfer 1: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.');
 	});
 
-	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {
+	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 1], seepage 0–100 % (N2)', () => {
 		const a = node('a', 'A', null);
 		a.damAreaFullM2 = null;
 		expect(messages(model([a]))).toEqual([]);
@@ -142,9 +142,15 @@ describe('validateModel', () => {
 		a.damSeepagePerDay = 2;
 		expect(messages(model([a]))).toEqual([
 			'"A": percentages must be between 0% and 100%.',
-			'"A": the dam area exponent must be above 0 and at most 3.',
+			'"A": the dam area exponent must be above 0 and at most 1.',
 			'"A": the dam area can\'t be negative.'
 		]);
+		// No basin has b > 1 (engine ≥ 1.61.0); 1 itself, a vertical-sided pan, is allowed.
+		const b = node('b', 'B', null);
+		b.damAreaExponent = 1;
+		expect(messages(model([b]))).toEqual([]);
+		b.damAreaExponent = 1.2;
+		expect(messages(model([b]))).toEqual(['"B": the dam area exponent must be above 0 and at most 1.']);
 	});
 
 	it('checks an other water user as the API does (WP-1.33)', () => {
