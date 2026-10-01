@@ -59,7 +59,7 @@
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
-		// A storage-only (21b) row registers no take: volume 0, surface water (137).
+		// A storage-only (21b) row registers no take: volume 0, surface water (142).
 		const volume = storageOnly ? 0 : parseNum(draft.volume);
 		const storage = draft.storage.trim() === '' ? null : parseNum(draft.storage);
 		if (volume === null || volume < 0) {

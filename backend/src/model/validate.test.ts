@@ -130,6 +130,19 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
 	});
 
+	it('a pump capacity on an other water user (engine 1.58.0): accepted, null by default, refused negative; a supply rule on it is refused', () => {
+		const out = node('Gauge', null);
+		const user = node('Town', out.id, { kind: 'user', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: Array(12).fill(500) });
+		const parse = (over: object) => ModelBody.safeParse({ nodes: [out, { ...user, ...over }], crops: [], cropAreas: [], transfers: [] });
+		expect(parse({}).data!.nodes[1]).toMatchObject({ kind: 'user', pumpCapacityM3Day: null });
+		const capped = parse({ pumpCapacityM3Day: 1200 });
+		expect(capped.data!.nodes[1]).toMatchObject({ pumpCapacityM3Day: 1200 });
+		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 1200 } as never]))).toEqual([]);
+		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 0 } as never]))).toEqual([]);
+		expect(parse({ pumpCapacityM3Day: -1 }).success).toBe(false);
+		expect(modelProblems(model([out, { ...user, supplyRule: 'riverFirst' } as never])).join()).toMatch(/"Town": only a farm has a supply rule; an other water user always takes from the river/);
+	});
+
 	it('hands-off flow and River to dam by month (engine 1.32.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });
@@ -351,6 +364,22 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.population).toBeNull();
 		expect(ModelBody.parse(body({ ...monthly, population: 2000 })).demandObjects![0]!.population).toBe(2000);
 		for (const population of [-1, Number.POSITIVE_INFINITY, 'many']) expect(ModelBody.safeParse(body({ ...monthly, population })).success, String(population)).toBe(false);
+	});
+
+	it('takes where an object’s number comes from (engine 1.56.0): not recorded by default, one of the four, sized as it says', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
+		const perUnit = { sizing: 'perUnit', count: 300, litresPerUnitDay: 230, category: 'domestic' };
+		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.source).toBeNull();
+		for (const [o, source] of [[monthly, 'meter'], [monthly, 'aadd'], [perUnit, 'perCapita'], [monthly, 'other'], [perUnit, 'other']] as const) {
+			const parsed = ModelBody.parse(body({ ...o, source }));
+			expect(parsed.demandObjects![0]!.source).toBe(source);
+			expect(modelProblems(parsed), source).toEqual([]);
+		}
+		for (const source of ['survey', 'Meter', 3, '']) expect(ModelBody.safeParse(body({ ...monthly, source })).success, String(source)).toBe(false);
+		// A meter record or an AADD is a volume; a per-capita norm is a count × litres.
+		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'meter' }))).join()).toMatch(/a meter record is a volume, so size it by month/);
+		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'aadd' }))).join()).toMatch(/an AADD is a volume/);
+		expect(modelProblems(ModelBody.parse(body({ ...monthly, source: 'perCapita' }))).join()).toMatch(/population × litres a day is sized per unit/);
 	});
 
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {

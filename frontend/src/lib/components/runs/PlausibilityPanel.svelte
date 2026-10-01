@@ -4,7 +4,8 @@
 	water year, EWR days by rain source, the double-mass check of observed flow
 	against rain, and the dry-season low-flow duration curves, overlaid with the
 	latest run of each other runoff model; from engine 1.19.0 the recession
-	diagnostics (RecessionDiagnostics.svelte). Part of the Runs tab's chunk (RunsTab.svelte).
+	diagnostics (RecessionDiagnostics.svelte); from engine 1.55.0 the validation
+	signatures (ValidationSignatures.svelte). Part of the Runs tab's chunk (RunsTab.svelte).
 -->
 <script lang="ts">
 	import type { LowFlowCurve, PlausibilityChecks } from '@water-management/engine';
@@ -14,6 +15,7 @@
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
 	import { detailCache } from './cache';
 	import RecessionDiagnostics from './RecessionDiagnostics.svelte';
+	import ValidationSignatures from './ValidationSignatures.svelte';
 	import { breakHint, curveLabel, findings, gaugeRow, lowFlowChart, otherModelRuns, seasonText, signedPct, type OtherCurves } from './plausibility';
 
 	let {
@@ -99,8 +101,8 @@
 		const i = lf?.points.indexOf(p) ?? -1;
 		return i >= 0 ? c.flowsM3s[i]! : null;
 	};
-	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth.
-	const checkCount = $derived(checks.recession === undefined ? 'Four' : 'Five');
+	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth, the validation signatures (engine 1.55.0) the sixth.
+	const checkCount = $derived(checks.recession === undefined ? 'Four' : checks.signatures === undefined ? 'Five' : 'Six');
 </script>
 
 <section aria-labelledby="{uid}-h">
@@ -328,6 +330,10 @@
 	{:else if checks.recession === null}
 		<h4>Recession diagnostics <HelpTip key="plausibility-recession" /></h4>
 		<p class="muted small">Not checked: needs an observed flow record and catchment rain.</p>
+	{/if}
+
+	{#if checks.signatures !== undefined}
+		<ValidationSignatures signatures={checks.signatures} />
 	{/if}
 
 	{#if gauges.length}

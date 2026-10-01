@@ -783,6 +783,11 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'PUT /projects/:id/alert-rules nodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: r.farm2Id, threshold: 0.3, enabled: true }] }),
 	'PUT /projects/:id/alert-rules feedId': (h, r) => dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'data_stale', feedId: r.feedId, threshold: 5, enabled: true }] }),
+	// A series takes a rule only once an API key writes it or it has one (141): give each project's series its rule first.
+	'PUT /projects/:id/alert-rules seriesId': async (h, r) => {
+		await asOwner(`INSERT INTO alert_rule (project_id, kind, series_id, threshold) VALUES ($1, 'data_stale', $2, 2) ON CONFLICT DO NOTHING`, [r.projectId, r.series.id]);
+		return dual.call('PUT', `/projects/${h.projectId}/alert-rules`, { rules: [{ kind: 'data_stale', seriesId: r.series.id, threshold: 3, enabled: true }] });
+	},
 	// Per-farm choices are a farmer's: the farmer of both, linked to "Farm" in each.
 	'PUT /me/alerts/:projectId nodeId': (h, r) => farmer.call('PUT', `/me/alerts/${h.projectId}`, { items: [{ kind: 'dam_below', nodeId: r.farmId, mode: 'immediate' }] }),
 	'POST /projects/:id/allocations nodeId': (h, r) =>
@@ -849,6 +854,7 @@ describe('through the routes, by an editor of both projects', () => {
 const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:nodeId': ['PUT /me/alerts/:projectId nodeId', 'PUT /projects/:id/alert-rules nodeId'],
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
+	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',

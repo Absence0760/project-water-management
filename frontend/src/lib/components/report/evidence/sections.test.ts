@@ -5,8 +5,25 @@ import type { EvidenceCheck } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { boardChecks, evidenceSections, refusedChecks, sectionHeading } from './sections';
 
+const none = { notAssessed: 'Not assessed', objects: [], bySource: [], demandM3Day: 0 };
+
 describe('evidenceSections', () => {
 	it('is the same fixed list for every application, whatever its data', () => {
+		expect(evidenceSections({ mode: 'application', demandObjects: none }).map((s) => s.id)).toEqual([
+			'summary',
+			'river',
+			'uncertainty',
+			'credibility',
+			'users',
+			'allocations',
+			'demandObjects',
+			'appendixInputs',
+			'appendixVerify',
+			'applicantStatement'
+		]);
+	});
+
+	it('an application’s pack drafted before evidence-9 has no § 6, and its sections are as they were', () => {
 		expect(evidenceSections({ mode: 'application' }).map((s) => s.id)).toEqual([
 			'summary',
 			'river',
@@ -20,18 +37,19 @@ describe('evidenceSections', () => {
 		]);
 	});
 
-	it('leaves out only the applicant’s statement for baseline evidence', () => {
-		expect(evidenceSections({ mode: 'baseline' }).map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'appendixInputs', 'appendixVerify']);
+	it('leaves out § 6 and the applicant’s statement for baseline evidence', () => {
+		expect(evidenceSections({ mode: 'baseline', demandObjects: null }).map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'appendixInputs', 'appendixVerify']);
 	});
 
 	it('numbers the sections and letters the appendices', () => {
-		expect(evidenceSections({ mode: 'application' }).map(sectionHeading)).toEqual([
+		expect(evidenceSections({ mode: 'application', demandObjects: none }).map(sectionHeading)).toEqual([
 			'Summary',
 			'1. The river',
 			'2. Uncertainty',
 			'3. Model and data',
 			'4. Other users',
 			'5. Registered water use',
+			'6. The applicant’s demand objects',
 			'Appendix A. Inputs and assumptions',
 			'Appendix B. Limitations, sign-off and verification',
 			'Appendix C. Applicant’s statement'

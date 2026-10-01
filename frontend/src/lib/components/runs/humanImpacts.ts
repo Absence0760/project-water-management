@@ -15,17 +15,20 @@ function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>) {
 		landCover: !!summary.landCover,
 		groundwater: [...farms, ...others].some((f) => f.avgGroundwaterM3Day !== undefined),
 		demandObjects: farms.some((f) => !!f.demandObjects?.length),
-		users: others.length > 0
+		users: others.length > 0,
+		// Other water users with a pump capacity (engine ≥ 1.58.0): their own table, drawn beside the curtailment table too.
+		userPumps: others.some((u) => u.avgPumpLimitedM3Day !== undefined)
 	};
 }
 
 /**
  * The run has any of the tables: land cover, boreholes (units or users), a
- * unit's demand objects, or, with `users`, other water users.
+ * unit's demand objects, other water users' pumps (engine ≥ 1.58.0), or,
+ * with `users`, other water users.
  */
 export function hasHumanImpacts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>, users = true): boolean {
 	const p = parts(summary);
-	return p.landCover || p.groundwater || p.demandObjects || (users && p.users);
+	return p.landCover || p.groundwater || p.demandObjects || p.userPumps || (users && p.users);
 }
 
 /**
@@ -44,7 +47,7 @@ export const usersTableOnSupply = (summary: Pick<RunSummary, 'curtailment'>): bo
 export function otherUsesLink(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'curtailment'>): { hash: 'res-other-uses' | 'res-curtailment'; what: string; where: string } | null {
 	const p = parts(summary);
 	const usersHere = usersTableOnSupply(summary);
-	const names = [p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.users && usersHere && 'other water users'].filter(
+	const names = [p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.users && usersHere && 'other water users', p.userPumps && 'other water users’ pumps'].filter(
 		(x): x is string => !!x
 	);
 	if (names.length) {

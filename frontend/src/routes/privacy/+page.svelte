@@ -165,8 +165,10 @@
 		<li>
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
 			as the project exists, as its audit trail. Deleting a project deletes them, except that a project that has put a run forward
-			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record. Model runs are pruned as a project goes on: its
-			newest 12 published results and 20 unpublished runs are kept.
+			as evidence or issued a licensing evidence pack can’t be deleted: it is kept as that licence record for the life of the
+			record (the licence or decision it supports, and any appeal or review of it), and then deleted when the organisation
+			responsible for the project confirms the record has closed. Model runs are pruned as a project goes on: its newest 12
+			published results and 20 unpublished runs are kept.
 		</li>
 		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>
 		<li>
@@ -176,15 +178,21 @@
 		</li>
 	</ul>
 	<p>
-		When your account is deleted, your name is removed from the project history (it reads “Deleted user”). A few things are kept
-		because they are the project’s record rather than yours: a note’s text, and a sign-off’s typed name and registration.
+		When your account is deleted, your name is removed from the project history (it reads “Deleted user”). What you made for a
+		project (the project itself, a team, model runs, a run put forward as evidence, uncertainty results, scenarios, a licence
+		application you submitted, an import) stays as the project’s record, with your name removed. It is never put in someone
+		else’s name. An uncertainty result you started and never finished, and a licence application still in draft, are deleted
+		with the account, unless the project already relies on the draft (for example, it has public comments).
 	</p>
 	<p>
-		<strong>One exception.</strong> If your account created something a project relies on as evidence (the project itself, a
-		model run, a scenario or licence application, an import, or a run put forward as evidence), we can’t simply delete the account,
-		because that would break the project’s record. We will then agree with you and the organisation responsible for the project
-		what happens to that record (for example, removing your name from it or handing it to a colleague) before the account is
-		deleted, and tell you how long that will take.
+		Two things keep your name, because they are a signature or a record handed to others: a sign-off’s typed name and
+		registration, and the names printed in an evidence pack (who made its runs and, for an application, who applied), which
+		can’t be changed without breaking the pack’s seal. Both are kept only as long as the project or licence record they belong to
+		(above).
+	</p>
+	<p>
+		If you are the only owner of a project or the only admin of a team, someone else needs to take that role before the account
+		is deleted; we will tell you if that applies, and you or the project’s other members can hand it over.
 	</p>
 
 	<h2 id="cookies">8. Cookies and your browser</h2>
@@ -220,7 +228,10 @@
 			everything we hold about you, as a file, straight away.
 		</li>
 		<li><strong>Correct it.</strong> You can change your name and settings on your account page; ask the project’s owner, or us, for anything else.</li>
-		<li><strong>Have it deleted.</strong> Email us from your account’s address and we will delete the account as described in section 7 (including its one exception).</li>
+		<li>
+			<strong>Have it deleted.</strong> Email us from your account’s address (or ask in any other way that suits you) and we will
+			delete the account as soon as we reasonably can, as described in section 7, and tell you what we did.
+		</li>
 		<li><strong>Object</strong> to our using it for a legitimate interest, or <strong>stop alert emails</strong> at any time from any alert email or your alert settings.</li>
 	</ul>
 	<p>

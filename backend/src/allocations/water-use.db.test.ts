@@ -1,10 +1,10 @@
-// The s21 water use (issue #72, 137_allocation_water_use.sql,
+// The s21 water use (issue #72, 142_allocation_water_use.sql,
 // docs/allocations.md § Importing): WARMS registers per water use, per
 // property, and a 21(b) row's "volume" is a dam's storage, not a take.
 //  - a WARMS-shaped extract's 21(b) rows store as storage only (volume 0,
 //    the storage), and its ambiguous rows (no code, two uses, another s21
 //    use, a missing or non-annual unit) are refused, not stored;
-//  - the API and 137's CHECK refuse a storage-only row with a take, no
+//  - the API and 142's CHECK refuse a storage-only row with a take, no
 //    storage, or groundwater;
 //  - a run's input marks a storage-only row and leaves a take as before;
 //  - the comparison counts the storage and never the 21(b) row as a take;
@@ -115,7 +115,7 @@ describe('a storage-only row typed in or changed', () => {
 		expect(ok.status, JSON.stringify(ok.body)).toBe(201);
 		expect(ok.body.allocation).toMatchObject({ waterUse: '21b', volumeM3PerYear: 0, storageM3: 25_000 });
 		damId = ok.body.allocation.id;
-		// A take typed in without a water use is a take, as before 137.
+		// A take typed in without a water use is a take, as before 142.
 		const take = await owner.call('POST', `/projects/${projectId}/allocations`, { nodeId: farmB.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 7_000 });
 		expect(take.body.allocation.waterUse).toBe('21a');
 	});
@@ -129,7 +129,7 @@ describe('a storage-only row typed in or changed', () => {
 		expect((await owner.call('PATCH', `/projects/${projectId}/allocations/${damId}`, { waterUse: '21b', volumeM3PerYear: 0 })).status).toBe(200);
 	});
 
-	it('137’s CHECK refuses one written past the API', async () => {
+	it('142’s CHECK refuses one written past the API', async () => {
 		await expect(
 			asOwner(`INSERT INTO allocation (project_id, authorisation, water_source, volume_m3_year, storage_m3, water_use) VALUES ($1, 'registration', 'surface', 10, 5, '21b')`, [projectId])
 		).rejects.toThrow(/allocation_storage_only_check/);
@@ -146,7 +146,7 @@ describe('runs and the comparison', () => {
 		runId = run.body.run.id;
 	}, 60_000);
 
-	it('a run’s input marks a storage-only row, and a take reads as before 137 (no waterUse)', async () => {
+	it('a run’s input marks a storage-only row, and a take reads as before 142 (no waterUse)', async () => {
 		const list = await withUser(owner.id, (db) => allocationsForRun(db, projectId));
 		const dams = list.filter((a) => a.waterUse === '21b');
 		expect(dams.length).toBe(3);

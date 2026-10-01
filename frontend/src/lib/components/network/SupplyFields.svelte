@@ -55,7 +55,8 @@
 			<span class="hint" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
 			<FieldHistoryLine field="node:{node.id}:supplyRule" {unit} />
 		</div>
-		{#if rule !== 'damFirst'}
+		<!-- An other water user's pump capacity is its own field, with its user fields (engine ≥ 1.58.0). -->
+		{#if rule !== 'damFirst' && node.kind !== 'user'}
 			{#if !readonly}
 				<div class="field">
 					<label for={id('pumps')}>Number of pumps</label>

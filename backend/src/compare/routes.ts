@@ -85,7 +85,7 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		        r.scenario_id AS "scenarioId", sc.name AS "scenarioName"
 		 FROM model_run r
 		 JOIN project p ON p.id = r.project_id
-		 JOIN app_user u ON u.id = r.created_by
+		 LEFT JOIN app_user u ON u.id = r.created_by
 		 LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 		 LEFT JOIN scenario sc ON sc.id = r.scenario_id
 		 WHERE r.project_id = $1 AND r.id = $2`,

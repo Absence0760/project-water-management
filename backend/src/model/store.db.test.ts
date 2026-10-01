@@ -102,8 +102,9 @@ describe('model store', () => {
 		});
 		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
 		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
-		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property).
-		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15' });
+		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property)
+		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
+		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091).
 		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0 });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
@@ -168,8 +169,10 @@ describe('model store', () => {
 					],
 					// The people it serves, for the basic-needs floor (engine 1.44.0, migration 127): more than its 1 200 stands.
 					population: 4100.5,
+					// Where its number comes from (engine 1.56.0, migration 139).
+					source: 'perCapita',
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -217,6 +220,8 @@ describe('model store', () => {
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
 		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).
 		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
+		// Migration 134's CHECK keeps the source in the list below the API's own check (engine 1.56.0).
+		await expect(asOwner('UPDATE demand_object SET source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'survey'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_source_known' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});

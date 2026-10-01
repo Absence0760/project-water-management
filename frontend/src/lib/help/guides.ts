@@ -168,7 +168,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
+						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were. The **Node table** and **Planted areas** also take a block copied from a spreadsheet: paste it into any cell, or use **Paste from a spreadsheet…** under the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. A preview lists every value it would change before **Apply**, and nothing is kept until you save.'
 					},
 					{
 						type: 'note',
@@ -217,6 +217,15 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'p',
 						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A b023 workbook becomes one project; an administrator can import one with the workbook importer.'
+					}
+				]
+			},
+			{
+				heading: 'Start from an example',
+				blocks: [
+					{
+						type: 'p',
+						text: 'To look round a finished model before building your own, press **Start from an example** on the Projects page while you have no projects. It makes an invented winter-rainfall catchment your own project (four hydrological units, fruit farms with dams, two transfers, a calibrated runoff model and 15 years of made-up rainfall), runs it and opens that run on **Runs & results**. Every name and number in it is made up. Change it as you like, and delete it from its row’s **⋯** menu when you’re done.'
 					}
 				]
 			},
@@ -354,7 +363,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'Crop factors multiply **A-pan** evaporation, not FAO reference ET₀. A published FAO-56 Kc overstates demand by about a quarter unless you first multiply it by the pan coefficient (0.7–0.85).'
+						text: 'Crop factors multiply **A-pan** evaporation, not FAO reference ET₀. A published FAO-56 Kc overstates demand by about 18–67 % (a third at a pan coefficient of 0.75) unless you first multiply it by the pan coefficient (usually 0.60–0.85).'
 					}
 				]
 			},
@@ -375,7 +384,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library, a b023 workbook or a node-based workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
@@ -576,6 +585,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
+							'To see what the change does first, press **Preview** beside **Save settings**: the last run against the same run with your unsaved change, worked out in your browser (KGE, NSE, PBIAS and supply). Nothing is saved and no run is made.',
 							'Save and run.',
 							'On the run, read the **Hydrograph** (observed flow against simulated outflow) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
 							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',

@@ -1,9 +1,41 @@
 <script lang="ts">
-	// First-run empty state for the project list: what a project is and the
-	// three steps from nothing to a model run.
+	// First-run empty state for the project list: what a project is, the
+	// three steps from nothing to a model run, and an invented example
+	// catchment to start from instead (issue #286, example.ts).
+	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { api } from '$lib/api';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
+	import { loadExample, startFromExample, type ExampleFailure } from './example';
 
 	let { oncreate, hasTeams }: { oncreate: () => void; hasTeams: boolean } = $props();
+
+	let starting = $state(false);
+	let failure = $state<ExampleFailure | null>(null);
+	/** Created, but its run failed: say so here, with the way in, rather than open a project with no run. */
+	let unrun = $state<{ path: string; runError: string } | null>(null);
+	const prefetchExample = () => prefetch(loadExample);
+	// A user who left the list while the import ran isn't pulled into the project when it lands.
+	let gone = false;
+	onDestroy(() => (gone = true));
+
+	async function startExample() {
+		// Not `disabled` while busy: that would drop focus to the page.
+		if (starting) return;
+		starting = true;
+		failure = null;
+		unrun = null;
+		try {
+			const r = await startFromExample((file, opts) => api.projects.importProject(file, opts));
+			if (!r.ok) failure = r;
+			else if (r.runError) unrun = { path: r.path, runError: r.runError };
+			else if (!gone) await goto(`${base}${r.path}`);
+		} finally {
+			starting = false;
+		}
+	}
 </script>
 
 <section class="start" aria-labelledby="start-h">
@@ -49,6 +81,36 @@
 			{/if}
 		</span>
 	</div>
+	<div class="example">
+		<div>
+			<h3>Or try an example first</h3>
+			<p>
+				A finished model of an invented winter-rainfall catchment: four hydrological units (fruit farms) with dams, two transfers, a calibrated runoff
+				model and 15 years of made-up rainfall, already run. It becomes your own project, so change it freely and delete
+				it when you’re done.
+			</p>
+		</div>
+		<button
+			type="button"
+			class="btn"
+			aria-busy={starting ? 'true' : undefined}
+			onpointerenter={prefetchExample}
+			onfocus={prefetchExample}
+			onclick={startExample}>{starting ? 'Setting up the example…' : 'Start from an example'}</button
+		>
+	</div>
+	{#if failure?.kind === 'chunk'}
+		<ChunkFailed what="The example" />
+	{:else if failure?.kind === 'import'}
+		<div class="alert alert-error" role="alert">
+			Couldn’t create the example: {failure.error instanceof Error ? failure.error.message : String(failure.error)}
+		</div>
+	{:else if unrun}
+		<div class="alert alert-warning" role="alert">
+			The example was created, but the model didn’t run: {unrun.runError}.
+			<a href="{base}{unrun.path}">Open the example</a> and run it from Runs &amp; results.
+		</div>
+	{/if}
 </section>
 
 <style>
@@ -118,12 +180,40 @@
 	.cta a {
 		text-decoration: underline;
 	}
+	.example {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1.25rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--border);
+	}
+	.example h3 {
+		margin: 0 0 0.25rem;
+	}
+	.example p {
+		margin: 0;
+		max-width: 70ch;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.example .btn {
+		flex: none;
+	}
+	.alert {
+		margin: 1rem 0 0;
+	}
 	@media (max-width: 760px) {
 		.start {
 			padding: 1rem;
 		}
 		.steps {
 			grid-template-columns: minmax(0, 1fr);
+		}
+		.example {
+			flex-direction: column;
+			align-items: flex-start;
 		}
 	}
 </style>

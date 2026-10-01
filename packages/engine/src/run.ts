@@ -37,7 +37,7 @@ import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './n
 import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
-import { operatingOf, supplyOf } from './network/supply';
+import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -65,6 +65,7 @@ import {
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
@@ -436,6 +437,8 @@ function runNetwork(
 	// snapshot's day, this input has none before its start) can't judge the suspect class, which reads the whole
 	// record: it leaves the class out and says so, rather than flag other days than the uninterrupted run.
 	let outletFlowFlags: Uint8Array | null = null;
+	// The scored record's classes, wherever it is: the validation signatures' recession segments leave its flagged days out.
+	let scoredFlowFlags: Uint8Array | null = null;
 	let flowRecordHistory = false;
 	if (calKind) {
 		const siteId = calSite?.nodeId ?? null;
@@ -461,6 +464,7 @@ function runNetwork(
 		if (kept || hasFlaggedDay(flags)) push(siteId, FLOW_QUALITY_COLUMN.key, FLOW_QUALITY_COLUMN.label, FLOW_QUALITY_COLUMN.unit, flags);
 		// At the outlet these are the outlet record's flags, which the plausibility checks read too.
 		if (siteId === null) outletFlowFlags = flags;
+		scoredFlowFlags = flags;
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
@@ -580,7 +584,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -661,8 +665,11 @@ function runNetwork(
 		// Under the 'own' basis (engine ≥ 1.54.0) each unit's own level, beside its restricted demand.
 		const ul = sim.restrictionUnitLevel?.[i];
 		if (ul) push(node.id, RESTRICTION_SERIES.level.key, RESTRICTION_SERIES.unitLabel, RESTRICTION_SERIES.level.unit, ul);
+		// An other water user's pump (engine ≥ 1.58.0): the demand it left unmet. Its river take is supplied − groundwater_used,
+		// so it has no river_abstraction series: that key means a farm's river pump, 0 where there is none (run comparison fills it).
+		if (r.pumpLimited) push(node.id, 'pump_limited', 'Demand the pump capacity left unmet (the river had it)', 'm³/day', r.pumpLimited);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
-		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
+		else if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
@@ -781,7 +788,8 @@ function runNetwork(
 			avgReturnedM3Day: mean(r.userReturn),
 			avgEwrChargeM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
-			...groundwaterMeans(plan.nodes[i]!, r)
+			...groundwaterMeans(plan.nodes[i]!, r),
+			...(r.pumpLimited ? pumpMeans(r.riverAbstraction!, r.pumpLimited, mean) : {})
 		});
 	});
 
@@ -945,7 +953,12 @@ function runNetwork(
 		outflow: topo.outflow,
 		upstream: topo.upstream,
 		flowFill,
-		outletFlowFlags
+		outletFlowFlags,
+		// The scored record (engine ≥ 1.55.0): the validation signatures follow the calibration site.
+		scored:
+			calKind && scoredFlowFlags
+				? { kind: calKind, observedM3s: calObserved, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -1125,6 +1138,18 @@ function runPlausibility(r: {
 	flowFill?: PreparedRun['flowFill'];
 	/** The outlet record's flags when the run already computed them (the quality column at the outlet), else null. */
 	outletFlowFlags?: Uint8Array | null;
+	/**
+	 * The record the run's calibration statistics score (engine ≥ 1.55.0): the calibration site's or the
+	 * outlet's, the simulated outflow there (m³/day) and its per-day classes (recordFlowFlags, the
+	 * `observed_flow_quality` column's); null without an observed record.
+	 */
+	scored?: {
+		kind: CalibrationFlowKind;
+		observedM3s: (number | null)[];
+		simulatedM3Day: ArrayLike<number>;
+		flags: Uint8Array;
+		site: { nodeId: string; name: string } | null;
+	} | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -1161,6 +1186,10 @@ function runPlausibility(r: {
 	const flowFlagged = kind
 		? flaggedDayMask(r.outletFlowFlags ?? recordFlowFlags({ kind, series: series[kind], start, days, settings, siteNodeId: null, flowFill: r.flowFill }))
 		: null;
+	// The scored record's flagged days (engine ≥ 1.55.0), for the validation signatures' recession segments: the
+	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
+	const sc = r.scored;
+	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -1183,7 +1212,16 @@ function runPlausibility(r: {
 		reserve: r.reserve,
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
-		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
+		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {}),
+		scored: sc
+			? {
+					flowKind: sc.kind,
+					site: sc.site,
+					observedM3s: sc.observedM3s,
+					simulatedM3Day: sc.simulatedM3Day,
+					segmentMask: scoredFlagged ? Uint8Array.from(excluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : excluded
+				}
+			: null
 	});
 }
 
@@ -1480,7 +1518,7 @@ export function buildNetworkPlan(
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
 				soilWater: demand[i]!.soilWater,
-				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
+				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed, ...(u.pump !== undefined ? { userPumpM3Day: u.pump } : {}) } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings),
 				...operatingOf(n, warnings),
@@ -1772,6 +1810,7 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			id,
 			name: o.name,
 			category: o.category,
+			...(o.source && (DEMAND_OBJECT_SOURCES as readonly string[]).includes(o.source) ? { source: o.source } : {}),
 			priority: o.priority,
 			destination: o.destination,
 			avgDemandM3Day: avgDemand,
@@ -1804,6 +1843,8 @@ interface OtherUser {
 	returnPct: number;
 	senior: boolean;
 	claimed: boolean;
+	/** Its river pump capacity, m³/day (engine ≥ 1.58.0); absent = no limit. */
+	pump?: number;
 }
 
 function otherUsers(
@@ -1841,6 +1882,7 @@ function otherUsers(
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
 		const senior = (n.userPriority ?? 'senior') !== 'junior';
+		const { userPumpM3Day: pump } = userPumpOf(n, warnings);
 		let claimed = false;
 		if (senior && demand.some((v) => v > 0)) {
 			// Farms upstream of the user, and their flow shares.
@@ -1859,13 +1901,15 @@ function otherUsers(
 				for (const j of up) {
 					const c = (claims[j] ??= new Float64Array(days));
 					const f = share[j]! / total;
-					for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
+					// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
+					if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
+					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
 				}
 			} else {
 				warnings.push(`senior user "${n.name}" has no farm with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
-		byNode.set(i, { demand, returnPct, senior, claimed });
+		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
 	}
 	return { byNode, claims };
 }
@@ -2395,6 +2439,17 @@ export function resolveReportWindow(
 		b = Math.min(b, runEnd);
 	}
 	return { from: a - runStart, to: b - runStart, reportStart: fromEpochDay(a), reportEnd: fromEpochDay(b) };
+}
+
+/**
+ * An other water user's pump over the run (engine ≥ 1.58.0): the mean river
+ * take and the mean demand the pump left unmet, and the days it did (more
+ * than float noise of the day's take).
+ */
+function pumpMeans(river: Float64Array, limited: Float64Array, mean: (a: ArrayLike<number>) => number): Pick<UserSummary, 'avgRiverAbstractionM3Day' | 'avgPumpLimitedM3Day' | 'daysPumpLimited'> {
+	let days = 0;
+	for (let t = 0; t < limited.length; t++) if (limited[t]! > 1e-9 * Math.max(1, river[t]!)) days++;
+	return { avgRiverAbstractionM3Day: mean(river), avgPumpLimitedM3Day: mean(limited), daysPumpLimited: days };
 }
 
 /** Series labels that read differently on an other water user (WP-1.33). */

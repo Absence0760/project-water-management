@@ -229,14 +229,46 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-8');
+		expect(manifest.report.version).toBe('evidence-9');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
 		expect(manifest.report.licenceImpact).toEqual(live.licenceImpact);
 		// § 1's paired FDC change (evidence-7) freezes with it, whatever it holds for this run.
 		expect(manifest.report.river.map((s) => s.fdcChange)).toEqual(live.river.map((s: { fdcChange?: unknown }) => s.fdcChange));
+		// § 6 the applicant's demand objects (evidence-9) freezes with it too.
+		expect(manifest.report.demandObjects).toEqual(live.demandObjects);
+		expect(manifest.report.demandObjects?.notAssessed).toMatch(/^Not assessed/);
 		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+	});
+
+	it('still matches a pack drafted before evidence-9 to its hash: its stored manifest has no § 6, and nothing rebuilds it', async () => {
+		// A draft of today's report, deleted again, lends its manifest to the evidence-8 pack stored below.
+		const p = await draft(editor, appRun);
+		const read0 = (await editor.call('GET', packPath(p.id))).body;
+		const now = read0.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		// The pack as an evidence-8 draft froze it: the same report without demandObjects, under its own id and hash.
+		const id = crypto.randomUUID();
+		const { demandObjects: _, ...report } = now.report;
+		const old = { ...now, pack: { ...now.pack, id }, report: { ...report, version: 'evidence-8' } } as unknown as PackManifest;
+		const hash = sha256(packManifestText(old));
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-8', $8, $9)`,
+			[id, projectId, baseRun, read0.pack.scenarioId, appRun, JSON.stringify(old), hash, now.engine.version, editor.id]
+		);
+		try {
+			const read = (await viewer.call('GET', packPath(id))).body;
+			expect(read.manifestMatches).toBe(true);
+			expect(read.pack.manifestSha256).toBe(hash);
+			expect(read.manifest.report.version).toBe('evidence-8');
+			expect('demandObjects' in read.manifest.report).toBe(false);
+			// Positive control: the live report has § 6.
+			expect((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.demandObjects).not.toBeUndefined();
+		} finally {
+			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		}
 	});
 
 	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-8)', async () => {

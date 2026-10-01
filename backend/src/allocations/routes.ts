@@ -10,11 +10,12 @@
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
 import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations } from '@water-management/engine';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
-import { attachment, collectCsv, csvRow, exportFilename } from '../export/csv.js';
+import { csvRow, exportFilename } from '../export/csv.js';
+import { csvDownload } from '../export/download.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -83,7 +84,7 @@ const FIELDS = {
 		.nullable(),
 	maxRateM3s: z.number().finite().min(0).lt(1e6).nullable(),
 	conditions: z.array(text(CONDITION_MAX_CHARS).pipe(z.string().min(1, 'a condition is empty'))).max(CONDITIONS_MAX, `at most ${CONDITIONS_MAX} conditions`),
-	/** The s21 water use (137, issue #72): 21a a take, 21b a dam's storage only (volume 0, a storage, surface). */
+	/** The s21 water use (142, issue #72): 21a a take, 21b a dam's storage only (volume 0, a storage, surface). */
 	waterUse: z.enum(WATER_USES as [string, ...string[]])
 };
 /**
@@ -188,7 +189,7 @@ export interface AllocationRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
-	/** The s21 water use (137): '21b' = a dam's storage only, never a take. */
+	/** The s21 water use (142): '21b' = a dam's storage only, never a take. */
 	waterUse: '21a' | '21b';
 	createdAt: string;
 	updatedAt: string;
@@ -306,14 +307,6 @@ async function prepareImport(db: Db, projectId: string, body: z.infer<typeof Imp
 			unmatched: valid.filter((r) => r.nodeId === null).length
 		}
 	};
-}
-
-function csvResponse(c: Context, body: string, filename: string) {
-	return c.body(body, 200, {
-		'Content-Type': 'text/csv; charset=utf-8',
-		'Content-Disposition': attachment(filename),
-		'Cache-Control': 'no-store'
-	});
 }
 
 export const allocationRoutes = new Hono<AuthEnv>()
@@ -554,9 +547,12 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					]);
 				})
 			];
-			const body = collectCsv(lines);
-			if (body === null) throw new ApiError(413, 'the allocations export is too large');
-			return csvResponse(c, body, exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE));
+			return csvDownload(
+				c,
+				() => lines,
+				exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE),
+				new ApiError(413, 'the allocations export is too large')
+			);
 		});
 	})
 	// A run's modelled use against the registered volumes, per farm or water

@@ -228,7 +228,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-8');
+		expect(r.version).toBe('evidence-9');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -378,5 +378,68 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 			expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { outcomes: { yearClassMethod: 'auto' } } })).status).toBe(200);
 		}
 		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).licenceImpact).toBeNull();
+	});
+});
+
+describe('§ 6 the applicant’s demand objects and their sources (evidence-9)', () => {
+	it('lists what the application adds on the applicant’s unit, with its source and note as the run stored them, and flags the unmetered share', async () => {
+		// The dam application has no demand object: § 6 is there, and says so.
+		const dam = (await report(viewer, appRun)).body.report as EvidenceReport;
+		expect(dam.demandObjects?.notAssessed).toMatch(/^Not assessed: no demand object is on the applicant’s units/);
+		expect(dam.flags.some((f) => f.id === 'demandSource')).toBe(false);
+		// Baseline evidence has no applicant, so no § 6.
+		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).demandObjects).toBeNull();
+
+		const object = (name: string, over: Record<string, unknown>) => ({
+			id: crypto.randomUUID(),
+			nodeId: farmId,
+			name,
+			category: 'domestic',
+			sizing: 'monthly',
+			monthlyM3Day: monthly(30),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0,
+			priority: 'first',
+			destination: 'internal',
+			enabled: true,
+			...over
+		});
+		const metered = object('Staff housing', { source: 'meter', note: 'Meter M-12, 2024–25 readings' });
+		const village = object('Labour village', { sizing: 'perUnit', monthlyM3Day: null, count: 300, litresPerUnitDay: 230 });
+		const created = await owner.call('POST', `/projects/${projectId}/scenarios`, {
+			name: 'Upper housing',
+			baseRunId: baseRun,
+			ops: [
+				{ op: 'demandObject.add', demandObject: metered },
+				{ op: 'demandObject.add', demandObject: village }
+			],
+			ownedNodeIds: [farmId]
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const ran = await owner.call('POST', `/projects/${projectId}/scenarios/${created.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		const runId = ran.body.run.id as string;
+
+		const r = (await report(viewer, runId)).body.report as EvidenceReport;
+		expect(r.version).toBe('evidence-9');
+		const d = r.demandObjects!;
+		expect(d.notAssessed).toBeNull();
+		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([
+			['Staff housing', 'Upper', 'added', 'meter', 'Meter M-12, 2024–25 readings'],
+			['Labour village', 'Upper', 'added', null, '']
+		]);
+		expect(d.objects[1]).toMatchObject({ sizing: 'perUnit', count: 300, litresPerUnitDay: 230, demandA: null });
+		// The same demand as the run's own demand-objects table (G14).
+		const run = (await viewer.call('GET', runPath(runId))).body.run;
+		const table = run.summary.farms.flatMap((f: { demandObjects?: { id: string; avgDemandM3Day: number }[] }) => f.demandObjects ?? []);
+		for (const o of d.objects) expect(o.demandB).toBe(table.find((x: { id: string }) => x.id === o.id).avgDemandM3Day);
+		// 30 m³/day metered against 69 m³/day not recorded: most of it isn't metered, and the missing source is a question.
+		expect(d.bySource.map((s) => s.source)).toEqual(['meter', null]);
+		expect(d.bySource[0]!.share).toBeCloseTo(30 / 99, 6);
+		expect(r.flags.find((f) => f.id === 'demandSource')?.text).toBe('Most of the applicant’s demand objects’ demand isn’t from meter records: 30 % is, and 70 % has no source recorded (§ 6).');
+		expect(r.questions.some((q) => q.startsWith('1 of the applicant’s demand objects has no source recorded (§ 6)'))).toBe(true);
 	});
 });

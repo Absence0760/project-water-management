@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
+import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
@@ -72,6 +72,21 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): a number ≥ 0, or none.
 		if (o.population !== null && o.population !== undefined && !(typeof o.population === 'number' && Number.isFinite(o.population) && o.population >= 0))
 			add(`doPopulation:${o.id}`, `demand object "${o.name}": the people it serves must be a number ≥ 0`);
+		// Where its number comes from (engine ≥ 1.56.0): one of the sources, sized the way that source gives a volume.
+		if (o.source !== null && o.source !== undefined) {
+			if (!(DEMAND_OBJECT_SOURCES as readonly unknown[]).includes(o.source))
+				add(`doSource:${o.id}`, `demand object "${o.name}": its source must be one of ${DEMAND_OBJECT_SOURCES.join(', ')}`);
+			else {
+				const sizing = DEMAND_OBJECT_SOURCE_SIZING[o.source];
+				if (sizing !== null && o.sizing !== sizing)
+					add(
+						`doSourceSizing:${o.id}`,
+						sizing === 'monthly'
+							? `demand object "${o.name}": ${o.source === 'meter' ? 'a meter record' : 'an AADD'} is a volume, so size it by month (m³/day)`
+							: `demand object "${o.name}": a demand from population × litres a day is sized per unit (a count and litres per unit per day)`
+					);
+			}
+		}
 		// Its schedule (engine ≥ 1.17.0): each window runs as entered, and not too many of them.
 		if (Array.isArray(o.schedule)) {
 			if (o.schedule.length > DEMAND_SCHEDULE_MAX_WINDOWS) add(`doScheduleCount:${o.id}`, `demand object "${o.name}": its schedule has ${o.schedule.length} windows, at most ${DEMAND_SCHEDULE_MAX_WINDOWS}`);
@@ -94,9 +109,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			else if (n.kind !== 'gauge') add(`ewrSiteKind:${n.id}`, `"${n.name}": only a gauge can be taken off the EWR sites`);
 		}
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
+		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';
-		if (n.kind !== 'farm' && (supply !== 'damFirst' || (n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined)))
-			add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
+		const hasPump = n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined;
+		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule; an other water user always takes from the river, up to its pump capacity`);
+		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))

@@ -21,6 +21,8 @@ describe('hasHumanImpacts', () => {
 	it('leaves other users out when asked, but not a user’s borehole (issue #137)', () => {
 		expect(hasHumanImpacts({ farms: [], users: [user()] }, false)).toBe(false);
 		expect(hasHumanImpacts({ farms: [], users: [user({ avgGroundwaterM3Day: 10 })] }, false)).toBe(true);
+		// Nor a user's pump (engine 1.58.0): the curtailment table has no pump columns.
+		expect(hasHumanImpacts({ farms: [], users: [user({ avgPumpLimitedM3Day: 0 })] }, false)).toBe(true);
 	});
 });
 
@@ -57,6 +59,12 @@ describe('otherUsesLink', () => {
 			hash: 'res-curtailment',
 			what: 'Other water users',
 			where: 'the curtailment targets on Units & supply'
+		});
+		// A user's pump (engine 1.58.0) has its own table in Other uses.
+		expect(otherUsesLink({ farms: [], users: [user({ avgPumpLimitedM3Day: 3 })], curtailment: listed })).toEqual({
+			hash: 'res-other-uses',
+			what: 'Other water users’ pumps',
+			where: 'Other uses on Units & supply'
 		});
 	});
 });

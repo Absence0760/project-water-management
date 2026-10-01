@@ -20,6 +20,7 @@ import {
 	DEMAND_OBJECT_DESTINATIONS,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
 	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
@@ -186,6 +187,8 @@ const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Da
 const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+/** An other water user's river pump (engine ≥ 1.58.0, WP-3.8, docs/model.md §2.7c): the farm's field, without a supply rule. */
+const USER_PUMP = ['pumpCapacityM3Day'] as const;
 /**
  * How a farm takes its water (engine ≥ 0.42.0, WP-3.8, docs/model.md §2.7e):
  * the supply rule, the river pump and the trigger rule's two dam levels.
@@ -210,7 +213,7 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  */
 export const NODE_SET_FIELDS = {
 	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
-	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
+	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 
@@ -739,6 +742,7 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'enabled',
 	'schedule',
 	'population',
+	'source',
 	'note'
 ] as const;
 export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
@@ -796,6 +800,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	schedule: demandSchedule,
 	// The people it serves, for the basic-needs floor (engine ≥ 1.44.0); null = a per-person object's count.
 	population: nullable(nonNeg),
+	// Where its number comes from (engine ≥ 1.56.0); null = not recorded. Its fit with the sizing is a model rule.
+	source: nullable(oneOf(DEMAND_OBJECT_SOURCES)),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
 
@@ -812,8 +818,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no population (its count), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its

@@ -24,7 +24,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Authorisation | `registration` (WARMS, GN R1352 of 1999), `licence` (s40), `general_authorisation` (s39, e.g. GN 538), `schedule_1` (Schedule 1 permissible use, s22(1)(a)(i); 136), `existing_lawful_use_claimed` (s32, claimed or registered, not verified; 136), `existing_lawful_use` (s32, verified under s35). A registration is not an entitlement and doesn't confirm lawfulness; only s35 verification does ([DWS verification guide](https://www.dws.gov.za/WAR/documents/VerificationGuideDec06.pdf), issue #281) |
 | Purpose | `irrigation`, `domestic`, `livestock`, `industry`, `mining`, `municipal`, `other` |
 | Water source | `surface` or `groundwater` |
-| Water use | the NWA s21 water use (137, issue #72): `21a` taking water (the default) or `21b` storing water. A `21b` row is a dam's registered storage only: volume 0, a storage, surface water; it is never compared, capped or scaled as a take (engine 1.59.0) |
+| Water use | the NWA s21 water use (142, issue #72): `21a` taking water (the default) or `21b` storing water. A `21b` row is a dam's registered storage only: volume 0, a storage, surface water; it is never compared, capped or scaled as a take (engine 1.59.0) |
 | Volume | m³ per year, ≥ 0 (0 on a `21b` row) |
 | Storage | registered storage (s21b), m³; optional on a take, required on a `21b` row |
 | Valid from / to | inclusive ISO dates; either may be open |

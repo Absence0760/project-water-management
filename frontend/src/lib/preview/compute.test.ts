@@ -7,10 +7,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyScenario, firmYield, prepareYield, type ModelInput, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, compareRuns, firmYield, prepareYield, runModelWithoutChecks, SUPPLY_TARGET, type ModelInput, type ScenarioOp } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handle, parseMessage, previewYield } from './compute';
+import { forgetBase, handle, parseMessage, previewEffect, previewYield } from './compute';
 import type { FromWorker, ToWorker } from './messages';
 
 /** A random catchment (engine fuzz) with a dam on a farm: the input and that farm's id. */
@@ -95,7 +95,8 @@ describe('parseMessage: the worker message is checked at the boundary', () => {
 		m.request.ops = [{ op: 'node.set', nodeId, field: 'damCapacityM3', value: 1000, extra: 'dropped' }];
 		const r = parseMessage(m);
 		expect(r.ok).toBe(true);
-		if (r.ok) expect(r.msg.request.ops).toEqual([{ op: 'node.set', nodeId, field: 'damCapacityM3', value: 1000 }]);
+		expect(r.ok && r.msg.type).toBe('yield');
+		if (r.ok && r.msg.type === 'yield') expect(r.msg.request.ops).toEqual([{ op: 'node.set', nodeId, field: 'damCapacityM3', value: 1000 }]);
 	});
 
 	it('ignores what is not a preview request (no id to answer)', () => {
@@ -158,6 +159,90 @@ describe('parseMessage: the worker message is checked at the boundary', () => {
 		m.request.ops = [{ op: 'transfer.set', transferId: 't', field: '__proto__', value: {} }];
 		expect(handle(m)).toEqual({ type: 'error', id: 5, message: expect.stringMatching(/is not a transfer field a scenario can set/) });
 		expect(handle({ type: 'run' })).toBeNull();
+	});
+});
+
+/** A random catchment (engine fuzz) the model runs, with planted crops: the input, and it with every planted area tripled. */
+function withCrops(): { base: ModelInput; edited: ModelInput } {
+	for (let seed = 1; seed < 200; seed++) {
+		const base = randomInput(seed, { maxNodes: 6, maxDays: 400 });
+		if (!base.model.cropAreas.some((a) => a.areaM2 > 0)) continue;
+		try {
+			runModelWithoutChecks(base);
+		} catch {
+			continue;
+		}
+		const edited: ModelInput = JSON.parse(JSON.stringify(base));
+		for (const a of edited.model.cropAreas) a.areaM2 *= 3;
+		return { base, edited };
+	}
+	throw new Error('no fuzz seed with crops');
+}
+
+describe('previewEffect: what unsaved edits do to the last run (issue #284)', () => {
+	afterEach(forgetBase);
+
+	it("reads the two runs as compareRuns does, exactly (it keeps its own copy of compareRuns' sums)", () => {
+		const { base, edited } = withCrops();
+		const c = compareRuns(runModelWithoutChecks(base), runModelWithoutChecks(edited));
+		const e = previewEffect({ baseKey: 'p/r', base, edited });
+		expect(e.totals).toEqual(c.totals);
+		expect(e.catchment).toEqual({ meanNaturalFlowM3Day: c.catchment.meanNaturalFlowM3Day, meanSimulatedOutflowM3Day: c.catchment.meanSimulatedOutflowM3Day, ewrDaysNotMet: c.catchment.ewrDaysNotMet });
+		expect(e.calibration).toEqual(c.calibration ? { nse: c.calibration.nse, kge: c.calibration.kge, pbias: c.calibration.pbias } : null);
+		// compute.ts counts units below 95 % supplied without importing the engine's constant.
+		expect(SUPPLY_TARGET).toBe(0.95);
+		expect(e.totals.demandM3Day.delta).toBeGreaterThan(0);
+		// Every unit with a moved figure is listed, the largest change in supply first.
+		const moved = c.farms.filter((f) => Math.abs(f.fractionSupplied.delta ?? 0) > 1e-9 || Math.abs(f.deficitM3Day.delta ?? 0) > 1e-6);
+		expect(e.units.map((u) => u.name).sort()).toEqual(moved.map((f) => f.name).sort());
+		const steps = e.units.map((u) => Math.abs(u.fractionSupplied.delta ?? 0));
+		expect(steps).toEqual([...steps].sort((a, b) => b - a));
+	});
+
+	it('moves nothing when the edits change nothing', () => {
+		const { base } = withCrops();
+		const e = previewEffect({ baseKey: 'p/r', base, edited: JSON.parse(JSON.stringify(base)) });
+		expect(e.totals.demandM3Day.delta).toBe(0);
+		expect(e.units).toEqual([]);
+		expect(e.addedUnits).toEqual([]);
+		expect(e.removedUnits).toEqual([]);
+	});
+
+	it("runs the last run's input once for previews of the same run", () => {
+		const { base, edited } = withCrops();
+		const first = previewEffect({ baseKey: 'p/r', base, edited });
+		// The same key: the kept output, not this (different) input's.
+		const again = previewEffect({ baseKey: 'p/r', base: edited, edited });
+		expect(again.totals.demandM3Day.a).toBe(first.totals.demandM3Day.a);
+		// Another run: worked out afresh.
+		expect(previewEffect({ baseKey: 'p/other', base: edited, edited }).totals.demandM3Day.delta).toBe(0);
+	});
+
+	it("words the engine's refusal of the edited input", () => {
+		const { base } = withCrops();
+		const edited: ModelInput = JSON.parse(JSON.stringify(base));
+		edited.model.nodes[0]!.downstreamNodeId = 'no-such-node';
+		expect(() => previewEffect({ baseKey: 'p/r', base, edited })).toThrow(/^the model can't run with these edits: /);
+	});
+
+	it('handle answers an effect request with its id', () => {
+		const { base, edited } = withCrops();
+		const m = handle({ type: 'effect', id: 9, request: { baseKey: 'p/r', base, edited } });
+		expect(m?.type).toBe('effect-done');
+		expect(m?.id).toBe(9);
+	});
+
+	it('parseMessage refuses a malformed effect request, with its id', () => {
+		const { base, edited } = withCrops();
+		const bad = (request: unknown) => {
+			const r = parseMessage({ type: 'effect', id: 2, request });
+			expect(r.ok).toBe(false);
+			return (r as { id: number; message: string }).message;
+		};
+		expect(bad({ baseKey: 'k', base, edited, input: base })).toMatch(/unknown request field/);
+		expect(bad({ baseKey: '', base, edited })).toMatch(/baseKey/);
+		expect(bad({ baseKey: 'k', base: null, edited })).toMatch(/base must be a run input/);
+		expect(bad({ baseKey: 'k', base, edited: { ...edited, model: { ...edited.model, crops: 1 } } })).toMatch(/edited\.model\.crops must be a list/);
 	});
 });
 

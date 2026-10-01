@@ -39,7 +39,7 @@ export interface ScenarioRow {
 	ownedNodeIds: string[];
 	/** Names of the nodes and crops the ops name, kept from the base run's snapshot when the ops were written (047_scenario_op_names). */
 	opNames: OpName[];
-	ownerUserId: string;
+	ownerUserId: string | null;
 	owner: string | null;
 	status: ScenarioStatus;
 	/** 'team': a modelling scenario (WP-3.2). 'applicant': an application by a contributor (WP-3.3, 045_contributor_scope). */
@@ -86,7 +86,7 @@ export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
 	(SELECT count(*)::int FROM app_scenario_run_meta(s.project_id, s.id)) AS "runCount",
 	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM app_scenario_run_meta(s.project_id, s.id) r
 	 ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"
-	FROM scenario s JOIN app_user u ON u.id = s.owner_user_id LEFT JOIN app_user du ON du.id = s.decided_by`;
+	FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id LEFT JOIN app_user du ON du.id = s.decided_by`;
 
 /** One scenario of a project, or 404. `lock` holds it against a concurrent delete until the transaction ends. */
 export async function loadScenario(db: Db, projectId: string, scenarioId: string, lock = false): Promise<ScenarioRow> {

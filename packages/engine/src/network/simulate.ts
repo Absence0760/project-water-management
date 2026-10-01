@@ -134,6 +134,11 @@ export interface PlanNode {
 	/** A user's priority (WP-1.33): a senior user takes what reaches it; a junior one leaves the senior requirement passing it. */
 	senior?: boolean;
 	/**
+	 * A user's river pump capacity, m³/day (engine ≥ 1.58.0, WP-3.8, docs/model.md
+	 * §2.7c): the most it takes from the river in a day. Absent = no limit.
+	 */
+	userPumpM3Day?: number;
+	/**
 	 * Boreholes (WP-1.34, WP-3.9, docs/model.md §2.7d); absent = none. Its
 	 * pumping units (the combined capacity and each borehole) run in the supply
 	 * order of ./boreholes.ts groundwaterDay, each within its daily capacity
@@ -302,8 +307,18 @@ export interface NodeResult {
 	 * with no limit on either source.
 	 */
 	allocationLeft?: { surface: Float64Array | null; groundwater: Float64Array | null };
-	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
+	/**
+	 * Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river.
+	 * On an other water user with a pump capacity (engine ≥ 1.58.0): what it took from the river (supplied − groundwater),
+	 * for its summary only (run.ts publishes no river_abstraction series for a user).
+	 */
 	riverAbstraction?: Float64Array;
+	/**
+	 * An other water user with a pump capacity (engine ≥ 1.58.0, docs/model.md
+	 * §2.7c): the demand the pump left unmet although the river (within its
+	 * priority and allocation room) had it, m³/day; ≤ deficit. Absent otherwise.
+	 */
+	pumpLimited?: Float64Array;
 	/**
 	 * The unit's abstraction demand after the drought restriction (engine ≥
 	 * 1.54.0, docs/model.md §2.7i): what its sources are asked for, ≤ demand.
@@ -629,6 +644,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
 		if (n.supply) r.riverAbstraction = new Float64Array(days);
+		if (n.userPumpM3Day !== undefined) {
+			r.riverAbstraction = new Float64Array(days);
+			r.pumpLimited = new Float64Array(days);
+		}
 		if (plan.restriction?.inScope[i]) r.restrictedDemand = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
@@ -1032,13 +1051,21 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// the same day. Like a gauge it has no EWR share of its own.
 				const D = node.demand[t]!;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
+				// Its river pump (engine ≥ 1.58.0): it takes at most its capacity from the river; no pump = no limit.
+				const pump = node.userPumpM3Day;
+				const reach = pump === undefined ? avail : Math.min(avail, pump);
 				const [sRoom, gRoom] = allocationRoom(node, r, allocUsed[i]!, t);
 				// Boreholes (WP-1.34, WP-3.9): what the river can't give (or first, primary).
-				let Gs = Math.min(avail, D, sRoom);
+				let Gs = Math.min(reach, D, sRoom);
 				let Ggw = 0;
 				let dGw = 0;
-				if (node.borehole) [Gs, Ggw, , dGw] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, 0, avail, 0, 0, 0, 1, sRoom, gRoom);
+				if (node.borehole) [Gs, Ggw, , dGw] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, 0, reach, 0, 0, 0, 1, sRoom, gRoom);
 				const G = Math.min(Gs + Ggw, D);
+				if (r.pumpLimited) {
+					r.riverAbstraction![t] = Gs;
+					// What the river had for it (its priority, its allocation room, the demand groundwater left) that the pump couldn't take.
+					r.pumpLimited[t] = Math.max(0, Math.min(avail, sRoom, D - Ggw) - Gs);
+				}
 				const au = allocUsed[i];
 				if (au) {
 					au[0]! += G - Ggw;
@@ -1057,7 +1084,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				r.ewrCumulative[t] = sumZ;
 				r.ewrShortfall[t] = shortfall(U, sumZ, Math.max(U, sumZ));
 				// A senior user takes its own demand out of the requirement; float noise can't make it negative.
-				r.seniorRequirement[t] = node.seniorClaimed ? Math.max(0, sumZs - D) : sumZs;
+				// Its claim is what its pump can take (engine ≥ 1.58.0), MIN(D, capacity), as the farms upstream were asked to pass.
+				r.seniorRequirement[t] = node.seniorClaimed ? Math.max(0, sumZs - (pump === undefined ? D : Math.min(D, pump))) : sumZs;
 				continue;
 			}
 
@@ -1238,7 +1266,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// What the unit's own sources still have to supply once the off-take water is used.
 			const Dl = Xused > 0 ? Dr - Xused : Dr;
 			const sLeft = Xused > 0 ? sRoom - Xused : sRoom;
-			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom);
+			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom, D);
 			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - dead, 0), room);
 			else Gs = Math.min(Math.max(avail0 - dead, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;

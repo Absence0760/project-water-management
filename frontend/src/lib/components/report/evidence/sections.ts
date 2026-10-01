@@ -2,11 +2,13 @@
 // §4, G6): page 1, the numbered sections in the order an assessor's questions
 // come, then the lettered appendices. Fixed, so a section can't be left out
 // because it looks bad; a section with nothing to show prints "Not assessed"
-// inside it instead (rule 3). Only Appendix C, the applicant's own words,
-// depends on the mode: a baseline-evidence report has no applicant.
+// inside it instead (rule 3). Only § 6 and Appendix C, the applicant's
+// demand objects and own words, depend on the mode: a baseline-evidence
+// report has no applicant. § 6 came with report format evidence-9: a pack
+// drafted before it has no `demandObjects` and prints as it always did.
 import type { EvidenceReport } from '@water-management/engine';
 
-export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
+export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'demandObjects' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
 
 export interface EvidenceSection {
 	id: EvidenceSectionId;
@@ -17,7 +19,7 @@ export interface EvidenceSection {
 	title: string;
 }
 
-export function evidenceSections(r: Pick<EvidenceReport, 'mode'>): EvidenceSection[] {
+export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects'>): EvidenceSection[] {
 	const app = r.mode === 'application';
 	const out: EvidenceSection[] = [
 		{ id: 'summary', number: '', kind: '', title: 'Summary' },
@@ -27,6 +29,8 @@ export function evidenceSections(r: Pick<EvidenceReport, 'mode'>): EvidenceSecti
 		{ id: 'users', number: '4', kind: 'Section', title: app ? 'Other users' : 'Every user’s supply' },
 		// WP-3.10: modelled use against the registered volumes (WARMS registrations, licences); "Not assessed" when the runs carry none.
 		{ id: 'allocations', number: '5', kind: 'Section', title: 'Registered water use' },
+		// evidence-9: the applicant's demand objects and where their numbers come from; "Not assessed" when the applicant has none.
+		...(app && r.demandObjects ? [{ id: 'demandObjects' as const, number: '6', kind: 'Section', title: 'The applicant’s demand objects' }] : []),
 		{ id: 'appendixInputs', number: 'A', kind: 'Appendix', title: 'Inputs and assumptions' },
 		{ id: 'appendixVerify', number: 'B', kind: 'Appendix', title: 'Limitations, sign-off and verification' }
 	];

@@ -30,6 +30,10 @@ export type ImportNoteCode =
 	| 'model-window'
 	/** Dams have no surface area in the workbook; runs estimate it (audit N2). */
 	| 'dam-area-unknown'
+	/** WARNING: a [Crop demand] row has the same 12 factors as another crop's (a copied row; issue #289). */
+	| 'crop-factors-copied'
+	/** WARNING: a [Crop demand] row has a negative factor, a lone 0, a lone spike or dip, or a factor above 1.0 (issue #289). */
+	| 'crop-factors-suspect'
 	/** A [Farm demand] farm isn't in [Network]. */
 	| 'farm-demand-unknown-farm'
 	/** A [Farm demand] crop isn't in [Crop demand]. */

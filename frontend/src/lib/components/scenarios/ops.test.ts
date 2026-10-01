@@ -378,6 +378,12 @@ describe('buildOp', () => {
 		// People served (the basic-needs floor, engine 1.44.0): empty is its count.
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'population', value: '1500' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: 1500 } });
+		// Where its number comes from (engine 1.56.0): one of the sources, or empty for not recorded.
+		const src = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'source', value: 'meter' }), after.input.model, id);
+		expect(src).toEqual({ ok: true, op: { op: 'demandObject.set', demandObjectId, field: 'source', value: 'meter' } });
+		expect(describeOp((src as { op: ScenarioOp }).op, after.input)).toBe('Upper farm, demand object “Village”: Source of the number not recorded → Meter records');
+		expect(applyScenario(after.input, [(src as { op: ScenarioOp }).op]).problems).toEqual([]);
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'source', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
 		const remove = buildOp(draft({ kind: 'demandObject.remove', demandObjectId }), after.input.model, id);
 		expect(remove).toEqual({ ok: true, op: { op: 'demandObject.remove', demandObjectId } });
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the demand object “Village” (Municipal (town), 300 m³/day on average)');

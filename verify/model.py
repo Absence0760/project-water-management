@@ -780,9 +780,11 @@ def run(doc: dict) -> dict:
             frac = eff_monthly[m] if eff_monthly else settings["effectiveRainFraction"]
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
             available = w + pe_m3
-            used = min(available, max(0.0, gross))
-            F = (max(0.0, gross) - used) * dfac(f, i)
-            w = min(smax, available - used)
+            need = max(0.0, gross)
+            # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
+            used = need if need - available <= 1e-12 * need else available
+            F = (need - used) * dfac(f, i)
+            w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
             eff_s.append(used)
             soil_s.append(w / cropped * 1000 if cropped > 0 else 0.0)
@@ -860,7 +862,9 @@ def run(doc: dict) -> dict:
             # Each water year over its run days; the year a forecast tail
             # starts in over its historical days only (§2.4f). A later year,
             # all tail, is an ordinary part year.
-            tail_y = water_year(days[hist]) if hist < n else None
+            # (A tail that starts on 1 October starts a year with no historical
+            # days: that year is a part year over its tail days.)
+            tail_y = water_year(days[hist]) if 0 < hist < n and water_year(days[hist - 1]) == water_year(days[hist]) else None
             yrs: dict[int, list[int]] = {}
             for i in range(n):
                 if i >= hist and water_year(days[i]) == tail_y:
@@ -868,6 +872,7 @@ def run(doc: dict) -> dict:
                 yrs.setdefault(water_year(days[i]), []).append(i)
             fac_y: dict[int, float] = {}
             vol_y: dict[int, float] = {}
+            dem_y: dict[int, float] = {}
             scaled_rows: list = []
             fa_scaled[nid] = scaled_rows
             for y, idx in yrs.items():
@@ -880,6 +885,7 @@ def run(doc: dict) -> dict:
                     tot += D_base[nid][i]
                 fac_y[y] = vol / tot if tot > 0 else 0.0
                 vol_y[y] = vol
+                dem_y[y] = tot
             # The summary's rows: the demand before over every run day of the
             # year (a forecast tail's too) and the volume it was scaled to.
             ally: dict[int, list[int]] = {}
@@ -889,10 +895,10 @@ def run(doc: dict) -> dict:
                 tot = 0.0
                 for i in idx:
                     tot += D_base[nid][i]
-                # A year with no demand can't be scaled: the row keeps its
-                # volume, except the year a forecast tail starts in, whose row
-                # is k × its demand, 0 (probe scaled-no-demand-tail-year).
-                if tot > 0 or y == tail_y:
+                # A year with no demand on the days it is scaled on can't be
+                # scaled: the row keeps the volume registered over those days,
+                # the year a forecast tail starts in too (its historical days).
+                if dem_y.get(y, 0.0) > 0:
                     reg = fac_y.get(y, 0.0) * tot
                 else:
                     reg = vol_y.get(y, 0.0)
@@ -1483,12 +1489,12 @@ def run(doc: dict) -> dict:
                     continue
                 hroom = cap - avail - GWd
                 if u_["mode"] == "primary":
-                    want_ = hroom if dr > 1e-12 * rem else 0.0
+                    want_ = hroom if dr > 1e-12 * dem else 0.0
                 elif u_["mode"] == "supplemental":
                     asked = dr - (avail + GWd - dead)
                     want_ = min(hroom, asked)
                 else:
-                    want_ = hroom if (dr > 1e-12 * rem and s_prev < u_["level"] * cap) else 0.0
+                    want_ = hroom if (dr > 1e-12 * dem and s_prev < u_["level"] * cap) else 0.0
                 v = pump(k_, want_)
                 GWd += v
                 if u_["mode"] == "supplemental" and v > 0:
@@ -1509,7 +1515,6 @@ def run(doc: dict) -> dict:
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).
-            T = 0.0
             beta = x["lossReturnFraction"]
             if objs[xid]:
                 left_g = G
@@ -1736,7 +1741,6 @@ def run(doc: dict) -> dict:
             charge_irr[f][i] = -a_irr
 
     # ---- write the node series ------------------------------------------
-    dam_keys = {"dam_release"}
     for x in nodes:
         xid = x["id"]
         cc = col[xid]
@@ -2008,24 +2012,18 @@ def note_limit(lb, nid, wy, room, src, use, r_, dem, short, o, ald):
     if not r_:
         return
     rm, left, limit, budget = r_
-    if not (use >= rm - 1e-9 * rm and short > 1e-9 * dem):
+    if not (use >= rm - 1e-9 * max(rm, 1.0) and short > 1e-9 * max(dem, 1.0)):
         return
-    if left <= limit + 1e-9 * budget:
+    if left <= limit + 1e-9 * max(budget, 1.0):
         kind = "volumeDays"
     else:
         lst = ald[nid][src]
         inforce = [a for a in lst if a["from"] <= o <= a["to"]]
         outside = bool(inforce) and all(a["months"] and cal_month(o) not in a["months"] for a in inforce)
         kind = "monthsDays" if outside else "rateDays"
-    row = lb.setdefault((nid, src, wy), {"days": 0, "volumeDays": 0, "rateDays": 0, "monthsDays": 0, "_noise": {}})
+    row = lb.setdefault((nid, src, wy), {"days": 0, "volumeDays": 0, "rateDays": 0, "monthsDays": 0})
     row["days"] += 1
     row[kind] += 1
-    # A day whose demand is float noise (≤ 1e-9 m³): the documented test
-    # counts it, the engine doesn't (diff.py KNOWN_CASES, noise-demand).
-    if dem <= 1e-9:
-        nz = row["_noise"]
-        nz["days"] = nz.get("days", 0) + 1
-        nz[kind] = nz.get(kind, 0) + 1
 
 
 def network_order(nodes: list[dict], transfers: list[dict]) -> list[dict]:

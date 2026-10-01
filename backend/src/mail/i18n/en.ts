@@ -69,6 +69,8 @@ export const en = {
 		'This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.',
 	'mail.alert.model.dam.staff':
 		'This is the catchment model’s estimate, worked out from the figures the WUA published. It is not a measurement of the dam and not an instruction. Only a notice from the WUA or from DWS is a restriction.',
+	'mail.alert.model.short.staff':
+		'This is the catchment model’s estimate, from figures an auto run published by itself, without a person checking them first. It is not a measurement and not a restriction.',
 	'mail.alert.model.staff':
 		'This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.',
 	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
@@ -90,6 +92,7 @@ export const en = {
 	'mail.alert.kind.restriction_published': 'restriction notice',
 	'mail.alert.kind.job_dead': 'failed background job',
 	'mail.alert.kind.feed_failing': 'failing data feed',
+	'mail.alert.kind.farms_short': 'hydrological units short of water',
 
 	// One alert each: the subject's {what}, the heading, the sentence.
 	'mail.alert.dam.what': 'Dam low on {farm}',
@@ -104,6 +107,12 @@ export const en = {
 	'mail.alert.stale.body.other': 'These data feeds are more than {threshold} days later than usual:',
 	'mail.alert.stale.line.one': '{feed}: newest day {newest}, {overdue} day late',
 	'mail.alert.stale.line.other': '{feed}: newest day {newest}, {overdue} days late',
+	'mail.alert.stale.seriesWhat': 'API data behind',
+	'mail.alert.stale.seriesBody.one': 'No new readings have come in through the API key for this series for more than {threshold} day:',
+	'mail.alert.stale.seriesBody.other': 'No new readings have come in through the API key for this series for more than {threshold} days:',
+	'mail.alert.short.what': 'Hydrological units short of water',
+	'mail.alert.short.body':
+		'An auto run published new figures on {publishedAt}. Hydrological units short of water on at least one day from {from} to {to}: {count} of {of}. The alert is set at {threshold}.',
 	'mail.alert.failing.what': 'Data feed failing',
 	'mail.alert.failing.body': 'These data feeds have failed {threshold} or more times in a row:',
 	'mail.alert.failing.line.one': '{feed}: {failures} failure in a row',
@@ -181,6 +190,10 @@ export const notes: Partial<Record<MailKey, string>> = {
 	'mail.alert.model.staff': 'Under the river-flow forecast alert, which only the WUA’s staff get.',
 	'mail.alert.stale.line.one': 'One line per data feed; {overdue} is 1 (a day).',
 	'mail.alert.stale.line.other': 'One line per data feed; {overdue} is a number of days.',
+	'mail.alert.stale.seriesBody.one': 'Followed by one line naming the series (a logger’s readings, pushed in through an API key); {threshold} is 1 (a day).',
+	'mail.alert.stale.seriesBody.other': 'Followed by one line naming the series (a logger’s readings, pushed in through an API key); {threshold} is a number of days.',
+	'mail.alert.short.body': 'Only the WUA’s staff get this. {publishedAt}, {from} and {to} are dates; {count}, {of} and {threshold} are numbers of hydrological units (farms).',
+	'mail.alert.model.short.staff': 'Under the “hydrological units short of water” alert, which only the WUA’s staff get.',
 	'mail.alert.restriction.body': '{level} is one of the level lines below.',
 	'mail.pack.withdrawn.reason': '{reason} is the catchment team’s own words, as they wrote them (often in English), and it is public on the verify page.',
 	'mail.pack.why.applicant': 'To the applicant: {name} is the name they gave their application.',

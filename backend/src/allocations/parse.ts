@@ -42,7 +42,7 @@ export const AUTHORISATIONS: readonly Authorisation[] = [
 ];
 export const PURPOSES: readonly Purpose[] = ['irrigation', 'domestic', 'livestock', 'industry', 'mining', 'municipal', 'other'];
 export const WATER_SOURCES: readonly WaterSource[] = ['surface', 'groundwater'];
-/** The s21 water uses the app stores (137): 21a taking water, 21b storing water (the engine's, one list). */
+/** The s21 water uses the app stores (142): 21a taking water, 21b storing water (the engine's, one list). */
 export type WaterUse = AllocationWaterUse;
 export const WATER_USES: readonly WaterUse[] = ALLOCATION_WATER_USES;
 
@@ -158,7 +158,7 @@ export interface ParsedRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
-	/** The s21 water use (137): 21b = storage only (volume 0, storageM3 the dam's registered storage). */
+	/** The s21 water use (142): 21b = storage only (volume 0, storageM3 the dam's registered storage). */
 	waterUse: WaterUse;
 	/** Why this row can't be imported; empty = valid. */
 	errors: string[];

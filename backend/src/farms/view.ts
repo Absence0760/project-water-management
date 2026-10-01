@@ -12,7 +12,8 @@ import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { csvDownload } from '../export/download.js';
 import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
@@ -316,13 +317,12 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_CSV_DEFAULT_DAYS - 1));
 			const range = dayRange(start, Math.max(...columns.map((col) => col.values.length)), from, to);
 			if (!range) throw new ApiError(400, `the window is outside the published figures (${start} … ${cur.view.dataUntil})`);
-			const body = collectCsv(dailyCsvLines(start, columns, range));
-			if (body === null) throw new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
-			return c.body(body, 200, {
-				'Content-Type': 'text/csv; charset=utf-8',
-				'Content-Disposition': attachment(exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv', p[0]!.timeZone)),
-				'Cache-Control': 'no-store'
-			});
+			return csvDownload(
+				c,
+				() => dailyCsvLines(start, columns, range),
+				exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv', p[0]!.timeZone),
+				new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD')
+			);
 		});
 	});

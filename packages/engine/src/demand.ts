@@ -152,7 +152,8 @@ export function cropFactorAreaM2(crops: readonly Crop[], areaM2ByCropId: Readonl
  * Net daily demand after effective rainfall (b023 [Irrigation Demand]):
  * MAX(0, gross − cropped area × effectiveRainFraction / 1000 × rain mm).
  * The run uses farmDailyDemand, which carries rain over; this is its
- * store-less case (effectiveRainStoreMm = 0), kept as the workbook formula.
+ * store-less case (effectiveRainStoreMm = 0), kept as the workbook formula
+ * but for rain within float noise of the gross, which covers it (coveredByRain).
  */
 export function netDailyDemandM3(
 	grossM3PerDay: number,
@@ -160,8 +161,23 @@ export function netDailyDemandM3(
 	rainMm: number,
 	effectiveRainFraction: number
 ): number {
-	return Math.max(0, grossM3PerDay - rainOffsetM3(croppedAreaM2, rainMm, effectiveRainFraction));
+	const need = Math.max(0, grossM3PerDay);
+	const pe = rainOffsetM3(croppedAreaM2, rainMm, effectiveRainFraction);
+	return coveredByRain(need, pe) ? 0 : need - pe;
 }
+
+/**
+ * Does the rain available today (the store plus the day's effective rain)
+ * cover the day's gross need? Yes when it falls short by no more than 10⁻¹²
+ * of the need (engine ≥ 1.57.0): the store's running sum carries float noise,
+ * and a sum that came an ulp short left a crop requirement of 10⁻¹⁴ m³ beside
+ * a 35 m³ need, which as a demand switched on a dam-filling borehole (verify
+ * random seed 1343, docs/model.md §2.3).
+ */
+export const coveredByRain = (need: number, available: number): boolean => need - available <= RAIN_COVER_NOISE * need;
+
+/** The relative shortfall of effective rain below which it covers the need (coveredByRain). */
+export const RAIN_COVER_NOISE = 1e-12;
 
 /** Effective rain on the cropped area (m³/day): Pe, what the soil-water store takes in each day. */
 export function rainOffsetM3(croppedAreaM2: number, rainMm: number, effectiveRainFraction: number): number {
@@ -190,8 +206,10 @@ export interface FarmDailyDemand {
  *      below the threshold is already 0 in `rainMm`);
  *   2. available = W[t−1] + Pe, not capped yet, so a big rain still covers
  *      that day's demand first, even when the store is small;
- *   3. used = MIN(available, gross), net = gross − used;
- *   4. W[t] = MIN(Smax, available − used): what is left, up to the store's
+ *   3. used = MIN(available, gross), net = gross − used; available short of
+ *      the gross by no more than 10⁻¹² of it counts as covering it (used =
+ *      gross, net = 0, coveredByRain, engine ≥ 1.57.0);
+ *   4. W[t] = MIN(Smax, MAX(0, available − used)): what is left, up to the store's
  *      size. The excess drains or runs off, and the catchment runoff model
  *      already counts that water.
  *
@@ -223,10 +241,11 @@ export function farmDailyDemand(
 		// A negative gross (bad crop factors) needs no water, as MAX(0, …) had it.
 		const need = Math.max(0, grossM3PerDay[t]!);
 		const available = w + rainOffsetM3(croppedAreaM2, rainMm[t]!, perDay ? perDay[t]! : one);
-		const used = Math.min(available, need);
+		// Rain within float noise of the need covers it: no noise-level requirement (engine ≥ 1.57.0).
+		const used = coveredByRain(need, available) ? need : available;
 		out.used[t] = used;
 		out.net[t] = need - used;
-		w = Math.min(maxM3, available - used);
+		w = Math.min(maxM3, Math.max(0, available - used));
 		out.storeMm[t] = croppedAreaM2 > 0 ? (w * 1000) / croppedAreaM2 : 0;
 	}
 	if (warm.captureAt === days) out.storeAtM3 = w;

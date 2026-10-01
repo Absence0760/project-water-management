@@ -32,7 +32,7 @@ export const SOURCE_LABEL: Record<AllocationWaterSourceKind, string> = {
 	groundwater: 'Groundwater'
 };
 
-/** The NWA s21 water use (137, issue #72). */
+/** The NWA s21 water use (142, issue #72). */
 export const WATER_USE_LABEL: Record<AllocationWaterUse, string> = {
 	'21a': 'Taking water (s21a)',
 	'21b': 'Storing water in a dam (s21b)'

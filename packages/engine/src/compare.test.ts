@@ -472,6 +472,16 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists an other water user’s pump capacity, added with it or changed (engine 1.58.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		b.model.nodes.push({ ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), pumpCapacityM3Day: 900 });
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1\u202f200 m³/day on average over the months, pump 900 m³/day, drains into Outlet)']);
+		const c = structuredClone(b);
+		c.model.nodes.find((n) => n.name === 'Town')!.pumpCapacityM3Day = null;
+		expect(texts(b, c)).toEqual(['Town: river pump capacity 900 m³/day → no limit']);
+	});
+
 	it('lists a farm’s boreholes added and their depletion changed (WP-1.34)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
@@ -707,6 +717,35 @@ describe('diffInputs', () => {
 		expect(rest).toEqual([]);
 		// fmtValue groups thousands with a narrow space.
 		expect(text).toMatch(/^Rooikloof: demand object "Town" Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first → Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first, serves 12\D000 people$/);
+	});
+
+	it('lists a demand object whose source changed (engine 1.56.0); absent and null are both not recorded', () => {
+		const a = snapshot();
+		const town = {
+			id: 'town',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.source = null;
+		expect(texts(a, b)).toEqual([]);
+		b.model.demandObjects![0]!.source = 'meter';
+		expect(texts(a, b)).toEqual(['Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first, from meter records']);
+		a.model.demandObjects![0]!.source = 'aadd';
+		expect(texts(a, b)).toEqual(['Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first, from a strategy’s AADD → Municipal (town), 600 m³/day on average, return 0.5, priority first, from meter records']);
 	});
 
 	it('describes a dam raise on a copied project by farm name', () => {

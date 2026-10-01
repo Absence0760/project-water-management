@@ -234,6 +234,21 @@ passed on.
 duties that concern the service (for example a prior-authorisation
 application or a question from the Information Regulator).
 
+8.4 Standing instruction on deleting an account. When a person asks for
+their account to be deleted, the Client instructs the Operator, as a
+standing instruction under clause 3 for every such request, to delete it as
+the privacy notice (§7) describes, without asking the Client each time:
+what the person made for a project (the project, its runs, scenarios,
+licence applications, imports and the like) is kept as the project's record
+with the person's name removed, and is never reassigned to anyone else; an
+unfinished calculation and a draft application of theirs are deleted; a
+sign-off's typed name and registration, and the names printed in an issued
+evidence pack, are kept for the life of the licence record they support.
+The Operator tells the Client of each deletion that touches the Client's
+projects within [5] business days. The Client may vary this instruction in
+writing for its own projects (for example under clause 3 where it must keep
+a name by law).
+
 ## 9. Records, information and audits
 
 9.1 The service keeps an audit log for each project, which the Client's
@@ -350,3 +365,12 @@ Signed by the Operator: ____________________ Jared Howard Date: ________
   (2026-09-28); confirm the s57 reading before the first signature.
 - **Mailbox provider** (clause 6.1): confirm the provider and its data-
   protection terms before the first signature.
+- **Clause 8.4 and the National Archives Act.** The standing instruction
+  removes a deleted person's name from the evidence they made (POPIA s16
+  rules out reassigning it; s14(1)(b) and s14(6)(b) support keeping a
+  sign-off's typed name for a bounded period). Where the responsible party
+  is DWS or a CMA, its records may be public records under the National
+  Archives and Records Service of South Africa Act 43 of 1996, which may
+  require the name to be kept. Confirm whether that applies, and if so the
+  carve-out to clause 8.4 (a per-team setting in the app would keep a
+  snapshot of the name; not built, issue #112).

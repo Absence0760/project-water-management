@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Engine 1.58.0, WP-3.8 (#276): a pump capacity on other water users, the node form's field, the Units & supply 'Other water users' pumps' table and the run comparison's pump lines. Measured 1372 locally against main @ 5c182256's 1370 (+2 KB, rounded up to 3 since both are rounded)."
+}

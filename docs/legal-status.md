@@ -30,11 +30,21 @@ client goes live. Not customer-facing.
   disclosed under POPIA s72, naming the gateways relied on: s72(1)(c)/(d)
   (needed to provide the service) and s72(1)(a) (AWS's binding agreement).
   Counsel to confirm which gateway fits an operator that is itself offshore.
-- **Deletion:** on emailed request, with the one exception disclosed in
-  Privacy §7: an account that created project evidence is kept until the
-  person and the responsible organisation agree what happens to that record
-  (`docs/security.md`, the restrict foreign keys). Self-service deletion
-  stays open (issue #90).
+- **Deletion:** on a request by email or any other expedient way (POPIA
+  s24, Regulation 3 as amended: Form 2 in any expedient manner, free), acted
+  on as soon as reasonably practicable and answered with what was done
+  (s24(4); runbook item 7 in deployment.md). Privacy §7's rule (138, issue
+  #112): **keep the evidence, remove the name**. What the person made for a
+  project stays with their name removed, never reassigned to a colleague
+  (that would make the record false, s16); a started ensemble and a draft
+  application go with the account. Two things keep the name: a sign-off's
+  typed name and registration and the names printed in an evidence pack's
+  hashed manifest, both for a **bounded** period, the life of the licence
+  record they support, defended under s14(1)(b) and s14(6)(b) (pre-counsel
+  research, fact-check of 2026-09-30 on #112). The only refusal left is the
+  only owner of a project or admin of a team, until it is handed over.
+  Self-service deletion is the convenience still to build (#112); POPIA
+  doesn't require it.
 - **Assent:** directly above the sign-up button, a box with the four main
   points of the Terms in the reader's language ("The main things you agree
   to", `lib/components/legal/termsSummary.ts`; the same points open the
@@ -157,7 +167,12 @@ Tracked in issue #103.
   Before the first signature, confirm the mailbox provider listed as a
   sub-processor (clause 6.1).
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed
-  request (runbook item 7 in deployment.md), which is how it works today.
+  request (runbook item 7 in deployment.md), which is how it works today
+  for every account since 138. The Account page's **Delete my account** is
+  a convenience still to build (#112). Counsel to confirm the rule (keep the
+  evidence, remove the name), the bounded retention of sign-offs and pack
+  names, and the National Archives Act question for a responsible party
+  that is DWS or a CMA (operator agreement, notes for counsel).
 - [ ] **Backups:** the notice says up to 35 days; keep
   `db_backup_retention_days` at or under that. The one copy kept longer is
   the final snapshot a teardown takes (infra/README.md § Tearing down); the
@@ -213,3 +228,14 @@ Tracked in issue #103.
   comment's author (115, 128) and a pack's signers (as verify already
   shows, 112). It states what the app already did: a clarification, not a
   material change, so no `LEGAL_VERSION` bump.
+- 2026-09-30: Privacy §7 rewritten (issue #112, 138): the "one exception"
+  (an account that made evidence kept until the person and the organisation
+  agree, possibly "handing it to a colleague") is gone. Deletion keeps the
+  evidence without the name, deletes a started ensemble and a draft
+  application, keeps a sign-off's typed name and the names printed in an
+  evidence pack for the life of the licence record, and asks the only owner
+  or admin to hand over first; a project kept as a licence record is kept
+  for the life of that record, then deleted. Privacy §10: a deletion request
+  in any expedient way, answered as soon as reasonably practicable with what
+  was done. A material change: `LEGAL_VERSION` 2026-09-30 (every account
+  accepts again; nothing is in production yet).
