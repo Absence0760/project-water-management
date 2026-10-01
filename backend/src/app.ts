@@ -8,6 +8,7 @@ import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
+import { mfaRoutes } from './auth/mfa-routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
@@ -132,6 +133,7 @@ export function createApp() {
 	app.get('/health', (c) => c.json({ ok: true }));
 
 	app.route('/auth', authRoutes);
+	app.route('/auth', mfaRoutes);
 	app.route('/auth', emailAuthRoutes);
 	// The headless report renderer's sign-in: the render token is the credential.
 	app.route('/auth', renderSessionRoutes);

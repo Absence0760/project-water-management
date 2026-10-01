@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "Two-step sign-in (issue #282): the uqr QR encoder + qr.ts as a lazy chunk (3.8 KB gz, loaded only when setting up), the Account page's TwoStepSignIn panel, the login page's code step and the MFA client calls, and ~45 Afrikaans strings in the af catalogue. Measured: total 1426 KB against 1422 before this entry; 4 KB headroom left."
+}

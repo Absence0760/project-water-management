@@ -29,6 +29,7 @@ import { anon, app, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '
 import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
+import { base32Decode, hotp, totpStep } from './totp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 const ORIGIN = 'http://localhost:7777';
@@ -337,7 +338,10 @@ describe('where the backend reads a credential (source sweep)', () => {
 	 * and to the matrix above, on purpose.
 	 */
 	const READS: Record<string, string[]> = {
-		'auth/session.ts': ['getCookie(c, SESSION_COOKIE)'],
+		// The session, and two-step sign-in's challenge (issue #282): what a
+		// right password buys when the account has an authenticator, good only
+		// with a code at POST /auth/mfa/verify (test below).
+		'auth/session.ts': ['getCookie(c, MFA_CHALLENGE_COOKIE)', 'getCookie(c, SESSION_COOKIE)'],
 		'ingest/auth.ts': ["c.req.header('authorization')"],
 		'alerts/routes.ts': ["c.req.query('token')"],
 		// Not a user's credential: CloudFront's shared secret on the origin (app.ts).
@@ -387,6 +391,25 @@ describe('where the backend reads a credential (source sweep)', () => {
 		}
 		const bearer = await send('/ingest/v1/whoami', { headers: { authorization: `Bearer ${value}` } });
 		expect(bearer.status).toBe(401);
+	});
+
+	it('the two-step sign-in challenge opens nothing but the code step (positive control: there, with a code, it does)', async () => {
+		const u = await signUp('TCchallenge');
+		const { secret } = (await u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' })).body;
+		const key = base32Decode(secret)!;
+		// Confirmed with the current step's code; the sign-in below uses the next step's (within the window, never a replay).
+		expect((await u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) })).status).toBe(200);
+		const r = await post('/auth/login', { email: u.email, password: 'correct horse' });
+		expect(r.body).toEqual({ mfaRequired: true });
+		const challenge = (r.setCookie ?? '').split(/,(?=\s*wm_)/).map((c) => c.trim().split(';')[0]!).find((p) => p.startsWith('wm_mfa='))!;
+		expect(challenge, r.setCookie ?? '').toBeTruthy();
+		const value = challenge.slice('wm_mfa='.length);
+		for (const cookie of [challenge, asCookie(value)]) {
+			expect((await anon('GET', '/auth/me', undefined, cookie)).status, cookie).toBe(401);
+			expect((await anon('GET', '/projects', undefined, cookie)).status, cookie).toBe(401);
+		}
+		expect((await send('/ingest/v1/whoami', { headers: { authorization: `Bearer ${value}` } })).status).toBe(401);
+		expect((await anon('POST', '/auth/mfa/verify', { code: hotp(key, totpStep(Date.now()) + 1) }, challenge)).status).toBe(200);
 	});
 });
 
