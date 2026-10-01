@@ -6396,7 +6396,10 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
   [engine-errata.md](./engine-errata.md) (`errataFor(engineVersion)`: first
   affected ≤ the version < fixed in). Generated the same way
   (`errata.generated.ts`, `errata.test.ts`). A fixed bug keeps its row, since
-  runs made by the affected versions stay stored.
+  runs made by the affected versions stay stored. A new row also tags the
+  runs it may affect in the app and emails their projects' owners once
+  ([legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+  issue #103).
 - **Methodology**: the current methodology statement's version and SHA-256
   ([methodology/](./methodology/README.md)); `methodology.test.ts` pins every
   published version's hash.
