@@ -1,4 +1,4 @@
-// Load a gauging-station dataset into gauge_station_reference (153; issue
+// Load a gauging-station dataset into gauge_station_reference (156; issue
 // #326 Part B "B-gauge", docs/maps.md § Gauging stations). The operator's
 // tool, run as the schema owner (`pnpm import:gauge-stations`); the app only
 // reads the table.
