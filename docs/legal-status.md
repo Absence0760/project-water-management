@@ -241,6 +241,56 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   no deadline. Older decisions were mapped. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
+- [ ] **D2, what an applicant sees, and freezing "own".** *Position:* keep
+  the farmer scope plus the river (other farms' figures are personal or
+  commercial information, POPIA s1, PAIA s36/s64; fairness to the applicant
+  is the authority's duty, PAJA s3, s5). An issued pack's applicant copy
+  keeps the units it was issued about: the right of access attaches to the
+  application, not to who holds the land now (PAIA s50(1)(a)). *Built
+  (164_applicant_visibility):* the copy reads the units the frozen report
+  counted as the applicant's, within the application's stored own nodes,
+  never the owner's current links. *For counsel:* whether figures about land
+  the applicant no longer holds now relate to the new holder.
+- [ ] **The k rule on catchment series.** *Position:* natural flow (and the
+  EWR made from it) describes the river, not anyone's use, so it shows at
+  any holder count; the series from which "natural minus outflow = the
+  farms' use" follows keep k ≥ 5 (a judgement in line with
+  statistical-disclosure practice, not a statutory number). *Built (164):*
+  share links and applicants see natural flow and the EWR always; outflow,
+  observed flow below the farms, the EWR shortfall and the volume rows stay
+  at five holders. A dominance rule (one holder taking most of the use) is a
+  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
+  dominance rule is needed before go-live.
+- [ ] **Rules broken by hidden farms.** *Position:* a validation refusal
+  the applicant can't fix blind is a fairness problem; an aggregate over
+  five or more holders relates to no one of them (POPIA s1). The authority,
+  not the operator, decides what its reasons disclose (NWA s42(b), PAJA
+  s5). *Built (164):* the catchment's aggregate past five hidden holders,
+  the generic words below; the assessors read the rule's real words; the
+  applicant's **Ask the assessors why** sends the line, the changes it names
+  and the rule's kind (nothing hidden), and an editor answers once. *For
+  counsel:* how much third-party detail the authority's reasons may carry
+  (PAJA s5(4)).
+- [ ] **The applicant's printable copy, and the full pack to the authority.**
+  *Position:* the applicant files the technical report (R267 reg 11(1)) and
+  what they file reaches the public (Annexure D item 8), so the copy they
+  file withholds other users' figures, close to what PAIA severance would
+  give; the full pack goes where s41(2) says the evidence goes. *Built
+  (165_applicant_copy):* a party's printable copy of an issued pack, printed
+  as them, saying it is a derived copy and where to check the pack, with its
+  own hash; an editor sends the full pack to the members acting for the
+  responsible authority (a link to sign in to, never a file). Sending to an
+  outside address is a tracked follow-up. *For counsel:* whether the copy
+  needs the third parties' notice at all, and whether delivery to an
+  authority inbox outside the app is needed.
+- [ ] **D15, the impact basis.** *Position:* report both, labelled, with
+  full authorised use as the headline (s27(1)(a), (f), s29(1)(a)(iii); R267
+  "existing and potential impacts"), and the authorised volume's mix, since
+  only a licence or verified existing lawful use is an entitlement. *Built
+  (165, report format `evidence-14`):* both boards on page 1; an editor runs
+  the full-allocation pair; a fixed row says when there is none. *For
+  counsel and the client's hydrologist:* which basis an authority expects
+  first, and how to treat registered but unverified volumes.
 
 ## Change log
 
