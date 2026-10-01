@@ -3327,13 +3327,19 @@ from the WP:
       15 Feb) keeps its printed factor rather than being prorated, and the
       stage-to-month rule for vegetables (model.md §2.3 item 8). Trigger:
       their answer on #46.
+- [x] **b023 crop-table slips flagged on import** (2026-09-30, issue #289).
+      Rows copied from another crop, a negative factor, a lone 0, a lone
+      spike or dip of more than 0.3 and a factor above 1.0 each give an
+      import-report warning (`crop-factors-copied`, `crop-factors-suspect`),
+      both importers alike; the factors import unchanged ([model.md §2.3
+      item 3](./model.md)).
 - [ ] **A node-based workbook's crop sheets can't be loaded** (partly done,
       issue #289). Done: the reader, `spreadsheet/import/nodeCrops.ts`. It
       finds [Crop_Factors] and [Crop_Areas] by name (ignoring case, spaces
       and underscores) and their tables by header row (twelve month names in
       any order, then "Crop(s)"; "Farm …" then a column per crop). It returns
       each crop's twelve factors (Oct..Sep) and efficiency, each farm's areas
-      in m², the A-pan and effective-rainfall rows, and warnings (a missing
+      in m² (hectare columns converted), the A-pan and effective-rainfall rows, and warnings (a missing
       sheet or header, a non-numeric or out-of-range cell, a duplicate, a
       crop in one sheet but not the other). The set is marked
       `shape: 'fao-et0'`. It runs in the import worker
