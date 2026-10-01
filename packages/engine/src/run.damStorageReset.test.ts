@@ -110,6 +110,6 @@ describe('settings.damStorageReset (engine 0.46.0)', () => {
 		expect(nan.summary.warnings.some((w) => w.includes('is not a number'))).toBe(true);
 		expect(col(nan, a!.id, 'dam_storage_set')).toBeUndefined();
 		const missing = runModel(withReset(base, { date, storageM3: { nowhere: 1 } }));
-		expect(missing.summary.warnings).toContain('damStorageReset: "nowhere" is not a farm with a dam; ignored');
+		expect(missing.summary.warnings).toContain('damStorageReset: "nowhere" is not a unit with a dam; ignored');
 	});
 });

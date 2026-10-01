@@ -1802,6 +1802,10 @@ export interface PackReproductionState {
 	checkedAt: string | null;
 	checks: PackBundleCheck[];
 	error: string | null;
+	/** The engine this server re-runs with. */
+	serverEngine: string;
+	/** An editor may ask for a re-run now (POST …/reproduce): issued, none pending, no outcome on serverEngine yet. */
+	canRerun: boolean;
 }
 
 /** GET /verify/:code (public): only what the pack prints (app_verify_pack). */

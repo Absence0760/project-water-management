@@ -287,7 +287,7 @@ export function partDemandFactorOf(n: NetworkNode, part: DemandPart, warnings: s
 	const f = (all as Record<string, unknown>)[part];
 	if (f === null || f === undefined) return null;
 	const out = new Float64Array(12).fill(1);
-	if (!Array.isArray(f) || f.length !== 12) warnings.push(`farm "${n.name}": the ${part} demand factor should have 12 monthly values; missing months are 1`);
+	if (!Array.isArray(f) || f.length !== 12) warnings.push(`unit "${n.name}": the ${part} demand factor should have 12 monthly values; missing months are 1`);
 	if (!Array.isArray(f)) return out;
 	let bad = false;
 	for (let m = 0; m < 12; m++) {
@@ -296,7 +296,7 @@ export function partDemandFactorOf(n: NetworkNode, part: DemandPart, warnings: s
 		if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[m] = v;
 		else bad = true;
 	}
-	if (bad) warnings.push(`farm "${n.name}": a ${part} demand factor that isn't a number ≥ 0 runs as 1`);
+	if (bad) warnings.push(`unit "${n.name}": a ${part} demand factor that isn't a number ≥ 0 runs as 1`);
 	return out;
 }
 

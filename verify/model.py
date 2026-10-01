@@ -1107,7 +1107,8 @@ def run(doc: dict) -> dict:
             return curve_area(curve, s0)
         a_full = f.get("damAreaFullM2")
         if a_full is None:
-            a_full = cap / 3
+            # Maaren & Moolman (1985) via Sawunyama (2013): A = 7.2 C^0.77 m² (engine >= 1.61.0).
+            a_full = 7.2 * cap ** 0.77
         b = f.get("damAreaExponent", 0.7)
         return (a_full * (s0 / cap) ** b if s0 > 0 else 0.0), None
 

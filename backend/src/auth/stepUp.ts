@@ -5,8 +5,10 @@
 // the actions those roles exist for: anything gated on the owner role
 // (members, invites, API keys, data feeds, share links, deleting a project),
 // anything gated on team admin, publishing to farmers (a restriction, a notice,
-// an outlook), deciding an application and issuing or withdrawing an
-// evidence pack. Everyone else may add an authenticator, and is asked for
+// an outlook), deciding an application, issuing or withdrawing an
+// evidence pack, and signing a run or a pack (any editor may sign, so every
+// signer needs an authenticator: a sign-off is the professional record an
+// authority relies on; operator decision, 2026-10-01). Everyone else may add an authenticator, and is asked for
 // its code at sign-in once they have, but needs it for nothing.
 //
 // Where it is checked: requireRole(…, 'owner') and requireTeamRole(…, 'admin')
@@ -47,23 +49,32 @@ export function mfaRequired(env: Record<string, string | undefined> = process.en
 }
 
 /**
- * 403 unless this request's session signed in with a second factor and the
- * account still has one. `mfa_required`: the person has no authenticator yet
- * (set one up on the Account page). `mfa_step_up`: they have one, but this
- * session signed in before it was added: sign in again.
+ * The 403 this request would get for want of a second factor, or null when it
+ * has one (or the requirement is off, or there is no request). `mfa_required`:
+ * the person has no authenticator yet (set one up on the Account page).
+ * `mfa_step_up`: they have one, but this session signed in before it was
+ * added: sign in again. A read can say so ahead of the action (a sign-off's
+ * `cannotSign`), so nobody fills in a form the server will refuse.
  */
-export async function requireStepUp(db: Db): Promise<void> {
+export async function stepUpRefusal(db: Db): Promise<ApiError | null> {
 	const auth = requestAuth.getStore();
-	if (!auth || !mfaRequired()) return;
+	if (!auth || !mfaRequired()) return null;
 	const { rows } = await db.query<{ enrolled: boolean }>(
 		'SELECT EXISTS (SELECT 1 FROM user_totp WHERE user_id = $1 AND confirmed_at IS NOT NULL) AS enrolled',
 		[auth.userId]
 	);
 	const enrolled = rows[0]?.enrolled ?? false;
 	if (!enrolled) {
-		throw ApiError.coded(403, 'mfa_required', 'this needs two-step sign-in: set up an authenticator app on your Account page first');
+		return ApiError.coded(403, 'mfa_required', 'this needs two-step sign-in: set up an authenticator app on your Account page first');
 	}
 	if (!auth.amr.includes('otp')) {
-		throw ApiError.coded(403, 'mfa_step_up', 'this needs two-step sign-in: sign out and sign in again with a code from your authenticator app');
+		return ApiError.coded(403, 'mfa_step_up', 'this needs two-step sign-in: sign out and sign in again with a code from your authenticator app');
 	}
+	return null;
+}
+
+/** 403 mfa_required / mfa_step_up unless this request's session signed in with a second factor and the account still has one. */
+export async function requireStepUp(db: Db): Promise<void> {
+	const refusal = await stepUpRefusal(db);
+	if (refusal) throw refusal;
 }

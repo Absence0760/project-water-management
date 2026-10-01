@@ -52,11 +52,11 @@ describe('readShareToken', () => {
 describe('the notice', () => {
 	afterEach(() => setLocale('en'));
 
-	it('builds the notice card: title, text, the percentage and who published it', () => {
+	it('builds the notice card: title, text, the percentage beside them and who published it', () => {
 		const n = shareNotice(view())!;
 		expect(n).toMatchObject({ level: 'advisory', label: 'Notice from the WUA · Advisory', heading: 'Please cut back', body: 'Irrigate at night.', lang: 'en' });
-		// The WUA's own words carry the cut; the percentage stands alone only without them.
-		expect(n.pctLine).toBeNull();
+		// The WUA's percentage shows beside its own words, as on the farm page and in the alert email (operator, 2026-10-01).
+		expect(sp(n.pctLine)).toBe('Set by the WUA: a 15 % cut in registered water use.');
 		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, notice: {} } }))!.pctLine)).toBe('Set by the WUA: a 15 % cut in registered water use.');
 		expect(sp(n.byline)).toMatch(/^Thandi Mokoena, 1[12] Jan 2024$/);
 	});

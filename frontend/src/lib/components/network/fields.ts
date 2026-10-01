@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { IRRIGATION_SYSTEMS, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
+import { estimatedDamAreaM2, IRRIGATION_SYSTEMS, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -115,7 +115,7 @@ export const NODE_FIELDS: NodeField[] = [
 		farmOnly: true,
 		nullable: true,
 		aria: (n) => `Dam surface area when full at ${n}, m²`,
-		help: 'Water surface of the full dam, for evaporation and the rain it catches. Empty: estimated as capacity ÷ 3 m (a typical farm dam’s mean depth), and the run says so.'
+		help: 'Water surface of the full dam, for evaporation and the rain it catches. Empty: estimated as 7.2 × capacity^0.77 m² (Maaren & Moolman 1985, a South African farm-dam relation: about 2 m deep at 100 000 m³), and the run says so. It can be far out for any one dam.'
 	},
 	{
 		key: 'damAreaExponent',
@@ -125,7 +125,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'dam',
 		farmOnly: true,
 		aria: (n) => `Dam area exponent of ${n}`,
-		help: 'How the surface shrinks as the dam empties: area = area when full × (storage ÷ capacity)^exponent. 0.7 suits small dams (Liebe et al. 2005); 1 is a flat-sided pan; allowed 0–3.'
+		help: 'How the surface shrinks as the dam empties: area = area when full × (storage ÷ capacity)^exponent. 0.7 suits small dams (Liebe et al. 2005; a V-shaped valley gives about 0.67); 1 is a vertical-sided pan, the most a real basin can have; allowed above 0 up to 1.'
 	},
 	{
 		key: 'damSeepagePerDay',
@@ -305,7 +305,7 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
 	// A survey curve (WP-3.5) gives the area; the estimate is only for the power law.
 	if ((n.damAreaFullM2 === null || n.damAreaFullM2 === undefined) && !(n.damCurve && n.damCurve.length))
-		hints.push(`No surface area: evaporation uses capacity ÷ 3 m, about ${fmtArea(n.damCapacityM3 / 3)}. Enter the dam's area when full for a better figure.`);
+		hints.push(`No surface area: evaporation uses 7.2 × capacity^0.77 m², about ${fmtArea(estimatedDamAreaM2(n.damCapacityM3))}. Enter the dam's area when full for a better figure.`);
 	return hints;
 }
 

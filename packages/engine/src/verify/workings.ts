@@ -8,7 +8,7 @@ import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
 import { seepageReturnOf } from '../network/dam';
 import { abstractionStartDay } from '../network/development';
-import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, ESTIMATED_DAM_DEPTH_M, type DemandPart, type ModelInput, type NetworkNode } from '../project';
+import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, estimatedDamAreaForEngine, type DemandPart, type ModelInput, type NetworkNode } from '../project';
 
 /**
  * Open-water evaporation depth (mm) on each run day (audit N2): the lake
@@ -78,9 +78,10 @@ export interface DamWorkings {
 	seepReturn: number;
 }
 
-export function damWorkings(n: NetworkNode): DamWorkings {
+/** `engineVersion`: the run's, so an unknown area is the estimate that engine used (absent = this engine's). */
+export function damWorkings(n: NetworkNode, engineVersion?: string): DamWorkings {
 	return {
-		areaFull: n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0,
+		areaFull: n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? estimatedDamAreaForEngine(n.damCapacityM3, engineVersion)) : 0,
 		b: n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT,
 		seep: Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1),
 		seepReturn: n.damCapacityM3 > 0 ? seepageReturnOf(n) : 1

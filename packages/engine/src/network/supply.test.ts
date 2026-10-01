@@ -175,13 +175,13 @@ describe('supply rules (WP-3.8)', () => {
 
 describe('supplyOf (WP-3.8)', () => {
 	const farm = (over: Partial<NetworkNode>) => node('F', 'farm', 'G', over);
-	it('dam first, the default, has no plan; only a farm has a supply rule', () => {
+	it('dam first, the default, has no plan; only a unit has a supply rule', () => {
 		const w: string[] = [];
 		expect(supplyOf(farm({}), w)).toEqual({});
 		expect(supplyOf(farm({ supplyRule: 'damFirst', pumpCapacityM3Day: 500 }), w)).toEqual({});
 		expect(w).toEqual([]);
 		expect(supplyOf(node('U', 'user', 'G', { supplyRule: 'riverFirst' }), w)).toEqual({});
-		expect(w[0]).toMatch(/only a farm has a supply rule/);
+		expect(w[0]).toMatch(/only a unit has a supply rule/);
 	});
 
 	// Issue #54: a dam-less farm irrigates from the river routed to its (absent) dam with no limit; the run says so.
@@ -193,7 +193,7 @@ describe('supplyOf (WP-3.8)', () => {
 		};
 		for (const over of [{ pctUpstreamToDam: 1 }, { pctRunoffToDam: 0.3 }, { divertCapacityM3Day: 8640 }])
 			expect(warned({ damCapacityM3: 0, ...over }), JSON.stringify(over)).toEqual([
-				'farm "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity'
+				'unit "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity'
 			]);
 		expect(warned({ damCapacityM3: 50_000, pctUpstreamToDam: 1 })).toEqual([]); // a real dam
 		expect(warned({ damCapacityM3: 0 })).toEqual([]); // nothing routed to it
@@ -208,7 +208,7 @@ describe('supplyOf (WP-3.8)', () => {
 			return w.filter((x) => x.includes('past the river pump'));
 		};
 		const text =
-			'farm "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river';
+			'unit "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river';
 		for (const supplyRule of ['riverFirst', 'trigger'] as const)
 			for (const over of [{ pctUpstreamToDam: 1 }, { pctRunoffToDam: 0.3 }, { divertCapacityM3Day: 8640 }, { divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100] }])
 				expect(warned({ supplyRule, ...over }), `${supplyRule} ${JSON.stringify(over)}`).toEqual([text]);

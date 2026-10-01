@@ -113,7 +113,7 @@ describe('irrigation efficiency per crop (engine 0.43.0)', () => {
 		for (const bad of [0, -0.2, 1.5]) {
 			const out = run(input(twoCrops({ irrigationEfficiency: bad })));
 			expect(get(out, 'demand')[0]).toBeCloseTo(250, 9);
-			expect(out.summary.warnings).toContain(`crop "Crop a": irrigation efficiency ${bad} is not in (0, 1]; using the farm's`);
+			expect(out.summary.warnings).toContain(`crop "Crop a": irrigation efficiency ${bad} is not in (0, 1]; using the unit's`);
 		}
 	});
 

@@ -258,7 +258,7 @@
 			<div class="badges">
 				{#if view.metricLabel}<span class="badge" data-testid="outcome-metric">Measure: {view.metricLabel}</span>{/if}
 				<span class="badge">{view.method === 'quintiles' ? 'Quintiles' : 'Terciles'} of {view.nYears} complete water years</span>
-				{#if view.cutoffsPending}<span class="badge badge-warn" data-testid="cutoffs-pending">Risk cut-offs pending the hydrologist</span>{/if}
+				{#if view.cutoffsPending}<span class="badge badge-warn" data-testid="cutoffs-pending">Provisional risk cut-offs, not yet confirmed by the catchment’s hydrologist</span>{/if}
 			</div>
 			{#if view.siteMissing}
 				<p class="alert alert-warning" data-testid="outcome-site-missing">{view.siteMissing}</p>
