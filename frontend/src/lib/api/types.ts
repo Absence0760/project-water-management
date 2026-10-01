@@ -406,7 +406,7 @@ export interface PortfolioProject {
 
 // ---- Alerts (WP-2.13, docs/api.md § Alerts) --------------------------------
 
-export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing';
+export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing' | 'farms_short';
 export type AlertMode = 'immediate' | 'daily_digest' | 'off';
 
 /** One choice on /account/alerts. */
@@ -455,6 +455,12 @@ export interface AlertRule {
 	/** That feed as the feeds page names it, and whether it is enabled (null for other kinds). */
 	feedName: string | null;
 	feedEnabled: boolean | null;
+	/** data_stale: the ingest-key series it watches instead of a feed (one rule per series an API key writes); null otherwise. */
+	seriesId: string | null;
+	/** That series as the Data page names it (its name, else its kind's label). */
+	seriesName: string | null;
+	/** Whether an API key still writes it; false once a person wrote over the key's days (null for other rules). */
+	seriesKeyFed: boolean | null;
 	/** dam_below: a fraction of capacity (0.3 = 30 %); the others whole days, failures or jobs; restriction_published 0. */
 	threshold: number;
 	enabled: boolean;
@@ -465,6 +471,7 @@ export interface AlertRuleChange {
 	kind: AlertKind;
 	nodeId?: string | null;
 	feedId?: string | null;
+	seriesId?: string | null;
 	threshold: number;
 	enabled: boolean;
 }
@@ -480,6 +487,8 @@ export interface AlertEvent {
 	nodeName: string | null;
 	/** data_stale: the feed it is about; null for every other kind. */
 	feedId: string | null;
+	/** data_stale: the ingest-key series it is about; null otherwise. */
+	seriesId: string | null;
 	openedAt: string;
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
