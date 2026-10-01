@@ -146,7 +146,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
   createdAt, sentAt }]` (133). `erratumNotices` is the known engine bug
   emails sent to them as an owner (kept 30 days likewise), `[{ projectId,
-  erratumId, status, createdAt, sentAt }]` (150). `account` is
+  erratumId, status, createdAt, sentAt }]` (153). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view

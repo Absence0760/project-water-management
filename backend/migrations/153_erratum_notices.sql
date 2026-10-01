@@ -1,4 +1,4 @@
--- 150_erratum_notices — the known-defect procedure's emails (issue #103,
+-- 153_erratum_notices — the known-defect procedure's emails (issue #103,
 -- Gate D; docs/legal/known-defect-procedure.md, docs/engine-errata.md,
 -- docs/data-model.md § Engine errata notices, docs/security.md § Evidence packs
 -- "Who is emailed about a known engine bug").
@@ -64,7 +64,7 @@ CREATE TABLE erratum_sweep (
 );
 
 COMMENT ON TABLE erratum_sweep IS
-	'Which engine errata the worker has swept for affected runs, and with which range (150_erratum_notices, issue #103). Written and read only by app_erratum_sweep.';
+	'Which engine errata the worker has swept for affected runs, and with which range (153_erratum_notices, issue #103). Written and read only by app_erratum_sweep.';
 
 ALTER TABLE erratum_sweep ENABLE ROW LEVEL SECURITY;
 -- Reading only, by a signed-in person: it holds what docs/engine-errata.md already publishes. Never an API key,
@@ -94,7 +94,7 @@ CREATE INDEX erratum_notice_open_idx ON erratum_notice (status, created_at) WHER
 CREATE INDEX erratum_notice_settled_idx ON erratum_notice (settled_at);
 
 COMMENT ON TABLE erratum_notice IS
-	'One "known engine bug" email per erratum, project and owner, ever (150_erratum_notices, issue #103). Own rows readable; written only by the SECURITY DEFINER sweep / claim / finish / purge functions. Purged 30 days after it is settled.';
+	'One "known engine bug" email per erratum, project and owner, ever (153_erratum_notices, issue #103). Own rows readable; written only by the SECURITY DEFINER sweep / claim / finish / purge functions. Purged 30 days after it is settled.';
 
 ALTER TABLE erratum_notice ENABLE ROW LEVEL SECURITY;
 -- Reading only: no INSERT, UPDATE or DELETE policy.

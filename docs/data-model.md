@@ -1244,7 +1244,7 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
   (`USER_FK_COVERAGE`: the `packNotices` section).
 
-### Engine errata notices (150_erratum_notices.sql)
+### Engine errata notices (153_erratum_notices.sql)
 
 The known-defect procedure's emails ([legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
 issue #103). The errata themselves live in code (`ENGINE_ERRATA`, from

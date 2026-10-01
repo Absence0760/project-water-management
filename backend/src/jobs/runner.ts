@@ -147,7 +147,7 @@ export interface TickResult {
 	alerts: SendResult & { scheduled: number; purged: number };
 	/** Evidence pack notices sent by this tick, and settled ones purged (133_pack_notices). */
 	packNotices: NoticeResult & { purged: number };
-	/** The known-defect emails (150_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
+	/** The known-defect emails (153_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
 	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
 }
 

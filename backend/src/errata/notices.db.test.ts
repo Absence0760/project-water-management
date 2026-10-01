@@ -1,5 +1,5 @@
 // "A known engine bug may affect your results" notices (issue #103, the
-// known-defect procedure; 150_erratum_notices.sql, errata/notices.ts,
+// known-defect procedure; 153_erratum_notices.sql, errata/notices.ts,
 // docs/legal/known-defect-procedure.md), at the SQL and worker level: which
 // runs an erratum reaches (the run's engine, or the fit's for a `fit`
 // erratum, in [first affected, fixed in)), who is queued (owners direct or

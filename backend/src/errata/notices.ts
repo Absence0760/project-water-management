@@ -1,6 +1,6 @@
 // "A known engine bug may affect your results" emails: the known-defect
 // procedure's notice (issue #103, Gate D; docs/legal/known-defect-procedure.md,
-// 150_erratum_notices.sql). The pattern is the pack notices'
+// 153_erratum_notices.sql). The pattern is the pack notices'
 // (evidence/notices.ts):
 //
 //   1. Swept by the worker's tick (sweepErrata): the engine's ENGINE_ERRATA,

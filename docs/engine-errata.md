@@ -36,7 +36,7 @@ documented. Then run `pnpm gen:liability`;
 issue #103). Once the release that carries it is deployed, every run in its
 range is tagged **May be affected** in the run list and its header (the API's
 `errata` on each run), and on the next worker tick each project holding such
-a run has its owners emailed once (150_erratum_notices). Changing a row's
+a run has its owners emailed once (153_erratum_notices). Changing a row's
 range later sweeps again, mailing only owners not mailed about it before.
 
 ## Errata

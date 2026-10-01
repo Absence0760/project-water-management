@@ -149,7 +149,7 @@ Tracked in issue #103.
     [legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
     for counsel review. A row in engine-errata.md is the trigger: the app
     tags the runs it may affect (**May be affected**) and the worker emails each
-    affected project's owners once (150_erratum_notices).
+    affected project's owners once (153_erratum_notices).
   - A South African attorney's opinion on the CPA once fees start (s48, s49,
     s51, and whether s61 reaches a hosted model), the US $100 floor against
     real fees, §16 and §18 against s48, ECTA s43–44 (address, cooling-off),

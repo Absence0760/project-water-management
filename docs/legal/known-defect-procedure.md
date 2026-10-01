@@ -45,7 +45,7 @@ failing test that shows the wrong figure, not a suspicion.
   the errata of the run's engine
   ([engine-errata.md](../engine-errata.md)). The flag means *may* be
   affected: a run is wrong only when the erratum's conditions hold.
-- **The email** (`150_erratum_notices.sql`, backend `errata/notices.ts`). On
+- **The email** (`153_erratum_notices.sql`, backend `errata/notices.ts`). On
   each tick the worker hands the list to `app_erratum_sweep`, which looks at
   the runs only for an erratum it hasn't swept with that range (an
   unchanged list costs a lookup per erratum). For each project with a run in
