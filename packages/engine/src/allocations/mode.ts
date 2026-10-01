@@ -22,8 +22,9 @@
 //    nothing, and otherwise at most the in-force allocations' maximum rates
 //    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
 //    two.
-//  - 'fullAllocation': "what if every lawful user took their entitlement"
-//    (WP-3.11's background run): each unit's abstraction demand (crops and
+//  - 'fullAllocation': "what if every registered or licensed volume were
+//    taken in full" (a registration is not an entitlement; WP-3.11's
+//    background run): each unit's abstraction demand (crops and
 //    demand objects) is scaled, per water year, so it adds up to the
 //    registered volume in force over the run's days of that year (both
 //    sources together), keeping the unit's own seasonal pattern. A unit with

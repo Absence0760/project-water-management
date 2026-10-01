@@ -50,7 +50,6 @@ describe('cell parsers', () => {
 	});
 
 	it('maps authorisation, purpose and source words', () => {
-		expect(parseAuthorisation('Existing lawful use')).toBe('existing_lawful_use');
 		expect(parseAuthorisation('WUL')).toBe('licence');
 		expect(parseAuthorisation('General Authorisation')).toBe('general_authorisation');
 		expect(parseAuthorisation('maybe')).toBeUndefined();
@@ -60,6 +59,60 @@ describe('cell parsers', () => {
 		expect(parseWaterSource('Borehole')).toBe('groundwater');
 		expect(parseWaterSource('SW')).toBe('surface');
 		expect(parseWaterSource('sea')).toBeUndefined();
+	});
+});
+
+// Issue #281: a registration is not an entitlement, existing lawful use is
+// verified only under s35, and Schedule 1 is permissible use, not a s39 GA.
+describe('parseAuthorisation', () => {
+	const cases: [string, string | null | undefined][] = [
+		['', null],
+		['Registration', 'registration'],
+		['Registered use', 'registration'],
+		['WARMS', 'registration'],
+		['Licence', 'licence'],
+		['Water use license', 'licence'],
+		['s40', 'licence'],
+		['GA', 'general_authorisation'],
+		['General Authorization', 'general_authorisation'],
+		['s39', 'general_authorisation'],
+		['Section 39', 'general_authorisation'],
+		// Schedule 1 is its own value, never a general authorisation.
+		['Schedule 1', 'schedule_1'],
+		['Sch 1', 'schedule_1'],
+		['Sch. 1', 'schedule_1'],
+		['Schedule1', 'schedule_1'],
+		['Permissible use', 'schedule_1'],
+		['s22(1)(a)(i)', 'schedule_1'],
+		// Unqualified existing lawful use is a claim, not a verified use.
+		['Existing lawful use', 'existing_lawful_use_claimed'],
+		['Existing', 'existing_lawful_use_claimed'],
+		['ELU', 'existing_lawful_use_claimed'],
+		['s32', 'existing_lawful_use_claimed'],
+		['Section 32', 'existing_lawful_use_claimed'],
+		['Claimed ELU', 'existing_lawful_use_claimed'],
+		['Unverified ELU', 'existing_lawful_use_claimed'],
+		['Existing lawful use (unverified)', 'existing_lawful_use_claimed'],
+		// Only an explicit verification reads as verified.
+		['Verified', 'existing_lawful_use'],
+		['Verified ELU', 'existing_lawful_use'],
+		['ELU (verified)', 'existing_lawful_use'],
+		['Existing lawful use - verified', 'existing_lawful_use'],
+		['Verified existing lawful use', 'existing_lawful_use'],
+		['s35', 'existing_lawful_use'],
+		['Section 35', 'existing_lawful_use'],
+		['S35 verified', 'existing_lawful_use'],
+		['Schedule 2', undefined],
+		['maybe', undefined]
+	];
+	for (const [cell, want] of cases) it(`maps “${cell}” to ${String(want)}`, () => expect(parseAuthorisation(cell)).toBe(want));
+
+	it('names every value an unknown authorisation could be', () => {
+		const t = parseAllocationTable('registration_no,authorisation,water_source,volume_m3_year\nR1,Schedule 2,surface,5\n', 'csv');
+		expect(t.rows[0]!.authorisation).toBeNull();
+		expect(t.rows[0]!.errors).toEqual([
+			'unknown authorisation “Schedule 2” (registration, licence, general authorisation, Schedule 1, existing lawful use (a claim) or verified existing lawful use (s35))'
+		]);
 	});
 });
 
@@ -83,7 +136,8 @@ describe('parseAllocationTable', () => {
 			validTo: null
 		});
 		expect(t.rows[2]).toMatchObject({ authorisation: 'licence', validTo: '2045-05-31' });
-		expect(t.rows[3]).toMatchObject({ purpose: 'livestock', authorisation: 'existing_lawful_use' });
+		// The extract says "Existing lawful use" with no verification: a claim (#281).
+		expect(t.rows[3]).toMatchObject({ purpose: 'livestock', authorisation: 'existing_lawful_use_claimed' });
 	});
 
 	it('reads a semicolon file with decimal commas', () => {

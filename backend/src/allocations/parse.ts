@@ -10,11 +10,29 @@
 // for them, so they never reach the database.
 
 export type AllocationSourceKind = 'warms_extract' | 'csv';
-export type Authorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+// A registration (WARMS) is not an entitlement, and existing lawful use is
+// verified only under s35: an unqualified "existing" / "ELU" / "s32" is a
+// claim (existing_lawful_use_claimed), and only an explicit "verified" or
+// "s35" reads as verified (existing_lawful_use). Schedule 1 is permissible use
+// (NWA s22(1)(a)(i)), not a s39 general authorisation (issue #281).
+export type Authorisation =
+	| 'registration'
+	| 'licence'
+	| 'general_authorisation'
+	| 'schedule_1'
+	| 'existing_lawful_use_claimed'
+	| 'existing_lawful_use';
 export type Purpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
 export type WaterSource = 'surface' | 'groundwater';
 
-export const AUTHORISATIONS: readonly Authorisation[] = ['registration', 'licence', 'general_authorisation', 'existing_lawful_use'];
+export const AUTHORISATIONS: readonly Authorisation[] = [
+	'registration',
+	'licence',
+	'general_authorisation',
+	'schedule_1',
+	'existing_lawful_use_claimed',
+	'existing_lawful_use'
+];
 export const PURPOSES: readonly Purpose[] = ['irrigation', 'domestic', 'livestock', 'industry', 'mining', 'municipal', 'other'];
 export const WATER_SOURCES: readonly WaterSource[] = ['surface', 'groundwater'];
 
@@ -258,8 +276,13 @@ export function parseAuthorisation(cell: string): Authorisation | null | undefin
 	if (w === '') return null;
 	if (/^(registration|registered|reg|warms|registered use)$/.test(w)) return 'registration';
 	if (/^(licen[cs]e|licen[cs]ed|wul|water use licen[cs]e|s40|section 40)$/.test(w)) return 'licence';
-	if (/^(ga|general authori[sz]ation|s39|section 39|schedule 1|sch 1)$/.test(w)) return 'general_authorisation';
-	if (/^(elu|existing lawful use|existing|s35|section 35|s32|section 32|verified|verified elu)$/.test(w)) return 'existing_lawful_use';
+	if (/^(ga|general authori[sz]ation|s39|section 39)$/.test(w)) return 'general_authorisation';
+	if (/^(schedule ?1|sch ?1|sched ?1|schedule 1 use|permissible use|s22 1 a i|section 22 1 a i)$/.test(w)) return 'schedule_1';
+	// Verified only when the cell says so: s35 is the verification itself.
+	if (/^(verified|verified elu|elu verified|verified existing lawful use|existing lawful use verified|s35|section 35|s35 verified|verified s35)$/.test(w))
+		return 'existing_lawful_use';
+	if (/^(elu|existing lawful use|existing|existing use|s32|section 32|claimed|claimed elu|elu claimed|claimed existing lawful use|existing lawful use claimed|unverified|unverified elu|elu unverified|existing lawful use unverified|unverified existing lawful use)$/.test(w))
+		return 'existing_lawful_use_claimed';
 	return undefined;
 }
 
@@ -347,7 +370,7 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			if (LOOKS_LIKE_ID_NUMBER.test(get(f).replace(/\s/g, ''))) errors.push(`${columns[f]} looks like an ID number; the app doesn't keep those`);
 
 		const auth = parseAuthorisation(get('authorisation'));
-		if (auth === undefined) errors.push(`unknown authorisation “${get('authorisation')}” (registration, licence, general authorisation or existing lawful use)`);
+		if (auth === undefined) errors.push(`unknown authorisation “${get('authorisation')}” (registration, licence, general authorisation, Schedule 1, existing lawful use (a claim) or verified existing lawful use (s35))`);
 		// A WARMS extract lists registrations; the template must say.
 		else row.authorisation = auth ?? (kind === 'warms_extract' ? 'registration' : null);
 		if (auth === null && kind !== 'warms_extract') errors.push('authorisation is missing');

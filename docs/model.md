@@ -7273,7 +7273,8 @@ bits whatever order they came in).
   volumes; the comparison still nets it, and reads the unit below its
   surface volume by that much. Pending the hydrologist, with dam filling vs
   registered storage (s21b, issue #90).
-- **`fullAllocation`**: "what if every lawful user took their entitlement",
+- **`fullAllocation`**: "what if every registered or licensed volume were
+  taken in full" (a registration is not an entitlement, issue #281),
   the background run of a cumulative assessment (WP-3.11). Each unit's
   abstraction demand D = F / e + its demand objects' (a water user's own
   demand) is scaled, water year by water year, by
