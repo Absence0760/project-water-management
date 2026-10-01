@@ -24,6 +24,9 @@ export const SECTIONS: Record<string, string> = {
 	verify: 'The confirm-your-email page (opened from the confirmation email).',
 	banner: 'The strips at the top of every page: until the email address is confirmed, and while an invitation to a catchment or team waits to be accepted.',
 	account: 'The account page: name, language and units, password.',
+	'account.two-step':
+		'The account page’s “Two-step sign-in” box: after the password, a 6-digit code from an authenticator app on the phone (Google Authenticator, Microsoft Authenticator, Aegis: app names stay as they are). Setting it up (scan a QR code or type a key), the ten recovery codes (each signs in once if the phone is lost), new codes, turning it off. “Two-step sign-in” is the feature’s name: one consistent term.',
+	'account.two-step.counts': 'The account page’s “Two-step sign-in” box: how many unused recovery codes are left.',
 	'account.delete':
 		'The account page’s “Delete my account” section: what deleting the account removes, what the catchment keeps without the person’s name, and what keeps the name (a sign-off is a professional’s signature on a model run; an evidence pack is a sealed copy of the evidence for a water-use licence application). Then the password again, and, if refused, the catchments (“projects”) and teams the person must hand to someone else first. Plain and exact: this is a legal promise about the person’s information.',
 	invitations: 'The invitations page (from the account page, an invitation email or the strip at the top): invitations to join a catchment or a team, each accepted or declined. Nobody joins until they accept.',
@@ -62,6 +65,7 @@ export const SECTIONS: Record<string, string> = {
 	'alerts.kind': 'Alert emails page: the name of each kind of alert.',
 	unsubscribe: 'The page an alert email’s “Stop these emails” link opens. Works without signing in.',
 	'unsubscribe.kind': 'Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for {project} any more”.',
+	feedback: 'The page an alert email’s “Was this useful? Yes · No” links open: the reader confirms Yes or No, may add a comment, and presses Send. Works without signing in.',
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',

@@ -40,6 +40,12 @@ export type Body = {
 	footer: string[];
 	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
 	links?: { label: string; url: string }[];
+	/**
+	 * A question with answer links, after the action and before the footer
+	 * (an alert's "Was this useful? Yes · No", 151_alert_feedback): plain
+	 * links, never an image or a pixel, in HTML; "label: url" in text.
+	 */
+	ask?: { question: string; answers: { label: string; url: string }[] };
 };
 
 /** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
@@ -52,6 +58,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 		...b.paragraphs.flatMap((p) => [paraText(p), '']),
 		`${b.action.label}: ${b.action.url}`,
 		'',
+		...(b.ask ? [b.ask.question, ...b.ask.answers.map((a) => `${a.label}: ${a.url}`), ''] : []),
 		...b.footer.flatMap((p) => [p, '']),
 		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
@@ -67,7 +74,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 ${b.paragraphs.map(p).join('\n')}
 <p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
 <p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
-${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
+${b.ask ? `<p style="margin:0 0 16px">${escapeHtml(b.ask.question)} ${b.ask.answers.map((a) => `<a href="${escapeHtml(a.url)}" style="color:#1d4e89;font-weight:600">${escapeHtml(a.label)}</a>`).join(' · ')}</p>\n` : ''}${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
 <p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
 </main>
 </body>
@@ -357,6 +364,47 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 		},
 		tr
 	);
+}
+
+export type ErratumNoticeFacts = {
+	projectId: string;
+	projectName: string;
+	/** The erratum (docs/engine-errata.md, the engine's ENGINE_ERRATA): its id and what the table says. */
+	erratum: { id: string; keyedOn: 'run' | 'fit'; firstAffected: string; fixedIn: string | null; severity: string; appliesWhen: string; summary: string };
+	/** How many of the project's runs were made by an affected engine (or with an affected fit) when it was swept. */
+	runCount: number;
+};
+
+/**
+ * A confirmed engine bug may affect results in a project (issue #103, the
+ * known-defect procedure; docs/legal/known-defect-procedure.md). Sent once
+ * per erratum, project and owner by the worker (errata/notices.ts), built as
+ * its recipient. It says what goes wrong, when it changes results, how many
+ * runs may be affected and what to do; it never says the results *are*
+ * wrong, since a run is affected only when the erratum's conditions hold.
+ * English, as the workspace is.
+ */
+export function erratumNoticeMail(to: string, f: ErratumNoticeFacts): Mail {
+	const e = f.erratum;
+	const runs = `${f.runCount} ${f.runCount === 1 ? 'run' : 'runs'}`;
+	const made =
+		e.keyedOn === 'fit'
+			? `${runs} in ${f.projectName} ${f.runCount === 1 ? 'uses' : 'use'} parameters from an automatic calibration made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`
+			: `${runs} in ${f.projectName} ${f.runCount === 1 ? 'was' : 'were'} made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`;
+	return render('erratum_notice', to, `Known engine bug ${e.id} may affect ${f.projectName} — ${PRODUCT}`, {
+		heading: `A known engine bug may affect results in ${f.projectName}`,
+		paragraphs: [
+			`We confirmed a bug in the model engine (${e.id}, severity ${e.severity.toLowerCase()}): ${e.summary}.`,
+			`It changes results only when: ${e.appliesWhen}.`,
+			made,
+			e.fixedIn
+				? `It is fixed in engine ${e.fixedIn}. Check whether the conditions apply to your catchment; if they do, re-run on the current engine and compare the two runs. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`
+				: `It is not fixed yet. Check whether the conditions apply to your catchment; if they do, treat the affected figures with care until it is. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`,
+			'If a run you published, signed or put in an evidence pack is affected, consider telling the people who rely on it. An issued pack keeps its own record, and its verify page lists the errata found since it was issued.'
+		],
+		action: { label: 'Open the runs', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=runs`) },
+		footer: [`You get this email because you own ${f.projectName}. The list of known engine bugs is published with the methodology (docs/engine-errata.md).`]
+	});
 }
 
 /** What a deletion did, for its confirmation: the catchments and teams the person left (their names, as they stood). */

@@ -193,7 +193,8 @@ Keys this app needs:
 | --- | --- |
 | `auth_jwt_secret` | `AUTH_JWT_SECRET` in the API's and worker's runtime secrets: signs session cookies, and keys the run stamps (security.md § Run stamps; rotating it leaves stored runs unverified) (≥ 32 random bytes) |
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
-| `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent |
+| `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links and the "Was this useful?" links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent, and the feedback links of the last 30 days |
+| `app_encryption_key` | `APP_ENCRYPTION_KEY` in the API's runtime secret: seals two-step sign-in's TOTP secrets at rest (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it voids every authenticator ([§ Runbooks](#runbooks) 15) |
 | `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
@@ -224,7 +225,8 @@ write again, and `tf.sh` sets it for you: it reads the sops file's plaintext
 `sops.lastmodified` (which sops rewrites on every edit, without decrypting
 anything) and passes it as `YYYYMMDDhhmmss`. So:
 
-- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`;
+- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`,
+  `app_encryption_key` (which voids every authenticator: § Runbooks 15);
   `cloudfront_private_key` also needs its public key moved, below):
   edit it with sops, then plan and apply through `tf.sh`. The edit moved
   `lastmodified`, so the plan replaces every runtime secret version.
@@ -1243,7 +1245,9 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
 
   | Variable | Value |
   | --- | --- |
-  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
+  | `APP_ENCRYPTION_KEY` | The sops key `app_encryption_key` (32+ alphanumeric characters), in the API's runtime secret. Seals two-step sign-in's TOTP secrets (AES-256-GCM, `auth/secretBox.ts`); the API refuses a missing, short or `dev-only-` value at cold start. Rotate only if it leaked ([§ Runbooks](#runbooks) 15) |
+  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: owners, team admins and assessors always need two-step sign-in in production (`auth/stepUp.ts`) |
+  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (151). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
   | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |
@@ -1644,7 +1648,10 @@ Every step is an ordinary app action by an owner unless it says "operator".
    says which endpoint and what kind of failure; `at` points at the throwing
    line. One route with a SQLSTATE after a deploy is usually a migration the
    code got ahead of (§ A failed migration); every route at once with
-   `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
+   `ECONNREFUSED` or `57P01` is the database (RDS alarms); a failover or
+   restart also leaves `{"event":"db_idle_client_error","code":"57P01"}`
+   warnings, one per pooled connection it dropped (`backend/src/db/pool.ts`:
+   the pool replaces the connection, the process keeps running). Reproduce it
    locally, fix the cause and add a test; the message was deliberately not
    logged (it can hold row values), so the stack and code are the lead.
 10. **Request flood** (the `cloudfront-requests` or `waf-blocked-requests`
@@ -1803,6 +1810,28 @@ Every step is an ordinary app action by an owner unless it says "operator".
        instance, § Restoring the database, and open an AWS Support case).
     7. Find out who and why in CloudTrail (the email names the caller), and
        record it in the operator log.
+
+14. **Someone lost their authenticator app and their recovery codes**
+    (operator; two-step sign-in, [security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+    There is no reset route by design: a reset link to the inbox would be a
+    way round the second factor for anyone who holds the inbox. Confirm who
+    is asking out of band (a call to a number the WUA or consultancy has on
+    file, not one in the request), then, as the schema owner, in one
+    transaction:
+    `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
+    (the last line signs out every session, a thief's included). They sign
+    in with the password and set up a new authenticator on the Account
+    page; if they are an owner, team admin or assessor, they need it before
+    those actions again. If the password may be known to someone else too,
+    have them reset it first. Record the request and how identity was
+    checked in the operator log.
+15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
+    every TOTP secret; a new one can't open the old rows. Edit
+    `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
+    the schema owner, `DELETE FROM user_recovery_code; DELETE FROM user_totp;`
+    and tell every person who had two-step sign-in on to set it up again
+    (owners, team admins and assessors can't do those actions until they
+    have). Their security log keeps the history.
 
 ## Rollback
 

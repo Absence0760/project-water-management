@@ -98,6 +98,24 @@ export interface User {
 	farmNoticeCurrent?: boolean;
 }
 
+/** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
+export interface MfaStatus {
+	/** An authenticator app is set up. */
+	enrolled: boolean;
+	enrolledAt: string | null;
+	/** Unused recovery codes left (0 when off). */
+	recoveryCodesLeft: number;
+	/** The person is a project owner, team admin or assessor: those actions need it. */
+	required: boolean;
+	/** This session signed in with a code. */
+	sessionVerified: boolean;
+}
+
+/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+export interface MfaChallenge {
+	mfaRequired: true;
+}
+
 export interface UserPreferences {
 	/**
 	 * The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`);
@@ -510,6 +528,19 @@ export interface Unsubscribed {
 	farm: string | null;
 }
 
+/** POST /alerts/feedback: what the answered mail was about (151_alert_feedback). */
+export interface FeedbackAnswered {
+	kind: AlertKind | 'digest';
+	project: { name: string };
+}
+
+/** GET /projects/:id/alert-feedback (editors): answers counted per kind, and comments, never who gave them. */
+export interface AlertFeedbackSummary {
+	since: string;
+	kinds: { kind: AlertKind | 'digest'; yes: number; no: number }[];
+	comments: { kind: AlertKind | 'digest'; useful: boolean; comment: string; answeredAt: string }[];
+}
+
 export interface Portfolio {
 	team: { id: string; name: string; role: TeamRole };
 	/** The traffic-light thresholds the statuses were judged by (the team's, or the defaults). */
@@ -629,6 +660,15 @@ export interface RunMeta {
 	 * from an older API (= manual).
 	 */
 	trigger?: RunTrigger;
+	/** The engine of the automatic fit its parameters came from (settings.fitRecord); null for entered parameters. Absent from an older API. */
+	fitEngineVersion?: string | null;
+	/**
+	 * The known engine bugs that may affect it (issue #103, docs/engine-errata.md):
+	 * the ids of the errata whose range holds its engine, or its fit's for a `fit`
+	 * erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
+	 * from an older API.
+	 */
+	errata?: string[];
 }
 
 export type RunTrigger = 'manual' | 'auto' | 'forecast';

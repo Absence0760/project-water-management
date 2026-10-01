@@ -604,6 +604,7 @@ variables {
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
   alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  app_encryption_key  = "0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd"
   # PEM armour around a placeholder: the shape the variable checks, not a key.
   cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
   # Report downloads (reports.tf): a public key generated for these tests (its
@@ -782,16 +783,17 @@ run "runtime_secrets" {
   assert {
     condition = (
       toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
-      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY", "APP_ENCRYPTION_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
       toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
     )
-    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret and the download signing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret, the download signing key and the TOTP sealing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
     condition = (
       local.runtime_secrets.migrate.WATER_APP_PASSWORD == var.db_app_password &&
       local.runtime_secrets.api.AUTH_JWT_SECRET == var.auth_jwt_secret &&
+      local.runtime_secrets.api.APP_ENCRYPTION_KEY == var.app_encryption_key &&
       local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret
     )
     error_message = "The runtime secrets carry the values from their sources (the sops-fed variables)."
@@ -822,6 +824,7 @@ run "runtime_secrets" {
       ephemeralasnull(var.db_app_password) == null,
       ephemeralasnull(var.alerts_token_secret) == null,
       ephemeralasnull(var.cloudfront_private_key) == null,
+      ephemeralasnull(var.app_encryption_key) == null,
       ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY) == null,
       ephemeralasnull(local.runtime_secrets.api.DATABASE_URL) == null,
       ephemeralasnull(local.runtime_secrets.worker.DATABASE_URL) == null,
@@ -985,6 +988,28 @@ run "rejects_short_alerts_token_secret" {
   }
 
   expect_failures = [var.alerts_token_secret]
+}
+
+# The TOTP sealing key (two-step sign-in, issue #282): long, and not the
+# committed dev placeholder.
+run "rejects_short_app_encryption_key" {
+  command = plan
+
+  variables {
+    app_encryption_key = "0123456789abcdef"
+  }
+
+  expect_failures = [var.app_encryption_key]
+}
+
+run "rejects_placeholder_app_encryption_key" {
+  command = plan
+
+  variables {
+    app_encryption_key = "dev-only-app-encryption-key-0000000000000000"
+  }
+
+  expect_failures = [var.app_encryption_key]
 }
 
 run "rejects_fractional_runtime_secret_version" {

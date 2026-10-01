@@ -143,9 +143,13 @@ Tracked in issue #103.
     indemnity cover for consultants who sign off.
   - Technology errors-and-omissions insurance that covers claims brought in
     South Africa, under South African law, by third parties too.
-  - A known-defect procedure beside the incident procedure: when an engine
+  - [x] A known-defect procedure beside the incident procedure: when an engine
     bug that changes results is confirmed, flag the affected runs and email
-    the project owners.
+    the project owners. *Done (2026-10-01, issue #103):*
+    [legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+    for counsel review. A row in engine-errata.md is the trigger: the app
+    tags the runs it may affect (**May be affected**) and the worker emails each
+    affected project's owners once (153_erratum_notices).
   - A South African attorney's opinion on the CPA once fees start (s48, s49,
     s51, and whether s61 reaches a hosted model), the US $100 floor against
     real fees, §16 and §18 against s48, ECTA s43–44 (address, cooling-off),
@@ -240,6 +244,16 @@ Tracked in issue #103.
   in any expedient way, answered as soon as reasonably practicable with what
   was done. A material change: `LEGAL_VERSION` 2026-09-30 (every account
   accepts again; nothing is in production yet).
+- 2026-10-01: Privacy §3, §4, §5 and §7 (issue #74, 151): the "Was this
+  useful?" link on alert emails. §3 lists the feedback kept (yes or no, an
+  optional comment, the alert's kind; nothing until Send is pressed) and
+  says the emails carry no tracking pixels or tracked links; §4 adds its
+  lawful basis (the organisation's legitimate interest in useful alerts;
+  answering is optional); §5 says editors see the answers counted and the
+  comments without names; §7 gives its retention (an answer 1 year; an
+  unanswered link 30 days). A new kind of personal information, so a
+  material change: `LEGAL_VERSION` 2026-10-01 (every account accepts again;
+  nothing is in production yet).
 - 2026-10-01: Privacy §10 says a signed-in person can delete the account
   themselves (Account → Delete my account, issue #112, 143), and §7 that the
   account page says when they must hand a project or team over first. The
@@ -247,3 +261,12 @@ Tracked in issue #103.
   unchanged: a clarification, not a material change, so it brings no
   `LEGAL_VERSION` bump of its own (it shares the 2026-10-01 text with any
   bump made that day).
+- 2026-10-01: two-step sign-in (issue #282, 150_mfa.sql). Privacy §3 lists
+  the authenticator key (stored encrypted), the recovery codes (one-way
+  hashes), wrong-code counts and the account's own record of turning it on
+  or off; §7 their retention; §8 a third strictly necessary cookie,
+  `wm_mfa` (the 5-minute sign-in challenge between the password and the
+  code); §9 says owners, team admins and assessors must use it. New
+  personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
+  notice's "what changed" list now names this and the 2026-09-30 deletion
+  change (it still listed 2026-09-28's).

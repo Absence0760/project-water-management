@@ -16,6 +16,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { recordAudit } from '../history/record.js';
 import { currentOutlookPublication, PublishOutlookBody, publishOutlook, withdrawOutlookPublication } from './publication.js';
 import { CreateOutlookBody, OUTLOOK_JOBS_PER_USER } from './schema.js';
@@ -59,6 +60,8 @@ export const outlookRoutes = new Hono<AuthEnv>()
 		if (!UUID.test(outlookId)) throw new ApiError(404, 'not found');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Publishing to farmers needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const publication = await publishOutlook(db, id, outlookId, body.levelId);
 			await recordAudit(db, id, 'outlook.published', {
 				publicationId: publication.id,
@@ -80,6 +83,8 @@ export const outlookRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireRole(db, id, 'editor');
+			// Publishing to farmers needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const publication = await withdrawOutlookPublication(db, id);
 			await recordAudit(db, id, 'outlook.unpublished', { publicationId: publication.id, outlookId: publication.outlookId, level: publication.level });
 			return c.json({ publication });

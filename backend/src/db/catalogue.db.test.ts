@@ -122,17 +122,21 @@ const APPEND_ONLY = new Set([
  * only by the operator, as the schema owner, on a POPIA request
  * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
  * publication is ended, not deleted; the newest 12 are kept by its cap
- * trigger (106_outlook_triggers_publication.sql).
+ * trigger (106_outlook_triggers_publication.sql). An account's security
+ * event is append-only, so a thief can't erase that they turned two-step
+ * sign-in off (150_mfa.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication', 'account_security_event']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
  * dam (040_yield.sql). An outlook member is written once, complete, by its
  * job, and goes with its outlook (063_seasonal_outlook.sql). A signed-out
- * session is recorded once and aged out (102_session_revocation.sql).
+ * session is recorded once and aged out (102_session_revocation.sql). A
+ * recovery code is issued, then used or replaced (deleted), and an account's
+ * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session']);
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -146,11 +150,14 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * written by the migration runner from the engine's language table
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
- * no caller can choose a recipient. The quaternary reference dataset is
- * loaded by the operator as the schema owner (152_catchment_map.sql,
- * `pnpm import:quaternaries`); the app only proposes from it.
+ * no caller can choose a recipient; the same for a person's erratum notices
+ * and the record of which errata were swept (153_erratum_notices); and alert
+ * feedback, written only by 151_alert_feedback's, so no caller answers for
+ * someone else. The quaternary reference dataset is loaded by the operator as
+ * the schema owner (152_catchment_map.sql, `pnpm import:quaternaries`); the
+ * app only proposes from it.
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'quaternary_reference']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -186,7 +193,10 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
 	// A person's alert mails and choices are theirs (051_alerts.sql); a rule is the project's.
 	'alert_delivery.user_id': 'cascade',
+	'alert_feedback.user_id': 'cascade',
 	'pack_notice.user_id': 'cascade',
+	// A person's known-engine-bug emails (153_erratum_notices).
+	'erratum_notice.user_id': 'cascade',
 	'alert_rule.created_by': 'set null',
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
@@ -249,6 +259,11 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).
 	'user_preferences.user_id': 'cascade',
+	// Two-step sign-in is the person's own and goes with them (150_mfa.sql).
+	'user_totp.user_id': 'cascade',
+	'user_recovery_code.user_id': 'cascade',
+	'mfa_throttle.user_id': 'cascade',
+	'account_security_event.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };
 
@@ -386,7 +401,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice)', async () => {
+	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice, erratum_notice, erratum_sweep)', async () => {
 		for (const table of READ_ONLY) {
 			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);

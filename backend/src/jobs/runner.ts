@@ -8,6 +8,7 @@
 // transport (tests), and the production worker Lambda (lambda-worker.ts).
 import { sendAlerts, type SendResult } from '../alerts/send.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
+import { type ErratumNoticeResult, purgeErratumNotices, sendErratumNotices, sweepErrata } from '../errata/notices.js';
 import { type NoticeResult, purgePackNotices, sendPackNotices } from '../evidence/notices.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
@@ -146,6 +147,8 @@ export interface TickResult {
 	alerts: SendResult & { scheduled: number; purged: number };
 	/** Evidence pack notices sent by this tick, and settled ones purged (133_pack_notices). */
 	packNotices: NoticeResult & { purged: number };
+	/** The known-defect emails (153_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
+	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -169,17 +172,21 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		lost: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
-		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 }
+		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
+		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 }
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
 	const noticesPurged = await purgePackNotices();
+	const erratumPurged = await purgeErratumNotices();
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
 	let alertsScheduled = 0;
 	let alertsPurged = 0;
 	if (o.alerts !== false) {
 		alertsPurged = await withoutUser(async (db) => (await db.query<{ n: number }>('SELECT app_purge_alerts(make_interval(days => $1)) AS n', [ALERT_RETENTION_DAYS])).rows[0]?.n ?? 0);
+		// "Was this useful?" rows: unanswered 30 days, answers 365 (151_alert_feedback).
+		alertsPurged += await withoutUser(async (db) => (await db.query<{ n: number }>('SELECT app_purge_alert_answers() AS n')).rows[0]?.n ?? 0);
 		alertsScheduled = await withoutUser(
 			async (db) => (await db.query<{ n: number }>(`SELECT app_alert_schedule(NULL, interval '${ALERT_CHECK_GAP}', 100) AS n`)).rows[0]?.n ?? 0
 		);
@@ -195,6 +202,10 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };
 	// Queued by the issue or withdraw route itself (no job), so sent every tick; global like the alert sends.
 	result.packNotices = { purged: noticesPurged, ...(await sendPackNotices()) };
+	// A new erratum (a deploy that adds a row to docs/engine-errata.md) is swept once, after the jobs so a sweep that
+	// fails can't hold them up; an unchanged list costs a lookup per erratum. Its notices go out in the same tick.
+	const erratumQueued = await sweepErrata();
+	result.erratumNotices = { purged: erratumPurged, queued: erratumQueued, ...(await sendErratumNotices()) };
 	result.stats = await withoutUser(queueStats);
 	return result;
 }

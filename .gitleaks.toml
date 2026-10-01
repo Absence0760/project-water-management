@@ -15,4 +15,10 @@ regexes = [
   '''^abcdef0123456789abcdef0123456789abcdef01234567$''',
   '''^fedcba9876543210fedcba9876543210fedcba9876543210$''',
   '''^-----BEGIN PRIVATE KEY-----\\ntestonlynotakey\\n-----END PRIVATE KEY-----$''',
+  # Two-step sign-in (issue #282), reviewed 2026-10-01: the too-short key the guardrails test expects refused,
+  # the fake sops value in infra/scripts (tf-stubs/sops.mjs, tf.test.mjs), and the RFC 6238 test seed
+  # "12345678901234567890" in base32 (backend/src/auth/totp.test.ts).
+  '''^0123456789abcdef$''',
+  '''^synthetic0app0encryption0key0123456789$''',
+  '''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''',
 ]

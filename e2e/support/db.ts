@@ -136,6 +136,25 @@ export async function plantAlertSubscription(email: string, projectId: string, k
 }
 
 /**
+ * An alert email's "Was this useful?" row for `email` whose token the test
+ * knows (151_alert_feedback). The worker would derive the token as
+ * HMAC(ALERTS_TOKEN_SECRET, "wm-alert-feedback/v1/" + nonce); the API only
+ * ever looks it up by its SHA-256, so any planted token behaves the same.
+ */
+export async function plantAlertFeedback(email: string, projectId: string, kind: string): Promise<string> {
+	const { token, hash } = newToken();
+	await withDb(async (db) => {
+		const r = await db.query(
+			`INSERT INTO alert_feedback (project_id, user_id, kind, nonce, token_hash)
+			 SELECT $2, id, $3, $4, $5 FROM app_user WHERE email = $1`,
+			[email, projectId, kind, randomBytes(32), hash]
+		);
+		if (r.rowCount !== 1) throw new Error(`no user ${email}`);
+	});
+	return token;
+}
+
+/**
  * Turn a run into a stored run of the legacy runoff model, as a run made
  * before engine 1.0.0 removed that model (issue #16) sits in the database:
  * its settings snapshot says 'legacy' (what every reader keys on), it has no
@@ -363,5 +382,17 @@ export async function plantFiringAlert(projectId: string): Promise<void> {
 			[projectId]
 		);
 		await db.query(`INSERT INTO alert_event (rule_id, project_id, kind, state, value) VALUES ($1, $2, 'data_stale', 'firing', 30)`, [rows[0]!.id, projectId]);
+	});
+}
+
+/**
+ * Make a run look as if an older engine made it (issue #103, the known-defect
+ * flag): only its recorded engine_version changes, so the API flags the errata
+ * of that version (docs/engine-errata.md).
+ */
+export async function plantRunEngine(runId: string, engineVersion: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query('UPDATE model_run SET engine_version = $2 WHERE id = $1', [runId, engineVersion]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
 	});
 }

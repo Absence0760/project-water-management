@@ -708,8 +708,12 @@ alerts plug in as a further kind.
   functions that never return a payload. After the jobs and the alert
   mails, each tick sends the evidence pack notices the issue and withdraw
   routes queued (`evidence/notices.ts`, as each recipient;
-  [evidence-pack.md § Notices](./evidence-pack.md#notices)). Each tick also purges finished jobs
-  after 30 days, settled pack notices after 30, report rows after 8, and invites 90 days past their expiry
+  [evidence-pack.md § Notices](./evidence-pack.md#notices)). Then it sweeps any erratum
+  it hasn't swept with its current range (`app_erratum_sweep`, queuing one email per erratum,
+  project and owner whose project holds a run it may affect) and sends the queued known-bug
+  emails (`errata/notices.ts`, 153; [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Each tick also purges finished jobs
+  after 30 days, settled pack notices and erratum notices after 30, report rows after 8, and invites 90 days past their expiry
   (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
@@ -940,11 +944,16 @@ flowchart LR
    transaction **as its recipient** (`withUser`): `app_alert_my_mode`
    re-checks their access and choice, and RLS limits what the mail can say
    (a farmer's names only their farm). The unsubscribe token is derived
-   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`).
+   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`),
+   and so is the "Was this useful?" token, whose row the recipient's
+   transaction makes (`app_alert_answer_slot`, 151); the answer comes back
+   through the public `POST /alerts/feedback`, never by tracking.
    The mail goes out after that transaction, and `app_alert_finish` records
    `sent`, `skipped` (why) or a retry.
 4. **Purge.** The tick deletes deliveries after 180 days and events 180 days
-   after they cleared (`app_purge_alerts`).
+   after they cleared (`app_purge_alerts`), and "Was this useful?" rows 30
+   days after the mail if unanswered, an answer a year after it was given
+   (`app_purge_alert_answers`).
 
 The worker Lambda's metric line carries `AlertMailsSent` and
 `AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on

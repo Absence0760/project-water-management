@@ -124,7 +124,10 @@ The checklist for these is issue #62; the history scrub is #63.
       [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
       changed, why, and § 6: what stays open for a lawyer, tracked in
       [legal-status.md](./legal-status.md) under Counsel review; the go-live
-      gates and pre-fee items are issue #103).
+      gates and pre-fee items are issue #103; its known-defect procedure is
+      built, 2026-10-01:
+      [legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+      awaiting counsel review with the rest).
 
 - [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
@@ -171,6 +174,30 @@ The checklist for these is issue #62; the history scrub is #63.
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
       `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
+
+## Two-step sign-in (issue #282)
+
+Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
+sign-in, `amr` in the session, and the requirement for project owners, team
+admins and assessors at the route (security.md § Two-step sign-in). Open:
+
+- [ ] **No app-wide prompt yet.** An owner, team admin or assessor without an
+      authenticator learns of the requirement on the Account page (its
+      warning) or from the `403 mfa_required` of the action they tried; the
+      workspace shows that message, with no link. A banner in the app shell
+      (from `GET /auth/mfa` `required && !enrolled`) and, for `mfa_step_up`,
+      a "sign in again" button are the durable fix. Trigger: before the
+      first production deploy with client data (#62).
+- [ ] **The requirement is checked at the route, not in RLS.** Every owner
+      route goes through `requireRole(…, 'owner')`, so a new one is covered
+      without a decision, but a route that checks the owner role some other
+      way would not be. Durable fix: step-4 WP-4.2's `app.auth_mfa`
+      transaction setting, with the owner-level policies refusing without it.
+      Trigger: organisations (WP-4.1), when the session context is rebuilt.
+- [ ] **Signing a run or a pack doesn’t require it** (below,
+      "Two-step sign-in on sign-off"): the operator's decision.
+- [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
+      "verifikasie-app" and "herstelkode" (§ Afrikaans).
 
 ## Hydrologist
 
@@ -2126,7 +2153,9 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 - [x] **Afrikaans boards** at 360 px and an axe pass on every translated
       page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
       green.
-- [ ] **A native speaker's review.** The Afrikaans is machine-written and
+- [ ] **A native speaker's review** (tracked in issue #90, where the
+      client answers it; moved off #74 by the 2026-09-30 fact-check, so #74
+      no longer carries it). The Afrikaans is machine-written and
       machine-checked. The client confirmed (2026-09-28, issue #90) that
       their native-speaker translator (roadmap Step 2 prerequisite 6) will
       review it, the #47 liability lines included
@@ -2150,7 +2179,11 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       "voorbeeld-opvanggebied" hyphenated or as one word (catalogue-wide);
       "Regsinligting" for the Legal nav (`de7530aa`); and "Bevestig
       wagwoord" on sign-up beside "Herhaal nuwe wagwoord" on the account
-      page (deliberate: the English differs). The specs read the words from
+      page (deliberate: the English differs). Added 2026-10-01 from the
+      "Was this useful?" pass (issue #74): "bestuur" for the people who run
+      a catchment's alerts (`6bfb93ee`), and "aftekening" for a sign-off in
+      the terms' "What changed" line (`71f9b9a7`, matching the run's
+      "afgeteken"). The specs read the words from
       the catalogues, so a correction needs no test change. Trigger: before
       Afrikaans-speaking farmers are invited.
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
@@ -4330,8 +4363,13 @@ Left, each with its trigger:
       folded shut, in the run's Record group (`#res-validation`) and under
       the scenario's comparison (`liability/ValidationPanel.svelte`, its
       body a lazy chunk; ui.md § Runs & results, § Scenarios).
-- [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
-      sign-off is as strong as the signer's password.
+- [ ] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
+      sign-in and requires it of owners, team admins and assessors:
+      security.md § Two-step sign-in). Signing a run or a pack doesn't
+      require it yet, since a signer is any editor: a one-line
+      `requireStepUp` in `signoffs/routes.ts` and the pack sign-off route
+      once the operator decides every signer must use it. Until then a
+      sign-off is as strong as the signer's sign-in.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
       2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion
@@ -4688,11 +4726,21 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       catchment-wide rules became one per feed at the same level, in place
       (history kept); a catchment with no feed keeps its choice until its
       first feed adopts it.
-- [ ] **Open rates and farmer feedback** (the roadmap's recommendation
-      before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
-      click tracking on the configuration set (POPIA: say so in the privacy
-      notice) or a "Was this useful?" link. Trigger: one season of alerts on
-      production (#92).
+- [x] **Farmer feedback** (the roadmap's recommendation before
+      WhatsApp/SMS; issue #74): built (151). Every alert email and digest
+      asks "Was this alert useful?" with two plain links, Yes and No, to a
+      public page (`/alerts/feedback`) that preselects the answer, takes an
+      optional comment and stores nothing until **Send**; a single-purpose
+      token (its own HMAC label beside the unsubscribe token's) answers only
+      its own email, for 30 days. Editors see the answers counted per kind
+      and the comments, without names, under the rule editor. Kept: an
+      answer 1 year, an unanswered link 30 days; in the data export,
+      deleted with the account; Privacy §3, §4, §5 and §7 (LEGAL_VERSION
+      2026-10-01). ~~SES open and click tracking~~: **dropped**
+      (fact-check 2026-09-30). Privacy §3 says "We do not use analytics,
+      advertising or tracking tools", and an open pixel is exactly that;
+      open rates are unreliable too, since some mail apps fetch images on
+      their own. No alert email carries an image, a pixel or a tracked link.
 - [ ] **A farmer's own dam alert level** (issue #51, the farmer persona:
       "40 %, chosen by me, before my planting decision"). The page now
       shows the WUA's level for each farm (`AlertChoice.threshold`), but only
@@ -4703,9 +4751,28 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       still the model's estimate, and a level above the WUA's could read as
       an earlier restriction. Trigger: the client decides whether farmers
       may set their own level (plan.md §9 questions).
-- [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
-      is ready; a transport beside `mail/transport.ts` with a log transport
-      locally. Trigger: farmers ask for it after a season of email.
+- [ ] **WhatsApp / SMS** (optional, after Step 2; issue #74). Likely the
+      right channel for South African farmers, but more than a transport
+      beside `mail/transport.ts` (fact-check 2026-09-30). Before it can be
+      built:
+      - `alert_subscription.channel` is limited to `'email'` by a check
+        constraint (`051_alerts.sql`): a migration widens it, and the
+        preferences, the fan-out and the worker learn a channel per person
+        (with a phone number, a new piece of personal information: the
+        privacy notice, the export and deletion).
+      - **Meta as a new sub-processor** (WhatsApp Business Platform): the
+        operator agreement and Privacy §5 name it.
+      - **A POPIA s72 cross-border transfer**: Meta processes outside South
+        Africa, so Privacy §6 needs its own s72 basis and safeguards.
+      - **Templates approved in advance**: WhatsApp's business-initiated
+        messages are pre-approved templates, so every alert's wording (both
+        languages, the liability lines included) is submitted and approved
+        before it can be sent, and changing it means approval again.
+      - **Cost**: utility templates are about R0.12 a message from
+        1 October 2026, per message, so the daily cap and the digest matter
+        for the bill too; an SMS fallback costs more.
+      Trigger: farmers ask for it after a season of email alerts in
+      production (#92); the "Was this useful?" answers are the evidence.
 ## POPIA and the Step 2 release (WP-2.16)
 
 The questions for the client's information officer are in [issue #90](https://github.com/Absence0760/project-water-management/issues/90)

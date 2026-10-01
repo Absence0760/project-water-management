@@ -17,7 +17,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; for an account with two-step sign-in, `200 { mfaRequired: true }` and **no** session, only the 5-minute `wm_mfa` challenge cookie (send a code to `POST /auth/mfa/verify`, § Two-step sign-in); `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
 | POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
@@ -36,6 +36,39 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
+
+### Two-step sign-in
+
+TOTP (RFC 6238) from an authenticator app, with ten recovery codes (issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in)). A
+`code` is the app's six digits (spaces forgiven) or, where it says so, a
+recovery code (`ABCDE-FGH23`, case and the dash forgiven). Every code check
+counts on the account's code throttle first: the 5th wrong code in a row
+answers `429 mfa_locked` (`params.seconds`, `Retry-After`) for a minute,
+doubling to 15, right codes included. The session JWT carries `amr`:
+`["pwd"]`, or `["pwd", "otp"]` once signed in with a code.
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor; `sessionVerified`, this session signed in with a code (signed in) |
+| POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
+| POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
+| DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
+
+**Actions that need it.** Project owners, team admins and assessors must
+sign in with a code before: any route that needs the owner role (members,
+invites, API keys, data feeds, share links, renaming a team project,
+deleting a project), any that needs team admin (and removing someone else
+from a team; removing someone else from a project; an owner making or
+revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
+`POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
+deciding an application (`POST …/scenarios/:sid/decide`) and issuing or
+withdrawing an evidence pack. Checked after the role, so an outsider still
+gets `404` and a viewer `403` without a code: `403 mfa_required` (no
+authenticator yet: set one up) or `403 mfa_step_up` (one is set up, but this
+session signed in with the password only: sign in again).
 
 **Email links.** Tokens are 32 random bytes (43 base64url chars), single-use,
 stored only as SHA-256 hashes. Links point at `SITE_URL`:
@@ -139,12 +172,17 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, preferences,
-  reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
+  signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, erratumNotices, preferences,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `alertFeedback`
+  is their "Was this useful?" rows on alert emails, answered or not,
+  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (151; never
+  the token's hash or nonce). `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
-  createdAt, sentAt }]` (133). `account` is
+  createdAt, sentAt }]` (133). `erratumNotices` is the known engine bug
+  emails sent to them as an owner (kept 30 days likewise), `[{ projectId,
+  erratumId, status, createdAt, sentAt }]` (153). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
@@ -274,9 +312,18 @@ the frontend catalogue (same contract: add, never rename):
 | `note_comment_closed` | 403 | a public comment on a scenario that isn't open for comment (WP-3.15) |
 | `note_audience_denied` | 403 | a scenario note with an audience the caller may not post to, or a farmer commenting on a scenario (WP-3.15) |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
+| `feedback_link_gone` | 404 | an alert email's "Was this useful?" link that no longer works (unknown, more than 30 days old, or its person left the catchment) |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
+| `mfa_code_wrong` | 400 | a wrong two-step sign-in code (§ Two-step sign-in) |
+| `mfa_locked` | 429 | five wrong codes in a row; `params.seconds` (also `Retry-After`) |
+| `mfa_challenge_expired` | 401 | `POST /auth/mfa/verify` without a live sign-in challenge: sign in again |
+| `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
+| `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
+| `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
+| `mfa_required` | 403 | an owner's, team admin's or assessor's action without an authenticator set up |
+| `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 | `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 
@@ -1111,6 +1158,8 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
+| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
+| POST | `/alerts/feedback` *(public)* | `{ token, useful: boolean, comment?: string \| null }` (comment ≤ 500 characters) | `200 { kind, project: { name } }` | – |
 
 - Kinds, what fires them, and who gets them by default:
 
@@ -1183,6 +1232,23 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   catchment-wide `all`), without signing in; a repeat is harmless. `404`
   for a malformed or tampered token, one a later re-enable replaced, or one
   whose person is no longer a member; `400` without a token.
+- **"Was this useful?"** (issue #74, `151_alert_feedback`). Every alert
+  email and digest asks it, after the button, with two plain links, **Yes**
+  and **No**, to the site's `/alerts/feedback#t=<token>&a=yes|no` (token
+  and answer in the fragment, so neither reaches a server log). There is no
+  open or click tracking and no image or pixel in any alert email: opening
+  the mail or following a link records nothing. The page preselects the
+  link's answer and asks first; only **Send** posts `POST /alerts/feedback`,
+  so a mail scanner that opens links answers nothing. The token is
+  single-purpose (its own HMAC label beside the unsubscribe token's,
+  `alerts/tokens.ts`; neither works at the other's route) and answers only
+  its own email, without signing in; answering again replaces the answer.
+  `404 feedback_link_gone` for a malformed, tampered or unknown token, a
+  link more than 30 days old, or a person who is no longer a member of the
+  catchment; `400` for a missing answer or a comment over 500 characters.
+  Same-origin from the page, so the CSRF check applies (unlike the
+  unsubscribe). Editors see the answers in the rule editor
+  (`GET …/alert-feedback`).
 
 ### How alert mail is sent
 
@@ -1581,12 +1647,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
-  (`summary.forecast.from`), else `null`.
+  (`summary.forecast.from`), else `null`. `fitEngineVersion` is the engine
+  of the automatic fit the run's parameters came from
+  (`settings.fitRecord.engineVersion`), else `null`; `errata` the ids of the
+  known engine bugs that may affect the run (issue #103,
+  [engine-errata.md](./engine-errata.md)): the errata whose range holds its
+  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which
   engine 1.0.0 removed, so only a stored run from before it can be one. The

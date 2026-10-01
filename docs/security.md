@@ -99,6 +99,109 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   route inventory, with each credential's own slot as the positive control;
   its source sweep fails when a new place starts reading a credential.
 
+## Two-step sign-in
+
+TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
+password could otherwise publish a restriction to a catchment's farmers or
+decide a licence application.
+
+- **What it is.** An account can add an authenticator app (Account page,
+  `POST /auth/mfa/totp/enrol` then `…/confirm`). From then on a right
+  password at `POST /auth/login` buys no session: it answers
+  `{ mfaRequired: true }` and sets a **5-minute challenge** cookie
+  (`wm_mfa`, `HttpOnly`, `SameSite=Strict`), and `POST /auth/mfa/verify`
+  trades the challenge and a code (six digits from the app, or a recovery
+  code) for the session and the trusted-device cookie. The challenge is a
+  JWT under the session key with **its own issuer**, so it never passes as
+  a session nor a session as it; it is good once (its `jti` goes into
+  `revoked_session`), and a password reset voids it like a session (the
+  watermark). `auth/token-confusion.security.db.test.ts` presents it in the
+  session's slot and as a bearer key (refused) and at the code step with a
+  code (accepted).
+- **The session says how it signed in.** The JWT carries `amr` (RFC 8176):
+  `["pwd"]`, or `["pwd", "otp"]` after a code (from verify, or from
+  confirming an enrolment on this browser). A token without `amr` (from
+  before) is password-only; an unknown value makes the token invalid.
+  Changing the password keeps the session's `amr`; turning two-step sign-in
+  off moves the session watermark (every other session is signed out, so
+  none signed in with a code outlives it and counts again after a later
+  re-enrolment) and reissues this browser's session as `["pwd"]`.
+- **The code.** `auth/totp.ts`, on `node:crypto` (an HMAC-SHA1, the
+  dynamic truncation and a modulus, RFC 4226 § 5.3), 6 digits, 30-second
+  steps, one step either side of now. A step at or before the last one
+  accepted is refused (`user_totp.last_used_step`), so a code can't be
+  replayed. Tests: the RFC 4226 and RFC 6238 Appendix B vectors (SHA-1,
+  SHA-256, SHA-512), the window and replay (`auth/totp.test.ts`).
+- **The secret, at rest.** 20 random bytes, sealed by the backend before it
+  reaches the database: AES-256-GCM under a key derived (HKDF-SHA256) from
+  `APP_ENCRYPTION_KEY`, with the account id as authenticated data, so a
+  sealed secret copied onto another account's row doesn't open
+  (`auth/secretBox.ts`). `APP_ENCRYPTION_KEY` is an API runtime secret (the
+  sops key `app_encryption_key`, § Runtime secrets); the committed dev value
+  is a `dev-only-` placeholder `check:env` pins and the API refuses in
+  production. Rotating it voids every authenticator: clear `user_totp` and
+  `user_recovery_code` as the schema owner and have each person set theirs
+  up again (deployment.md § Runbooks).
+- **Recovery codes.** Ten, shown once when the authenticator is confirmed
+  or when a new set is made (`POST /auth/mfa/recovery-codes`, which needs a
+  code from the app): 10 characters from a 30-letter alphabet without
+  look-alikes (about 49 bits each), stored as SHA-256, each deleted when
+  used. Only while an authenticator is confirmed.
+- **Enrolment needs the password.** `…/enrol` checks the current password
+  through the sign-in lockout, as changing the password does, so a stolen
+  session can't put its own authenticator on the account and lock its owner
+  out. Turning it off needs a code from the app or a recovery code.
+- **Code throttle.** Every code check (sign-in, confirm, turn off, new
+  codes) counts on the account's `mfa_throttle` row first, in its own
+  transaction under a row lock, like `login_throttle`: the 5th wrong code in
+  a row locks the account's code checks for a minute, doubling to 15; a right
+  code clears it; a day forgets it. Only `app_mfa_attempt` and
+  `app_mfa_succeeded` (SECURITY DEFINER, the current user only) touch it, so
+  nobody can clear their own count. Each wrong code logs `login_failed`
+  with reason `bad_code`, counted by the login-failed alarm. The WAF's
+  per-IP limit on `/api/auth/*` covers `/api/auth/mfa/verify` too.
+- **Who must use it.** Project owners, team admins and assessors
+  (`auth/stepUp.ts`). `requireRole(…, 'owner')` and
+  `requireTeamRole(…, 'admin')` call `requireStepUp` after the role check
+  passes (so an outsider still gets 404 and learns nothing), and so do the
+  editor-level actions those roles exist for: publishing to farmers (`POST`
+  and `PATCH …/publication`, publishing and withdrawing an outlook),
+  deciding an application (`…/decide`) and issuing or withdrawing an
+  evidence pack. The owner and admin checks a route makes by hand are
+  stepped up too: removing someone else from a project or a team (leaving
+  isn't), and an owner making or revoking a share link of any kind. A guard
+  (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
+  `rank.owner` comparison in the backend and fails unless its file calls
+  `requireStepUp` or is listed with why it gates no action. Without an authenticator the answer is
+  `403 mfa_required` ("set one up on your Account page"); with one but a
+  password-only session, `403 mfa_step_up` ("sign in again"). The check
+  reads the session's `amr` from the request's `requestAuth`
+  (AsyncLocalStorage, set by `requireUser`) and the account's confirmed
+  factor, so a factor turned off since sign-in no longer counts. Work
+  outside a request (the job runner) isn't stepped up: no job kind needs
+  more than editor, and the request that queued it was checked. Everyone
+  else may turn it on, and is asked for a code at sign-in once they have.
+  `GET /auth/mfa` says whether the person's roles need it (`required`).
+  Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
+  the same person signed in with a code as the positive control; outsiders
+  and viewers still get their 404 and 403).
+- **The switch.** `MFA_REQUIRED=false` turns the requirement off for the
+  backend's DB tests and the e2e API server, whose hundreds of owner
+  fixtures sign in with a password; `stepUp.db.test.ts` turns it back on.
+  Lambda refuses `false` at startup (`config/production.ts`) and so does the
+  check itself (`mfaRequired`). Local dev requires it unless
+  `.env.development.local` says otherwise (run-locally.md).
+- **RLS.** `user_totp` and `user_recovery_code` are the account's own rows
+  for every command; `account_security_event` (enrolled, turned off, a
+  recovery code used, new codes) is the account's own and append-only
+  (no update or delete, even for its owner, so a thief can't erase that they
+  turned it off); `mfa_throttle` is deny-all. `auth/mfa.db.test.ts` proves
+  each, with the owner's own rows as the positive control.
+- **Lost phone and codes.** The operator, after verifying who is asking,
+  deletes the account's `user_totp` and `user_recovery_code` rows as the
+  schema owner (deployment.md § Runbooks); the person then signs in with the
+  password and sets up again.
+
 ## Password reset, email verification and invites
 
 - **Tokens** are 32 bytes from `crypto.randomBytes`, mailed as base64url. The
@@ -1125,6 +1228,37 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     narrow (the same form post to any other route is refused).
   - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
     can't be guessed.
+- **"Was this useful?" (issue #74, `151_alert_feedback`).**
+  - *No tracking.* Every alert email and digest carries two plain links,
+    Yes and No, to `/alerts/feedback#t=<token>&a=yes|no`. No email carries
+    an image, a pixel or a tracked link, SES open and click tracking is not
+    switched on, and opening the mail or a link records nothing: the page
+    preselects the link's answer and stores it only when the reader presses
+    **Send**, so a mail scanner that opens links answers nothing (Privacy
+    §3: "We do not use analytics, advertising or tracking tools"). Open
+    tracking was considered and dropped: it is tracking, and some mail apps
+    fetch images on their own, so it is unreliable too.
+  - *The token.* Single-purpose: HMAC-SHA256(`ALERTS_TOKEN_SECRET`,
+    `"wm-alert-feedback/v1/"` + a per-mail nonce), its own label beside the
+    unsubscribe token's, so neither works at the other's route
+    (`token-confusion.security.db.test.ts`). The worker makes the row as the
+    recipient, only for a delivery of theirs being sent
+    (`app_alert_answer_slot`); the row stores the nonce and the token's
+    SHA-256, and the API, which holds no secret, looks the token up by its
+    hash (`app_alert_answer`). It answers only its own email, without
+    signing in, for 30 days after the mail, and only while its person can
+    still open the catchment; a second answer replaces the first. Its worst
+    use, leaked: someone answers one email's question for that person.
+  - *Who reads it.* The person (their own rows, and in their data export)
+    and the project's editors and owners (RLS). The editors' route,
+    `GET …/alert-feedback`, sends counts per kind and comments, never who
+    gave them; a comment is shown as text, never as HTML. water_app has
+    SELECT only; every write is a SECURITY DEFINER function.
+  - *Retention.* Unanswered rows 30 days after the mail, answers 365 days
+    after they were given (`app_purge_alert_answers`, each tick); deleted
+    with the account (cascade).
+  - *CSRF.* The page posts it same-origin as JSON, so the `csrf()` check
+    applies (the unsubscribe stays the only exemption).
 - **Headers.** `List-Unsubscribe`, `List-Unsubscribe-Post:
   List-Unsubscribe=One-Click` and `Auto-Submitted: auto-generated` go out on
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
@@ -2274,9 +2408,10 @@ by the WUA; nobody is added to a project without an owner acting.
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
   each person choosing right away, daily or off, with a one-click
   unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
-- Cookies: the session cookie (`wm_session`) and the sign-in lockout's
-  trusted-device cookie (`wm_device`, [§ Authentication](#authentication)),
-  both strictly necessary. No
+- Cookies: the session cookie (`wm_session`), the sign-in lockout's
+  trusted-device cookie (`wm_device`, [§ Authentication](#authentication))
+  and two-step sign-in's 5-minute challenge (`wm_mfa`,
+  [§ Two-step sign-in](#two-step-sign-in)), all strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
 - Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
@@ -2305,7 +2440,9 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
-| Ids of sessions the person signed out (102) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
+| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
@@ -2322,6 +2459,7 @@ PDF someone else asked for kept the person as a recipient
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
 | Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
+| Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
@@ -2339,7 +2477,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, evidence pack emails sent (`packNotices`, 133), their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, their "Was this useful?" answers and comments on alert emails (`alertFeedback`, 151), evidence pack emails sent (`packNotices`, 133), known engine bug emails sent (`erratumNotices`, 153), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
@@ -2479,7 +2617,7 @@ key there would let any read-only principal forge any user's session.
 
   | Lambda | Keys |
   | --- | --- |
-  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports) |
+  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports), `APP_ENCRYPTION_KEY` (seals two-step sign-in's secrets, § Two-step sign-in) |
   | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
   | migrate | `WATER_APP_PASSWORD` |
   | fetcher, renderer | none: no database, no session |
@@ -2817,9 +2955,10 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     ECSA or SACNASP register, and printed "self-declared"; the report prints
     the chosen register's address beside each signature); dam
     safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
-    finding on lawfulness and doesn't verify the app's software; there is no MFA on
-    signing yet (Step 4), so a sign-off is as strong as the signer's
-    password. The typed name and registration are personal data: the
+    finding on lawfulness and doesn't verify the app's software; signing
+    doesn't require two-step sign-in (it is the signer's choice, § Two-step
+    sign-in; requiring it for every signer waits on a decision,
+    followups.md), so a sign-off is as strong as the signer's sign-in. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
     with the account cleared, for the life of the licence record it supports
     ([§ Personal information](#personal-information-popia)).
@@ -2985,6 +3124,17 @@ nothing else.
   (an editor gets the pack's page; the applicant the public verify page and
   their own copy, 131's projection, never the editors' pack page).
   `evidence/notices.db.test.ts` checks each refusal beside its control.
+- **Who is emailed about a known engine bug** (153_erratum_notices,
+  [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Only the worker's own context sweeps (`app_erratum_sweep`, refused under a
+  user or an API key), and the errata it sweeps come from the engine's
+  generated list, never a request. Recipients are the affected project's
+  owners (project owner or team admin) with a confirmed, unsuppressed
+  address; `water_app` holds only `SELECT` on `erratum_notice` and there is
+  no write policy. Each email is built as its recipient under RLS, the role
+  and address checked again at send, and carries the erratum's published
+  text, the project's name and a count of runs: never a figure.
+  `errata/notices.db.test.ts` checks each refusal beside its control.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the
   job queue: it reads nothing but through `app_verify_pack`; in the route
