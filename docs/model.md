@@ -157,6 +157,27 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    demand by roughly a quarter. The Crops tab says so and points out any factor
    above 1.0 (a hint, not an error).
 
+   **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
+   demand]` table has rows pasted from another crop and one-month slips (issue
+   #54 item 1). Both importers (`crops.ts` `cropTableNotes`,
+   `extract_project.py` `crop_table_notes`) import every factor as it is and
+   add one import-report warning per crop that trips a check, on the `Crop
+   demand` sheet with the crop as its element:
+
+   | Check | Rule | Why this line |
+   | --- | --- | --- |
+   | Copied row (`crop-factors-copied`) | the 12 factors equal an earlier, differently named crop's, exactly; a row of zeros (an unused crop) isn't compared | a pasted row is exact; two crops may share a curve (apples and pears, #54), so it is for the modeller to confirm, not an error. The copy's months aren't checked again, the first crop's warning covers them |
+   | Negative factor (`crop-factors-suspect`) | below 0 | a crop can't give water back to the pan |
+   | Lone month out of the ground | 0, with both neighbouring months above 0 | no crop in the ARC/SABI tables (item 8) leaves the ground for one month between two in it |
+   | Lone spike or dip | more than 0.3 above, or below, both neighbouring months | 0.3 is the largest step between adjacent months in those tables (table grapes Mar → Apr, pecan into and out of dormancy), and no month there stands off both neighbours by more than 0.15 |
+   | Above 1.0 | above 1.0 | the Crops tab's hint: a factor is Kp × Kc, FAO-56 Kc mid-season is at most about 1.2 ([Table 12](https://www.fao.org/4/x0490e/x0490e0b.htm)) and Class A pan Kp at most 0.85 ([Table 5](https://www.fao.org/4/x0490e/x0490e08.htm)), about 1.0; the ARC/SABI tables peak at 0.7 |
+
+   The year wraps (Oct's neighbours are Sep and Nov). A difference exactly at
+   0.3 isn't flagged (a 10⁻⁹ allowance absorbs float noise). The checks read
+   the table, not the farms, so a crop no farm grows is checked too. A number
+   cell holding text is already its own unmapped item (`non-numeric-value`,
+   imported as 0).
+
    Demand always reads A-pan: `apanMm`, or on the days it covers the daily
    A-pan series (§2.3a, engine ≥ 0.38.0). GR4J's own PE input (`settings.pe`,
    §2.4a, engine ≥ 0.31.0) never reaches it, so a monthly PE for GR4J leaves
