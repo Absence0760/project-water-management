@@ -142,6 +142,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'member.added':
 			return s.via === 'invite' ? `${who} joined as ${role(s.role)} (accepted an invite)` : `Added ${who} as ${role(s.role)}`;
 		case 'member.removed':
+			// accountDeleted: they deleted their account (issue #112), which took them out of every project; the name reads "Deleted user".
+			if (s.accountDeleted) return `${who} deleted their account and left the project (${role(s.role)})`;
 			return s.self ? `${who} left the project` : `Removed ${who} (${role(s.role)})`;
 		case 'member.role':
 			return `Changed ${who}’s role from ${role(s.from)} to ${role(s.to)}`;
@@ -319,6 +321,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'team_member.role':
 			return `Changed ${who}’s role in the team “${str(s.team)}” from ${role(s.from)} to ${role(s.to)}${hereToo(s.to, s.role)}`;
 		case 'team_member.removed':
+			if (s.accountDeleted) return `${who} deleted their account and left the team “${str(s.team)}”`;
 			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${role(s.teamRole)}) from the team “${str(s.team)}”`;
 		case 'team.deleted':
 			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;

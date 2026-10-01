@@ -73,6 +73,9 @@ describe('what an item says', () => {
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer' }))).toBe('Added Ben as viewer');
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer', via: 'invite' }))).toBe('Ben joined as viewer (accepted an invite)');
 		expect(eventLine(ev('member.removed', { displayName: 'Ben', role: 'farmer', self: true }))).toBe('Ben left the project');
+		expect(eventLine(ev('member.removed', { displayName: 'Deleted user', role: 'owner', self: true, accountDeleted: true }))).toBe(
+			'Deleted user deleted their account and left the project (owner)'
+		);
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'editor' }))).toBe('Changed Ben’s role from viewer to editor');
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'contributor' }))).toBe('Changed Ben’s role from viewer to applicant');
 		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
@@ -215,6 +218,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from editor to owner');
 		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (owner) from the team “Upper WUA”');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
+		expect(eventLine(ev('team_member.removed', { ...who, self: true, accountDeleted: true }))).toBe('Ben deleted their account and left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
 	});
 

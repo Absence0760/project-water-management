@@ -118,6 +118,9 @@ import type {
 	JobMeta,
 	Sweep,
 	SweepRequest,
+	Assessment,
+	AssessmentCheck,
+	AssessmentRequest,
 	Outlook,
 	OutlookPublication,
 	OutlookRequest,
@@ -307,7 +310,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			changePassword: (currentPassword: string, newPassword: string) =>
 				request<{ user: User }>('POST', '/auth/change-password', { currentPassword, newPassword }).then(
 					(r) => r.user
-				)
+				),
+			/**
+			 * "Delete my account" (issue #112): the password, typed again. Resolves
+			 * once the account is gone and this browser's cookies are cleared.
+			 * ApiError 403 = wrong password, 429 = locked (the sign-in lockout),
+			 * 409 `account_sole_holder` = the only owner or admin of what `details`
+			 * names (SoleHoldings; account/deleteAccount.ts soleHoldingsOf reads it).
+			 */
+			deleteMe: (password: string) => request<void>('DELETE', '/auth/me', { password })
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
@@ -887,6 +898,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
 		},
 		/**
+		 * Cumulative impact assessments (docs/api.md § Assessments, roadmap
+		 * WP-3.11): several scenarios on one base run, each alone and all
+		 * together, run by one background job. Editors only. check() is the dry
+		 * run (conflicts and problems, nothing written); create() refuses with a
+		 * 422 whose details are the same (assessmentCheckOf).
+		 */
+		assessments: {
+			check: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) =>
+				request<{ check: AssessmentCheck }>('POST', `${p(id)}/assessments`, { ...body, dryRun: true }).then((r) => r.check),
+			create: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) => request<{ assessment: Assessment; jobId: string; job: JobMeta }>('POST', `${p(id)}/assessments`, body),
+			list: (id: string) => request<{ assessments: Assessment[] }>('GET', `${p(id)}/assessments`).then((r) => r.assessments),
+			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment)
+		},
+		/**
 		 * Automated calibration run by the server (docs/api.md § Automated
 		 * calibration, issue #153): a run of the saved calibration rules, one
 		 * background job per fit. Follow a running one with get(); apply() writes
@@ -930,6 +955,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 export type Api = ReturnType<typeof createApi>;
 
 /** The ops a scenario run refused over (422 from api.scenarios.run), or [] for any other error. */
+/** The conflicts and problems of a refused assessment (POST …/assessments' 422), or null for any other error. */
+export function assessmentCheckOf(err: unknown): AssessmentCheck | null {
+	if (!(err instanceof ApiError) || err.status !== 422) return null;
+	const d = err.details as { conflicts?: unknown; problems?: unknown } | null | undefined;
+	if (!d || (!Array.isArray(d.conflicts) && !Array.isArray(d.problems))) return null;
+	return {
+		ok: false,
+		conflicts: Array.isArray(d.conflicts) ? (d.conflicts as AssessmentCheck['conflicts']) : [],
+		problems: Array.isArray(d.problems) ? d.problems.filter((x): x is string => typeof x === 'string') : []
+	};
+}
+
 export function scenarioProblems(err: unknown): string[] {
 	if (!(err instanceof ApiError) || err.status !== 422) return [];
 	const p = (err.details as { problems?: unknown } | null | undefined)?.problems;

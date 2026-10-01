@@ -271,4 +271,31 @@ describe('scenario_sweep RLS', () => {
 		expect(upd.rows).toEqual([]);
 		expect(((await asOwner('SELECT status FROM scenario_sweep_member WHERE id = $1', [memberId])) as [{ status: string }])[0].status).toBe('done');
 	});
+
+	it('the 30-day job clean-up clears a sweep’s job and keeps the sweep, complete or pending (148_job_purge_clears_links)', async () => {
+		const owner = await signUp('SweepPurge');
+		const c = await catchment(owner);
+		const done = (await owner.call('POST', `/projects/${c.projectId}/sweeps`, sweepOf(c.runId))).body;
+		await tick();
+		const stuck = (await owner.call('POST', `/projects/${c.projectId}/sweeps`, sweepOf(c.runId, demandLevels, 'Stuck'))).body;
+		// The second sweep's job died before it ran: the sweep stays pending.
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now() WHERE id = $1`, [stuck.jobId]);
+		const before = await asOwner('SELECT id, status, completed_at, engine_version FROM scenario_sweep WHERE project_id = $1 ORDER BY name', [c.projectId]);
+		expect(before.map((r) => r.status)).toEqual(['complete', 'pending']);
+
+		await asOwner(`UPDATE job SET finished_at = now() - interval '31 days' WHERE id = ANY($1)`, [[done.jobId, stuck.jobId]]);
+		expect((await tick()).purged).toBeGreaterThanOrEqual(2);
+		expect(await asOwner('SELECT id FROM job WHERE project_id = $1', [c.projectId])).toEqual([]);
+		const after = await asOwner('SELECT id, status, completed_at, engine_version, job_id FROM scenario_sweep WHERE project_id = $1 ORDER BY name', [c.projectId]);
+		expect(after).toEqual(before.map((r) => ({ ...r, job_id: null })));
+		expect(await asOwner(`SELECT count(*)::int AS n FROM scenario_sweep_member WHERE sweep_id = $1 AND status = 'done'`, [done.sweep.id])).toEqual([{ n: 3 }]);
+		const got = await owner.call('GET', `/projects/${c.projectId}/sweeps/${done.sweep.id}`);
+		expect(got.status).toBe(200);
+		expect(got.body.sweep).toMatchObject({ status: 'complete', job: null });
+
+		// Positive control: the guard still refuses a real change, alone or beside a cleared link, even by the schema owner.
+		await expect(asOwner(`UPDATE scenario_sweep SET name = 'Changed' WHERE id = $1`, [done.sweep.id])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE scenario_sweep SET created_by = NULL, name = 'Changed' WHERE id = $1`, [done.sweep.id])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE scenario_sweep SET job_id = $2 WHERE id = $1`, [done.sweep.id, done.jobId])).rejects.toMatchObject({ code: '23514' });
+	});
 });

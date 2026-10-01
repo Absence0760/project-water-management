@@ -269,6 +269,22 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 		},
 		effect: async (id) => (await asOwner('SELECT status FROM scenario_sweep WHERE id = $1', [id]))[0].status
 	},
+	assessment: {
+		// Two team scenarios on B's run that combine (two fields of one farm), and B's assessment of them.
+		async queue(owner, b) {
+			const scenario = async (name: string, ops: unknown[]) => {
+				const res = await owner.call('POST', `/projects/${b.projectId}/scenarios`, { name, baseRunId: b.runId, ops });
+				expect(res.status, JSON.stringify(res.body)).toBe(201);
+				return res.body.scenario.id as string;
+			};
+			const s1 = await scenario('Bigger pump', [{ op: 'node.set', nodeId: b.farmId, field: 'divertCapacityM3Day', value: 9000 }]);
+			const s2 = await scenario('Less demand', [{ op: 'demand.scale', factor: 0.9, nodeIds: [b.farmId] }]);
+			const res = await owner.call('POST', `/projects/${b.projectId}/assessments`, { name: 'a', scenarioIds: [s1, s2] });
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			return { jobId: res.body.jobId, ref: res.body.assessment.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0].status
+	},
 	auto_calibration: {
 		// A run of B's calibration rules: a quick search, so B's own job fits its one case.
 		async queue(owner, b) {

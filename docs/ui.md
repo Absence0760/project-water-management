@@ -72,7 +72,7 @@ header (issue #17): **Account**, then who you are as its summary line, the
 initials avatar, display name, email and a Confirmed / Not confirmed badge
 (a region named by the heading). Below it the cards sit in **two columns**
 once the page itself is 52rem wide (a container query, so the 240 px
-sidebar counts): Profile and Password on the left; Language and units,
+sidebar counts): Profile, Password and Delete my account on the left; Language and units,
 Alert emails and Your data on the right; one column below that. The page is
 capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
@@ -98,6 +98,32 @@ in an alert above the form, with the field it's about marked
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
+
+**Delete my account** (issue #112; `lib/components/account/DeleteAccount.svelte`,
+`DELETE /auth/me`) is a small card (one line and a danger button) so the
+page still fits the window; the button opens a dialog, **Delete your
+account?**, in the reader's language like the rest of the page. It lists
+what is **Deleted** (name, email and password; memberships and farm links;
+alert choices and the alert emails sent; settings; an unfinished
+uncertainty result and a draft licence application), what is **Kept,
+without your name** (what they made for a project, and the project's
+history, which reads "Deleted user" or "a former member") and what is
+**Kept, with your name** (a sign-off's typed name and registration, and the
+names an evidence pack printed, for the life of the licence record), as
+Privacy §7 says; then the hand-over rule, the confirmation email and the
+backups line, with a link to the privacy notice. The password is typed
+again (a wrong one is *Your current password is wrong.*; an empty one is
+refused before any request). The only owner of a project or only admin of
+a team gets an alert naming each, linked to its page (the `409
+account_sole_holder` details), which takes the focus; Cancel closes the
+dialog with nothing changed. On success the browser forgets the account as
+signing out does (the farm view's saved copies, the note counts) and lands
+on `/login?deleted=1`, whose notice says the account was deleted and that
+an email says what was deleted and what was kept. The History reads such a
+departure as "Deleted user deleted their account and left the project
+(owner)" (`timeline.ts`). Tests: `account-delete.spec.ts` (the refusal, the
+hand-over, the deletion, axe on the dialog in both themes at desktop and
+phone width).
 
 ## Number style
 
@@ -6003,6 +6029,43 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
   decision." and **Show all**).
+
+**Assess together** (roadmap WP-3.11, `&view=assess` in the URL, so Back
+returns to the list; `CumulativeAssessment.svelte`, the pure parts in
+`cumulative.ts`): the section header's **Assess together** link swaps the
+card for the cumulative impact view, and **Back to the list** swaps it back.
+
+- **Pick:** every submitted or decided application, ticked two or more; once
+  one is ticked, an application on another base run can't be (it says
+  "based on another run than …"). A **Name**, then **Check they combine** (a
+  dry run: nothing written) or **Assess together** (writes the assessment
+  and queues its job).
+- **Refused, never merged:** when two applications change the same thing,
+  or one removes what another uses, each conflict is listed: its target
+  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  what the other uses, and both changes side by side (each application's
+  name, change number and the change in words). Changes that apply alone but
+  not together (two new dams given one name) are listed too.
+- **The result** (the newest assessment, or one picked under **Assessment**):
+  while it runs, *Queued* or *Running each application alone and all
+  together… N %* (followed every 1.5 s); a refused or failed one says why,
+  line by line. Complete: one matrix, rows = each measure at each EWR site
+  (the outlet first) and for the catchment (days the EWR is not met, mean
+  EWR shortfall, Reserve months met and deficit at each rule-table site,
+  mean flow at the outlet, supplied to existing users and their share of
+  demand met), columns = **Baseline**, each application **alone**, **All
+  together** (each with its change from the baseline under it, coloured
+  worse or better) and **Interaction** (together less the sum of the
+  separate changes; its plain-words reading is the cell's title and is read
+  out), with a one-paragraph explanation of the interaction above it and
+  **Download CSV** (the raw numbers, names guarded against CSV injection)
+  below.
+- Workspace English, like the rest of the assessors' tab.
+
+e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
+conflicting pair refused with both changes named, a pair that combines run
+by a worker tick into the matrix, the CSV, Back to the list; axe light and
+dark).
 
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the

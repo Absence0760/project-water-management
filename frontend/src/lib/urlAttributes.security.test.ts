@@ -84,6 +84,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	},
 	scenarioHref: { why: 'ApplicationsTab: local "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	filterHref: { why: 'ApplicationsTab: withoutParam(page.url, "status") or withParam(page.url, "status", f)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
+	assessHref: { why: 'ApplicationsTab: withParam(page.url, "view", "assess")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
+	listHref: { why: 'ApplicationsTab: withoutParam(page.url, "view")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },
 	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
 	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },

@@ -9,6 +9,7 @@ import type {
 	FlaggedYearShare,
 	ObjectiveId,
 	CatchmentView,
+	CumulativeReport,
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
@@ -35,6 +36,7 @@ import type {
 	PackSignoffStatement,
 	RegistrationBodyCode,
 	RunSummary,
+	ScenarioConflict,
 	ScenarioOp,
 	SeasonalOutlook,
 	SeriesMeta,
@@ -55,6 +57,12 @@ export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 /** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
 export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
 /** How a role reads (a `contributor` is an applicant, a team `admin` an owner): ./roleLabels.ts. */
+
+/** What a deletion would leave with no owner or admin: DELETE /auth/me's 409 `account_sole_holder` details (issue #112). */
+export interface SoleHoldings {
+	projects: { id: string; name: string }[];
+	teams: { id: string; name: string }[];
+}
 
 export interface User {
 	id: string;
@@ -1968,6 +1976,57 @@ export interface SweepRequest {
 	name: string;
 	baseRunId: string;
 	members: { name: string; ops: ScenarioOp[] }[];
+}
+
+/** One scenario of a cumulative assessment (backend assessments/store.ts AssessmentMemberRow). */
+export interface AssessmentMember {
+	id: string;
+	position: number;
+	/** The scenario it was copied from; null once a team scenario is deleted (the copy stays). */
+	scenarioId: string | null;
+	name: string;
+	origin: 'team' | 'applicant';
+	opsSha256: string;
+	opCount: number;
+	/** done: its run alone is stored; problems: its ops don't apply alone; failed: the engine refused it. */
+	status: 'pending' | 'done' | 'problems' | 'failed';
+	problems: string[];
+	startDate: string | null;
+	endDate: string | null;
+}
+
+/** A cumulative impact assessment (roadmap WP-3.11, docs/api.md § Assessments). */
+export interface Assessment {
+	id: string;
+	name: string;
+	baseRunId: string;
+	baseRun: { id: string; label: string; createdAt: string };
+	/** refused: the scenarios no longer combine (`problems`); failed: the engine refused an input. */
+	status: 'pending' | 'complete' | 'refused' | 'failed';
+	problems: string[];
+	/** Only on GET …/assessments/:aid, and only when complete. */
+	report?: CumulativeReport | null;
+	engineVersion: string | null;
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	members: AssessmentMember[];
+}
+
+/** POST /projects/:id/assessments. */
+export interface AssessmentRequest {
+	name: string;
+	scenarioIds: string[];
+	/** Only check that the scenarios combine; write nothing. */
+	dryRun?: boolean;
+}
+
+/** Whether scenarios combine: the 422's details, or a dry run's answer. */
+export interface AssessmentCheck {
+	ok: boolean;
+	conflicts: ScenarioConflict[];
+	problems: string[];
 }
 
 /** One fit of a server run of the calibration rules (docs/api.md § Automated calibration, issue #153). */

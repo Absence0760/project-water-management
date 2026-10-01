@@ -39,6 +39,7 @@ import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
 import { signoffRoutes } from './signoffs/routes.js';
 import { sweepRoutes } from './sweeps/routes.js';
+import { assessmentRoutes } from './assessments/routes.js';
 import { autoCalibrationRoutes } from './calibration/routes.js';
 import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
@@ -157,6 +158,7 @@ export function createApp() {
 	projects.route('/', jobRoutes);
 	projects.route('/', yieldRoutes);
 	projects.route('/', sweepRoutes);
+	projects.route('/', assessmentRoutes);
 	projects.route('/', autoCalibrationRoutes);
 	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);

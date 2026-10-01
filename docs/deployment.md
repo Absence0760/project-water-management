@@ -1595,9 +1595,16 @@ Every step is an ordinary app action by an owner unless it says "operator".
 6. **The worker is stuck.** See [§ Background jobs](#background-jobs): check
    the worker's logs and the `jobs-dlq`, redrive or purge it; leases expire
    after 6 minutes and the next tick claims the jobs again.
-7. **A POPIA request to delete a person's account** (operator; there is no
-   self-service deletion yet, issue #112, [security.md § Personal information](./security.md#personal-information-popia)).
-   A request may come by email or any other expedient way (POPIA s24,
+7. **A POPIA request to delete a person's account** (operator; [security.md § Personal information](./security.md#personal-information-popia)).
+   A person who can sign in can do it themselves: Account → **Delete my
+   account** (`DELETE /auth/me`, issue #112) runs the same deletion, refuses
+   the only owner or admin with the list to hand over, and emails them what
+   was done; point them there. It logs `{"event":"account_deleted","via":"self"}`
+   with no id, so a self-service deletion is **not** in the operator log
+   (the re-apply-after-restore step waits on #90, [followups.md §
+   POPIA](./followups.md#popia-and-the-step-2-release-wp-216)). Otherwise
+   (they can't sign in, or ask another way): a request may come by email or
+   any other expedient way (POPIA s24,
    Regulation 3); act on it as soon as reasonably practicable. Confirm it
    comes from the account's address, and tell the WUA (the responsible
    party for its farmers). As the schema owner, in one transaction:
