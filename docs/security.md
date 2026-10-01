@@ -265,6 +265,24 @@ decide a licence application.
   Tests: `auth/account-tokens.security.db.test.ts` "adding someone by
   email doesn't reveal whether the address has an account",
   `invites/invites.db.test.ts`.
+- **An invite is good only while its sender may still send it**
+  (`155_invite_sender_role.sql`). RLS checks the sender only when the
+  invite is written, so every function that lists, describes or accepts one
+  (`app_my_invites`, `app_accept_invite`, `app_invite_for_token`,
+  `app_accept_invites`: the invitations page, a sign-up through the link, a
+  confirmation or password-reset link) takes it only while its `invited_by`
+  still owns the project (directly, or as an admin of the team that owns it)
+  or administers the team (`app_invite_sender_holds`). An owner removed or
+  demoted, or a team admin demoted, leaves invites nobody can accept, at
+  any role; a lapsed invite's link is invalid like an expired one. Checked
+  where the invite is used rather than by deleting invites when a role
+  changes, because a role can be lost in more ways than a trigger list
+  keeps up with: the check fails closed on all of them. The remaining
+  owners see such an invite flagged (`senderLapsed`) and re-send it (which
+  makes them its sender) or revoke it; a deleted sender's invites cascade
+  away with the account. Tests: `invites/invites.db.test.ts` "an invite is
+  good only while its sender may still send it", `farms/invites.db.test.ts`
+  (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,

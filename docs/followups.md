@@ -2504,7 +2504,7 @@ role and not before it.
       `auth/account-tokens.security.db.test.ts` (unknown, unconfirmed and
       verified addresses get the same answer and row, with a positive
       control), `invites/invites.db.test.ts`, `sharing.spec.ts`.
-- [ ] **An invite outlives its sender's right to send it** (review of
+- [x] **An invite outlives its sender's right to send it** (review of
       issue #136, 2026-09-29). `invite` RLS checks owner/admin only when the
       invite is written, so if the owner who sent it is removed or demoted
       before it is accepted, the invitee still joins with the invited role
@@ -2516,6 +2516,12 @@ role and not before it.
       they lose that role (a trigger on `project_member`/`team_member`),
       with a DB test for each path. **Trigger:** before a catchment has more
       than one owner outside the operator's own team.
+      **Done** (155_invite_sender_role.sql): every function that lists,
+      describes or accepts an invite checks its sender at that moment
+      (`app_invite_sender_holds`), chosen over a role-change trigger because
+      it fails closed on every way a role is lost; owners see a lapsed invite
+      flagged (`senderLapsed`) to re-send or revoke. Tests:
+      `invites/invites.db.test.ts`, `farms/invites.db.test.ts`.
 
 ## Features left half-way
 
