@@ -1815,7 +1815,11 @@ personal copy (the Copy dialog says so).
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
-(below), and **Leave or delete** (*Leave team* for everyone, the only admin
+(below), **Privacy contact** (whom people ask about the personal information
+in the team's projects, POPIA s18(1)(b), 168: admins edit *Name or office*,
+*Email address* and *Postal address (optional)*, *Save contact* and
+*Remove*; members read it, "Only owners can change it."; farmers see it from
+the farm menu and invitations name it), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the project list's
 team note, "Change them on the team page", links there), and closing it drops the
@@ -7520,8 +7524,16 @@ published.
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My hydrological unit", the EN | AF
-  language switch, Menu: your farms, the words, Account, the privacy notice, "Don't keep a copy
+  language switch, Menu: your farms, the words, Account, the privacy notice, on a catchment's
+  pages *Who decides about your farm's information*, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
+- **Who decides about your farm's information** (`/farm/[id]/who-decides`,
+  POPIA s18(1)(b), 168): the organisation that runs the catchment (the
+  project's team) and the person or office to ask, as the team's owners set
+  it in Team settings (`GET /projects/:id/privacy-contact`): name, a
+  `mailto:` email link and the postal address when given. Without a contact
+  it says to ask the person who invited them or the WUA. Both link the
+  privacy notice's § 2.
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
   emails" link lands there): the header's **Your hydrological units** back link in

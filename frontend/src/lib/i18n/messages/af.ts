@@ -223,14 +223,6 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// If you turn on two-step sign-in, we keep the key your authenticator app uses (encrypted), your recovery codes (only as one-way hashes) and a record of when you turned it on or off or used a recovery code.
-	'd17f9391': 'As jy tweestap-intekening aanskakel, hou ons die sleutel wat jou verifikasie-app gebruik (geënkripteer), jou herstelkodes (net as eenrigting-hutswaardes) en ’n rekord van wanneer jy dit aan- of afgeskakel het of ’n herstelkode gebruik het.',
-	// When an account is deleted, what it made for a project stays as the project’s record with the name removed. A sign-off’s typed name and the names in an evidence pack are kept only as long as that record.
-	'71f9b9a7': 'Wanneer ’n rekening uitgevee word, bly wat dit vir ’n projek gemaak het as die projek se rekord, met die naam verwyder. ’n Aftekening se getikte naam en die name in ’n bewyspakket word net gehou solank daardie rekord bestaan.',
-	// Alert emails now ask “Was this useful?”. If you answer, your answer and any comment are kept for a year, and your WUA sees them without your name.
-	'521ccbcb': 'Waarskuwings-e-posse vra nou “Was dit nuttig?”. As jy antwoord, word jou antwoord en enige kommentaar ’n jaar lank gehou, en jou WGV sien dit sonder jou naam.',
-	// Our emails don’t track whether you open them or follow their links.
-	'dfb648c4': 'Ons e-posse hou nie dop of jy hulle oopmaak of hulle skakels volg nie.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed

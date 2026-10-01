@@ -291,7 +291,9 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/farm/:nodeId/export.csv',
 			'GET /projects/:id/farm/:nodeId/access',
 			// The farm's map (issue #326 A3).
-			'GET /projects/:id/farm/:nodeId/map'
+			'GET /projects/:id/farm/:nodeId/map',
+			// Who decides about the project's information: its team's privacy contact (168, POPIA s18(1)(b)).
+			'GET /projects/:id/privacy-contact'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);

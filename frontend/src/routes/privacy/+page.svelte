@@ -57,12 +57,13 @@
 			<strong>What an organisation puts into its projects</strong> (who it invites, which farm a farmer is linked to, its model,
 			data and notes): the organisation decides, and it is the responsible party for that information. We process it on its
 			behalf, as its <em>operator</em>. If you have questions about why you were invited or what a project holds about your farm,
-			ask the organisation first; we will help it answer you.
+			ask the organisation first: its contact details are on your farm page (menu, <em>Who decides about your farm’s
+			information</em>) and in your invitation email, once it has added them. We will help it answer you.
 		</li>
 	</ul>
 	<p>
-		We process an organisation’s project information under a written agreement with it (POPIA section 21); you can ask the
-		organisation, or us, for the organisation’s contact details.
+		We process an organisation’s project information under a written agreement with it (POPIA section 21). If an organisation
+		hasn’t added its contact details yet, ask us for them.
 	</p>
 
 	<h2 id="what">3. What we collect</h2>
@@ -116,11 +117,25 @@
 		<table>
 			<thead><tr><th>Use</th><th>Lawful basis (POPIA s11)</th></tr></thead>
 			<tbody>
-				<tr><td>Creating your account, signing you in, confirming your email address, resetting your password</td><td>Needed to provide the service you signed up for</td></tr>
-				<tr><td>Showing you the projects, farms and results you have access to</td><td>Needed to provide the service; for farmers, the water user association’s legitimate interest in managing its members’ water use</td></tr>
-				<tr><td>Alert emails (a dam running low, a restriction notice)</td><td>Needed to provide the service; you choose how often, and every email has a one-click unsubscribe</td></tr>
+				<tr><td>Creating your account, signing you in, confirming your email address, resetting your password</td><td>Needed to perform our agreement with you, the Terms of use (POPIA s11(1)(b))</td></tr>
+				<tr>
+					<td>Showing you the projects, farms and results you have access to</td>
+					<td>
+						For your account: our agreement with you. For what an organisation puts in a project (who it invites, which farm a farmer
+						is linked to): the organisation’s legitimate interest in managing its water scheme and telling its members about their own
+						water (s11(1)(f)). A farmer who objects can leave the project, which removes the link.
+					</td>
+				</tr>
+				<tr>
+					<td>Alert emails (a dam running low, a restriction notice)</td>
+					<td>
+						The organisation’s legitimate interest in warning its staff and members about their water supply (s11(1)(f)). The
+						organisation decides which alerts its catchment sends; you choose right away, daily or off, and every email has a one-click
+						unsubscribe, which is your objection. Alerts are service messages: they never advertise anything.
+					</td>
+				</tr>
 				<tr><td>Your answer to “Was this useful?” on an alert email, so the organisation can make its alerts better</td><td>The organisation’s legitimate interest in useful alerts; answering is up to you</td></tr>
-				<tr><td>The project’s history, sign-offs and published results</td><td>The organisation’s legitimate interest in, and duty to keep, a reproducible record of its decisions</td></tr>
+				<tr><td>The project’s history, notes, sign-offs and published results</td><td>The organisation’s legitimate interest in a reproducible record of its decisions and the evidence behind them (s11(1)(f))</td></tr>
 				<tr><td>Stopping password guessing, spam and abuse; keeping the service running</td><td>Our legitimate interest in a secure service</td></tr>
 			</tbody>
 		</table>
@@ -200,11 +215,18 @@
 			responsible for the project confirms the record has closed. Model runs are pruned as a project goes on: its newest 12
 			published results and 20 unpublished runs are kept.
 		</li>
+		<li>
+			<strong>A deleted note:</strong> hidden at once; its text is kept for 90 days, so a mistake or a complaint can be looked into,
+			then erased. The project’s history still shows that a note was deleted, by whom and when. A note on a submitted licence
+			application or an issued evidence pack is part of that licence record: it stays hidden and is kept with the record (below).
+		</li>
 		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>
 		<li>
-			<strong>Backups:</strong> kept for up to 35 days, so deleted information remains in them until they expire. If the service
-			is shut down for good, one final encrypted copy of the database is kept, in the same place, until we delete it; we will say
-			how long when we announce the shutdown.
+			<strong>Backups:</strong> an encrypted copy of the database, kept for up to 35 days and then deleted automatically, so
+			deleted information remains in them until they expire. Backups are used only to recover from a fault. Before a restored copy
+			is used, we delete again everything that was deleted after the backup was made: we keep a list of deleted accounts and
+			projects (their internal number only) for 40 days for this. If the service is shut down for good, one final encrypted copy
+			is kept for 90 days, so organisations can ask for their projects back, and then deleted.
 		</li>
 	</ul>
 	<p>
@@ -265,7 +287,11 @@
 			away. Or email us from your account’s address (or ask in any other way that suits you) and we will delete the account as soon
 			as we reasonably can. Either way it is deleted as described in section 7, and we email you what we did.
 		</li>
-		<li><strong>Object</strong> to our using it for a legitimate interest, or <strong>stop alert emails</strong> at any time from any alert email or your alert settings.</li>
+		<li>
+			<strong>Object</strong> to our or an organisation’s using your information for a legitimate interest: turn off an alert from any
+			alert email or your alert settings, leave a project to remove yourself (and a farmer’s farm link) from it, or tell us or the
+			organisation why you object.
+		</li>
 	</ul>
 	<p>
 		We answer requests within 30 days, and may ask you to confirm the request from your account’s email address first. Requests

@@ -132,6 +132,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/farm/:nodeId', { min: 'farmer', why: 'the farm view of a linked farm; any other node 404s alike' }],
 	['GET /projects/:id/farm/:nodeId/export.csv', { min: 'farmer', why: "the farm view's CSV, the same figures and the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/access', { min: 'farmer', why: 'who can see this farm, so a farmer knows who reads their figures' }],
+	['GET /projects/:id/privacy-contact', { min: 'farmer', why: 'who decides about the project’s information and whom to ask (POPIA s18(1)(b), 168): the team’s name and contact only' }],
 	['GET /projects/:id/farm/:nodeId/series', { min: 'farmer', why: "one of the farm view's own allowlisted series, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/history', { min: 'farmer', why: "the farm's own figures across publications, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/map', { min: 'farmer', why: "the farm's own parcels and dams plus the boundary, rivers and gauges, never a neighbour's (#326 A3; farm-map.db.test.ts), the same 404s" }],

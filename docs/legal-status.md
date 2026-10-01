@@ -178,12 +178,14 @@ Tracked in issue #103.
   evidence, remove the name), the bounded retention of sign-offs and pack
   names, and the National Archives Act question for a responsible party
   that is DWS or a CMA (operator agreement, notes for counsel).
-- [ ] **Backups:** the notice says up to 35 days; keep
-  `db_backup_retention_days` at or under that. The one copy kept longer is
-  the final snapshot a teardown takes (infra/README.md § Tearing down); the
-  notice says it is kept until deleted, and that the shutdown notice will
-  give its period. Decide that period when shutting down, and delete it on
-  time.
+- [x] **Backups:** the notice says up to 35 days; keep
+  `db_backup_retention_days` at or under that (and under the erasure log's
+  40 days, infra/variables.tf). The one copy kept longer is the final
+  snapshot a teardown takes (infra/README.md § Tearing down): since
+  2026-10-02 the notice and the operator agreement (10.2) fix it at 90 days
+  after the shutdown notice, then deleted. A restore re-applies the
+  erasures made after its restore point (deployment.md § Restoring the
+  database, step 6a).
 - [ ] **Material-change emails:** Terms §16 and Privacy §12 promise an email
   before a material change. There is no bulk "notice to all account
   holders" tool yet; send it by hand until there is.
@@ -210,6 +212,38 @@ Tracked in issue #103.
   changed" list is rewritten with each new version. Only the app is gated;
   the API doesn't refuse other calls from such an account.
 
+### Positions taken pending counsel (2026-10-01)
+
+Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
+and not approved by counsel), built so the app is ready for release. Counsel
+reviews them with the rest (#92); the client's information officer may
+override any of them by written instruction (operator agreement cl. 3).
+
+- **Lawful bases** (Privacy §4, security.md § Personal information):
+  accounts on contract (POPIA s11(1)(b)); memberships, farm links, notes,
+  the audit log, sign-offs and alerts on the organisation's legitimate
+  interest (s11(1)(f)), with the s11(3) objection built in (an alert's
+  unsubscribe, leaving a project; Privacy §10); records kept under
+  s14(1)(b). "And duty to keep" dropped: no statute requiring this record
+  was found. Alerts are service messages, not direct marketing (s1, s69):
+  `backend/src/mail/alerts.content.test.ts` holds their links to an
+  allowlist, and SES open and click tracking stays off.
+- **Deleted notes** (Privacy §7): the text is erased 90 days after
+  deletion (158_note_purge.sql), the `note.deleted` event stays; a note on
+  a scenario or pack past draft is kept hidden with the licence record
+  (s14(6)(b)).
+- **Backups after an erasure** (Privacy §7, operator agreement 5.8 and
+  10.2): backups age out within 35 days; a restore re-applies every
+  erasure and revocation since its restore point before traffic is back,
+  from a 40-day `erasure_log` of deleted account, project and team ids
+  (159_erasure_log.sql) and the audit log's revocations; the old instance's
+  final snapshot is deleted within 30 days and the teardown snapshot 90
+  days after the shutdown notice.
+- **The organisation's privacy contact** (Privacy §2, s18(1)(b)): a team
+  names whom to ask about its projects' information (168); farmers see it
+  from the farm menu ("Who decides about your farm's information") and
+  invitation emails name it. Where none is set, operator agreement 3A.1(b)
+  (the client's own notice) still covers it.
 ### Licensing positions (pre-counsel, 2026-10-01)
 
 Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
@@ -383,3 +417,20 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
   notice's "what changed" list now names this and the 2026-09-30 deletion
   change (it still listed 2026-09-28's).
+- 2026-10-02: the POPIA positions taken pending counsel (provisional
+  positions, pre-counsel research, 2026-10-01; not legal advice). Privacy
+  §4 names each lawful basis (accounts on contract, s11(1)(b); project
+  data and alerts on the organisation's legitimate interest, s11(1)(f);
+  "and duty to keep" dropped) and says alerts are service messages that
+  never advertise; §10 says how to object (an alert's unsubscribe, leaving
+  a project, or telling us or the organisation); §2 points to the
+  organisation's privacy contact on the farm page and in invitations
+  (168); §7 says a deleted note's
+  text is erased after 90 days (158), that a restore deletes again what was
+  deleted after the backup (a 40-day list of deleted accounts and projects,
+  159), and that the teardown copy is kept 90 days. Other changes in the
+  same round (history, licence records, registered water use) share this
+  version. `LEGAL_VERSION` 2026-10-02 (a new date, since the 2026-10-01
+  version had already been bumped that day; every account accepts again,
+  and nothing is in production yet); the re-acceptance notice's "what
+  changed" list is rewritten for it.

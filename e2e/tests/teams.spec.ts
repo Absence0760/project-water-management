@@ -3,7 +3,7 @@
 // The pages as laid out for the app frame (issue #17): the list's cards, the
 // team page's projects beside members, and the settings sheet.
 import type { APIRequestContext } from '@playwright/test';
-import { acceptInvites, createRun, seedRunnableProject, uniqueEmail } from '../support/api.ts';
+import { acceptInvites, createRun, putModel, sampleModel, seedRunnableProject, uniqueEmail } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -284,6 +284,55 @@ for (const [sizeName, viewport] of [
 		});
 	});
 }
+
+// The organisation's privacy contact (168, POPIA s18(1)(b)): set by an admin in the settings sheet, read by a
+// member there, and shown to a farmer of a team catchment from the farm page's menu.
+test('an admin sets the privacy contact; a member reads it; a farmer finds it from the farm menu', async ({ page, owner, signIn }) => {
+	void owner;
+	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Contact Board' } });
+	const { team } = (await res.json()) as { team: { id: string } };
+	const colleague = await signIn('Contact member');
+	expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+	await acceptInvites(colleague.user.email, team.id);
+
+	await page.goto(`/teams/${team.id}`);
+	let panel = (await openTeamSettings(page)).getByRole('region', { name: 'Privacy contact' });
+	await panel.getByLabel('Name or office').fill('Information Officer');
+	await panel.getByLabel('Email address').fill('io@contact-board.example');
+	await panel.getByLabel('Postal address (optional)').fill('PO Box 7, Kloof 1234');
+	await panel.getByRole('button', { name: 'Save contact' }).click();
+	await expect(panel.getByRole('status')).toHaveText('Saved. Farmers see it from their farm page’s menu, and new invitations name it.');
+	await expect(panel.getByRole('button', { name: 'Save contact' })).toBeDisabled();
+	await closeTeamSettings(page);
+
+	// A member reads it, and can't change it.
+	await colleague.page.goto(`/teams/${team.id}`);
+	panel = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Privacy contact' });
+	await expect(panel).toContainText('Information Officer, io@contact-board.example');
+	await expect(panel).toContainText('Only owners can change it.');
+	await expect(panel.getByRole('button', { name: 'Save contact' })).toHaveCount(0);
+
+	// A farmer of a team catchment: Menu → Who decides about your farm's information.
+	const made = await page.request.post(`${API_URL}/projects`, { data: { name: 'Contact catchment', teamId: team.id } });
+	expect(made.status(), await made.text()).toBe(201);
+	const project = ((await made.json()) as { project: { id: string } }).project;
+	const model = sampleModel();
+	await putModel(page.request, project.id, model);
+	const farmer = await signIn('Contact farmer');
+	const farmId = model.nodes.find((n) => n.kind === 'farm')!.id as string;
+	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farmId] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+	await farmer.page.goto(`/farm/${project.id}`);
+	await farmer.page.getByRole('button', { name: 'Menu' }).click();
+	await farmer.page.getByRole('link', { name: 'Who decides about your farm’s information' }).click();
+	await expect(farmer.page).toHaveURL(`/farm/${project.id}/who-decides`);
+	const card = farmer.page.getByRole('region', { name: 'Contact Board' });
+	await expect(card).toContainText('Contact Board decides what is done with your farm’s information in this catchment.');
+	await expect(card.getByRole('link', { name: 'io@contact-board.example' })).toHaveAttribute('href', 'mailto:io@contact-board.example');
+	await expect(card).toContainText('PO Box 7, Kloof 1234');
+	await expectNoViolations(farmer.page);
+});
 
 test('an admin renames and deletes the team from the settings sheet; a member leaves it', async ({ page, owner, signIn }) => {
 	void owner;

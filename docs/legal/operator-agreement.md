@@ -100,7 +100,10 @@ that.
 service, (a) it has a lawful basis under section 11; (b) it will make its
 members and invitees aware of the matters in section 18, including its own
 name and address as responsible party, before or as soon as reasonably
-practicable after their information is entered; and (c) it has considered
+practicable after their information is entered (setting its privacy
+contact in the service's team settings, which the service then shows on its
+farmers' farm pages and in invitation emails, does this for its name and
+contact details); and (c) it has considered
 whether matching registered water-use records (such as WARMS registration
 numbers) to farms or people needs prior authorisation under sections 57
 and 58, and has obtained it where needed.
@@ -160,7 +163,9 @@ values).
 
 5.8 **Backups.** Automated database backups with point-in-time recovery,
 kept for between 7 and 35 days (today: [7] days). A deleted record stays in
-backups until they age out.
+backups until they age out. A restore re-applies every deletion made after
+the backup point before the service is used again (the Operator keeps a
+40-day list of deleted accounts and projects for this).
 
 5.9 **Alarms.** Budget, error, throttle and integrity alarms notify the
 Operator.
@@ -275,7 +280,9 @@ export of anything the Client can't take itself.
 10.2 Within [60] days of the end date the Operator will delete the Client's
 projects and the personal information in them from the live service, and
 confirm it in writing. Copies in backups are deleted as the backups age out
-(at most 35 days). Accounts belong to their holders (clause 1.3): a person
+(at most 35 days). If the Operator shuts the whole service down, one final
+encrypted copy of the database is kept for 90 days after the shutdown
+notice, so the Client can ask for its projects back, and is then deleted. Accounts belong to their holders (clause 1.3): a person
 who is only in the Client's projects keeps their account unless they ask for
 it to be deleted.
 

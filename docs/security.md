@@ -2563,11 +2563,18 @@ s20–21 and needs a written agreement with it: the template is
 review), and a breach follows [legal/incident-procedure.md](./legal/incident-procedure.md). Farmers are invited
 by the WUA; nobody is added to a project without an owner acting.
 
-**Lawful basis and consent, today.**
-- Accounts, memberships and farm links: to provide the service the member
-  signed up for, and for farmers the WUA's function of managing its members'
-  water use (legitimate interest or a legal duty under its constitution)
-  *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
+**Lawful basis and consent, today.** Provisional positions (pre-counsel
+research, 2026-10-01; not legal advice), each with the objection right
+built in. None rests on consent.
+- Accounts: the operator's contract with the person, the Terms of use
+  (POPIA s11(1)(b)); the operator is the responsible party. Memberships and
+  farm links: the client organisation's legitimate interest in managing its
+  water scheme and telling members about their own water (s11(1)(f)), the
+  client as responsible party. Not consent: a member depends on the WUA for
+  water, so consent's voluntariness is open to attack, and it could be
+  withdrawn mid-season. The s11(3) objection is exercised by leaving the
+  project, which deletes the membership and the farm link (Privacy §4,
+  §10). The **privacy notice** is at `/privacy` and the terms at
   `/terms` (research-based, not counsel-reviewed, [legal-status.md](./legal-status.md));
   the sign-up form, invitations included, shows the Terms' main points and
   a required checkbox accepting both, and sends the version it showed: the
@@ -2579,11 +2586,24 @@ by the WUA; nobody is added to a project without an owner acting.
   sees a notice before any app page until it accepts
   (`POST /auth/me/accept-terms`, which refuses a stale version the same
   way).
-- Notes, the audit log, publications and sign-offs: the project's record,
-  kept for the regulator's audit trail (roadmap §7).
+- Notes, the audit log, publications and sign-offs: the organisation's
+  legitimate interest in a reproducible record of its decisions
+  (s11(1)(f)), kept for the life of the project under s14(1)(b) (the
+  organisation reasonably requires it for its functions). No statute
+  imposing a duty to keep this record has been identified, so the notice
+  claims none (s11(1)(c) is not relied on).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
   each person choosing right away, daily or off, with a one-click
-  unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
+  unsubscribe in every mail ([§ Alerts](#alerts)), which is the s11(3)
+  objection. Basis: the organisation's legitimate interest in warning its
+  staff and members about their water supply (s11(1)(f)). Alerts are not
+  direct marketing (POPIA s1, s69): no promotional content in any alert or
+  digest, so default-on delivery needs no opt-in. `mail/alerts.content.test.ts`
+  holds every link in every alert and digest (both languages, farmer and
+  staff) to an allowlist: the unsubscribe page, "Was this useful?", the
+  farm page or workspace, the alert settings, the account page and
+  `/privacy`. SES open and click tracking stays off (§ Alerts, "Was this
+  useful?").
 - Cookies: the session cookie (`wm_session`), the sign-in lockout's
   trusted-device cookie (`wm_device`, [§ Authentication](#authentication))
   and two-step sign-in's 5-minute challenge (`wm_mfa`,
@@ -2604,7 +2624,8 @@ file), so a new column can't ship without a decision.
 behind every cascade and set-null key is deleted, then every text, json,
 uuid and array column of every table is scanned for its email, name and
 id, which may survive only where this table keeps them (the audit log's
-random id, the typed sign-off name, the sign-in lockout's address). It
+random id and the 40-day erasure log's, the typed sign-off name, the
+sign-in lockout's address). It
 found three guards that fought the deletion, fixed in 066: a sweep's or
 outlook's guard refused the key's SET NULL (so the account couldn't be
 deleted), `alert_rule_check` put the creator back (a dangling id), and a
@@ -2626,9 +2647,11 @@ PDF someone else asked for kept the person as a recipient
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
-| Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
+| Notes: body, author | `note` | For the life of the project. A deleted note's text: 90 days, then erased by the tick (`app_purge_deleted_notes`, 158; the `note.deleted` event stays); on a submitted application or an issued pack, kept hidden with the licence record (s14(6)(b)) | Author cleared; body stays | Deleted |
 | Public comments through a share link (166): the author, the link it came through, whether they agreed to give their name and email to the applicant for the I&AP register (GN R267 reg 18); the applicant's download of them (the reg 19 record, with the emails agreed to) | `note` (`share_link_id`, `register_consent`); the applicant's own copy once downloaded | As notes; the applicant keeps their copy for their register (reg 18: while the application is considered and two years after a licence is granted), as its responsible party | Author cleared; body stays (as notes); a copy already downloaded is the applicant's | Deleted |
-| A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note: erased with a deleted note after 90 days (cascade), kept with a licence record's note | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A team's privacy contact (168): the name (or office), email and optional postal address the team gives for questions about its projects' information (POPIA s18(1)(b)), shown to its projects' members and farmers and in invitation emails | `team` (`privacy_contact_*`) | Until an admin changes or removes it, or the team is deleted | Unaffected (it is the organisation's contact, not the account's; an admin removes it) | Unaffected (deleted with the team) |
+| Erasure log: the internal id of each deleted account, project and team (159), for a restore to delete them again | `erasure_log` (owner-only, no grant to `water_app`) | 40 days, above the 35-day backup maximum (`app_purge_erasure_log`, the tick) | The account's id, 40 days | The project's id, 40 days |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
 | Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
@@ -2645,8 +2668,8 @@ PDF someone else asked for kept the person as a recipient
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, for the life of the licence record (as sign-offs) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
-| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
-| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down; a manual snapshot, kept until the operator deletes it (the privacy notice says so and promises the period with the shutdown notice) | Stays in it | Stays in it |
+| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
+| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |
 
 **Data-subject requests.**
 - **Access / export: self-service.** Account → Your data → **Download my

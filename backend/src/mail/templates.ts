@@ -170,13 +170,20 @@ export function roleName(role: string): string {
 	return Object.hasOwn(ROLE_NAME, role) ? ROLE_NAME[role]! : role;
 }
 
+/**
+ * The organisation that decides about the information an invite concerns, and whom to ask (POPIA s18(1)(b);
+ * 168_team_privacy_contact): the project's team, or the team invited to. Absent when it has set no contact.
+ */
+export type InviteContact = { organisation: string; name: string; email: string; postal: string | null };
+
 /** An invite to a project or team, in one of the three modes (InviteMode). */
 export function inviteMail(
 	to: string,
 	url: string,
 	inviterName: string,
 	target: InviteTarget,
-	mode: InviteMode = 'sign-up'
+	mode: InviteMode = 'sign-up',
+	contact: InviteContact | null = null
 ): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
 	const role = roleName(target.role);
@@ -201,7 +208,16 @@ export function inviteMail(
 					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
 				]
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
-		).concat(`How we handle your information: ${sitePage('/privacy')}`)
+		)
+			.concat(
+				contact
+					? [
+							`${contact.organisation} decides about your information in its projects. Questions about it: ${contact.name}, ${contact.email}.`,
+							...(contact.postal ? [`Or write to ${contact.name} at: ${contact.postal}`] : [])
+						]
+					: []
+			)
+			.concat(`How we handle your information: ${sitePage('/privacy')}`)
 	});
 }
 
@@ -211,7 +227,7 @@ export function listText(items: readonly string[], and = 'and'): string {
 	return `${items.slice(0, -1).join(', ')} ${and} ${items.at(-1)}`;
 }
 
-export type FarmerInviteFacts = { catchment: string; farms: string[] };
+export type FarmerInviteFacts = { catchment: string; farms: string[]; contact?: InviteContact | null };
 
 /**
  * A farmer invite (WP-2.2): "{inviter} invited you to see {farm} in
@@ -249,6 +265,13 @@ export function farmerInviteMail(
 				...(confirm
 					? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
 					: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]),
+				// Who decides about the farmer's information, when the catchment's team has said (POPIA s18(1)(b), 168).
+				...(facts.contact
+					? [
+							tr.t('mail.invite.contact', { organisation: facts.contact.organisation, name: facts.contact.name, email: facts.contact.email }),
+							...(facts.contact.postal ? [tr.t('mail.invite.contactPost', { name: facts.contact.name, postal: facts.contact.postal })] : [])
+						]
+					: []),
 				tr.t('mail.invite.privacy', { url: sitePage('/privacy') })
 			]
 		},

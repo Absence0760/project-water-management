@@ -58,6 +58,7 @@ export const SECTIONS: Record<string, string> = {
 	'farm.chart': 'Farm view: the two small charts and their “Show the numbers” tables. The summaries are read by screen readers.',
 	'farm.damPage': 'Farm view: the dam details page.',
 	'farm.why': 'Farm view: the “Why?” page, the model’s look back in three steps.',
+	'farm.whoDecides': 'Farm view: “Who decides about your farm’s information”, from the menu. The organisation that runs the catchment (a WUA or a consultancy) decides what is done with the farmer’s information; this page names it and the person or office to ask, as the organisation typed them. “We” is the company that runs the app for it.',
 	'farm.list': 'Farm view: “Your hydrological units”, for a farmer with several.',
 	'farm.alerts': 'Farm view: the alert card, shown while the farm’s dam is below the WUA’s alert level. What the model estimates, never a promise.',
 	alerts: 'The alert emails page (from the account page): which alerts a person gets by email, per catchment, and how often.',

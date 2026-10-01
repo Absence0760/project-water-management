@@ -50,6 +50,8 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 	id: {
 		// 048: events about a person keep the random id, which no longer resolves; the name goes.
 		'audit_event.subject': 'pseudonymised: the event keeps a random id that resolves to no one, never the name',
+		// 159: a restore re-applies erasures from this list; the id only, purged after 40 days (above the 35-day backups).
+		'erasure_log.subject_id': 'the erasure log: the deleted account’s random id only, so a restore can delete it again; purged after 40 days',
 		// 101: the daily cap on adding by email counts by the adder's id, not linked to the account.
 		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends'
 	},

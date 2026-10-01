@@ -61,7 +61,7 @@ erDiagram
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (a `language` code, NULL = not chosen; 080) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql); `terms_version` (the terms and privacy notice accepted at sign-up, their effective date `YYYY-MM-DD`, the engine's `LEGAL_VERSION`) and `terms_accepted_at` (stamped by the database, never the caller: `app_register` and the `app_user_terms_stamp` trigger, which also refuses to clear a record), both NULL for an account a script made, 087_terms_acceptance.sql; `farm_notice_version` (the farm view's "Before you look at your farm" notice acknowledged with "I understand", its effective date, the engine's `FARMER_NOTICE_VERSION`) and `farm_notice_accepted_at` (stamped by the database through the `app_user_farm_notice_stamp` trigger, which also refuses to clear a record), both NULL until acknowledged, 093_farm_notice.sql | none (the workbook has no users) |
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
-| `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
+| `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); `privacy_contact_name` / `_email` / `_postal` (168: whom to ask about the team's projects' personal information); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Three keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
@@ -2170,12 +2170,21 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     for their export; `app_link_comment_author(note)` a link comment's author
     name for the project's members.
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
-- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
-  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
-  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
-  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
-  trigger lets only the author change the body, stamps `edited_at` and
-  `deleted_by` itself, and refuses to touch a deleted note.
+- **Soft delete, then erasure after 90 days.** `deleted_at` / `deleted_by`:
+  the note is hidden at once, and its row, body and earlier texts stay for
+  90 days so a mistake or a complaint can be looked into. Then the job tick
+  erases them (`app_purge_deleted_notes`, 158_note_purge.sql, called with
+  `DELETED_NOTE_RETENTION_DAYS` in `jobs/runner.ts`; `note_revision` goes by
+  its cascade). The `note.deleted` audit event, which never held the body,
+  stays. A note on a scenario past draft (submitted, withdrawn, decided) or
+  a pack past draft is part of that licence record and is kept, hidden, with
+  it (POPIA s14(6)(b); provisional position, pre-counsel research,
+  2026-10-01). `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list: the definer function is the only path) and may
+  `UPDATE` only `body`, `edited_at`, `deleted_at` and `deleted_by` (its
+  column-only list). The `note_guard` trigger lets only the author change
+  the body, stamps `edited_at` and `deleted_by` itself, and refuses to touch
+  a deleted note.
 - **RLS.**
   - SELECT: viewers and above see every note that isn't deleted; editors, and
     a note's author, also see deleted ones (Postgres checks an updated row
@@ -2344,6 +2353,17 @@ only read. `project_insert` and `project_update` enforce this (008);
 `project_update` only gates a *change* of team, so a direct editor can still
 edit a project whose team they only view. A viewer copying a team project gets
 a personal copy.
+
+**Privacy contact** (168_team_privacy_contact, POPIA s18(1)(b)): the team,
+as the client organisation, is the responsible party for its projects'
+information, so it names whom people ask: `privacy_contact_name` and
+`privacy_contact_email` (both or neither; CHECK
+`team_privacy_contact_complete`) and an optional `privacy_contact_postal`.
+`team_select` lets members read them and `team_update` lets only an admin
+change them. A farmer has no team role, so `app_project_privacy_contact(p_project)`
+(SECURITY DEFINER, pinned search path) returns the team's name and the three
+fields, and nothing else, to anyone with a role on the project; no row for a
+non-member, a project without a team, or a team without a contact.
 
 `app_project_role()` maps each team role explicitly and gives an unknown one no
 access (NULL), so a role added later can never fall through to `editor`. The
@@ -3026,6 +3046,22 @@ functions and changes no table, policy or grant:
   exists, instead of putting the old creator back;
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
+
+### Erasure log (159_erasure_log.sql)
+
+`erasure_log (id, kind, subject_id, erased_at)`: one row for every deleted
+`app_user` (`account`), `project` and `team`, written by an `AFTER DELETE`
+trigger on each (`erasure_log_record`, SECURITY DEFINER), so both
+account-deletion paths (the operator's SQL and `DELETE /auth/me`) are
+covered. It holds the internal id only, no foreign keys (the row outlives
+what it names), RLS on with no policy and no grant to `water_app`:
+only the schema owner reads it (`catalogue.db.test.ts` `OWNER_ONLY`). The
+job tick deletes entries older than 40 days (`app_purge_erasure_log`,
+`ERASURE_LOG_RETENTION_DAYS`; the function refuses under 36), above the
+35-day maximum of `db_backup_retention_days`. Its one reader is the restore
+runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the-database),
+step 6a), which reads it on the old instance and deletes each row again on
+the restored one.
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 
