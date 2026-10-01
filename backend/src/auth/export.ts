@@ -104,6 +104,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'scenario.decided_by': { excluded: 'the project’s application decision; its assessor only' },
 	'scenario.owner_user_id': { excluded: 'the project’s scenario; scenario.created is in auditEvents' },
 	'scenario_member.added_by': { excluded: 'people the person added to a scenario; its maker only' },
+	'assessment.created_by': { excluded: 'the project’s cumulative assessment; who asked only' },
 	'scenario_sweep.created_by': { excluded: 'the project’s scenario sweep; its maker only' },
 	'auto_calibration.created_by': { excluded: 'the project’s run of its calibration rules; who asked only' },
 	'auto_calibration.applied_by': { excluded: 'the project’s run of its calibration rules; who applied its fit only' },

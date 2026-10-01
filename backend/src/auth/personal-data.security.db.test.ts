@@ -229,6 +229,8 @@ beforeAll(async () => {
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
 	await withUser(subject.id, async (tx) => {
 		await tx.query(`INSERT INTO scenario_sweep (project_id, base_run_id, name) VALUES ($1, $2, 'pd sweep')`, [projectId, runId]);
+		// A cumulative assessment (145): created_by is SET NULL when they go; its completion trigger fires only on the outcome columns.
+		await tx.query(`INSERT INTO assessment (project_id, base_run_id, name) VALUES ($1, $2, 'pd assessment')`, [projectId, runId]);
 		const [o] = (
 			await tx.query(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels)
@@ -369,8 +371,8 @@ describe('while the account exists, only its deletion clears who made a row (066
 		expect(await asOwner('SELECT created_by FROM alert_rule WHERE project_id = $1', [projectId])).toEqual([{ created_by: subject.id }]);
 	});
 
-	it('refuses water_app a change to who asked for a sweep or an outlook', async () => {
-		for (const table of ['scenario_sweep', 'seasonal_outlook']) {
+	it('refuses water_app a change to who asked for a sweep, an outlook or an assessment', async () => {
+		for (const table of ['scenario_sweep', 'seasonal_outlook', 'assessment']) {
 			await expect(withUser(owner.id, (tx) => tx.query(`UPDATE ${table} SET created_by = NULL WHERE project_id = $1`, [projectId]))).rejects.toMatchObject({
 				code: '42501'
 			});

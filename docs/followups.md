@@ -3858,6 +3858,38 @@ from the WP:
       Trigger: the hydrologist's review, or a licence application for a dam
       raise.
 
+## Cumulative impact (WP-3.11)
+
+Built (issue #287, migration 145): `combineScenarios` / `cumulativeImpact`
+in the engine, `backend/src/assessments/` with the `assessment` job, and
+the assessors' **Assess together** view
+([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
+Left:
+
+- [ ] **The evidence report's cumulative row reads a combined run.** C26
+      (`packages/engine/src/evidence/report.ts` `cumulativeOf`, § 4 and
+      page 1's *Other applications on this baseline, summed*) still adds up
+      other applications' separate runs and says so. The durable fix: the
+      report's backend (`backend/src/evidence/report.ts`) combines this
+      application with every other submitted or approved one on the baseline
+      (`combineScenarios`), runs it, and the row shows the combined change
+      and the interaction; a conflict makes the row *Not assessed* with the
+      conflicts named, never a silent merge. It changes the report's
+      content, so `REPORT_VERSION` and the evidence pack's manifest move with
+      it. Trigger: now (WP-3.11 landed); needs the report version decision.
+- [ ] **Yield and reliability per dam, together.** The report covers the EWR
+      sites, the Reserve, the outlet and existing users' supply; a firm
+      yield of each dam on the combined input (WP-3.6) is not in it. Durable
+      fix: the job runs `yield` for the dams the applications touch on the
+      baseline, alone and together, and adds rows. Trigger: an assessor
+      asks for yield in a cumulative assessment.
+- [ ] **A full-allocation baseline column** (WP-3.10): the baseline run as it
+      is today; making it *existing authorised use* means assessing on a
+      full-allocation run. Durable fix: the assessment takes an optional
+      `backgroundRunId` (a full-allocation run of the same model) as the
+      baseline. Trigger: the first assessment on a catchment with WARMS
+      volumes imported.
+
 ## Applicants (WP-3.3)
 
 The first slice (migrations 044/045, [scenarios.md § Applications](./scenarios.md#applications-wp-33))
@@ -4326,7 +4358,9 @@ Left, from the design and the persona review (§11), each with its trigger.
       whose basis says it is a sum of separate runs. The durable fix, a
       combined run of every application's ops, is WP-3.11
       (`combineScenarios`, with its conflict rules); the row then reads that
-      run instead. Trigger: WP-3.11.
+      run instead. Trigger: WP-3.11, which has now landed (engine, backend
+      and the Assess together view, issue #287): the switch is the open item
+      under [§ Cumulative impact](#cumulative-impact-wp-311).
 - [x] **Cancelled ensembles' interim results.** Finding: there are none to
       print. The browser runs an ensemble and stores it only when every set
       has run; a `started` row of `run_uncertainty` holds no summary or result

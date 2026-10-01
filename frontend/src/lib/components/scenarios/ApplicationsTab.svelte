@@ -12,6 +12,8 @@
 	// packs (WP-3.14) with their status, newest version first, each linking to
 	// its page, and has its comments (the notes drawer on the scenario,
 	// WP-3.15); its share links are in the scenario's Application panel.
+	// "Assess together" (`view=assess` in the URL, WP-3.11) swaps the list for
+	// the cumulative impact view (CumulativeAssessment.svelte).
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -20,6 +22,7 @@
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import CumulativeAssessment from './CumulativeAssessment.svelte';
 	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -72,6 +75,9 @@
 	});
 
 	const filter = $derived(parseFilter(page.url.searchParams.get('status')));
+	const assessView = $derived(page.url.searchParams.get('view') === 'assess');
+	const assessHref = $derived(withParam(page.url, 'view', 'assess'));
+	const listHref = $derived(withoutParam(page.url, 'view'));
 	const counts = $derived(applicationCounts(items ?? []));
 	const shown = $derived(sortApplications(filterApplications(items ?? [], filter), sort));
 	const next = $derived(longestWaiting(items ?? []));
@@ -91,7 +97,7 @@
 	let innerW = $state(0);
 	let innerH = $state(0);
 	let top = $state(0);
-	const fit = $derived(!!items?.length && innerW >= 1100 && innerH >= 620);
+	const fit = $derived(!assessView && !!items?.length && innerW >= 1100 && innerH >= 620);
 	$effect(() => {
 		if (!root) return;
 		const el = root;
@@ -109,10 +115,20 @@
 
 {#snippet headerContext()}<span>{applicationsContext(items ?? [], now)}</span>{/snippet}
 {#snippet headerActions()}
+	{#if assessView}
+		<a class="btn" href={listHref} data-sveltekit-noscroll>Back to the list</a>
+	{:else if items?.length}
+		<a class="btn" href={assessHref} data-sveltekit-noscroll>Assess together</a>
+	{/if}
 	{#if next}<a class="btn" href={scenarioHref(next.id)} title="Open “{next.name}”, waiting longest">Decide the longest waiting</a>{/if}
 {/snippet}
 
 <div class="applications" class:fit bind:this={root} style:--ap-top="{top}px" data-testid="applications">
+	{#if assessView}
+		<LoadState {loading} {error} retry={load}>
+			<CumulativeAssessment {projectId} applications={items ?? []} />
+		</LoadState>
+	{:else}
 	<section class="panel apps-card" aria-labelledby="applications-h">
 		<div class="panel-head">
 			<div class="head-text">
@@ -213,6 +229,7 @@
 			{/if}
 		</LoadState>
 	</section>
+	{/if}
 </div>
 
 <style>

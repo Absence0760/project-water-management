@@ -60,6 +60,9 @@ interface World {
 	/** A submitted application: only an application past draft is shared by link (share/routes.ts shareableScenario). */
 	submittedApplicationId: string;
 	sweepId: string;
+	/** A finished `assessment` job, and a pending assessment on runId (145, WP-3.11). */
+	assessmentJobId: string;
+	assessmentId: string;
 	outlookId: string;
 	/** A complete outlook with one level, "0", and its current publication to farmers (106). */
 	completeOutlookId: string;
@@ -166,6 +169,8 @@ async function world(name: string): Promise<World> {
 				[projectId, runId, u]
 			),
 			sweepId: await one(`INSERT INTO scenario_sweep (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Sweep', $3, 'pending')`, [projectId, runId, u]),
+			assessmentJobId: await job('assessment'),
+			assessmentId: await one(`INSERT INTO assessment (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Assessment', $3, 'pending')`, [projectId, runId, u]),
 			outlookId: await one(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels, created_by, status) VALUES ($1, $2, 'Outlook', '2012-10-01', '2013-04-30', '[{}]', $3, 'pending')`,
 				[projectId, runId, u]
@@ -521,6 +526,26 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.applicationId,
 		insert: (h, ref) => ['INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3)', [ref, h.projectId, viewer.id]]
 	},
+	// An assessment (145_assessment, WP-3.11): assessment_guard checks its base run and job, assessment_member_guard its assessment and scenario.
+	'assessment.base_run_id': { ref: (w) => w.runId, insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name) VALUES ($1, $2, 'x')`, [h.projectId, ref]] },
+	'assessment.job_id': {
+		ref: (w) => w.assessmentJobId,
+		insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name, job_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, h.runId, ref]]
+	},
+	'assessment_member.assessment_id': {
+		ref: (w) => w.assessmentId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256) VALUES ($1, $2, $3, 6, 'y', 'team', '[]', repeat('a', 64))`,
+			[ref, h.projectId, h.submittedApplicationId]
+		]
+	},
+	'assessment_member.scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256) VALUES ($1, $2, $3, 7, 'y', 'team', '[]', repeat('a', 64))`,
+			[h.assessmentId, h.projectId, ref]
+		]
+	},
 	'scenario_sweep.base_run_id': { ref: (w) => w.runId, insert: (h, ref) => [`INSERT INTO scenario_sweep (project_id, base_run_id, name) VALUES ($1, $2, 'x')`, [h.projectId, ref]] },
 	'scenario_sweep.job_id': {
 		ref: (w) => w.sweepJobId,
@@ -774,6 +799,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/reports runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/reports`, { runId: r.runId }),
 	'POST /projects/:id/sweeps baseRunId': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/sweeps`, { name: `W ${randomUUID()}`, baseRunId: r.runId, members: [{ name: 'm', ops: [{ op: 'demand.scale', factor: 0.9 }] }] }),
+	// Both scenarios of the other project: loadScenario reads within the project (404), and assessment_member_guard refuses one too.
+	'POST /projects/:id/assessments scenarioIds': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/assessments`, { name: `A ${randomUUID()}`, scenarioIds: [r.scenarioId, r.submittedApplicationId] }),
 	'POST /projects/:id/yield runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: r.runId, kind: 'firm' }),
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
@@ -913,6 +941,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'calibration/schema.ts:calibrationId': 'a job payload: jobs/trust.security.db.test.ts',
 	'calibration/schema.ts:uncertaintyId': 'a job payload: jobs/trust.security.db.test.ts',
 	'sweeps/schema.ts:sweepId': 'a job payload: jobs/trust.security.db.test.ts',
+	'assessments/schema.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts',
 	'yield/routes.ts:runId': ['POST /projects/:id/yield runId'],
 	'yield/routes.ts:scenarioId': 'a read filter within the project',
 	'yield/routes.ts:nodeId': 'a read filter within the project',

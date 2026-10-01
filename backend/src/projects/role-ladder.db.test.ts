@@ -174,6 +174,8 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 /** Reads that need editor, and why. */
 const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
+	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
+	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (147)']
 ]);

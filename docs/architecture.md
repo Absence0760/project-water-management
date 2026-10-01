@@ -750,6 +750,16 @@ alerts plug in as a further kind.
   catchment). The sweep row and its members are written by the request in
   the same transaction as the job, and completed by the job. At most 2
   pending per user.
+- **`assessment`** (roadmap WP-3.11, `jobs/handlers/assessment.ts`,
+  [api.md § Assessments](./api.md#assessments),
+  [scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)):
+  the baseline, each of up to 8 scenarios alone and all of them together,
+  as the editor who asked, all on the current engine so every column is one
+  engine's. The members' ops were copied from their scenarios when the
+  assessment was written; the job checks again that they combine
+  (`combineScenarios`) and stores each member's summary and the cumulative
+  report (`cumulativeImpact`), or why it was refused. `progress` after each
+  run; no cancel. At most 2 pending per user.
 - **`auto_calibration`** (issue #153, `jobs/handlers/auto-calibration.ts`,
   [api.md § Automated calibration](./api.md#automated-calibration),
   [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
