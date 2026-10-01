@@ -289,7 +289,7 @@ describe('where the validation benchmarks come from (CR-5, engine 1.62.0)', () =
 	});
 
 	it('says an older report’s validation benchmarks already knew the validation flows', () => {
-		expect(benchmarkSourceNote(scoreColumns(report({ splitSample: split() })))).toMatch(/before engine 1\.61\.0/);
+		expect(benchmarkSourceNote(scoreColumns(report({ splitSample: split() })))).toMatch(/before engine 1\.62\.0/);
 	});
 
 	it('names a column built from its own flows (another record) beside the rest', () => {
