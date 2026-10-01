@@ -215,7 +215,9 @@
 							if (!draft?.active) m.getCanvas().style.cursor = '';
 						});
 					}
-					m.getCanvas().addEventListener('focus', () => (keyFocus = true));
+					// The crosshair is for the keyboard: shown when the focus came by keyboard (focus-visible), not after a click.
+					m.getCanvas().addEventListener('focus', () => (keyFocus = m.getCanvas().matches(':focus-visible')));
+					m.getCanvas().addEventListener('keydown', () => (keyFocus = true));
 					m.getCanvas().addEventListener('blur', () => (keyFocus = false));
 					status = 'ready';
 					syncMarkers();
