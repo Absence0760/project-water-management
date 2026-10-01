@@ -42,6 +42,15 @@ const NOT_A_CREDENTIAL: Record<string, string> = {
 	'job.lease_token': 'a worker’s lease on a claimed job (uuid); it authorises nothing outside the worker',
 	'app_user.password_hash': 'bcrypt, not SHA-256: checked on its own below'
 };
+/**
+ * Credentials the server must read back, so they can't be a digest: stored
+ * encrypted instead (bytea, sealed by the backend), each with its reason. Checked
+ * on their own below; anything else matching CREDENTIAL_NAME must be a digest.
+ */
+const ENCRYPTED_CREDENTIAL: Record<string, string> = {
+	'user_totp.secret_enc':
+		'the TOTP seed (144): checking a code needs the seed itself, so it is sealed with AES-256-GCM under APP_ENCRYPTION_KEY, bound to its account (auth/secretBox.ts; mfa.db.test.ts checks the stored bytes hold no plaintext)'
+};
 const CREDENTIAL_NAME = /(token|secret|password|api_?key|_hash)/;
 
 describe('no table stores a raw credential', () => {
@@ -55,11 +64,11 @@ describe('no table stores a raw credential', () => {
 			 WHERE c.table_schema = 'public' AND tb.table_type = 'BASE TABLE'`
 		);
 		const credential = cols.filter(
-			(r) => CREDENTIAL_NAME.test(r.c) && !/_id$/.test(r.c) && !(`${r.t}.${r.c}` in NOT_A_CREDENTIAL)
+			(r) => CREDENTIAL_NAME.test(r.c) && !/_id$/.test(r.c) && !(`${r.t}.${r.c}` in NOT_A_CREDENTIAL) && !(`${r.t}.${r.c}` in ENCRYPTED_CREDENTIAL)
 		);
 		// Positive control: the sweep finds the stores it is meant to guard.
 		const names = credential.map((r) => `${r.t}.${r.c}`);
-		for (const known of ['email_token.token_hash', 'invite.token_hash', 'share_link.token_hash', 'render_token.token_hash', 'api_key.key_hash']) {
+		for (const known of ['email_token.token_hash', 'invite.token_hash', 'share_link.token_hash', 'render_token.token_hash', 'api_key.key_hash', 'user_recovery_code.code_hash']) {
 			expect(names).toContain(known);
 		}
 		const bad = credential
@@ -71,6 +80,13 @@ describe('no table stores a raw credential', () => {
 		expect(bad, 'store only the SHA-256 of a credential, as bytea with CHECK (octet_length(col) = 32)').toEqual([]);
 		// Every allowlisted column still exists (a stale entry would hide a rename).
 		for (const key of Object.keys(NOT_A_CREDENTIAL)) expect(cols.map((r) => `${r.t}.${r.c}`)).toContain(key);
+		// The encrypted ones: each still exists, matches the credential sweep, and is bytea (the sealed form, never text).
+		for (const key of Object.keys(ENCRYPTED_CREDENTIAL)) {
+			const col = cols.find((r) => `${r.t}.${r.c}` === key);
+			expect(col, key).toBeDefined();
+			expect(CREDENTIAL_NAME.test(col!.c), key).toBe(true);
+			expect(col!.type, key).toBe('bytea');
+		}
 	});
 
 	it('passwords are bcrypt hashes, never the password', async () => {
