@@ -1629,6 +1629,13 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1367 KB (issue #285: paste a block from a
+//             spreadsheet into the node table and the planted-areas grid,
+//             the preview dialog (model/GridPasteDialog.svelte, a chunk
+//             shared by both grids), the block mapper and CSV template
+//             (spreadsheet/paste/) and each grid's mapping (nodePaste.ts,
+//             areaPaste.ts)). Measured 1364 locally against main @
+//             4a17d615's 1357 (+7 KB), CI ~2 KB above. Headroom ~1 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1639,7 +1646,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1362,
+	totalCodeKb: 1367,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

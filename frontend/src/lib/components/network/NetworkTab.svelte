@@ -29,6 +29,9 @@
 	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { applyNodePaste, nodeTableCsv, planNodePaste } from './nodePaste';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
@@ -274,6 +277,28 @@
 
 	// --- reordering (display order only; the model runs in topological order) ---
 	let announce = $state('');
+
+	// --- paste a block from a spreadsheet (issue #285): into a cell, or from the toolbar ---
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteAnchor = $state<PasteAnchor | null>(null);
+	const pasteWhere = $derived(pasteAnchor ? `${nodes[pasteAnchor.row]?.name || '(unnamed)'}, ${cardLabel(TABLE_FIELDS[pasteAnchor.col]!)}` : null);
+	function onTablePaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		pasteAnchor = t.anchor;
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function openPaste() {
+		pasteAnchor = null;
+		pasteText = '';
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applyNodePaste(editor.model.nodes, plan);
+		announce = `Pasted ${plan.changes.length} ${plan.changes.length === 1 ? 'value' : 'values'} into the node table. Save the model to keep them.`;
+	}
 	const labelOf = (id: string) => nodes.find((n) => n.id === id)?.name || 'unnamed node';
 
 	function moveBy(id: string, delta: -1 | 1, focus = false) {
@@ -524,7 +549,7 @@
 							</th>
 						</tr>
 					</thead>
-					<tbody bind:this={reorder.body}>
+					<tbody bind:this={reorder.body} onpaste={readonly ? undefined : onTablePaste}>
 						{#each nodes as node, i (node.id)}
 							{@const label = node.name || 'unnamed node'}
 							{@const share = shareOf(i)}
@@ -537,7 +562,7 @@
 								class:drop-before={rs.before}
 								class:drop-after={rs.after}
 							>
-								<th scope="row" class="sticky">
+								<th scope="row" class="sticky" data-paste-col="0">
 									<div class="namecell">
 									{#if !readonly}
 										<MoveControls id={node.id} {label} index={i} count={nodes.length} {reorder} onmove={(d) => moveBy(node.id, d, true)} />
@@ -578,7 +603,7 @@
 										{/each}
 									</select>
 								</td>
-								{#each TABLE_FIELDS as f (f.key)}
+								{#each TABLE_FIELDS as f, fi (f.key)}
 									{#if (f.farmOnly && node.kind !== 'farm') || node.kind === 'user'}
 										{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
 										<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
@@ -594,7 +619,7 @@
 											{/if}
 										</td>
 									{:else}
-									<td class:pct={isPct(f)} class:vol={isVolume(f)}>
+									<td class:pct={isPct(f)} class:vol={isVolume(f)} data-paste-col={fi}>
 										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 										<NumberInput
 											label={f.aria(label)}
@@ -645,6 +670,7 @@
 					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
 						Sort by flow path
 					</button>
+					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
 					{#if outletCount === 1}<span class="muted small">New nodes drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
 				</div>
 			{/if}
@@ -659,6 +685,19 @@
 					{/each}
 				</dl>
 			</details>
+			{#if !readonly}
+				<GridPasteDialog
+					bind:open={pasteOpen}
+					bind:text={pasteText}
+					title="Paste into the node table"
+					layout="A row per node with its name first, under a heading row naming the columns (as the CSV below has them); without names or headings the values fill the table from the cell you pasted into, in its order. A % is 0–100."
+					where={pasteWhere}
+					plan={(t) => planNodePaste(t, nodes, pasteAnchor)}
+					onapply={applyPaste}
+					csv={() => nodeTableCsv(nodes)}
+					csvName="node-table.csv"
+				/>
+			{/if}
 		{/if}
 	</section>
 {#if users.length}

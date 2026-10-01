@@ -25,6 +25,9 @@
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
 	import { cropAreaTotals, cropColouring, OTHER_COLOUR, rankCrops } from './cards';
 	import DemandTable from './DemandTable.svelte';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { applyAreaPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 	let {
 		editor,
@@ -137,6 +140,28 @@
 		announce = `${f.name || 'Farm'} moved to row ${to + 1} of ${farms.length} (network order).`;
 		if (focus) void refocusMover('mvf', f.id, focus);
 	}
+	// --- paste a block of hectares from a spreadsheet (issue #285): into a cell, or from the button ---
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteAnchor = $state<PasteAnchor | null>(null);
+	const pasteWhere = $derived(pasteAnchor ? `${farms[pasteAnchor.row]?.name || '(unnamed)'}, ${crops[pasteAnchor.col]?.name || '(unnamed)'}` : null);
+	function onAreasPaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		pasteAnchor = t.anchor;
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function openPaste() {
+		pasteAnchor = null;
+		pasteText = '';
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applyAreaPaste(plan, (nodeId, cropId, m2) => editor.setCropArea(nodeId, cropId, m2));
+		announce = `Pasted ${plan.changes.length} planted ${plan.changes.length === 1 ? 'area' : 'areas'}. Save the model to keep them.`;
+	}
+
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
 	const farmReorder = new RowReorder(() => farms.map((f) => f.id), (from, to) => moveFarm(from, to));
 </script>
@@ -246,11 +271,11 @@
 						<th scope="col" class="num">Total<br /><span class="u">ha</span></th>
 					</tr>
 				</thead>
-				<tbody bind:this={farmReorder.body}>
+				<tbody bind:this={farmReorder.body} onpaste={readonly ? undefined : onAreasPaste}>
 					{#each farms as f, fi (f.id)}
 						{@const rs = farmReorder.rowState(f.id, fi, farms.length)}
 						<tr data-idx={fi} class:dragging={rs.dragging} class:drop-before={rs.before} class:drop-after={rs.after}>
-							<th scope="row" class="sticky">
+							<th scope="row" class="sticky" data-paste-col="0">
 								<span class="namecell">
 									{#if !readonly}
 										<MoveControls id={f.id} label={f.name || 'farm'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
@@ -258,8 +283,8 @@
 									<span>{f.name || '(unnamed)'}</span>
 								</span>
 							</th>
-							{#each crops as c (c.id)}
-								<td>
+							{#each crops as c, ci (c.id)}
+								<td data-paste-col={ci}>
 									<span class="cell-label" aria-hidden="true">{c.name || '(unnamed)'} <span class="u">ha</span></span>
 									<NumberInput
 										label="{c.name || 'crop'} on {f.name || 'farm'}, ha"
@@ -288,6 +313,22 @@
 			</table>
 		</div>
 		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
+		{#if !readonly}
+			<div class="toolbar after">
+				<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+			</div>
+			<GridPasteDialog
+				bind:open={pasteOpen}
+				bind:text={pasteText}
+				title="Paste planted areas"
+				layout="Hectares: a row per hydrological unit with its name first, under a heading row of crop names (as the CSV below has them); without names or headings the values fill the grid from the cell you pasted into, in its order. 0 clears an area."
+				where={pasteWhere}
+				plan={(t) => planAreaPaste(t, farms, crops, editor.model.cropAreas, pasteAnchor)}
+				onapply={applyPaste}
+				csv={() => plantedAreasCsv(farms, crops, editor.model.cropAreas)}
+				csvName="planted-areas.csv"
+			/>
+		{/if}
 	{/if}
 </section>
 {/if}
