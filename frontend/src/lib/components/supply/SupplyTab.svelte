@@ -37,6 +37,8 @@
 	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
+	import { mapNodeHref } from '$lib/workspace/mapLinks';
+	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
@@ -58,6 +60,15 @@
 		runs: RunMeta[] | null;
 		readonly: boolean;
 	} = $props();
+
+	// Which units have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
+	// page has drawn, so the map's list never delays it (workspace/mapLinks.ts).
+	const mapped = new MappedNodes(() => projectId, api.map.list);
+	// After the first paint, and again if the workspace switches project under this tab.
+	$effect(() => {
+		void projectId;
+		void untrack(() => mapped.load());
+	});
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const runName = (r: Pick<RunMeta, 'label'>) => r.label || 'Untitled run';
@@ -373,6 +384,7 @@
 										{#if c.inModel}
 											<p class="links small">
 												<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
+												{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="unit-map-link">Show on map</a>{/if}
 												<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>
 											</p>
 										{/if}

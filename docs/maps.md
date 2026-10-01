@@ -62,6 +62,41 @@ server and no tile CDN: the file is served from the app's own storage.
   then production shows the plain background. Tracked in
   [followups.md § Catchment map](./followups.md#catchment-map-issue-288).
 
+### Colours, theme and the picked name
+
+- **Colours** (`overlayColours` in `mapStyle.ts`, issue #326 E7): the
+  catchment boundary amber-brown (dark: amber), long-dashed and thickest;
+  **farm parcels green** (the app's `--success`), solid outline and a light
+  fill; **water blue** for rivers (3.5 px, thicker than any outline, on a
+  6 px casing), dam polygons (a denser blue fill, 45% against a parcel's 18%,
+  so a dam reads as water and never as a parcel) and gauge and dam points;
+  other features grey and dotted; the picked feature magenta. Every stroke
+  has a contrasting casing and is at least 3:1 against the basemap's
+  background, land, water and land cover in both themes, parcel green and
+  water blue are at least ΔE 60 apart (CIE76; the old blues were 38 light,
+  23 dark), and every pair of stroke colours at least ΔE 40
+  (`mapStyle.test.ts`). The `*Fill` entries are CSS `rgba()` values, so the
+  map's key can draw its swatches from the same function and can't drift.
+  Point markers take their colours from the same function, as custom
+  properties on the map's box: the component has no hex of its own.
+- **Results colouring (A1, prepared):** `CatchmentMap` takes an optional
+  `fills` (feature id → CSS colour). A polygon named there is filled with
+  that colour at 75% (`RESULT_FILL_OPACITY`) instead of its kind's
+  (`overlayData` carries it as a `fill` property; the fill layer's
+  `to-color` falls back to the kind's colour when it is missing or doesn't
+  parse). Nothing passes it yet.
+- **Theme:** the map follows the app's theme, not only the OS's
+  (`appTheme.ts`: `<html data-theme>` when set, else
+  `prefers-color-scheme`), and redraws when either changes: one style holds
+  the basemap and the overlay (`mapStyle()`), so `setStyle` swaps both and
+  the features, the pick and the click handlers carry over. A basemap that
+  failed to load stays dropped.
+- **The picked feature's name** shows in a small box over the map's top-left
+  corner (its kind, then its name), until the basemap has labels (A6). It is
+  hidden from assistive technology (`aria-hidden`): the ways to pick that it reaches are
+  the list's buttons and the point markers' buttons, which already say which
+  is pressed, so announcing it again would say everything twice.
+
 ### CSP and bundle
 
 - MapLibre and the PMTiles reader are **dynamic imports**:
@@ -135,7 +170,7 @@ with no dependency. `area.test.ts` checks a 1 km² square at 22°, 30° and
 34.5° S (within 0.01 %) and a quarter of the ellipsoid against WGS84's
 published surface area.
 
-**Use … km²** on a polygon's row sets a hydrological unit's area
+**Use … km²** on a farm parcel's (or an `other` polygon's) row sets a hydrological unit's area
 (`node.area_km2`) to it after a confirmation, and records a model revision
 whose reason names the feature ("Area of Upper farm from the map: “Upper
 farm” (9.257 km², computed from its polygon)"), which the History tab and the
@@ -143,8 +178,106 @@ run comparison's input diff show. The unit's `area_source` is then `map`
 (with the feature), until its area is typed over (back to `typed`) or the
 feature is deleted (the area stays; the link goes). The area is the farm's
 **catchment area** (runoff), so the polygon to use is the farm's
-sub-catchment, not its irrigated land. Only farm nodes take one. While the
+sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
+
+## Checks
+
+The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
+between the map and the model: a one-line count under the feature list, and
+the warnings in the **Map checks** side sheet (`checks=1`, `MapChecks.svelte`;
+`cap` folds a long list behind "Show all", unused in the sheet). They are **warnings
+only**: nothing stops a save or a run. Each warning names its features as
+buttons that select them on the map and in the list; "No problems found"
+when there are none. The checks are pure and in the browser
+(`lib/components/map/mapChecks.ts`, no dependency; `mapChecks.test.ts`), the
+thresholds named constants there:
+
+- **Units with no parcel**: a hydrological unit (farm node) that no farm
+  parcel is linked to.
+- **Outside the boundary** (only with a boundary): a parcel, dam, point or
+  line with any vertex outside the catchment boundary (a hole in it counts as
+  outside). A vertex within `OUTSIDE_TOLERANCE_M` (10 m) of the boundary's
+  line counts as on it. The warning says how many of the feature's points are
+  out.
+- **Overlapping parcels**: two farm parcels whose interiors overlap, found
+  without a geometry library: a vertex of one inside the other, two edges
+  crossing, or a point just inside one edge's middle lying inside the other
+  (which catches a parcel imported twice). Within `OVERLAP_TOLERANCE_M`
+  (5 m) nothing counts, so shared edges, touching corners and rounding
+  slivers don't.
+- **Units against the boundary**: the units' areas (as the model has them)
+  added up, against the boundary's server-computed area. Flagged when they
+  differ by more than `UNITS_VS_BOUNDARY_TOLERANCE` (10 %), giving both:
+  "The units add up to 184.0 km², 12 % less than the boundary's 210.2 km²"
+  (the seeded Sandspruit example, whose boundary has a margin round its
+  farms).
+- **Typed area against the parcel**: a unit whose area was typed (not taken
+  from the map) and differs from its linked parcel's area (the parcels'
+  sum, if several) by more than `TYPED_VS_PARCEL_TOLERANCE` (10 %).
+- **Gauges off the rivers** (only with river lines): a gauge further than
+  `GAUGE_RIVER_DISTANCE_M` (100 m) from every river line, measured to the
+  nearest point of any segment (great-circle distance), with how far it is.
+
+Geometry is in metres on a local equirectangular projection around the
+features (well under 1 % off over a catchment); people read haversine
+distances and the server's areas.
+
+## Results on the map (data)
+
+Issue #326 A1 (decision D-A1) colours each parcel by one run's figures. This
+section is the data layer, `frontend/src/lib/components/map/mapStatus.ts`
+(pure, `mapStatus.test.ts`). **Not wired to the page yet:** the map's
+colours, measure picker, legend and the table beside it are the next round
+of #326, and nothing on the Map tab calls this module today.
+
+- **No new route.** Every figure is in the run's summary, which
+  `GET /projects/:id/runs/:runId` already returns (`api.runs.get`), with the
+  run's model snapshot for the dams' capacities. No series is downloaded:
+  the same summary feeds the Hydrological units page and the Network's
+  colours. A parcel reaches its figure through `map_feature.node_id`.
+- **Which run** (`chooseMapRun`, `mapRuns`): the current publication's run
+  (`RunMeta.published`) for everyone by default. An editor or owner may pick
+  any run (`from: 'picked'`), and sees their newest run when nothing is
+  published; anyone below editor gets the published run only, and nothing
+  when nothing is published. This is a choice of view, not an access rule:
+  viewers can already read every run on the Runs page. Farmers can't read
+  runs at all (`403`); their farm map (A3) reads the farm view instead.
+- **Measures** (`unitStatuses`), per hydrological unit and water user, each
+  as `{ nodeId, measure, value, band, label }` with `band` one of `ok`,
+  `watch`, `short` or `none` (no figure), and `label` the figure in words so
+  a colour is never the only cue. The bands reuse the app's thresholds rather
+  than new ones:
+  - **Days short** (the default): demand days in the reporting window not
+    fully met (`supplyAssurance.reliability`, as the Hydrological units
+    cards count them), banded by the share of demand days met with the
+    supply bands' thresholds (`supplyColour.ts`: 95 % and 70 %).
+  - **Curtailment**: the cut the curtailment table asks of a unit
+    (`curtailment.farms`, `totalChangeM3Day` below 0), banded by the share of
+    demand left with the same thresholds; no cut is `ok`. Water users are not
+    in that table, so they are `none`.
+  - **Dam level**: the end-of-run level, banded exactly as the Network's
+    **Colour by dam level** (`farmColour.ts` `damColouring`: 60 % full or
+    more, 30–60 %, under 30 % or at its minimum), from `damLevelsFromSummary`
+    or, for a run before engine 1.2.0, `loadDamLevels`.
+  - **Use against allocation**: per water source, *above registered* when
+    any whole water year was, else the engine's `allocationStatus` of the
+    mean whole year with the run's tolerance (the Allocations page's rule,
+    `allocations.ts` `unitRows`); a unit with both sources shows the worse.
+    Above registered is `short`, use with no registered volume `watch`,
+    within the band or below it `ok`. A run with no whole water year, or no
+    allocations, is `none`.
+- **Gauges and EWR sites** (`ewrStatuses`): met or missed over the reporting
+  window from `curtailment.ewrSites` (outlet first, then gauges); a gauge
+  that isn't a site in the run is `none`.
+- **Colours** (`bandFills`): `Record<featureId, colour>` for CatchmentMap's
+  fills, from the band's design token (`ok` `--success`, `watch`
+  `--warning`, `short` `--danger`, `none` `--text-muted`, the schematic's and
+  the node card's family), read from `<html>`'s computed style so it follows
+  the app's theme at the time of the call. The caller must call it again on
+  `watchAppTheme` and pass the new `fills`: CatchmentMap redraws a theme
+  change with the `fills` it was given, so stale ones keep the old theme's
+  colours. The boundary and rivers are never filled.
 
 ## Quaternary lookup
 
@@ -170,6 +303,12 @@ as the schema owner; the app never writes it.
   says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
   (`pnpm setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
+- **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
+  an invented map inside those cells (`backend/scripts/examples/map.ts`,
+  recorded as the file `sandspruit-map.synthetic.geojson`): a boundary, a
+  parcel and a dam per farm linked to its node, two gauges and four streams.
+  Parcels are drawn to the model's areas, so the map proposes nothing new
+  until someone edits it; `map.test.ts` holds the layout to the model.
 - **Real data: the operator's own download.**
   1. Boundaries: the DWS quaternary catchments (open data; the DWS/WR2012
      GIS layers). Convert the shapefile to GeoJSON in WGS84:
