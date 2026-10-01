@@ -59,6 +59,15 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(got[40]).toBe('inRange');
 	});
 
+	it('a long zero-flow stretch is scored as a river that stopped, not suspect (QF-3, engine 1.61.0); the same stretch at a non-zero value is', () => {
+		const values: (number | null)[] = varying(300);
+		for (let i = 20; i < 140; i++) values[i] = 0; // 120 days of zero flow: past the 90-day cap the Data checks list
+		for (let i = 200; i < 230; i++) values[i] = 0.75; // positive control: 30 days of one non-zero value
+		const got = names(flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values }, start: d0, days: 300 }));
+		expect(got.slice(20, 140).every((f) => f === 'inRange')).toBe(true);
+		expect(got.slice(200, 230).every((f) => f === 'suspect')).toBe(true);
+	});
+
 	it('reads the project’s data-check limits (settings.dataQuality), not the defaults', () => {
 		const values: (number | null)[] = varying(100);
 		for (let i = 20; i < 30; i++) values[i] = 1.234; // 10 days of one value: under the default 14-day floor
@@ -211,6 +220,22 @@ describe('dayQuality (CR-22)', () => {
 		expect(q.suspectZeroDays).toBe(1);
 		expect(q.rain).toBeNull();
 		expect(q.use).toEqual({ aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+	});
+
+	it('names zero flow held for the flat-line cap or longer as scored (QF-3), and not a shorter zero run', () => {
+		const n = 200;
+		const flags = new Uint8Array(n).fill(code('inRange'));
+		const observed = new Float64Array(n).fill(4);
+		for (let t = 10; t < 110; t++) observed[t] = 0; // 100 days of zero
+		for (let t = 150; t < 160; t++) observed[t] = 0; // 10 days: a short dry spell, not named
+		const windowIdx = Array.from({ length: n }, (_, i) => i);
+		const q = dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx, flags, scoring: scoringDays(windowIdx, flags, settings, null, n), observed, rainFlags: null, zeroRunMask: null });
+		expect(q.longZeroDays).toBe(100);
+		expect(q.suspectZeroDays).toBe(0);
+		expect(q.scoredDays).toBe(n);
+		expect(q.notes.join('\n')).toMatch(/100 days are zero flow held for 90 days or more\. They are scored as a river that stopped flowing/);
+		// The project's own cap.
+		expect(dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx, flags, scoring: scoringDays(windowIdx, flags, settings, null, n), observed, rainFlags: null, zeroRunMask: null, zeroFlatMinDays: 120 }).longZeroDays).toBe(0);
 	});
 
 	it('says what the record can’t support: no rating, suspect days left out, zero flow among them, and a large share left out', () => {

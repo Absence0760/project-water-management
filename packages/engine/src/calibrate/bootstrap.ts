@@ -15,6 +15,17 @@
 //   seasonal catchment climatology is hard to beat (Schaefli & Gupta 2007;
 //   Knoben et al. 2020), and a model that doesn't beat it adds little
 //   beyond the seasonal cycle.
+// - Where the benchmarks come from (engine ≥ 1.61.0, CR-5, provisional
+//   decision 2026-10-01, to be confirmed by the client's hydrologist): on a
+//   validation period both are built from the flows of the test's own
+//   calibration period and applied to the validation days, as a forecast
+//   made with only the calibration data would be (Knoben et al. 2020;
+//   Gründemann et al. 2026, HESS 30, 3439, "the benchmarks are defined using
+//   data from a dedicated calibration period … and then used to predict the
+//   streamflow in an independent evaluation period"). Up to 1.60.0 they were
+//   built from the validation days themselves, a benchmark that already knew
+//   the period's flows. A calibration period (and a validation on another
+//   record, whose flows the calibration period never saw) keeps its own.
 
 import { fromEpochDay } from '../calendar';
 import { Rng } from '../random';
@@ -62,6 +73,12 @@ export interface ScoreBenchmarks {
 	/** Each day, the period's mean observed flow on that calendar day, smoothed over ±`halfWindowDays`. */
 	climatology: FitScores;
 	halfWindowDays: number;
+	/**
+	 * Whose flows built the two benchmarks (engine ≥ 1.61.0): 'period' the scored days' own,
+	 * 'calibration' the test's calibration period's, applied to these days. Absent on an older
+	 * report, which always used the period's own.
+	 */
+	builtFrom?: 'period' | 'calibration';
 }
 
 export interface BootstrapOptions {
@@ -210,11 +227,12 @@ export function dayOfYearSlot(epochDay: number): number {
 }
 
 /**
- * The day-of-year climatology of `o`: for each day, the mean observed flow
- * over every day of the period within ±`halfWindow` calendar days of it
- * (circular over the year), each observation weighted once.
+ * The smoothed day-of-year climatology of `o` as a table over the 366
+ * calendar slots: each slot the mean of every observation within
+ * ±`halfWindow` calendar days of it (circular over the year), each weighted
+ * once; NaN where none is.
  */
-export function climatologyFlows(o: ArrayLike<number>, slots: ArrayLike<number>, halfWindow = CLIMATOLOGY_HALF_WINDOW): Float64Array {
+function slotTable(o: ArrayLike<number>, slots: ArrayLike<number>, halfWindow: number): Float64Array {
 	const sum = new Float64Array(366);
 	const count = new Float64Array(366);
 	for (let i = 0; i < o.length; i++) {
@@ -232,18 +250,52 @@ export function climatologyFlows(o: ArrayLike<number>, slots: ArrayLike<number>,
 		}
 		clim[d] = c > 0 ? s / c : NaN;
 	}
+	return clim;
+}
+
+/**
+ * The day-of-year climatology of `o`: for each day, the mean observed flow
+ * over every day of the period within ±`halfWindow` calendar days of it
+ * (circular over the year), each observation weighted once.
+ */
+export function climatologyFlows(o: ArrayLike<number>, slots: ArrayLike<number>, halfWindow = CLIMATOLOGY_HALF_WINDOW): Float64Array {
+	const clim = slotTable(o, slots, halfWindow);
 	return Float64Array.from(slots, (d) => clim[d]!);
 }
 
-/** The mean-flow and day-of-year climatology benchmarks for observed flows `o` on the epoch days `days`. */
-export function scoreBenchmarks(o: ArrayLike<number>, days: ArrayLike<number>, groups?: ArrayLike<number>, halfWindow = CLIMATOLOGY_HALF_WINDOW): ScoreBenchmarks {
+/** Observed flows and their epoch days: the record a benchmark is built from. */
+export interface BenchmarkSource {
+	o: ArrayLike<number>;
+	days: ArrayLike<number>;
+}
+
+/**
+ * The mean-flow and day-of-year climatology benchmarks for observed flows `o`
+ * on the epoch days `days`. Built from `o` itself, or, given `from` (engine ≥
+ * 1.61.0), from another period's flows (the test's calibration period) and
+ * applied to these days: the mean of `from`, and each day `from`'s
+ * climatology on that calendar day. A calendar day `from` has no flow within
+ * ±`halfWindow` of takes `from`'s mean.
+ */
+export function scoreBenchmarks(
+	o: ArrayLike<number>,
+	days: ArrayLike<number>,
+	groups?: ArrayLike<number>,
+	halfWindow = CLIMATOLOGY_HALF_WINDOW,
+	from?: BenchmarkSource
+): ScoreBenchmarks {
+	const src = from ?? { o, days };
 	let m = 0;
-	for (let i = 0; i < o.length; i++) m += o[i]!;
-	m /= o.length;
+	for (let i = 0; i < src.o.length; i++) m += src.o[i]!;
+	m /= src.o.length;
 	const slots = Int32Array.from(days, dayOfYearSlot);
+	// The source's climatology by calendar slot, read at each scored day's slot.
+	const bySlot = from ? slotTable(src.o, Int32Array.from(src.days, dayOfYearSlot), halfWindow) : null;
+	const clim = bySlot ? Float64Array.from(slots, (d) => (Number.isFinite(bySlot[d]!) ? bySlot[d]! : m)) : climatologyFlows(o, slots, halfWindow);
 	return {
 		meanFlow: fitScores(o, new Float64Array(o.length).fill(m), groups),
-		climatology: fitScores(o, climatologyFlows(o, slots, halfWindow), groups),
-		halfWindowDays: halfWindow
+		climatology: fitScores(o, clim, groups),
+		halfWindowDays: halfWindow,
+		builtFrom: from ? 'calibration' : 'period'
 	};
 }

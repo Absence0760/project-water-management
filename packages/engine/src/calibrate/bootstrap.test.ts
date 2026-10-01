@@ -143,3 +143,40 @@ describe('benchmarks (CR-5)', () => {
 		expect(exact.climatology.nse).toBeCloseTo(1, 10);
 	});
 });
+
+describe('benchmarks built from a calibration period (CR-5, engine 1.61.0)', () => {
+	it('applies the source’s mean and calendar-day climatology to the scored days', () => {
+		const { days, o, groups } = record(8);
+		const half = Math.floor(o.length / 2);
+		const cal = { o: o.slice(0, half), days: days.slice(0, half) };
+		const vo = o.slice(half);
+		const vd = days.slice(half);
+		const vg = groups.slice(half);
+		const own = scoreBenchmarks(vo, vd, vg);
+		const fromCal = scoreBenchmarks(vo, vd, vg, 7, cal);
+		expect(own.builtFrom).toBe('period');
+		expect(fromCal.builtFrom).toBe('calibration');
+		// The source's mean every day: KGE′ 1 − √2 only for the period's own mean.
+		expect(own.meanFlow.kgePrime).toBeCloseTo(1 - Math.SQRT2, 10);
+		expect(fromCal.meanFlow.kgePrime).not.toBeCloseTo(own.meanFlow.kgePrime!, 6);
+		// A benchmark that knew the validation flows is at least as good on them as one that didn't (NSE: the period's own mean is optimal).
+		expect(own.meanFlow.nse!).toBeGreaterThanOrEqual(fromCal.meanFlow.nse!);
+	});
+
+	it('a purely seasonal record: the calibration half’s climatology predicts the other half exactly', () => {
+		const { days, groups } = record(8);
+		const seasonal = Float64Array.from(days, (d) => 5 + 4 * Math.sin((2 * Math.PI * dayOfYearSlot(d)) / 366));
+		const half = Math.floor(days.length / 2);
+		const b = scoreBenchmarks(seasonal.slice(half), days.slice(half), groups.slice(half), 0, { o: seasonal.slice(0, half), days: days.slice(0, half) });
+		expect(b.climatology.nse).toBeCloseTo(1, 10);
+	});
+
+	it('a calendar day the source never saw takes the source’s mean', () => {
+		const d = ['2001-01-10', '2001-01-11'].map(toEpochDay);
+		const v = ['2001-07-01'].map(toEpochDay);
+		// Source: 2 and 4 in January; scored: one July day reading 3, which the source's mean (3) predicts exactly.
+		const b = scoreBenchmarks([3, 3], [v[0]!, v[0]! + 1], undefined, 0, { o: [2, 4], days: d });
+		expect(b.climatology.volumeErrorPct ?? 0).toBeCloseTo(0, 10);
+	});
+});
+

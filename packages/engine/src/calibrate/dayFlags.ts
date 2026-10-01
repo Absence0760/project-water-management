@@ -9,7 +9,13 @@
 //   settings.flowGapFill's fill, engine ≥ 1.23.0, docs/model.md §2.10i);
 // - suspect: an outlier or a flat stretch by the Data checks (quality.ts
 //   seriesRowFlags, under the project's settings.dataQuality limits, the
-//   same the run warnings use);
+//   same the run warnings use), except a stretch of zero flow (engine ≥
+//   1.61.0, QF-3, provisional decision 2026-10-01): a river that stops is a
+//   reading, not a fault, so a long zero stretch stays a scored day, as GSIM
+//   Part 2 flags only runs of one value *above zero* (Gudmundsson et al.
+//   2018, ESSD 10, 787). The Data checks still list the stretch, and the
+//   data-quality panel names it, so a logger that died reading zero is seen;
+//   leave its dates out with an exclusion period;
 // - aboveRating: above the highest field gauging (settings.qualityFlags
 //   .ratings), so the flow comes from an extrapolated rating curve;
 // - belowRating: above zero but below the lowest gauging;
@@ -29,7 +35,7 @@
 // shows.
 import { toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
 import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
-import { seriesRowFlags } from '../quality';
+import { FLATLINE_FLOW_MAX_DAYS, seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
 import type { CalibrationExclusion } from './provenance';
 import { ratingOf, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
@@ -107,7 +113,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
 		out[t] = x.infilled?.[t]
 			? FLOW_FLAG_CODE.infilled
-			: rows && (rows.outlier[i] || rows.flatline[i])
+			: rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))
 				? FLOW_FLAG_CODE.suspect
 				: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
@@ -277,8 +283,13 @@ export interface DayQuality {
 	censoredDays: number;
 	/** Days with a reading that the flags left out. */
 	leftOutDays: number;
-	/** Suspect days whose flow is zero (a river that stops trips the flat-stretch check after 90 days). */
+	/** Suspect days whose flow is zero: 0 from engine 1.61.0, which never calls a zero stretch suspect (QF-3); kept for older reports. */
 	suspectZeroDays: number;
+	/**
+	 * Days in the window that are zero flow held for at least `zeroFlatMinDays` (the flow flat-line cap, 90 by
+	 * default), and so scored as a river that stopped (engine ≥ 1.61.0, QF-3). Absent on an older report.
+	 */
+	longZeroDays?: number;
 	/** The scored days' rain by class, and how many fall in a zero-rain run set aside as missing (CR-20); null without rain. */
 	rain: { observed: number; infilled: number; missing: number; zeroRunDays: number } | null;
 	/** What the record can't support, in plain words. */
@@ -304,6 +315,8 @@ export interface DayQualityInput {
 	rainFlags: Uint8Array | null;
 	/** 1 on run days in a zero-rain run set aside as missing, null without one. */
 	zeroRunMask: ArrayLike<number> | null;
+	/** A zero-flow stretch this long or longer is named (settings.dataQuality.flatlineFlowMaxDays; FLATLINE_FLOW_MAX_DAYS by default). */
+	zeroFlatMinDays?: number;
 }
 
 /** Counts and notes for the data-quality panel. */
@@ -317,6 +330,17 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		flow[f]++;
 		if (f === 'suspect' && x.observed[t] === 0) suspectZeroDays++;
 	}
+	// Zero flow held for a long stretch (QF-3): run days in a run of consecutive zero readings at least zeroFlatMinDays long.
+	const zeroMin = x.zeroFlatMinDays ?? FLATLINE_FLOW_MAX_DAYS;
+	const inLongZero = new Uint8Array(x.observed.length);
+	for (let t = 0; t < x.observed.length; ) {
+		let j = t;
+		while (j < x.observed.length && x.observed[j] === 0) j++;
+		if (j - t >= zeroMin) inLongZero.fill(1, t, j);
+		t = j > t ? j : t + 1;
+	}
+	let longZeroDays = 0;
+	for (let i = 0; i < x.windowIdx.length; i++) if (inLongZero[x.windowIdx[i]!]) longZeroDays++;
 	const scoredDays = x.scoring.idx.length;
 	let censoredDays = 0;
 	if (x.scoring.censor) for (const t of x.scoring.idx) if (!Number.isNaN(x.scoring.censor[t]!)) censoredDays++;
@@ -362,11 +386,17 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 				? `${days(flow.suspect)} flagged suspect by the Data checks (outliers or flat stretches) are left out.`
 				: `${days(flow.suspect)} flagged suspect by the Data checks (outliers or flat stretches) are scored as recorded.`
 		);
+		// An older report's zero stretches were suspect.
 		if (suspectZeroDays && use.suspect === 'exclude') {
 			notes.push(
 				`${n(suspectZeroDays)} of the suspect days ${suspectZeroDays === 1 ? 'is' : 'are'} zero flow held for a long stretch. If the river really stops, set suspect days to "Score as recorded" (Settings → Calibration record), or the fit never sees it dry.`
 			);
 		}
+	}
+	if (longZeroDays) {
+		notes.push(
+			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for ${n(zeroMin)} days or more. They are scored as a river that stopped flowing, not left out as suspect. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
+		);
 	}
 	if (flow.infilled) {
 		notes.push(
@@ -386,7 +416,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	if (rain?.zeroRunDays) {
 		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled.`);
 	}
-	return { flowKind: x.flowKind, rating, use, windowDays: x.windowIdx.length, flow, scoredDays, censoredDays, leftOutDays, suspectZeroDays, rain, notes };
+	return { flowKind: x.flowKind, rating, use, windowDays: x.windowIdx.length, flow, scoredDays, censoredDays, leftOutDays, suspectZeroDays, longZeroDays, rain, notes };
 }
 
 /**

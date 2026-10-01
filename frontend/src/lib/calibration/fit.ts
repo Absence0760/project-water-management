@@ -262,6 +262,22 @@ export function benchmarkRows(cols: readonly ScoreColumn[], objective: Objective
 }
 
 /**
+ * Where a validation column's benchmarks came from: from engine 1.61.0 the
+ * test's calibration period (a forecast made without the validation flows,
+ * CR-5); an older report built them from the validation days themselves.
+ * null when no validation column carries benchmarks.
+ */
+export function benchmarkSourceNote(cols: readonly ScoreColumn[]): string | null {
+	const val = benchmarkColumns(cols).filter((c) => c.validation);
+	if (!val.length) return null;
+	const own = val.filter((c) => c.benchmarks!.builtFrom !== 'calibration');
+	if (!own.length) return 'On a validation column both benchmarks are built from that test’s calibration period and applied to the validation days, as a forecast made without the validation flows would be.';
+	if (own.length === val.length)
+		return 'On the validation columns the benchmarks are built from the validation days’ own flows (a report from before engine 1.61.0), so they already know those flows: a harder benchmark than a forecast could be.';
+	return `On ${own.map((c) => `“${c.label}”`).join(', ')} the benchmarks are built from the column’s own flows, so they already know them; on the other validation columns from the test’s calibration period, as a forecast made without the validation flows would be.`;
+}
+
+/**
  * One plain sentence when the fitted model doesn't beat the day-of-year
  * climatology on the fit's objective, on the fitted period or a validation
  * period; null when it beats it everywhere (or nothing can be compared).

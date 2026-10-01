@@ -33,6 +33,7 @@
 		BOUNDS_LABEL,
 		boundsHint,
 		climatologyWarning,
+		benchmarkSourceNote,
 		fmtScore,
 		fitInput,
 		fitParams,
@@ -140,6 +141,7 @@
 	const benchCols = $derived(benchmarkColumns(columns));
 	const benchRows = $derived(report ? benchmarkRows(columns, report.objective) : []);
 	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);
+	const benchSource = $derived(report ? benchmarkSourceNote(columns) : null);
 	const anyInterval = $derived(columns.some((c) => c.intervals));
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty, runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
@@ -401,6 +403,11 @@
 										flow every day, and in a strongly seasonal catchment the day-of-year climatology too.
 									</td>
 								</tr>
+								{#if benchSource}
+									<tr>
+										<td colspan={benchCols.length + 1} class="muted small note" data-testid="fit-benchmarks-source">{benchSource}</td>
+									</tr>
+								{/if}
 							</tfoot>
 						</table>
 					</div>

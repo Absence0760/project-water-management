@@ -77,6 +77,21 @@ describe('SettingsPatch.dataQuality', () => {
 		expect(dataQualityPatchError(mergeSettings({}))).toBeNull();
 	});
 
+	it('a fit record takes engine 1.61.0’s benchmark source and long zero-flow count, and records without them (CR-5, QF-3)', () => {
+		const bench = FitRecord.shape.fit.shape.benchmarks.unwrap().unwrap();
+		const set = { kgePrime: 0.1, nse: 0, kgeLowHigh: null, kgeYearly: null, volumeErrorPct: null, logNse: null };
+		const base = { meanFlow: set, climatology: set, halfWindowDays: 7 };
+		const ok = (v: unknown) => bench.safeParse(v).success;
+		expect(ok(base)).toBe(true);
+		expect(ok({ ...base, builtFrom: 'calibration' })).toBe(true);
+		expect(ok({ ...base, builtFrom: 'period' })).toBe(true);
+		expect(ok({ ...base, builtFrom: 'validation' })).toBe(false);
+		const dq = FitRecord.shape.dayQuality.unwrap().unwrap();
+		expect(dq.shape.longZeroDays.safeParse(undefined).success).toBe(true);
+		expect(dq.shape.longZeroDays.safeParse(120).success).toBe(true);
+		expect(dq.shape.longZeroDays.safeParse(-1).success).toBe(false);
+	});
+
 	it('records the rain-check limits in a fit record’s forcing, optionally', () => {
 		const rc = FitRecord.shape.forcing.unwrap().shape.rainChecks;
 		expect(rc.safeParse(undefined).success).toBe(true);
