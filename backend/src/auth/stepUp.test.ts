@@ -35,7 +35,8 @@ const NOT_A_GATE: Record<string, string> = {
 	'feeds/routes.ts': 'the canEdit flag the page shows; the feed writes go through requireRole(…, owner)',
 	'feeds/fromBoundary.ts': 'the canApply flag the boundary-rain proposal shows; applying it goes through requireRole(…, owner) (#326 B-rain)',
 	'evidence/notices.ts': 'who is emailed about a pack, not an action',
-	'errata/notices.ts': 'who is emailed about a known engine bug (still an owner when it is sent), not an action'
+	'errata/notices.ts': 'who is emailed about a known engine bug (still an owner when it is sent), not an action',
+	'licence/record.ts': 'who is emailed that a licence record needs a decision (still an owner when it is sent), not an action'
 };
 
 describe('hand-rolled owner and admin checks', () => {

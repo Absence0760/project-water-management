@@ -39,8 +39,9 @@ client goes live. Not customer-facing.
   (that would make the record false, s16); a started ensemble and a draft
   application go with the account. Two things keep the name: a sign-off's
   typed name and registration and the names printed in an evidence pack's
-  hashed manifest, both for a **bounded** period, the life of the licence
-  record they support, defended under s14(1)(b) and s14(6)(b) (pre-counsel
+  hashed manifest, both for a **bounded** period, until the licence
+  record's closing date (the licence's expiry, or the refusal or withdrawal,
+  + 3 years; a 5-yearly review while no outcome is recorded; 161), defended under s14(1)(b) and s14(6)(b) (pre-counsel
   research, fact-check of 2026-09-30 on #112). The only refusal left is the
   only owner of a project or admin of a team, until it is handed over.
   Self-service deletion (Account → Delete my account, 143, #112) is the
@@ -417,6 +418,28 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
   notice's "what changed" list now names this and the 2026-09-30 deletion
   change (it still listed 2026-09-28's).
+- 2026-10-01: provisional positions (pre-counsel research, 2026-10-01; not
+  legal advice, counsel review #92) on issue #90's D12, evidence that names
+  its maker, and D3, built on branch r3/popia-records:
+  **D12**: pseudonymising the audit log is enough (s24(1)(b) reaches only
+  what s14 no longer authorises; s14(1)(b) authorises the trail), the
+  entries are treated as personal information, and deletion now also
+  blanks the masked address in invitation entries (160).
+  **Licence record**: "the life of the licence record" is a date the
+  project holds (161): the licence's expiry, or the refusal or withdrawal,
+  + 3 years, with a 5-yearly review while no outcome is recorded; the tick
+  emails the owners and the operator, the operator deletes on the client's
+  written confirmation (deployment.md runbook item 16); the pack signer is
+  told so (the dialog's note, not part of the hashed statement, so no
+  sign-off version change). A DWS or CMA client may be marked
+  `team.public_records` (operator agreement 3A.2), keeping names in its
+  project history; its Privacy §7 sentence waits for such a client.
+  **D3**: registered users' names never go to viewers or public pages;
+  viewers see per-farm volumes only when an owner allows it, else totals at
+  5 or more holders (162); § 5 of an issued pack lists only the applicant's
+  own units (`evidence-15`); a WARMS extract records how it was obtained
+  (operator agreement 3A.1(d)). Privacy §5 and §7 changed; the round's one
+  `LEGAL_VERSION` bump carries them.
 - 2026-10-02: the POPIA positions taken pending counsel (provisional
   positions, pre-counsel research, 2026-10-01; not legal advice). Privacy
   §4 names each lawful basis (accounts on contract, s11(1)(b); project

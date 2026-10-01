@@ -158,6 +158,15 @@ export const teamRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
+			// A team that keeps public records (161, NARSSA s13(2)(a)) is kept until the client confirms
+			// their disposal to the operator; team_public_records_guard refuses the DELETE too.
+			const { rows: kept } = await db.query<{ kept: boolean }>('SELECT public_records AND records_disposal_confirmed_on IS NULL AS kept FROM team WHERE id = $1', [id]);
+			if (kept[0]?.kept)
+				throw new ApiError(
+					409,
+					"this team can't be deleted yet: it keeps public records (a government body's records under the National Archives Act), so it is deleted only after the organisation confirms to the operator, in writing, that it holds its records or has a disposal authority.",
+					{ publicRecords: true }
+				);
 			// Recorded first, while the projects are still the team's: every member
 			// loses the access the team gave them on each one.
 			const { rows } = await db.query<{ name: string; members: number }>(

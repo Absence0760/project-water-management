@@ -615,6 +615,15 @@
 						Modelled use per water year against the volume registered for each unit (WARMS registrations, licences), over whole water years; a part year is listed but not counted.
 						Modelled, not metered: the comparison is arithmetic, not a finding on whether a use is lawful. The report carries volumes only, never the holders’ names.
 					</p>
+					{#if al.unitYears}
+						<!-- evidence-13 (D3): only the applicant's own units one by one; the rest as totals at 5 or more units. -->
+						<p class="small muted" data-testid="evidence-allocations-others">
+							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
+							source, “Other registered users”, when at least 5 units hold that source.{#if al.othersLeftOut}
+								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: fewer than 5 hold one
+								from that water source. The project’s editors see each unit on the Allocations tab.{/if}
+						</p>
+					{/if}
 					{#if useJudged}<p class="na">{useJudged}</p>{/if}
 					{#if use.rows.some((r) => r.marks.length)}
 						<UsePlot

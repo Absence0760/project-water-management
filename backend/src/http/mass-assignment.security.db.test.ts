@@ -414,6 +414,10 @@ const NO_WRITE = new Map<string, string>([
 
 /** Routes the owner's sample can't reach past a business rule, and why (their body never gets that far). */
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
+	[
+		'POST /projects/:id/licence-record/confirm',
+		{ why: 'takes an empty body only (strict); the sweep records the licence outcome first (PUT), and a recorded outcome leaves no review to confirm (licence/licence-record.db.test.ts confirms one)', legit: 409 }
+	],
 	['POST /share/scenario', { why: 'a read (app_share_scenario); the ladder link is a baseline link, which opens no scenario', legit: 404 }],
 	['POST /share/pack', { why: 'a read (app_share_pack); the ladder link is a baseline link, which opens no pack', legit: 404 }],
 	['POST /share/comment', { why: 'app_share_comment writes only through a live application or pack link; the ladder link is a baseline link', legit: 404 }],

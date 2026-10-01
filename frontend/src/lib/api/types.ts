@@ -2163,6 +2163,23 @@ export interface AllocationSource {
 	rows: number;
 }
 
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
+export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+export interface LicenceRecord {
+	outcome: LicenceOutcome | null;
+	outcomeOn: string | null;
+	expiresOn: string | null;
+	reason: string;
+	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	closesOn: string | null;
+	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
+	reviewDueOn: string | null;
+}
+export type LicenceOutcomeInput =
+	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: null; reason: string };
+
 export interface AllocationList {
 	allocations: Allocation[];
 	sources: AllocationSource[];
@@ -2170,6 +2187,31 @@ export interface AllocationList {
 	nodes: { id: string; name: string }[];
 	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
 	canSeeHolders: boolean;
+	/** The owners let viewers read each registered volume (162, D3). */
+	viewerUnits: boolean;
+	/** This caller is a viewer who can't (allocations is then empty): `totals` instead. */
+	unitsHidden: boolean;
+	/** Per water source held by 5 or more registered users; null unless unitsHidden. */
+	totals: AllocationTotal[] | null;
+}
+
+/** A water source's registered volumes in force today, summed (a viewer's view, 162). */
+export interface AllocationTotal {
+	waterSource: 'surface' | 'groundwater';
+	holders: number;
+	registeredM3PerYear: number;
+	storageM3: number | null;
+}
+
+/** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
+export interface AllocationComparisonTotals {
+	tolerance: number;
+	sources: {
+		waterSource: 'surface' | 'groundwater';
+		holders: number;
+		units: number;
+		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+	}[];
 }
 
 /** The fields an editor sends to create or change an allocation. */

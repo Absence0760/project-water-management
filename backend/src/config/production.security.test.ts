@@ -90,7 +90,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		SES_CONFIGURATION_SET: 'water-management',
 		ALERTS_ENABLED: 'true',
 		ALERTS_DAILY_CAP: '5',
-		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events'
+		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events',
+		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
 	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results') },
 	renderer: {

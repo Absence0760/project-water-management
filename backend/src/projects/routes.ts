@@ -178,6 +178,16 @@ function packKept(n: number) {
 	);
 }
 
+/** Why a public-records team's project can't be deleted yet (161_licence_record, project_public_records_guard). */
+function publicRecordKept() {
+	return new ApiError(
+		409,
+		"this project can't be deleted yet: its team keeps public records (a government body's records under the National Archives Act), " +
+			'so it is deleted only after the organisation confirms to the operator, in writing, that it holds its records or has a disposal authority.',
+		{ publicRecords: true }
+	);
+}
+
 async function getProject(db: import('../db/tx.js').Db, id: string) {
 	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
@@ -327,6 +337,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (settings && typeof calSite === 'string' && calSite !== (current.settings as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId) {
 				await checkCalibrationSite(db, id, calSite);
 			}
+			// A public-records team's project stays in the team (161, project_public_records_guard).
+			if (body.teamId !== undefined && body.teamId !== current.team_id) {
+				const { rows: pr } = await db.query<{ kept: boolean }>('SELECT app_project_public_records($1) AS kept', [id]);
+				if (pr[0]?.kept) throw new ApiError(409, 'this project stays in its team: the team keeps public records (a government body’s records under the National Archives Act)', { publicRecords: true });
+			}
 			const changed = await db.query(
 				`UPDATE project SET
 					name = COALESCE($2, name),
@@ -388,11 +403,16 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[id]
 			);
 			if (evidence[0]) throw evidenceKept(evidence[0]);
+			// A project of a team that keeps public records (161, NARSSA s13(2)(a)) is
+			// deleted only once the client has confirmed its disposal to the operator;
+			// project_public_records_guard refuses the DELETE too.
+			const { rows: publicRecords } = await db.query<{ kept: boolean }>('SELECT app_project_public_records($1) AS kept', [id]);
+			if (publicRecords[0]?.kept) throw publicRecordKept();
 			try {
 				mustChange(await db.query('DELETE FROM project WHERE id = $1', [id]));
 			} catch (err) {
-				// A nomination, or an issued pack, that landed after the checks above.
-				if ((err as { code?: string }).code === PG_RESTRICT) throw evidenceKept(null);
+				// A nomination, or an issued pack, that landed after the checks above (or the team marked as keeping public records since).
+				if ((err as { code?: string }).code === PG_RESTRICT) throw (err as Error).message.includes('public record') ? publicRecordKept() : evidenceKept(null);
 				throw err;
 			}
 			return c.body(null, 204);

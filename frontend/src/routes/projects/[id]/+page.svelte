@@ -836,7 +836,7 @@
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>
-						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} />{/snippet}
+						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} {isOwner} />{/snippet}
 					</Lazy>
 				{:else if tab === 'project'}
 					<Lazy load={LOAD.project}>

@@ -106,7 +106,16 @@ farmers' farm pages and in invitation emails, does this for its name and
 contact details); and (c) it has considered
 whether matching registered water-use records (such as WARMS registration
 numbers) to farms or people needs prior authorisation under sections 57
-and 58, and has obtained it where needed.
+and 58, and has obtained it where needed; and (d) it obtained any registered
+water-use extract lawfully and will give the Operator, on request, the terms
+under which it was released, which prevail over the service's defaults.
+
+3A.2 The Client tells the Operator in writing if it is a governmental body
+whose records are public records under the National Archives and Records
+Service of South Africa Act 43 of 1996 (or a provincial archives law). For
+such a Client, clause 8.4 is varied: a deleted person's name stays in the
+Client's project history, and clause 10.2 deletion happens only after the
+Client confirms it holds its records or has a disposal authority.
 
 ## 4. Confidentiality (s20(b))
 
@@ -248,7 +257,10 @@ licence applications, imports and the like) is kept as the project's record
 with the person's name removed, and is never reassigned to anyone else; an
 unfinished calculation and a draft application of theirs are deleted; a
 sign-off's typed name and registration, and the names printed in an issued
-evidence pack, are kept for the life of the licence record they support.
+evidence pack, are kept until the closing date of the licence record they
+support (three years after the licence expires, or three years after the
+application is refused or withdrawn, reviewed every five years while no
+outcome is recorded), and then deleted on the Client's written confirmation.
 The Operator tells the Client of each deletion that touches the Client's
 projects within [5] business days. The Client may vary this instruction in
 writing for its own projects (for example under clause 3 where it must keep
@@ -378,6 +390,10 @@ Signed by the Operator: ____________________ Jared Howard Date: ________
   sign-off's typed name for a bounded period). Where the responsible party
   is DWS or a CMA, its records may be public records under the National
   Archives and Records Service of South Africa Act 43 of 1996, which may
-  require the name to be kept. Confirm whether that applies, and if so the
-  carve-out to clause 8.4 (a per-team setting in the app would keep a
-  snapshot of the name; not built, issue #112).
+  require the name to be kept. Clause 3A.2 is the carve-out (built: the
+  operator-set `team.public_records`, migration 161, keeps the name in that
+  team's project history). Confirm whether a WUA is a "governmental body"
+  for the Act, and whether the Operator deleting its own copy is a
+  "disposal". Clause 3A.1(d) and the WARMS reference the app now requires
+  rest on finding no published DWS terms for WARMS extracts; provisional
+  positions (pre-counsel research, 2026-10-01).

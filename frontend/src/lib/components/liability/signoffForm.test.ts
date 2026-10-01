@@ -91,7 +91,7 @@ describe('statementEngines (a run’s statement, or a pack’s two runs)', () =>
 	});
 
 	it('tells a pack’s signer, before signing, that what they sign with is public on the verify page', () => {
-		for (const what of ['full name', 'registration', 'publicly', 'verify page', 'even if it is withdrawn']) expect(PACK_SIGNER_PUBLIC).toContain(what);
+		for (const what of ['full name', 'registration', 'publicly', 'verify page', 'even if the pack is withdrawn', 'three years after the licence expires', 'the pack is deleted']) expect(PACK_SIGNER_PUBLIC).toContain(what);
 	});
 });
 

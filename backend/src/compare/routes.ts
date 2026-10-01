@@ -16,6 +16,7 @@ import { withUser, type Db } from '../db/tx.js';
 import { attributeChanges } from '../history/attribute.js';
 import { revisionsBetween, type RevisionItem } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
@@ -74,7 +75,7 @@ export interface CompareScenario {
 
 async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	// requireRole: 404 when the project is invisible (never 403 — viewer is the floor).
-	await requireRole(db, ref.projectId, 'viewer');
+	const role = await requireRole(db, ref.projectId, 'viewer');
 	if (!UUID.test(ref.runId)) throw new ApiError(404, 'not found');
 	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string; scenarioName: string | null }>(
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
@@ -91,8 +92,10 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		 WHERE r.project_id = $1 AND r.id = $2`,
 		[ref.projectId, ref.runId]
 	);
-	const row = rows[0];
-	if (!row) throw new ApiError(404, 'not found');
+	const found = rows[0];
+	if (!found) throw new ApiError(404, 'not found');
+	// A viewer who can't read each registered volume (162, D3): the run without its copy of them.
+	const row = (await allocationUnitsHidden(db, ref.projectId, role)) ? redactRunAllocations(found) : found;
 	const { rows: series } = await db.query<{ key: string; label: string; unit: string }>(
 		`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit
 		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,

@@ -16,8 +16,10 @@
 	// years (the WUA manager's cross-unit view), that table folded whole
 	// behind "Show all units' water years" since issue #175: it is the picked
 	// unit's table for every unit, so the page leads with the one.
-	// Viewers see volumes but no holder names (decision D3; the API leaves them
-	// out, RLS enforces it). Farmers never reach the workspace.
+	// Viewers never see holder names (decision D3; the API leaves them out, RLS
+	// enforces it), and see each volume only when an owner allows it (162):
+	// otherwise totals per water source (AllocationTotals). Owners switch that
+	// here. Farmers never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -31,6 +33,8 @@
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
 	import AllocationForm from './AllocationForm.svelte';
 	import AllocationImport from './AllocationImport.svelte';
+	import AllocationTotals from './AllocationTotals.svelte';
+	import type { AllocationComparisonTotals } from '$lib/api';
 	import UsePlot from './UsePlot.svelte';
 	import YearTable from './YearTable.svelte';
 	import { comparisonUseRows } from './usePlot';
@@ -51,10 +55,11 @@
 		unitRows,
 		unitStatusText,
 		volumeCell,
+		VIEWER_UNITS_NOTE,
 		waterYearLabel
 	} from './allocations';
 
-	let { projectId, runs, canEdit }: { projectId: string; runs: RunMeta[] | null; canEdit: boolean } = $props();
+	let { projectId, runs, canEdit, isOwner = false }: { projectId: string; runs: RunMeta[] | null; canEdit: boolean; isOwner?: boolean } = $props();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const runList = $derived(runs ?? []);
@@ -104,6 +109,8 @@
 
 	// --- the comparison for that run ---
 	let comparison = $state.raw<AllocationComparison | null>(null);
+	/** A viewer who can't read each volume (162, D3): the run's use summed per water source and year. */
+	let yearTotals = $state.raw<AllocationComparisonTotals | null>(null);
 	/** What the compared run's allocation mode did to its use (engine ≥ 1.18.0). */
 	let runMode = $state<AllocationMode>('none');
 	/** A cap run's water years per unit and source (engine ≥ 1.18.0; the days the limit bound from 1.40.0). */
@@ -121,6 +128,7 @@
 			const r = await api.allocations.compare(projectId, id);
 			if (wanted === id) {
 				comparison = r.comparison;
+				yearTotals = r.totals ?? null;
 				runMode = r.run.allocationMode ?? 'none';
 				capYears = r.capYears ?? [];
 				capForecast = !!r.run.forecastFrom;
@@ -263,6 +271,20 @@
 		}
 	}
 
+	// --- whether viewers read each registered volume (162, D3): owners ---
+	let unitsSaving = $state(false);
+	async function setViewerUnits(on: boolean) {
+		unitsSaving = true;
+		try {
+			await api.allocations.setViewerUnits(projectId, on);
+			await changed(on ? 'Viewers now see each farm’s registered volumes.' : 'Viewers now see registered volumes as totals only.');
+		} catch (err) {
+			notice = msg(err);
+		} finally {
+			unitsSaving = false;
+		}
+	}
+
 	const validity = (a: Allocation) =>
 		a.validFrom || a.validTo ? `${a.validFrom ? fmtDate(a.validFrom) : '…'} – ${a.validTo ? fmtDate(a.validTo) : '…'}` : 'open';
 
@@ -270,7 +292,9 @@
 </script>
 
 {#snippet headerContext()}
-	<span data-testid="allocations-summary">{data ? allocationsContext(data.allocations.length, unmatchedCount, comparison ? units : null) : ''}</span>
+	<span data-testid="allocations-summary"
+		>{data ? (data.unitsHidden ? 'Registered volumes as totals per water source' : allocationsContext(data.allocations.length, unmatchedCount, comparison ? units : null)) : ''}</span
+	>
 {/snippet}
 {#snippet headerActions()}
 	{#if runList.length > 1 && run}
@@ -292,6 +316,9 @@
 	{#if gone}<p class="alert alert-info" role="note">That run no longer exists, so this compares the {defaultRun?.published ? 'published' : 'newest'} run.</p>{/if}
 	{#if notice}<p class="alert alert-info slim" role="status">{notice}</p>{/if}
 
+	{#if data?.unitsHidden}
+		<AllocationTotals totals={data.totals} years={yearTotals} runLabel={run ? run.label || 'Untitled run' : null} loading={cLoading} />
+	{:else}
 	{#if !run}
 		<section class="panel" aria-labelledby="alloc-compare-h" data-testid="allocation-compare">
 			<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
@@ -549,6 +576,18 @@
 					/>
 				{/if}
 			</div>
+		</section>
+	{/if}
+	{/if}
+
+	{#if isOwner && data}
+		<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
+			<h2 id="alloc-viewers-h">What viewers see</h2>
+			<label class="check">
+				<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
+				Viewers see each farm’s registered volumes
+			</label>
+			<p class="small muted">{VIEWER_UNITS_NOTE} Names of registered users are never shown to viewers.</p>
 		</section>
 	{/if}
 

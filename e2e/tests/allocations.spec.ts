@@ -4,7 +4,8 @@
 // imports; the list shows each volume with its source file, and the run's
 // modelled use sits next to the registered volume per water year (the page's
 // layout, the sheets and the big case: allocations-page.spec.ts). A viewer
-// sees the volumes but no names and can't import. Axe-scanned, and on a
+// sees no total while fewer than 5 registered users hold a source (162, D3),
+// then, once the owner allows it, the volumes but no names, and can't import. Axe-scanned, and on a
 // phone. Licence conditions entered in the sheet show in the list, and a run
 // capped at the registered volumes (settings.allocationMode, engine 1.18.0)
 // says so above its comparison (issue #72). The import sheet can't be closed
@@ -99,10 +100,18 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(upper).toContainText(grouped((50_000 * 120) / 365));
 	await expect(page.getByTestId('allocation-compare')).toContainText('modelled, not metered');
 
-	// A viewer reads the volumes, without names, and can't import or change them.
+	// A viewer: two registered users hold surface water, too few for even a total (162, D3).
 	const viewer = await signIn('Allocations viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	const v = viewer.page;
+	await v.goto(`/projects/${project.id}?tab=allocations`);
+	await expect(v.getByTestId('allocation-totals-withheld')).toContainText('fewer than 5 registered users');
+	await expect(v.getByTestId('allocation-list')).toHaveCount(0);
+	await expect(v.getByTestId('allocation-totals')).not.toContainText('50\u202f000');
+
+	// Once the owner lets viewers see each farm, the viewer reads the volumes, without names, and can't import or change them.
+	await page.getByTestId('allocation-viewer-units').getByRole('checkbox', { name: 'Viewers see each farm’s registered volumes' }).check();
+	await expect(page.getByRole('status').filter({ hasText: 'Viewers now see each farm’s registered volumes.' })).toBeVisible();
 	await v.goto(`/projects/${project.id}?tab=allocations`);
 	const vList = v.getByTestId('allocation-list');
 	await expect(vList.getByRole('row', { name: /Upper farm/ })).toContainText('50\u202f000');

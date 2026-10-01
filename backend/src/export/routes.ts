@@ -10,6 +10,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadProjectDocument } from '../projects/document.js';
 import { listNominations, runEvidence } from '../runs/evidence.js';
@@ -283,8 +284,10 @@ export const exportRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs/:runId/export/summary.csv', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
-			const run = await loadRun(db, id, runId);
+			const role = await requireRole(db, id, 'viewer');
+			const loaded = await loadRun(db, id, runId);
+			// A viewer who can't read each registered volume (162, D3): no per-unit allocation cap table.
+			const run = (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations(loaded) : loaded;
 			const { name, timeZone } = await projectInfo(db, id);
 			const lines = summaryCsvLines(
 				{

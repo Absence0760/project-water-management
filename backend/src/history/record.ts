@@ -226,6 +226,11 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// Whether viewers read each registered volume (162, D3): { on }.
+	| 'allocation.viewer_units'
+	// The licence record (161_licence_record): the outcome an owner recorded (with its dates and reason), or a review confirmed.
+	| 'licence.outcome'
+	| 'licence.confirmed'
 	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
 	| 'map.imported'
 	| 'map.feature_created'

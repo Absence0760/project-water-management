@@ -3512,8 +3512,35 @@ from the WP:
       modelled dam, with "not an entitlement" (`FarmView.registered`; no
       name or registration number). Not blocked by D3, which is about other
       people's names and volumes.
-- [ ] **Share views per D3 (c)** (volumes public, names hidden). Trigger: D3
-      settled with the client's legal adviser.
+- [x] **D3: who sees registered water use** (2026-10-01, migration 162,
+      provisional position, pre-counsel research). Viewers read each volume
+      only once an owner switches it on, else totals per water source at 5
+      or more registered users; § 5 of the evidence report lists only the
+      applicant's own units, the rest as totals (`evidence-13`); a WARMS
+      extract needs its reference; Privacy §5 says so
+      ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
+- [ ] **Share views: allocation totals** (D3 (c), narrowed): totals only, at
+      5 or more holders (the share links' `k` rule), never a unit beside a
+      volume or a name. Share views show no allocation figure today, so
+      nothing leaks; this is the feature, to the rule. Trigger: a client
+      asks for registered use on its public page.
+- [ ] **A capped run's per-unit series still bound a viewer's guess at the
+      volume** (D3). With viewers' switch off, a viewer reads no copy of the
+      volumes, but a cap run's daily `supplied` per unit is held to its
+      volume, and `allocation_left_*` (a capped source with licence
+      conditions) is the volume less use so far; a viewer's project
+      `model-input` also omits the volumes (RLS), so a fit they run in a cap
+      project runs uncapped. Durable fix: for a viewer with the switch off,
+      leave `allocation_left_*` out of the series routes and exports, and
+      say on a cap run's per-unit pages that its use is capped by a volume
+      they can't see. Trigger: a project with outside viewers runs in cap
+      mode, or counsel reads per-unit modelled use as personal information.
+- [ ] **Registration numbers in History** are readable by viewers
+      (`allocation.created/changed/deleted` carry `registrationNo`), and a
+      registration number is a "unique identifier" (POPIA s1). Durable fix:
+      leave `registrationNo` out of those events for a viewer in the History
+      route (as `allocation.viewer_units` is off). Trigger: with the share
+      views item above, or counsel's review (#92).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -4220,7 +4247,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
+- [ ] **D1, D2 are open decisions; D3 is a provisional position** (2026-10-01, pre-counsel research, built in 162; [allocations.md § Who sees what](./allocations.md#who-sees-what)) ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and results (downstream
       units as a whole percentage, nothing but the EWR for a run with a
       baseline assumption) are **pending the client and the licensing
@@ -5126,12 +5153,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `assertNotLastAdmin`, and migration 149 has the keep-owner and
       keep-admin triggers take a per-project (per-team) lock before counting;
       `last-owner-race.db.test.ts` forces both orders.
-- [ ] **A DWS or CMA responsible party may have to keep the maker's name**
-      (National Archives Act, operator agreement notes for counsel, clause
-      8.4). Durable fix: a per-team setting that keeps a snapshot of the name
-      on the evidence (its own migration), on for such a team. Trigger: D1
-      (#50) puts the published baseline with a CMA or DWS, or counsel says
-      the Act applies.
+- [ ] **A DWS or CMA responsible party keeps the maker's name** (National
+      Archives Act s13(2)(a), operator agreement 3A.2). **Built 2026-10-01
+      (161):** the operator-set `team.public_records` keeps the name in that
+      team's project history after account deletion, and the team and its
+      projects are kept until `team.records_disposal_confirmed_on`
+      (provisional position, pre-counsel research). Left: Privacy §7's
+      sentence for such a team ("If the organisation responsible for a
+      project is a government body that must keep its records by law …, your
+      name stays in that project's history after your account is deleted"),
+      a `LEGAL_VERSION` bump with it and an email to that team's members
+      first (Privacy §12). Trigger: the first DWS or CMA client signs 3A.2.
 - [x] **Retention of deleted notes' bodies.** Done (158_note_purge.sql;
       provisional position, pre-counsel research, 2026-10-01): a deleted
       note's text and earlier texts are erased 90 days after deletion by the
@@ -5153,11 +5185,15 @@ own. Loop in the CISO or security analyst before acting on any of them.
       is taken only if needed and deleted within 30 days; the teardown
       snapshot is kept 90 days after the shutdown notice. Privacy §7,
       operator agreement 5.8 and 10.2, infra/README.md § Tearing down.
-- [ ] **D12 confirmation.** The audit log is pseudonymised on account
-      deletion ("Deleted user", 048) as the roadmap recommends; the
-      information officer confirms it (or asks for full deletion of the
-      events, which would weaken the regulator's trail). Trigger: with the
-      privacy notice.
+- [x] **D12 confirmation** (2026-10-01, provisional position, pre-counsel
+      research). Pseudonymising is enough: s24(1)(b) reaches only what s14
+      no longer authorises, and s14(1)(b) authorises the audit trail. The
+      events stay, treated as personal information (not de-identified).
+      Migration 160 also blanks the deleted account's masked address in
+      invitation entries (`app_mask_email`, paired with `maskEmail` by
+      `mask-email.db.test.ts`); Privacy §7 says so. If counsel wants the
+      events de-identified, the remaining step is clearing `subject.userId`
+      and node names in events about the person.
 - [x] **Personal-information incident procedure** for the "a farmer sees the
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data

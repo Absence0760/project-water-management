@@ -14,6 +14,7 @@ import { type NoticeResult, purgePackNotices, sendPackNotices } from '../evidenc
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { purgeInvites } from '../invites/invites.js';
+import { type LicenceRecordResult, sendLicenceRecordNotices } from '../licence/record.js';
 import { safeError, stackFrames } from '../logging/safeError.js';
 import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
@@ -164,6 +165,8 @@ export interface TickResult {
 	packNotices: NoticeResult & { purged: number };
 	/** The known-defect emails (153_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
 	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
+	/** The licence record's review and closing notices (161_licence_record): owners and the operator, at most once each. */
+	licenceRecords: LicenceRecordResult;
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -190,7 +193,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
-		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 }
+		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
+		licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 }
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
@@ -229,6 +233,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	// fails can't hold them up; an unchanged list costs a lookup per erratum. Its notices go out in the same tick.
 	const erratumQueued = await sweepErrata();
 	result.erratumNotices = { purged: erratumPurged, queued: erratumQueued, ...(await sendErratumNotices()) };
+	// A licence record's review is due, or its closing date passed (161): asked, never deleted.
+	result.licenceRecords = await sendLicenceRecordNotices();
 	result.stats = await withoutUser(queueStats);
 	return result;
 }

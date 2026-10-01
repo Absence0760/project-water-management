@@ -89,7 +89,7 @@ export function statementEngines(s: { engineVersion: string } | { baseline: { en
  * Verification).
  */
 export const PACK_SIGNER_PUBLIC =
-	'Your full name, your registration (body, category, field and number) and the date you sign are printed on the pack and shown publicly, to anyone holding its code, on its verify page. They stay there for as long as the pack exists, even if it is withdrawn.';
+	'Your full name, your registration (body, category, field and number) and the date you sign are printed on the pack and shown publicly, to anyone holding its code, on its verify page. They stay there, even if the pack is withdrawn, for as long as the licence record it supports is kept: until three years after the licence expires, or three years after the application is refused or withdrawn, then the pack is deleted.';
 
 /**
  * What an in-app sign-off is, and isn't (licensing positions item 9, build

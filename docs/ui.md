@@ -1457,6 +1457,17 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
+- **Licence record** (161, `project/LicenceRecordPanel.svelte`, words in
+  `project/licenceRecord.ts`), editors and owners, under Share links
+  (heading id `licence-record`, the target of the licence-record emails):
+  how long the issued packs, nominated runs and the names they keep are kept
+  ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
+  says where it stands (nothing to keep yet; the next review; the review is
+  due; granted and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome (Not recorded,
+  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  no outcome is recorded and a review is set, **The record is still
+  needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
@@ -6077,6 +6088,20 @@ WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
 workspace.
 
+**What a viewer sees** (decision D3, 162). Until an owner switches viewers
+on, a viewer gets one card instead of the page below, *Registered water use
+in this catchment* (`AllocationTotals.svelte`): per water source held by 5
+or more registered users, the holders, the volume registered today and the
+storage (`totalsSentence`), and the run's modelled use against the
+registered volumes summed per water year; "No total is shown" when no
+source has 5 holders. No unit, number, name or Download CSV. Owners get a
+**What viewers see** card at the foot of the page, a checkbox *Viewers see
+each farm's registered volumes* with the note to switch it on only if every
+viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
+The import sheet asks a WARMS extract **How you obtained this extract (the
+DWS or CMA letter or terms)**, required, and refuses the file until it is
+filled; a CSV's reference stays optional.
+
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
 registered volumes · 4 not matched · 6 units above registered";
@@ -7113,7 +7138,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     caps, the days the licence limit held use back by limit and the years
     the volume was used up, in the Allocations page's words (`capYearsText`),
     "Not capped" for the run that doesn't cap it. Units by their unit name,
-    never the holder's. *Not assessed* when the runs carry no volumes, or
+    never the holder's, and only the applicant's own (`evidence-13`, D3):
+    every other unit is one *Other registered users (n units)* row per water
+    source, left out below 5 units, and a note says which
+    (`evidence-allocations-others`). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units
@@ -7270,7 +7298,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   evidence pack…** opens the run's sign-off dialog with the pack's version,
   manifest hash and engines, the eleventh confirmation, and first a warning
   that the signer's name, registration and date are shown publicly on the
-  verify page, for as long as the pack exists. An editor chooses **You sign
+  verify page, even if the pack is withdrawn, for as long as the licence
+  record it supports is kept (three years after the licence expires, or
+  after the application is refused or withdrawn; [evidence-pack.md §
+  Retention](./evidence-pack.md#retention)). An editor chooses **You sign
   as**: "Specialist for the applicant" (the professional responsible for
   the evidence; what issue needs) or "Reviewed for the responsible
   authority" (a second sign-off); the applicant's appointed specialist
