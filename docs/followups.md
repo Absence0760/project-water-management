@@ -172,6 +172,30 @@ The checklist for these is issue #62; the history scrub is #63.
       recommendation](./deployment.md)). If that's the choice, raise
       `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
+## Two-step sign-in (issue #282)
+
+Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
+sign-in, `amr` in the session, and the requirement for project owners, team
+admins and assessors at the route (security.md § Two-step sign-in). Open:
+
+- [ ] **No app-wide prompt yet.** An owner, team admin or assessor without an
+      authenticator learns of the requirement on the Account page (its
+      warning) or from the `403 mfa_required` of the action they tried; the
+      workspace shows that message, with no link. A banner in the app shell
+      (from `GET /auth/mfa` `required && !enrolled`) and, for `mfa_step_up`,
+      a "sign in again" button are the durable fix. Trigger: before the
+      first production deploy with client data (#62).
+- [ ] **The requirement is checked at the route, not in RLS.** Every owner
+      route goes through `requireRole(…, 'owner')`, so a new one is covered
+      without a decision, but a route that checks the owner role some other
+      way would not be. Durable fix: step-4 WP-4.2's `app.auth_mfa`
+      transaction setting, with the owner-level policies refusing without it.
+      Trigger: organisations (WP-4.1), when the session context is rebuilt.
+- [ ] **Signing a run or a pack doesn’t require it** (below,
+      "Two-step sign-in on sign-off"): the operator's decision.
+- [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
+      "verifikasie-app" and "herstelkode" (§ Afrikaans).
+
 ## Hydrologist
 
 Every engine decision marked "pending the hydrologist" in model.md is
@@ -4288,8 +4312,13 @@ Left, each with its trigger:
       folded shut, in the run's Record group (`#res-validation`) and under
       the scenario's comparison (`liability/ValidationPanel.svelte`, its
       body a lazy chunk; ui.md § Runs & results, § Scenarios).
-- [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
-      sign-off is as strong as the signer's password.
+- [ ] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
+      sign-in and requires it of owners, team admins and assessors:
+      security.md § Two-step sign-in). Signing a run or a pack doesn't
+      require it yet, since a signer is any editor: a one-line
+      `requireStepUp` in `signoffs/routes.ts` and the pack sign-off route
+      once the operator decides every signer must use it. Until then a
+      sign-off is as strong as the signer's sign-in.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
       2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion

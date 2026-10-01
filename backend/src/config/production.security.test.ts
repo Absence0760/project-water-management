@@ -48,7 +48,7 @@ const pemPair = () =>
 	generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
 const SIGNING = pemPair();
 const PROD_SECRETS: Record<Role, Record<string, string>> = {
-	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey },
+	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey, APP_ENCRYPTION_KEY: 'e'.repeat(64) },
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
 	fetcher: {},
 	renderer: {},

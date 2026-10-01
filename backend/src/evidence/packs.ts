@@ -34,6 +34,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
@@ -390,6 +391,8 @@ export const packRoutes = new Hono<AuthEnv>()
 		PackIssueBody.parse((await readJson(c, { optional: true })) ?? {});
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Issuing or withdrawing licensing evidence needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status !== 'draft') throw new ApiError(409, `only a draft pack is issued; this one is ${pack.status}`);
 			const { manifest, matches } = await storedManifest(db, packId);
@@ -498,6 +501,8 @@ export const packRoutes = new Hono<AuthEnv>()
 		const body = PackWithdrawBody.parse(await readJson(c));
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Issuing or withdrawing licensing evidence needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status === 'withdrawn') throw new ApiError(409, 'this pack is already withdrawn');
 			mustChange(await db.query(`UPDATE evidence_pack SET status = 'withdrawn', status_reason = $3 WHERE project_id = $1 AND id = $2`, [id, packId, body.reason]));

@@ -122,17 +122,21 @@ const APPEND_ONLY = new Set([
  * only by the operator, as the schema owner, on a POPIA request
  * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
  * publication is ended, not deleted; the newest 12 are kept by its cap
- * trigger (106_outlook_triggers_publication.sql).
+ * trigger (106_outlook_triggers_publication.sql). An account's security
+ * event is append-only, so a thief can't erase that they turned two-step
+ * sign-in off (150_mfa.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication', 'account_security_event']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
  * dam (040_yield.sql). An outlook member is written once, complete, by its
  * job, and goes with its outlook (063_seasonal_outlook.sql). A signed-out
- * session is recorded once and aged out (102_session_revocation.sql).
+ * session is recorded once and aged out (102_session_revocation.sql). A
+ * recovery code is issued, then used or replaced (deleted), and an account's
+ * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session']);
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -244,6 +248,11 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).
 	'user_preferences.user_id': 'cascade',
+	// Two-step sign-in is the person's own and goes with them (150_mfa.sql).
+	'user_totp.user_id': 'cascade',
+	'user_recovery_code.user_id': 'cascade',
+	'mfa_throttle.user_id': 'cascade',
+	'account_security_event.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };
 

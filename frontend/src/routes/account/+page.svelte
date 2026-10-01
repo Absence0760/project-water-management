@@ -2,7 +2,7 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
-	// while signed in, a link to the alert emails page (WP-2.13), with a
+	// while signed in, two-step sign-in (issue #282, TwoStepSignIn), a link to the alert emails page (WP-2.13), with a
 	// banner when SES stopped delivering to the address (alert emails paused
 	// until the person turns them back on), "download my data" (POPIA,
 	// GET /auth/me/export) and "delete my account" (issue #112, DELETE
@@ -20,6 +20,7 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import TwoStepSignIn from '$lib/components/account/TwoStepSignIn.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 
@@ -312,6 +313,7 @@
 					</form>
 				</section>
 
+				<TwoStepSignIn />
 				<!-- Self-service deletion (issue #112): a small card; its dialog says what goes and what stays, then asks for the password again. -->
 				<DeleteAccount />
 			</div>
