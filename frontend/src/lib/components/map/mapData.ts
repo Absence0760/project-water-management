@@ -43,6 +43,13 @@ export const GEO_MAX_BYTES = 5 * 1024 * 1024;
 
 export const isPolygon = (g: MapGeometry) => g.type === 'Polygon' || g.type === 'MultiPolygon';
 
+/**
+ * Whether a feature's polygon may become a hydrological unit's catchment area
+ * (the backend's AREA_KINDS, geo/routes.ts): a farm parcel or an "other"
+ * polygon, never a dam's water surface or the whole catchment's boundary.
+ */
+export const takesArea = (f: Pick<MapFeature, 'kind' | 'geometry'>) => (f.kind === 'farm_parcel' || f.kind === 'other') && isPolygon(f.geometry);
+
 /** An area for people: km² with 3 decimals below 10 km², else 2; ha below 1 km². */
 export function areaText(m2: number | null): string {
 	if (m2 === null) return '–';

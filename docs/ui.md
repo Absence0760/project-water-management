@@ -2355,7 +2355,8 @@ this is the geography.
   and the table.
 - **Every feature** (table): name (selects it), kind, area or position,
   **Stands for** (a select of the nodes of fitting kinds, editors), **Area
-  into the model** (editors, polygons): a hydrological unit (the linked farm
+  into the model** (editors; farm parcels and `other` polygons only, never a
+  dam or the boundary): a hydrological unit (the linked farm
   by default) and **Use 9.257 km²**, which asks first ("Set Upper farm’s area
   from the map?", the old and new area) and then saves the area to the model,
   recorded in History with the feature named; disabled while the model has

@@ -34,6 +34,10 @@ export const parcelsGeoJson = () =>
 		]
 	});
 
+/** A dam's water surface inside Upper farm's parcel: a polygon whose area is never a unit's catchment area. */
+export const damGeoJson = () =>
+	JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'Upper dam' }, geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.004)] } }] });
+
 /** A file in projected metres (a Lo zone's), which the server refuses rather than guesses. */
 export const projectedGeoJson = () =>
 	JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [box(-45_000, 3_700_000, 1000)] } }] });

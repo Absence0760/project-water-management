@@ -32,12 +32,12 @@
 		GEO_MAX_BYTES,
 		IMPORT_KINDS,
 		importProblems,
-		isPolygon,
 		KIND_LABEL,
 		KIND_NODES,
 		parseDegrees,
 		POINT_KINDS,
-		problemText
+		problemText,
+		takesArea
 	} from './mapData';
 
 	let {
@@ -337,7 +337,7 @@
 										</td>
 										{#if canEdit}
 											<td class="area-cell">
-												{#if isPolygon(f.geometry) && farms.length}
+												{#if takesArea(f) && farms.length}
 													{@const target = farms.find((n) => n.id === targetOf(f))}
 													<select aria-label="Hydrological unit to take {f.name || 'this polygon'}’s area" bind:value={() => targetOf(f), (v) => (areaTarget[f.id] = v)} disabled={busy === f.id}>
 														<option value="">Choose a unit…</option>
@@ -516,6 +516,8 @@
 <style>
 	.map-tab {
 		display: grid;
+		/* One column no wider than the page: an auto column grows to the map's width and the phone page scrolls sideways. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 	}
 	.layout {
