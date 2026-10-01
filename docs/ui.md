@@ -1824,7 +1824,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   text):
   - **Supply, latest run** (the default once there is a run): the newest
     run's summary (`api.runs.get`, sharing the Runs tab's `detailCache`; a
-    quiet status line covers loading, and a failure offers Retry) banded by
+    quiet status chip over the map's top-left corner covers loading, and a
+    failure offers Retry there; it lies over the drawing rather than in the
+    card's header, where at 1280 px it wrapped the header and moved the map
+    when the load ended, `network-map.spec.ts`) banded by
     `fractionSupplied` (`network/supplyColour.ts`): **≥ 95 %**
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
