@@ -382,7 +382,10 @@ requested volume in a full-allocation background, is one op.
   nothing), `waterSource` (`surface` | `groundwater`), `volumeM3PerYear`
   (0 to below 10¹² m³, the API's limit), and optionally `storageM3`,
   `validFrom` / `validTo` (ISO dates, from ≤ to), `months` (1–12, no
-  repeats; stored as a sorted set) and `maxRateM3s` (0 to below 10⁶).
+  repeats; stored as a sorted set), `maxRateM3s` (0 to below 10⁶) and
+  `waterUse` (`'21a'`, the default, or `'21b'`: a dam's storage only,
+  volume 0, never a take; engine ≥ 1.59.0, issue #72). The scenario form
+  offers only takes to change; a storage-only row can be removed.
   Under `cap` (engine ≥ 1.37.0) the months of use and the maximum rate
   bind the scenario run as they bind a stored licence ([model.md
   §2.12a](./model.md)), so "what if this licence were winter-only" is one

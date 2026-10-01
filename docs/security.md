@@ -2130,7 +2130,7 @@ database:
 - **Run inputs** (engine ≥ 1.18.0, issue #72): every run's stored input
   carries the project's allocations so the run replays, but only what the
   engine reads (id, unit, source, volume, storage, validity, months, maximum
-  rate), never the holder's name, the registration number or the property
+  rate, and `waterUse: '21b'` on a storage-only row, issue #72), never the holder's name, the registration number or the property
   (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
   appears). A viewer reads a run's input and could read the volumes anyway;
   an applicant's projection of a published base keeps only the allocations on
@@ -2148,6 +2148,13 @@ database:
   person another's registration. A registered user without a linked farm
   has no account to export to; their name is the WUA's record, answered by
   the WUA.
+- The **farm view** (issue #72, `farms/view.ts farmRegistered`) shows a
+  farmer their own farm's registered water: the allocations on that farm in
+  force today, summed per source plus the storage, read under their RLS
+  (`allocation_select_farmer`). No holder name, registration number or
+  property, and a farm they aren't linked to answers `404`
+  (`allocations/water-use.db.test.ts`, the WUA's preview as positive
+  control).
 
 ## Personal information (POPIA)
 

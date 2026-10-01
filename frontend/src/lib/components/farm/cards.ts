@@ -253,6 +253,49 @@ export function damCard(farm: FarmProjection, unit: VolumeUnit): DamVm | null {
 	};
 }
 
+// ---- Your registered water (issue #72) ----------------------------------------
+
+export interface RegisteredVm {
+	/** One line per thing registered: "Surface water: 120 000 m³ a year", "Dam storage: 150 000 m³". */
+	lines: string[];
+	/** The season's modelled supply beside the year's registered volume; null with no volume registered. */
+	use: string | null;
+	/** The dam in the model beside its registered storage; null unless both are known. */
+	dam: string | null;
+}
+
+// i18n-section: farm.registered
+/** What a registered volume is, and isn't (the 2026-09-30 fact-check on issue #72: not an entitlement). */
+export const registeredNote = () =>
+	t('This is what is registered for your hydrological unit with the Department of Water and Sanitation (DWS). A registered volume is not an entitlement, and it doesn’t say whether a use is lawful.');
+
+/**
+ * "Your registered water" (FarmView.registered): the farm's own registered
+ * volumes and storage in force today, with the season's modelled supply and
+ * the modelled dam beside them. null when nothing is registered on the farm.
+ * Only the farm's own totals: no name, no registration number.
+ */
+export function registeredCard(view: FarmView, unit: VolumeUnit): RegisteredVm | null {
+	const r = view.registered;
+	if (!r) return null;
+	const lines: string[] = [];
+	// i18n-section: farm.registered
+	if (r.surfaceM3PerYear !== null) lines.push(t('Surface water: {volume} a year', { volume: fmtVolume(r.surfaceM3PerYear, unit) }));
+	if (r.groundwaterM3PerYear !== null) lines.push(t('Groundwater: {volume} a year', { volume: fmtVolume(r.groundwaterM3PerYear, unit) }));
+	if (r.storageM3 !== null) lines.push(t('Dam storage: {volume}', { volume: fmtVolume(r.storageM3, unit) }));
+	const year = (r.surfaceM3PerYear ?? 0) + (r.groundwaterM3PerYear ?? 0);
+	const s = view.farm.season;
+	const use =
+		r.surfaceM3PerYear === null && r.groundwaterM3PerYear === null
+			? null
+			: t('The model supplied {got} since {from}. The volume registered for the whole year is {year}.', { got: fmtVolume(s.suppliedM3, unit), from: fmtDayMonth(s.from), year: fmtVolume(year, unit) });
+	const dam =
+		r.storageM3 !== null && view.farm.damCapacityM3 > 0
+			? t('Your dam in the model holds {capacity} when full.', { capacity: fmtVolume(view.farm.damCapacityM3, unit) })
+			: null;
+	return { lines, use, dam };
+}
+
 // ---- Looking back: the model card (§3 Q2, §6.2) ------------------------------
 
 // i18n-section: farm.band

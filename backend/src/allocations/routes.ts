@@ -34,6 +34,7 @@ import {
 	PURPOSES,
 	TEMPLATE_HEADERS,
 	WATER_SOURCES,
+	WATER_USES,
 	type AllocationSourceKind,
 	type KnownMatch,
 	type MatchedBy,
@@ -82,8 +83,22 @@ const FIELDS = {
 		.transform((m) => [...m].sort((a, b) => a - b))
 		.nullable(),
 	maxRateM3s: z.number().finite().min(0).lt(1e6).nullable(),
-	conditions: z.array(text(CONDITION_MAX_CHARS).pipe(z.string().min(1, 'a condition is empty'))).max(CONDITIONS_MAX, `at most ${CONDITIONS_MAX} conditions`)
+	conditions: z.array(text(CONDITION_MAX_CHARS).pipe(z.string().min(1, 'a condition is empty'))).max(CONDITIONS_MAX, `at most ${CONDITIONS_MAX} conditions`),
+	/** The s21 water use (142, issue #72): 21a a take, 21b a dam's storage only (volume 0, a storage, surface). */
+	waterUse: z.enum(WATER_USES as [string, ...string[]])
 };
+/**
+ * Why an allocation as it would be stored can't be a storage-only (21b) row,
+ * or null: 137's allocation_storage_only_check, said in words before the
+ * database refuses it.
+ */
+export function storageOnlyProblem(a: { waterUse: string; volumeM3PerYear: number; storageM3: number | null; waterSource: string }): string | null {
+	if (a.waterUse !== '21b') return null;
+	if (a.volumeM3PerYear !== 0) return 'a storage-only (21b) row registers no take: its volume is 0';
+	if (a.storageM3 === null) return 'a storage-only (21b) row needs its storage';
+	if (a.waterSource !== 'surface') return 'a storage-only (21b) row is a dam, so surface water';
+	return null;
+}
 const datesInOrder = (b: { validFrom?: string | null; validTo?: string | null }) => !b.validFrom || !b.validTo || b.validFrom <= b.validTo;
 const CreateBody = z
 	.object({
@@ -98,10 +113,15 @@ const CreateBody = z
 		reference: FIELDS.reference.default(''),
 		months: FIELDS.months.default(null),
 		maxRateM3s: FIELDS.maxRateM3s.default(null),
-		conditions: FIELDS.conditions.default([])
+		conditions: FIELDS.conditions.default([]),
+		waterUse: FIELDS.waterUse.default('21a')
 	})
 	.strict()
-	.refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] });
+	.refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] })
+	.superRefine((b, ctx) => {
+		const problem = storageOnlyProblem(b);
+		if (problem) ctx.addIssue({ code: 'custom', message: problem, path: ['waterUse'] });
+	});
 const PatchBody = z
 	.object(FIELDS)
 	.partial()
@@ -126,7 +146,7 @@ const CommitBody = ImportBody.extend({
 const TOLERANCE = z.coerce.number().min(0).lt(1).optional();
 
 /** The fields of an allocation a run reads (the engine's AllocationEntry, runs/execute.ts allocationsForRun). */
-const RUN_INPUT_FIELDS = ['nodeId', 'waterSource', 'volumeM3PerYear', 'storageM3', 'validFrom', 'validTo'] as const;
+const RUN_INPUT_FIELDS = ['nodeId', 'waterSource', 'volumeM3PerYear', 'storageM3', 'waterUse', 'validFrom', 'validTo'] as const;
 
 /**
  * Allocations are part of every run's input since engine 1.18.0 (the model's
@@ -142,7 +162,7 @@ const ALLOCATION_SELECT = `SELECT a.id, a.node_id AS "nodeId", n.name AS "nodeNa
 	a.registration_no AS "registrationNo", a.property_ref AS "propertyRef", h.user_display AS holder,
 	a.authorisation, a.purpose, a.water_source AS "waterSource", a.volume_m3_year AS "volumeM3PerYear",
 	a.storage_m3 AS "storageM3", a.valid_from AS "validFrom", a.valid_to AS "validTo", a.reference,
-	a.months::int[] AS months, a.max_rate_m3s AS "maxRateM3s", a.conditions,
+	a.months::int[] AS months, a.max_rate_m3s AS "maxRateM3s", a.conditions, a.water_use AS "waterUse",
 	a.created_at AS "createdAt", a.updated_at AS "updatedAt"
 	FROM allocation a
 	LEFT JOIN node n ON n.id = a.node_id
@@ -169,6 +189,8 @@ export interface AllocationRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	/** The s21 water use (142): '21b' = a dam's storage only, never a take. */
+	waterUse: '21a' | '21b';
 	createdAt: string;
 	updatedAt: string;
 }
@@ -309,14 +331,14 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				throw new ApiError(409, `this project has reached the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations`);
 			const { rows } = await db.query<{ id: string }>(
 				`INSERT INTO allocation (project_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb) RETURNING id`,
-				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference, body.months, body.maxRateM3s, JSON.stringify(body.conditions)]
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16) RETURNING id`,
+				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference, body.months, body.maxRateM3s, JSON.stringify(body.conditions), body.waterUse]
 			);
 			await touchRunInputs(db, id);
 			const aid = rows[0]!.id;
 			await setHolder(db, id, aid, body.holder);
-			await recordAudit(db, id, 'allocation.created', { allocationId: aid, registrationNo: body.registrationNo, nodeId: body.nodeId, waterSource: body.waterSource, volumeM3PerYear: body.volumeM3PerYear });
+			await recordAudit(db, id, 'allocation.created', { allocationId: aid, registrationNo: body.registrationNo, nodeId: body.nodeId, waterSource: body.waterSource, volumeM3PerYear: body.volumeM3PerYear, waterUse: body.waterUse });
 			return c.json({ allocation: await loadAllocation(db, id, aid) }, 201);
 		});
 	})
@@ -329,6 +351,10 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const before = await loadAllocation(db, id, aid);
 			if (!datesInOrder({ validFrom: body.validFrom !== undefined ? body.validFrom : before.validFrom, validTo: body.validTo !== undefined ? body.validTo : before.validTo }))
 				throw new ApiError(400, 'valid from is after valid to');
+			// The row as it would be stored: a storage-only (21b) row stays one only with volume 0, a storage and surface water.
+			const after = <K extends 'waterUse' | 'volumeM3PerYear' | 'storageM3' | 'waterSource'>(k: K) => (body[k] !== undefined ? body[k] : before[k]);
+			const problem = storageOnlyProblem({ waterUse: after('waterUse')!, volumeM3PerYear: after('volumeM3PerYear')!, storageM3: after('storageM3') ?? null, waterSource: after('waterSource')! });
+			if (problem) throw new ApiError(400, problem);
 			await checkNode(db, id, body.nodeId);
 			const cols: Record<string, string> = {
 				nodeId: 'node_id',
@@ -344,7 +370,8 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				reference: 'reference',
 				months: 'months',
 				maxRateM3s: 'max_rate_m3s',
-				conditions: 'conditions'
+				conditions: 'conditions',
+				waterUse: 'water_use'
 			};
 			const sets: string[] = [];
 			const values: unknown[] = [id, aid];
@@ -408,13 +435,14 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const ids = valid.map(() => crypto.randomUUID());
 			await db.query(
 				`INSERT INTO allocation (id, project_id, source_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions)
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use)
 				 SELECT x.id, $1, $2, x.node_id, x.registration_no, x.property_ref, x.authorisation, x.purpose, x.water_source,
 					x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference,
-					CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions
+					CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions,
+					x.water_use
 				 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, node_id uuid, registration_no text, property_ref text, authorisation text, purpose text,
 					water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text,
-					months jsonb, max_rate_m3s double precision, conditions jsonb)`,
+					months jsonb, max_rate_m3s double precision, conditions jsonb, water_use text)`,
 				[
 					id,
 					sourceId,
@@ -434,7 +462,8 @@ export const allocationRoutes = new Hono<AuthEnv>()
 							reference: r.reference,
 							months: r.months,
 							max_rate_m3s: r.maxRateM3s,
-							conditions: r.conditions
+							conditions: r.conditions,
+							water_use: r.waterUse
 						}))
 					)
 				]
@@ -512,6 +541,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 						a.months ? a.months.join(' ') : '',
 						a.maxRateM3s,
 						a.conditions.join(CONDITIONS_SEPARATOR),
+						a.waterUse,
 						s?.fileName ?? '',
 						s?.sha256 ?? ''
 					]);
@@ -567,6 +597,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					waterSource: a.waterSource,
 					volumeM3PerYear: a.volumeM3PerYear,
 					storageM3: a.storageM3,
+					...(a.waterUse === '21b' ? { waterUse: '21b' as const } : {}),
 					validFrom: a.validFrom,
 					validTo: a.validTo
 				}))

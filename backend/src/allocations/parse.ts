@@ -8,6 +8,13 @@
 // listed. A file carrying ID numbers, phone numbers or email addresses is
 // refused outright (POPIA minimisation, docs/security.md): the app has no use
 // for them, so they never reach the database.
+//
+// WARMS registers water per NWA s21 water use, per property (issue #72): a
+// 21(a) row's volume is a take per year, a 21(b) row's "volume" is the dam's
+// storage. So a row is read by its water-use code and its unit and frequency,
+// and a row that can't be read one way only is refused rather than guessed.
+
+import { ALLOCATION_WATER_USES, type AllocationWaterUse } from '@water-management/engine';
 
 export type AllocationSourceKind = 'warms_extract' | 'csv';
 // A registration (WARMS) is not an entitlement, and existing lawful use is
@@ -35,6 +42,9 @@ export const AUTHORISATIONS: readonly Authorisation[] = [
 ];
 export const PURPOSES: readonly Purpose[] = ['irrigation', 'domestic', 'livestock', 'industry', 'mining', 'municipal', 'other'];
 export const WATER_SOURCES: readonly WaterSource[] = ['surface', 'groundwater'];
+/** The s21 water uses the app stores (142): 21a taking water, 21b storing water (the engine's, one list). */
+export type WaterUse = AllocationWaterUse;
+export const WATER_USES: readonly WaterUse[] = ALLOCATION_WATER_USES;
 
 /** Longest file text accepted (UTF-8 characters); inside the API's 4 MB body cap. */
 export const IMPORT_MAX_CHARS = 2 * 1024 * 1024;
@@ -63,7 +73,10 @@ export type Field =
 	| 'reference'
 	| 'months'
 	| 'maxRateM3s'
-	| 'conditions';
+	| 'conditions'
+	| 'waterUse'
+	| 'unit'
+	| 'frequency';
 
 /** Header spellings per field, compared after lower-casing and dropping everything but letters and digits. */
 export const HEADER_ALIASES: Record<Field, readonly string[]> = {
@@ -82,7 +95,12 @@ export const HEADER_ALIASES: Record<Field, readonly string[]> = {
 	// Licence conditions (103, issue #72).
 	months: ['months', 'abstractionmonths', 'permittedmonths', 'monthsofuse', 'usemonths'],
 	maxRateM3s: ['maxratem3s', 'maxrate', 'maximumrate', 'maximumratem3s', 'maxabstractionrate', 'maxabstractionratem3s', 'ratem3s'],
-	conditions: ['conditions', 'licenceconditions', 'licenseconditions', 'otherconditions']
+	conditions: ['conditions', 'licenceconditions', 'licenseconditions', 'otherconditions'],
+	// The NWA s21 water use (issue #72): 21(a) taking, 21(b) storing.
+	waterUse: ['wateruse', 'waterusecode', 'waterusetype', 'wateruses21', 's21', 's21code', 's21use', 'section21', 'section21use', 'nwas21', 'usecode', 'usetype'],
+	// The volume column's unit and frequency (m3/a, Ml/a, …), per row.
+	unit: ['unit', 'units', 'volumeunit', 'volumeunits', 'unitofmeasure', 'measurementunit', 'uom'],
+	frequency: ['frequency', 'period', 'volumeperiod', 'volumefrequency', 'timeunit', 'per']
 };
 
 /** The template's header row, in order (docs/allocations.md). */
@@ -101,7 +119,8 @@ export const TEMPLATE_HEADERS = [
 	'reference',
 	'months',
 	'max_rate_m3s',
-	'conditions'
+	'conditions',
+	'water_use'
 ] as const;
 
 /** Most conditions in words on one allocation, and the longest one (103). */
@@ -139,6 +158,8 @@ export interface ParsedRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	/** The s21 water use (142): 21b = storage only (volume 0, storageM3 the dam's registered storage). */
+	waterUse: WaterUse;
 	/** Why this row can't be imported; empty = valid. */
 	errors: string[];
 }
@@ -307,6 +328,106 @@ export function parseWaterSource(cell: string): WaterSource | null | undefined {
 }
 
 /**
+ * A water-use cell: the NWA s21 letter, however it is written ("21(a)",
+ * "s21 b", "Section 21(b)", "a"), or the words ("taking water", "storing
+ * water"). 21a / 21b for those; `other` with the letter for another s21 use
+ * (21c to 21k: not a take or storage the app compares); null for an empty
+ * cell; undefined for anything else, two uses in one cell included ("21(a)
+ * and (b)" is one volume for two uses, so it can't be read).
+ */
+export function parseWaterUse(cell: string): WaterUse | { other: string } | null | undefined {
+	const w = word(cell);
+	if (w === '') return null;
+	if (/^(taking|taking water|abstraction|abstract|abstracting|taking water from a water resource)$/.test(w)) return '21a';
+	if (/^(storing|storing water|storage|store|dam|storing water in a dam)$/.test(w)) return '21b';
+	const m = /^(?:(?:nwa )?(?:section|sec|s) ?)?(?:21 ?)?([a-k])$/.exec(w);
+	if (!m) return undefined;
+	const letter = m[1]!;
+	return letter === 'a' ? '21a' : letter === 'b' ? '21b' : { other: `21(${letter})` };
+}
+
+/** Each unit a volume may be in, as m³: a megalitre is 1 000 m³, a kilolitre 1 m³. */
+const UNIT_M3: [RegExp, number][] = [
+	[/^(m3|m³|cubic ?met(re|er)s?|cum|kl|kilolit(re|er)s?)$/, 1],
+	[/^(megalit(re|er)s?|mega ?lit(re|er)s?)$/, 1000],
+	[/^(lit(re|er)s?|l)$/, 0.001]
+];
+
+export type Frequency = 'year' | 'month' | 'day' | 'second';
+const FREQUENCY: [RegExp, Frequency][] = [
+	[/^(a|pa|annum|per ?annum|annual|annually|y|yr|year|years|per ?year|p ?a)$/, 'year'],
+	[/^(m|mo|month|months|monthly|per ?month|pm)$/, 'month'],
+	[/^(d|day|days|daily|per ?day)$/, 'day'],
+	[/^(s|sec|second|seconds|per ?second)$/, 'second']
+];
+
+/**
+ * A unit cell, with or without its frequency ("m3/a", "Ml per annum",
+ * "m³", "ML/year"): the factor to m³, and the frequency when it says one.
+ * Megalitres are "Ml" or "ML"; a lower-case "ml" is a millilitre as written
+ * and too odd to trust, so it doesn't read. Null for an empty cell,
+ * undefined for anything else (a rate such as "l/s" reads, as frequency
+ * second, and is refused by the caller).
+ */
+export function parseUnit(cell: string): { m3: number; frequency: Frequency | null } | null | undefined {
+	const raw = cell.trim();
+	if (raw === '') return null;
+	const [u, f, ...rest] = raw.split(/\s*\/\s*|\s+per\s+/i);
+	if (rest.length) return undefined;
+	let m3: number | undefined;
+	if (/^(Ml|ML|Mℓ)$/.test(u!.trim())) m3 = 1000;
+	else if (/^ml$/.test(u!.trim())) return undefined;
+	else {
+		const v = u!.trim().toLowerCase();
+		m3 = UNIT_M3.find(([re]) => re.test(v))?.[1];
+	}
+	if (m3 === undefined) return undefined;
+	if (f === undefined) return { m3, frequency: null };
+	const frequency = parseFrequency(f);
+	return frequency ? { m3, frequency } : undefined;
+}
+
+/** A frequency cell ("per annum", "a", "monthly"); null for empty, undefined for anything else. */
+export function parseFrequency(cell: string): Frequency | null | undefined {
+	const v = cell.trim().toLowerCase().replace(/[.]/g, '');
+	if (v === '') return null;
+	return FREQUENCY.find(([re]) => re.test(v))?.[1];
+}
+
+/**
+ * The volume cell's factor to m³ (a year's take, or a 21(b) storage), from
+ * the unit cell ("m3/a"), the frequency cell, or, without either column, m³
+ * a year as the volume heading says; or why the row can't be read. A cell
+ * that is there but blank, a unit and a frequency that disagree, or a take
+ * that isn't per year is refused, not guessed (issue #72).
+ */
+function volumeUnit(get: (f: Field) => string, index: Partial<Record<Field, number>>, storage: boolean): number | string {
+	let m3 = 1;
+	let frequency: Frequency | null = null;
+	if (index.unit !== undefined) {
+		const u = parseUnit(get('unit'));
+		if (u === null) return 'unit is missing (e.g. “m3/a” or “Ml/a”)';
+		if (u === undefined) return `unit “${get('unit')}” doesn’t read (m3, Ml or kl, with “/a” for a year)`;
+		m3 = u.m3;
+		frequency = u.frequency;
+	}
+	if (index.frequency !== undefined) {
+		const f = parseFrequency(get('frequency'));
+		if (f === undefined) return `frequency “${get('frequency')}” doesn’t read (per annum, per month or per day)`;
+		if (f !== null && frequency !== null && f !== frequency) return `the unit says per ${frequency} but the frequency says per ${f}`;
+		frequency = frequency ?? f;
+		if (frequency === null) return 'frequency is missing (per annum)';
+	}
+	// Neither says one: the volume heading's year (m³ a year), as before the unit columns.
+	frequency ??= 'year';
+	if (frequency !== 'year')
+		return storage
+			? `a storage is a volume of m³, not m³ per ${frequency}`
+			: `the volume is per ${frequency}: the app compares a volume per year and won’t guess how a ${frequency}’s adds up to a year’s`;
+	return m3;
+}
+
+/**
  * Parse an allocations table. Throws ImportRefused for a file the importer
  * can't take at all (too big, no header, a personal-information column, no
  * volume column); row problems are listed on each row instead.
@@ -337,6 +458,13 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 		} else if (h.trim() !== '') ignoredColumns.push(h.trim());
 	});
 	if (index.volumeM3PerYear === undefined) throw new ImportRefused('no volume column found (expected a header such as “volume_m3_year” or “Registered volume (m3/a)”)');
+	// WARMS lists one row per s21 water use, and a 21(b) row's volume is a dam's storage: without the code a
+	// storage row would read as a take per year (issue #72). The app's template has separate volume and
+	// storage columns, so there a missing column means takes.
+	if (kind === 'warms_extract' && index.waterUse === undefined)
+		throw new ImportRefused(
+			'no water-use column found (expected a header such as “Water use” or “s21”). A WARMS extract lists one row per s21 water use, and a 21(b) row’s volume is a dam’s storage, not a take, so the rows can’t be read without it. Add the column, or use the app’s template.'
+		);
 
 	const rows = records.map((r): ParsedRow => {
 		const get = (f: Field) => (index[f] === undefined ? '' : (r.cells[index[f]!] ?? '').trim());
@@ -364,6 +492,7 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			months: null,
 			maxRateM3s: null,
 			conditions: [],
+			waterUse: '21a',
 			errors
 		};
 		for (const f of ['holder', 'reference', 'propertyRef', 'farm', 'conditions'] as const)
@@ -375,19 +504,50 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 		else row.authorisation = auth ?? (kind === 'warms_extract' ? 'registration' : null);
 		if (auth === null && kind !== 'warms_extract') errors.push('authorisation is missing');
 
+		// The s21 water use (issue #72). In the template, a blank (or no column) is a take: it has a storage
+		// column of its own. In a WARMS extract a blank is ambiguous: its volume may be a dam's storage.
+		const read = index.waterUse === undefined ? null : parseWaterUse(get('waterUse'));
+		const use = read === null && kind !== 'warms_extract' ? '21a' : read;
+		if (use === null) errors.push('water use is missing (21(a) taking or 21(b) storing)');
+		else if (use === undefined) errors.push(`water use “${get('waterUse')}” doesn’t read as one s21 use (21(a) taking or 21(b) storing)`);
+		else if (typeof use === 'object') errors.push(`water use ${use.other} is not a take or a storage the app compares; not imported`);
+		else row.waterUse = use;
+		const storageRow = use === '21b';
+
 		const src = parseWaterSource(get('waterSource'));
 		if (src === undefined) errors.push(`unknown water source “${get('waterSource')}” (surface or groundwater)`);
+		// A dam stores surface water: a 21(b) row with no source is surface.
+		else if (src === null && storageRow) row.waterSource = 'surface';
 		else if (src === null) errors.push('water source is missing (surface or groundwater)');
+		else if (src === 'groundwater' && storageRow) errors.push('a 21(b) storage row is a dam, so surface water; this one says groundwater');
 		else row.waterSource = src;
 
-		const vol = parseNumber(get('volumeM3PerYear'), delimiter);
-		if (vol === null) errors.push('volume is missing');
-		else if (!Number.isFinite(vol) || vol < 0 || vol >= 1e12) errors.push(`volume “${get('volumeM3PerYear')}” is not a number of m³ per year ≥ 0`);
-		else row.volumeM3PerYear = vol;
+		const unit = volumeUnit(get, index, storageRow);
+		if (typeof unit === 'string') errors.push(unit);
+		const factor = typeof unit === 'string' ? null : unit;
 
+		const rawVol = parseNumber(get('volumeM3PerYear'), delimiter);
 		const sto = parseNumber(get('storageM3'), delimiter);
-		if (sto !== null && (!Number.isFinite(sto) || sto < 0 || sto >= 1e12)) errors.push(`storage “${get('storageM3')}” is not a number of m³ ≥ 0`);
-		else row.storageM3 = sto;
+		const volBad = rawVol !== null && (!Number.isFinite(rawVol) || rawVol < 0 || rawVol * (factor ?? 1) >= 1e12);
+		const stoBad = sto !== null && (!Number.isFinite(sto) || sto < 0 || sto >= 1e12);
+		if (volBad) errors.push(`volume “${get('volumeM3PerYear')}” is not a number ≥ 0`);
+		if (stoBad) errors.push(`storage “${get('storageM3')}” is not a number of m³ ≥ 0`);
+		const vol = rawVol === null || volBad || factor === null ? null : rawVol * factor;
+		if (storageRow) {
+			// A dam's registered storage: its volume cell is the storage (a 21(b) row registers no take).
+			// With a storage cell too, the two must agree, or the row is two numbers for one dam.
+			const fromVol = vol !== null && vol > 0 ? vol : null;
+			if (fromVol !== null && sto !== null && !stoBad && Math.abs(fromVol - sto) > 1e-9 * Math.max(fromVol, sto))
+				errors.push(`a 21(b) storage row gives two storages (volume ${get('volumeM3PerYear')}, storage ${get('storageM3')})`);
+			else if (fromVol === null && (sto === null || stoBad)) {
+				if (!volBad && !stoBad && factor !== null) errors.push('a 21(b) storage row has no storage (in the volume or the storage column)');
+			} else row.storageM3 = fromVol ?? sto;
+			row.volumeM3PerYear = 0;
+		} else {
+			if (rawVol === null) errors.push('volume is missing');
+			else row.volumeM3PerYear = vol;
+			if (!stoBad) row.storageM3 = sto;
+		}
 
 		for (const f of ['validFrom', 'validTo'] as const) {
 			const d = parseDate(get(f));

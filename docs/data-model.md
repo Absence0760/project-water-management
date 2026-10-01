@@ -1262,7 +1262,12 @@ water-use volumes per farm or water user.
   none stated), `max_rate_m3s` (≥ 0, < 10⁶; NULL = none stated) and
   `conditions jsonb` (an array of at most 20 strings, `[]` by default; the API
   checks each is 1–500 characters). Recorded and shown; the engine doesn't
-  apply them yet.
+  apply them yet. `water_use` (142, issue #72): the NWA s21 water use, `21a`
+  (taking water, the default and every row before 142) or `21b` (storing
+  water: a dam's registered storage only); `allocation_storage_only_check`
+  holds a `21b` row to `volume_m3_year = 0`, a `storage_m3` and `surface`
+  water, so it can never be read as a take. WARMS registers per water use, so
+  a dam arrives as its own 21(b) row.
 - **`allocation_holder`**: `allocation_id` (primary key; composite key
   `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
   `user_display` (1–200). The registered user's name, in its own table so RLS
@@ -1282,15 +1287,21 @@ water-use volumes per farm or water user.
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`
   `allocationsForRun`): a project with allocations adds them to the model a
   run reads (`model.allocations`: id, node, source, volume, storage, validity,
-  months and maximum rate; never `registration_no`, `property_ref` or the
-  holder), read under the caller's RLS. So the stored run carries them, and a
+  months and maximum rate, and `waterUse: '21b'` on a storage-only row only,
+  so a take's input is as before 137; never `registration_no`, `property_ref`
+  or the holder), read under the caller's RLS. The farm view sums a farmer's
+  own farm's rows (`FarmView.registered`, issue #72). So the stored run carries them, and a
   write that changes what a run reads (create, delete, an import or its undo,
-  a change to the node, source, volume, storage or dates) stamps
+  a change to the node, source, volume, storage, water use or dates) stamps
   `project.updated_at`, as a model save does, so the Runs tab says the latest
   run is out of date.
-- Guards: `backend/src/allocations/allocations.db.test.ts` and
+- Guards: `backend/src/allocations/allocations.db.test.ts`,
   `conditions.db.test.ts` (the conditions' CHECKs with a positive control, a
-  PATCH changing only what it sends, the run input without names) (positive
+  PATCH changing only what it sends, the run input without names) and
+  `water-use.db.test.ts` (142: 21(b) rows import and store as storage only,
+  ambiguous rows are refused, the CHECKs, the run input, the export round
+  trip, a farmer's own registered totals with the WUA's preview as positive
+  control) (positive
   controls: an editor reads names, the owner reads the rows a stranger can't,
   a farmer reads their own farm's), the catalogue tests and the route
   inventories.

@@ -7290,8 +7290,14 @@ the days *D(y)* of *y* inside the run:
 - partial = |*D(y)*| < *L(y)*; the per-node summary (`yearsOver`,
   `meanModelledM3PerYear`, `meanRegisteredM3PerYear`) counts whole years
   only.
-- storage: Σ `storageM3` of the node's allocations (none when no allocation
-  states one) beside the run's `damCapacityM3` for a farm.
+- storage: Σ `storageM3` of the node's allocations, storage-only (s21b)
+  rows included (none when no allocation states one), beside the run's
+  `damCapacityM3` for a farm, with the difference *C* − *S* and a status
+  banded the same way with *C* for *M* and *S* for *R* (issue #72): **over**
+  = a dam larger than the storage registered for it by more than *τ*,
+  **unregistered** = a dam with no storage registered. Arithmetic only:
+  whether filling the dam is also a s21(a) take is the hydrologist's
+  question (issue #90). A storage-only row is never part of *R(n,s,y)*.
 
 Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
 of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ
@@ -7315,6 +7321,15 @@ volume that isn't a number ≥ 0, an unknown source, dates that aren't ISO days
 in order) are left out with a warning; the ones matched to a farm or water
 user of the run are used, in id order (so a unit's volume sums to the same
 bits whatever order they came in).
+
+A **storage-only** allocation (`waterUse: '21b'`, engine ≥ 1.59.0, issue
+#72) registers a dam's storage under NWA s21(b), not a take: its volume is
+0 and only its storage counts. No mode reads it (it neither caps nor scales
+a unit, and `RunSummary.allocations` doesn't count it); §2.12's storage
+comparison does. A WARMS extract lists one row per s21 water use, so a dam
+arrives as its own 21(b) row; read as a take, its storage would have capped
+the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
+`waterUse` is a take (21a), as before 1.59.0, so no stored input changes.
 
 - **`none`** (the default, and every run before 1.18.0): nothing changes but
   the summary. A run whose input has allocations reports

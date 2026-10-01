@@ -1400,6 +1400,21 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(texts(b, one({ op: 'allocation.set', allocation: alloc({ maxRateM3s: 0.02 }) }, withAllocations()).input)).toEqual(['Farm A: registered volume surface 120 000 m³/a → surface 120 000 m³/a, at most 0.02 m³/s']);
 	});
 
+	it('allocation.set keeps a storage-only (s21b) row’s water use and refuses an unknown one (engine 1.59.0, issue #72)', () => {
+		const b = deepFreeze(withAllocations());
+		const dam = alloc({ id: 'al4', volumeM3PerYear: 0, waterUse: '21b', storageM3: 80_000 });
+		const r = one({ op: 'allocation.set', allocation: dam }, b);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.allocations).toContainEqual(dam);
+		expect(texts(b, r.input)).toContain('Registered volume added to Farm A (surface storage only (s21b), storage 80 000 m³)');
+		expect(one({ op: 'allocation.set', allocation: alloc({ waterUse: '21b', volumeM3PerYear: 120_000 }) }).problems).toEqual([
+			"op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be 0 on a storage-only (21b) row: it registers no take; storageM3 is needed on a storage-only (21b) row"
+		]);
+		expect(one({ op: 'allocation.set', allocation: alloc({ waterUse: '21c' as never }) }).problems).toEqual([
+			expect.stringMatching(/^op 1 \(allocation\.set\): the registered volume isn't usable: waterUse must be one of/)
+		]);
+	});
+
 	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a farm or other water user; "Outlet gauge" is a gauge']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);

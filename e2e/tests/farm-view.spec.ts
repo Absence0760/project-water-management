@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { addAllocation } from '../support/allocations.ts';
 import { acceptInvites, createProject, createRun, putModel, putSeries, register, sampleModel, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -490,5 +491,47 @@ test('the model card folds to its link line when the river asked for no cut', as
 	await expect(fp.getByRole('region', { name: 'Water you received this season' })).toBeVisible();
 	await expect(fp.getByRole('link', { name: 'The model’s look back and what you can do' })).toHaveAttribute('href', new RegExp(`/farm/${project.id}/why`));
 	await expect(fp.getByRole('region', { name: /^Looking back/ })).toHaveCount(0);
+	await expectNoViolations(fp);
+});
+
+// Issue #72: a farmer sees their own farm's registered volumes and storage, with what a
+// registration is not, and never another farm's. The other farm's distinctive volume is the
+// negative control; the farm's own figures are the positive one.
+test('a farmer sees their own registered water, not an entitlement, and no one else’s', async ({ page, owner, signIn: signInAs }) => {
+	void owner;
+	const req = page.context().request;
+	const project = await createProject(req, 'Registered water catchment');
+	const model = sampleModel();
+	await putModel(req, project.id, model);
+	await updateSettings(req, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: Array(12).fill(1000) });
+	await putSeries(req, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(120) });
+	await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')! as { id: string };
+	const lower = model.nodes.find((n) => n.name === 'Lower farm')! as { id: string };
+	await addAllocation(req, project.id, { nodeId: upper.id, registrationNo: 'E2E-REG-1', holder: 'Invented Holder', authorisation: 'registration', waterSource: 'surface', volumeM3PerYear: 120_000 });
+	await addAllocation(req, project.id, { nodeId: upper.id, authorisation: 'registration', waterSource: 'surface', volumeM3PerYear: 0, storageM3: 150_000, waterUse: '21b' });
+	await addAllocation(req, project.id, { nodeId: lower.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 777_000 });
+	const runId = await createRun(req, project.id, 'Baseline');
+	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'none' } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmer = await signInAs('Registered farmer');
+	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+
+	const fp = farmer.page;
+	await fp.setViewportSize(PHONE);
+	await fp.goto(`/farm/${project.id}`);
+	const card = fp.getByRole('region', { name: 'Your registered water' });
+	await expect(card).toContainText(/Surface water: 120\s000\sm³ a year/);
+	await expect(card).toContainText(/Dam storage: 150\s000\sm³/);
+	await expect(card).toContainText('A registered volume is not an entitlement');
+	// Only the farm's own: no name, no registration number, nothing of the other farm.
+	await expect(fp.getByRole('main')).not.toContainText(/Invented Holder|E2E-REG-1|777\s000/);
+	// Reference figures, below the season's cards: after "Looking back", before the last 12 months.
+	await expectBefore(fp.locator('#dam-h'), card);
+	await expectNoSidewaysScroll(fp);
+	await expectNoViolations(fp);
+	await fp.setViewportSize(DESKTOP);
 	await expectNoViolations(fp);
 });

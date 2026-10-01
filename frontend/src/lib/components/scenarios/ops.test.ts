@@ -1,7 +1,7 @@
 import { applyScenario, blankEwrRuleTable, classifyOp, classifyScenario, type EwrRuleTable, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { NEW_ALLOCATION, OUTLET_SITE, allocationDraft, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
+import { NEW_ALLOCATION, OUTLET_SITE, allocationDraft, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, volumeText, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -593,5 +593,12 @@ describe('draftStarted', () => {
 		expect(draftStarted(emptyDraft('transfer.set'))).toBe(false);
 		expect(draftStarted({ ...emptyDraft(), nodeId: 'n1' })).toBe(true);
 		expect(draftStarted({ ...emptyDraft('settings.set'), value: '3' })).toBe(true);
+	});
+});
+
+describe('volumeText (issue #72)', () => {
+	it('words a storage-only (s21b) row as storage, never as a volume taken', () => {
+		expect(volumeText({ id: 'a', nodeId: 'n', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 80_000 })).toMatch(/^surface storage only \(s21b\), storage 80.000 m³$/);
+		expect(volumeText({ id: 'a', nodeId: 'n', waterSource: 'surface', volumeM3PerYear: 120_000 })).toMatch(/^surface 120.000 m³\/a$/);
 	});
 });

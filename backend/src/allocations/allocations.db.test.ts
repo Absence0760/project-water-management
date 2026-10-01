@@ -233,7 +233,8 @@ describe('the run comparison', () => {
 		expect(a.surface.years[0]).toMatchObject({ waterYear: 2021, partial: false });
 		expect(a.surface.years[0].registeredM3).toBeCloseTo(120_000, 6);
 		expect(a.groundwater.years[0].registeredM3).toBeCloseTo(15_000, 6);
-		expect(a.storage).toEqual({ registeredM3: 150_000, modelledCapacityM3: farmA.damCapacityM3 });
+		// 150 000 m³ registered against the 100 000 m³ dam: 50 000 m³ smaller, below the band (issue #72).
+		expect(a.storage).toEqual({ registeredM3: 150_000, modelledCapacityM3: farmA.damCapacityM3, differenceM3: farmA.damCapacityM3 - 150_000, status: 'under' });
 		const again = compareAllocations({
 			startDate: '2021-10-01',
 			nodes: [{ nodeId: farmA.id, name: 'Farm A', kind: 'farm', supplied: supplied.values }],

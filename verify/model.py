@@ -1974,6 +1974,9 @@ def read_allocations(model: dict, by_id: dict) -> list[dict]:
         x = by_id.get(a.get("nodeId"))
         if x is None or x["kind"] not in ("farm", "user"):
             continue
+        # §2.12a: a storage-only (s21b) row is not a take; it neither caps nor scales a unit.
+        if a.get("waterUse") == "21b":
+            continue
         v = a.get("volumeM3PerYear")
         if not isinstance(v, (int, float)) or not v >= 0 or a.get("waterSource") not in ("surface", "groundwater"):
             continue

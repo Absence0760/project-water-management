@@ -24,8 +24,9 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Authorisation | `registration` (WARMS, GN R1352 of 1999), `licence` (s40), `general_authorisation` (s39, e.g. GN 538), `schedule_1` (Schedule 1 permissible use, s22(1)(a)(i); 136), `existing_lawful_use_claimed` (s32, claimed or registered, not verified; 136), `existing_lawful_use` (s32, verified under s35). A registration is not an entitlement and doesn't confirm lawfulness; only s35 verification does ([DWS verification guide](https://www.dws.gov.za/WAR/documents/VerificationGuideDec06.pdf), issue #281) |
 | Purpose | `irrigation`, `domestic`, `livestock`, `industry`, `mining`, `municipal`, `other` |
 | Water source | `surface` or `groundwater` |
-| Volume | m³ per year, ≥ 0 |
-| Storage | registered storage (s21b), m³; optional |
+| Water use | the NWA s21 water use (142, issue #72): `21a` taking water (the default) or `21b` storing water. A `21b` row is a dam's registered storage only: volume 0, a storage, surface water; it is never compared, capped or scaled as a take (engine 1.59.0) |
+| Volume | m³ per year, ≥ 0 (0 on a `21b` row) |
+| Storage | registered storage (s21b), m³; optional on a take, required on a `21b` row |
 | Valid from / to | inclusive ISO dates; either may be open |
 | Registration number, property | used to match the row to a node, and shown in the list |
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
@@ -74,9 +75,10 @@ so the importer finds columns **by their heading** through an alias table
 Number", "Registered Volume (m3/a)", "Resource Type", "Water Use Sector" and
 so on, or the app's own template headings (`registration_no`, `farm`,
 `holder`, `authorisation`, `purpose`, `water_source`, `volume_m3_year`,
-`storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`, and the
+`storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`, the
 licence conditions `months` (numbers or names, ranges over the new year:
-`Oct-Mar`), `max_rate_m3s` and `conditions`, separated by `|`). The
+`Oct-Mar`), `max_rate_m3s` and `conditions`, separated by `|`, and
+`water_use`, `21a` or `21b`, blank = a take). The
 template is downloadable from the Allocations page's Import sheet. The aliases are **pending a real
 extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
@@ -85,6 +87,26 @@ is listed as "not read", never guessed.
   the decimal mark), UTF-8, at most 2 MB, 5 000 rows and 200 columns. Quoted fields,
   doubled quotes and line breaks inside quotes are read. XLSX is not read
   yet: save the sheet as CSV.
+- **One row per s21 water use** (issue #72). WARMS registers water per
+  water use, per property: a 21(a) row's registered volume is a take per
+  year, but a 21(b) row's is the dam's storage. So each row is read by its
+  **water-use code** (a column headed "Water use", "s21", "Water use code"
+  …: "21(a)", "21a", "s21 a", "Section 21(a)", "a", "taking water"; "21(b)"
+  …, "storing water") and the volume by its **unit and frequency** (a "Unit"
+  column such as `m3/a`, `Ml/a`, `ML per annum`, `kl/a`, or a unit and a
+  separate "Frequency" column; a megalitre is 1 000 m³; with neither column,
+  m³ a year as the volume heading says). A 21(b) row is stored as storage
+  only (its volume cell, or the storage column, as the storage; volume 0;
+  surface water when the source is blank). These rows are **refused, not
+  guessed**: no code, a code naming two uses ("21(a)(b)"), another s21 use
+  (21(c) to 21(k): not a take or a storage the app compares), a blank or
+  unreadable unit (a lower-case "ml" too: millilitres as written), a unit
+  and frequency that disagree, a take per month, day or second (the app
+  won't guess how they add up to a year), a 21(b) row with two different
+  storages, with none, or on groundwater. A WARMS extract **without** a
+  water-use column is refused whole: its storage rows can't be told from
+  its takes. The template has its own volume and storage columns, so there
+  a blank or missing `water_use` is a take.
 - **Refused files.** A heading that looks like an **ID number, passport,
   phone, cell, fax or email** column refuses the whole file, before anything
   is stored (POPIA minimisation, [security.md](./security.md)). A cell in the
@@ -164,8 +186,14 @@ For a run, per farm or water user, per water source and per **water year**
   *above registered* (modelled > registered × 1.1),
   *within band*, *below registered* (< × 0.9), *no registered volume*
   (modelled use with nothing in force), *no use, none registered*.
-- **Storage**: the sum of the farm's registered storage beside the dam
-  capacity the run modelled.
+- **Storage**: the sum of the farm's registered storage (21(b) rows and
+  storage stated on a take) beside the dam capacity the run modelled, with
+  the difference (capacity − registered) and a status banded like a year's
+  use (issue #72): *over* is a dam larger than the storage registered for
+  it, *under* a smaller one, *unregistered* a dam with none registered. The
+  page says it in words. Arithmetic only: whether filling the dam is also a
+  s21(a) take is the hydrologist's question (issue #90). A 21(b) row is
+  never part of the registered volume a year's use is compared with.
 - Allocations not matched to a node, or matched to a node the run doesn't
   have, are counted and named, not compared.
 
@@ -264,7 +292,7 @@ existing lawful use beside the application's numbers.
   applies them (above).
 - Pending the hydrologist: the ±10 % band, and counting supply from the
   farm's own dam as abstraction (the WP says so; a hydrologist may want dam
-  filling, s21b, compared with storage instead).
+  filling, s21b, compared with storage instead, issue #90).
 
 ## Who sees what
 
@@ -275,13 +303,21 @@ recommendation (b), pending legal advice:
 | --- | --- | --- | --- |
 | Owner, editor | all | all | yes |
 | Viewer | all | none | no |
-| Farmer | their linked farms' allocations only (RLS) | their own only | no |
+| Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Not a member | nothing | nothing | no |
 
 Names live in their own table (`allocation_holder`) so RLS, not the API,
-hides them. Farmers are refused the allocations routes today (like every
-viewer route); their farm view doesn't show allocations yet (follow-up), but
-RLS already scopes them. The history (readable by viewers) records
+hides them. Farmers are refused the allocations routes (like every viewer
+route). Their farm view shows **Your registered water** (issue #72,
+`FarmView.registered`): the farm's own surface and groundwater volumes a
+year and registered storage in force today (Schedule 1 permissible use left
+out: it isn't registered with DWS), summed, read under their RLS,
+beside the season's modelled supply and the modelled dam, with "A
+registered volume is not an entitlement, and it doesn't say whether a use is
+lawful". No holder name, registration number or property, and nothing about
+another farm. This isn't blocked by D3, which is about other people's names
+and volumes; the farmer's own figures are theirs (and already in their
+data-subject export). The history (readable by viewers) records
 registration numbers and counts, never names.
 
 ## Still to build (WP-3.10)
@@ -290,8 +326,8 @@ Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
 
 - XLSX import and a column-mapping step for extracts whose headings the alias
   table doesn't know (waits on a real WARMS extract).
-- The farm view (and share views, D3 (c)) showing a farmer their own
-  registered volume beside their modelled use (waits on D3).
-- Dam filling vs registered storage (s21b), and how the cap counts water
-  drawn from a dam that boreholes filled (pending the hydrologist, issue #90).
+- Share views per D3 (c) (volumes public, names hidden; waits on D3).
+- Whether filling a dam is also a s21(a) take, and how the cap counts water
+  drawn from a dam that boreholes filled (pending the hydrologist, issue
+  #90). Dam capacity against registered storage is built (above).
 - The issued pack (WP-3.14) freezes § 5 once it lands.

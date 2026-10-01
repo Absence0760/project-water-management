@@ -101,7 +101,7 @@ describe('GET /auth/me/export', () => {
 		expect(doc.farms).toHaveLength(1);
 		const farm = doc.farms[0];
 		expect(farm).toMatchObject({ projectId, nodeId: farmA.id, farmName: 'Farm Alpha', linkedBy: 'XOwner' });
-		expect(farm.allocations).toEqual([expect.objectContaining({ holderName: 'Holder Alpha', registrationNo: 'REG-ALPHA', volumeM3Year: 12_000 })]);
+		expect(farm.allocations).toEqual([expect.objectContaining({ holderName: 'Holder Alpha', registrationNo: 'REG-ALPHA', volumeM3Year: 12_000, waterUse: '21a' })]);
 		expect(farm.publication?.figures?.name).toBe('Farm Alpha');
 		expect(farm.publication.restriction.level).toEqual(expect.any(String));
 	});

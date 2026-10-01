@@ -642,7 +642,9 @@ covers its storage, months of use and maximum rate as well as its source,
 volume and validity, so a licence condition changed on its own is listed
 (*"Rooikloof: registered volume surface 120 000 m³/a → surface 120 000
 m³/a, at most 0.02 m³/s"*); before, only the volume, source and validity
-were compared. Land cover is compared per farm and class on its condensed
+were compared. From engine 1.59.0 (issue #72) its water use is compared too,
+and a storage-only (s21b) row reads *"surface storage only (s21b), storage
+80 000 m³"* in place of a volume a year. Land cover is compared per farm and class on its condensed
 area, and from engine 1.35.0 on its area and each patch's cover too, so a
 patch at no cover that grows, or one whose cover changes on no area, is
 listed (*"… 0 km² → 0 km² condensed (area 1 km² → 2 km²)"*, *"…, its

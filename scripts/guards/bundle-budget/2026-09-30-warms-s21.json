@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Engine 1.59.0, issue #72 (#305): WARMS rows by s21 water use (21a take, 21b storage only), the allocation form's water-use field and the farmer's own registered water on the farm view. Measured 1415 locally against main @ 657ffea3's 1413 (+2 KB, rounded up to 3 since both are rounded)."
+}

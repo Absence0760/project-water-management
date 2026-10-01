@@ -1485,12 +1485,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const allocs = matchByIdThenName(a.allocations ?? [], b.allocations ?? [], (x) => x.id, (x) => `${(b.allocations ?? []).includes(x) ? ownerB(x) : ownerA(x)}\u0000${x.waterSource}`);
 		// Registered storage and the licence conditions (months, the maximum rate) are part of it: a run stores them, so a change is listed.
 		const describe = (x: AllocationEntry) =>
-			`${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}${x.storageM3 != null ? `, storage ${fmtValue(x.storageM3, 0)} m³` : ''}${x.months?.length ? `, months ${[...x.months].sort((p, q) => p - q).join(' ')}` : ''}${x.maxRateM3s != null ? `, at most ${fmtValue(x.maxRateM3s, 4)} m³/s` : ''}`;
+			`${x.waterUse === '21b' ? `${x.waterSource} storage only (s21b)` : `${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a`}${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}${x.storageM3 != null ? `, storage ${fmtValue(x.storageM3, 0)} m³` : ''}${x.months?.length ? `, months ${[...x.months].sort((p, q) => p - q).join(' ')}` : ''}${x.maxRateM3s != null ? `, at most ${fmtValue(x.maxRateM3s, 4)} m³/s` : ''}`;
 		for (const x of allocs.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Registered volume removed from ${ownerA(x)} (was ${describe(x)})` });
 		for (const y of allocs.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Registered volume added to ${ownerB(y)} (${describe(y)})` });
 		for (const [x, y] of allocs.pairs) {
 			const moved = ownerA(x) !== ownerB(y);
-			const fields = ['waterSource', 'volumeM3PerYear', 'validFrom', 'validTo', 'storageM3', 'maxRateM3s'] as const;
+			const fields = ['waterSource', 'volumeM3PerYear', 'waterUse', 'validFrom', 'validTo', 'storageM3', 'maxRateM3s'] as const;
 			const months = (v: AllocationEntry) => (v.months?.length ? [...v.months].sort((p, q) => p - q) : null);
 			if (moved || fields.some((f) => !same(x[f] ?? null, y[f] ?? null)) || !same(months(x), months(y)))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: registered volume ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}` });

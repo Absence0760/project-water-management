@@ -1293,8 +1293,13 @@ must build WP-2.15 Phase B.
   engine 1.37.0, 2026-09-30). Deviations: `fullAllocation` keeps the unit's
   own demand shape rather than a monthly pattern of the allocation (it
   doesn't apply the licence's months), and `conditions` is a list of texts.
-  Left: XLSX and column mapping, the
-  farm view and the chart
+  Third slice (2026-09-30, issue #72, migration 142, engine 1.59.0): the
+  importer reads each row's s21 water use (21(a) a take, 21(b) a dam's
+  storage) and its unit and frequency, refusing ambiguous rows; a farmer's
+  farm view shows their own registered volumes and storage; the comparison
+  bands dam capacity against registered storage. The chart landed with
+  issue #71. Left: XLSX and column mapping (a real extract), share views per
+  D3 (c), and whether dam filling is a s21(a) take (#90)
   ([followups.md § Allocations](../followups.md#allocations-wp-310),
   [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to
