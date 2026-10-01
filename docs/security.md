@@ -2470,7 +2470,7 @@ database:
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
   | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`) |
   | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
-  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-13`) |
+  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`) |
 
   With the switch off, a viewer's routes carry no copy of the volumes: the
   run's model and summary per unit, the compare route, the summary CSV, the
@@ -2495,7 +2495,7 @@ database:
 - The **evidence report's § 5** (issue #71) compares each run's *stored*
   allocations, so it never carries a holder's name or registration number,
   for every reader (viewers and up) and in an issued pack an applicant later
-  holds; since `evidence-13` it lists only the applicant's own units, the
+  holds; since `evidence-15` it lists only the applicant's own units, the
   rest as totals (`evidence/report.db.test.ts` fails if a name, a number or
   another unit appears).
 - In the data-subject export ([§ Personal information](#personal-information-popia)),

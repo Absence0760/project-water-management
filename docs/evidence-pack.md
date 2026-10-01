@@ -38,7 +38,10 @@ locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-ma
 report format `evidence-12`, 2026-10-01); and whom the report is for and
 whether the responsible authority endorsed its baseline
 ([§ The responsible authority](#the-responsible-authority), report format
-`evidence-13`, 163_licensing_authority, 2026-10-01).; and § 5 naming only the
+`evidence-13`, 163_licensing_authority, 2026-10-01); page 1's licence
+impact against full authorised use as well as modelled use
+([§ Both impact bases](#both-impact-bases), report format `evidence-14`,
+2026-10-01); and § 5 naming only the
 applicant's own units, every other unit's registered volume and use as
 totals at 5 or more units (report format `evidence-15`, decision D3,
 2026-10-01; [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)). What is left is

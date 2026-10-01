@@ -212,7 +212,7 @@ describe('settings.evidenceUncertaintyRule', () => {
 });
 
 describe('§ 5 registered water use (WP-3.10)', () => {
-	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares, never naming another unit, the holder or the registration (evidence-13, D3)', async () => {
+	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares, never naming another unit, the holder or the registration (evidence-15, D3)', async () => {
 		// The nominated baseline ran without allocations.
 		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).toMatch(/^Not assessed: the runs carry no registered volumes/);
 		const created = await owner.call('POST', `/projects/${projectId}/allocations`, {

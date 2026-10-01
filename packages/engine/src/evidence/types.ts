@@ -821,11 +821,11 @@ export interface EvidenceCapYears {
 
 /** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */
 export interface EvidenceAllocationUnit {
-	/** The node; `others:<source>` for a total of other units (evidence-13). */
+	/** The node; `others:<source>` for a total of other units (evidence-15). */
 	nodeId: string;
 	name: string;
 	/**
-	 * evidence-13: this row is the total of this many units that aren't the
+	 * evidence-15: this row is the total of this many units that aren't the
 	 * applicant's, on its one water source (name "Other registered users (n
 	 * units)"); absent for a unit of its own.
 	 */
@@ -854,13 +854,13 @@ export interface EvidenceAllocations {
 	notMatchedA: number;
 	notMatchedB: number | null;
 	/**
-	 * evidence-13: units other than the applicant's with a volume on a water
+	 * evidence-15: units other than the applicant's with a volume on a water
 	 * source fewer than 5 such units hold, so left out of § 5 even as a total
 	 * (D3). Absent from an older pack's document.
 	 */
 	othersLeftOut?: number;
 	/**
-	 * evidence-13: whole unit-years judged and above the band, per run, over
+	 * evidence-15: whole unit-years judged and above the band, per run, over
 	 * every unit before the totals (the page-1 row's figures). Absent from an
 	 * older pack's document.
 	 */

@@ -294,7 +294,7 @@ existing lawful use beside the application's numbers.
   the registration number, so neither does the report, whoever reads it
   (viewers and up). An issued evidence pack (WP-3.14) freezes this document.
 - **Only the applicant's own units, one by one** (report version
-  `evidence-13`, decision D3). Every other unit is one *Other registered
+  `evidence-15`, decision D3). Every other unit is one *Other registered
   users (n units)* total per water source and water year (the volumes and
   use summed, judged against the band as a whole), left out when fewer than
   5 units hold that source; the section says how many were left out. Baseline
@@ -327,7 +327,7 @@ reasoning is in [security.md § Allocations](./security.md#allocations-popia-min
 | Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise totals per water source held by 5 or more registered users: the volume and storage in force today, and a run's use against them by water year | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
-| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-13`) | none | no |
+| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`) | none | no |
 | Not a member | nothing | nothing | no |
 
 The switch is off by default, for viewers can be outside the organisation

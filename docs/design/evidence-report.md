@@ -450,6 +450,21 @@ applications carry the Act's outcome words; only a licence issued counts
 among the other applications. A pack drafted before `evidence-13` has
 neither ([evidence-pack.md § The responsible authority](../evidence-pack.md#the-responsible-authority)).
 
+**Report version `evidence-14`** (licensing build item 8, decision D15;
+provisional position, pre-counsel research, 2026-10-01): page 1 leads with
+the licence impact board against **full authorised use** (every holder at
+their registered volume) with the authorised volume's mix by how it is held,
+and the board against modelled use follows; a fixed row says when there is
+none. A pack drafted before `evidence-14` says it has no such board
+([evidence-pack.md § Both impact bases](../evidence-pack.md#both-impact-bases)).
+
+**Report version `evidence-15`** (decision D3; provisional position,
+pre-counsel research, 2026-10-01): § 5 lists only the applicant's own units
+one by one; every other unit's registered volume and modelled use is one
+*Other registered users (n units)* total per water source, left out below 5
+units. Page 1's row still counts unit-years per unit. A pack drafted before
+`evidence-15` names every unit ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 

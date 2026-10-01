@@ -3516,7 +3516,7 @@ from the WP:
       provisional position, pre-counsel research). Viewers read each volume
       only once an owner switches it on, else totals per water source at 5
       or more registered users; § 5 of the evidence report lists only the
-      applicant's own units, the rest as totals (`evidence-13`); a WARMS
+      applicant's own units, the rest as totals (`evidence-15`); a WARMS
       extract needs its reference; Privacy §5 says so
       ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
 - [ ] **Share views: allocation totals** (D3 (c), narrowed): totals only, at

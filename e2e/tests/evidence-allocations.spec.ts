@@ -1,7 +1,7 @@
 // § 5 of the licensing evidence report, registered water use (issue #71,
 // WP-3.10; docs/allocations.md § In the evidence report, docs/ui.md §
 // Evidence report): a nominated run of two whole water years with a volume
-// on each farm. Since evidence-13 (decision D3) § 5 lists only the
+// on each farm. Since evidence-15 (decision D3) § 5 lists only the
 // applicant's own units one by one, and every other unit as one total per
 // water source at 5 or more units: baseline evidence (no applicant) with two
 // farms lists none and says so, while page 1's row still counts the
@@ -105,7 +105,7 @@ test('the evidence report cites a capped run’s cap: the years it used its volu
 	expect(res.status()).toBe(201);
 	const run = await createRun(page.request, project.id, 'Capped baseline');
 	await nominateRun(page.request, project.id, run, 'Capped baseline');
-	// The applicant's own unit is cited one by one (evidence-13); the baseline column is the capped baseline's.
+	// The applicant's own unit is cited one by one (evidence-15); the baseline column is the capped baseline's.
 	const app = await application(page, project.id, run, nodes.find((n) => n.name === 'Upper farm')!.id);
 
 	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);

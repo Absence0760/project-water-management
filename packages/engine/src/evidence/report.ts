@@ -1415,7 +1415,7 @@ function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
  * volume and the modelled use, and whole years counted over, within and
  * under the band. Units are matched by node id (as § 4 matches them) and
  * named by the unit, never the holder (D3). Only the applicant's own units
- * are listed one by one (evidence-13): every other unit is in one total per
+ * are listed one by one (evidence-15): every other unit is in one total per
  * water source (otherUnitTotals), at FARMER_K or more units.
  */
 function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
@@ -1497,14 +1497,14 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 	};
 }
 
-/** The label of a total of other units (evidence-13). */
+/** The label of a total of other units (evidence-15). */
 export const otherUnitsName = (n: number) => `Other registered users (${n} units)`;
 
 const sumOrNull = (xs: (number | null)[]) => (xs.some((x) => x !== null) ? xs.reduce<number>((s, x) => s + (x ?? 0), 0) : null);
 
 /**
  * Every unit that isn't the applicant's, summed per water source and water
- * year (evidence-13, D3): the registered volume and modelled use of each run,
+ * year (evidence-15, D3): the registered volume and modelled use of each run,
  * the status of the sums, and the whole years counted from them. A source
  * fewer than FARMER_K such units hold is left out (counted in `leftOut`).
  */
@@ -1622,7 +1622,7 @@ const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not record
 
 /** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
 function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
-	// Per unit, before § 5's totals of other units (evidence-13).
+	// Per unit, before § 5's totals of other units (evidence-15).
 	const uy = al.unitYears;
 	const A = uy ? { over: uy.overA, judged: uy.judgedA } : allocationTotals(al, 'A');
 	const B = app ? (uy && uy.overB !== null && uy.judgedB !== null ? { over: uy.overB, judged: uy.judgedB } : allocationTotals(al, 'B')) : null;

@@ -869,7 +869,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notAssessed).toBeNull();
 	});
 
-	it('lists the applicant’s unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14); one other unit is too few for a total (evidence-13, D3)', () => {
+	it('lists the applicant’s unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14); one other unit is too few for a total (evidence-15, D3)', () => {
 		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([['Farm two', true, null]]);
 		expect(r.allocations.othersLeftOut).toBe(1);
 		const cb = comparisonOf(app, appOut, allocations);
@@ -893,7 +893,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
-	it('the page-1 row sums every unit’s years above the volume, both runs, with no band, the units § 5 leaves out included (evidence-13)', () => {
+	it('the page-1 row sums every unit’s years above the volume, both runs, with no band, the units § 5 leaves out included (evidence-15)', () => {
 		const row = r.rows.find((x) => x.id === 'registeredUse')!;
 		// Farm one (left out of § 5) is under its volume every year, so the sums are Farm two's; its 5 whole years count as judged.
 		const sum = (k: 'countsA' | 'countsB') => r.allocations.units.reduce((t, u) => t + u.sources.reduce((v, s) => v + (s[k]?.over ?? 0), 0), 0);
@@ -966,7 +966,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(loose.rows.find((x) => x.id === 'registeredUse')!.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
 	});
 
-	it('baseline evidence: no applicant, so no unit is listed; two units are too few for a total, but the page-1 row still counts them (evidence-13)', () => {
+	it('baseline evidence: no applicant, so no unit is listed; two units are too few for a total, but the page-1 row still counts them (evidence-15)', () => {
 		const i = withAllocations();
 		const b = evidenceReport({ ...i, application: null, changes: [] });
 		expect(b.allocations.units).toEqual([]);
@@ -1007,7 +1007,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect([full.partialA, full.partialB]).toEqual([false, false]);
 	});
 
-	it('sums 5 or more other units into one total per water source, naming none of them, with the flag on the total (evidence-13, D3)', () => {
+	it('sums 5 or more other units into one total per water source, naming none of them, with the flag on the total (evidence-15, D3)', () => {
 		// Five other units, each with Farm one's use (none) and a small volume, and Farm two (the applicant's).
 		const others = ['O1', 'O2', 'O3', 'O4', 'O5'];
 		const many = (out: ModelOutput, inp: ModelInput, use: number) => {
