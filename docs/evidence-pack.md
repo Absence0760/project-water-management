@@ -220,7 +220,12 @@ kept at 6 decimals of a degree (about 0.1 m) and simplified (Douglas–Peucker)
 to a third of a pixel of the figure, so a 50 000-vertex river doesn't swell
 the manifest; the report holds exactly what is drawn. Beside the features:
 the newest change to any of them (*Features as of*), the imported files they
-came from (name, SHA-256, date) and how many were drawn in the app.
+came from (name, SHA-256, date) and how many were drawn in the app, both
+counting only what may be named: the boundary, rivers, gauges and the
+applicant's own parcels and dams. Another unit's parcel or dam is drawn but
+its import file is never listed, since a file is often named after the farm
+or its owner (baseline evidence names no unit, so it lists no parcel's or
+dam's file).
 
 **How it is drawn** (`packages/engine/src/geo/localityMap.ts`,
 `localityMapSvg`, drawing rules `locality-1`): a local equirectangular

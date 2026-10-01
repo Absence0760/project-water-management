@@ -198,15 +198,19 @@ export function localitySection(
 		.sort((a, b) => LOCALITY_LAYER_ORDER.indexOf(a.x.layer) - LOCALITY_LAYER_ORDER.indexOf(b.x.layer) || a.i - b.i)
 		.map((o) => o.x);
 
+	// The source files of what may be named: never another unit's parcel or dam, whose import file is often named
+	// after the farm or its owner (in baseline evidence no unit is named, so no parcel's or dam's file is listed).
+	const otherUnits = (x: EvidenceMapFeatureInput) => (x.kind === 'farm_parcel' || x.kind === 'dam') && !(x.nodeId && owned.has(x.nodeId));
+	const listed = used.filter((x) => !otherUnits(x));
 	const sources = new Map<string, LocalitySource>();
-	for (const f of used) if (f.source) sources.set(f.source.sha256, { fileName: f.source.fileName, sha256: f.source.sha256, importedAt: f.source.importedAt.slice(0, 10) });
+	for (const f of listed) if (f.source) sources.set(f.source.sha256, { fileName: f.source.fileName, sha256: f.source.sha256, importedAt: f.source.importedAt.slice(0, 10) });
 	const data: LocalityMapData = {
 		version: LOCALITY_MAP_VERSION,
 		applicant: ctx.applicant,
 		features: sorted,
 		asOf: used.map((f) => f.updatedAt.slice(0, 10)).sort().at(-1)!,
 		sources: [...sources.values()].sort((a, b) => a.importedAt.localeCompare(b.importedAt) || a.sha256.localeCompare(b.sha256)),
-		drawnInApp: used.filter((f) => !f.source).length,
+		drawnInApp: listed.filter((f) => !f.source).length,
 		svgSha256: null
 	};
 	return data;

@@ -100,6 +100,26 @@ describe('localitySection', () => {
 		expect(loc.svgSha256).toBeNull();
 	});
 
+	it('never lists another unit’s import file: a neighbour’s file name can name the farm or its owner', () => {
+		const NEIGHBOUR_FILE = { fileName: 'Smith farm.kml', sha256: 'c'.repeat(64), importedAt: '2026-09-21T09:00:00.000Z' };
+		const features = [
+			f('farm_parcel', 'A', { type: 'Polygon', coordinates: [sq(21.31, -33.69, 0.02)] }, { source: FILE }),
+			f('farm_parcel', 'B', { type: 'Polygon', coordinates: [sq(21.35, -33.69, 0.02)] }, { source: NEIGHBOUR_FILE }),
+			f('dam', 'B', { type: 'Polygon', coordinates: [sq(21.36, -33.68, 0.002)] }, { source: NEIGHBOUR_FILE }),
+			f('farm_parcel', null, { type: 'Polygon', coordinates: [sq(21.39, -33.69, 0.02)] })
+		];
+		const loc = localitySection(features, ctx)!;
+		// Positive control: the applicant's own file is listed; the neighbour's appears nowhere in the section.
+		expect(loc.sources.map((x) => x.fileName)).toEqual(['parcels.geojson']);
+		expect(JSON.stringify(loc)).not.toContain('Smith');
+		// Drawn in the app counts only what may be named (the unlinked parcel is another unit's).
+		expect(loc.drawnInApp).toBe(0);
+		// Baseline evidence names no unit, so no parcel's or dam's file is listed at all.
+		const base = localitySection(features, { ...ctx, applicant: false, ownedNodeIds: [] })!;
+		expect(base.sources).toEqual([]);
+		expect(JSON.stringify(base)).not.toContain('Smith');
+	});
+
 	it('rounds coordinates to 6 decimals and simplifies a dense line to the figure’s resolution, keeping its ends', () => {
 		// A river of 5 000 vertices wiggling by ~1 cm, across a 0.1° catchment.
 		const river = Array.from({ length: 5_000 }, (_, i): [number, number] => [21.3 + (0.1 * i) / 4_999 + 1.234567891e-7, -33.6 - (0.1 * i) / 4_999 + (i % 2) * 1e-7]);
