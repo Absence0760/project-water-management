@@ -395,7 +395,8 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    - **Pan coefficient**: the dialog multiplies the source factors by an
      optional Kp, defaulted by the source's shape (issue #289). A-pan tables
      and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
-     an FAO-56 Kc set (against ET₀) defaults to 0.75, a mid value of FAO-56
+     an FAO-56 Kc set (against ET₀; a node-based workbook's
+     [Crop_Factors], the dialog's third source) defaults to 0.75, a mid value of FAO-56
      Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
      and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values

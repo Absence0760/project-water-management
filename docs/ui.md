@@ -2368,7 +2368,9 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   **A node-based workbook** is the third source: its [Crop_Factors] and
   [Crop_Areas] sheets, read by the same worker
   (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
-  those two sheets). Its factors are FAO-56 Kc values (against ET₀). For
+  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+  efficiency column isn't loaded (a crop's efficiency changes only through
+  the system select below), nor are its farm areas. For
   either workbook, the dialog lists what the reader flagged as text under
   the file: for a node-based workbook, a missing sheet (a b023 file picked
   under this option), names that differ between the two sheets and cells

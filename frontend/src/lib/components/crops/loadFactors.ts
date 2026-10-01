@@ -58,7 +58,8 @@ export const FAO56_TABLE5_URL = 'https://www.fao.org/4/x0490e/x0490e08.htm';
 /** The dialog's source kinds, in radio order, each with the shape of its factors. A new kind is a row here. */
 export const SOURCE_KINDS = [
 	{ id: 'library', label: 'Reference library (ARC/SABI A-pan, winter rainfall)', shape: 'a-pan' },
-	{ id: 'b023', label: 'A b023 workbook', shape: 'a-pan' }
+	{ id: 'b023', label: 'A b023 workbook', shape: 'a-pan' },
+	{ id: 'node', label: 'A node-based workbook (FAO-56 Kc)', shape: 'fao-et0' }
 ] as const satisfies readonly { id: string; label: string; shape: FactorShape }[];
 export type SourceKind = (typeof SOURCE_KINDS)[number]['id'];
 
@@ -85,6 +86,24 @@ export const isKp = (kp: number | null, value: number): boolean => kp !== null &
 export function kpForShape(current: number | null, previousDefault: number, shape: FactorShape): number {
 	const own = current !== null && current > 0 && !isKp(current, previousDefault);
 	return own ? current : defaultKp(shape);
+}
+
+/** The workbook sheet each workbook kind's factors come from, as the dialog names it. */
+export const FACTOR_SHEET: Record<Exclude<SourceKind, 'library'>, string> = { b023: 'Crop demand', node: 'Crop_Factors' };
+
+/**
+ * A b023 import's crop-table warnings (issue #289: a row copied from another
+ * crop, a suspect month), as plain text for the dialog: the import report's
+ * `crop-factors-*` notes without their "WARNING: " prefix. The rest of the
+ * report is about the project the dialog doesn't import.
+ */
+export function b023CropWarnings(notes: readonly { code: string; message: string }[]): string[] {
+	return notes.filter((n) => n.code === 'crop-factors-copied' || n.code === 'crop-factors-suspect').map((n) => n.message.replace(/^WARNING: /, ''));
+}
+
+/** A node-based reader warning as plain text, with its cell when it names one ("… read as 0. ([Crop_Factors] C9)"). */
+export function nodeWarningText(w: { message: string; sheet?: string; cell?: string }): string {
+	return w.cell ? `${w.message} (${w.sheet ? `[${w.sheet}] ` : ''}${w.cell})` : w.message;
 }
 
 /** Source factors × the pan coefficient Kp, to 4 decimals (no float dust in the table). */

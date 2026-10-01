@@ -1615,6 +1615,12 @@
 //             issue on verify, the pack page and the applicant view
 //             (errataFoundSinceNote)). Measured 1338 locally, 1341 on CI;
 //             headroom ~3 KB.
+// 2026-09-30  total 1344 → 1349 KB (issue #289, #293 with #291, #292 and
+//             #294 in it: the node-based workbook's crop reader in the import
+//             worker, the b023 crop-table warnings, and Load crop factors'
+//             third source, its Kp default by crop-set shape with the why
+//             line, and the workbook warnings list). Measured 1345 locally;
+//             CI has run ~3 KB above local, so headroom ~1 KB on CI.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1625,7 +1631,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1344,
+	totalCodeKb: 1349,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

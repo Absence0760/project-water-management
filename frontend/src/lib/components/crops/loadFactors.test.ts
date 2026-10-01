@@ -1,7 +1,7 @@
 import type { CropDef, NetworkNode, ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { CROP_LIBRARY } from './library';
-import { applyChanges, cropChanges, defaultKp, demandDifference, isKp, kpForShape, matchByName, nameTokens, pctChange, shapeOf, SOURCE_KINDS, withKp } from './loadFactors';
+import { applyChanges, b023CropWarnings, cropChanges, defaultKp, demandDifference, isKp, kpForShape, matchByName, nameTokens, nodeWarningText, pctChange, shapeOf, SOURCE_KINDS, withKp } from './loadFactors';
 
 describe('matchByName', () => {
 	const lib = CROP_LIBRARY.map((c) => ({ id: c.id, name: c.name }));
@@ -45,9 +45,11 @@ describe('the pan coefficient default by source shape', () => {
 		expect(k).toBeLessThanOrEqual(0.85);
 	});
 
-	it('gives the library and a b023 workbook, both A-pan tables, the A-pan shape; every kind has one', () => {
+	it('gives the library and a b023 workbook, both A-pan tables, the A-pan shape, and the node-based set FAO-56 Kc; every kind has one', () => {
 		expect(shapeOf('library')).toBe('a-pan');
 		expect(shapeOf('b023')).toBe('a-pan');
+		expect(shapeOf('node')).toBe('fao-et0');
+		expect(defaultKp(shapeOf('node'))).toBe(0.75);
 		expect(new Set(SOURCE_KINDS.map((k) => k.id)).size).toBe(SOURCE_KINDS.length);
 		for (const k of SOURCE_KINDS) expect(['a-pan', 'fao-et0']).toContain(k.shape);
 	});
@@ -76,6 +78,27 @@ describe('the pan coefficient default by source shape', () => {
 		expect(kpForShape(null, 1, 'fao-et0')).toBe(0.75);
 		expect(kpForShape(0, 1, 'fao-et0')).toBe(0.75);
 		expect(kpForShape(-1, 0.75, 'a-pan')).toBe(1);
+	});
+});
+
+describe('the workbook warnings the dialog lists', () => {
+	it("keeps a b023 import's crop-table notes only, without the WARNING: prefix", () => {
+		const notes = [
+			{ code: 'crop-factors-copied', message: "WARNING: [Crop demand] crop Pasture F: its 12 factors are the same as Pasture C's" },
+			{ code: 'non-numeric-value', message: 'WARNING: [Dams] something else' },
+			{ code: 'crop-factors-suspect', message: 'WARNING: [Crop demand] crop Fodder E: Dec factor is 0' },
+			{ code: 'missing-crop', message: '[Farm demand] crop Hops X is not in [Crop demand]; ignored' }
+		];
+		expect(b023CropWarnings(notes)).toEqual(["[Crop demand] crop Pasture F: its 12 factors are the same as Pasture C's", '[Crop demand] crop Fodder E: Dec factor is 0']);
+		expect(b023CropWarnings([])).toEqual([]);
+	});
+
+	it('adds the cell to a node-based warning that names one', () => {
+		expect(nodeWarningText({ message: 'Olives Nov factor is not a number (n/a); read as 0.', sheet: 'Crop_Factors', cell: 'C9' })).toBe(
+			'Olives Nov factor is not a number (n/a); read as 0. ([Crop_Factors] C9)'
+		);
+		expect(nodeWarningText({ message: 'The workbook has no [Crop_Areas] sheet.', sheet: 'Crop_Areas' })).toBe('The workbook has no [Crop_Areas] sheet.');
+		expect(nodeWarningText({ message: 'x', cell: 'B2' })).toBe('x (B2)');
 	});
 });
 
