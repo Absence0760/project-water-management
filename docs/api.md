@@ -2230,12 +2230,15 @@ They read no pack row, so the routes above answer them `403`.
   `{ own: { name, kind, onlyIn: 'application' | null, suppliedA, suppliedB,
   timeReliabilityA, timeReliabilityB, annualReliabilityA,
   annualReliabilityB, change: { run, band, worse } | null }[], others: {
-  kind: 'farm' | 'user', n, changePts }[] }`, or `null` when the report
-  changed a baseline assumption. `own`: the application's owned nodes its
-  owner still links and the nodes it adds; `others`: every other unit in
-  both runs as its kind and a number (per kind, ranked by a hash of its id;
-  a rank within the pack, which can shift between versions), `changePts` its change in share of demand
-  supplied in whole percentage points. Never another unit's name or id.
+  kind: 'farm' | 'user', name, changePts }[] | null }`, or `null` when the
+  report changed a baseline assumption. `own`: the application's owned
+  nodes its owner still links and the nodes it adds; `others`: the other
+  farms and water users downstream of those in the application run, as the
+  results view lists them (`GET …/results` `downstream`), under the same
+  anonymous `name` ("Farm 3", as on `…/base`), in its order, with
+  `changePts` their change in share of demand supplied in whole percentage
+  points; `null` when the run's base is no longer a published run, so those
+  names can't be given. Never another unit's real name or id.
 - No PDF, manifest or bundle: each carries the whole report.
 
 - A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they

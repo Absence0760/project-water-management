@@ -3,13 +3,25 @@
 // again field by field, so a key the database starts returning never leaves by
 // default. The database side is applicant-packs.db.test.ts.
 import { describe, expect, it } from 'vitest';
-import { toApplicantPack, toApplicantPackMeta, type ApplicantPackRow } from './applicantPacks.js';
+import { nameOthers, toApplicantPack, toApplicantPackMeta, type ApplicantPackRow, type OthersNaming } from './applicantPacks.js';
 
 const PACK = '11111111-1111-4111-8111-111111111111';
 const SCENARIO = '22222222-2222-4222-8222-222222222222';
 const OTHER_NODE = '33333333-3333-4333-8333-333333333333';
+const DOWN_USER = '44444444-4444-4444-8444-444444444444';
+const UPSTREAM = '55555555-5555-4555-8555-555555555555';
+const RUN = '66666666-6666-4666-8666-666666666666';
 const HASH = 'ab'.repeat(32);
-const LEAKS = ['Neighbour Farm', 'holder@example.com', 'Jane Holder', OTHER_NODE, 'manifest-secret'];
+const LEAKS = ['Neighbour Farm', 'holder@example.com', 'Jane Holder', OTHER_NODE, DOWN_USER, UPSTREAM, RUN, 'manifest-secret'];
+/** The results view's naming: the base projection's anonymous names (in its order) and what lies downstream of the application. */
+const naming: OthersNaming = {
+	names: new Map([
+		[UPSTREAM, 'Farm 1'],
+		[OTHER_NODE, 'Farm 2'],
+		[DOWN_USER, 'Water user 1']
+	]),
+	downstream: new Set([OTHER_NODE, DOWN_USER])
+};
 
 const row = (over: Partial<ApplicantPackRow> = {}): ApplicantPackRow => ({
 	pack: {
@@ -50,18 +62,22 @@ const row = (over: Partial<ApplicantPackRow> = {}): ApplicantPackRow => ({
 	units: {
 		own: [{ name: 'My farm', kind: 'farm', onlyIn: null, suppliedA: 0.8, suppliedB: 0.9, change: { run: 10, band: { n: 3, p5: 1, p50: 2, p95: 3, min: 0 }, worse: null, bandNote: 'Jane Holder' }, nodeId: OTHER_NODE }],
 		others: [
-			{ kind: 'farm', n: 1, changePts: -4.4, name: 'Neighbour Farm', nodeId: OTHER_NODE },
-			{ kind: 'user', n: 1, changePts: -0.2 },
-			{ kind: 'farm', n: 'x', changePts: 1 }
+			{ kind: 'farm', changePts: -4.4, name: 'Neighbour Farm', nodeId: OTHER_NODE },
+			{ kind: 'user', changePts: -0.2, nodeId: DOWN_USER },
+			// Upstream of the application: never shown.
+			{ kind: 'farm', changePts: 1, nodeId: UPSTREAM },
+			// No id: dropped.
+			{ kind: 'farm', changePts: 1 }
 		],
 		holders: ['Jane Holder']
 	},
+	application_run_id: RUN,
 	...over
 });
 
 describe('toApplicantPack', () => {
 	it('keeps only the allowlisted fields, whatever the row carries', () => {
-		const v = toApplicantPack(row());
+		const v = toApplicantPack(row(), naming);
 		expect(v.pack).toEqual({
 			id: PACK,
 			scenarioId: SCENARIO,
@@ -94,12 +110,12 @@ describe('toApplicantPack', () => {
 				change: { run: 10, band: { n: 3, p5: 1, p50: 2, p95: 3 }, worse: null }
 			}
 		]);
-		// Whole points (never −0), and a row without a number dropped.
+		// Only those downstream, under the results view's names in its order; whole points (never −0); a row without an id dropped.
 		expect(v.units?.others).toEqual([
-			{ kind: 'farm', n: 1, changePts: -4 },
-			{ kind: 'user', n: 1, changePts: 0 }
+			{ kind: 'farm', name: 'Farm 2', changePts: -4 },
+			{ kind: 'user', name: 'Water user 1', changePts: 0 }
 		]);
-		expect(Object.is(v.units?.others[1]?.changePts, -0)).toBe(false);
+		expect(Object.is(v.units?.others?.[1]?.changePts, -0)).toBe(false);
 		const text = JSON.stringify(v);
 		for (const leak of LEAKS) expect(text, leak).not.toContain(leak);
 	});
@@ -112,14 +128,20 @@ describe('toApplicantPack', () => {
 
 	it('answers verify’s errata found since issue from the runs’ engines (132), never the runs themselves', () => {
 		const r = row();
-		const v = toApplicantPack({ ...r, verify: { ...r.verify, runs: [{ engineVersion: '1.50.0', fitEngineVersion: '9.9.9-secret' }] } });
+		const v = toApplicantPack({ ...r, verify: { ...r.verify, runs: [{ engineVersion: '1.50.0', fitEngineVersion: '9.9.9-secret' }] } }, naming);
 		expect(Array.isArray(v.verify.errataFoundSince)).toBe(true);
 		expect(v.verify).not.toHaveProperty('runs');
 		expect(JSON.stringify(v)).not.toContain('9.9.9-secret');
 	});
 
 	it('passes a withheld units block through as null', () => {
-		expect(toApplicantPack(row({ units: null })).units).toBeNull();
-		expect(toApplicantPack(row({ figures: null })).figures).toBeNull();
+		expect(toApplicantPack(row({ units: null }), naming).units).toBeNull();
+		expect(toApplicantPack(row({ figures: null }), naming).figures).toBeNull();
+	});
+
+	it('shows no other unit without the results view’s naming (the base no longer published), and never one outside it', () => {
+		expect(toApplicantPack(row(), null).units?.others).toBeNull();
+		expect(nameOthers([{ nodeId: UPSTREAM, kind: 'farm', changePts: 3 }], naming)).toEqual([]);
+		expect(nameOthers([{ nodeId: 'not-in-the-base', kind: 'farm', changePts: 3 }], { names: new Map(), downstream: new Set(['not-in-the-base']) })).toEqual([]);
 	});
 });

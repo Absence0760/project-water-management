@@ -1472,8 +1472,14 @@ export interface ApplicantPack {
 	verify: PackVerification;
 	/** What a pack link shows of the frozen report, for every standing. */
 	figures: NonNullable<SharePack['figures']> | null;
-	/** Their own units by name; every other only as "Farm n" with its change in whole points. null when a baseline assumption changed. */
-	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; n: number; changePts: number }[] } | null;
+	/**
+	 * Their own units by name; every other farm or water user downstream of the
+	 * application under the anonymous name /base and the results view give it
+	 * ("Farm 3"), with its change in whole points. null when a baseline
+	 * assumption changed; `others` null when the run's base is no longer a
+	 * published run, so those names can't be given.
+	 */
+	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; name: string; changePts: number }[] | null } | null;
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
