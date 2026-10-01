@@ -41,6 +41,52 @@ export function matchByName(crops: readonly { id: string; name: string }[], sour
 	return out;
 }
 
+const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+
+/**
+ * What a source's factors multiply. 'a-pan': Class A pan factors (the
+ * reference library's ARC/SABI tables, a b023 workbook's [Crop demand]),
+ * what the engine's crop demand (A-pan × factor) expects, so Kp 1.
+ * 'fao-et0': FAO-56 Kc values, set against reference ET₀ (a node-based
+ * workbook's set), which on A-pan need the pan coefficient Kp (ET₀ ÷ pan).
+ */
+export type FactorShape = 'a-pan' | 'fao-et0';
+
+/** FAO-56 ch. 3, Table 5: Class A pan Kp by humidity, wind and fetch, 0.35–0.85. */
+export const FAO56_TABLE5_URL = 'https://www.fao.org/4/x0490e/x0490e08.htm';
+
+/** The dialog's source kinds, in radio order, each with the shape of its factors. A new kind is a row here. */
+export const SOURCE_KINDS = [
+	{ id: 'library', label: 'Reference library (ARC/SABI A-pan, winter rainfall)', shape: 'a-pan' },
+	{ id: 'b023', label: 'A b023 workbook', shape: 'a-pan' }
+] as const satisfies readonly { id: string; label: string; shape: FactorShape }[];
+export type SourceKind = (typeof SOURCE_KINDS)[number]['id'];
+
+export const shapeOf = (kind: SourceKind): FactorShape => SOURCE_KINDS.find((k) => k.id === kind)!.shape;
+
+/**
+ * The default Kp for a shape: 1 for A-pan factors; 0.75 for FAO-56 Kc, a
+ * mid value of FAO-56 Table 5's 0.35–0.85 for a Class A pan (the site's
+ * humidity, wind and fetch set the real one).
+ */
+export function defaultKp(shape: FactorShape): number {
+	return shape === 'fao-et0' ? 0.75 : 1;
+}
+
+/** Kp is this value (within float dust); a blank Kp is no value. */
+export const isKp = (kp: number | null, value: number): boolean => kp !== null && same(kp, value);
+
+/**
+ * The Kp after the source's shape changes from one whose default was
+ * `previousDefault`: the new shape's default, unless the modeller set their
+ * own, a value above 0 other than that previous default, which is kept.
+ * A blank or invalid Kp is not their own: it takes the default.
+ */
+export function kpForShape(current: number | null, previousDefault: number, shape: FactorShape): number {
+	const own = current !== null && current > 0 && !isKp(current, previousDefault);
+	return own ? current : defaultKp(shape);
+}
+
 /** Source factors × the pan coefficient Kp, to 4 decimals (no float dust in the table). */
 export function withKp(factors: readonly number[], kp: number): number[] {
 	return factors.map((f) => Math.round(f * kp * 10_000) / 10_000);
@@ -64,8 +110,6 @@ export interface CropChange {
 	/** Anything differs: a factor or the efficiency. */
 	differs: boolean;
 }
-
-const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
 /** The diff for each crop that has a choice, in the crop table's order. */
 export function cropChanges(crops: readonly CropDef[], choices: ReadonlyMap<string, CropChoice>): CropChange[] {

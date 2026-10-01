@@ -333,9 +333,11 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
-     optional Kp (default 1). A-pan tables and b023 factors already multiply
-     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀) needs
-     about 0.75 (issue #54).
+     optional Kp, defaulted by the source's shape (issue #289). A-pan tables
+     and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
+     an FAO-56 Kc set (against ET₀) defaults to 0.75, a mid value of FAO-56
+     Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
+     and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values
      from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
      WRC orchard studies should be checked. The engine's maths is unchanged

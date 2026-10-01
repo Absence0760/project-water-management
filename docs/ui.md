@@ -2366,8 +2366,20 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   so a large one takes a few seconds). Workbooks never leave the
   browser. A node-based workbook (no b023 named ranges) can't be
   read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
-- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
-  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+- **Pan coefficient Kp** multiplies the source factors. It starts at the
+  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
+  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
+  b023), **0.75** for an FAO-56 Kc set, which is set against reference ET₀
+  while the engine multiplies crop factors by A-pan (FAO-56 Table 5 gives a
+  Class A pan's Kp as 0.35–0.85; 0.75 is a mid value). A line under the
+  input says which and why, linking [FAO-56 Table
+  5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
+  re-applies the new source's default only while Kp is still the previous
+  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
+  **Use the default, N** puts the default back. Both current sources are
+  A-pan, so the 0.75 default and its line arrive with the node-based
+  workbook source (issue #289, [followups.md § Crop
+  factors](./followups.md#crop-factors-issue-54-item-1)).
 - **Match crops:** a row per project crop with a **Load factors from**
   select, preset by name (`matchByName`: the same name ignoring case,
   accents, punctuation and a plural s, or the one source whose words hold the

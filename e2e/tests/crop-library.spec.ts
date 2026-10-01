@@ -125,6 +125,33 @@ test('from a b023 workbook: matched by name, times a pan coefficient', async ({ 
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeVisible();
 });
 
+test('the pan coefficient starts at the source’s default, says why, and a typed Kp survives a change of source', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Crop library Kp');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await openLoad(page);
+	const d = dialog(page);
+	const kp = d.getByLabel('Pan coefficient Kp');
+	// The library is A-pan factors: Kp 1, and the line under it says why, citing FAO-56 Table 5 for a Kc set.
+	await expect(kp).toHaveValue('1');
+	const why = d.getByTestId('kp-why');
+	await expect(why).toContainText('Default 1: these factors already multiply A-pan');
+	await expect(why.getByRole('link', { name: 'FAO-56 Table 5' })).toHaveAttribute('href', 'https://www.fao.org/4/x0490e/x0490e08.htm');
+	await expect(d.getByRole('button', { name: /^Use the default/ })).toHaveCount(0);
+
+	// The modeller's own Kp is kept when the source changes; one click puts the default back.
+	await kp.fill('0.8');
+	await kp.press('Tab');
+	await d.getByRole('radio', { name: 'A b023 workbook' }).check();
+	await expect(kp).toHaveValue('0.8');
+	await d.getByRole('button', { name: 'Use the default, 1' }).click();
+	await expect(kp).toHaveValue('1');
+	// The button goes, so focus returns to the input; the why line describes it.
+	await expect(kp).toBeFocused();
+	await expect(kp).toHaveAccessibleDescription(/^Default 1: these factors already multiply A-pan/);
+	await expect(d.getByRole('button', { name: /^Use the default/ })).toHaveCount(0);
+});
+
 test('rejecting the change, or cancelling, leaves the factors as they were', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Crop library reject');

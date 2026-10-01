@@ -3296,7 +3296,10 @@ from the WP:
       `Crop_Areas` sheets have none. Durable fix: a small
       reader for those two sheets beside `spreadsheet/import/crops.ts`
       (sheet by name, the month header row), as a third source in the
-      dialog, where Kp (default 0.75 for it) already applies. Until then a
+      dialog, added to `SOURCE_KINDS` (`loadFactors.ts`) with shape
+      `fao-et0`, so Kp will default to 0.75 for it (issue #289: the
+      default-by-shape rule is in; the reader, its source row and an e2e
+      case for the 0.75 default are in progress). Until then a
       modeller enters its values by hand. Trigger: the hydrologist wants
       such a set compared (Q9), with a synthetic fixture of that shape for the
       test (never a client file).

@@ -1,7 +1,7 @@
 import type { CropDef, NetworkNode, ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { CROP_LIBRARY } from './library';
-import { applyChanges, cropChanges, demandDifference, matchByName, nameTokens, pctChange, withKp } from './loadFactors';
+import { applyChanges, cropChanges, defaultKp, demandDifference, isKp, kpForShape, matchByName, nameTokens, pctChange, shapeOf, SOURCE_KINDS, withKp } from './loadFactors';
 
 describe('matchByName', () => {
 	const lib = CROP_LIBRARY.map((c) => ({ id: c.id, name: c.name }));
@@ -33,6 +33,49 @@ describe('withKp', () => {
 		expect(withKp([1.1, 0.4, 0], 0.75)).toEqual([0.825, 0.3, 0]);
 		expect(withKp([0.1, 0.2], 3)).toEqual([0.3, 0.6]);
 		expect(withKp([0.55], 1)).toEqual([0.55]);
+	});
+});
+
+describe('the pan coefficient default by source shape', () => {
+	it('is 1 for A-pan factors and 0.75 (mid FAO-56 Table 5, 0.35–0.85) for FAO-56 Kc against ET₀', () => {
+		expect(defaultKp('a-pan')).toBe(1);
+		expect(defaultKp('fao-et0')).toBe(0.75);
+		const k = defaultKp('fao-et0');
+		expect(k).toBeGreaterThanOrEqual(0.35);
+		expect(k).toBeLessThanOrEqual(0.85);
+	});
+
+	it('gives the library and a b023 workbook, both A-pan tables, the A-pan shape; every kind has one', () => {
+		expect(shapeOf('library')).toBe('a-pan');
+		expect(shapeOf('b023')).toBe('a-pan');
+		expect(new Set(SOURCE_KINDS.map((k) => k.id)).size).toBe(SOURCE_KINDS.length);
+		for (const k of SOURCE_KINDS) expect(['a-pan', 'fao-et0']).toContain(k.shape);
+	});
+
+	it("re-applies the new shape's default while Kp is still the previous default", () => {
+		expect(kpForShape(1, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(0.75, 0.75, 'a-pan')).toBe(1);
+		expect(kpForShape(1, 1, 'a-pan')).toBe(1);
+	});
+
+	it('keeps a Kp the modeller typed, and never clobbers it on a change of source', () => {
+		expect(kpForShape(0.6, 1, 'fao-et0')).toBe(0.6);
+		expect(kpForShape(0.6, 0.75, 'a-pan')).toBe(0.6);
+		// Their own value that happens to be the new default stays too.
+		expect(kpForShape(0.75, 1, 'fao-et0')).toBe(0.75);
+	});
+
+	it('isKp compares within float dust; a blank Kp is no value', () => {
+		expect(isKp(0.75, 0.75)).toBe(true);
+		expect(isKp(0.1 + 0.2, 0.3)).toBe(true);
+		expect(isKp(0.8, 0.75)).toBe(false);
+		expect(isKp(null, 1)).toBe(false);
+	});
+
+	it('treats a blank or invalid Kp as unset: it takes the default', () => {
+		expect(kpForShape(null, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(0, 1, 'fao-et0')).toBe(0.75);
+		expect(kpForShape(-1, 0.75, 'a-pan')).toBe(1);
 	});
 });
 
