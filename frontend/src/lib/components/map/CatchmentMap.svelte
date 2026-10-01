@@ -9,14 +9,40 @@
 	basemap tiles can't be read, the features stay drawn on a plain background.
 	It follows the app's theme (appTheme.ts: data-theme, else the OS), redrawing
 	basemap and overlay with setStyle; the picked feature's name shows over the
-	map's top-left corner until the basemap has labels (#326 E9).
+	map's top-left corner until the basemap has labels (#326 E9). The farm
+	view's map (#326 A3) passes `words` in the reader's language: this file
+	imports no catalogue (i18n/boundary.test.ts), so its own words are English.
 -->
+<script module lang="ts">
+	import type { MapFeatureKind } from '$lib/api/types';
+
+	/** Everything the map says in words (the farm view passes its own, translated). */
+	export interface MapWords {
+		loading: string;
+		unavailable: string;
+		tilesNote: string;
+		/** After the map's name on the canvas, for the keyboard. */
+		keys: string;
+		kind: (k: MapFeatureKind) => string;
+		/** The zoom buttons' names (MapLibre's own English when absent). */
+		zoomIn?: string;
+		zoomOut?: string;
+	}
+</script>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import { basemapLayerIds, mapStyle, overlayColours, overlayData } from './mapStyle';
+	const ENGLISH: MapWords = {
+		loading: 'Drawing the map…',
+		unavailable: 'The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.',
+		tilesNote: 'The basemap couldn’t be loaded, so the features are drawn on a plain background.',
+		keys: 'use the arrow keys to pan, + and − to zoom',
+		kind: (k) => KIND_LABEL[k]
+	};
 
 	let {
 		features,
@@ -25,7 +51,8 @@
 		tilesUrl,
 		label,
 		fills,
-		fill = false
+		fill = false,
+		words = ENGLISH
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -38,6 +65,8 @@
 		fill?: boolean;
 		/** Results colours by feature id (A1): a polygon listed here is filled with its colour instead of its kind's. */
 		fills?: Readonly<Record<string, string>>;
+		/** What the map says, for a translated page (the farm view); English by default. */
+		words?: MapWords;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -94,7 +123,7 @@
 		}
 		for (const f of points) {
 			const at = f.geometry.coordinates as [number, number];
-			const name = f.name || KIND_LABEL[f.kind];
+			const name = f.name || words.kind(f.kind);
 			const key = `${f.kind}|${name}|${at.join(',')}`;
 			const had = markers.get(f.id);
 			if (had && had.key === key) {
@@ -105,9 +134,9 @@
 			const button = document.createElement('button');
 			button.type = 'button';
 			button.className = `map-marker mk-${f.kind}`;
-			button.setAttribute('aria-label', `${KIND_LABEL[f.kind]}: ${name}`);
+			button.setAttribute('aria-label', `${words.kind(f.kind)}: ${name}`);
 			button.setAttribute('aria-pressed', String(f.id === selectedId));
-			button.title = `${KIND_LABEL[f.kind]}: ${name}`;
+			button.title = `${words.kind(f.kind)}: ${name}`;
 			button.append(markerShape(f.kind));
 			button.addEventListener('click', (e) => {
 				e.stopPropagation();
@@ -143,6 +172,7 @@
 					bounds: boundsOfAll(features) ?? SA,
 					fitBoundsOptions: { padding: 48, maxZoom: 13 },
 					keyboard: true,
+					...(words.zoomIn && words.zoomOut ? { locale: { 'NavigationControl.ZoomIn': words.zoomIn, 'NavigationControl.ZoomOut': words.zoomOut } } : {}),
 					dragRotate: false,
 					pitchWithRotate: false,
 					touchPitch: false
@@ -151,7 +181,7 @@
 				m.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
 				// Always expanded: the basemap's licence must stay visible.
 				m.addControl(new lib.AttributionControl({ compact: false }), 'bottom-right');
-				m.getCanvas().setAttribute('aria-label', `${label}: use the arrow keys to pan, + and − to zoom`);
+				m.getCanvas().setAttribute('aria-label', `${label}: ${words.keys}`);
 				m.on('error', (ev) => {
 					const e = ev as unknown as { sourceId?: string; error?: { message?: string } };
 					if (e.sourceId === 'basemap' && !tilesNote) {
@@ -237,19 +267,19 @@
 	{#if status === 'ready' && picked}
 		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
 		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
-			<span class="picked-kind">{KIND_LABEL[picked.kind]}</span>
-			<span class="picked-label">{picked.name || KIND_LABEL[picked.kind]}</span>
+			<span class="picked-kind">{words.kind(picked.kind)}</span>
+			<span class="picked-label">{picked.name || words.kind(picked.kind)}</span>
 		</p>
 	{/if}
 	{#if status === 'loading'}
-		<p class="map-state muted" role="status">Drawing the map…</p>
+		<p class="map-state muted" role="status">{words.loading}</p>
 	{:else if status === 'failed'}
 		<p class="map-state alert alert-info slim" role="status" data-testid="map-unavailable">
-			The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.
+			{words.unavailable}
 		</p>
 	{/if}
 	{#if tilesNote}
-		<p class="tiles-note small muted" role="status" data-testid="map-tiles-note">The basemap couldn’t be loaded, so the features are drawn on a plain background.</p>
+		<p class="tiles-note small muted" role="status" data-testid="map-tiles-note">{words.tilesNote}</p>
 	{/if}
 </div>
 

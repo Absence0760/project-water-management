@@ -2221,6 +2221,21 @@ export interface MapFeature {
 	updatedAt: string;
 }
 
+/** One feature on a farm's map (GET /projects/:id/farm/:nodeId/map, issue #326 A3): the farm's own parcels and dams, the boundary, rivers and gauges. No node, no properties, no author. */
+export interface FarmMapFeature {
+	id: string;
+	kind: Exclude<MapFeatureKind, 'other'>;
+	name: string;
+	geometry: MapGeometry;
+	areaM2: number | null;
+	center: MapPosition;
+}
+
+/** GET /projects/:id/farm/:nodeId/map: empty when the farm has no parcel or dam of its own on the map. */
+export interface FarmMap {
+	features: FarmMapFeature[];
+}
+
 export interface MapSource {
 	id: string;
 	fileName: string;

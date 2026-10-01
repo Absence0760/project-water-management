@@ -47,6 +47,7 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	FarmMap,
 	AddFarmerResult,
 	FarmRole,
 	BulkFarmerResult,
@@ -438,6 +439,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
 			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
+			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
+			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)

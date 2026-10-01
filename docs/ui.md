@@ -7190,7 +7190,22 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
+  alone if that fails); **Your hydrological unit on the map** (issue #326
+  A3, `farm/FarmMapCard.svelte`, wording in `farm/farmMap.ts`, section
+  `farm.map`), only when the farm has a parcel or dam of its own on the map
+  (`GET …/map`, [maps.md § The farmer's map](./maps.md#the-farmers-map)):
+  what the map shows and that it shows no other hydrological unit, "Your land
+  is coloured by the model’s look back: **Model: watch**" (no line without a
+  band), each feature in words ("Your land: Vaalbank (3 000 ha)", "Your dam:
+  …", "Rivers: …", "Gauges: …", "The catchment boundary"), "Where: about
+  33.684° S, 21.320° E.", and "There is no background map here, so only these
+  are drawn." when the build has no basemap tiles; then the map itself, a
+  280 px `CatchmentMap` loaded as its own chunk (`farm/FarmMapCanvas.svelte`,
+  MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
+  the reader's language, and a one-line key (the land in its band's colour,
+  "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
+  map draws them). A failed request says so in one line; the offline view
+  leaves it out; "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file (the farm's last 365
   days to `dataUntil`, in whole m³, headed by the series keys; api.md
   § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the
