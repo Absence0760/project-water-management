@@ -391,6 +391,24 @@ pack drafted before `evidence-9` has no `demandObjects`, and its report has
 no § 6 at all, rather than a § 6 saying it wasn't part of the pack: the
 section is new, not a changed one, so the old pack prints as it did.
 
+**Report version `evidence-10`** (issue #54, #90 Q15 and Q16): two checks
+that stop issue on the river abstraction a pack rests on. `pumpCapacity`:
+every river pump, other water user and off-take in either run has a
+capacity (an uncapped pump is limited only by the river's flow, no basis
+for licensing a volume). `protectsEwr`, applications only: the river
+abstraction the application's proposals add or change leaves the EWR, or a
+hands-off flow, in the river in every month it takes, since under the NWA the Reserve comes first and a new
+licence normally carries a hands-off condition. Both read the runs' stored
+models (engine `evidence/riverWorks.ts`). Judgement: issue-blocking, not
+refusing, so the report still previews and says what to fix; the
+baseline's existing users are exempt from the second, because the baseline
+is current use and modelling a protection they may not honour would
+misstate the river the application is measured against; and nothing gates
+a model save or a run, so exploring stays unrestricted. A pack drafted
+before `evidence-10` keeps its frozen checks; issuing it checks the live
+report, which has both ([evidence-pack.md § What stops issue on the
+river](../evidence-pack.md#what-stops-issue-on-the-river)).
+
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
 
@@ -527,7 +545,7 @@ source in [`evidence-report-prototype/evidence-report.html`](./evidence-report-p
 
 | Board / sheet | Shows |
 | --- | --- |
-| Board 1 · In-app preview | The route's bar in evidence mode: title, Download draft PDF, Generate PDF (WP-2.15 Phase B), and **Issue** disabled with the reason; the issue checks (nomination, base run, engine, assumptions, cited ensemble and paired band, coverage warning, sign-off missing); page thumbnails |
+| Board 1 · In-app preview | The route's bar in evidence mode: title, Download draft PDF, Generate PDF (WP-2.15 Phase B), and **Issue** disabled with the reason; the issue checks (nomination, base run, engine, assumptions, river pump capacity and the EWR kept, cited ensemble and paired band, coverage warning, sign-off missing); page thumbnails |
 | Board 2 · Refused | A scenario run based on a replaced baseline that also changes the pan coefficient: the two failed checks, and the ways out |
 | Sheet 1 · Summary | §4.1 in full, with the mock-up's figures |
 | Sheet 2 · The river | Site strip ("Class, REC, EWR % nMAR: not given for this site"), the two heat maps with 3 months lost and 1 gained outlined, the paired by-month plot, the May FDC against the EWR curve, the compliance table, R2 |

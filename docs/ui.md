@@ -1616,6 +1616,15 @@ workbook part is `WorkbookReview.svelte`.
      read) and updates the counts, notes and report in place; a date without
      a factor (or the other way round) or a non-positive factor is flagged
      and blocks Import.
+   - **River pumping units** (only when the importer flags a unit as
+     probable run-of-river; issue #54, 2c/2d): *Import these N as run of
+     river, pumping from the river*, off by default, its hint naming the
+     flagged units. On, it converts them as the Python importer's
+     `--run-of-river` does: the run-of-river supply rule, the dummy dam
+     dropped and the river pump uncapped (`pumpCapacityM3Day` null) until
+     the capacities are entered under Network → Supply, with a warning per
+     unit; a unit an enabled transfer draws on keeps its dam, and says so.
+     Like the gauge option it re-extracts from the workbook the worker holds.
    - **CHIRPS column** (only when the workbook has one; issue #40 part c):
      which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
      b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The
@@ -6497,6 +6506,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
 - **Board 1, the checks** (screen only, open by default): every check the
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Among them (`evidence-10`) *Every river pump has a capacity* and, for an
+  application, *The application's own river abstraction leaves the EWR in
+  the river*, each naming the units it found
+  ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
   Then **Expect questions about:** what an assessor will ask for, with the
   way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).

@@ -76,6 +76,31 @@ export function damCapacityOn(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'd
 }
 
 /**
+ * Whether a farm's dam is there (capacity factor above 0) on every day from
+ * `start` to `end` (epoch days, inclusive), and on any. k falls with sediment
+ * and steps up on the in-service day, so its least is on the first or last
+ * day and, when the dam comes into service inside the span, its most is on
+ * that day: three reads, not one per day. Without a span, the entered
+ * capacity alone decides (there throughout, or never). The run warning about
+ * a dam-less farm (./supply.ts) and the evidence report's river checks
+ * (../evidence/riverWorks.ts) both judge "no dam" by it.
+ */
+export function damPresence(
+	n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>,
+	span?: { start: number; end: number }
+): { always: boolean; ever: boolean } {
+	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return { always: false, ever: false };
+	if (!span) return { always: true, ever: true };
+	const days = [span.start, span.end];
+	if (n.damInServiceFrom && !developmentProblem(n)) {
+		const d = toEpochDay(n.damInServiceFrom);
+		if (d > span.start && d <= span.end) days.push(d);
+	}
+	const k = days.map((d) => damCapacityFactor(n, d));
+	return { always: k[0]! > 0 && k[1]! > 0, ever: k.some((x) => x > 0) };
+}
+
+/**
  * The day-by-day capacity factor k of a farm's dam over the run (`start`,
  * epoch day, for `days` days); undefined when it is 1 throughout (no rate,
  * no in-service date inside or after the run's start), so an unchanged dam

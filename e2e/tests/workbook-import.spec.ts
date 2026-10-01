@@ -4,7 +4,8 @@
 // the importer's notes, the unmapped report with Echo Farm's hand-written
 // InOut formula), imports it with a first run, and the project opens with
 // results, whose Overview keeps the import record (the same notes and
-// unmapped report, 017_project_import). A workbook that isn't b023 names the
+// unmapped report, 017_project_import). The run-of-river option converts the
+// units the importer flags, as the Python importer's --run-of-river does. A workbook that isn't b023 names the
 // ranges it lacks; a farm name that looks like HTML shows as text; and the
 // review and the import record pass axe in both themes and on a phone.
 import { readFileSync } from 'node:fs';
@@ -177,6 +178,47 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	expect(byKind(exported.series)).toEqual(byKind(expected.series));
 });
 
+test('the run-of-river option imports the flagged units as river pumping units, as --run-of-river does', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	const dialog = await openWorkbookImport(page);
+	await review(dialog, synthetic(), 'synthetic_b023');
+	// Off by default; it names the units the importer flags (issue #54, 2c/2d).
+	const option = dialog.getByLabel('Import these 2 as run of river, pumping from the river');
+	await expect(option).not.toBeChecked();
+	await expect(option).toHaveAccessibleDescription(/flags 2 units as probable run-of-river: Delta Farm, India Farm\..*no pump limit until you enter the pump capacities/);
+	const notes = dialog.getByRole('region', { name: 'Importer notes' });
+	const converted = notes.getByRole('listitem').filter({ hasText: 'imported as run of river (--run-of-river)' });
+	await expect(converted).toHaveCount(0);
+
+	// On: the workbook already in the worker is extracted again, with one more warning per unit; off again undoes it.
+	await option.check();
+	await expect(converted).toHaveCount(2);
+	await expect(notes.getByRole('paragraph').first()).toHaveText('21 notes, 10 of them warnings. Read them before relying on a run.');
+	await option.uncheck();
+	await expect(converted).toHaveCount(0);
+	await option.check();
+	await expect(converted).toHaveCount(2);
+
+	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'synthetic_b023' })).toBeVisible();
+
+	// What was stored is the Python importer's --run-of-river project: Delta and India pump from the river, uncapped, with no dam.
+	const id = new URL(page.url()).pathname.split('/').pop()!;
+	type Node = { name: string; supplyRule?: string; pumpCapacityM3Day?: number | null; damCapacityM3: number };
+	const exported = (await (await page.request.get(`${API_URL}/projects/${id}/export.json`)).json()) as { model: { nodes: Node[] } };
+	const expected = JSON.parse(readFileSync(new URL('../../scripts/wbt-import/fixtures/synthetic_b023.run-of-river.project.json', import.meta.url), 'utf8')) as {
+		model: { nodes: Node[] };
+	};
+	const runOfRiver = (nodes: Node[]) => nodes.filter((n) => n.supplyRule === 'runOfRiver').map((n) => [n.name, n.damCapacityM3, n.pumpCapacityM3Day]);
+	expect(runOfRiver(exported.model.nodes)).toEqual([
+		['Delta Farm', 0, null],
+		['India Farm', 0, null]
+	]);
+	expect(runOfRiver(exported.model.nodes)).toEqual(runOfRiver(expected.model.nodes));
+});
+
 test('a workbook that is not b023 names the ranges it lacks, and Cancel leaves nothing behind', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/');
@@ -268,6 +310,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			await review(dialog, synthetic(), 'synthetic_b023');
 			await dialog.getByLabel("It's a gauge on another river: import it as a reference gauge").check();
 			await expect(dialog.getByLabel('Scale factor (optional)')).toBeVisible();
+			await dialog.getByLabel('Import these 2 as run of river, pumping from the river').check();
+			await expect(dialog.getByRole('region', { name: 'Importer notes' }).getByText(/imported as run of river/)).toHaveCount(2);
 			await expectNoViolations(page);
 		});
 

@@ -35,6 +35,9 @@ No env files to write. `backend/.env.development` and
 | --- | --- | --- |
 | `DATABASE_URL` | `postgresql://water_app:water_app@127.0.0.1:5434/water` | The runtime connection, bound by RLS |
 | `MIGRATION_DATABASE_URL` | `postgresql://water:water@127.0.0.1:5434/water` | Schema owner, used for migrations |
+
+In a git worktree both URLs point at that worktree's own dev database,
+`water_w<n>` (see below), not `water`.
 | `AUTH_JWT_SECRET` | a dev-only string (≥ 32 chars) | Signs session cookies. Production uses a real secret. |
 | `ALLOWED_ORIGINS` | `http://localhost:7777` | CORS allow-list (with credentials) |
 | `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; local dev is plain http. Unset (Secure on) when deployed. |
@@ -79,6 +82,20 @@ pnpm dev
   opt-in (`pnpm dev:mail:up`, `pnpm dev:s3:up`). Every checkout, git worktrees
   included, drives the same containers: `docker-compose.yml` fixes the compose
   project name, so `pnpm dev:db:down` in any of them stops the shared database.
+- Each checkout has its **own dev database** in that Postgres: `water` in the
+  main checkout, `water_w<n>` in a git worktree (n from a hash of its path,
+  the same as its `water_test_w<n>`). The backend's dev entry points
+  (`backend/src/config/devEnv.ts`) point `DATABASE_URL` and
+  `MIGRATION_DATABASE_URL` at it, and `pnpm dev` / `pnpm dev:db:migrate`
+  create it on first use. A new worktree's database starts empty: run
+  `pnpm seed:examples` there for the demo catchments. This keeps a branch's
+  unmerged migrations out of the main checkout's database; when one branch
+  migrated `water` and then renumbered that migration before merging, the
+  main checkout's dev server refused to start ("applied but its file is
+  missing"). `DEV_DB_NAME=water` (in the worktree's
+  `backend/.env.development.local`) shares the main checkout's database
+  instead; only a local URL naming `water` is redirected, so a custom
+  `DATABASE_URL` is left alone.
 - The backend applies any pending migrations every time it starts or restarts
   (`backend/scripts/dev-server.ts` under `tsx watch`, which also watches `backend/migrations/`).
   So a database set up before a new migration landed, or a `git pull` that adds one while
@@ -106,7 +123,10 @@ Kareebos (Droëvlei), same password; each reads their farm's published
 figures through `GET /projects/:id/farm/:nodeId` (the farm page is
 WP-2.6's). A demo **applicant** (WP-3.3), `applicant@example.com`, is a
 contributor on Sandspruit, linked to Klipdrift, with one submitted
-application doubling its dam: sign in as them for the Applicant view, or as
+application doubling its dam and keeping the EWR in the river before River
+to dam fills it (the hands-off condition a new licence carries, so its
+evidence report passes the river checks, [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river);
+`backend/scripts/examples/application.ts`): sign in as them for the Applicant view, or as
 analyst@ for Sandspruit's **Applications** tab to decide it. To try a **share link** (WP-2.3 phase 2), sign in as the owner
 (analyst@ for Sandspruit, demo@ for the team's catchments), make one on the
 Overview's Share links panel and open it in a private window; none is seeded,
@@ -357,7 +377,9 @@ WBT_GAUGE_SCALE_FACTOR=F
 
 and, for a workbook with units that pump straight from the river, to
 import the units the importer flags as probable run-of-river with the
-run-of-river supply rule (issue #54, 2c/2d; off unless set):
+run-of-river supply rule (issue #54, 2c/2d; off unless set; the in-app
+**Import b023 workbook** review has the same option as its *River pumping
+units* checkbox, [ui.md](./ui.md#import-a-b023-workbook)):
 
 ```bash
 WBT_RUN_OF_RIVER=1
@@ -470,9 +492,9 @@ pnpm dev:jobs:tick          # one job tick, then exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default), then exit
 pnpm dev:db:status          # is Postgres up?
 pnpm dev:db:logs            # follow Postgres logs
-pnpm dev:db:psql            # psql as the owner role
+pnpm dev:db:psql            # psql as the owner role, on this checkout's dev database
 pnpm dev:db:down            # stop Postgres (data is kept in the docker volume)
-pnpm dev:db:reset           # DELETE all local data, recreate and migrate
+pnpm dev:db:reset           # DELETE all local data (every checkout's databases), recreate and migrate
 ```
 
 ## Checks and tests
