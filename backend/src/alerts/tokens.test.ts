@@ -42,7 +42,7 @@ describe('unsubscribe tokens', () => {
 	});
 });
 
-describe('feedback tokens (147_alert_feedback)', () => {
+describe('feedback tokens (151_alert_feedback)', () => {
 	it('are stable per nonce, in the emailed tokens’ format, and never the unsubscribe token of the same nonce', () => {
 		const nonce = newNonce();
 		const t = feedbackToken(nonce, SECRET);

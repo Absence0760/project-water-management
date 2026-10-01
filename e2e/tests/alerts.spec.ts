@@ -310,7 +310,7 @@ test('an alert email’s unsubscribe link works signed out, asks first, and a de
 	}
 });
 
-// "Was this useful?" (147_alert_feedback, issue #74): the link opens a page
+// "Was this useful?" (151_alert_feedback, issue #74): the link opens a page
 // that asks first, with the link's answer chosen; only Send records it. The
 // editors see the answers counted and the comment, without a name, under the
 // rule editor.

@@ -1,4 +1,4 @@
-// "Was this useful?" on alert emails (147_alert_feedback, issue #74): the
+// "Was this useful?" on alert emails (151_alert_feedback, issue #74): the
 // links the worker puts in each mail, the public answer, the editors'
 // summary, who can read the rows, and retention. Every "cannot" check has a
 // positive control.

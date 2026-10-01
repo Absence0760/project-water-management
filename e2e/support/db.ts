@@ -137,7 +137,7 @@ export async function plantAlertSubscription(email: string, projectId: string, k
 
 /**
  * An alert email's "Was this useful?" row for `email` whose token the test
- * knows (147_alert_feedback). The worker would derive the token as
+ * knows (151_alert_feedback). The worker would derive the token as
  * HMAC(ALERTS_TOKEN_SECRET, "wm-alert-feedback/v1/" + nonce); the API only
  * ever looks it up by its SHA-256, so any planted token behaves the same.
  */

@@ -1189,7 +1189,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   catchment-wide `all`), without signing in; a repeat is harmless. `404`
   for a malformed or tampered token, one a later re-enable replaced, or one
   whose person is no longer a member; `400` without a token.
-- **"Was this useful?"** (issue #74, `147_alert_feedback`). Every alert
+- **"Was this useful?"** (issue #74, `151_alert_feedback`). Every alert
   email and digest asks it, after the button, with two plain links, **Yes**
   and **No**, to the site's `/alerts/feedback#t=<token>&a=yes|no` (token
   and answer in the fragment, so neither reaches a server log). There is no

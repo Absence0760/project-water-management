@@ -44,7 +44,7 @@ const PUBLIC = new Set([
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
 	// route exempt from the CSRF check (app.ts): a mail client form-posts it.
 	'POST /alerts/unsubscribe',
-	// "Was this useful?" on an alert email (147_alert_feedback): the token is
+	// "Was this useful?" on an alert email (151_alert_feedback): the token is
 	// the credential, and it can only answer its own mail, through
 	// app_alert_answer (alerts/feedback.db.test.ts). Same-origin from the
 	// feedback page, so the CSRF check applies.

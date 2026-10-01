@@ -41,7 +41,7 @@ export function newSubscriptionSecret(secret: string = alertsTokenSecret()): { n
 const FEEDBACK_LABEL = 'wm-alert-feedback/v1/';
 
 /**
- * The "Was this useful?" token of a feedback row's nonce (147_alert_feedback):
+ * The "Was this useful?" token of a feedback row's nonce (151_alert_feedback):
  * the unsubscribe token's scheme under its own label, so one can never stand
  * in for the other. Only its SHA-256 is stored; the API looks it up by that.
  */

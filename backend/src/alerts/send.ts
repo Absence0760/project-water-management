@@ -113,7 +113,7 @@ async function subscriptionToken(db: Db, projectId: string, kind: AlertKind | 'a
 }
 
 /**
- * The mail's "Was this useful?" links (147_alert_feedback): the recipient's
+ * The mail's "Was this useful?" links (151_alert_feedback): the recipient's
  * feedback row for this event (a digest: its first line), made now, or the
  * one a failed attempt made, so a retried mail carries the same link. As the
  * recipient, and only for a delivery of theirs being sent

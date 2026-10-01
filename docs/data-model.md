@@ -2945,7 +2945,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     `node_id` must be one of their farms (`app_farm_nodes`).
   - `alert_delivery`: SELECT your own rows. No write policy: every write is a
     `SECURITY DEFINER` function below.
-  - `alert_feedback` (147): SELECT your own rows, and the project's editors
+  - `alert_feedback` (151): SELECT your own rows, and the project's editors
     and owners every row of the project (the route sends them counts and
     comments, never who gave them). `water_app` has SELECT only: the worker
     writes through `app_alert_answer_slot`, the public answer through

@@ -1,4 +1,4 @@
--- 147_alert_feedback — "Was this useful?" on alert emails (issue #74;
+-- 151_alert_feedback — "Was this useful?" on alert emails (issue #74;
 -- docs/data-model.md § Alerts, docs/security.md § Alerts, docs/api.md §
 -- Alerts).
 --
@@ -73,7 +73,7 @@ CREATE INDEX alert_feedback_event_idx ON alert_feedback (event_id);
 CREATE INDEX alert_feedback_sent_idx ON alert_feedback (sent_at) WHERE answered_at IS NULL;
 
 COMMENT ON TABLE alert_feedback IS
-	'"Was this useful?" on an alert email (147_alert_feedback, issue #74): one row per mail, answered or not. Own rows and editors read; written only by the SECURITY DEFINER slot / answer / purge functions. Unanswered: 30 days; answered: 365 days.';
+	'"Was this useful?" on an alert email (151_alert_feedback, issue #74): one row per mail, answered or not. Own rows and editors read; written only by the SECURITY DEFINER slot / answer / purge functions. Unanswered: 30 days; answered: 365 days.';
 COMMENT ON COLUMN alert_feedback.token_hash IS
 	'SHA-256 of the feedback token HMAC(ALERTS_TOKEN_SECRET, "wm-alert-feedback/v1/" + nonce). Looked up by POST /alerts/feedback through app_alert_answer.';
 

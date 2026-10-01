@@ -36,7 +36,7 @@ describe('fragmentToken', () => {
 	});
 });
 
-describe('the feedback page (147_alert_feedback)', () => {
+describe('the feedback page (151_alert_feedback)', () => {
 	it('reads the chosen answer from #t=…&a=yes|no, and nothing else', () => {
 		expect(fragmentAnswer(`#t=${TOKEN}&a=yes`)).toBe(true);
 		expect(fragmentAnswer(`#t=${TOKEN}&a=no`)).toBe(false);

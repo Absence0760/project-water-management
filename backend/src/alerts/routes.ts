@@ -374,7 +374,7 @@ export interface AlertEventView {
 
 const EventsQuery = z.object({ state: z.enum(['firing', 'all']).default('firing') });
 
-/** How far back the feedback summary reaches: as long as an answer is kept (147_alert_feedback). */
+/** How far back the feedback summary reaches: as long as an answer is kept (151_alert_feedback). */
 export const FEEDBACK_KEEP_DAYS = 365;
 /** The newest comments the summary lists. */
 export const FEEDBACK_COMMENTS = 50;

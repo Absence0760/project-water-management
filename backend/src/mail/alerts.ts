@@ -8,7 +8,7 @@
 //   - a one-click unsubscribe: a link to the landing page (token in the
 //     fragment) and the RFC 8058 headers pointing at POST /alerts/unsubscribe;
 //   - "why you got this" and a link to manage alerts;
-//   - "Was this useful? Yes · No" (147_alert_feedback): two plain links to a
+//   - "Was this useful? Yes · No" (151_alert_feedback): two plain links to a
 //     page that asks before it records anything, never an image or a pixel;
 //     opening the mail or a link records nothing (Privacy §3);
 //   - the liability line for its kind and reader (liabilityKey): a dam alert

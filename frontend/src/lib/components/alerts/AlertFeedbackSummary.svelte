@@ -1,6 +1,6 @@
 <script lang="ts">
 	// "Was this useful?" answers on the catchment's alert emails
-	// (147_alert_feedback; editors, inside the rule editor): yes and no
+	// (151_alert_feedback; editors, inside the rule editor): yes and no
 	// counted per kind over the last year, and the newest comments, never who
 	// gave them. Answers come only from people who chose to answer: there is
 	// no open or click tracking, so this says nothing about who read a mail.

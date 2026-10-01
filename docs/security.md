@@ -1125,7 +1125,7 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     narrow (the same form post to any other route is refused).
   - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
     can't be guessed.
-- **"Was this useful?" (issue #74, `147_alert_feedback`).**
+- **"Was this useful?" (issue #74, `151_alert_feedback`).**
   - *No tracking.* Every alert email and digest carries two plain links,
     Yes and No, to `/alerts/feedback#t=<token>&a=yes|no`. No email carries
     an image, a pixel or a tracked link, SES open and click tracking is not

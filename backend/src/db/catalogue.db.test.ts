@@ -147,7 +147,7 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
  * no caller can choose a recipient; and alert feedback, written only by
- * 147_alert_feedback's, so no caller answers for someone else.
+ * 151_alert_feedback's, so no caller answers for someone else.
  */
 const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback']);
 /**

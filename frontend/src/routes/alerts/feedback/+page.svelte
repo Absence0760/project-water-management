@@ -1,7 +1,7 @@
 <!-- i18n-section: feedback -->
 <script lang="ts">
 	// The page an alert email's "Was this useful? Yes · No" links open
-	// (147_alert_feedback, docs/ui.md § Alerts). Works signed in or out: the
+	// (151_alert_feedback, docs/ui.md § Alerts). Works signed in or out: the
 	// token in the URL's fragment (never sent to a server log) is the
 	// credential, and it only ever answers its own email. Opening the link
 	// records nothing: the answer the link chose is preselected, and only

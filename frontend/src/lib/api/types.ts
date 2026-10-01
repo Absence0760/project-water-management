@@ -510,7 +510,7 @@ export interface Unsubscribed {
 	farm: string | null;
 }
 
-/** POST /alerts/feedback: what the answered mail was about (147_alert_feedback). */
+/** POST /alerts/feedback: what the answered mail was about (151_alert_feedback). */
 export interface FeedbackAnswered {
 	kind: AlertKind | 'digest';
 	project: { name: string };

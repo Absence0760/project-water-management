@@ -4650,7 +4650,7 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       (history kept); a catchment with no feed keeps its choice until its
       first feed adopts it.
 - [x] **Farmer feedback** (the roadmap's recommendation before
-      WhatsApp/SMS; issue #74): built (147). Every alert email and digest
+      WhatsApp/SMS; issue #74): built (151). Every alert email and digest
       asks "Was this alert useful?" with two plain links, Yes and No, to a
       public page (`/alerts/feedback`) that preselects the answer, takes an
       optional comment and stores nothing until **Send**; a single-purpose

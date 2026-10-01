@@ -1243,7 +1243,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
 
   | Variable | Value |
   | --- | --- |
-  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (147). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
+  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (151). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
   | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |

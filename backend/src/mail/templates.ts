@@ -42,7 +42,7 @@ export type Body = {
 	links?: { label: string; url: string }[];
 	/**
 	 * A question with answer links, after the action and before the footer
-	 * (an alert's "Was this useful? Yes · No", 147_alert_feedback): plain
+	 * (an alert's "Was this useful? Yes · No", 151_alert_feedback): plain
 	 * links, never an image or a pixel, in HTML; "label: url" in text.
 	 */
 	ask?: { question: string; answers: { label: string; url: string }[] };

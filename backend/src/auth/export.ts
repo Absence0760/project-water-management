@@ -60,7 +60,7 @@ export const APP_USER_EXCLUDED: Record<string, string> = {
 export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: string }> = {
 	'account_mail_quota.user_id': { excluded: 'a count of reset / verification emails for the daily cap, a day at most' },
 	'alert_delivery.user_id': { section: 'alertDeliveries' },
-	// Their "Was this useful?" answers and comments, and the unanswered links (147_alert_feedback).
+	// Their "Was this useful?" answers and comments, and the unanswered links (151_alert_feedback).
 	'alert_feedback.user_id': { section: 'alertFeedback' },
 	'alert_rule.created_by': { excluded: 'the project’s alert rule; its maker only' },
 	'alert_subscription.user_id': { section: 'alertSubscriptions' },
@@ -238,7 +238,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE d.user_id = $1 ORDER BY d.created_at DESC`,
 			[userId]
 		);
-		// Their own "Was this useful?" rows (147): never the token's hash or nonce.
+		// Their own "Was this useful?" rows (151): never the token's hash or nonce.
 		const { rows: alertFeedback } = await db.query(
 			`SELECT project_id AS "projectId", kind, sent_at AS "sentAt", useful, comment, answered_at AS "answeredAt"
 			 FROM alert_feedback WHERE user_id = $1 ORDER BY sent_at DESC, id`,

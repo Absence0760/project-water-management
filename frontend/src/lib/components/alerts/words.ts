@@ -69,7 +69,7 @@ export function unsubscribedText(u: Unsubscribed): string {
 	return t('You won’t get {kind} emails for {project} any more.', { kind: t(UNSUBSCRIBED[u.kind]), project: u.project.name });
 }
 
-// ---- "Was this useful?" (147_alert_feedback) ----------------------------------
+// ---- "Was this useful?" (151_alert_feedback) ----------------------------------
 
 /** The answer a feedback link chose (`#t=…&a=yes|no`), or null when it names none. */
 export function fragmentAnswer(hash: string): boolean | null {

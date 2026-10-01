@@ -227,7 +227,7 @@ describe('digestMail', () => {
 	});
 });
 
-describe('"Was this useful?" (147_alert_feedback)', () => {
+describe('"Was this useful?" (151_alert_feedback)', () => {
 	const fb = { yesUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=yes', noUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=no' };
 
 	it('asks under the action with two plain links, in text and HTML, and never an image', () => {

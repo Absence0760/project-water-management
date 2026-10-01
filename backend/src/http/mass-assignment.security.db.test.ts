@@ -194,7 +194,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		return { as: null, body: { token: unsubscribeToken(nonce) } };
 	},
 	'POST /alerts/feedback': async () => {
-		// A "Was this useful?" row's token, as its alert email would carry it (147_alert_feedback).
+		// A "Was this useful?" row's token, as its alert email would carry it (151_alert_feedback).
 		const nonce = newNonce();
 		const token = feedbackToken(nonce);
 		await db.query(`INSERT INTO alert_feedback (project_id, user_id, kind, nonce, token_hash) VALUES ($1, $2, 'data_stale', $3, $4)`, [

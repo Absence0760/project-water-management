@@ -127,7 +127,7 @@ export const seriesRuleLabel = (r: Pick<AlertRule, 'seriesName' | 'seriesKeyFed'
 /** A data feed's staleness rule, as the editor labels it: the feed, and "(switched off)" for a disabled feed. */
 export const feedRuleLabel = (r: Pick<AlertRule, 'feedName' | 'feedEnabled'>) => `${r.feedName ?? 'Data feed'}${r.feedEnabled === false ? ' (feed switched off)' : ''}`;
 
-// ---- "Was this useful?" (147_alert_feedback) ----------------------------------
+// ---- "Was this useful?" (151_alert_feedback) ----------------------------------
 
 /** A feedback row's kind: an alert kind, or a daily summary. */
 export const feedbackKindName = (k: AlertFeedbackSummary['kinds'][number]['kind']): string => (k === 'digest' ? 'Daily summary' : KIND_NAME[k]);

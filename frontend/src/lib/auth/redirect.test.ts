@@ -62,7 +62,7 @@ describe('routeAccess', () => {
 		expect(routeAccess('/alerts/unsubscribe', '', false)).toBe('show');
 		expect(routeAccess('/alerts/unsubscribe', '', true)).toBe('show');
 		expect(isPublicPath('/app/alerts/unsubscribe', '/app')).toBe(true);
-		// Its "Was this useful?" link the same way (147_alert_feedback).
+		// Its "Was this useful?" link the same way (151_alert_feedback).
 		expect(routeAccess('/alerts/feedback', '', false)).toBe('show');
 		expect(routeAccess('/alerts/feedback', '', true)).toBe('show');
 		expect(routeAccess('/account/alerts', '', false)).toBe('login');

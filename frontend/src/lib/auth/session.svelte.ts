@@ -13,7 +13,7 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  * or confirmation link instead of being bounced to the project list. A
  * share link (/share, WP-2.3) is the same: its token is the credential, and so
  * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13) and its
- * "Was this useful?" link (/alerts/feedback, 147_alert_feedback). An
+ * "Was this useful?" link (/alerts/feedback, 151_alert_feedback). An
  * evidence pack's verify page (/verify/<code>, WP-3.14) answers anyone holding
  * the code printed on the pack, signed in or not.
  */

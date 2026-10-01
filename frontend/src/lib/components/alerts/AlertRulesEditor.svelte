@@ -3,7 +3,7 @@
 	// and at what level: catchment-wide kinds, a dam level per farm, and a
 	// staleness level per data feed (each past that feed's usual delay, 057)
 	// and per series an API key writes (141).
-	// Under it, what people answered to "Was this useful?" (147_alert_feedback).
+	// Under it, what people answered to "Was this useful?" (151_alert_feedback).
 	// Loaded on demand by AlertsPanel. Saving evaluates the
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
