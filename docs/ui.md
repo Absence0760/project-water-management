@@ -2381,7 +2381,8 @@ this is the geography.
   and the table.
 - **Every feature** (table): name (selects it), kind, area or position,
   **Stands for** (a select of the nodes of fitting kinds, editors), **Area
-  into the model** (editors, polygons): a hydrological unit (the linked farm
+  into the model** (editors; farm parcels and `other` polygons only, never a
+  dam or the boundary): a hydrological unit (the linked farm
   by default) and **Use 9.257 km²**, which asks first ("Set Upper farm’s area
   from the map?", the old and new area) and then saves the area to the model,
   recorded in History with the feature named; disabled while the model has
@@ -7558,7 +7559,7 @@ the catalogue, [§ Language](#language)); both unit-tested.
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing. Under the rules, **Was it
-  useful?** (`alerts/AlertFeedbackSummary.svelte`, 147, issue #74): what
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
   people answered to "Was this alert useful?" over the last year, one line
   per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
   most answered first), then **Comments** (the newest 50, each with its

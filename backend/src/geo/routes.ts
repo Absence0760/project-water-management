@@ -44,6 +44,12 @@ const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = {
 	river: ['LineString', 'MultiLineString'],
 	other: ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']
 };
+/**
+ * The kinds whose polygon may become a hydrological unit's catchment area: a
+ * farm parcel, or an "other" polygon the editor drew for the purpose. A dam's
+ * water surface or the whole catchment's boundary is never one unit's area.
+ */
+export const AREA_KINDS: readonly MapFeatureKind[] = ['farm_parcel', 'other'];
 /** The node kinds a feature of each kind may stand for. */
 const KIND_NODES: Record<MapFeatureKind, readonly string[]> = {
 	catchment_boundary: [],
@@ -376,6 +382,7 @@ export const mapRoutes = new Hono<AuthEnv>()
 			if (n[0].kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit (a farm node) has a catchment area to set from the map.');
 			const f = await loadFeature(db, id, body.featureId);
 			if (f.area_m2 === null || f.area_m2 <= 0) throw new ApiError(400, 'That feature is not a polygon with an area.');
+			if (!AREA_KINDS.includes(f.kind)) throw new ApiError(400, `${cap(KIND_LABEL[f.kind])}’s area is not a hydrological unit’s catchment area; use a farm parcel.`);
 			const change = await beginModelChange(db, id);
 			const areaKm2 = f.area_m2 / 1e6;
 			await db.query(`UPDATE node SET area_km2 = $3, area_source = 'map', area_feature_id = $4 WHERE id = $1 AND project_id = $2`, [nodeId, id, areaKm2, f.id]);

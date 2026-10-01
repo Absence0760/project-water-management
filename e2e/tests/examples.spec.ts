@@ -71,6 +71,25 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await expect(page.getByRole('heading', { level: 3, name: 'Hydrological unit results' })).toBeVisible();
 });
 
+// Issue #288: Sandspruit's invented map (backend/scripts/examples/map.ts), read from the list, not the map's pixels.
+test('a shared example has a seeded catchment map: a boundary, linked parcels, dams, gauges and streams', async ({ page }) => {
+	await signInAs(page, DEMO);
+	await page.locator('table.projects').getByRole('link', { name: SANDSPRUIT, exact: true }).click();
+	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
+	await page.goto(`${page.url().split('?')[0]}?tab=map`);
+
+	const list = page.getByTestId('map-feature-list');
+	await expect(list.getByRole('listitem')).toHaveCount(23);
+	await expect(page.getByTestId('map-no-boundary')).toHaveCount(0);
+	const item = (name: string) => list.getByRole('listitem').filter({ has: page.getByRole('button', { name, exact: true }) });
+	await expect(item('Sandspruit catchment')).toContainText(/Catchment boundary · 210[.,]\d+ km²/);
+	await expect(item('Klipdrift')).toContainText(/Farm parcel · .* · Klipdrift$/);
+	await expect(item('Klipdrift dam')).toContainText(/Dam · .* · Klipdrift$/);
+	await expect(item('Melkhout Gauge')).toContainText(/Gauge · .* · Melkhout Gauge$/);
+	await expect(item('Sandspruit')).toContainText('River · 1 line');
+	await expect(page.getByText('sandspruit-map.synthetic.geojson')).toBeVisible();
+});
+
 // WP-2.1: the seeded farmers, as the owner manages them and as a farmer's own list shows them.
 test('the owner sees the seeded farmers with their farms, and a farmer sees only their own catchment', async ({ page, browser }) => {
 	await signInAs(page, ANALYST);

@@ -175,7 +175,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, preferences,
   reportSubscriptions, auditEvents, auditEventsTruncated }`. `alertFeedback`
   is their "Was this useful?" rows on alert emails, answered or not,
-  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (147; never
+  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (151; never
   the token's hash or nonce). `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
@@ -1156,7 +1156,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
-| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 147) | editor |
+| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
 | POST | `/alerts/feedback` *(public)* | `{ token, useful: boolean, comment?: string \| null }` (comment ≤ 500 characters) | `200 { kind, project: { name } }` | – |
 
 - Kinds, what fires them, and who gets them by default:
@@ -2728,7 +2728,7 @@ and the quaternary lookup only proposes.
 | PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
 | DELETE | `/projects/:id/map/features/:fid` | – | `204`; its import goes with its last feature. A node whose area came from it keeps the area and loses the link | editor |
 | POST | `/projects/:id/map/import` | `{ fileName, kind, text }`: the GeoJSON file's text (≤ 5 MB; this route has its own body limit, 7 MB of JSON), `kind` what its features are | `201 { source: { id, fileName, sha256 }, features }`. A `catchment_boundary` file's polygons become one boundary (replacing the current one); other kinds one feature each, linked to a node of the same name (case-insensitive) and a fitting kind. `422 { error, details: { feature: n \| null, message }[] }` with every problem, per feature (nothing is imported); `409` for the same file twice (SHA-256); `413` over the limit | editor |
-| POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm or a feature without an area; `404` for another project's feature | editor |
+| POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm, a feature without an area, or a dam or the catchment boundary (only a `farm_parcel` or an `other` polygon is a unit's catchment area; `AREA_KINDS`); `404` for another project's feature | editor |
 | GET | `/projects/:id/map/quaternary` | `?lon=&lat=` | `{ point: [lon, lat], quaternary: QuaternaryProposal \| null, datasets: { dataset, count }[] }`: the quaternary in the loaded dataset that contains the point (null: none does, or none is loaded). Writes nothing | viewer |
 
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |

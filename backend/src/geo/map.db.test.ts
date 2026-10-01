@@ -192,6 +192,22 @@ describe('accepting an area from the map', () => {
 		expect((await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId: theirs.body.feature.id })).status).toBe(404);
 	});
 
+	it('refuses a dam’s polygon and the boundary as a unit’s catchment area, and leaves the area alone', async () => {
+		const before = (await editor.call('GET', `/projects/${projectId}/model`)).body.nodes.find((n: { id: string }) => n.id === farmA.id).areaKm2;
+		const dam = await editor.call('POST', at('/features'), { kind: 'dam', name: 'A dam polygon', nodeId: farmA.id, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.002)] } });
+		expect(dam.status).toBe(201);
+		const boundary = (await editor.call('GET', at('/features'))).body.features.find((f: { kind: string }) => f.kind === 'catchment_boundary');
+		for (const featureId of [dam.body.feature.id, boundary.id]) {
+			const res = await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId });
+			expect(res.status).toBe(400);
+			expect(res.body.error).toMatch(/area is not a hydrological unit’s catchment area; use a farm parcel\.$/);
+		}
+		// Positive control: the parcel is still accepted.
+		expect((await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId: parcelId })).status).toBe(200);
+		expect((await editor.call('GET', `/projects/${projectId}/model`)).body.nodes.find((n: { id: string }) => n.id === farmA.id).areaKm2).toBeCloseTo(before, 9);
+		expect((await editor.call('DELETE', at(`/features/${dam.body.feature.id}`))).status).toBe(204);
+	});
+
 	it('keeps “from the map” through a save that leaves the area alone, and drops it when the area is typed over', async () => {
 		const saved = (await editor.call('GET', `/projects/${projectId}/model`)).body;
 		expect((await editor.call('PUT', `/projects/${projectId}/model`, saved)).status).toBe(200);

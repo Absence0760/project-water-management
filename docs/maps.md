@@ -135,7 +135,7 @@ with no dependency. `area.test.ts` checks a 1 km² square at 22°, 30° and
 34.5° S (within 0.01 %) and a quarter of the ellipsoid against WGS84's
 published surface area.
 
-**Use … km²** on a polygon's row sets a hydrological unit's area
+**Use … km²** on a farm parcel's (or an `other` polygon's) row sets a hydrological unit's area
 (`node.area_km2`) to it after a confirmation, and records a model revision
 whose reason names the feature ("Area of Upper farm from the map: “Upper
 farm” (9.257 km², computed from its polygon)"), which the History tab and the
@@ -143,7 +143,7 @@ run comparison's input diff show. The unit's `area_source` is then `map`
 (with the feature), until its area is typed over (back to `typed`) or the
 feature is deleted (the area stays; the link goes). The area is the farm's
 **catchment area** (runoff), so the polygon to use is the farm's
-sub-catchment, not its irrigated land. Only farm nodes take one. While the
+sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
 
 ## Quaternary lookup
@@ -170,6 +170,12 @@ as the schema owner; the app never writes it.
   says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
   (`pnpm setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
+- **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
+  an invented map inside those cells (`backend/scripts/examples/map.ts`,
+  recorded as the file `sandspruit-map.synthetic.geojson`): a boundary, a
+  parcel and a dam per farm linked to its node, two gauges and four streams.
+  Parcels are drawn to the model's areas, so the map proposes nothing new
+  until someone edits it; `map.test.ts` holds the layout to the model.
 - **Real data: the operator's own download.**
   1. Boundaries: the DWS quaternary catchments (open data; the DWS/WR2012
      GIS layers). Convert the shapefile to GeoJSON in WGS84:
