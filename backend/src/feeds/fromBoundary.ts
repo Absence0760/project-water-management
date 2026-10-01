@@ -149,6 +149,17 @@ export const feedFromBoundaryRoutes = new Hono<AuthEnv>()
 				const cur = await getFeed(db, id, body.feedId);
 				if (!cur) throw new ApiError(404, 'not found');
 				if (cur.source !== 'chirps') throw new ApiError(409, 'only a CHIRPS daily rainfall feed reads the boundary’s cells');
+				// Hold the feed's row while checking its series and saving the new cells, and refuse while a fetch is out
+				// (fetch_job_id, 029): its answer was asked for with the old cells, and an ingest that read the feed before this
+				// save could still claim it after (app_take_feed_fetch waits on this lock), writing the old area's days into the
+				// series the new cells start. Once the fetch is applied, the series is no longer empty, or it never answered.
+				const { rows: held } = await db.query<{ fetching: boolean }>(
+					'SELECT fetch_job_id IS NOT NULL AS fetching FROM data_feed WHERE id = $1 AND project_id = $2 FOR UPDATE',
+					[cur.id, id]
+				);
+				if (held[0]?.fetching) {
+					throw new ApiError(409, 'a fetch for this feed is still out: apply the boundary’s cells once it has come back', { code: 'feed_fetching' });
+				}
 				if ((await targetSeries(db, id, cur.targetKind, cur.targetName))?.filled) {
 					throw new ApiError(
 						409,

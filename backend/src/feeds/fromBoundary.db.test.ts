@@ -153,6 +153,21 @@ describe('the rain feed from the catchment boundary', () => {
 		expect(sep.body.feed.targetName).toBe('CHIRPS boundary');
 	});
 
+	it('waits for a fetch that is out: its answer was asked for with the old cells', async () => {
+		const { owner, pid } = await setup();
+		const b = await drawBoundary(owner, pid);
+		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -33.72, lon: 21.27 }] } })).body.feed;
+		// A fetch sent to the fetcher and not yet applied (029's columns, as app_begin_feed_fetch sets them).
+		await asOwner(`UPDATE data_feed SET fetch_job_id = gen_random_uuid(), fetch_start = '2026-01-01', fetch_end = '2026-01-31' WHERE id = $1`, [feed.id]);
+		const out = await apply(owner, pid, b, { feedId: feed.id });
+		expect(out.status).toBe(409);
+		expect(out.body.details).toMatchObject({ code: 'feed_fetching' });
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds.find((f: { id: string }) => f.id === feed.id).config.boundary).toBeUndefined();
+		// Positive control: once it has come back (cleared by app_take_feed_fetch), the cells apply.
+		await asOwner(`UPDATE data_feed SET fetch_job_id = NULL, fetch_start = NULL, fetch_end = NULL WHERE id = $1`, [feed.id]);
+		expect((await apply(owner, pid, b, { feedId: feed.id })).status).toBe(200);
+	});
+
 	it('refuses a feed that is not CHIRPS daily rainfall, and an id that is not a feed of the project', async () => {
 		const { owner, pid } = await setup();
 		const b = await drawBoundary(owner, pid);

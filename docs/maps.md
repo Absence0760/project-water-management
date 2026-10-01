@@ -580,7 +580,9 @@ boundary itself rather than over a box around it.
   which only this route writes; the History says "Set up the CHIRPS feed …
   from the catchment boundary “…” (N cells)".
 - **No splicing.** A feed's existing days were averaged over its old cells,
-  so new cells never go to a feed whose series already holds a record (409).
+  so new cells never go to a feed whose series already holds a record (409),
+  nor while a fetch for that feed is still out (409 `feed_fetching`): its
+  answer was asked for with the old cells, so the save waits for it.
   The proposal then attaches a new feed into a separate series ("CHIRPS
   boundary") to compare beside the old one. Switch the old feed off once
   satisfied.
