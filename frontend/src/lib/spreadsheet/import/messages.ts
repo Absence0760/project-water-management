@@ -7,6 +7,7 @@
 import { InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, WorkbookImportError, WorkbookTooLargeError, type WorkbookImportErrorCode } from './errors';
 import type { ImportResult } from './extract';
 import type { GaugeScaling } from './gauge';
+import type { NodeCropSet } from './nodeCrops';
 
 /** The importer's options a user can change on the review screen. */
 export interface WorkbookImportOptions {
@@ -18,7 +19,9 @@ export type ToWorker =
 	/** Read the file, then extract the project with these options. */
 	| { type: 'parse'; file: Blob; fileName: string; options: WorkbookImportOptions }
 	/** Extract again from the workbook already read, with other options. */
-	| { type: 'extract'; options: WorkbookImportOptions };
+	| { type: 'extract'; options: WorkbookImportOptions }
+	/** Read a node-based workbook's [Crop_Factors] / [Crop_Areas] (./nodeCrops.ts); forgets any workbook read before. */
+	| { type: 'nodeCrops'; file: Blob; fileName: string };
 
 export interface WorkbookImportProgress {
 	/** 'read': parsing a sheet of the file (the slow part); 'extract': building the project from it. */
@@ -47,6 +50,7 @@ export interface WorkbookImportFailure {
 export type FromWorker =
 	| { type: 'progress'; progress: WorkbookImportProgress }
 	| { type: 'result'; result: ImportResult }
+	| { type: 'nodeCrops'; result: NodeCropSet }
 	| { type: 'error'; error: WorkbookImportFailure };
 
 /** Any thrown value → the failure the page shows. */

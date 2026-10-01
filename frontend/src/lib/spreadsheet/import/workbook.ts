@@ -47,6 +47,13 @@ export interface ReadOptions extends ZipLimits {
 	maxSheets?: number;
 	/** Called before each sheet is parsed: (sheet, i, n), 1-based. */
 	onProgress?: (sheet: string, i: number, n: number) => void;
+	/**
+	 * Which sheets to parse, given the workbook's sheet names and defined
+	 * names (default sheetsToRead: the b023 sheets). The node-based crop
+	 * reader (./nodeCrops.ts) passes its own; a name the workbook lacks is
+	 * skipped.
+	 */
+	sheets?: (source: WorkbookSource) => string[];
 }
 
 /** The workbook readWorkbook() returns: every sheet's name, the defined names, and the cells of the sheets it read. */
@@ -131,7 +138,7 @@ export async function readWorkbook(data: Blob | ArrayBuffer | Uint8Array<ArrayBu
 		const part = target === undefined ? undefined : zip.find(target);
 		if (part !== undefined) partOf.set(s.name, part);
 	}
-	const sheets = sheetsToRead(source).filter((s) => partOf.has(s));
+	const sheets = [...new Set((opts.sheets ?? sheetsToRead)(source))].filter((s) => partOf.has(s));
 
 	let styles = defaultStyles();
 	if (pkg.styles !== null) {

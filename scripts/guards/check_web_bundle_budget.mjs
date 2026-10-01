@@ -1634,7 +1634,17 @@
 //             held-out recession skill, with the drought rule's 1.54.0 now on
 //             main @ the #273 merge). Measured 1360 locally; CI ~2 KB above.
 //             Headroom ~3 KB.
-// 2026-09-30  total 1365 → 1392 KB (issue #286, Start from an example on the
+// 2026-09-30  total 1365 → 1370 KB (issue #289, #293 with #291, #292 and
+//             #294 merged: Load crop factors' Kp default by crop-set shape
+//             with its why line, the node-based workbook as the third source
+//             and the workbook warnings list). Measured 1361 locally against
+//             #294's 1360 (+1 KB), plus CI's ~3 KB over local; headroom ~1 KB
+//             on CI. The import worker is now 31 of 32 KB
+//             (largestSpreadsheetWorkerKb, the node-based reader in it), so
+//             the next addition there trips that ceiling.
+//             Re-measured with main @ 11b181da merged (engine 1.55.0, #267's
+//             1365): 1365 locally, CI ~3 KB above. Headroom ~2 KB on CI.
+// 2026-09-30  total 1370 → 1396 KB (issue #286, Start from an example on the
 //             empty project list): the invented Kleinberg example catchment
 //             as a project document (projects/exampleCatchment.generated.json,
 //             a lazy chunk of its own, 84 KB raw, ~25 KB gzip: 15 years of
@@ -1645,7 +1655,9 @@
 //             button, never with a page, and the largest-chunk ceiling (42 KB)
 //             still holds it. Measured 1383 locally on main @ 4a17d615 plus
 //             this; CI ~2 KB above. Re-measured with main @ 11b181da merged
-//             (engine 1.55.0): 1387 locally, CI ~2 KB above. Headroom ~3 KB.
+//             (engine 1.55.0): 1387 locally. Again with main @ 9dbdbc8b
+//             (#293's crop work, 1370): 1391 locally, CI ~2 KB above.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1656,7 +1668,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1392,
+	totalCodeKb: 1396,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

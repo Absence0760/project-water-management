@@ -86,6 +86,17 @@ describe('readWorkbook', () => {
 		expect(wb.sheet('Network')).toBeDefined();
 	});
 
+	it('parses the sheets a `sheets` selector names instead: once each, skipping names the workbook lacks', async () => {
+		const seen: string[] = [];
+		const wb = await readWorkbook(syntheticB023().toFile(), {
+			sheets: () => ['Network', 'No such sheet', 'Network', 'Transfers'],
+			onProgress: (s, i, n) => seen.push(`${i}/${n} ${s}`)
+		});
+		expect(seen).toEqual(['1/2 Network', '2/2 Transfers']);
+		expect(wb.sheet('Farm spec')).toBeUndefined();
+		expect(wb.sheet('Transfers')).toBeDefined();
+	});
+
 	it('reads the tables from other sheets when the named ranges point there', async () => {
 		// The same workbook with [Network] renamed: the second pass picks the new name up.
 		const b = syntheticB023();
