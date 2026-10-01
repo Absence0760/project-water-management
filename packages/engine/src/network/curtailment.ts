@@ -25,7 +25,7 @@ export const M3_PER_DAY_PER_LS = 86.4;
  * future work (docs/model.md §2.11).
  */
 export const EQUITABLE_SHARE_FOOTNOTE =
-	'Fairness benchmark only: assumes water can move freely between farms, and ignores network position, storage, licensed or registered volumes and existing lawful use. Not an allocation or licence condition.';
+	'Fairness benchmark only: assumes water can move freely between units, and ignores network position, storage, licensed or registered volumes and existing lawful use. Not an allocation or licence condition.';
 
 /**
  * Below this average demand (m³/day, ≈ 0.012 l/s, under any meter's

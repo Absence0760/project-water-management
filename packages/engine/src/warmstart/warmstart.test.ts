@@ -220,7 +220,7 @@ describe('what the resumed input may and may not change', () => {
 			expect(s.values, `${s.nodeId}/${s.key}`).toEqual(col(uninterrupted, s.nodeId, s.key)!.slice(k));
 		}
 		expect(col(set, 'a', 'dam_storage_set')).toBeUndefined();
-		expect(() => withDamStorage(snapshot, input, { g: 5 })).toThrow(/not a farm with a dam/);
+		expect(() => withDamStorage(snapshot, input, { g: 5 })).toThrow(/not a unit with a dam/);
 		// A reset before the snapshot day is in the history: the capture input must have had it.
 		const before = clone(input);
 		before.settings.damStorageReset = { date: '2009-01-01', storageM3 };

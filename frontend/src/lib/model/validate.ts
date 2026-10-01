@@ -82,7 +82,7 @@ export function ewrSiteIssue(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 
  */
 export function developmentIssue(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>): string | null {
 	const p = developmentProblem(n);
-	return p === null ? null : `${p.replace('only a farm has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
+	return p === null ? null : `${p.replace('only a unit has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
 }
 
 export function validateModel(model: ProjectModel): ModelIssue[] {

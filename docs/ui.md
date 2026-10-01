@@ -480,11 +480,24 @@ on …", "Open your hydrological unit") and the public `/share` page. The
 client chose it knowing it is more technical for farmers. Engine check
 labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
 
+Engine run warnings, save errors (model rules, scenario ops) and the
+workspace's API errors say **unit** too (engine 1.61.0: `unit "Upper": no
+river pump capacity is set …`, "only a unit has a dam", "unit flow shares
+sum to …"), and a new node is named `Unit N` (operator decision,
+2026-10-01, from #54). Only the words changed, never a field name. A run
+from before 1.61.0 keeps its stored warnings as they were, so the first
+automatic run after the upgrade reads every such warning as new and isn't
+published by itself (`autoPublish` compares warnings by their words): a
+person publishes it once.
+
 What keeps **farm**: the code, database, API and CSV names (`kind: 'farm'`,
 `/farm`, `farms.csv`, `farm_scope`, the invite CSV's `farm` column), URL
-params (`unit=`), test ids, engine and API messages (run warnings, save
-errors, the bulk invite's "no farm named …") and the summary CSV's block
-titles. So do words that mean the real thing rather than the node: a
+params (`unit=`), test ids, the bulk invite's "no farm named …" (the CSV's
+`farm` column), the summary CSV's block titles, and so the xlsx export's
+Summary sheet's "Farm summary" block, which is the summary CSV's own: the
+CSV is a contract other tools read, so its titles stay (the same decision),
+and the evidence report and validation statement, whose words are frozen
+in packs and signed statements. So do words that mean the real thing rather than the node: a
 **farmer** (the person, "Preview as farmer", "farmer views" in the
 publication panel), a **farm dam** (the kind of dam), "a farm, sub-catchment
 or town" where the glossary says what a unit can stand for, the landing
@@ -495,8 +508,7 @@ own decision: the farm notice's title "Before you look at your farm"
 rewording it means a new version every farmer re-accepts), and the Terms
 and Privacy pages (`/terms`, `/privacy`, versioned by `LEGAL_VERSION`). The
 importer's notes keep b023's own terms (and match `extract_project.py`),
-and node names ("Upper farm") are data. A new node is still named
-`Farm N`.
+and node names ("Upper farm") are data.
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
@@ -6770,7 +6782,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   and date (an info box), *Not reproduced* with each failed check listed (an
   error), *Not re-run on the runs' own engine* when only the re-runs differ
   on another engine (a warning), a quiet *re-running* line with **Check
-  again** while its job runs, or that it couldn't be done and why. It is
+  again** while its job runs, or that it couldn't be done and why. An editor
+  gets a button to ask for it again (`POST …/reproduce`,
+  `data-testid="pack-reproduce-again"`): **Try again** when it couldn't be
+  done, **Re-run on engine X** when the outcome is an older engine's than
+  the server's (the line adds that the server now runs X and the new
+  outcome is recorded beside this one), **Re-run on the server** for a pack
+  issued before re-runs; never on the server's own engine's outcome. It is
   the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
@@ -7054,7 +7072,10 @@ published.
   the WUA on …. Data up to …", amber with its age when stale: "Data up to
   10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
   becomes "30 days to 10 Jan 2024"); the WUA's
-  notice first (warning or danger fill, icon and level in words), or "No
+  notice first (warning or danger fill, icon and level in words, the WUA's
+  words, and its percentage as "Set by the WUA: a 20 % cut in registered
+  water use." whenever it published one, beside its words as the alert email
+  has it), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
@@ -7686,7 +7707,9 @@ signed in or out, for someone outside the project, on a phone first.
   responsibility to anyone who relies on this page." (`shareCaveat()`,
   quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language, else English, else
+  restriction from the WUA"; the WUA's percentage, "Set by the WUA: a 20 %
+  cut in registered water use.", beside its words, as on the farm page and
+  in the alert email), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
@@ -7715,7 +7738,7 @@ signed in or out, for someone outside the project, on a phone first.
   k-ruled series). On paper: "Water Management · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
-  when it gave no words, who published it); each EWR site's reserve over
+  beside them, who published it); each EWR site's reserve over
   the period, always with its dates ("Below its reserve on 12 of the 102
   days from 1 Oct 2023 to 10 Jan 2024."); the monthly flow chart over the
   period's months (never fewer than 12, counting back from its last; drawn

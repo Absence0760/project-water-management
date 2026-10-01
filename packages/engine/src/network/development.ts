@@ -49,7 +49,7 @@ export function developmentProblem(n: Pick<NetworkNode, 'kind' | 'damSurveyDate'
 		if (v !== null && v !== undefined && !isIso(v)) return `the ${label} must be a date (YYYY-MM-DD)`;
 	}
 	if (typeof r === 'number' && r > 0 && !n.damSurveyDate) return 'a sediment rate needs the date the capacity was surveyed';
-	if (n.kind !== 'farm' && (n.damSurveyDate || (typeof r === 'number' && r > 0) || n.damInServiceFrom)) return 'only a farm has a dam';
+	if (n.kind !== 'farm' && (n.damSurveyDate || (typeof r === 'number' && r > 0) || n.damInServiceFrom)) return 'only a unit has a dam';
 	if (n.kind === 'gauge' && n.abstractionFrom) return 'a gauge takes no water';
 	return null;
 }
@@ -110,7 +110,7 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return undefined;
 	const bad = developmentProblem(n);
 	if (bad) {
-		warnings.push(`farm "${n.name}": ${bad}; its dam runs at its entered capacity throughout`);
+		warnings.push(`unit "${n.name}": ${bad}; its dam runs at its entered capacity throughout`);
 		return undefined;
 	}
 	const rate = n.damSedimentPctPerYear ?? 0;
@@ -123,7 +123,7 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	const most = k.reduce((a, v) => Math.max(a, v), 0);
 	if (most > DAM_SEDIMENT_WARN_FACTOR)
 		warnings.push(
-			`farm "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date`
+			`unit "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date`
 		);
 	return k;
 }

@@ -191,8 +191,14 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
       way would not be. Durable fix: step-4 WP-4.2's `app.auth_mfa`
       transaction setting, with the owner-level policies refusing without it.
       Trigger: organisations (WP-4.1), when the session context is rebuilt.
-- [ ] **Signing a run or a pack doesn’t require it** (below,
-      "Two-step sign-in on sign-off"): the operator's decision.
+- [x] **Signing a run or a pack doesn’t require it** (below,
+      "Two-step sign-in on sign-off"). **Done** (operator decision,
+      2026-10-01): every signer needs it.
+- [x] **The two-step sign-in banner can be dismissed** (from #282). Like the
+      confirm-email banner, it hides until the next refused action or
+      sign-in. **Decided (operator, 2026-10-01): keep it dismissable**,
+      since every refused action brings it back (security.md § Two-step
+      sign-in, The prompt). No change.
 - [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
       "verifikasie-app" and "herstelkode" (§ Afrikaans).
 
@@ -2235,6 +2241,17 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
+- [x] **"Unit" wording, the smaller choices** (from #54; operator, #93).
+      Should engine run warnings and API errors say "unit" in the
+      workspace, should the xlsx summary sheets say "Unit summary", and
+      should a new node default to "Unit N"? **Decided (operator,
+      2026-10-01): yes, keep, yes. Done:** the engine's run warnings and
+      save errors and the workspace API's errors say "unit" (engine 1.61.0,
+      words only); a new node is `Unit N`; the xlsx Summary sheet keeps
+      "Farm summary", since it is the summary CSV's block and the CSV is a
+      contract (ui.md § the words). The first automatic run after the
+      upgrade reads the reworded warnings as new, so a person publishes it
+      once.
 - [x] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
       `main`** (tracked on #76; seen 2026-09-27, not caused by it; fails the same on a clean
       checkout): at 1440 px the page itself scrolls 25 px, where the list
@@ -2528,6 +2545,9 @@ role and not before it.
       it fails closed on every way a role is lost; owners see a lapsed invite
       flagged (`senderLapsed`) to re-send or revoke. Tests:
       `invites/invites.db.test.ts`, `farms/invites.db.test.ts`.
+      A lapsed invite revives if its sender regains the role: **accepted
+      (operator, 2026-10-01)**, since they could re-send it anyway
+      (security.md § Invites).
 
 ## Features left half-way
 
@@ -3943,6 +3963,24 @@ Left:
       model runs per GET, pack draft and issue check. A pack drafted before
       it keeps its frozen sum ([evidence-pack.md § The other applications
       together](./evidence-pack.md#the-other-applications-together)).
+- [x] **The cumulative row's assessment engine** (from #71, C26; operator,
+      #93). The row read the newest complete assessment of the same
+      applications on any engine and printed which, so its baseline figure
+      (the assessment's own run of the baseline) could differ from the
+      report's. **Decided (operator, 2026-10-01): require the baseline
+      run's engine. Done:** `loadCombined` reads only an assessment made on
+      the baseline run's engine; one on another engine makes the row *Not
+      assessed* with why (assessed on X, the baseline ran on Y: assess
+      again), and while the server runs another engine than the baseline's
+      it says to run the baseline again (`staleAssessment`). Tests:
+      `evidence/report-combined.db.test.ts`.
+- [x] **Who sees the combined row** (from #71, C26; operator, #93).
+      Assessments are visible to editors only, so a viewer's report never
+      shows the combined figure (viewers don't see submitted applications
+      at all), and a team scenario counts as an application once it is
+      submitted, as § 4 always did. **Confirmed (operator, 2026-10-01):
+      both stay as built** ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
 - [ ] **The reproduction bundle carries the combined row's runs.** An
       `evidence-11` pack's combined row cites an assessment, whose runs (the
       baseline, each alone, all together, on the assessment's engine) the
@@ -4336,13 +4374,18 @@ Left, each with its trigger:
       folded shut, in the run's Record group (`#res-validation`) and under
       the scenario's comparison (`liability/ValidationPanel.svelte`, its
       body a lazy chunk; ui.md § Runs & results, § Scenarios).
-- [ ] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
+- [x] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
       sign-in and requires it of owners, team admins and assessors:
-      security.md § Two-step sign-in). Signing a run or a pack doesn't
-      require it yet, since a signer is any editor: a one-line
-      `requireStepUp` in `signoffs/routes.ts` and the pack sign-off route
-      once the operator decides every signer must use it. Until then a
-      sign-off is as strong as the signer's sign-in.
+      security.md § Two-step sign-in). Signing a run or a pack didn't
+      require it, since a signer is any editor, so a sign-off was only as
+      strong as the signer's password. **Decided (operator, 2026-10-01):
+      require it of every signer**, since a sign-off is the professional
+      record an authority relies on. **Done:** `requireStepUp` after the
+      role check in `POST …/runs/:runId/signoffs` and
+      `POST …/packs/:packId/signoffs` (`403 mfa_required` / `mfa_step_up`,
+      which the workspace's two-step banner picks up), and both reads'
+      `cannotSign` say so first (`stepUpRefusal`), so nobody fills in the
+      dialog to be refused. Tests: `auth/stepUp.db.test.ts`.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
       2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion
@@ -4596,7 +4639,7 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       check in `pack_reproduction`, through `app_record_pack_reproduction`
       from that job only. The pack page's bar shows it; verify doesn't
       ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
-- [ ] **Re-run a pack again on the server.** The `pack_reproduce` job runs
+- [x] **Re-run a pack again on the server.** The `pack_reproduce` job runs
       once, at issue (3 attempts). When it gives up (the packs bucket
       unreachable for all three) the pack page says the re-run couldn't be
       done, and nothing asks again; and after an engine upgrade nothing
@@ -4608,7 +4651,14 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       engine; route inventory, role ladder, mass-assignment and write-route
       entries), with a "Try again" on the pack page. Trigger: the first
       `pack_reproduce` job that goes dead in production, or an engine
-      version bump after the first pack is issued.
+      version bump after the first pack is issued. **Decided (operator,
+      2026-10-01): build it now. Done:** `POST …/packs/:packId/reproduce`
+      (`requestPackReproduce`: idempotent while one is pending, `409` once
+      the server's engine has an outcome), `canRerun` and `serverEngine` on
+      the pack's `reproduction`, and the bar's **Try again** / **Re-run on
+      engine X** (evidence-pack.md § Reproduction, "Re-run again"). Tests:
+      `evidence/packs.db.test.ts`, the four route lists,
+      `packs/pack.test.ts`, `e2e/tests/evidence-pack-pdf.spec.ts`.
 - [ ] **Move the bundle's build to a job if issue nears the timeout.** The
       bundle is built in the issue's transaction today, estimated 5–10 s at
       300 outputs × 30 years a run
@@ -4666,6 +4716,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
       Afrikaans words went through the i18n translator and checker (the
       native speaker's review is pending with the rest, § Afrikaans).
+- [x] **"Pack issued" emails: no opt-out, and a rare duplicate** (from #71;
+      operator, #93). They have no opt-out, like report-ready emails, and
+      if SES accepts an email but the call times out the retry can send a
+      second copy, as the alert emails can. **Accepted (operator,
+      2026-10-01)**: they are service messages to the people accountable
+      for the pack ([evidence-pack.md § Notices](./evidence-pack.md#notices)).
 
 ## Alerts (WP-2.13)
 
@@ -4902,7 +4958,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       closed #51, re-checked at 81db5ed), and the 60-farm load timings in
       step-2 WP-2.16 "Load checks" (manual run ≈ 8.7 s on the API Lambda,
       under the 10 s trigger; storage flat over 30 days).
-- [ ] **Hold a key's pushes into a short series?** A series with fewer than
+- [x] **Hold a key's pushes into a short series?** A series with fewer than
       100 non-zero days has no outlier limit, so a key's push into it is
       checked for negatives only (security.md § API keys, Limits). Holding
       every such push is safer but holds a new logger's automatic runs
@@ -4910,12 +4966,25 @@ own. Loop in the CISO or security analyst before acting on any of them.
       record. Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before the first gateway key is issued on production.
-- [ ] **The WUA's cut % beside its own notice.** The farm page and `/share`
-      show "a 20 % cut in registered water use" only when the WUA wrote no
+      **Decided (operator, 2026-10-01): hold auto-publish only (option b),
+      keep automatic runs (option a). Done:** a key's push with no outlier
+      limit records `series.unchecked` and answers `autoPublishHeld: true`;
+      its automatic run runs, and `autoPublish` publishes none while such an
+      event is newer than the latest manual run (`series/hold.ts`
+      `uncheckedSinceLastRun`); the History says "Paused automatic
+      publishing". Tests: `ingest/ingest.db.test.ts`,
+      `history/timeline.test.ts`.
+- [x] **The WUA's cut % beside its own notice.** The farm page and `/share`
+      showed "a 20 % cut in registered water use" only when the WUA wrote no
       notice text; the alert email shows both. Make them agree (both, or
       neither). Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
-      Trigger: before farmers are invited.
+      **Decided (operator, 2026-10-01): both everywhere**, since the % is the
+      WUA's decision and the notice its explanation. **Done:** `noticeCard`
+      (farm page) and `shareNotice` (`/share` and its printed member
+      summary) show the line whenever a % was published. Tests:
+      `farm/cards.test.ts`, `share/share.test.ts`, `farm-view.spec.ts`,
+      `share-links.spec.ts`.
 - [x] **A stale EWR-forecast alert says nothing.** A firing
       `ewr_forecast_fail` event is left as it is while its forecast is behind
       the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast

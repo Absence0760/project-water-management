@@ -231,8 +231,8 @@ describe('applicationMask', () => {
 			rename('Town')
 		]);
 		expect(r.problems).toEqual([
-			'op 1 (cropArea.set): crops grow on farms; "Water user 1" is a user',
-			'op 2 (landCover.add): land cover lies on a farm; "Water user 1" is a user'
+			'op 1 (cropArea.set): crops grow on units; "Water user 1" is a user',
+			'op 2 (landCover.add): land cover lies on a unit; "Water user 1" is a user'
 		]);
 		// Their own farm renamed to the hidden user's name: applied, and quoted as theirs.
 		expect(r.applied.map((a) => a.index)).toEqual([2]);

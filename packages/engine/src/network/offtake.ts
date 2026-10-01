@@ -198,7 +198,7 @@ export function planOfftakes(
 		if (o.lossReturn > 0) {
 			const at = offtakeReturnAt(tr, from, nodes, index);
 			if (at === undefined) {
-				warnings.push(`river off-take ${a.name} → ${b.name}: its seepage return unit is not ${a.name} or a farm below it on the river; no seepage returns`);
+				warnings.push(`river off-take ${a.name} → ${b.name}: its seepage return unit is not ${a.name} or a unit below it on the river; no seepage returns`);
 				o.lossReturn = 0;
 			} else o.returnAt = at;
 		}

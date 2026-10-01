@@ -84,7 +84,7 @@ describe('the capacity factor', () => {
 		expect(developmentProblem({ ...dam, damSurveyDate: null })).toMatch(/needs the date the capacity was surveyed/);
 		expect(developmentProblem({ ...dam, damSedimentPctPerYear: 0.5 })).toMatch(/0 to 20 %/);
 		expect(developmentProblem({ ...dam, damInServiceFrom: '2021-02-30' })).toMatch(/in-service date must be a date/);
-		expect(developmentProblem({ ...dam, kind: 'user' })).toMatch(/only a farm has a dam/);
+		expect(developmentProblem({ ...dam, kind: 'user' })).toMatch(/only a unit has a dam/);
 		expect(developmentProblem({ ...dam, kind: 'gauge', damSurveyDate: null, damSedimentPctPerYear: null, abstractionFrom: '2021-01-01' })).toMatch(/gauge takes no water/);
 		expect(developmentProblem(dam)).toBeNull();
 		const i = input({ damSedimentPctPerYear: 0.01 });

@@ -285,11 +285,28 @@ describe('reproductionNote', () => {
 		checkedAt: null,
 		checks: [],
 		error: null,
+		serverEngine: '9.1.0',
+		canRerun: false,
 		...over
 	});
 
-	it('says nothing for a draft or a pack issued before re-runs', () => {
+	it('says nothing for a draft; offers a pack issued before re-runs its first', () => {
 		expect(reproductionNote(state({}))).toBeNull();
+		expect(reproductionNote(state({ canRerun: true }))).toMatchObject({ tone: 'quiet', text: expect.stringMatching(/^Not re-run on the server yet/), rerun: 'Re-run on the server' });
+	});
+
+	it('offers an editor a re-run on the server’s newer engine, beside the older engine’s outcome; never on its own engine', () => {
+		const older = reproductionNote(state({ status: 'reproduced', engineVersion: '9.0.0', serverEngine: '9.1.0', canRerun: true, checks: [ok('reproduce:baseline')] }))!;
+		expect(older.rerun).toBe('Re-run on engine 9.1.0');
+		expect(older.text).toMatch(/The server now runs engine 9\.1\.0: re-run it to record that engine’s outcome beside this one\.$/);
+		for (const status of ['not_reproduced', 'other_engine'] as const) {
+			expect(reproductionNote(state({ status, engineVersion: '9.0.0', runEngines: ['8.0.0'], serverEngine: '9.1.0', canRerun: true }))!.rerun).toBe('Re-run on engine 9.1.0');
+		}
+		// Its own engine's outcome stands; the server says when it can't be asked (a viewer reads the same state).
+		expect(reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', canRerun: false }))!.rerun).toBeNull();
+		expect(reproductionNote(state({ status: 'reproduced', engineVersion: '9.0.0', canRerun: false }))!.text).not.toContain('now runs');
+		// No bundle: another engine has nothing to re-run either.
+		expect(reproductionNote(state({ status: 'no_bundle', engineVersion: '9.0.0', canRerun: true }))!.rerun).toBeNull();
 	});
 
 	it('names the engine, the date and both runs when it reproduced; one run for a baseline pack', () => {
@@ -322,6 +339,9 @@ describe('reproductionNote', () => {
 		expect(reproductionNote(state({ status: 'checking' }))).toMatchObject({ tone: 'quiet', text: expect.stringMatching(/is re-running/) });
 		expect(reproductionNote(state({ status: 'failed', error: 'the store was down' }))).toMatchObject({ tone: 'bad', text: 'The server couldn’t re-run this pack: the store was down' });
 		expect(reproductionNote(state({ status: 'failed' }))!.text).toBe('The server couldn’t re-run this pack.');
+		// A re-run that gave up may be asked for again; one still running may not.
+		expect(reproductionNote(state({ status: 'failed', canRerun: true }))!.rerun).toBe('Try again');
+		expect(reproductionNote(state({ status: 'checking' }))!.rerun).toBeNull();
 		expect(reproductionNote(state({ status: 'no_bundle' }))!.text).toMatch(/without a reproduction bundle/);
 	});
 });

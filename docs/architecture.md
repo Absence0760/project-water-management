@@ -879,7 +879,10 @@ Settings → Automatic runs.
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
   replaces the current publication, never the first one, when none of its
   self-checks failed and it raises no warning the published run didn't (the
-  same sentence with other numbers or dates is the same warning), carrying
+  same sentence with other numbers or dates is the same warning), and no
+  API key has pushed into a series too short for the outlier limit since
+  the latest run a person made (`series.unchecked`, security.md § API keys),
+  carrying
   the WUA's notice and next-update date over; the audit event says `auto:
   true`, and so does the publication (`run_publication.auto`, 141), which
   is what the `farms_short` alert watches: a publication no person made

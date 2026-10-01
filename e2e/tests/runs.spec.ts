@@ -425,7 +425,7 @@ test('flow shares over 100 % stop the Run button and say why, until they fit', a
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const button = page.getByRole('button', { name: 'Run model' });
 	await expect(button).toBeDisabled();
-	await expect(page.getByTestId('shares-over')).toHaveText(/The run can't start: farm flow shares sum to 140\.00%, more than 100%/);
+	await expect(page.getByTestId('shares-over')).toHaveText(/The run can't start: unit flow shares sum to 140\.00%, more than 100%/);
 
 	// Positive control: shares that add up to 100 % run.
 	await setShares(0.5);

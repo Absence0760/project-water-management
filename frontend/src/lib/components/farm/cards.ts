@@ -76,8 +76,9 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
-		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
-		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
+		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction. Shown beside the WUA's own
+		// words too, as the alert email does: the % is the WUA's decision, the notice its explanation (operator, 2026-10-01).
+		pctLine: r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
 		// As /share: the API sends null for a deleted publisher, never English words.
 		byline: `${view.publication.publishedBy ?? t('A former member')}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title,

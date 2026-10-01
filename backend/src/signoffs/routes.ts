@@ -20,6 +20,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
+import { requireStepUp, stepUpRefusal } from '../auth/stepUp.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -212,7 +213,16 @@ export const signoffRoutes = new Hono<AuthEnv>()
 				statementSha256,
 				disclaimer: { version: DISCLAIMER.version, status: DISCLAIMER.status },
 				// Why the caller can't sign, or null when they can.
-				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : forecast ? FORECAST_NOT_SIGNABLE : !verified ? RUN_UNVERIFIED : null,
+				cannotSign:
+					rank[role] < rank.editor
+						? 'requires editor role'
+						: legacy
+							? LEGACY
+							: forecast
+								? FORECAST_NOT_SIGNABLE
+								: !verified
+									? RUN_UNVERIFIED
+									: ((await stepUpRefusal(db))?.message ?? null),
 				signoffs: rows
 			});
 		});
@@ -222,6 +232,8 @@ export const signoffRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
 			const { statement, sha256: expected, legacy, forecast, verified } = await statementFor(db, id, runId);

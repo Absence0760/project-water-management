@@ -189,6 +189,8 @@ export type AuditKind =
 	| 'series.labelled'
 	| 'series.site_changed'
 	| 'series.held'
+	// A key's push into a series too short for the outlier limit: its auto run isn't published by itself until a person runs the model.
+	| 'series.unchecked'
 	| 'run.created'
 	| 'run.changed'
 	| 'run.deleted'
