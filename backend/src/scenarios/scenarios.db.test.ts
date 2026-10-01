@@ -173,7 +173,7 @@ describe('a dam-raise scenario', () => {
 			classified: ['proposal']
 		});
 		expect(res.body.b.run.scenarioId).toBe(sid);
-		// The raise resizes the dam's area along its own relation (engine 1.10.0): the 7.2 × 100 000^0.77 = 50 972 m² estimate (engine ≥ 1.61.0) × 1.2^0.7.
+		// The raise resizes the dam's area along its own relation (engine 1.10.0): the 7.2 × 100 000^0.77 = 50 972 m² estimate (engine ≥ 1.63.0) × 1.2^0.7.
 		expect(res.body.changes).toEqual([
 			{ area: 'network', kind: 'changed', subject: 'Rooikloof', text: 'Rooikloof: dam capacity 100\u202f000 m³ → 120\u202f000 m³' },
 			{ area: 'network', kind: 'changed', subject: 'Rooikloof', text: 'Rooikloof: dam area when full estimated (7.2 × capacity^0.77) → 57\u202f911 m²' }

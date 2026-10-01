@@ -81,7 +81,7 @@ describe('IRRIGATION_SYSTEMS (SABI 2021 system efficiencies, issue #54 Q10)', ()
 	});
 });
 
-describe('estimatedDamAreaM2 (Maaren & Moolman 1985, engine ≥ 1.61.0, issue #90 N2)', () => {
+describe('estimatedDamAreaM2 (Maaren & Moolman 1985, engine ≥ 1.63.0, issue #90 N2)', () => {
 	it('is 7.2 × capacity^0.77 m²: a small dam shallower than a large one', () => {
 		expect(estimatedDamAreaM2(100_000)).toBeCloseTo(7.2 * 100_000 ** 0.77, 9);
 		const depth = (c: number) => c / estimatedDamAreaM2(c);
@@ -92,10 +92,11 @@ describe('estimatedDamAreaM2 (Maaren & Moolman 1985, engine ≥ 1.61.0, issue #9
 		expect(estimatedDamAreaM2(-5)).toBe(0);
 	});
 
-	it('gives a stored run the estimate its own engine used: capacity ÷ 3 m before 1.61.0', () => {
+	it('gives a stored run the estimate its own engine used: capacity ÷ 3 m before 1.63.0', () => {
 		expect(estimatedDamAreaForEngine(90_000, '1.60.0')).toBe(30_000);
+		expect(estimatedDamAreaForEngine(90_000, '1.62.0')).toBe(30_000);
 		expect(estimatedDamAreaForEngine(90_000, '0.16.0')).toBe(30_000);
-		expect(estimatedDamAreaForEngine(90_000, '1.61.0')).toBe(estimatedDamAreaM2(90_000));
+		expect(estimatedDamAreaForEngine(90_000, '1.63.0')).toBe(estimatedDamAreaM2(90_000));
 		expect(estimatedDamAreaForEngine(90_000, '2.0.0')).toBe(estimatedDamAreaM2(90_000));
 		// Absent or unreadable: this engine's.
 		expect(estimatedDamAreaForEngine(90_000)).toBe(estimatedDamAreaM2(90_000));

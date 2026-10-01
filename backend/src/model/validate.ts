@@ -38,7 +38,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				lossReturnFraction: frac,
 				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
 				damAreaFullM2: nonNeg.nullable(),
-				// At most 1 (engine ≥ 1.61.0, issue #90): no basin's surface grows faster than its volume; the
+				// At most 1 (engine ≥ 1.63.0, issue #90): no basin's surface grows faster than its volume; the
 				// DB column still allows 3, so an older row loads and runs (with a warning) until it is next saved.
 				damAreaExponent: z.number().gt(0).max(DAM_AREA_EXPONENT_MAX),
 				damSeepagePerDay: frac,

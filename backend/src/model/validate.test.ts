@@ -32,7 +32,7 @@ describe('modelProblems', () => {
 	});
 });
 
-describe('dam area exponent (engine ≥ 1.61.0, issue #90)', () => {
+describe('dam area exponent (engine ≥ 1.63.0, issue #90)', () => {
 	it('takes 0 < b ≤ 1 and refuses b > 1, which no basin has (the DB column still holds an older row)', () => {
 		const out = node('Gauge', null);
 		const parse = (b: number) => ModelBody.safeParse({ nodes: [out, node('A', out.id, { damAreaExponent: b })], crops: [], cropAreas: [], transfers: [] }).success;

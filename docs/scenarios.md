@@ -134,7 +134,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 - farm: `name`; land `areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`;
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
-  from engine 1.61.0),
+  from engine 1.63.0),
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
   `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
@@ -174,7 +174,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   and to a capacity above 0) resizes its geometry along the dam's own
   area–volume relation, as the storage–yield curve does: a power-law dam's
   `damAreaFullM2` (as entered, or the 7.2 × capacity^0.77 estimate, engine
-  ≥ 1.61.0; capacity ÷ 3 m before) becomes
+  ≥ 1.63.0; capacity ÷ 3 m before) becomes
   A_full × (new ÷ old)^b with its own `damAreaExponent`; a survey curve is
   cut at its top × the ratio, or extrapolated beyond the survey to it
   (a power law through its top two rows). The op's note says what changed

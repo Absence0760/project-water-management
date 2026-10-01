@@ -145,7 +145,7 @@ describe('validateModel', () => {
 			'"A": the dam area exponent must be above 0 and at most 1.',
 			'"A": the dam area can\'t be negative.'
 		]);
-		// No basin has b > 1 (engine ≥ 1.61.0); 1 itself, a vertical-sided pan, is allowed.
+		// No basin has b > 1 (engine ≥ 1.63.0); 1 itself, a vertical-sided pan, is allowed.
 		const b = node('b', 'B', null);
 		b.damAreaExponent = 1;
 		expect(messages(model([b]))).toEqual([]);

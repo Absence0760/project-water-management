@@ -2051,7 +2051,7 @@ function capYears(
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
  * as entered, or estimatedDamAreaM2 when it isn't known (warning W6, in
  * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning;
- * above DAM_AREA_EXPONENT_MAX it runs, with a warning, engine ≥ 1.61.0);
+ * above DAM_AREA_EXPONENT_MAX it runs, with a warning, engine ≥ 1.63.0);
  * seepage per day clamped to 0–1. A node without a dam gets none.
  */
 function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
@@ -2067,7 +2067,7 @@ function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number;
 		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
 		b = DAM_AREA_EXPONENT;
 	} else if (b > DAM_AREA_EXPONENT_MAX && !resolveDamCurve(n)) {
-		// Engine ≥ 1.61.0 (issue #90): a save no longer takes b > 1, which no basin has; an older document's runs as entered.
+		// Engine ≥ 1.63.0 (issue #90): a save no longer takes b > 1, which no basin has; an older document's runs as entered.
 		warnings.push(
 			`farm "${n.name}": dam area exponent ${String(b)} is above ${DAM_AREA_EXPONENT_MAX}, which no real basin has (the surface would grow faster than the volume); ` +
 				`it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ ${DAM_AREA_EXPONENT_MAX}. Use ${DAM_AREA_EXPONENT}, or enter the dam's survey curve`

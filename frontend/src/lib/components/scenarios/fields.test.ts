@@ -116,7 +116,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 		};
 		// The GR4J bounds are the engine's own (GR4J_PARAMS).
 		// The sediment rate's range is 0–20 % (the sample's 35 % is out of it), and the dam area exponent's
-		// 0–1 (the sample's 1.25 is out of it, engine ≥ 1.61.0): their own cases below.
+		// 0–1 (the sample's 1.25 is out of it, engine ≥ 1.63.0): their own cases below.
 		check(NODE_FIELD_SPECS, nodeFieldError, ['damSedimentPctPerYear', 'damAreaExponent']);
 		check(TRANSFER_FIELD_SPECS, transferFieldError);
 		check(SETTINGS_SPECS, settingsValueError, ['gr4j.x1', 'gr4j.x2', 'gr4j.x3', 'gr4j.x4']);
@@ -144,7 +144,7 @@ describe('development over the run (engine 1.30.0, issue #67)', () => {
 		expect(nodeFields('gauge').some((f) => dev.includes(f.field))).toBe(false);
 	});
 
-	it('takes a dam area exponent above 0 up to 1, which the engine checks (engine ≥ 1.61.0)', () => {
+	it('takes a dam area exponent above 0 up to 1, which the engine checks (engine ≥ 1.63.0)', () => {
 		const spec = NODE_FIELD_SPECS.damAreaExponent.spec;
 		expect(parseValue(spec, '0.7')).toEqual({ ok: true, value: 0.7 });
 		expect(nodeFieldError('damAreaExponent', 0.7)).toBeNull();

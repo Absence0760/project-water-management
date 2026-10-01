@@ -163,7 +163,7 @@ export interface AuditRun {
 	days: number;
 	/** Run days whose A-pan came from a daily series (RunSummary.apanDaily.dailyDays); 0 or absent without one. */
 	apanDailyDays?: number;
-	/** The engine that saved the run (an unknown dam's estimated area changed in 1.61.0); absent = this engine. */
+	/** The engine that saved the run (an unknown dam's estimated area changed in 1.63.0); absent = this engine. */
 	engineVersion?: string;
 	/** The farm's stored series by key. */
 	farm: ReadonlyMap<string, ArrayLike<number | null>>;

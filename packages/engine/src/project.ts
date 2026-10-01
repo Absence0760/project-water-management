@@ -1147,13 +1147,13 @@ export interface NetworkNode {
 	/**
 	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
 	 * known: the run estimates it from the capacity (estimatedDamAreaM2, engine
-	 * ≥ 1.61.0; capacity ÷ 3 m before) and warns.
+	 * ≥ 1.63.0; capacity ÷ 3 m before) and warns.
 	 */
 	damAreaFullM2: number | null;
 	/**
 	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b.
 	 * Default 0.7 (Liebe et al. 2005, small reservoirs). A save takes 0 < b ≤ 1
-	 * (DAM_AREA_EXPONENT_MAX, engine ≥ 1.61.0: no basin has b ≥ 1); a run still
+	 * (DAM_AREA_EXPONENT_MAX, engine ≥ 1.63.0: no basin has b ≥ 1); a run still
 	 * takes an older document's b up to 3, with a warning.
 	 */
 	damAreaExponent: number;
@@ -1424,7 +1424,7 @@ export const DAM_CURVE_MAX_ROWS = 200;
 export const DAM_AREA_EXPONENT = 0.7;
 
 /**
- * The largest dam area exponent a save takes (engine ≥ 1.61.0, issue #90;
+ * The largest dam area exponent a save takes (engine ≥ 1.63.0, issue #90;
  * provisional decision 2026-10-01, to be confirmed by the client's
  * hydrologist). Any area–stage power law V ∝ h^m gives b = (m − 1)/m < 1, so
  * b > 1 is no real basin shape; 1 (a vertical-sided pond) is the bound. The
@@ -1434,7 +1434,7 @@ export const DAM_AREA_EXPONENT = 0.7;
 export const DAM_AREA_EXPONENT_MAX = 1;
 
 /**
- * A dam's full-supply area when none is entered (engine ≥ 1.61.0, issue #90,
+ * A dam's full-supply area when none is entered (engine ≥ 1.63.0, issue #90,
  * N2; provisional decision 2026-10-01, to be confirmed by the client's
  * hydrologist): A = 7.2 · C^0.77 m² for a capacity C in m³, the generalised
  * relation for South African farm dams of all shapes of Maaren & Moolman
@@ -1453,7 +1453,7 @@ export function estimatedDamAreaM2(capacityM3: number): number {
 }
 
 /** The engine that moved the estimate from capacity ÷ 3 m to ESTIMATED_DAM_AREA. */
-export const ESTIMATED_DAM_AREA_SINCE = '1.61.0';
+export const ESTIMATED_DAM_AREA_SINCE = '1.63.0';
 
 /**
  * The estimated area an unknown dam ran on in a run saved by `engineVersion`:

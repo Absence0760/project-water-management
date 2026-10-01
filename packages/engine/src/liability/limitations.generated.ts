@@ -64,7 +64,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
 		"title": "A dam's capacity and a unit's abstraction now change over a run, on judgement calls the hydrologist hasn't made",
-		"status": "Built; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90): linear, run back to the in-service date (engine 1.61.0 asks for it), dead storage and the triggers scaled, the full-supply area kept"
+		"status": "Built; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90): linear, run back to the in-service date (engine 1.63.0 asks for it), dead storage and the triggers scaled, the full-supply area kept"
 	},
 	{
 		"id": "C2",

@@ -126,7 +126,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
 		if (badFrac) issues.push({ area: 'network', message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', message: `${label}: irrigation efficiency must be above 0%.` });
-		// At most 1 (engine ≥ 1.61.0): no basin's surface grows faster than its volume (model.md §2.7a).
+		// At most 1 (engine ≥ 1.63.0): no basin's surface grows faster than its volume (model.md §2.7a).
 		if (!(n.damAreaExponent > 0 && n.damAreaExponent <= DAM_AREA_EXPONENT_MAX)) issues.push({ area: 'network', message: `${label}: the dam area exponent must be above 0 and at most ${DAM_AREA_EXPONENT_MAX}.` });
 		if (n.damAreaFullM2 !== null && !inRange(n.damAreaFullM2, 0, Infinity)) issues.push({ area: 'network', message: `${label}: the dam area can't be negative.` });
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {

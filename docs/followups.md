@@ -209,7 +209,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       source, is [engine-audit.md § Provisional decisions
       2026-10-01](./engine-audit.md#provisional-decisions-2026-10-01-network-supply-crops-and-dams),
       and model.md marks each section. Built where the evidence clearly
-      pointed elsewhere (engine 1.61.0): an unknown dam area is 7.2 · C^0.77
+      pointed elsewhere (engine 1.63.0): an unknown dam area is 7.2 · C^0.77
       m² (Maaren & Moolman 1985, via Sawunyama 2013) instead of capacity ÷
       3 m, whose source was never found; a save takes a dam area exponent
       0 < b ≤ 1; the sediment warning asks for a dam's in-service date; and
@@ -438,7 +438,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       so both wait on the hydrologist (model.md §2.7a). **Provisional
       decision 2026-10-01** (issue #90, to be confirmed by the client's
       hydrologist): the resize rule and the 0.7 exponent kept; the unknown
-      area changed to 7.2 · C^0.77 (Maaren & Moolman 1985) in engine 1.61.0,
+      area changed to 7.2 · C^0.77 (Maaren & Moolman 1985) in engine 1.63.0,
       since the 3 m depth's source was never found.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
@@ -462,7 +462,7 @@ collected as a checklist in issue #46; tick it there as they answer.
         2023" 3 m median depth reference (not verified). Rain on a dam is
         partly double-counted with land runoff. **Provisional decision
         2026-10-01** (issue #90): the reference was never found, so engine
-        1.61.0 estimates an unknown area as 7.2 · C^0.77 m² (Maaren &
+        1.63.0 estimates an unknown area as 7.2 · C^0.77 m² (Maaren &
         Moolman 1985); N1, N3, N4/Q3/Q18 and Q5 are provisionally kept
         (engine-audit.md § Provisional decisions 2026-10-01).
       - N4/Q3/Q18 (0.16.0): transfers capped at the receiver's room; an
@@ -520,7 +520,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       user's population is known); the dam area exponent 0.6
       (WR2012) instead of 0.7 and the fallback area 7.2·C^0.77 (Sawunyama
       2013) instead of capacity ÷ 3 m (provisionally 2026-10-01: 0.7 kept,
-      the fallback changed in engine 1.61.0); which dam evaporation preset (the
+      the fallback changed in engine 1.63.0); which dam evaporation preset (the
       WR90 monthly presets are built, engine 1.49.0, but 0.75 × A-pan, the
       top of SA practice, stays the default; see "Which dam evaporation
       preset" above); plantation classes by
@@ -1982,7 +1982,7 @@ the suggested order (the IDs carry the detail):
       `order.test.ts` (one case per sum, on values whose sum depends on the
       order), `run.invariants.test.ts` › "engine 0.26.1: …" pins the seeds
       of both models; `runoff/legacy.test.ts` now adds the area in id order.
-- [x] **Dam area exponent above 1** (done 2026-10-01, engine 1.61.0, issue
+- [x] **Dam area exponent above 1** (done 2026-10-01, engine 1.63.0, issue
       #90; provisional decision, to be confirmed by the client's hydrologist).
       Narrowed to 0 < b ≤ 1 (`DAM_AREA_EXPONENT_MAX`) in zod, the node form,
       the frontend model check and the scenario ops; `damLosses` runs an

@@ -2483,7 +2483,7 @@ binds, the transfer brings enough that neither MIN bites.
 
 - `A_full` is `node.damAreaFullM2`. When it is not known (null), the run
   estimates **A = 7.2 · C^0.77 m²** for a capacity C in m³
-  (`estimatedDamAreaM2`, engine ≥ 1.61.0), and warns **W6** with the number
+  (`estimatedDamAreaM2`, engine ≥ 1.63.0), and warns **W6** with the number
   of dams (and their names) that used the estimate. The relation is Maaren &
   Moolman's (1985, *The effects of farm dams on hydrology*, Proc. 2nd SA
   National Hydrology Symposium, ACRU Report 22, 428–441) generalised one for
@@ -2494,7 +2494,7 @@ binds, the transfer brings enough that neither MIN bites.
   3.3 m at 1 000 000 m³. Sawunyama found such generalised relations a poor
   guide to any *one* dam (R² < 0.8) but usable over many dams, which is how a
   catchment model uses them; the warning says so and asks for the area.
-  **Changed in engine 1.61.0** (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 N2): before it the estimate
+  **Changed in engine 1.63.0** (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 N2): before it the estimate
   was capacity ÷ 3 m, a constant 3 m mean depth attributed to "Mantel &
   Hughes 2023", a reference that could never be found or verified. Against
   the SA-derived relation it understated the area, and so the evaporation, of
@@ -2504,7 +2504,7 @@ binds, the transfer brings enough that neither MIN bites.
   (`estimatedDamAreaForEngine`).
 - `b` is `node.damAreaExponent`, default **0.7** (`DAM_AREA_EXPONENT`, Liebe
   et al. 2005, small reservoirs; published small-reservoir fits give b ≈
-  0.65–0.85); a save takes 0 < b ≤ 1 (engine ≥ 1.61.0, below). WR2012's
+  0.65–0.85); a save takes 0 < b ≤ 1 (engine ≥ 1.63.0, below). WR2012's
   Pitman theory manual (WRC TT 690/16 §2.2) gives 0.6 as "the average for
   all reservoirs in South Africa" (calibration-research.md CR-32).
   **Kept at 0.7** (provisional decision 2026-10-01, to be confirmed by the client's hydrologist): the 0.6 is an average over all reservoirs, large
@@ -2533,7 +2533,7 @@ binds, the transfer brings enough that neither MIN bites.
   already keeps the order, so default dams are unchanged. A single power law
   with b > 1 is not a real basin shape (any area–stage power law gives
   b = m/(m + 1) < 1; published small-reservoir fits give b ≈ 0.65–0.85), so
-  the allowed range was narrowed to 0 < b ≤ 1 in engine 1.61.0
+  the allowed range was narrowed to 0 < b ≤ 1 in engine 1.63.0
   (`DAM_AREA_EXPONENT_MAX`; provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90): the API, the node form and a
   scenario's `node.set` refuse b > 1. The database column still allows up
   to 3, so a stored node with b > 1 loads and runs as entered, with the
@@ -3876,7 +3876,7 @@ needs the inflow and sediment yield the model doesn't have. Linear
 overstates late-life loss, the cautious side for storage. **How far back**:
 to the in-service date and no further, since the dam holds nothing before
 it; the run's warning above 1.25 × now asks for that date when it is
-missing (engine 1.61.0), instead of a fixed cap. **Dead storage and the
+missing (engine 1.63.0), instead of a fixed cap. **Dead storage and the
 triggers** keep scaling with the capacity (sediment spreads through a
 reservoir, not only the dead pool; filling dead storage first would leave
 the usable storage untouched for years and overstate the yield). **The

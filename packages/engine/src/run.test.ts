@@ -506,7 +506,7 @@ describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', (
 		expect(end(1, { damAreaExponent: 1 })).toBe(0);
 	});
 
-	it('engine 1.61.0: runs an older document\'s b > 1 as entered, and says a save now needs b ≤ 1 (issue #90)', () => {
+	it('engine 1.63.0: runs an older document\'s b > 1 as entered, and says a save now needs b ≤ 1 (issue #90)', () => {
 		const warn = (over: Partial<NetworkNode>) => dam(over).summary.warnings.filter((w) => w.includes('dam area exponent'));
 		expect(warn({ damAreaExponent: 1.5 })).toEqual([
 			'farm "D": dam area exponent 1.5 is above 1, which no real basin has (the surface would grow faster than the volume); it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ 1. Use 0.7, or enter the dam\'s survey curve'
@@ -528,7 +528,7 @@ describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', (
 			natural: [0],
 			startDate: '2020-10-01'
 		});
-		// 7.2 × 90 000^0.77 ≈ 47 000 m², a mean depth of about 1.9 m (engine ≥ 1.61.0; capacity ÷ 3 m gave 30 000 before).
+		// 7.2 × 90 000^0.77 ≈ 47 000 m², a mean depth of about 1.9 m (engine ≥ 1.63.0; capacity ÷ 3 m gave 30 000 before).
 		expect(get(out, 'D', 'dam_area')[0]).toBeCloseTo(7.2 * 90_000 ** 0.77, 6);
 		expect(get(out, 'D', 'dam_area')[0]).toBeCloseTo(47_000.15, 1);
 		expect(get(out, 'E', 'dam_area')).toEqual([20_000]);

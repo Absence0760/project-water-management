@@ -86,7 +86,7 @@ export function testCatchment(options: TestCatchmentOptions = {}): ModelInput {
 		},
 		model: {
 			// The dams' areas are entered (a 3 m mean depth), so the outlook tests' figures don't move with the
-			// engine's estimate for an unknown area (7.2 × capacity^0.77 since engine 1.61.0).
+			// engine's estimate for an unknown area (7.2 × capacity^0.77 since engine 1.63.0).
 			nodes: [
 				node({ id: 'g', name: 'Outlet', kind: 'gauge', sortOrder: 0 }),
 				node({ id: 'a', name: 'Farm A', kind: 'farm', sortOrder: 1, downstreamNodeId: 'g', areaKm2: 22, areaHiKm2: 18, areaLoKm2: 4, pctUpstreamToDam: 1, pctRunoffToDam: 0.8, damCapacityM3: 300_000, damInitialPct: 0.6, damMinPct: 0.05, damAreaFullM2: 300_000 / 3 }),
