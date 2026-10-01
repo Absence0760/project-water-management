@@ -41,7 +41,7 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
 	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom"`;
-const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
+const FROM_RUN = `FROM model_run r LEFT JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 /** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */
 export const RUN_META_SQL = { meta: RUN_META, from: FROM_RUN } as const;

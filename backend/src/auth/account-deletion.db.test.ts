@@ -4,9 +4,12 @@
 // yet: on a POPIA request the operator deletes the app_user row as the schema
 // owner, which is what these tests do. Every foreign key to app_user decides
 // what happens to its rows (catalogue.db.test.ts classifies each one); this
-// checks the outcome end to end for a farmer and for a co-owner, with the
-// project's other members as the positive control.
+// checks the outcome end to end for a farmer, a co-owner, an assessor, and a
+// modeller and an applicant who made evidence (138, issue #112: keep the
+// evidence, remove the name), with the project's other members as the
+// positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
+import { runEnsemble } from '@water-management/engine';
 import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -43,7 +46,7 @@ beforeAll(async () => {
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: coOwner.email, role: 'owner' })).status).toBe(201);
 	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farmA.id] })).status).toBe(201);
 	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: other.email, nodeIds: [farmB.id] })).status).toBe(201);
-	// The run is the owner's (model_run.created_by keeps its creator: a run is evidence), the publication the co-owner's.
+	// The run is the owner's (the owner stays; a run whose maker is deleted keeps it with no name, 138), the publication the co-owner's.
 	runId = (await owner.call('POST', `/projects/${projectId}/runs`, { label: 'r' })).body.run.id;
 	expect((await coOwner.call('POST', `/projects/${projectId}/publication`, { runId })).status).toBe(201);
 	expect((await coOwner.call('PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked against the gauge' })).status).toBe(200);
@@ -180,5 +183,163 @@ describe('deleting an assessor’s account', () => {
 		expect(read.status).toBe(200);
 		expect(read.body.scenario).toMatchObject({ status: 'decided', outcome: 'refused', decisionNote: 'Too little left in dry years.' });
 		expect(JSON.stringify(await events())).not.toContain('Dassessor');
+	});
+});
+
+// Evidence that names its maker (138_account_evidence_deletion, issue #112):
+// a project, team, run, nomination, ensemble, scenario and import made by a
+// modeller, and an applicant's applications. The rule is "keep the evidence,
+// remove the name": every row stays with its maker cleared, except what only
+// the person could ever finish or see (a started ensemble, a draft
+// application and its runs). The positive controls: an editor still reads
+// each row, with no name.
+describe('deleting the account of a modeller who made evidence, and of an applicant', () => {
+	let modeller: User;
+	let applicant: User;
+	let ownProject: string; // the modeller's own project, made by importing a project file
+	let teamId: string;
+	let modRun: string;
+	let complete: string; // a completed ensemble on modRun
+	let started: string; // a started one, never completed
+	let teamScenario: string;
+	let submitted: string; // the applicant's submitted application
+	let draft: string; // their draft, with a run
+	let draftRun: string;
+	const P = () => `/projects/${projectId}`;
+	const ok = async (res: Promise<{ status: number; body: any }>, status = 200) => {
+		const r = await res;
+		expect(r.status, JSON.stringify(r.body)).toBe(status);
+		return r.body;
+	};
+	const ensemble = async () => (await ok(modeller.call('POST', `${P()}/runs/${modRun}/uncertainty`, { request: { members: 30, thresholds: { minSkill: -10, maxLowFlowBiasPct: null, wr2012MaxLevel: 'unusable' } } }), 201)).ensemble;
+
+	beforeAll(async () => {
+		[modeller, applicant] = (await Promise.all(['Dmodeller', 'Dapplicant2'].map((n) => signUp(n)))) as [User, User];
+		await ok(owner.call('POST', `${P()}/members`, { email: modeller.email, role: 'owner' }), 201);
+		await ok(owner.call('POST', `${P()}/members`, { email: applicant.email, role: 'contributor' }), 201);
+		// A project they imported (project.created_by, project_import.imported_by), handed to a co-owner so they aren't its only owner.
+		ownProject = (
+			await ok(
+				modeller.call('POST', '/projects/import', {
+					format: 'water-management.project',
+					version: 1,
+					name: 'Imported by the modeller',
+					description: '',
+					settings: {},
+					model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
+					series: [],
+					importReport: { source: 'project-file', fileName: 'catchment.json', importerVersion: 'test' }
+				}),
+				201
+			)
+		).project.id;
+		await ok(modeller.call('POST', `/projects/${ownProject}/members`, { email: owner.email, role: 'owner' }), 201);
+		// A team they made (team.created_by), with a second admin.
+		teamId = (await ok(modeller.call('POST', '/teams', { name: 'Modeller team' }), 201)).team.id;
+		await ok(modeller.call('POST', `/teams/${teamId}/members`, { email: owner.email, role: 'admin' }), 201);
+		// A gauge record, which an ensemble needs.
+		const flow = Array.from({ length: 60 }, (_, i) => 0.02 * (1 + 0.5 * Math.sin(i / 7)));
+		await ok(modeller.call('PUT', `${P()}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-10-01', values: flow }));
+		// A run, nominated as evidence (model_run.created_by, run_nomination.nominated_by).
+		modRun = (await ok(modeller.call('POST', `${P()}/runs`, { label: 'modeller run' }), 201)).run.id;
+		await ok(modeller.call('POST', `${P()}/evidence`, { runId: modRun, reason: 'the calibrated run' }), 201);
+		// Two ensembles (run_uncertainty.created_by): one completed, one left started.
+		const e = await ensemble();
+		const input = (await ok(modeller.call('GET', `${P()}/runs/${modRun}/model-input`))).input;
+		const { members, coverage } = runEnsemble(input, e.options);
+		await ok(modeller.call('POST', `${P()}/runs/${modRun}/uncertainty/${e.id}/result`, { members, coverage }));
+		complete = e.id;
+		started = (await ensemble()).id;
+		// A team scenario (scenario.owner_user_id, origin team).
+		teamScenario = (await ok(modeller.call('POST', `${P()}/scenarios`, { name: 'Team option', baseRunId: runId, ops: [] }), 201)).scenario.id;
+		// The applicant: one application submitted (the project's record), one still a draft, with a run.
+		submitted = (await ok(applicant.call('POST', `${P()}/scenarios`, { name: 'New dam', baseRunId: runId, ops: [] }), 201)).scenario.id;
+		await ok(applicant.call('POST', `${P()}/scenarios/${submitted}/submit`));
+		draft = (await ok(applicant.call('POST', `${P()}/scenarios`, { name: 'Bigger dam', baseRunId: runId, ops: [] }), 201)).scenario.id;
+		draftRun = (await ok(applicant.call('POST', `${P()}/scenarios/${draft}/runs`, { label: 'draft run' }), 201)).run.id;
+	}, 120_000);
+
+	it('refuses anyone a change to who made a row while the account exists (negative controls)', async () => {
+		// An editor (the owner) can update the project and team rows, but not their maker: clearing it or naming someone else.
+		for (const to of [null, owner.id]) {
+			await expect(withUser(owner.id, (db) => db.query('UPDATE project SET created_by = $2 WHERE id = $1', [ownProject, to]))).rejects.toMatchObject({ code: '23514' });
+			await expect(withUser(owner.id, (db) => db.query('UPDATE team SET created_by = $2 WHERE id = $1', [teamId, to]))).rejects.toMatchObject({ code: '23514' });
+		}
+		// Nor a scenario's owner, or a completed ensemble's starter (not even the schema owner, while the account exists).
+		await expect(withUser(modeller.id, (db) => db.query('UPDATE scenario SET owner_user_id = NULL WHERE id = $1', [teamScenario]))).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner('UPDATE run_uncertainty SET created_by = NULL WHERE id = $1', [complete])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner('UPDATE model_run SET created_by = NULL WHERE id = $1', [modRun])).rejects.toMatchObject({ code: '23514' });
+		// A new project, team or run needs its maker, though the columns are nullable now.
+		await expect(asOwner(`INSERT INTO project (name, created_by) VALUES ('No maker', NULL)`)).rejects.toMatchObject({ code: '23502' });
+		await expect(asOwner(`INSERT INTO team (name, created_by) VALUES ('No maker', NULL)`)).rejects.toMatchObject({ code: '23502' });
+		expect(await asOwner('SELECT created_by FROM project WHERE id = $1', [ownProject])).toEqual([{ created_by: modeller.id }]);
+		expect(await asOwner('SELECT created_by FROM team WHERE id = $1', [teamId])).toEqual([{ created_by: modeller.id }]);
+	});
+
+	it('refuses an account that is a project’s only owner, until it is handed over', async () => {
+		const alone = await signUp('Dalone');
+		await ok(alone.call('POST', '/projects', { name: 'Only mine' }), 201);
+		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [alone.id])).rejects.toMatchObject({ code: '23514' });
+		expect(await asOwner('SELECT 1 FROM app_user WHERE id = $1', [alone.id])).toHaveLength(1);
+	});
+
+	describe('once both accounts are deleted', () => {
+		beforeAll(async () => {
+			await asOwner('DELETE FROM app_user WHERE id = $1', [modeller.id]);
+			await asOwner('DELETE FROM app_user WHERE id = $1', [applicant.id]);
+		});
+
+		it('keeps every row of evidence with its maker cleared', async () => {
+			expect(await asOwner('SELECT created_by FROM project WHERE id = $1', [ownProject])).toEqual([{ created_by: null }]);
+			expect(await asOwner('SELECT imported_by FROM project_import WHERE project_id = $1', [ownProject])).toEqual([{ imported_by: null }]);
+			expect(await asOwner('SELECT created_by FROM team WHERE id = $1', [teamId])).toEqual([{ created_by: null }]);
+			expect(await asOwner('SELECT created_by FROM model_run WHERE id = $1', [modRun])).toEqual([{ created_by: null }]);
+			expect(await asOwner('SELECT nominated_by FROM run_nomination WHERE run_id = $1', [modRun])).toEqual([{ nominated_by: null }]);
+			expect(await asOwner(`SELECT status, created_by FROM run_uncertainty WHERE id = $1`, [complete])).toEqual([{ status: 'complete', created_by: null }]);
+			expect(await asOwner('SELECT owner_user_id, origin FROM scenario WHERE id = $1', [teamScenario])).toEqual([{ owner_user_id: null, origin: 'team' }]);
+			expect(await asOwner('SELECT owner_user_id, status FROM scenario WHERE id = $1', [submitted])).toEqual([{ owner_user_id: null, status: 'submitted' }]);
+			// Nothing else names either of them by id.
+			for (const u of [modeller, applicant]) {
+				for (const [t, c] of [
+					['project', 'created_by'],
+					['team', 'created_by'],
+					['model_run', 'created_by'],
+					['run_uncertainty', 'created_by'],
+					['run_nomination', 'nominated_by'],
+					['project_import', 'imported_by'],
+					['scenario', 'owner_user_id']
+				]) {
+					expect(await asOwner(`SELECT 1 FROM ${t} WHERE ${c} = $1`, [u.id])).toEqual([]);
+				}
+			}
+		});
+
+		it('drops what only they could finish or see: the started ensemble, the draft application and its run', async () => {
+			expect(await asOwner('SELECT 1 FROM run_uncertainty WHERE id = $1', [started])).toEqual([]);
+			expect(await asOwner('SELECT 1 FROM scenario WHERE id = $1', [draft])).toEqual([]);
+			// The run went with it, not left behind as a run of the model (scenario_id cleared).
+			expect(await asOwner('SELECT 1 FROM model_run WHERE id = $1', [draftRun])).toEqual([]);
+		});
+
+		it('still shows an editor the run, the nomination history, the ensemble and the scenarios, with no name (positive controls)', async () => {
+			const runs = (await ok(owner.call('GET', `${P()}/runs`))).runs as { id: string; createdBy: string | null }[];
+			expect(runs.find((r) => r.id === modRun)).toMatchObject({ createdBy: null });
+			expect(runs.some((r) => r.id === draftRun)).toBe(false);
+			expect((await ok(owner.call('GET', `${P()}/runs/${modRun}`))).run).toMatchObject({ id: modRun, createdBy: null });
+			const nominations = (await ok(owner.call('GET', `${P()}/evidence`))).nominations as { runId: string; nominatedBy: string | null }[];
+			expect(nominations.find((n) => n.runId === modRun)).toMatchObject({ nominatedBy: null });
+			const ensembles = (await ok(owner.call('GET', `${P()}/runs/${modRun}/uncertainty`))).ensembles as { id: string; createdBy: string | null; createdById: string | null }[];
+			expect(ensembles).toEqual([expect.objectContaining({ id: complete, createdBy: null, createdById: null })]);
+			const compared = await ok(owner.call('GET', '/compare/runs?' + new URLSearchParams({ a: `${projectId}:${runId}`, b: `${projectId}:${modRun}` })));
+			expect(compared.b.run).toMatchObject({ id: modRun, createdBy: null });
+			for (const sid of [teamScenario, submitted]) {
+				expect((await ok(owner.call('GET', `${P()}/scenarios/${sid}`))).scenario).toMatchObject({ id: sid, owner: null, ownerUserId: null });
+			}
+			expect((await ok(owner.call('GET', `/projects/${ownProject}/import-report`))).report).toMatchObject({ importedBy: null });
+			const teams = (await ok(owner.call('GET', '/teams'))).teams as { id: string }[];
+			expect(teams.map((t) => t.id)).toContain(teamId);
+			// Their names are gone from the project's history too (048).
+			expect(JSON.stringify(await events())).not.toMatch(/Dmodeller|Dapplicant2/);
+		});
 	});
 });
