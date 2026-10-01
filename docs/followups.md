@@ -3291,18 +3291,22 @@ from the WP:
       15 Feb) keeps its printed factor rather than being prorated, and the
       stage-to-month rule for vegetables (model.md §2.3 item 8). Trigger:
       their answer on #46.
-- [ ] **A node-based workbook's crop sheets can't be loaded.** The browser importer reads
-      b023 only (it needs b023's named ranges); node-based `Crop_Factors` /
-      `Crop_Areas` sheets have none. Durable fix: a small
-      reader for those two sheets beside `spreadsheet/import/crops.ts`
-      (sheet by name, the month header row), as a third source in the
-      dialog, added to `SOURCE_KINDS` (`loadFactors.ts`) with shape
-      `fao-et0`, so Kp will default to 0.75 for it (issue #289: the
-      default-by-shape rule is in; the reader, its source row and an e2e
-      case for the 0.75 default are in progress). Until then a
-      modeller enters its values by hand. Trigger: the hydrologist wants
-      such a set compared (Q9), with a synthetic fixture of that shape for the
-      test (never a client file).
+- [x] **A node-based workbook's crop sheets** (2026-09-30, issue #289).
+      The reader, `spreadsheet/import/nodeCrops.ts`, finds [Crop_Factors]
+      and [Crop_Areas] by name (ignoring case, spaces and underscores) and
+      their tables by header row (twelve month names in any order, then
+      "Crop(s)"; "Farm …" then a column per crop). It returns each crop's
+      twelve factors (Oct..Sep) and efficiency, each farm's areas in m², the
+      A-pan and effective-rainfall rows, and warnings (a missing sheet or
+      header, a non-numeric or out-of-range cell, a duplicate, a crop in one
+      sheet but not the other). The set is marked `shape: 'fao-et0'`. It
+      runs in the import worker (`createWorkbookImport().readNodeCrops(file)`),
+      parses only those two sheets and is tested on a synthetic workbook of
+      that layout (`testWorkbook.ts` `syntheticNodeBased`). Load crop
+      factors offers it as its third source, with Kp defaulting to 0.75
+      (`SOURCE_KINDS`, `defaultKp` in `crops/loadFactors.ts`) and the
+      reader's warnings listed ([ui.md § Load crop
+      factors](./ui.md#load-crop-factors)).
 - [x] **One table of irrigation efficiencies; drip the new-farm default**
       (2026-09-28, issue #90 answering #54 Q10). The engine's
       `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values
