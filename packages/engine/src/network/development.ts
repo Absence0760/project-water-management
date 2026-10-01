@@ -119,11 +119,12 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	const k = new Float64Array(days);
 	for (let t = 0; t < days; t++) k[t] = damCapacityFactor(n, start + t);
 	// Linear back from a recent survey over a long record makes the dam far larger than surveyed, at the
-	// same full-supply area: said, pending the hydrologist's ruling on how far that may go (engine-audit.md S1).
+	// same full-supply area: said. Provisional decision 2026-10-01 (engine-audit.md S1): the rate runs back to the in-service
+	// date, which the modeller is asked for here, and no further cap is applied.
 	const most = k.reduce((a, v) => Math.max(a, v), 0);
 	if (most > DAM_SEDIMENT_WARN_FACTOR)
 		warnings.push(
-			`farm "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date`
+			`farm "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date${n.damInServiceFrom ? '' : ', and enter the date it came into service (before it the dam holds nothing, so the rate runs back only that far)'}`
 		);
 	return k;
 }

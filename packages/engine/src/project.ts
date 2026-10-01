@@ -1146,12 +1146,15 @@ export interface NetworkNode {
 	lossReturnFraction: number;
 	/**
 	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
-	 * known: the run estimates capacity ÷ 3 m (ESTIMATED_DAM_DEPTH_M) and warns.
+	 * known: the run estimates it from the capacity (estimatedDamAreaM2, engine
+	 * ≥ 1.61.0; capacity ÷ 3 m before) and warns.
 	 */
 	damAreaFullM2: number | null;
 	/**
-	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b
-	 * (0 < b ≤ 3). Default 0.7 (Liebe et al. 2005, small reservoirs).
+	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b.
+	 * Default 0.7 (Liebe et al. 2005, small reservoirs). A save takes 0 < b ≤ 1
+	 * (DAM_AREA_EXPONENT_MAX, engine ≥ 1.61.0: no basin has b ≥ 1); a run still
+	 * takes an older document's b up to 3, with a warning.
 	 */
 	damAreaExponent: number;
 	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
@@ -1421,11 +1424,56 @@ export const DAM_CURVE_MAX_ROWS = 200;
 export const DAM_AREA_EXPONENT = 0.7;
 
 /**
- * Mean depth used to estimate a dam's full-supply area when none is entered:
- * area = capacity ÷ 3 m, about the median mean depth of South African minor
- * dams (Mantel & Hughes 2023). A run that uses it says so (warning W6).
+ * The largest dam area exponent a save takes (engine ≥ 1.61.0, issue #90;
+ * provisional decision 2026-10-01, to be confirmed by the client's
+ * hydrologist). Any area–stage power law V ∝ h^m gives b = (m − 1)/m < 1, so
+ * b > 1 is no real basin shape; 1 (a vertical-sided pond) is the bound. The
+ * engine still runs an older document's b up to 3 (the b > 1 limiter, model.md
+ * §2.7a) and warns.
  */
-export const ESTIMATED_DAM_DEPTH_M = 3;
+export const DAM_AREA_EXPONENT_MAX = 1;
+
+/**
+ * A dam's full-supply area when none is entered (engine ≥ 1.61.0, issue #90,
+ * N2; provisional decision 2026-10-01, to be confirmed by the client's
+ * hydrologist): A = 7.2 · C^0.77 m² for a capacity C in m³, the generalised
+ * relation for South African farm dams of all shapes of Maaren & Moolman
+ * (1985, ACRU Report 22, pp. 428–441), as quoted by Sawunyama (2013, IAHS Publ. 362,
+ * p. 59), who warns it is a poor guide to any one dam (enter the area where known). It replaces
+ * capacity ÷ 3 m (a 3 m mean depth whose source could not be verified): a
+ * small dam is shallower than a large one (mean depth C ÷ A: about 1.2 m at
+ * 10 000 m³, 2.0 m at 100 000 m³, 3.3 m at 1 000 000 m³). A run that uses it
+ * says so (warning W6).
+ */
+export const ESTIMATED_DAM_AREA = { coefficient: 7.2, exponent: 0.77 } as const;
+
+/** The estimated full-supply area of a dam of `capacityM3` (m²); 0 for no dam. See ESTIMATED_DAM_AREA. */
+export function estimatedDamAreaM2(capacityM3: number): number {
+	return capacityM3 > 0 ? ESTIMATED_DAM_AREA.coefficient * capacityM3 ** ESTIMATED_DAM_AREA.exponent : 0;
+}
+
+/** The engine that moved the estimate from capacity ÷ 3 m to ESTIMATED_DAM_AREA. */
+export const ESTIMATED_DAM_AREA_SINCE = '1.61.0';
+
+/**
+ * The estimated area an unknown dam ran on in a run saved by `engineVersion`:
+ * capacity ÷ 3 m before ESTIMATED_DAM_AREA_SINCE, estimatedDamAreaM2 from it
+ * (and when the version is absent or not x.y.z), so a stored run's audit
+ * workbook recomputes the area its own engine used.
+ */
+export function estimatedDamAreaForEngine(capacityM3: number, engineVersion?: string): number {
+	const parse = (v: string | undefined) => (v && /^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null);
+	const run = parse(engineVersion);
+	const since = parse(ESTIMATED_DAM_AREA_SINCE)!;
+	if (run && capacityM3 > 0) {
+		const d = run[0]! - since[0]! || run[1]! - since[1]! || run[2]! - since[2]!;
+		if (d < 0) return capacityM3 / 3;
+	}
+	return estimatedDamAreaM2(capacityM3);
+}
+
+/** How the estimate is written in labels and warnings. */
+export const ESTIMATED_DAM_AREA_LABEL = '7.2 × capacity^0.77 (Maaren & Moolman 1985)';
 
 /** An irrigation system with its SABI 2021 efficiency range and the value the app offers for it. */
 export interface IrrigationSystem {

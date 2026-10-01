@@ -46,7 +46,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		formula:
 			"MIN(diversion capacity (the month's, when River to dam is set by month), L + N); cut first so S passes the senior users' requirement MIN(Zs, H + I), and with a hands-off flow (engine ≥ 1.32.0) at most MAX(0, L + N − keep), keep = MAX(the month's hands-off amount, Z when the EWR is kept)"
 	},
-	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m. With a survey curve (WP-3.5): the area linear in volume between its rows at Q[t−1] (from 0 m³, 0 m² below the lowest row; the top row\'s area above it)' },
+	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or 7.2 × dam capacity^0.77 (capacity ÷ 3 m before engine 1.61.0). With a survey curve (WP-3.5): the area linear in volume between its rows at Q[t−1] (from 0 m³, 0 m² below the lowest row; the top row\'s area above it)' },
 	{ key: 'rain_on_dam', letter: null, formula: 'rain (before any threshold) ÷ 1000 × dam area' },
 	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor (the month\'s, when monthly factors are set) × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J); for b > 1 also at most (1 − seepage per day) × Q[t−1] ÷ b (on a survey curve b = Q[t−1] × the curve\'s slope ÷ dam area)' },
 	{ key: 'dam_seepage', letter: null, formula: 'MIN(seepage per day × Q[t−1], Q[t−1] + rain on dam + J − evaporation)' },

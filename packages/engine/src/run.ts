@@ -65,9 +65,11 @@ import {
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
+	DAM_AREA_EXPONENT_MAX,
 	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
-	ESTIMATED_DAM_DEPTH_M,
+	ESTIMATED_DAM_AREA_LABEL,
+	estimatedDamAreaM2,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
 	parseGaugeSeriesKey,
@@ -1433,7 +1435,7 @@ export function buildNetworkPlan(
 	if (estimated.length) {
 		warnings.push(
 			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
-				`capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m mean depth (Mantel & Hughes 2023). Enter the area for (${estimated.map((n) => n.name).join('; ')})`
+				`${ESTIMATED_DAM_AREA_LABEL} m², a regional relation that can be far out for any one dam. Enter the area for (${estimated.map((n) => n.name).join('; ')})`
 		);
 	}
 
@@ -2047,22 +2049,29 @@ function capYears(
 
 /**
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
- * as entered, or capacity ÷ 3 m when it isn't known (warning W6, in
- * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning);
+ * as entered, or estimatedDamAreaM2 when it isn't known (warning W6, in
+ * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning;
+ * above DAM_AREA_EXPONENT_MAX it runs, with a warning, engine ≥ 1.61.0);
  * seepage per day clamped to 0–1. A node without a dam gets none.
  */
 function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
 	const cap = n.damCapacityM3;
 	if (n.kind !== 'farm' || !(cap > 0)) return { damAreaFullM2: 0, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
-	let area = n.damAreaFullM2 ?? cap / ESTIMATED_DAM_DEPTH_M;
+	let area = n.damAreaFullM2 ?? estimatedDamAreaM2(cap);
 	if (!(Number.isFinite(area) && area >= 0)) {
-		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m`);
-		area = cap / ESTIMATED_DAM_DEPTH_M;
+		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using ${ESTIMATED_DAM_AREA_LABEL}`);
+		area = estimatedDamAreaM2(cap);
 	}
 	let b = n.damAreaExponent;
 	if (!(b > 0 && b <= 3)) {
 		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
 		b = DAM_AREA_EXPONENT;
+	} else if (b > DAM_AREA_EXPONENT_MAX && !resolveDamCurve(n)) {
+		// Engine ≥ 1.61.0 (issue #90): a save no longer takes b > 1, which no basin has; an older document's runs as entered.
+		warnings.push(
+			`farm "${n.name}": dam area exponent ${String(b)} is above ${DAM_AREA_EXPONENT_MAX}, which no real basin has (the surface would grow faster than the volume); ` +
+				`it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ ${DAM_AREA_EXPONENT_MAX}. Use ${DAM_AREA_EXPONENT}, or enter the dam's survey curve`
+		);
 	}
 	const s = n.damSeepagePerDay;
 	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;

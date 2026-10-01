@@ -8,35 +8,35 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium",
 		"title": "Irrigation efficiency and return flow don't add up",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N2",
 		"source": "finding",
 		"severity": "High (dam-dominated farms)",
 		"title": "Dam evaporation and seepage are ignored",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N3",
 		"source": "finding",
 		"severity": "Medium",
 		"title": "Effective rain is applied day by day with no carry-over",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.14.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90), engine 0.14.0"
 	},
 	{
 		"id": "N5",
 		"source": "finding",
 		"severity": "Medium (where boreholes pump near the river)",
 		"title": "Groundwater was not modelled",
-		"status": "Built (engine 0.23.0, roadmap WP-1.34, migration 012), off by default; pending the hydrologist"
+		"status": "Built (engine 0.23.0, roadmap WP-1.34, migration 012), off by default; the method provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90); its values need client data"
 	},
 	{
 		"id": "N4",
 		"source": "finding",
 		"severity": "Low",
 		"title": "Transfers ignore the receiving dam's free space, and the source's irrigation comes second",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N6",
@@ -64,7 +64,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
 		"title": "A dam's capacity and a unit's abstraction now change over a run, on judgement calls the hydrologist hasn't made",
-		"status": "Built, pending the hydrologist (issue #90)"
+		"status": "Built; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90): linear, run back to the in-service date (engine 1.61.0 asks for it), dead storage and the triggers scaled, the full-supply area kept"
 	},
 	{
 		"id": "C2",
@@ -148,14 +148,14 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "quirk",
 		"severity": null,
 		"title": "Transfer order / spill at the receiver",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "Q5",
 		"source": "quirk",
 		"severity": null,
 		"title": "Irrigation may empty the dam",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90; which dams keep a reserve is client data) — engine 0.16.0"
 	},
 	{
 		"id": "Q6",
@@ -190,6 +190,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "quirk",
 		"severity": null,
 		"title": "Several transfers from one dam",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	}
 ];

@@ -1205,7 +1205,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damCapacityM3', 'dam capacity', withUnit('m³', 0)],
 	['damInitialPct', 'dam initial level', pct],
 	['damMinPct', 'dam minimum operating level', pct],
-	['damAreaFullM2', 'dam area when full', (v) => (v === null || v === undefined ? 'estimated (capacity ÷ 3 m)' : `${fmtValue(v, 0)} m²`)],
+	['damAreaFullM2', 'dam area when full', (v) => (v === null || v === undefined ? 'estimated (7.2 × capacity^0.77)' : `${fmtValue(v, 0)} m²`)],
 	['damAreaExponent', 'dam area exponent', plain],
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
