@@ -3391,7 +3391,11 @@ reading of this document where it didn't settle them):
   River to dam (K, M, O), so on a farm with no dam the other rules irrigate
   what they route straight from the river, past the pump and its capacity,
   as dam only does. The run warns, naming the farm; run of river sends it
-  all through the pump.
+  all through the pump. Both this warning and dam only's judge "no dam" over
+  the run's own days (engine ≥ 1.60.0, `network/development.ts`
+  `damPresence`, as the evidence check does): a dam not in service yet when
+  the run starts, or silted empty by its end (§2.7g), leaves days without
+  one, and the warning says so.
 - *Run of river takes a transfer in first.* A transfer into a farm is sized
   to its demand (§2.6), so a run-of-river farm uses it before the river and
   it never becomes a "spill". The dam split fields (`pctUpstreamToDam`,

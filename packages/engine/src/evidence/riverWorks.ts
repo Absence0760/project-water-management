@@ -8,7 +8,7 @@ import type { NetworkNode, ProjectModel, Transfer } from '../project';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { toEpochDay } from '../calendar';
-import { damCapacityFactor } from '../network/development';
+import { damPresence } from '../network/development';
 import { transferRatesM3s } from '../network/transferRates';
 
 /**
@@ -73,26 +73,6 @@ function hasDemand(model: Pick<ProjectModel, 'cropAreas' | 'demandObjects'>, nod
 	return (model.cropAreas ?? []).some((a) => a.nodeId === nodeId && a.areaM2 > 0) || (model.demandObjects ?? []).some((o) => o.nodeId === nodeId && o.enabled !== false);
 }
 
-/**
- * Whether the farm's dam is there on every day of the run, and on any. Its
- * capacity factor (development.ts) falls with sediment and steps up on its
- * in-service day, so its least is on the run's first or last day and, when
- * it comes into service inside the run, its most is on that day.
- */
-function damPresence(n: NetworkNode, window: RiverWorksWindow | undefined): { always: boolean; ever: boolean } {
-	if (!(n.damCapacityM3 > 0)) return { always: false, ever: false };
-	if (!window) return { always: true, ever: true };
-	const a = toEpochDay(window.startDate);
-	const b = toEpochDay(window.endDate);
-	const days = [a, b];
-	if (n.damInServiceFrom) {
-		const d = toEpochDay(n.damInServiceFrom);
-		if (d > a && d <= b) days.push(d);
-	}
-	const k = days.map((d) => damCapacityFactor(n, d));
-	return { always: k[0]! > 0 && k[1]! > 0, ever: k.some((x) => x > 0) };
-}
-
 /** The river abstractions of one node (none for a gauge, or for a node that takes nothing from the river in the run). */
 export function nodeRiverWorks(n: NetworkNode, model: Pick<ProjectModel, 'cropAreas' | 'demandObjects'>, window?: RiverWorksWindow): RiverWorks[] {
 	const out: RiverWorks[] = [];
@@ -105,7 +85,7 @@ export function nodeRiverWorks(n: NetworkNode, model: Pick<ProjectModel, 'cropAr
 	}
 	if (n.kind !== 'farm') return out;
 	const demand = hasDemand(model, n.id);
-	const dam = damPresence(n, window);
+	const dam = damPresence(n, window ? { start: toEpochDay(window.startDate), end: toEpochDay(window.endDate) } : undefined);
 	const rule = n.supplyRule ?? 'damFirst';
 	// The run reads null / absent / not a size ≥ 0 as no limit (network/supply.ts supplyOf); 0 = no river pump. It pumps only for demand.
 	if (RIVER_PUMP_RULES.has(rule) && n.pumpCapacityM3Day !== 0 && demand)

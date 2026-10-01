@@ -3611,13 +3611,13 @@ from the WP:
       (engine 1.60.0 warns, model.md §2.7e). Only run of river zeroes the
       dam split and River to dam, so on a unit with no dam the other rules
       irrigate what is routed to the absent dam straight from the river,
-      past the pump capacity. The evidence check counts it as unbounded;
-      the run's warning keys on the entered dam capacity, so a dam not yet
-      in service or silted empty inside the run isn't warned about.
-      Durable fix: send K, M and O through the pump under those rules when
-      there is no dam (a change to the model's numbers: an engine-audit.md
-      finding, *needs hydrologist*, then `pnpm gen:liability`), and warn
-      per day of no dam. Trigger: the hydrologist confirming how a
+      past the pump capacity. The evidence check counts it as unbounded,
+      and the run warns, judging "no dam" over the run's days as the check
+      does (a dam not in service yet or silted empty inside the run
+      included; `damPresence`). Durable fix: send K, M and O through the
+      pump under those rules when there is no dam (a change to the model's
+      numbers: an engine-audit.md finding, *needs hydrologist*, then
+      `pnpm gen:liability`). Trigger: the hydrologist confirming how a
       dam-less river-first unit should take its routed water.
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
       them uncapped (b023 has none) and every run warns; an evidence pack

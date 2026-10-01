@@ -106,7 +106,10 @@ Kareebos (Droëvlei), same password; each reads their farm's published
 figures through `GET /projects/:id/farm/:nodeId` (the farm page is
 WP-2.6's). A demo **applicant** (WP-3.3), `applicant@example.com`, is a
 contributor on Sandspruit, linked to Klipdrift, with one submitted
-application doubling its dam: sign in as them for the Applicant view, or as
+application doubling its dam and keeping the EWR in the river before River
+to dam fills it (the hands-off condition a new licence carries, so its
+evidence report passes the river checks, [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river);
+`backend/scripts/examples/application.ts`): sign in as them for the Applicant view, or as
 analyst@ for Sandspruit's **Applications** tab to decide it. To try a **share link** (WP-2.3 phase 2), sign in as the owner
 (analyst@ for Sandspruit, demo@ for the team's catchments), make one on the
 Overview's Share links panel and open it in a private window; none is seeded,
