@@ -1973,12 +1973,21 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     (112), so its comments stay; a draft's team notes go with it (cascade).
     Every edit of a scenario or pack note is kept (`note_write_revision`).
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
-- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
-  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
-  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
-  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
-  trigger lets only the author change the body, stamps `edited_at` and
-  `deleted_by` itself, and refuses to touch a deleted note.
+- **Soft delete, then erasure after 90 days.** `deleted_at` / `deleted_by`:
+  the note is hidden at once, and its row, body and earlier texts stay for
+  90 days so a mistake or a complaint can be looked into. Then the job tick
+  erases them (`app_purge_deleted_notes`, 156_note_purge.sql, called with
+  `DELETED_NOTE_RETENTION_DAYS` in `jobs/runner.ts`; `note_revision` goes by
+  its cascade). The `note.deleted` audit event, which never held the body,
+  stays. A note on a scenario past draft (submitted, withdrawn, decided) or
+  a pack past draft is part of that licence record and is kept, hidden, with
+  it (POPIA s14(6)(b); provisional position, pre-counsel research,
+  2026-10-01). `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list: the definer function is the only path) and may
+  `UPDATE` only `body`, `edited_at`, `deleted_at` and `deleted_by` (its
+  column-only list). The `note_guard` trigger lets only the author change
+  the body, stamps `edited_at` and `deleted_by` itself, and refuses to touch
+  a deleted note.
 - **RLS.**
   - SELECT: viewers and above see every note that isn't deleted; editors, and
     a note's author, also see deleted ones (Postgres checks an updated row
@@ -2829,6 +2838,22 @@ functions and changes no table, policy or grant:
   exists, instead of putting the old creator back;
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
+
+### Erasure log (157_erasure_log.sql)
+
+`erasure_log (id, kind, subject_id, erased_at)`: one row for every deleted
+`app_user` (`account`), `project` and `team`, written by an `AFTER DELETE`
+trigger on each (`erasure_log_record`, SECURITY DEFINER), so both
+account-deletion paths (the operator's SQL and `DELETE /auth/me`) are
+covered. It holds the internal id only, no foreign keys (the row outlives
+what it names), RLS on with no policy and no grant to `water_app`:
+only the schema owner reads it (`catalogue.db.test.ts` `OWNER_ONLY`). The
+job tick deletes entries older than 40 days (`app_purge_erasure_log`,
+`ERASURE_LOG_RETENTION_DAYS`; the function refuses under 36), above the
+35-day maximum of `db_backup_retention_days`. Its one reader is the restore
+runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the-database),
+step 6a), which reads it on the old instance and deletes each row again on
+the restored one.
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 

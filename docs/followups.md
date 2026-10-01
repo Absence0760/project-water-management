@@ -4978,13 +4978,28 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `/terms`, linked from sign-up, the invite emails, the sign-in pages
       and the farm menu, with the consent record (087) and re-acceptance
       (2026-09-28); counsel review is gate D in legal-status.md (#103).
-- [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
-      security.md: farmers' accounts and farm links (the WUA's function or
-      legitimate interest, not consent), notes and the audit log kept for
-      the life of the project, alerts as service messages the WUA switches
-      on per catchment, each person choosing how often (WP-2.13).
-      Who: the client's information officer. Trigger: with the privacy
-      notice.
+- [x] **Confirm the lawful basis** for each row marked *(confirm)* in
+      security.md. **Provisional positions taken (pre-counsel research,
+      2026-10-01):** accounts on contract, s11(1)(b); memberships, farm
+      links, notes, the audit log and alerts on the client's legitimate
+      interest, s11(1)(f), with the s11(3) objection built in (leave the
+      project; the alert unsubscribe); records kept under s14(1)(b); "and
+      duty to keep" dropped from Privacy §4. Alerts are service messages,
+      not direct marketing (s1, s69): `mail/alerts.content.test.ts` holds
+      their links to an allowlist, and SES open and click tracking stays
+      off. Privacy §4 and §10, security.md § Personal information,
+      `LEGAL_VERSION` 2026-10-02. The client's information officer may still
+      override them by written instruction (operator agreement cl. 3).
+- [ ] **The client's privacy contact on the farm page and in invitations**
+      (POPIA s18(1)(b) for project data; the build list's item 5 in the
+      2026-10-01 POPIA positions). A team-level `privacy_contact` (name,
+      email, postal address; owners and admins edit), shown on the farm
+      view's menu ("Who decides about your farm's information") and in
+      invitation emails, and Privacy §2 then points there. Until it is built,
+      operator agreement 3A.1(b) makes each client give the notice itself.
+      Needs its own migration, routes, the team settings form and farmer-facing
+      strings (Afrikaans too). Trigger: before the first client whose
+      agreement doesn't settle 3A.1(b), or with the next team-settings change.
 - [ ] **Operator agreement** (POPIA s20–21, gate B in #103) between the client as
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
@@ -5029,23 +5044,27 @@ own. Loop in the CISO or security analyst before acting on any of them.
       on the evidence (its own migration), on for such a team. Trigger: D1
       (#50) puts the published baseline with a CMA or DWS, or counsel says
       the Act applies.
-- [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
-      body for editors for the life of the project (037). Decide a limit (for
-      example a year, then purge the body and keep the event). Who: client.
-      Trigger: with the privacy notice.
-- [ ] **Backups after an erasure.** A deleted account stays in RDS automated
-      backups for up to `db_backup_retention_days` (7–35). The usual
-      answer is that backups age out and are never restored into live use
-      without re-applying erasures; confirm and put it in the notice. Who:
-      operator + information officer. Trigger: with the privacy notice.
-      Since self-service deletion (143) the operator log no longer sees
-      every erasure: `DELETE /auth/me` logs `account_deleted` with no id, on
-      purpose. If the answer is "re-apply erasures after a restore", that
-      step needs a list of erased account ids that survives a restore (the
-      restore takes the database back, so not a table in it): for example
-      the id in that log line with log retention at least the backups', or
-      a write to a separate store. Decide it with the answer, in the same
-      change as the runbook step (deployment.md § Rollback).
+- [x] **Retention of deleted notes' bodies.** Done (156_note_purge.sql;
+      provisional position, pre-counsel research, 2026-10-01): a deleted
+      note's text and earlier texts are erased 90 days after deletion by the
+      tick (`app_purge_deleted_notes`, `DELETED_NOTE_RETENTION_DAYS`); the
+      `note.deleted` event stays; a note on a scenario or pack past draft is
+      kept hidden with the licence record. Privacy §7, security.md,
+      data-model.md § Notes. A dispute before day 90: the client instructs
+      the operator in writing to copy the note out first (no legal-hold
+      feature until one is asked for).
+- [x] **Backups after an erasure.** Done (provisional position, pre-counsel
+      research, 2026-10-01): backups age out (≤ 35 days) and a restore
+      re-applies erasures and revocations before traffic is back.
+      `erasure_log` (157) keeps the id of every deleted account, project and
+      team for 40 days, written by triggers so both deletion paths are
+      covered; the restore runbook's step 6a reads it, and the audit log's
+      revocations, on the old instance (deployment.md § Restoring the
+      database); `account_deleted` now logs the account id for the case
+      where the instance itself is lost; the old instance's final snapshot
+      is taken only if needed and deleted within 30 days; the teardown
+      snapshot is kept 90 days after the shutdown notice. Privacy §7,
+      operator agreement 5.8 and 10.2, infra/README.md § Tearing down.
 - [ ] **D12 confirmation.** The audit log is pseudonymised on account
       deletion ("Deleted user", 048) as the roadmap recommends; the
       information officer confirms it (or asks for full deletion of the

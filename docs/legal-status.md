@@ -270,3 +270,18 @@ Tracked in issue #103.
   personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
   notice's "what changed" list now names this and the 2026-09-30 deletion
   change (it still listed 2026-09-28's).
+- 2026-10-02: the POPIA positions taken pending counsel (provisional
+  positions, pre-counsel research, 2026-10-01; not legal advice). Privacy
+  §4 names each lawful basis (accounts on contract, s11(1)(b); project
+  data and alerts on the organisation's legitimate interest, s11(1)(f);
+  "and duty to keep" dropped) and says alerts are service messages that
+  never advertise; §10 says how to object (an alert's unsubscribe, leaving
+  a project, or telling us or the organisation); §7 says a deleted note's
+  text is erased after 90 days (156), that a restore deletes again what was
+  deleted after the backup (a 40-day list of deleted accounts and projects,
+  157), and that the teardown copy is kept 90 days. Other changes in the
+  same round (history, licence records, registered water use) share this
+  version. `LEGAL_VERSION` 2026-10-02 (a new date, since the 2026-10-01
+  version had already been bumped that day; every account accepts again,
+  and nothing is in production yet); the re-acceptance notice's "what
+  changed" list is rewritten for it.
