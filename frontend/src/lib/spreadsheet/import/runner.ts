@@ -4,8 +4,15 @@
 // One session per picked file: parse(), then any number of extract() calls
 // as the user changes options, then close(). cancel() terminates the worker
 // at once and rejects the pending call with WorkbookImportCancelled.
+//
+// readNodeCrops() reads a node-based workbook's [Crop_Factors] / [Crop_Areas]
+// instead (the Load crop factors dialog's third source, ./nodeCrops.ts): the
+// same worker, progress and failures, resolving with a NodeCropSet. It is
+// one call per file; an extract() after it fails (the worker keeps no b023
+// workbook from it).
 import type { ImportResult } from './extract';
 import type { FromWorker, ToWorker, WorkbookImportFailure, WorkbookImportOptions, WorkbookImportProgress } from './messages';
+import type { NodeCropSet } from './nodeCrops';
 
 export class WorkbookImportCancelled extends Error {
 	constructor() {
@@ -25,6 +32,8 @@ export class WorkbookImportFailed extends Error {
 export interface WorkbookImportSession {
 	parse(file: File, options: WorkbookImportOptions, onProgress?: (p: WorkbookImportProgress) => void): Promise<ImportResult>;
 	extract(options: WorkbookImportOptions, onProgress?: (p: WorkbookImportProgress) => void): Promise<ImportResult>;
+	/** Read a node-based workbook's crop sheets. Warnings come back in the set; only an unreadable file rejects (WorkbookImportFailed). */
+	readNodeCrops(file: File, onProgress?: (p: WorkbookImportProgress) => void): Promise<NodeCropSet>;
 	cancel(): void;
 	close(): void;
 }
@@ -41,7 +50,7 @@ export function createWorkbookImport(
 	spawn: () => WorkerLike = () => new Worker(new URL('./import.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike
 ): WorkbookImportSession {
 	let worker: WorkerLike | null = null;
-	let pending: { resolve: (r: ImportResult) => void; reject: (e: Error) => void; onProgress?: (p: WorkbookImportProgress) => void } | null = null;
+	let pending: { resolve: (r: ImportResult | NodeCropSet) => void; reject: (e: Error) => void; onProgress?: (p: WorkbookImportProgress) => void } | null = null;
 
 	const settle = (fn: (p: NonNullable<typeof pending>) => void) => {
 		const p = pending;
@@ -58,7 +67,7 @@ export function createWorkbookImport(
 		w.onmessage = (e) => {
 			const m = e.data;
 			if (m.type === 'progress') return pending?.onProgress?.(m.progress);
-			if (m.type === 'result') settle((p) => p.resolve(m.result));
+			if (m.type === 'result' || m.type === 'nodeCrops') settle((p) => p.resolve(m.result));
 			else settle((p) => p.reject(new WorkbookImportFailed(m.error)));
 		};
 		w.onerror = (e) => {
@@ -68,18 +77,20 @@ export function createWorkbookImport(
 		worker = w;
 		return w;
 	};
-	const send = (m: ToWorker, onProgress?: (p: WorkbookImportProgress) => void) => {
+	// The worker answers a 'parse' or 'extract' with a 'result' and a 'nodeCrops' with a 'nodeCrops', so T is the answer's type.
+	const send = <T extends ImportResult | NodeCropSet>(m: ToWorker, onProgress?: (p: WorkbookImportProgress) => void) => {
 		if (pending) return Promise.reject(new Error('The workbook reader is busy.'));
-		return new Promise<ImportResult>((resolve, reject) => {
-			pending = { resolve, reject, onProgress };
+		return new Promise<T>((resolve, reject) => {
+			pending = { resolve: resolve as (r: ImportResult | NodeCropSet) => void, reject, onProgress };
 			ensure().postMessage(m);
 		});
 	};
 
 	return {
-		parse: (file, options, onProgress) => send({ type: 'parse', file, fileName: file.name, options }, onProgress),
+		parse: (file, options, onProgress) => send<ImportResult>({ type: 'parse', file, fileName: file.name, options }, onProgress),
 		extract: (options, onProgress) =>
-			worker ? send({ type: 'extract', options }, onProgress) : Promise.reject(new Error('No workbook has been read yet.')),
+			worker ? send<ImportResult>({ type: 'extract', options }, onProgress) : Promise.reject(new Error('No workbook has been read yet.')),
+		readNodeCrops: (file, onProgress) => send<NodeCropSet>({ type: 'nodeCrops', file, fileName: file.name }, onProgress),
 		cancel() {
 			stop();
 			settle((p) => p.reject(new WorkbookImportCancelled()));
