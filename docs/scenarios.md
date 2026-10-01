@@ -1151,10 +1151,32 @@ scenario is `'team'`, and behaves exactly as above).
     its hidden dam or levels), and, while any farm is
     hidden, flow shares over 100 % or no catchment area left, which an op's
     own range-checked value can't break alone) reads only `op N (…):
-    doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
-    wording is the recommended default, **pending the client**
-    ([issue #90](https://github.com/Absence0760/project-water-management/issues/90));
-    rules about the network's shape and names keep their words.
+    doesn't apply to the catchment as modelled` (`MASKED_RULE`). For the
+    catchment-wide rules (flow shares, area) the applicant reads the
+    catchment's value and the hidden units' aggregate instead
+    (`MASKED_RULE_AGGREGATE`: "flow shares would total 120.0 %, more than
+    100 %; the units you can't see hold 90.0 % of them between them") when
+    the hidden farms have `FARMER_K` = 5 or more holders, the applicant
+    left out (`app_application_hidden_holders`, counted as the k rule counts
+    them, 164): an aggregate over that many holders relates to no one of
+    them. Below that the generic words stay, since the aggregate would be a
+    holder's own figure. Provisional position (pre-counsel research,
+    2026-10-01); rules about the network's shape and names keep their
+    words.
+  - the check says which lines a hidden rule broke (`maskedRules`: the
+    line, its ops and the rules' kinds, never an id, a name or a value),
+    and gives editors and up every line in its real words
+    (`assessorProblems`), which no contributor receives. The assessors'
+    cumulative assessment records the real words too (they alone read it).
+  - **Ask the assessors why** (164). Such an application can't be
+    submitted, and the assessors never read a draft, so a note on it would
+    reach no one. Its parties ask instead (`POST …/questions`): the
+    question carries the line as they read it, the ops it names, the rules'
+    kinds and the application's name, plus the line in its real words,
+    which the server computed and only the editors read
+    (`application_question`). The editors answer once, on the Applications
+    tab; the authority decides what an answer discloses of other users'
+    figures. The draft stays the applicant's.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
   where an op took it (`Kalkoenkrans` → `Kalkoenkrans (2)` in that application's
@@ -1171,7 +1193,9 @@ scenario is `'team'`, and behaves exactly as above).
   nodes are the stored ones still linked to the owner
   (`app_application_own_nodes`): a farm the owner unlinks is anonymised in
   the base and its series hidden, even in an application made before; the
-  assessors keep the stored list.
+  assessors keep the stored list. An issued evidence pack is the exception:
+  its applicant's copy keeps the units it was issued about
+  ([evidence-pack.md § Applicants](./evidence-pack.md#applicants), 164).
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
@@ -1280,10 +1304,13 @@ scenario is `'team'`, and behaves exactly as above).
   - every **EWR site**'s months met, rate and longest run not met, base
     beside application (the outlet unnamed, a gauge by name), and the
     outlet's EWR days not met;
-  - the **catchment**'s mean natural and outlet flow and the outlet's daily
-    flow and EWR series, base beside application, only at five or more farm
-    holders (the k rule of the share links and the contributor's series),
-    read under the caller's own RLS; the EWR deficit volumes likewise;
+  - the **catchment**, base beside application: its mean natural flow and
+    the outlet's daily EWR requirement (the river) at any holder count; its
+    mean outlet flow and daily outflow series, and the EWR deficit volumes
+    (the use: natural minus outflow is the farms' take), only at five or
+    more farm holders (the k rule of the share links and the contributor's
+    series, split in 164; provisional position, pre-counsel research,
+    2026-10-01); read under the caller's own RLS;
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR
     charge, the dam;

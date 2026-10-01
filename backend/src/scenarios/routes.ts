@@ -33,6 +33,7 @@ import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
 import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
+	hiddenHolders,
 	loadBaseInput,
 	loadScenario,
 	runScenario,
@@ -51,11 +52,17 @@ import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBod
  * only names the caller sees (checkScenario masks an application's hidden
  * nodes for everyone); `renamed`, the hidden nodes an application's ops took
  * the name of, and `reIds`, the new items moved off a hidden item's id, are
- * for the assessors, never a contributor.
+ * for the assessors, never a contributor. An application's check also says
+ * which problem lines a hidden rule broke (`maskedRules`: line, ops and the
+ * rules' kinds, never an id, a name or a value; what "Ask the assessors why"
+ * sends) and, to editors and up only, every line in its real words
+ * (`assessorProblems`, 164). A team scenario has neither: nothing is masked.
  */
 function checkView(c: ScenarioCheck, role: Role) {
-	const view = { applied: c.applied, problems: c.problems, classified: c.classified };
-	return role === 'contributor' ? view : { ...view, renamed: c.renamed, reIds: c.reIds };
+	const view = { applied: c.applied, problems: c.problems, classified: c.classified, ...(c.masked ? { maskedRules: c.maskedRules } : {}) };
+	if (role === 'contributor') return view;
+	// The unmasked reasons are the assessors' (164): editors and up, who read every farm anyway. Never a contributor.
+	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(c.masked && rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
 }
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
@@ -67,7 +74,7 @@ async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) 
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null, unverifiedRunIds };
+		return { scenario, check: checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), checkError: null, unverifiedRunIds };
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
@@ -428,7 +435,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				await db.query('UPDATE scenario SET op_names = $3 WHERE project_id = $1 AND id = $2', [id, sid, JSON.stringify(s.opNames)]);
 				await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
 			}
-			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s), role) });
+			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s, await hiddenHolders(db, s)), role) });
 		});
 	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------
@@ -445,8 +452,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const s = await loadScenario(db, id, sid);
 			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario can't be submitted`);
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
-			const { problems } = checkScenario(base, s);
-			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems });
+			const { problems, maskedRules } = checkScenario(base, s, await hiddenHolders(db, s));
+			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems, maskedRules });
 			await move(db, id, s, 'submitted');
 			await recordAudit(db, id, 'scenario.submitted', subject(s, { opsSha256: s.opsSha256 }));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));

@@ -4352,6 +4352,19 @@ Applicant view and the Applications tab. Left:
       from the members list keeps the farms. Tests:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
+- [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
+      split, 164; provisional position, pre-counsel research, 2026-10-01).
+      The use's catchment series (outflow, observed flow, EWR shortfall) and
+      the volume rows show at 5 or more farm holders, but k alone doesn't
+      protect a catchment where one holder does almost all the abstraction:
+      natural minus outflow is then mostly that holder's use. Durable fix:
+      withhold the use's series and volume rows also when one holder accounts
+      for more than ~70 % of modelled consumptive use in the published run
+      (one SQL helper beside the holder count, used by `app_share_series`,
+      `run_series_select_contributor` and the volume projections, with tests
+      at 69 and 71 %). Trigger: counsel's answer on question 5 of the
+      licensing positions (k and "reasonably foreseeable method"), or the
+      first pilot catchment with one dominant user.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +
@@ -4882,16 +4895,31 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner
       link their own issued pack and list and revoke the links they made.
-- [ ] **An anonymised printable copy of the pack for its applicant.** The
-      applicant's view (131) offers no PDF, manifest or bundle: each carries
-      the whole report, every unit named (the assessors' copy, D2). An
-      applicant who needs a document to attach has the verify code and the
-      assessors' copy. Durable fix: a D2-anonymised print of the applicant's
-      view (the server renderer, a render session scoped to that route), not
-      hashed as the pack (it isn't the pack), saying so and carrying the
-      pack's code. Trigger: an applicant or the client asks for a file of
-      their own copy, or D2 is settled with the client (it may instead open
-      the assessors' copy to the applicant).
+- [ ] **Send a pack to the authority's own address, not only its members.**
+      `POST …/packs/:packId/send` (licensing build item 13, 2026-10-01)
+      emails only members marked as acting for the responsible authority,
+      with a link to the pack's page that needs them signed in.
+      `settings.responsibleAuthority` (163) holds no address, and a link that
+      opened the PDF and bundle without signing in would be a new way out of
+      the app for every unit's figures. Durable fix: an
+      `authority.email` in the settings, set by the owner, and a single-use,
+      time-limited delivery token (stored as its hash, like a render token)
+      that downloads exactly that pack's PDF and bundle once, recorded in
+      the history; the operator agreement then names the authority as a
+      recipient. Trigger: an authority whose assessors won't hold accounts,
+      or counsel's answer on the D1 hosting question.
+- [x] **An anonymised printable copy of the pack for its applicant.**
+      Built 2026-10-01 (165_applicant_copy; licensing build item 12,
+      provisional position, pre-counsel research, 2026-10-01): a party of
+      the application asks for it on their pack view (`POST
+      …/scenarios/:sid/packs/:packId/pdf`), an `applicant_pack_render` job
+      prints that view as them in the server renderer (a render session that
+      reads that one page, render-token purpose `applicant_pack`), stores it
+      beside the pack's PDF under `applicant/` and records its own SHA-256
+      once (`evidence_pack_applicant_copy`); `GET …/pdf` downloads it. The
+      printed page says it is a derived copy, not the pack, with the pack's
+      code, manifest hash and verify address
+      ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner: built 2026-09-30
       (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,

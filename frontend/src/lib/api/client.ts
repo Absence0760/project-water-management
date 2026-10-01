@@ -8,6 +8,7 @@ import type {
 	AllocationMode,
 	DailySeries,
 	DayBoundary,
+	EvidenceAuthorisedImpact,
 	EvidenceReport,
 	PackManifest,
 	InputChange,
@@ -105,6 +106,9 @@ import type {
 	ScenarioCheck,
 	ScenarioBase,
 	ApplicantResults,
+	ApplicationQuestion,
+	ApplicantCopyState,
+	AssessorQuestion,
 	ApplicantResultsRun,
 	DecideRequest,
 	ScenarioStatus,
@@ -680,7 +684,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** The licensing evidence report of a run (issue #71, docs/api.md § Evidence report): an application run on its base, or a baseline alone. */
 		evidence: {
 			report: (id: string, runId: string) =>
-				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
+				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report),
+			/** Run an application run's full-allocation pair and keep page 1's board against full authorised use (editor; licensing build item 8). */
+			authorisedImpact: (id: string, runId: string) =>
+				request<{ authorised: EvidenceAuthorisedImpact }>('POST', `${p(id)}/runs/${enc(runId)}/authorised-impact`, {}).then((r) => r.authorised)
 		},
 		/** The host's checks of members' registrations against the public register (167, docs/api.md § Sign-offs). */
 		registrationChecks: {
@@ -727,6 +734,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
 			sign: (id: string, packId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff),
+			/**
+			 * Send the issued pack to the members acting for the responsible authority (editor; licensing build item 13):
+			 * all of them but the sender, or `userIds`. They get a link to the pack's page, never a file.
+			 */
+			send: (id: string, packId: string, body: { userIds?: string[]; note?: string }) =>
+				request<{ recipients: { userId: string; displayName: string }[]; sent: number; failed: number }>('POST', `${p(id)}/packs/${enc(packId)}/send`, body),
 			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready; viewer). */
 			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
 			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
@@ -888,6 +901,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			participationCsvUrl: (id: string, sid: string) => `${base}${p(id)}/scenarios/${enc(sid)}/participation-export?format=csv`,
 			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
 			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
+			/** Ask for the applicant's printable copy of an issued pack (165): 202 while it prints, 200 once recorded. */
+			packCopy: (id: string, sid: string, packId: string) =>
+				request<{ copy: ApplicantCopyState }>('POST', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.copy),
+			/** The copy's download (the API redirects to a short-lived signed GET). */
+			packCopyUrl: (id: string, sid: string, packId: string) => `${base}${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`,
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
 			create: (id: string, body: { name: string; baseRunId: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[] }) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios`, body),
@@ -946,7 +964,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { userId }).then((r) => r.members),
 			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
 			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
-			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)
+			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications),
+			/** "Ask the assessors why" (164): a party asks about problem line `problem` of the check, quoting it as read (409 if the check changed). */
+			ask: (id: string, sid: string, problem: number, line: string) =>
+				request<{ question: ApplicationQuestion }>('POST', `${p(id)}/scenarios/${enc(sid)}/questions`, { problem, line }).then((r) => r.question),
+			/** An application's questions: its parties' view, or the assessors' (with the real words) for an editor. */
+			questions: (id: string, sid: string) =>
+				request<{ questions: (ApplicationQuestion & Partial<AssessorQuestion>)[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/questions`).then((r) => r.questions),
+			/** The assessors' queue of questions, unanswered first. Editors only. */
+			assessorQuestions: (id: string) => request<{ questions: AssessorQuestion[] }>('GET', `${p(id)}/application-questions`).then((r) => r.questions),
+			/** Answer a question, once. Editors only. */
+			answerQuestion: (id: string, qid: string, answer: string) =>
+				request<{ question: AssessorQuestion }>('POST', `${p(id)}/application-questions/${enc(qid)}/answer`, { answer }).then((r) => r.question)
 		},
 		/**
 		 * Registered and licensed volumes per farm or water user, and a run's

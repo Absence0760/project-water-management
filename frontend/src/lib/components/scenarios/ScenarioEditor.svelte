@@ -28,6 +28,7 @@
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import ApplicantResults from './ApplicantResults.svelte';
 	import ScenarioStatement from './ScenarioStatement.svelte';
+	import AskAssessors from './AskAssessors.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -140,6 +141,10 @@
 	/** Changes that don't apply: an edit group's one problem line counts each of its ops. */
 	const problems = $derived(data.check ? s.ops.length - data.check.applied.length : 0);
 	const baseMeta = $derived(runs.find((r) => r.id === s.baseRunId));
+	/** The assessors' words for the lines a hidden rule masked (164): editors only, and only where they differ from what the applicant reads. */
+	const unmasked = $derived(
+		(data.check?.assessorProblems ?? []).map((text, i) => ({ text, masked: data.check?.problems[i] })).filter((x) => x.masked !== undefined && x.masked !== x.text)
+	);
 
 	// --- editing the ops, with undo ------------------------------------------------
 	let past = $state.raw<ScenarioOp[][]>([]);
@@ -412,6 +417,18 @@
 		<div class="alert alert-warning" role="status" data-testid="scenario-problems">
 			{problems === 1 ? "1 change doesn't" : `${problems} changes don't`} apply to the base run, so the scenario can't run until
 			{problems === 1 ? 'it is' : 'they are'} removed or the base changes.
+		</div>
+	{/if}
+	{#if isApplication && applicant && data.check}
+		<AskAssessors {projectId} scenarioId={s.id} problems={data.check.problems} maskedRules={data.check.maskedRules} canAsk={applicant} />
+	{/if}
+	{#if unmasked.length}
+		<!-- The assessors only (164): the rules the applicant reads as "doesn't apply to the catchment as modelled", in their own words. -->
+		<div class="alert alert-info" role="status" data-testid="scenario-unmasked">
+			The applicant reads {unmasked.length === 1 ? 'this rule' : 'these rules'} without the other units’ figures. In {unmasked.length === 1 ? 'its' : 'their'} own words:
+			<ul>
+				{#each unmasked as u, i (i)}<li>{u.text}</li>{/each}
+			</ul>
 		</div>
 	{/if}
 	{#if data.check?.renamed?.length}

@@ -72,6 +72,13 @@ describe('what an item says', () => {
 		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
+		// "Ask the assessors why" (164): never the question's words.
+		expect(eventLine(ev('application.question_asked', { scenarioId: 's', application: true, questionId: 'q', ops: [0], rules: ['shares'] }))).toBe(
+			'An applicant asked the assessors why a change doesn’t apply'
+		);
+		expect(eventLine(ev('application.question_answered', { scenarioId: 's', application: true, questionId: 'q' }))).toBe(
+			'Answered an applicant’s question about a change that doesn’t apply'
+		);
 		// A team scenario keeps its name, as before.
 		expect(eventLine(ev('scenario.submitted', { scenarioId: 's', name: 'Upper dam' }))).toBe('Submitted the scenario “Upper dam”');
 	});
@@ -136,6 +143,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('pack.withdrawn', { version: 2, shortCode: 'ffff-0000-1111', reason: 'the application lapsed' }))).toBe(
 			'Withdrew evidence pack version 2 (ffff-0000-1111): the application lapsed'
 		);
+		expect(eventLine(ev('pack.sent', { version: 1, shortCode: 'a1b2-c3d4-e5f6', recipients: ['u1', 'u2'], authority: 'Breede-Olifants CMA' }))).toBe(
+			'Sent evidence pack version 1 (a1b2-c3d4-e5f6) to 2 members acting for Breede-Olifants CMA'
+		);
+		expect(eventLine(ev('pack.sent', { version: 1, recipients: ['u1'], authority: null }))).toBe('Sent evidence pack version 1 to 1 member acting for the responsible authority');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the hydrological unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the hydrological unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(

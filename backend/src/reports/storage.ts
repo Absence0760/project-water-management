@@ -84,6 +84,22 @@ export function packPdfKey(projectId: string, packId: string, sha256: string): s
 	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/${sha256}.pdf`;
 }
 
+/**
+ * The object key of an applicant's copy of a pack (165_applicant_copy;
+ * app_record_applicant_pack_pdf builds the same key in SQL): beside the
+ * pack's own PDF, under `applicant/`, by the copy's own SHA-256.
+ */
+export function applicantPackPdfKey(projectId: string, packId: string, sha256: string): string {
+	if (!UUID.test(projectId) || !UUID.test(packId)) throw new Error('applicantPackPdfKey: ids must be UUIDs');
+	if (!SHA256.test(sha256)) throw new Error('applicantPackPdfKey: the hash must be a lowercase hex SHA-256');
+	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/applicant/${sha256}.pdf`;
+}
+
+/** An applicant's copy's download file name: "evidence-pack", its version and short code, "applicant-copy". No catchment name: the applicant may not read the project's. */
+export function applicantPackFileName(version: number, shortCode: string): string {
+	return `evidence-pack-v${version}-${shortCode.replace(/[^0-9a-f-]/gi, '')}-applicant-copy.pdf`;
+}
+
 /** A pack PDF's download file name: the catchment, "evidence-pack", its version and short code. */
 export function packFileName(projectName: string, version: number, shortCode: string): string {
 	const slug = reportFileName(projectName, 'x').replace(/-report-x\.pdf$/, '');

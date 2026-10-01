@@ -147,3 +147,21 @@ describe('the evidence pack messages (119_pack_render, the same two queues)', ()
 		expect(parseWorkerMessage(JSON.stringify({ ...ok, type: 'rendered' }))).toBeNull();
 	});
 });
+
+describe("the applicant's copy of a pack (165_applicant_copy, the same messages)", () => {
+	const ids = { packId: '00000000-0000-4000-8000-000000000006', projectId: '00000000-0000-4000-8000-000000000002' };
+	const S = '00000000-0000-4000-8000-000000000007';
+	const SHA = 'ab'.repeat(32);
+
+	it('a pack request may name the application whose party’s page is printed, a UUID and nothing else', () => {
+		const request = { v: 1, type: 'render_pack', ...ids, scenarioId: S, token: 'A'.repeat(43) };
+		expect(parseRenderRequest(JSON.stringify(request))).toEqual(request);
+		expect(parseRenderRequest(JSON.stringify({ ...request, scenarioId: '../x' }))).toBeNull();
+	});
+
+	it("an answer may say it is about the applicant's copy, and nothing else", () => {
+		const ok = { v: 1, type: 'rendered_pack', packId: ids.packId, copy: 'applicant', result: { ok: true, pages: 3, bytes: 500, ms: 300, sha256: SHA } };
+		expect(parseWorkerMessage(JSON.stringify(ok))).toEqual(ok);
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, copy: 'assessor' }))).toBeNull();
+	});
+});

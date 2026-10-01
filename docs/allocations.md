@@ -239,6 +239,15 @@ comparison as **§ 5 Registered water use** and one fixed page-1 row,
 report version `evidence-2`). The persona licence applicant asked for
 existing lawful use beside the application's numbers.
 
+- **Page 1's board against full authorised use** (`evidence-14`, licensing
+  build item 8; [evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)):
+  the baseline and the application run again with every holder at their
+  registered volume, and the volume it held them to is printed by how it is
+  held (`authorisation`: licence and verified existing lawful use as
+  entitlements, the rest not), totals only: no holder, registration
+  number or unit is named, so a viewer reads nothing the Allocations tab
+  wouldn't show them. The mix reads the allocations' rows when an editor
+  runs the pair (a later change shows only when it is run again).
 - **Each run's own volumes, not today's.** The backend
   (`backend/src/allocations/runUse.ts`, `runAllocationComparison`) runs
   `compareAllocations` over the run's stored series, the allocations stored

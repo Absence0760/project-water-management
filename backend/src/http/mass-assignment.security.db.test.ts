@@ -24,7 +24,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
-import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, plantQuestion, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
@@ -169,6 +169,11 @@ async function ladderDam(): Promise<string> {
 }
 
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	// A fresh unanswered question each time: an answer is given once (164).
+	'POST /projects/:id/application-questions/:qid/answer': async () => ({
+		params: { qid: await plantQuestion(ctx.projectId, ctx.ids.sid!) },
+		...SAMPLE['POST /projects/:id/application-questions/:qid/answer']!(ctx)
+	}),
 	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register', acceptTerms: LEGAL_VERSION } }),
 	'POST /auth/resend-confirmation': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com` } }),
 	'POST /auth/login': () => ({ as: null, body: { email: ctx.owner.email, password: 'correct horse' } }),
@@ -422,6 +427,25 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 	[
 		'POST /projects/:id/packs/:packId/issue',
 		{ why: 'takes an empty body only (strict); a pack is issued only from an issuable report, which the ladder has none of (evidence/packs.db.test.ts)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/runs/:runId/authorised-impact',
+		{ why: 'an empty body only (strict); the ladder’s run is the model’s own, not an application run, so a legit call is 409 (evidence/authorised-impact.db.test.ts runs a pair)', legit: 409 }
+	],
+	[
+		'POST /projects/:id/packs/:packId/send',
+		{ why: 'a strict body; the ladder has no pack, so a legit send is 404 (evidence/pack-send.db.test.ts sends an issued one)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+		{ why: 'an empty body only (strict); the owner is no party of an application with an issued pack in the ladder, so a legit call is 404 (evidence/applicant-copy.db.test.ts asks for one)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/scenarios/:sid/questions',
+		{
+			why: 'a strict body; the ladder has no application whose rule turns on farms hidden from its applicant, so a legit ask is 409 on its team scenario (scenarios/questions.db.test.ts asks one)',
+			legit: 409
+		}
 	],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[

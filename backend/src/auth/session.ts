@@ -50,11 +50,12 @@ export async function signSession(userId: string, scope?: RenderScope, amr: Amr 
 	const ttl = scope ? RENDER_SESSION_TTL_SECONDS : TTL_SECONDS;
 	// iat is whole seconds; iat_ms lets the revocation watermark compare
 	// precisely, so a sign-in right after a password reset isn't rejected.
-	// A report's scope is a project and run (`a`: an impact report's baseline); a pack's, a project and pack (`k`).
+	// A report's scope is a project and run (`a`: an impact report's baseline); a pack's, a project and pack (`k`),
+	// and an applicant's copy's the pack's application too (`s`, 165).
 	const claim = !scope
 		? null
 		: isPackScope(scope)
-			? { p: scope.projectId, k: scope.packId }
+			? { p: scope.projectId, k: scope.packId, ...(scope.scenarioId ? { s: scope.scenarioId } : {}) }
 			: { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) };
 	return new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : { amr: [...amr], ...(otpAt !== undefined && amr.includes('otp') ? { otp_at: otpAt } : {}) }) })
 		.setProtectedHeader({ alg: 'HS256' })
@@ -212,14 +213,15 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 			otpAt = payload.otp_at;
 		}
 		if (payload.scope !== undefined) {
-			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown; k?: unknown } | null;
+			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown; k?: unknown; s?: unknown } | null;
 			if (!s || typeof s.p !== 'string' || !UUID.test(s.p)) return null;
 			if (s.k !== undefined) {
-				// A pack's scope: a pack and nothing else.
+				// A pack's scope: a pack and nothing else (an applicant's copy: and the pack's application, 165).
 				if (typeof s.k !== 'string' || !UUID.test(s.k) || s.r !== undefined || s.a !== undefined) return null;
-				scope = { projectId: s.p.toLowerCase(), packId: s.k.toLowerCase() };
+				if (s.s !== undefined && (typeof s.s !== 'string' || !UUID.test(s.s))) return null;
+				scope = { projectId: s.p.toLowerCase(), packId: s.k.toLowerCase(), ...(typeof s.s === 'string' ? { scenarioId: s.s.toLowerCase() } : {}) };
 			} else {
-				if (typeof s.r !== 'string' || !UUID.test(s.r)) return null;
+				if (typeof s.r !== 'string' || !UUID.test(s.r) || s.s !== undefined) return null;
 				const report: ReportScope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase() };
 				if (s.a !== undefined) {
 					const a = s.a as { p?: unknown; r?: unknown } | null;

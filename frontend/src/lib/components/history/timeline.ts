@@ -300,6 +300,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${packName(s, true)} was superseded${num(s.byVersion) ? ` by version ${num(s.byVersion)}` : ''}`;
 		case 'pack.withdrawn':
 			return `Withdrew ${packName(s)}${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
+		// Licensing build item 13: the recipients by count only (their ids are in the subject).
+		case 'pack.sent': {
+			const n = Array.isArray(s.recipients) ? s.recipients.length : 0;
+			return `Sent ${packName(s)} to ${plural(n, 'member')} acting for ${str(s.authority) || 'the responsible authority'}`;
+		}
 		case 'calibration_rules.signed_off':
 			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
 		case 'calibration_rules.sign_off_withdrawn':
@@ -343,6 +348,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return 'Shared an application with another applicant';
 		case 'scenario.unshared':
 			return s.self ? 'Stopped reading a shared application' : 'Stopped sharing an application';
+		// "Ask the assessors why" (164): ids and the rules' kinds only, never the question's words.
+		case 'application.question_asked':
+			return 'An applicant asked the assessors why a change doesn’t apply';
+		case 'application.question_answered':
+			return 'Answered an applicant’s question about a change that doesn’t apply';
 		case 'share_link.created':
 			return s.targetKind === 'scenario' ? 'Created a share link to a scenario' : s.targetKind === 'pack' ? 'Created a share link to an evidence pack' : 'Created a share link';
 		case 'share_link.revoked':

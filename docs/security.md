@@ -621,8 +621,15 @@ buys a **render session** that can read one report and nothing else.
   (`pack_id`) and no run: the trigger checks that the issuer reads that pack
   (RLS, as themselves) and that it was issued (`issued_at`: never a draft,
   nor a draft withdrawn before its issue), and a CHECK keeps exactly one
-  target per purpose. It is issued by the `report_render` job (or the
-  `pack_render` job, as the editor who issued the pack or asked again),
+  target per purpose. An applicant's copy's token (purpose
+  `applicant_pack`, 165_applicant_copy; provisional position, pre-counsel
+  research, 2026-10-01) names one issued pack too, but its issuer is a
+  party of the pack's application (`app_applicant_pack_meta`: the
+  application's owner or someone they shared it with, and the pack was
+  issued), not a viewer: the trigger and `render_token_insert` say so, and a
+  pack token asked for by anyone else stays a `pack` token. It is issued by the `report_render` job (or the
+  `pack_render` job, as the editor who issued the pack or asked again, or
+  the `applicant_pack_render` job, as the party who asked for their copy),
   which runs as the requester under RLS, and never leaves the server side:
   it goes to the local Chromium in memory, or in production over the
   SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
@@ -635,7 +642,9 @@ buys a **render session** that can read one report and nothing else.
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes** (a pack's carries `scope: { p, k }`, the project and
-  the pack). A used, expired, unknown or malformed token gets one
+  the pack; an applicant's copy's `scope: { p, k, s }`, with the pack's
+  application, after the exchange checks the requester is still its
+  party). A used, expired, unknown or malformed token gets one
   answer, `400`. Both refusals carry the machine-only code
   `render_token_refused`: the renderer fails a report for good only on that
   code, so a WAF or CloudFront `403` in front of the API (no code) is
@@ -648,7 +657,11 @@ buys a **render session** that can read one report and nothing else.
   `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
   `/series`, `/day`, `/signoffs` and `/publication` (the run's place in the
   publications, issue #70): exactly the reads the report route
-  makes. An impact report's session may also `GET /compare/runs` with
+  makes. A pack's session reads only `/projects/<p>/packs/<k>` and its
+  `/signoffs`; an applicant's copy's only
+  `/projects/<p>/scenarios/<s>/packs/<k>` (the party's D2 projection), never
+  the editor's pack route, the application or its download
+  (`evidence/applicant-copy.db.test.ts` sweeps every signed-in route). An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
   parameters, once each: the impact section's one read), and the
   baseline run's `/series` with exactly `key=natural_flow` or
@@ -850,11 +863,26 @@ result without signing in, until it expires or its owner revokes it.
 - **The k rule on series.** `app_share_series` returns only the catchment
   allowlist (`natural_flow`, `simulated_outflow`, `observed_flow`, `ewr`,
   `ewr_shortfall`) of the current published run, monthly means plus the last
-  365 days, and **only when the catchment has at least `FARMER_K` = 5 farm
-  holders** (counted from nobody's point of view: one user's farms once, an
+  365 days. The rule is **split** (164; provisional position, pre-counsel
+  research, 2026-10-01): **the river** (`natural_flow`, and `ewr`, the
+  requirement made from it) is returned at any holder count, since it
+  describes the river and no holder's use (it is close to the public WR2012
+  quaternary record); **the use** (`simulated_outflow`, `observed_flow`,
+  `ewr_shortfall`) only when the catchment has at least `FARMER_K` = 5 farm
+  holders (counted from nobody's point of view: one user's farms once, an
   unlinked farm on its own). In a smaller catchment natural flow minus
   outflow is the farms' use, and with one farm it is that farm's
-  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)).
+  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)),
+  so it stays linkable to a person "by a reasonably foreseeable method"
+  (POPIA s1, de-identify). The volume rows of the scenario and pack links
+  (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
+  were. An applicant reads the same split (`run_series_select_contributor`,
+  `app_contributor_published_runs`; `scenarios/applicantResults.ts`
+  `naturalShown` / `impactedShown`). Five is a judgement in line with
+  statistical-disclosure practice, not a number in any statute; k alone
+  doesn't protect a catchment where one holder does almost all the
+  abstraction (a dominance rule is a follow-up,
+  [followups.md § Applicants](./followups.md#applicants-wp-33)).
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
@@ -866,7 +894,8 @@ result without signing in, until it expires or its owner revokes it.
 - **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
   control, the dead-link cases against a live one, the response scan for the
   note and every farm name and id, the `last_used_at` throttle, farm keys,
-  and the k boundary at 4 and 5 holders), `share/share.security.db.test.ts`
+  and the k boundary at 1, 4 and 5 holders, the river's series shown at 1
+  as the positive control), `share/share.security.db.test.ts`
   (a link made under one publication reads only the current one, view and
   series; a sweep over every key the published run stores, catchment and
   node level, answers exactly the allowlisted catchment series, one row
@@ -1938,7 +1967,8 @@ In short:
     server an application run's summary and model and its base's summary for
     `GET …/scenarios/:sid/results`; both are projected before anything
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
-    EWR sites, the catchment under the k rule, their own units, other units
+    EWR sites, the catchment under the split k rule (the river always, the
+    use at 5 or more holders), their own units, other units
     downstream only as "Farm 3" and a whole percentage, and nothing but the
     EWR when an op was a baseline assumption). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
@@ -3248,7 +3278,9 @@ nothing else.
   maps the answer field by field again (`evidence/applicantPacks.ts`),
   answers `404` alike for a pack not theirs, not issued or of another
   application, and never offers the PDF, manifest or bundle, which carry
-  the whole report (the assessors' copy). Tests:
+  the whole report (the assessors' copy). Their printable copy (165) is
+  this same projection printed as them in a render session scoped to that
+  one page ([§ Render tokens](#render-tokens)), stored with its own hash. Tests:
   `evidence/applicant-packs.db.test.ts` (each "cannot" with its control:
   another applicant, a non-party editor, a draft, a pack never issued, the
   baseline's; the string scan for every other unit's name and id; the

@@ -1081,7 +1081,8 @@ export interface ApplicantEwrFigures {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	meanSimulatedOutflowM3Day: number;
+	/** The use's figure: only at 5 or more farm holders (164); else null. */
+	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
 }
@@ -1118,7 +1119,9 @@ export interface ApplicantResults {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
 		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		series: { outflow: ApplicantSeriesPair; ewr: ApplicantSeriesPair } | null;
+		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
+		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
@@ -1169,6 +1172,43 @@ export interface ScenarioCheck {
 	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
 	 */
 	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
+	/**
+	 * An application's problem lines a rule hidden from its applicant broke
+	 * (164): the line's index in `problems`, the ops it names (0-based) and
+	 * the rules' kinds (`shares`, `area`, `supplyTrigger`…), never an id, a
+	 * name or a value. What "Ask the assessors why" sends. Absent on a team
+	 * scenario.
+	 */
+	maskedRules?: MaskedRuleRef[];
+	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
+	assessorProblems?: string[];
+}
+
+/** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
+export interface MaskedRuleRef {
+	problem: number;
+	ops: number[];
+	rules: string[];
+}
+
+/** An "Ask the assessors why" question as an application's parties read it (164): never the rule's real words. */
+export interface ApplicationQuestion {
+	id: string;
+	askedAt: string;
+	/** The problem line as the applicant read it. */
+	problem: string;
+	opIndexes: number[];
+	rules: string[];
+	answer: string | null;
+	answeredAt: string | null;
+}
+
+/** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
+export interface AssessorQuestion extends ApplicationQuestion {
+	scenarioId: string;
+	scenarioName: string;
+	ops: ScenarioOp[];
+	assessorText: string;
 }
 
 /**
@@ -1646,6 +1686,17 @@ export interface ApplicantPack {
 	 * published run, so those names can't be given.
 	 */
 	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; name: string; changePts: number }[] | null } | null;
+	/** Their printable copy of it (165_applicant_copy): their own page printed as them, other water users' figures withheld. */
+	copy: ApplicantCopyState;
+}
+
+/** The applicant's printable copy of a pack: ready (its own SHA-256), rendering, failed (why) or none (never asked for). */
+export interface ApplicantCopyState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	sha256: string | null;
+	pages: number | null;
+	renderedAt: string | null;
+	error: string | null;
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */

@@ -54,6 +54,7 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { packAudiences } from '$lib/components/notes/notes';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
+	import PackSendDialog from '$lib/components/packs/PackSendDialog.svelte';
 	import PackActions from '$lib/components/packs/PackActions.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
@@ -166,6 +167,8 @@
 	/** Share links to it (an editor, once it was issued) and its notes (whoever reads it); never in a render session, which reads no project. */
 	const canShare = $derived(canEdit && !!pack && pack.status !== 'draft');
 	let shareOpen = $state(false);
+	/** Send the issued pack to the members acting for the responsible authority (licensing build item 13). */
+	let sendOpen = $state(false);
 	const ready = $derived(status === 'loaded');
 	const stamp = $derived(pack ? packStamp(pack) : '');
 	const verify = $derived(pack ? packVerifyRef(pack, page.url.origin, base) : null);
@@ -243,6 +246,7 @@
 			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
 			{#if canShare}<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button>{/if}
+			{#if canEdit && pack.status === 'issued'}<button type="button" class="btn" onclick={() => (sendOpen = true)} data-testid="pack-send-open">Send to the authority…</button>{/if}
 			{#if project}<NotesDrawer {projectId} target={{ kind: 'pack', packId: pack.id, name: `evidence pack v${pack.version}`, audiences: packAudiences(pack.status === 'issued') }} />{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
@@ -300,6 +304,9 @@
 					<button type="button" class="btn" onclick={() => (shareOpen = false)}>Close</button>
 				{/snippet}
 			</Dialog>
+		{/if}
+		{#if canEdit && pack.status === 'issued'}
+			<PackSendDialog bind:open={sendOpen} {projectId} packId={pack.id} version={pack.version} authority={project?.settings.responsibleAuthority?.name ?? null} />
 		{/if}
 		<PackActions {projectId} {pack} issue={detail.issue} manifestMatches={detail.manifestMatches} {canEdit} onchange={reload} />
 		<Lazy load={loadReport}>

@@ -101,9 +101,16 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/pdf',
 			// Re-running an issued pack on the server again (154_pack_reproduce's job).
 			'POST /projects/:id/packs/:packId/reproduce',
+			// Sending the issued pack to the members acting for the responsible authority (licensing build item 13).
+			'POST /projects/:id/packs/:packId/send',
+			// Page 1's board against full authorised use (licensing build item 8): an editor runs the full-allocation pair.
+			'POST /projects/:id/runs/:runId/authorised-impact',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
-			'GET /projects/:id/scenarios/:sid/packs/:packId'
+			'GET /projects/:id/scenarios/:sid/packs/:packId',
+			// Their printable copy of one (165_applicant_copy).
+			'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+			'GET /projects/:id/scenarios/:sid/packs/:packId/pdf'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
@@ -239,7 +246,12 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/reopen',
 			'POST /projects/:id/scenarios/:sid/decide',
 			'POST /projects/:id/scenarios/:sid/members',
-			'DELETE /projects/:id/scenarios/:sid/members/:userId'
+			'DELETE /projects/:id/scenarios/:sid/members/:userId',
+			// "Ask the assessors why" (164_applicant_visibility).
+			'POST /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/application-questions',
+			'POST /projects/:id/application-questions/:qid/answer'
 		];
 		for (const r of applications) {
 			expect(routes).toContain(r);

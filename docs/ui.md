@@ -6283,8 +6283,9 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   run" when they have); the **Ecological Reserve** (the outlet's days not
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
-  flow and a chart of the outlet's flow and EWR, baseline against theirs, or
-  why not: fewer than five farm holders); **Your hydrological units**
+  flow and a chart of the outlet's flow and EWR, baseline against theirs;
+  below five farm holders natural flow and the EWR only, and why the outlet
+  flow isn't shown); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
@@ -6310,7 +6311,9 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   ("… in this application's runs Kalkoenkrans is called “Kalkoenkrans (2)”",
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
-  applicant never does.
+  applicant never does. An assessor also reads, in an info box, each rule
+  the applicant reads without the other units' figures in its own words
+  (`check.assessorProblems`, 164).
 - **Written objections** (166_public_participation): the warning that a
   comment in the app is not a written objection, and the notice's
   **Address** and **Closing date** ("Not given" until set). The owner edits
@@ -6332,6 +6335,17 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   applicant's Evidence packs list: the drafts the caller may sign as the
   party's appointed specialist, each with **Sign…** (the sign-off section
   in a side sheet, signing as "Specialist for the applicant").
+- **Rules you can't see** (`AskAssessors.svelte`, 164; for the
+  application's parties, between the problems note and the changes): each
+  problem line a rule hidden from them broke (`check.maskedRules`), the
+  changes it names and what the rule is about ("change 1: flow shares"), and
+  **Ask the assessors why**, which sends the line, those changes and the
+  rule's kind (never anything hidden) to the assessors. The panel says what
+  the assessors see (the question, the changes it names and the
+  application's name, not the rest of the draft). Once asked: "Asked
+  <date>; waiting for the assessors' answer", then the answer and **Ask
+  again**. Questions about lines the check no longer shows sit under
+  **Earlier questions**.
 - **Comments and share links** (WP-3.15), at the top of the panel: the
   application's **Notes** button (the notes drawer on the scenario, titled
   "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
@@ -6389,6 +6403,15 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs", its
   packs, its comments) and the page scrolls.
+- **Applicants' questions** (`AssessorQuestions.svelte`, 164), under the
+  card and only when there are any: each "Ask the assessors why" question,
+  unanswered first ("N waiting for an answer"), with the application's
+  name, when it was asked, the changes and the rule's kind, the line as the
+  applicant read it and the rule in its own words, and **Your answer** /
+  **Send the answer** (once; an answer goes to the application's parties,
+  so the note above the list says to write only what they may know of
+  other water users). A question may be about a draft, which stays the
+  applicant's.
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -6453,7 +6476,11 @@ e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and
 `e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
 fit and a 30-application queue, the status filter's URL and Back, empty
-states, a viewer, the phone cards, axe at desktop light and dark and phone).
+states, a viewer, the phone cards, axe at desktop light and dark and phone)
+and `e2e/tests/ask-assessors.spec.ts` (an applicant asks why a rule
+depending on a farm they can't see refuses their change, the assessor
+answers it on the Applications tab, the applicant reads the answer; axe in
+light and dark).
 
 ## History (`?tab=history`)
 
@@ -6980,8 +7007,23 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     interaction in its note; no band; *Not assessed* naming each conflict
     when they conflict, or saying none of exactly them is assessed yet;
     *None* when there are none the reader can see; an older pack prints its
-    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
-    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    application report, **Against full authorised use** (`evidence-14`,
+    licensing build item 8; `report/evidence/authorised.ts`): the same
+    board over the baseline and the application both run with every holder
+    at their registered volume, worded by `evidenceBoard` from the report's
+    `licenceImpactAuthorised`, and under it the authorised volumes' mix
+    (held as licence, verified existing lawful use, registration, claimed
+    existing lawful use, general authorisation or Schedule 1, the volume,
+    whether it is an entitlement, and the totals) and when and on which
+    engine it was run; without one, a fixed *Not assessed* row says why
+    (not run for this application run, no registered volumes, or out of
+    date); a pack drafted before `evidence-14` says it isn't part of it.
+    Above the report, on screen only, an editor gets **Run at full
+    authorised use** (or **Run it again** when out of date), which runs
+    the pair (`POST …/authorised-impact`) and reads the report again. Then
+    **Against modelled current use**, the **Impact by year
+    class** board (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
     the runs' stored series and the project's `settings.outcomes` (the
@@ -7163,7 +7205,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
   **Verify page** once issued, **Share link…** (an editor, once it was
-  issued) and **Notes**, and the version, code, manifest hash, PDF hash
+  issued), **Send to the authority…** (an editor, while it is issued:
+  `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
+  the authority and not through the applicant, the members acting for the
+  responsible authority as ticked checkboxes, an optional note and
+  **Send**, then "Sent to …"; with none, it says the owner marks them in
+  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
@@ -7257,6 +7305,18 @@ Part of the workspace, so English, like the rest of the Applicant view
   note that this is their copy: their own units by name, the others
   downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
+- **Their printable copy** (165_applicant_copy): **Make a printable copy**
+  in the head's bar asks the server to print this view as them; *Printing
+  your copy…* while it does (the page reads it again every 2 s for about a
+  minute), then **Download your printable copy** and a line with the
+  copy's own SHA-256, page count and when it was printed, saying it is a
+  copy of this page, not the pack. A failure says why, and the button
+  comes back. Printed (the server's PDF, or the browser's print), the page
+  drops the bar, the notes and the Back link, opens with a boxed
+  "Applicant's copy: other water users' figures withheld. Not the pack.
+  Check the pack at <verify address>" with the pack's code and manifest
+  hash, and repeats that in the footer of every page. The page sets
+  `data-report-ready` once loaded, for the renderer.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
@@ -7270,16 +7330,17 @@ Part of the workspace, so English, like the rest of the Applicant view
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
-  same note as the pack's page and verify), and the signers. No download:
-  the PDF, manifest and bundle are the assessors' copies. The "pack issued"
+  same note as the pack's page and verify), and the signers. No download
+  of the pack's PDF, manifest or bundle: those are the assessors' copies. The "pack issued"
   and "pack withdrawn" emails (133) link the applicant here.
 - 404 (not theirs, not issued, another application's) and 403 each have
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
   view, their farm named and the neighbour beside it, not downstream, not
-  listed (as in the results view), no download, the
-  errata found since issue, a share link opened signed out, axe, the phone
+  listed (as in the results view), no download of the pack, the
+  errata found since issue, their printable copy made by a worker tick and
+  its PDF's hash checked, a share link opened signed out, axe, the phone
   layout).
 
 ## Help (`/help`)

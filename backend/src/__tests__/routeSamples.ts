@@ -63,6 +63,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),
 	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'licence_issued', authority: 'Ladder CMA', decisionDate: '2026-09-30', reasonsReceived: true } }),
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
+	'POST /projects/:id/scenarios/:sid/questions': () => ({ body: { problem: 0, line: 'op 1 (node.set): ladder' } }),
+	'POST /projects/:id/application-questions/:qid/answer': () => ({ body: { answer: 'Ladder answer' } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
 		body: {
@@ -203,6 +205,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const outlookId = await plantCompleteOutlook(owner!.id, projectId, runId, [{ nodeId: a.id }, { nodeId: b.id }]);
 	const cid = await plantCalibration(owner!.id, projectId);
 	const [rev] = await asOwner('SELECT id FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
+	const qid = await plantQuestion(projectId, sid);
 	return {
 		owner: owner!,
 		editor: editor!,
@@ -236,9 +239,26 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			jobId,
 			outlookId,
 			cid,
+			qid,
 			revId: String(rev!.id)
 		}
 	};
+}
+
+/**
+ * An unanswered "Ask the assessors why" question on scenario `sid`, planted as
+ * the schema owner (164_applicant_visibility): asking one through the API
+ * needs an application whose rule turns on hidden farms
+ * (scenarios/questions.db.test.ts asks one).
+ */
+export async function plantQuestion(projectId: string, sid: string): Promise<string> {
+	const [q] = await asOwner(
+		`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text)
+		 VALUES ($1, $2, 'Ladder application', 'op 1 (node.set): doesn''t apply to the catchment as modelled', '{0}', '[]', '{shares}', 'op 1 (node.set): ladder')
+		 RETURNING id`,
+		[projectId, sid]
+	);
+	return q!.id as string;
 }
 
 /**

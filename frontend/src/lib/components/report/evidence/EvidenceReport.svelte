@@ -15,7 +15,8 @@
 		type Band,
 		type EvidenceReport,
 		type EwrAssuranceSite,
-		type ModelInput
+		type ModelInput,
+		type RunSummary
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
@@ -121,6 +122,19 @@
 			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
 		});
 	});
+	/**
+	 * Page 1's headline board against full authorised use (evidence-14, licensing build item 8): the
+	 * full-allocation pair's board, worded as the modelled-use one, both runs at full allocation.
+	 */
+	const authorisedBoard = $derived.by(() => {
+		const a = report.licenceImpactAuthorised;
+		if (!app || !id.application || !a?.board) return null;
+		const full = { allocations: { mode: 'fullAllocation' } } as unknown as RunSummary;
+		return evidenceBoard(a.board, {
+			a: { run: { label: `${id.baseline.label || 'Untitled run'}, every holder at their registered volume`, startDate: id.baseline.startDate, summary: full } },
+			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: full } }
+		});
+	});
 	/** An older pack (before evidence-5) froze no board: page 1 says it isn't part of the pack. */
 	const boardNotFrozen = $derived(frozen && app && report.licenceImpact === undefined);
 
@@ -164,7 +178,7 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} {boardNotFrozen} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->
 				<LocalityMap {report} {frozen} />

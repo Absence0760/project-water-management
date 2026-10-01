@@ -692,6 +692,10 @@ the result change?", and put back any earlier version.
   organisation), `registration.requirement` (167: the owner's switch,
   `required`), `scenario.participation_exported` (166: the reg 19 record
   downloaded: `format`, how many `comments` and `emails`, no name),
+  `application.question_asked` / `application.question_answered`
+  (164: "Ask the assessors why": the application's and the question's ids,
+  the op indexes and the rules' kinds, never the line, the real words or
+  the answer),
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
@@ -1207,7 +1211,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   already); returns the key ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **Audit**: `pack.drafted`, `pack.deleted`, `pack.issued`,
   `pack.superseded`, `pack.withdrawn` (ids, version, short code and hash; a
-  withdrawal its reason; an issue the bundle's hash), and `signoff.created`
+  withdrawal its reason; an issue the bundle's hash), `pack.sent` (the
+  issued pack sent to the members acting for the responsible authority,
+  licensing build item 13: the recipients' ids, the authority's name and
+  whether a note went, never the note), and `signoff.created`
   with `packId`.
 - Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
   role-ladder, mass-assignment and cross-project sweeps.
@@ -1237,6 +1244,51 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   downloads), `jobs/trust.security.db.test.ts` (a `pack_render` job naming
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
+
+**The applicant's printable copy (165_applicant_copy.sql;** [evidence-pack.md § Applicants](./evidence-pack.md#applicants)**).**
+
+- `job.kind` accepts `applicant_pack_render`: a party of the application
+  queues one as themselves (`POST …/scenarios/:sid/packs/:packId/pdf`),
+  deduplicated per pack and party (`applicant_copy:<pack>:<user>`); the
+  production retry is `applicant_copy_retry:<pack>:<user>:<n>` and the
+  renderer's answer `applicant_copy_result:<pack>`. `job_insert_applicant_copy`
+  lets a party insert one for an issued pack of their application
+  (`app_applicant_copy_target`, through `app_applicant_pack_meta`);
+  `job_select_applicant_copy` lets a contributor read the ones they
+  queued.
+- **`evidence_pack_applicant_copy`**: one per pack (`pack_id` primary key →
+  `evidence_pack`, cascade; `project_id` → `project`, cascade, indexed;
+  `evidence_pack_applicant_copy_same_project`), `pdf_key` (a CHECK holds it
+  to `packs/<project>/<pack>/applicant/<sha256>.pdf`), `pdf_sha256`,
+  `pdf_pages`, `rendered_at`. RLS: the project's viewers and up and the
+  pack's parties read; `water_app` has `SELECT` only (catalogue
+  `READ_ONLY`). Not the pack's PDF, and not on verify.
+- **`app_record_applicant_pack_pdf(pack, sha256, pages)`** (`SECURITY
+  DEFINER`): the one writer, as `app_record_pack_pdf` but for a *running*
+  `applicant_pack_render` job of the caller's and a caller who is still a
+  party; the first copy stands (false after).
+- `render_token.purpose` accepts `applicant_pack` (a `pack_id`, no run),
+  issued only to a party (`render_token_issue`, `render_token_insert`);
+  `app_consume_render_token` returns the purpose too.
+- **`app_applicant_copy_render_target(pack)`**: the production worker's
+  lookup for the renderer's answer, as `app_pack_render_target`.
+- Guards: `evidence/applicant-copy.db.test.ts`, `jobs/trust.security.db.test.ts`
+  (a copy job naming another project's pack touches nothing of it),
+  `db/catalogue.db.test.ts`, `db/cross-project-refs.security.db.test.ts`.
+
+**The board against full authorised use (165_applicant_copy.sql § 5;** [evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)**).**
+
+- **`authorised_impact`**: page 1's board over an application run's
+  full-allocation pair (licensing build item 8): `application_run_id` and
+  `base_run_id` → `model_run` (cascade; `authorised_impact_same_project`),
+  `engine_version`, the outcome settings it was built with
+  (`year_class_method`, `reserve_site`, the Reserve site's node id or null
+  for the outlet), `result` (the engine's `EvidenceAuthorisedImpact`, status
+  `ok`: the board, the authorised volumes' mix, when, which engine) and
+  `created_at`. RLS: read by a viewer and up who reads the application run
+  (`model_run`'s RLS in the policy's subquery); an editor inserts, and
+  deletes the run's older ones (the route keeps one per run); no `UPDATE`
+  (catalogue `NO_UPDATE`). The pair's runs themselves aren't stored.
 
 **The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
 
@@ -1731,6 +1783,28 @@ projection's read and narrows their series further:
   `app_share_allowed(project, owner, member)` allows (049), never its owner.
   RLS: read by whoever reads the application; only its owner adds; the owner
   removes anyone and anyone listed may leave; no update.
+- **`application_question`** (164_applicant_visibility): "Ask the
+  assessors why": an application's party asks about a problem line of its
+  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
+  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  (the application's name when asked: the assessors can't read a draft's
+  row), `problem` (the line as the applicant read it), `op_indexes` and
+  `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
+  an id or a name), `assessor_text` (the line in its real words, written by
+  the server), `answer` and `answered_at` (set once). No account column:
+  who asked and who answered is the audit trail's
+  (`application.question_asked` / `_answered`). RLS: editors and up read;
+  water_app writes nothing directly. `app_ask_assessors(scenario, …)`
+  (SECURITY DEFINER) files one for a party of an applicant's application,
+  taking the project and the name from the application;
+  `app_answer_assessors_question(project, question, answer)` lets an editor
+  answer once (`'answered'`, `'already'`, `'none'`);
+  `application_question_guard` refuses a question born answered, a second
+  answer or any other change; `app_application_questions(scenario)` gives
+  the parties their questions without `assessor_text` or `ops`.
+  `app_application_hidden_holders(scenario)` (server only, capped at 5)
+  counts the farm holders of an application's hidden farms, its owner left
+  out, for the check's masked-rule aggregate.
 - **`project_member.party`** (049, text ≤ 80, trimmed, null for none): the
   **applying party** the project owner puts a member in (the applicant, their
   consultant, their client). `app_share_allowed`: a contributor-or-above

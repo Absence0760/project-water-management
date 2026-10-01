@@ -13,7 +13,9 @@
 	// its page, and has its comments (the notes drawer on the scenario,
 	// WP-3.15); its share links are in the scenario's Application panel.
 	// "Assess together" (`view=assess` in the URL, WP-3.11) swaps the list for
-	// the cumulative impact view (CumulativeAssessment.svelte).
+	// the cumulative impact view (CumulativeAssessment.svelte). Below the list,
+	// applicants' "Ask the assessors why" questions, when there are any
+	// (AssessorQuestions.svelte, 164).
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -23,6 +25,7 @@
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import CumulativeAssessment from './CumulativeAssessment.svelte';
+	import AssessorQuestions from './AssessorQuestions.svelte';
 	import { scenarioAudiences } from '$lib/components/notes/notes';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -229,6 +232,8 @@
 			{/if}
 		</LoadState>
 	</section>
+	<!-- Applicants' "Ask the assessors why" questions (164): shown only when there are any. -->
+	<AssessorQuestions {projectId} />
 	{/if}
 </div>
 

@@ -20,6 +20,7 @@ import { demandSourceShares, type DemandSourceShare } from '../network/demandSou
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
+import { authorisedUnavailable } from './authorised';
 import { localitySection } from './locality';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
@@ -474,6 +475,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		cumulative,
 		allocations,
 		licenceImpact,
+		// The full-authorised-use board (evidence-14): as the backend found it, or not built.
+		licenceImpactAuthorised: a ? (input.authorisedImpact ? structuredClone(input.authorisedImpact) : authorisedUnavailable('notBuilt')) : null,
 		demandObjects,
 		localityMap: localitySection(input.mapFeatures, {
 			applicant: !!a,

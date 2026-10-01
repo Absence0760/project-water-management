@@ -101,7 +101,7 @@ async function getPack(request: APIRequestContext, projectId: string, packId: st
 	return ((await (await request.get(`${API_URL}/projects/${projectId}/packs/${packId}`)).json()) as { pack: ApiPack }).pack;
 }
 
-test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser }) => {
+test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser, signIn }) => {
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Pack catchment');
 	// § 1's locality map (evidence-12): a boundary and a parcel, read when the pack is drafted.
@@ -227,6 +227,24 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(errataSince.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expectNoViolations(page);
 	await page.unroute(packUrl);
+	await page.reload();
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+
+	// Sent to the responsible authority (licensing build item 13): to the member the owner marked as acting for it.
+	await page.getByTestId('pack-send-open').click();
+	const sendDialog = page.getByRole('dialog', { name: 'Send evidence pack v1 to the responsible authority' });
+	await expect(sendDialog.getByTestId('pack-send-none')).toContainText('No other member acts for the responsible authority');
+	await sendDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	const assessor = await signIn('Authority assessor');
+	await addMember(page.request, project.id, assessor.user.email, 'editor');
+	expect((await page.request.patch(`${API_URL}/projects/${project.id}/members/${assessor.user.id}`, { data: { actsForAuthority: true } })).status()).toBe(200);
+	await page.getByTestId('pack-send-open').click();
+	await expect(sendDialog.getByRole('checkbox', { name: 'Authority assessor' })).toBeChecked();
+	await sendDialog.getByLabel('Note (optional)').fill('For the assessment of the catchment baseline.');
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await sendDialog.getByRole('button', { name: 'Send', exact: true }).click();
+	await expect(sendDialog.getByTestId('pack-send-done')).toHaveText('Sent to Authority assessor.');
+	await sendDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
 	// The evidence report lists it now.
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);

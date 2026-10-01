@@ -17,7 +17,7 @@ import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
 
 /** Which email this is, for logs: a failed send is logged by kind, never by subject or recipient. */
-export type MailKind = 'verify' | 'account_exists' | 'reset' | 'invite' | 'farmer_invite' | 'report_ready' | 'alert' | 'alert_digest' | 'pack_notice' | 'erratum_notice' | 'account_deleted';
+export type MailKind = 'verify' | 'account_exists' | 'reset' | 'invite' | 'farmer_invite' | 'report_ready' | 'alert' | 'alert_digest' | 'pack_notice' | 'pack_sent' | 'erratum_notice' | 'account_deleted';
 
 export type Mail = {
 	/** Set by every template (mail/templates.ts, mail/alerts.ts); the log line's `kind`. */

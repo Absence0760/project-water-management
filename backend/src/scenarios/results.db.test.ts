@@ -188,14 +188,26 @@ describe("an applicant's results", () => {
 		expect(text).not.toContain('Lucerne');
 	});
 
-	it('leaves the catchment out below five farm holders, and keeps their own unit (control: six, above)', async () => {
+	it('leaves the use out below five farm holders and keeps the river and their own unit (164; control: six, above)', async () => {
 		// One farmer holds all four side farms: holders are A, Waterval and the farmer.
 		expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: others.map((o) => o.id) })).status).toBe(201);
 		const res = await results(applicantA, raise.sid);
 		expect(res.status).toBe(200);
-		expect(res.body.results.catchment).toMatchObject({ figures: null, series: null, withheld: 'few_farm_holders' });
+		const c = res.body.results.catchment;
+		expect(c.withheld).toBe('few_farm_holders');
+		// The river: natural flow and the EWR requirement, at any holder count (positive control).
+		expect(c.figures.base.meanNaturalFlowM3Day).toBeGreaterThan(0);
+		expect(c.series.ewr.application.values).toHaveLength(90);
+		// The use: the outflow, its series and the EWR deficit volume.
+		expect(c.figures.base.meanSimulatedOutflowM3Day).toBeNull();
+		expect(c.figures.application.meanSimulatedOutflowM3Day).toBeNull();
+		expect(c.series.outflow).toBeNull();
 		expect(res.body.results.units.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);
 		expect(res.body.results.ewrSites.every((s: { base: { deficitM3: unknown } | null }) => s.base === null || s.base.deficitM3 === null)).toBe(true);
-		expect((await seriesOf(applicantA, raise.runId)).some((s) => s.node_id === null)).toBe(false);
+		// RLS holds the same line: the river's catchment series of both runs, none of the use's.
+		for (const run of [raise.runId, published]) {
+			const catchment = (await seriesOf(applicantA, run)).filter((s) => s.node_id === null).map((s) => s.key);
+			expect(catchment.sort(), run).toEqual(['ewr', 'natural_flow']);
+		}
 	});
 });

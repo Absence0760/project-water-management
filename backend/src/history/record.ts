@@ -216,6 +216,8 @@ export type AuditKind =
 	| 'pack.issued'
 	| 'pack.superseded'
 	| 'pack.withdrawn'
+	// The issued pack sent to the members acting for the responsible authority (licensing build item 13): ids, the authority's name, whether a note went.
+	| 'pack.sent'
 	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
 	| 'calibration_rules.signed_off'
 	| 'calibration_rules.sign_off_withdrawn'
@@ -237,6 +239,10 @@ export type AuditKind =
 	| 'scenario.decided'
 	| 'scenario.shared'
 	| 'scenario.unshared'
+	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.
+	// Ids, op indexes and the rules' kinds; never the line, the real words or the answer.
+	| 'application.question_asked'
+	| 'application.question_answered'
 	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
 	| 'alert_rules.changed'
 	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14

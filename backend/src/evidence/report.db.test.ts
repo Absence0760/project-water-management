@@ -231,7 +231,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-13');
+		expect(r.version).toBe('evidence-14');
 		expect(r.allocations.notAssessed).toBeNull();
 		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
 		const s = r.allocations.units[0]!.sources[0]!;
@@ -432,7 +432,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-13');
+		expect(r.version).toBe('evidence-14');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([

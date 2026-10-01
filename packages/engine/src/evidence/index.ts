@@ -3,6 +3,7 @@
 export * from './types';
 export * from './report';
 export * from './impact';
+export * from './authorised';
 export * from './pack';
 export * from './bundle';
 export * from './prompts';

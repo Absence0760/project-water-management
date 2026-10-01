@@ -142,7 +142,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * recovery code is issued, then used or replaced (deleted), and an account's
  * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event']);
+// Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -166,6 +167,12 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
  * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
+ * An applicant's "Ask the assessors why" question is filed and answered only
+ * through 164_applicant_visibility's app_ask_assessors (the project and the
+ * name from the application) and app_answer_assessors_question (an editor,
+ * once). An applicant's printable copy of a pack is recorded only by
+ * 165_applicant_copy's app_record_applicant_pack_pdf, from the party's own
+ * running render job.
  */
 const READ_ONLY = new Set([
 	'language',
@@ -180,7 +187,9 @@ const READ_ONLY = new Set([
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',
-	'signoff_registration_check'
+	'signoff_registration_check',
+	'application_question',
+	'evidence_pack_applicant_copy'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).

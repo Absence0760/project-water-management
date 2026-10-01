@@ -298,6 +298,14 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_fan_out, SECURITY DEFINER, copies the project from the event',
 		premise: 'not writable'
 	},
+	'application_question.scenario_id': {
+		reason: 'water_app inserts none and updates only the answer; app_ask_assessors, SECURITY DEFINER, copies the project from the application itself (164)',
+		premise: 'not writable'
+	},
+	'evidence_pack_applicant_copy.pack_id': {
+		reason: 'water_app writes none of it; app_record_applicant_pack_pdf, SECURITY DEFINER, copies the project from the pack itself (165)',
+		premise: 'not writable'
+	},
 	'alert_feedback.event_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_answer_slot, SECURITY DEFINER, copies the project from the caller’s own delivery (151)',
 		premise: 'not writable'
@@ -419,6 +427,21 @@ const CASES: Record<string, Case> = {
 	'model_revision.restored_from': {
 		ref: (w) => w.revisionId,
 		insert: (h, ref) => [`INSERT INTO model_revision (project_id, created_by, source, snapshot, restored_from) VALUES ($1, $2, 'restore', '{}', $3)`, [h.projectId, u(), ref]]
+	},
+	// Page 1's board against full authorised use (165, licensing build item 8): authorised_impact_same_project checks both runs.
+	'authorised_impact.application_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, ref, h.runId]
+		]
+	},
+	'authorised_impact.base_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, h.scenarioRunId, ref]
+		]
 	},
 	'model_run.scenario_id': {
 		ref: (w) => w.scenarioId,
@@ -940,12 +963,14 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:packId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:projectId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:runId': 'a queue envelope between the app’s own Lambdas, not a request',
+	'jobs/transport.ts:scenarioId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'model/validate.ts:downstreamNodeId': ['PUT /projects/:id/model downstreamNodeId'],

@@ -23,6 +23,7 @@ import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } f
 import type { PairedSummary } from '../uncertainty/paired';
 import type { ApplicantPrompts } from './prompts';
 import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
+import type { EvidenceAuthorisedImpact } from './authorised';
 
 /**
  * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
@@ -80,8 +81,16 @@ import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
  * application_rejected, not_considered); a pack drafted before keeps its frozen approved /
  * approved_with_conditions, which the report still words. A pack drafted before evidence-13 has
  * neither field: its identity block says nothing about the authority, and it has no such flag.
+ * evidence-14: both impact bases (licensing build item 8; provisional position, pre-counsel research,
+ * 2026-10-01): page 1's licence impact board against **full authorised use**
+ * (`licenceImpactAuthorised`, evidence/authorised.ts), the baseline and the application both run with
+ * every holder at their registered volume, with the authorised volume's mix by how it is held
+ * (licence or verified existing lawful use, against registration, claimed use, general authorisation
+ * and Schedule 1); it is the headline, and the board against modelled use comes second. When there is
+ * none, a fixed row says why (not run, no registered volumes, or run on another engine or with other
+ * outcome settings). A pack drafted before it has no such board, and says so.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-13';
+export const EVIDENCE_REPORT_VERSION = 'evidence-14';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -314,6 +323,12 @@ export interface EvidenceInput {
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
 	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
 	impact?: EvidenceImpactInput | null;
+	/**
+	 * The full-authorised-use board (evidence-14, evidence/authorised.ts) as the backend found it for the
+	 * application run: built by an editor's POST …/authorised-impact, or why not. Absent or null on an
+	 * application report = not built.
+	 */
+	authorisedImpact?: EvidenceAuthorisedImpact | null;
 	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
 	mapFeatures?: EvidenceMapFeatureInput[] | null;
 }
@@ -947,6 +962,12 @@ export interface EvidenceReport {
 	allocations: EvidenceAllocations;
 	/** Page 1's licence impact by year class (issue #53 R7, evidence-5); null for baseline evidence. Absent from an older pack's document. */
 	licenceImpact?: EvidenceLicenceImpact | null;
+	/**
+	 * Page 1's headline board against full authorised use (evidence-14, evidence/authorised.ts): the
+	 * full-allocation pair's board and the authorised volume's mix, or why there is none. null for
+	 * baseline evidence; absent from a pack drafted before evidence-14.
+	 */
+	licenceImpactAuthorised?: EvidenceAuthorisedImpact | null;
 	/** § 6: the applicant's demand objects and their sources (evidence-9); null for baseline evidence. Absent from an older pack's document, which has no § 6. */
 	demandObjects?: EvidenceDemandObjects | null;
 	/**

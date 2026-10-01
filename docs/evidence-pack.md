@@ -376,6 +376,68 @@ the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
 A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
 
+### Both impact bases
+
+Report format `evidence-14` (licensing build item 8; provisional position,
+pre-counsel research, 2026-10-01; D15 in
+[step-3-licensing.md § 11](./roadmap/step-3-licensing.md)). Page 1 judges
+the application twice, both labelled:
+
+- **Against full authorised use** (the headline, `licenceImpactAuthorised`):
+  the baseline and the application both run with every holder at their
+  registered volume (`allocationMode: 'fullAllocation'`). NWA s27(1)(a) and
+  (f) have the authority weigh existing lawful uses and the effect on other
+  users, and s29(1)(a)(iii) and R267's "cumulative impact" protect existing
+  *and potential* use: a proposal that passes only because other holders
+  don't take their full entitlement would hurt them as soon as they do.
+  Beside it, the authorised volume's mix by how it is held: a licence
+  (s40) and an existing lawful use verified under s35 are entitlements; a
+  WARMS registration, a claimed existing lawful use, a general authorisation
+  and Schedule 1 use are not, and the table says which.
+- **Against modelled current use** (`licenceImpact`, as before): the
+  baseline as it ran, so "existing use" is what the model found holders
+  use; it answers what changes tomorrow.
+
+The pair is two model runs, which a report request (a viewer's GET, a pack
+draft) must not carry, so an editor runs it from the evidence report
+(**Run at full authorised use**, `POST …/runs/:runId/authorised-impact`):
+the board the engine builds over it, the mix (from the allocations' rows as
+they are then) and when and on which engine are kept for that application
+run (`authorised_impact`, the newest only); the pair's runs aren't stored.
+The report reads it only when it was run on the baseline's engine with the
+project's outcome settings as they are now; otherwise, or without one, or
+when the baseline ran with no registered volumes, a fixed row says which
+(*Not assessed: …*, never left out). A pack freezes whichever page 1 had
+when it was drafted; one drafted before `evidence-14` has no such board and
+says so. Tests: `backend/src/evidence/authorised-impact.db.test.ts`,
+`packages/engine/src/evidence/authorised.test.ts`,
+`e2e/tests/evidence-allocations.spec.ts`.
+
+### Sending it to the authority
+
+Licensing build item 13 (provisional position, pre-counsel research,
+2026-10-01). The pack's PDF and reproduction bundle name every water user,
+so they go where s41(2) says the evidence goes, to the authority that
+decides, not through the applicant (whose printable copy withholds the
+others' figures, [§ Applicants](#applicants)). On an issued pack's page an
+editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
+members the project's owner marked as acting for the responsible authority
+(editors and owners with `acts_for_authority`, 163), all of them or those
+picked, never the sender, each get an email (`pack_sent`) naming the pack,
+its version, code and the authority, with the editor's note. The email
+holds **no file and no download link**: it links the pack's page, where
+the member, signed in and still an editor, downloads the PDF and bundle
+through the usual one-minute signed GET, and the public verify page, so a
+forwarded email opens nothing. Only an issued pack is sent (a superseded or
+withdrawn one is `409`), and an id that isn't a member acting for the
+authority is one refusal (`422`). The history records `pack.sent` with the
+recipients' ids, the authority's name and whether a note went (never the
+note). An address outside the app (the authority's general inbox) is not
+offered: settings.responsibleAuthority holds none, and a link that works
+without signing in would be a new way out of the app for every unit's
+figures ([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+Tests: `backend/src/evidence/pack-send.db.test.ts`, `e2e/tests/evidence-pack.spec.ts`.
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text
@@ -894,8 +956,8 @@ row; they read a projection the database builds (D2's recommended default,
 | --- | --- |
 | the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
-| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the application's own units now, as the results view; when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
+| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, **frozen at issue**: the units the pack's report counted as the applicant's (`users[].own`, hashed into the manifest), within the application's stored own nodes (frozen at submit), and the nodes its proposals add. A farm the applicant sells or unlinks afterwards stays theirs by name in this copy (164; provisional position, pre-counsel research, 2026-10-01: the copy belongs to the application, not to whoever holds the land now) |
+| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the frozen own units (as the results view names them while nothing changed hands); when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the
@@ -905,8 +967,39 @@ flags and questions, the settings, model, input diff, series hashes,
 warnings or the applicant statement, and no person but the signers. **Not
 the PDF, the manifest or the bundle:** each carries the whole report, which
 is the assessors' copy (an applicant checks any copy they are handed on the
-verify page). An anonymised printable copy for the applicant is a follow-up
-([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+verify page).
+
+**Their printable copy** (165_applicant_copy; provisional position,
+pre-counsel research, 2026-10-01). R267 reg 11(1) has the applicant file the
+technical report, and what they file reaches the interested and affected
+parties (Annexure D item 8), so the copy they file should withhold the
+other water users' figures. A party of the application asks for it on their
+pack view (**Make a printable copy**, `POST …/scenarios/:sid/packs/:packId/pdf`);
+an `applicant_pack_render` job, as them, prints that very view in the same
+headless Chromium as the pack's PDF ([§ The PDF](#the-pdf)): a render token
+of purpose `applicant_pack`, issued only to a party (`render_token_issue`:
+`app_applicant_pack_meta`), whose session reads that one page and nothing
+else (not the editor's pack route, the run or the application;
+[security.md § Render tokens](./security.md#render-tokens)). The PDF goes
+beside the pack's own under `packs/<project>/<pack>/applicant/<sha256>.pdf`
+and is recorded once with **its own** SHA-256, pages and time
+(`evidence_pack_applicant_copy`, written only by
+`app_record_applicant_pack_pdf` from the party's own running job); asking
+again changes nothing. `GET …/pdf` downloads it (a one-minute signed GET,
+`evidence-pack-v<n>-<code>-applicant-copy.pdf`). The printed page opens with
+"Applicant's copy: other water users' figures withheld. Not the pack. Check
+the pack at <verify address>", with the pack's code and manifest hash, and
+its footer says the same on every page. It is not hashed as the pack, never
+replaces the pack's PDF, and verify knows nothing of it: the authority
+checks the pack itself. In production the job hands the render to the
+renderer Lambda with the application's id (`render_pack` with
+`scenarioId`), which answers `copy: 'applicant'`; the worker records it once
+the packs bucket is seen to hold it, as for the pack's PDF.
+Tests: `backend/src/evidence/applicant-copy.db.test.ts` (who asks and
+downloads, the token's issuer, the render session swept over every route,
+the one record, the production answer), `backend/src/jobs/handlers/applicant-pack-render.test.ts`,
+`backend/src/reports/scope.test.ts`, and `e2e/tests/applicant-pack.spec.ts`
+(the real print through MinIO, its hash checked).
 
 **Share links.** The application's owner (not the consultant they shared it
 with) makes a link to their own pack while it is issued, and lists and
@@ -935,7 +1028,9 @@ from the Application panel, sees their farm by name and not the neighbour
 beside it, which isn't downstream, as in their results view, makes a link,
 and it opens signed out); `evidence/applicant-pack-units.db.test.ts` (the other units are the
 results view's downstream units under the same names; no upstream or side
-unit).
+unit; the applicant's farm, unlinked after issue, is still theirs by name in
+the pack while the results view, which follows the links, no longer names
+it).
 
 ## Notices
 

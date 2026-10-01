@@ -78,6 +78,10 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	// (assertCanChange, the viewer checks in POST and …/runs).
 	['POST /projects/:id/scenarios', { why: 'a contributor makes an application; a viewer makes nothing', viewer: 403 }],
 	['PATCH /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
+	// The applicant's printable copy (165): a party of the application asks for it; anyone else gets the same 404.
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { why: "a party of the application asks for their copy of its issued pack (app_applicant_pack_meta); anyone else 404s", viewer: 404 }],
+	// "Ask the assessors why" (164): a party of the application asks; a team scenario has nothing hidden to ask about.
+	['POST /projects/:id/scenarios/:sid/questions', { why: "an application's parties ask about a rule hidden from them; a team scenario hides none", viewer: 409 }],
 	['DELETE /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/runs', { why: "an application by its readers (not a viewer), a team scenario by an editor", viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/rebase', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
@@ -150,6 +154,11 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/scenarios', { min: 'contributor', why: 'a contributor lists their own applications and those shared with them (RLS)' }],
 	['POST /projects/:id/scenarios', { min: 'contributor', why: 'a contributor makes an application on the published run' }],
 	['GET /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application its applicant or a sharer reads; any other 404s' }],
+	['POST /projects/:id/scenarios/:sid/questions', { min: 'contributor', why: 'a party of the application asks the assessors about a rule hidden from them (164)' }],
+	[
+		'GET /projects/:id/scenarios/:sid/questions',
+		{ min: 'contributor', why: "an application's questions: its parties through app_application_questions (never the real words), editors the rows; any other 404s" }
+	],
 	['GET /projects/:id/scenarios/:sid/base', { min: 'contributor', why: "the published base run's inputs, through app_published_run_input" }],
 	['GET /projects/:id/scenarios/:sid/results', { min: 'contributor', why: "an application run's results as its applicant sees them, through app_application_run_results (118)" }],
 	['PATCH /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
@@ -164,6 +173,8 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }],
 	// An applicant's packs (131_applicant_packs): the definer functions answer only the application's parties, for packs that were issued.
 	['GET /projects/:id/scenarios/:sid/packs', { min: 'contributor', why: "an application's issued packs, for its parties only (app_applicant_packs)" }],
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party asks for their printable copy of an issued pack of the application (165); any other 404s" }],
+	['GET /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party downloads their printable copy (165), other water users' figures withheld; any other 404s" }],
 	[
 		'GET /projects/:id/scenarios/:sid/packs/:packId',
 		{ min: 'contributor', why: "one issued pack of an application, D2-anonymised, for its parties only (app_applicant_pack); any other 404s" }
@@ -184,6 +195,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 /** Reads that need editor, and why. */
 const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
+	['GET /projects/:id/application-questions', 'applicants’ questions with each rule’s real words, which name farms only editors read in an application’s check (164)'],
 	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
