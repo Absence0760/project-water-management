@@ -15,6 +15,7 @@ import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from '
 import { isEwrSite } from './network/topology';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
+import { droughtRestrictionChanges } from './network/restriction';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from './seriesProvenance';
@@ -679,6 +680,7 @@ function arealRainChange(ra: unknown, rb: unknown): string | null {
 	return parts.length ? parts.join('; ') : null;
 }
 const AREAL_RAIN_LABEL = 'Areal rainfall correction (GR4J)';
+const DROUGHT_RESTRICTION_LABEL = 'Drought restriction rule';
 
 type Fmt = (v: unknown) => string;
 const withUnit = (unit: string, digits = 3): Fmt => (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v, digits)} ${unit}`);
@@ -973,6 +975,8 @@ function diffSettings(
 	// Automated calibration's rules (engine ≥ 1.25.0, issue #153): a snapshot without them ran the defaults.
 	for (const c of calibrationRulesChanges(resolveCalibrationRules(a.calibrationRules, []), resolveCalibrationRules(b.calibrationRules, []))) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a snapshot without one ran without it.
+	for (const t of droughtRestrictionChanges(a.droughtRestriction, b.droughtRestriction, (id) => siteName(id))) push(DROUGHT_RESTRICTION_LABEL, `${DROUGHT_RESTRICTION_LABEL}: ${t}`);
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([
 		...Object.keys(SETTINGS_FIELDS),
@@ -991,7 +995,8 @@ function diffSettings(
 		'fitRecord',
 		'pe',
 		'lakeEvapFactorMonthly',
-		'effectiveRainFractionMonthly'
+		'effectiveRainFractionMonthly',
+		'droughtRestriction'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);

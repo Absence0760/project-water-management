@@ -443,7 +443,7 @@
 					<button type="button" class="btn" onclick={() => (overriding = true)}>Edit in the model tables</button>
 					<span class="hint">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
 				</div>
-				<OpForm input={effective} onadd={add} disabled={saving} />
+				<OpForm input={effective} onadd={add} disabled={saving} {projectId} />
 			{/if}
 		{/if}
 		<p class="visually-hidden" role="status">{note}</p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
+import { AUTOMATION_LABEL, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order starting with Demand', () => {
@@ -19,18 +19,22 @@ describe('SETTINGS_SECTIONS', () => {
 });
 
 describe('settingsNavGroups', () => {
-	it('covers every section once, in page order, then the panels after Data feeds', () => {
+	it('covers every section once, in page order, the last four behind one Automation & access link', () => {
 		const owner = settingsNavGroups(true);
-		expect(owner.map((g) => g.label)).toEqual(['Model inputs', 'How results are read', 'Runs, feeds and reports']);
-		expect(owner.flatMap((g) => g.ids)).toEqual([...SETTINGS_SECTIONS.map((s) => s.id), 'set-api-keys', 'set-report-schedules']);
+		expect(owner.map((g) => g.label)).toEqual(['Model inputs', 'How results are read', AUTOMATION_LABEL]);
+		expect(AUTOMATION_LABEL).toBe('Automation & access');
+		const auto = SETTINGS_SECTIONS.findIndex((s) => s.id === 'set-auto');
+		// The bar's links: every model input and reading setting, then the one group link, landing on Automatic runs.
+		expect(owner.flatMap((g) => g.ids)).toEqual([...SETTINGS_SECTIONS.slice(0, auto).map((s) => s.id), 'set-auto']);
+		// The panels it stands for keep their own ids, so a link to any of them still lands.
+		expect(owner.at(-1)!.covers).toEqual({ 'set-auto': ['set-auto', 'set-feeds', 'set-api-keys', 'set-report-schedules'] });
 		// Data quality is a model input: its zero-rain and low-vs-CHIRPS limits change results (issue #173).
 		expect(owner[0]!.ids.at(-1)).toBe('set-quality');
 		expect(owner[1]!.ids).toEqual(['set-outcomes', 'set-outlook', 'set-evidence']);
-		for (const id of ['set-api-keys', 'set-report-schedules']) expect(AFTER_FORM_LABELS[id]).toBeTruthy();
 	});
 
-	it('links API keys for an owner only, since only an owner sees that panel', () => {
-		expect(settingsNavGroups(false).at(-1)!.ids).toEqual(['set-auto', 'set-feeds', 'set-report-schedules']);
+	it('counts API keys in the group for an owner only, since only an owner sees that panel', () => {
+		expect(settingsNavGroups(false).at(-1)!.covers).toEqual({ 'set-auto': ['set-auto', 'set-feeds', 'set-report-schedules'] });
 	});
 });
 

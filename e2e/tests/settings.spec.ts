@@ -138,16 +138,14 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'Flow share',
 		'EWR',
 		'Reserve rules',
+		'Drought restrictions',
 		'Simulation period',
 		'Data quality',
 		'Outcome matrix',
 		'Seasonal outlook',
 		'Evidence',
-		'Automatic runs',
-		'Data feeds',
-		// The panels after Data feeds, which save on their own (API keys: an owner's only).
-		'API keys',
-		'Scheduled reports'
+		// Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
+		'Automation & access'
 	]);
 	await expect(menu.getByRole('link', { name: 'Demand' })).toHaveAttribute('aria-current', 'location');
 
