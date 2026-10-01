@@ -591,9 +591,11 @@ buys a **render session** that can read one report and nothing else.
   GET instead, so no cloud account is needed; production's config check
   refuses anything but `cloudfront` (§ Production configuration). The
   alternative, streaming the PDF through the API, was not taken: the API's
-  Function URL is in buffered mode (a 6 MB response cap, less after base64,
-  that a long report could pass), and streaming would hold a VPC Lambda open
-  and billed for every transfer. **Emails carry no PDF and no download link**:
+  Function URL does stream since WP-1.29a (the CSV exports, deployment.md
+  § Response streaming), but past its first 6 MB a stream is paced at about
+  2 MB/s, holding a VPC Lambda open, billed and counted against the API's
+  reserved concurrency for every transfer, where a signed URL costs the API
+  one request. **Emails carry no PDF and no download link**:
   they link to the app's `/projects/:id/reports/:jobId` page, which needs the
   reader signed in and still a member, so a forwarded email opens nothing.
   Recipients must be direct project members with viewer or above, checked

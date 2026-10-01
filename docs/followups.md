@@ -2788,17 +2788,25 @@ role and not before it.
       size and reads every cell back.
     - No frozen header row or live formulas (SheetJS CE doesn't write panes;
       the formula audit workbook is the separate item in § Verification).
-  - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
-    plus a local MinIO equivalent). **Now a real limit, not a hypothetical
-    one** (measured 2026-09-25 for WP-1.28): the workspace's farm daily CSV has ~32
-    full-precision columns, ≈ 400 KB a year, so a multi-decade record gets
-    the `413` (the farmer's own CSV, six columns in whole m³ and the last
-    365 days by default since #124, reaches it only with a `?from=` decades
-    back). The
-    workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
-    bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
-    response streaming with a 50 MB cap (roadmap step 1). Trigger: before the
-    first production release that the client catchment will be exported from.
+  - ~~a path for exports over 5 MB~~ **landed (WP-1.29a, issue #283,
+    2026-09-30)**: the API's Function URL is in `RESPONSE_STREAM` mode and
+    every CSV download streams, capped at 50 MB (a farm's daily CSV is
+    ≈ 400 KB a year, so a century fits), the same code path on the local Node
+    server ([deployment.md § Response streaming](./deployment.md#response-streaming),
+    [api.md § Export](./api.md#export)). `export.json` and the bulk series
+    pages keep the 5 MB JSON cap (an export must import back).
+    - [ ] **Check it in production at the first backend deploy** (WP-1.29's
+      acceptance criteria; the steps are in deployment.md § Response
+      streaming): a farm daily CSV over 12 MB downloads through CloudFront,
+      and sign-in and sign-out still work. AWS's response-streaming page says
+      "Lambda function URLs do not support response streaming within a VPC
+      environment", which reads as a client inside a VPC calling a URL (its
+      example is a VPC client using `InvokeWithResponseStream`), not a
+      VPC-attached function behind a public URL as here; only a real deploy
+      settles it. If it fails, the durable fallback is WP-1.29 option (b),
+      the CSV written to S3 and handed out as a signed URL (the reports'
+      pattern), with the URL put back to `BUFFERED` and lambda.ts back to
+      the buffered adapter together.
 - **Accounts:**
   - Should sign-in require a verified email?
   - Should sign-up be invite-only, or email-first? Email-first closes the last
