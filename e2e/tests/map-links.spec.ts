@@ -52,19 +52,19 @@ test('a unit with a parcel links to it on the map from the Network, Hydrological
 	// Hydrological units: a link on the unit's card, none on the other's.
 	await page.goto(`/projects/${p.id}?tab=supply`);
 	const units = page.getByRole('list', { name: 'Hydrological units' });
-	await expect(units.getByRole('link', { name: 'Upper farm on the map' })).toHaveAttribute('href', href);
+	await expect(units.getByRole('link', { name: 'Show on map (Upper farm)' })).toHaveAttribute('href', href);
 	await expect(units.locator(`[data-unit="${p.lower}"]`).getByRole('link', { name: 'Lower farm on the Network' })).toBeVisible();
 	await expect(units.getByTestId('unit-map-link')).toHaveCount(1);
 
 	// Dams: the same, per dam.
 	await page.goto(`/projects/${p.id}?tab=dams`);
 	const dams = page.getByRole('list', { name: 'Dams' });
-	await expect(dams.getByRole('link', { name: 'Upper farm on the map' })).toHaveAttribute('href', href);
+	await expect(dams.getByRole('link', { name: 'Show on map (Upper farm)' })).toHaveAttribute('href', href);
 	await expect(dams.locator(`[data-dam="${p.lower}"]`).getByRole('link', { name: 'Lower farm on the Network' })).toBeVisible();
 	await expect(dams.getByTestId('dam-map-link')).toHaveCount(1);
 
 	// Following it opens the Map tab on that node.
-	await dams.getByRole('link', { name: 'Upper farm on the map' }).click();
+	await dams.getByRole('link', { name: 'Show on map (Upper farm)' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=map&node=${p.upper}$`));
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('aria-current', 'page');
 	// … with that unit's parcel picked: pressed in the list, and named on the card.
@@ -78,7 +78,7 @@ test('a viewer gets the links too', async ({ page, owner, signIn }) => {
 	await addMember(page.request, p.id, viewer.user.email, 'viewer');
 
 	await viewer.page.goto(`/projects/${p.id}?tab=supply`);
-	await expect(viewer.page.getByRole('list', { name: 'Hydrological units' }).getByRole('link', { name: 'Upper farm on the map' })).toHaveAttribute('href', `?tab=map&node=${p.upper}`);
+	await expect(viewer.page.getByRole('list', { name: 'Hydrological units' }).getByRole('link', { name: 'Show on map (Upper farm)' })).toHaveAttribute('href', `?tab=map&node=${p.upper}`);
 	await viewer.page.goto(`/projects/${p.id}?tab=network&node=${p.upper}`);
 	await expect(viewer.page.getByTestId('node-card-map')).toHaveAttribute('href', `?tab=map&node=${p.upper}`);
 });

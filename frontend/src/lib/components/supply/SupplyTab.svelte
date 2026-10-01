@@ -16,7 +16,7 @@
 	// sticks beside the cards, under the "On this page" menu, as they are read
 	// down. The tables below grow with their rows rather than scrolling in a box.
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { onMount, onDestroy, tick, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { DailySeries } from '@water-management/engine';
@@ -63,8 +63,12 @@
 
 	// Which units have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// page has drawn, so the map's list never delays it (workspace/mapLinks.ts).
-	const mapped = new MappedNodes(untrack(() => projectId), api.map.list);
-	onMount(() => void mapped.load());
+	const mapped = new MappedNodes(() => projectId, api.map.list);
+	// After the first paint, and again if the workspace switches project under this tab.
+	$effect(() => {
+		void projectId;
+		void untrack(() => mapped.load());
+	});
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const runName = (r: Pick<RunMeta, 'label'>) => r.label || 'Untitled run';
@@ -380,7 +384,7 @@
 										{#if c.inModel}
 											<p class="links small">
 												<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
-												{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="{c.name} on the map" data-testid="unit-map-link">Show on map</a>{/if}
+												{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="unit-map-link">Show on map</a>{/if}
 												<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>
 											</p>
 										{/if}

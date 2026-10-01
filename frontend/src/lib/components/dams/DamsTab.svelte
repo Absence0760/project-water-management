@@ -17,7 +17,7 @@
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { beforeForecast, type DailySeries } from '@water-management/engine';
@@ -53,8 +53,12 @@
 
 	// Which dams have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// page has drawn, so the map's list never delays it (workspace/mapLinks.ts).
-	const mapped = new MappedNodes(untrack(() => projectId), api.map.list);
-	onMount(() => void mapped.load());
+	const mapped = new MappedNodes(() => projectId, api.map.list);
+	// After the first paint, and again if the workspace switches project under this tab.
+	$effect(() => {
+		void projectId;
+		void untrack(() => mapped.load());
+	});
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const pick = $derived(pickRuns(runs));
@@ -290,7 +294,7 @@
 							{/if}
 							<p class="links small">
 								<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
-								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="{c.name} on the map" data-testid="dam-map-link">Show on map</a>{/if}
+								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="dam-map-link">Show on map</a>{/if}
 								{#if c.farm}<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>{/if}
 							</p>
 						</li>

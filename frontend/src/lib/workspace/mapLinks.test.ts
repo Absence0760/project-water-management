@@ -35,9 +35,9 @@ describe('Show on map links (issue #326 A2)', () => {
 	});
 
 	it('a page starts from the cached set and shows no link before any', async () => {
-		expect(new MappedNodes('p1', list(['n1'])).has('n1')).toBe(false);
+		expect(new MappedNodes(() => 'p1', list(['n1'])).has('n1')).toBe(false);
 		await loadMappedNodes('p1', list(['n1']));
-		const m = new MappedNodes('p1', list(['n2']));
+		const m = new MappedNodes(() => 'p1', list(['n2']));
 		expect(m.has('n1')).toBe(true);
 		expect(m.has('n2')).toBe(false);
 		// Loading replaces it with the server's set.
@@ -48,15 +48,44 @@ describe('Show on map links (issue #326 A2)', () => {
 
 	it('a page shows no link when the list fails, rather than a stale one', async () => {
 		await loadMappedNodes('p1', list(['n1']));
-		const m = new MappedNodes('p1', () => Promise.reject(new Error('offline')));
+		const m = new MappedNodes(() => 'p1', () => Promise.reject(new Error('offline')));
 		expect(m.has('n1')).toBe(true);
 		await m.load();
 		expect(m.has('n1')).toBe(false);
 	});
 
+	it('follows a project switch, and drops a late answer for the earlier project', async () => {
+		type List = { features: { nodeId: string | null }[] };
+		let project = 'p1';
+		const pending: ((v: List) => void)[] = [];
+		const slow = () => new Promise<List>((r) => pending.push(r));
+		const m = new MappedNodes(() => project, slow);
+		const first = m.load();
+		// The workspace switches project before p1's list arrives.
+		project = 'p2';
+		const second = m.load();
+		pending[1]!({ features: [{ nodeId: 'p2-node' }] });
+		await second;
+		expect(m.has('p2-node')).toBe(true);
+		// p1's answer lands late: it doesn't replace p2's set.
+		pending[0]!({ features: [{ nodeId: 'p1-node' }] });
+		await first;
+		expect(m.has('p2-node')).toBe(true);
+		expect(m.has('p1-node')).toBe(false);
+	});
+
+	it('never answers for another project than the current one', async () => {
+		await loadMappedNodes('p1', list(['n1']));
+		let project = 'p1';
+		const m = new MappedNodes(() => project, list(['n1']));
+		expect(m.has('n1')).toBe(true);
+		project = 'p2';
+		expect(m.has('n1')).toBe(false);
+	});
+
 	it('a page without a project never asks', async () => {
 		let asked = false;
-		const m = new MappedNodes('', async () => ((asked = true), { features: [] }));
+		const m = new MappedNodes(() => '', async () => ((asked = true), { features: [] }));
 		await m.load();
 		expect(asked).toBe(false);
 		expect(m.has('n1')).toBe(false);

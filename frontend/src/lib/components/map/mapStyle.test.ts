@@ -1,6 +1,7 @@
 // The catchment map's style (mapStyle.ts): no basemap without a tiles URL, a
 // self-hosted PMTiles basemap with its attribution and no glyphs with one,
 // and overlay layers that tell features apart by more than colour.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
 import { BASEMAP_ATTRIBUTION, basemapColours, basemapLayerIds, basemapStyle, fillColour, mapStyle, overlayColours, overlayData, overlayLayers, RESULT_FILL_OPACITY, withAlpha } from './mapStyle';
@@ -142,5 +143,16 @@ describe('overlay', () => {
 			{ id: 'p2', kind: 'farm_parcel', name: '', selected: false }
 		]);
 		expect(overlayData(fs, null).features.every((f) => !('fill' in f.properties))).toBe(true);
+	});
+});
+
+describe('the map shares the app’s colours', () => {
+	// MapLibre can't read CSS variables, so the parcel green repeats app.css's --success as hex. Pin it, so a token change can't leave the map behind.
+	it('draws parcels in --success, light and dark', () => {
+		const css = readFileSync(new URL('../../../app.css', import.meta.url), 'utf8');
+		const values = [...css.matchAll(/--success:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]!.toLowerCase());
+		expect(values.length).toBeGreaterThanOrEqual(2);
+		expect(values[0]).toBe(overlayColours(false).parcel);
+		for (const dark of values.slice(1)) expect(dark).toBe(overlayColours(true).parcel);
 	});
 });

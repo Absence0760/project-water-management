@@ -213,10 +213,12 @@
 	}
 	// Which nodes have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// tab has drawn, so the map's list never delays it (workspace/mapLinks.ts).
-	const mapped = new MappedNodes(untrack(() => projectId), api.map.list);
-	onMount(() => {
-		loadFarmers();
-		if (only !== 'table') void mapped.load(); // the grid modal's node table has no card to link from
+	const mapped = new MappedNodes(() => projectId, api.map.list);
+	onMount(() => loadFarmers());
+	// After the first paint, and again if the workspace switches project under this tab; the grid modal's node table has no card to link from.
+	$effect(() => {
+		void projectId;
+		if (only !== 'table') void untrack(() => mapped.load());
 	});
 
 	// Farmers linked to each farm (WP-2.1), for the detail note and the delete
@@ -458,7 +460,7 @@
 
 {#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</span>{/snippet}
 {#snippet headerActions()}
-	<!-- The geographic map (issue #288): a tab reached from here, not a sidebar row (lib/workspace/tabs.ts LINKED_ONLY). -->
+	<!-- A shortcut to the geographic map (issue #288), which also has its own sidebar row since #326 D3. -->
 	<a class="btn" href="?tab=map" data-testid="network-open-map">Map</a>
 	<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

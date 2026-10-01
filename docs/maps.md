@@ -227,8 +227,9 @@ distances and the server's areas.
 
 Issue #326 A1 (decision D-A1) colours each parcel by one run's figures. This
 section is the data layer, `frontend/src/lib/components/map/mapStatus.ts`
-(pure, `mapStatus.test.ts`); the map's colours, measure picker, legend and the
-table beside it come with the Map tab's redesign.
+(pure, `mapStatus.test.ts`). **Not wired to the page yet:** the map's
+colours, measure picker, legend and the table beside it are the next round
+of #326, and nothing on the Map tab calls this module today.
 
 - **No new route.** Every figure is in the run's summary, which
   `GET /projects/:id/runs/:runId` already returns (`api.runs.get`), with the
@@ -273,8 +274,10 @@ table beside it come with the Map tab's redesign.
   fills, from the band's design token (`ok` `--success`, `watch`
   `--warning`, `short` `--danger`, `none` `--text-muted`, the schematic's and
   the node card's family), read from `<html>`'s computed style so it follows
-  the app's theme; re-read it on `watchAppTheme`. The boundary and rivers are
-  never filled.
+  the app's theme at the time of the call. The caller must call it again on
+  `watchAppTheme` and pass the new `fills`: CatchmentMap redraws a theme
+  change with the `fills` it was given, so stale ones keep the old theme's
+  colours. The boundary and rivers are never filled.
 
 ## Quaternary lookup
 
