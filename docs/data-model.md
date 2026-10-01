@@ -682,7 +682,10 @@ the result change?", and put back any earlier version.
   `report_schedule.configured`, `scenario.created/changed/deleted`, the
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
-  it is decided),
+  it is decided), `application.question_asked` / `application.question_answered`
+  (164: "Ask the assessors why": the application's and the question's ids,
+  the op indexes and the rules' kinds, never the line, the real words or
+  the answer),
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
@@ -1687,6 +1690,28 @@ projection's read and narrows their series further:
   `app_share_allowed(project, owner, member)` allows (049), never its owner.
   RLS: read by whoever reads the application; only its owner adds; the owner
   removes anyone and anyone listed may leave; no update.
+- **`application_question`** (164_applicant_visibility): "Ask the
+  assessors why": an application's party asks about a problem line of its
+  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
+  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  (the application's name when asked: the assessors can't read a draft's
+  row), `problem` (the line as the applicant read it), `op_indexes` and
+  `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
+  an id or a name), `assessor_text` (the line in its real words, written by
+  the server), `answer` and `answered_at` (set once). No account column:
+  who asked and who answered is the audit trail's
+  (`application.question_asked` / `_answered`). RLS: editors and up read;
+  water_app writes nothing directly. `app_ask_assessors(scenario, …)`
+  (SECURITY DEFINER) files one for a party of an applicant's application,
+  taking the project and the name from the application;
+  `app_answer_assessors_question(project, question, answer)` lets an editor
+  answer once (`'answered'`, `'already'`, `'none'`);
+  `application_question_guard` refuses a question born answered, a second
+  answer or any other change; `app_application_questions(scenario)` gives
+  the parties their questions without `assessor_text` or `ops`.
+  `app_application_hidden_holders(scenario)` (server only, capped at 5)
+  counts the farm holders of an application's hidden farms, its owner left
+  out, for the check's masked-rule aggregate.
 - **`project_member.party`** (049, text ≤ 80, trimmed, null for none): the
   **applying party** the project owner puts a member in (the applicant, their
   consultant, their client). `app_share_allowed`: a contributor-or-above

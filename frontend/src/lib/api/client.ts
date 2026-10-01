@@ -105,6 +105,8 @@ import type {
 	ScenarioCheck,
 	ScenarioBase,
 	ApplicantResults,
+	ApplicationQuestion,
+	AssessorQuestion,
 	ApplicantResultsRun,
 	ScenarioOutcome,
 	ScenarioStatus,
@@ -870,7 +872,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { userId }).then((r) => r.members),
 			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
 			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
-			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)
+			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications),
+			/** "Ask the assessors why" (164): a party asks about problem line `problem` of the check, quoting it as read (409 if the check changed). */
+			ask: (id: string, sid: string, problem: number, line: string) =>
+				request<{ question: ApplicationQuestion }>('POST', `${p(id)}/scenarios/${enc(sid)}/questions`, { problem, line }).then((r) => r.question),
+			/** An application's questions: its parties' view, or the assessors' (with the real words) for an editor. */
+			questions: (id: string, sid: string) =>
+				request<{ questions: (ApplicationQuestion & Partial<AssessorQuestion>)[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/questions`).then((r) => r.questions),
+			/** The assessors' queue of questions, unanswered first. Editors only. */
+			assessorQuestions: (id: string) => request<{ questions: AssessorQuestion[] }>('GET', `${p(id)}/application-questions`).then((r) => r.questions),
+			/** Answer a question, once. Editors only. */
+			answerQuestion: (id: string, qid: string, answer: string) =>
+				request<{ question: AssessorQuestion }>('POST', `${p(id)}/application-questions/${enc(qid)}/answer`, { answer }).then((r) => r.question)
 		},
 		/**
 		 * Registered and licensed volumes per farm or water user, and a run's

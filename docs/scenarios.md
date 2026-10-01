@@ -1151,10 +1151,32 @@ scenario is `'team'`, and behaves exactly as above).
     its hidden dam or levels), and, while any farm is
     hidden, flow shares over 100 % or no catchment area left, which an op's
     own range-checked value can't break alone) reads only `op N (…):
-    doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
-    wording is the recommended default, **pending the client**
-    ([issue #90](https://github.com/Absence0760/project-water-management/issues/90));
-    rules about the network's shape and names keep their words.
+    doesn't apply to the catchment as modelled` (`MASKED_RULE`). For the
+    catchment-wide rules (flow shares, area) the applicant reads the
+    catchment's value and the hidden units' aggregate instead
+    (`MASKED_RULE_AGGREGATE`: "flow shares would total 120.0 %, more than
+    100 %; the units you can't see hold 90.0 % of them between them") when
+    the hidden farms have `FARMER_K` = 5 or more holders, the applicant
+    left out (`app_application_hidden_holders`, counted as the k rule counts
+    them, 164): an aggregate over that many holders relates to no one of
+    them. Below that the generic words stay, since the aggregate would be a
+    holder's own figure. Provisional position (pre-counsel research,
+    2026-10-01); rules about the network's shape and names keep their
+    words.
+  - the check says which lines a hidden rule broke (`maskedRules`: the
+    line, its ops and the rules' kinds, never an id, a name or a value),
+    and gives editors and up every line in its real words
+    (`assessorProblems`), which no contributor receives. The assessors'
+    cumulative assessment records the real words too (they alone read it).
+  - **Ask the assessors why** (164). Such an application can't be
+    submitted, and the assessors never read a draft, so a note on it would
+    reach no one. Its parties ask instead (`POST …/questions`): the
+    question carries the line as they read it, the ops it names, the rules'
+    kinds and the application's name, plus the line in its real words,
+    which the server computed and only the editors read
+    (`application_question`). The editors answer once, on the Applications
+    tab; the authority decides what an answer discloses of other users'
+    figures. The draft stays the applicant's.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
   where an op took it (`Kalkoenkrans` → `Kalkoenkrans (2)` in that application's

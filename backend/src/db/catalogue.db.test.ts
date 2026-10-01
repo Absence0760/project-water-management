@@ -160,8 +160,23 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
  * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
+ * An applicant's "Ask the assessors why" question is filed and answered only
+ * through 164_applicant_visibility's app_ask_assessors (the project and the
+ * name from the application) and app_answer_assessors_question (an editor,
+ * once).
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction', 'gauge_station_reference', 'dam_register_reference']);
+const READ_ONLY = new Set([
+	'language',
+	'pack_notice',
+	'alert_feedback',
+	'erratum_notice',
+	'erratum_sweep',
+	'quaternary_reference',
+	'pack_reproduction',
+	'gauge_station_reference',
+	'dam_register_reference',
+	'application_question'
+]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite

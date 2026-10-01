@@ -112,6 +112,8 @@ export interface ScenarioCheck {
 	assessorProblems: string[];
 	/** The problem lines a hidden rule broke, with their ops and the rules' kinds (applyScenario's `maskedRules`): what "Ask the assessors why" quotes. */
 	maskedRules: MaskedRuleRef[];
+	/** An application, checked under its applicant's mask: only then do `maskedRules` and `assessorProblems` say anything. */
+	masked: boolean;
 }
 
 /**
@@ -175,9 +177,10 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
  * they can't see (docs/scenarios.md § Applications).
  */
 export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>, holders = 0): ScenarioCheck {
-	const options = s.origin === 'applicant' ? { mask: { ...applicationMask(base, s.ownedNodeIds), hiddenHolders: holders } } : {};
+	const masked = s.origin === 'applicant';
+	const options = masked ? { mask: { ...applicationMask(base, s.ownedNodeIds), hiddenHolders: holders } } : {};
 	const { input, applied, problems, renamed, reIds, assessorProblems, maskedRules } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, masked, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /** Who may run a scenario, and the scenario as they read it: the route's check, made when the run is read and again when it is stored. */

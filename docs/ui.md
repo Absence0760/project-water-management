@@ -6279,7 +6279,20 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   ("… in this application's runs Kalkoenkrans is called “Kalkoenkrans (2)”",
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
-  applicant never does.
+  applicant never does. An assessor also reads, in an info box, each rule
+  the applicant reads without the other units' figures in its own words
+  (`check.assessorProblems`, 164).
+- **Rules you can't see** (`AskAssessors.svelte`, 164; for the
+  application's parties, between the problems note and the changes): each
+  problem line a rule hidden from them broke (`check.maskedRules`), the
+  changes it names and what the rule is about ("change 1: flow shares"), and
+  **Ask the assessors why**, which sends the line, those changes and the
+  rule's kind (never anything hidden) to the assessors. The panel says what
+  the assessors see (the question, the changes it names and the
+  application's name, not the rest of the draft). Once asked: "Asked
+  <date>; waiting for the assessors' answer", then the answer and **Ask
+  again**. Questions about lines the check no longer shows sit under
+  **Earlier questions**.
 - **Comments and share links** (WP-3.15), at the top of the panel: the
   application's **Notes** button (the notes drawer on the scenario, titled
   "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
@@ -6335,6 +6348,15 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs", its
   packs, its comments) and the page scrolls.
+- **Applicants' questions** (`AssessorQuestions.svelte`, 164), under the
+  card and only when there are any: each "Ask the assessors why" question,
+  unanswered first ("N waiting for an answer"), with the application's
+  name, when it was asked, the changes and the rule's kind, the line as the
+  applicant read it and the rule in its own words, and **Your answer** /
+  **Send the answer** (once; an answer goes to the application's parties,
+  so the note above the list says to write only what they may know of
+  other water users). A question may be about a draft, which stays the
+  applicant's.
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -6387,7 +6409,11 @@ e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and
 `e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
 fit and a 30-application queue, the status filter's URL and Back, empty
-states, a viewer, the phone cards, axe at desktop light and dark and phone).
+states, a viewer, the phone cards, axe at desktop light and dark and phone)
+and `e2e/tests/ask-assessors.spec.ts` (an applicant asks why a rule
+depending on a farm they can't see refuses their change, the assessor
+answers it on the Applications tab, the applicant reads the answer; axe in
+light and dark).
 
 ## History (`?tab=history`)
 

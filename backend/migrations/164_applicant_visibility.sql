@@ -55,6 +55,32 @@
 --                              them and capped at 5 (all the check needs),
 --                              for a caller who reads the application; 0
 --                              otherwise. The server's only: never returned.
+--
+-- 4. "Ask the assessors why" (build item 6). An application with a masked
+--    problem can't be submitted, and the assessors never read a draft, so a
+--    note on it would reach no one. Instead the applicant's question goes to
+--    its own table:
+--      application_question
+--                              new: one question per ask, about one problem
+--                              line of the check: the line as the applicant
+--                              read it, the ops it names (as they stood),
+--                              the rules' kinds (no id, no name, no value),
+--                              the application's name, and the line in its
+--                              real words (`assessor_text`, written by the
+--                              server, which computed it; the applicant never
+--                              reads it back). The editors read and answer
+--                              (once, app_answer_assessors_question); the
+--                              application's parties ask through
+--                              app_ask_assessors (water_app only reads the
+--                              table: the project and the name come from the
+--                              application)
+--                              and read their questions and the answers
+--                              through app_application_questions, which never
+--                              returns assessor_text or the ops. Who asked and who
+--                              answered is the audit trail's
+--                              (application.question_asked / _answered), so
+--                              the table holds no account and goes with the
+--                              application (cascade).
 
 -- ---------------------------------------------------------------------------
 -- 1. The applicant's units, frozen at issue
@@ -299,3 +325,159 @@ COMMENT ON FUNCTION app_application_hidden_holders(uuid) IS
 	'The farm holders of an application''s hidden farms (outside its stored own nodes, its owner left out), capped at 5, for the check''s masked-rule aggregate (164_applicant_visibility). Server only.';
 REVOKE ALL ON FUNCTION app_application_hidden_holders(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_application_hidden_holders(uuid) TO water_app;
+
+-- ---------------------------------------------------------------------------
+-- 4. The assessors' questions
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE application_question (
+	id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	project_id    uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+	scenario_id   uuid NOT NULL REFERENCES scenario(id) ON DELETE CASCADE,
+	asked_at      timestamptz NOT NULL DEFAULT now(),
+	-- The application's name when asked: the assessors can't read a draft's row.
+	scenario_name text NOT NULL CHECK (char_length(scenario_name) BETWEEN 1 AND 200),
+	-- The problem line as the applicant read it (MASKED_RULE or MASKED_RULE_AGGREGATE words).
+	problem       text NOT NULL CHECK (char_length(problem) BETWEEN 1 AND 4000),
+	-- The ops the line names (0-based) and those ops as they stood.
+	op_indexes    integer[] NOT NULL CHECK (cardinality(op_indexes) BETWEEN 1 AND 500),
+	ops           jsonb NOT NULL CHECK (jsonb_typeof(ops) = 'array'),
+	-- The rules' kinds (structure keys' kinds: shares, area, supplyTrigger…), never an id or a name.
+	rules         text[] NOT NULL CHECK (cardinality(rules) BETWEEN 1 AND 50),
+	-- The line in its real words (the check's assessorProblems): the editors' only.
+	assessor_text text NOT NULL CHECK (char_length(assessor_text) BETWEEN 1 AND 8000),
+	answer        text CHECK (answer IS NULL OR char_length(answer) BETWEEN 1 AND 4000),
+	answered_at   timestamptz,
+	CHECK ((answer IS NULL) = (answered_at IS NULL))
+);
+CREATE INDEX application_question_project_idx ON application_question (project_id, asked_at DESC);
+CREATE INDEX application_question_scenario_idx ON application_question (scenario_id, asked_at DESC);
+CREATE TRIGGER application_question_same_project BEFORE INSERT OR UPDATE ON application_question
+	FOR EACH ROW EXECUTE FUNCTION assert_same_project('scenario_id');
+
+COMMENT ON TABLE application_question IS
+	'"Ask the assessors why" (164_applicant_visibility, build item 6): an applicant''s question about a check line a hidden rule broke. Editors read and answer once; the parties read through app_application_questions (never assessor_text or ops). Goes with the application.';
+COMMENT ON COLUMN application_question.assessor_text IS
+	'The problem line in its real words, hidden names restored (the check''s assessorProblems). Written by the server; read by the editors only.';
+
+-- The answer: set once, by an editor, and stamped here; nothing else changes.
+CREATE FUNCTION application_question_guard() RETURNS trigger
+	LANGUAGE plpgsql SET search_path = public
+	AS $$
+	BEGIN
+		IF TG_OP = 'INSERT' THEN
+			IF NEW.answer IS NOT NULL OR NEW.answered_at IS NOT NULL THEN
+				RAISE EXCEPTION 'a question is asked without an answer' USING ERRCODE = 'check_violation';
+			END IF;
+			NEW.asked_at := now();
+			RETURN NEW;
+		END IF;
+		IF OLD.answer IS NOT NULL THEN
+			RAISE EXCEPTION 'a question is answered once' USING ERRCODE = 'check_violation';
+		END IF;
+		IF (NEW.id, NEW.project_id, NEW.scenario_id, NEW.asked_at, NEW.scenario_name, NEW.problem, NEW.op_indexes, NEW.ops, NEW.rules, NEW.assessor_text)
+			IS DISTINCT FROM (OLD.id, OLD.project_id, OLD.scenario_id, OLD.asked_at, OLD.scenario_name, OLD.problem, OLD.op_indexes, OLD.ops, OLD.rules, OLD.assessor_text) THEN
+			RAISE EXCEPTION 'only the answer of a question changes' USING ERRCODE = 'check_violation';
+		END IF;
+		NEW.answered_at := CASE WHEN NEW.answer IS NULL THEN NULL ELSE now() END;
+		RETURN NEW;
+	END
+	$$;
+CREATE TRIGGER application_question_guard BEFORE INSERT OR UPDATE ON application_question
+	FOR EACH ROW EXECUTE FUNCTION application_question_guard();
+
+ALTER TABLE application_question ENABLE ROW LEVEL SECURITY;
+-- The assessors: the project's editors and up (they read every farm, so assessor_text tells them nothing new).
+CREATE POLICY application_question_select ON application_question FOR SELECT
+	USING (app_has_role(project_id, 'editor'));
+-- No INSERT policy: a party asks through app_ask_assessors (below), which takes the project and the name from the application.
+-- No UPDATE or DELETE policy either: an editor answers through app_answer_assessors_question; a question goes with its application.
+GRANT SELECT ON application_question TO water_app;
+
+-- Ask: one of the application's parties (app_scenario_party), about their
+-- own application. The project and the application's name come from the
+-- application itself, so no caller can file a question under another
+-- project's or another applicant's; the line, the ops it names, the rules'
+-- kinds and the real words are the server's (it ran the check). Returns the
+-- new question's id; refuses anyone else.
+CREATE FUNCTION app_ask_assessors(p_scenario uuid, p_problem text, p_op_indexes integer[], p_ops jsonb, p_rules text[], p_assessor_text text) RETURNS uuid
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		s record;
+		v_id uuid;
+	BEGIN
+		SELECT sc.project_id, sc.name, sc.origin INTO s FROM scenario sc WHERE sc.id = p_scenario;
+		IF NOT FOUND OR s.origin <> 'applicant' OR NOT app_scenario_party(p_scenario) THEN
+			RAISE EXCEPTION 'only a party of an application asks the assessors about it' USING ERRCODE = 'insufficient_privilege';
+		END IF;
+		INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text)
+		VALUES (s.project_id, p_scenario, left(s.name, 200), p_problem, p_op_indexes, p_ops, p_rules, p_assessor_text)
+		RETURNING id INTO v_id;
+		RETURN v_id;
+	END
+	$$;
+COMMENT ON FUNCTION app_ask_assessors(uuid, text, integer[], jsonb, text[], text) IS
+	'"Ask the assessors why" (164_applicant_visibility): a party of an application files a question about it; project and name from the application.';
+REVOKE ALL ON FUNCTION app_ask_assessors(uuid, text, integer[], jsonb, text[], text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_ask_assessors(uuid, text, integer[], jsonb, text[], text) TO water_app;
+
+-- Answer: an editor of the question's project, once (the guard says so too).
+-- 'answered'; 'already' when it was answered before; 'none' when there is no
+-- such question for them.
+CREATE FUNCTION app_answer_assessors_question(p_project uuid, p_question uuid, p_answer text) RETURNS text
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_answered boolean;
+	BEGIN
+		IF NOT app_has_role(p_project, 'editor') THEN
+			RETURN 'none';
+		END IF;
+		-- Locked, so two editors answering at once give one answer and one 'already'.
+		SELECT q.answer IS NOT NULL INTO v_answered FROM application_question q WHERE q.project_id = p_project AND q.id = p_question FOR UPDATE;
+		IF NOT FOUND THEN
+			RETURN 'none';
+		END IF;
+		IF v_answered THEN
+			RETURN 'already';
+		END IF;
+		UPDATE application_question SET answer = p_answer WHERE project_id = p_project AND id = p_question;
+		RETURN 'answered';
+	END
+	$$;
+COMMENT ON FUNCTION app_answer_assessors_question(uuid, uuid, text) IS
+	'An editor answers an applicant''s "Ask the assessors why" question, once (164_applicant_visibility).';
+REVOKE ALL ON FUNCTION app_answer_assessors_question(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_answer_assessors_question(uuid, uuid, text) TO water_app;
+
+-- The questions on one application as its parties read them: never the
+-- real words or the ops. Nothing for anyone else (an editor reads the table).
+CREATE FUNCTION app_application_questions(p_scenario uuid)
+	RETURNS TABLE (
+		id uuid,
+		asked_at timestamptz,
+		problem text,
+		op_indexes integer[],
+		rules text[],
+		answer text,
+		answered_at timestamptz
+	)
+	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	#variable_conflict use_column
+	BEGIN
+		IF NOT app_scenario_party(p_scenario) THEN
+			RETURN;
+		END IF;
+		RETURN QUERY
+			SELECT q.id, q.asked_at, q.problem, q.op_indexes, q.rules, q.answer, q.answered_at
+			FROM application_question q
+			WHERE q.scenario_id = p_scenario
+			ORDER BY q.asked_at DESC, q.id;
+	END
+	$$;
+COMMENT ON FUNCTION app_application_questions(uuid) IS
+	'An application''s "Ask the assessors why" questions and their answers, for its parties (164_applicant_visibility): never assessor_text or the ops.';
+REVOKE ALL ON FUNCTION app_application_questions(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_application_questions(uuid) TO water_app;

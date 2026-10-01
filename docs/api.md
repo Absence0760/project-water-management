@@ -2190,6 +2190,15 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   id, as }[]` (the same readers) lists the items an application added under
   the id of one its applicant can't see, and the fresh id each has in its
   runs; always `[]` for a team scenario.
+  An application's check also carries `maskedRules: { problem, ops, rules }[]`
+  (164, every reader): each problem line a rule hidden from its applicant
+  broke, its index in `problems`, the ops it names (0-based) and the rules'
+  kinds (`shares`, `area`, `supplyTrigger`, `bhEmergency`…; never an id, a
+  name or a value), and, to editors and up only, `assessorProblems:
+  string[]`: `problems` line for line with every rule in its real words and
+  hidden names restored. A contributor never receives `assessorProblems`.
+  Neither field is on a team scenario's check. A submit refused for problems
+  (`422`) carries `details.maskedRules` beside `details.problems`.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether
@@ -2239,7 +2248,20 @@ below work on it too, for an editor.
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
 | GET | `/projects/:id/scenarios/:sid/results?runId=` | – | `{ run, results }`: one run of the application (the newest by default; `{ run: null, results: null }` before any) as its applicant sees it against its base (below). `run`: `id, label, engineVersion, startDate, endDate, createdAt, baseRunId, current` (`current`: made from the ops and base the application has now). `404` for a run that isn't one of its runs or an application the caller doesn't read; `409` for a team scenario (the compare page compares those), or when the run's base is no longer a published run | any reader of the application (contributor and up) |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
+| POST | `/projects/:id/scenarios/:sid/questions` | `{ problem: int, line: string }` (strict) | `201 { question }`, the parties' view below: "Ask the assessors why" (164) about problem line `problem` of the application's check, quoting it as the caller read it. `409` when the check's line is no longer `line` (read it again), or for a team scenario; `422` when no hidden rule broke that line; `409` past 50 questions on one application; `403` for a reader who isn't one of its parties (its owner or someone it is shared with); `404` for an application the caller can't read | a party of the application |
+| GET | `/projects/:id/scenarios/:sid/questions` | – | `{ questions }`, newest first. A party: `{ id, askedAt, problem, opIndexes, rules, answer, answeredAt }` (`app_application_questions`: never the real words or the ops). An editor: also `scenarioId, scenarioName, ops, assessorText`. `404` for anyone else | a party, or an editor |
+| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's) | editor |
+| POST | `/projects/:id/application-questions/:qid/answer` | `{ answer: 1–4000 }` (strict) | `200 { question }`; once (`409` when answered). `404` for no such question | editor |
 
+- **"Ask the assessors why"** (164, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+  an application with a problem a hidden rule broke can't be submitted, and
+  the assessors never read a draft, so its parties ask through
+  `…/questions` instead of a note. The question holds the line as they read
+  it, the ops it names as they stood, the rules' kinds, the application's
+  name and the line in its real words (written by the server; only editors
+  read it). The audit trail records `application.question_asked` and
+  `application.question_answered` (ids, op indexes and the rules' kinds;
+  never the words).
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and

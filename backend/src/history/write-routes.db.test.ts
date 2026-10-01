@@ -465,6 +465,42 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.unshared'],
 		call: (c) => (c.applicant as User).call('DELETE', `${at(c)}/scenarios/${c.applicationId}/members/${(c.consultant as User).id}`)
 	},
+	// --- "Ask the assessors why" (164_applicant_visibility) -------------------------------
+	{
+		route: `POST ${P}/scenarios/:sid/questions`,
+		records: ['application.question_asked'],
+		projectOf: (c) => c.questionProject as string,
+		call: async (c) => {
+			// A project of its own: the applicant's flow share pushes the catchment past 100 % only with five hidden farms' shares.
+			const applicant = await signUp('Gasker');
+			const projectId = (await c.owner.call('POST', '/projects', { name: 'Guard questions' })).body.project.id as string;
+			const q = `/projects/${projectId}`;
+			const outlet = node('Gauge', null);
+			const own = node('Asker farm', outlet.id, { flowShareManual: 0.05 });
+			const others = ['A', 'B', 'C', 'D', 'E'].map((n) => node(`Hidden ${n}`, outlet.id, { flowShareManual: 0.18 }));
+			expect((await c.owner.call('PUT', `${q}/model`, { nodes: [outlet, own, ...others], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+			expect((await c.owner.call('PATCH', q, { settings: { apanMm: monthly(150), flowShareMethod: 'manual' } })).status).toBe(200);
+			const rain = Array.from({ length: 40 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+			expect((await c.owner.call('PUT', `${q}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+			const runId = (await c.owner.call('POST', `${q}/runs`, { label: 'Guard questions' })).body.run.id as string;
+			expect((await c.owner.call('POST', `${q}/publication`, { runId })).status).toBe(201);
+			expect((await c.owner.call('POST', `${q}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+			expect((await c.owner.call('PUT', `${q}/farmers/${applicant.id}`, { nodeIds: [own.id] })).status).toBe(200);
+			const ops = [{ op: 'node.set', nodeId: own.id, field: 'flowShareManual', value: 0.3 }];
+			const s = await applicant.call('POST', `${q}/scenarios`, { name: 'Guard asks', baseRunId: runId, ops });
+			expect(s.body.check.maskedRules, JSON.stringify(s.body)).toHaveLength(1);
+			c.questionProject = projectId;
+			const r = await applicant.call('POST', `${q}/scenarios/${s.body.scenario.id}/questions`, { problem: 0, line: s.body.check.problems[0] });
+			c.questionId = r.body.question?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/application-questions/:qid/answer`,
+		records: ['application.question_answered'],
+		projectOf: (c) => c.questionProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.questionProject}/application-questions/${c.questionId}/answer`, { answer: 'Guard answer' })
+	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
 		route: `POST ${P}/feeds`,

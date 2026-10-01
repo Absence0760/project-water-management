@@ -239,7 +239,12 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/reopen',
 			'POST /projects/:id/scenarios/:sid/decide',
 			'POST /projects/:id/scenarios/:sid/members',
-			'DELETE /projects/:id/scenarios/:sid/members/:userId'
+			'DELETE /projects/:id/scenarios/:sid/members/:userId',
+			// "Ask the assessors why" (164_applicant_visibility).
+			'POST /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/application-questions',
+			'POST /projects/:id/application-questions/:qid/answer'
 		];
 		for (const r of applications) {
 			expect(routes).toContain(r);

@@ -1117,6 +1117,43 @@ export interface ScenarioCheck {
 	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
 	 */
 	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
+	/**
+	 * An application's problem lines a rule hidden from its applicant broke
+	 * (164): the line's index in `problems`, the ops it names (0-based) and
+	 * the rules' kinds (`shares`, `area`, `supplyTrigger`…), never an id, a
+	 * name or a value. What "Ask the assessors why" sends. Absent on a team
+	 * scenario.
+	 */
+	maskedRules?: MaskedRuleRef[];
+	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
+	assessorProblems?: string[];
+}
+
+/** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
+export interface MaskedRuleRef {
+	problem: number;
+	ops: number[];
+	rules: string[];
+}
+
+/** An "Ask the assessors why" question as an application's parties read it (164): never the rule's real words. */
+export interface ApplicationQuestion {
+	id: string;
+	askedAt: string;
+	/** The problem line as the applicant read it. */
+	problem: string;
+	opIndexes: number[];
+	rules: string[];
+	answer: string | null;
+	answeredAt: string | null;
+}
+
+/** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
+export interface AssessorQuestion extends ApplicationQuestion {
+	scenarioId: string;
+	scenarioName: string;
+	ops: ScenarioOp[];
+	assessorText: string;
 }
 
 /**

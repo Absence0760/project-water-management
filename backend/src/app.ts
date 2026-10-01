@@ -39,6 +39,7 @@ import { packRoutes, verifyRoutes } from './evidence/packs.js';
 import { reproduceRoutes } from './runs/reproduce.js';
 import { runRoutes } from './runs/routes.js';
 import { scenarioRoutes } from './scenarios/routes.js';
+import { questionRoutes } from './scenarios/questions.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
 import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
@@ -158,6 +159,7 @@ export function createApp() {
 	projects.route('/', applicantPackRoutes);
 	projects.route('/', reproduceRoutes);
 	projects.route('/', scenarioRoutes);
+	projects.route('/', questionRoutes);
 	projects.route('/', signoffRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);

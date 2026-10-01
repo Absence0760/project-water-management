@@ -51,13 +51,17 @@ import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBod
  * only names the caller sees (checkScenario masks an application's hidden
  * nodes for everyone); `renamed`, the hidden nodes an application's ops took
  * the name of, and `reIds`, the new items moved off a hidden item's id, are
- * for the assessors, never a contributor.
+ * for the assessors, never a contributor. An application's check also says
+ * which problem lines a hidden rule broke (`maskedRules`: line, ops and the
+ * rules' kinds, never an id, a name or a value; what "Ask the assessors why"
+ * sends) and, to editors and up only, every line in its real words
+ * (`assessorProblems`, 164). A team scenario has neither: nothing is masked.
  */
 function checkView(c: ScenarioCheck, role: Role) {
-	const view = { applied: c.applied, problems: c.problems, classified: c.classified, maskedRules: c.maskedRules };
+	const view = { applied: c.applied, problems: c.problems, classified: c.classified, ...(c.masked ? { maskedRules: c.maskedRules } : {}) };
 	if (role === 'contributor') return view;
 	// The unmasked reasons are the assessors' (164): editors and up, who read every farm anyway. Never a contributor.
-	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
+	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(c.masked && rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
 }
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */

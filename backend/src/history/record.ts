@@ -229,6 +229,10 @@ export type AuditKind =
 	| 'scenario.decided'
 	| 'scenario.shared'
 	| 'scenario.unshared'
+	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.
+	// Ids, op indexes and the rules' kinds; never the line, the real words or the answer.
+	| 'application.question_asked'
+	| 'application.question_answered'
 	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
 	| 'alert_rules.changed'
 	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14
