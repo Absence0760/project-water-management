@@ -973,6 +973,9 @@ Interaction details that bit:
   always renders belongs in the tab's chunk: workspace tabs (the page's
   `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
   pages, routes and shared chunks.
-- Every ceiling change gets a dated change-log entry with the measured
-  numbers and what grew. Never raise the page ceiling to fit a page; move
-  code out of the workspace page chunk instead.
+- Every ceiling change gets a dated entry with the measured numbers and
+  what grew. A raise of the total is a new entry file,
+  `pnpm gen:bundle-budget <slug> <kb> "<why>"`, never an edit of
+  `BUDGET.totalCodeKb`, so parallel PRs don't conflict on it
+  (`scripts/guards/bundle-budget/README.md`). Never raise the page ceiling
+  to fit a page; move code out of the workspace page chunk instead.

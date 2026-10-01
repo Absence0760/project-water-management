@@ -2,7 +2,7 @@
 // shortFileNames; issue #9): 7-character hashes and CSS files without the
 // component name. The names sit in import statements, preload lists and the
 // route manifest, where random characters compress badly (−2.7 KB gzip,
-// scripts/guards/check_web_bundle_budget.mjs's change log).
+// the bundle budget's history, scripts/guards/bundle-budget/README.md).
 import { describe, expect, it } from 'vitest';
 import config, { shortFileNames } from '../../vite.config';
 
