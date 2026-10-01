@@ -14,8 +14,8 @@
 //   2. no sops payload or `.sops.yaml` is tracked (secrets live in the
 //      private infra-secrets repo; `*.sops.yaml.example` key lists are fine);
 //   3. every host a committed dev default names is local;
-//   4. the dev-only placeholders stay placeholders (`AUTH_JWT_SECRET` starts
-//      with `dev-only-`, `CLOUDFRONT_SHARED_SECRET` is empty, the object
+//   4. the dev-only placeholders stay placeholders (`AUTH_JWT_SECRET`,
+//      `ALERTS_TOKEN_SECRET` and `APP_ENCRYPTION_KEY` start with `dev-only-`, `CLOUDFRONT_SHARED_SECRET` is empty, the object
 //      store is the local MinIO with its default `minioadmin` login, report
 //      downloads are pre-signed MinIO GETs and no CloudFront signing key is set);
 //   5. frontend env files define only `PUBLIC_*` keys (anything else in a
@@ -116,7 +116,7 @@ export function checkEnvFile(file, text) {
 			if (/_HOST$/.test(key) && value && !isLocalHost(value)) {
 				out.push({ file, line, rule: `${key} is not a local host; committed dev defaults must point at the local stack` });
 			}
-			if ((key === 'AUTH_JWT_SECRET' || key === 'ALERTS_TOKEN_SECRET') && !value.startsWith('dev-only-')) {
+			if ((key === 'AUTH_JWT_SECRET' || key === 'ALERTS_TOKEN_SECRET' || key === 'APP_ENCRYPTION_KEY') && !value.startsWith('dev-only-')) {
 				out.push({ file, line, rule: `${key} is no longer the dev-only- placeholder; a real signing key here is public. Move it to infra-secrets` });
 			}
 			if (key === 'CLOUDFRONT_SHARED_SECRET' && value !== '') {

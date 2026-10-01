@@ -464,7 +464,8 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
 # (backend/src/auth/loginFailed.ts):
 #   {"event":"login_failed","route":"/auth/login","reason":"bad_password"}
 # the route's pattern and a reason code (unknown_account, bad_password,
-# locked, invalid_link), never the address, an id, the client IP or a token.
+# locked, invalid_link, bad_code: a wrong two-step sign-in code), never the
+# address, an id, the client IP or a token.
 # Only the API checks credentials, so only its log group is filtered.
 #
 # Threshold (login_failed_alarm_per_15min, default 30 in 15 minutes): the
