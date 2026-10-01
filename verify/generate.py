@@ -475,6 +475,14 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                     if rng.random() < 0.4:
                         a["maxRateM3s"] = rng.choice([0, round(rng.uniform(0.0005, 0.05), 4)])
                     allocs.append(a)
+            # A dam's registered storage (s21b, engine 1.59.0): never a take, so no mode reads it;
+            # now and then with a volume on it, which the engine ignores with a warning.
+            if rng.random() < 0.25:
+                allocs.append({
+                    "id": _uuid(rng), "nodeId": x["id"], "waterSource": "surface", "waterUse": "21b",
+                    "volumeM3PerYear": rng.choice([0, 0, round(rng.uniform(1000, 50000))]),
+                    "storageM3": round(rng.uniform(10000, 500000)), "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None,
+                })
         m["allocations"] = allocs
 
 

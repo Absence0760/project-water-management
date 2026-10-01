@@ -4,7 +4,7 @@
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
-import type { AllocationEntry } from '../allocations/compare';
+import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
 	ACCUMULATION_MODES,
@@ -679,13 +679,15 @@ const ALLOCATION_FIELDS: Record<string, Check> = {
 	waterSource: oneOf(ALLOCATION_WATER_SOURCES),
 	volumeM3PerYear: allocVolume,
 	storageM3: nullable(allocVolume),
+	// The s21 water use (engine ≥ 1.59.0): a storage-only 21b row is never a take.
+	waterUse: nullable(oneOf(ALLOCATION_WATER_USES)),
 	validFrom: nullable(isoDate),
 	validTo: nullable(isoDate),
 	months: nullable(allocMonths),
 	maxRateM3s: nullable((v) => (isNum(v) && v >= 0 && v < 1e6 ? null : 'must be a rate in m³/s from 0 to below 10⁶'))
 };
 /** Left out = not stated (no storage, open validity, no licence conditions), as a volume entered by hand. */
-const ALLOCATION_OPTIONAL = new Set(['storageM3', 'validFrom', 'validTo', 'months', 'maxRateM3s']);
+const ALLOCATION_OPTIONAL = new Set(['storageM3', 'waterUse', 'validFrom', 'validTo', 'months', 'maxRateM3s']);
 
 /**
  * An `allocation.set` op's entry rebuilt from its known fields, with every
@@ -700,6 +702,12 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 		return [k!, rest.join(': ')];
 	});
 	if (typeof a.validFrom === 'string' && typeof a.validTo === 'string' && a.validFrom > a.validTo) issues.push(['validTo', `is before valid from (${a.validFrom})`]);
+	// A storage-only (21b) row is a dam's storage: no take, a storage, surface water (as the API's 137 CHECK).
+	if (a.waterUse === '21b') {
+		if (a.volumeM3PerYear !== 0) issues.push(['volumeM3PerYear', 'must be 0 on a storage-only (21b) row: it registers no take']);
+		if (a.storageM3 == null) issues.push(['storageM3', 'is needed on a storage-only (21b) row']);
+		if (a.waterSource !== 'surface') issues.push(['waterSource', 'must be surface on a storage-only (21b) row (a dam)']);
+	}
 	return { allocation: issues.length ? null : (a as unknown as AllocationEntry), issues };
 }
 

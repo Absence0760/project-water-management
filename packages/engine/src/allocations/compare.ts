@@ -17,6 +17,19 @@ import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 
 export type AllocationWaterSource = 'surface' | 'groundwater';
 
+/**
+ * The s21 water use an allocation registers (NWA s21, engine ≥ 1.59.0, issue
+ * #72): `21a` taking water (the volume is a take per year), `21b` storing
+ * water (only the storage counts; the volume is not a take and is 0). A WARMS
+ * extract lists one row per water use, so a dam's registered storage arrives
+ * as its own 21b row. Absent = 21a.
+ */
+export const ALLOCATION_WATER_USES = ['21a', '21b'] as const;
+export type AllocationWaterUse = (typeof ALLOCATION_WATER_USES)[number];
+
+/** A storage-only (s21b) allocation: counted for registered storage, never as a volume taken. */
+export const isStorageOnly = (a: { waterUse?: AllocationWaterUse | null }): boolean => a.waterUse === '21b';
+
 /** One registered volume, as the comparison needs it. */
 export interface AllocationEntry {
 	id: string;
@@ -26,6 +39,8 @@ export interface AllocationEntry {
 	volumeM3PerYear: number;
 	/** Registered storage (s21b), m³. */
 	storageM3?: number | null;
+	/** The s21 water use (engine ≥ 1.59.0): `21b` counts for storage only, never as a take; absent/null = `21a`. */
+	waterUse?: AllocationWaterUse | null;
 	/** First day it applies (ISO date, inclusive); null/absent = open. */
 	validFrom?: string | null;
 	/** Last day it applies (ISO date, inclusive); null/absent = open. */
@@ -126,8 +141,17 @@ export interface AllocationNodeComparison {
 	kind: 'farm' | 'user';
 	surface: AllocationSourceComparison;
 	groundwater: AllocationSourceComparison;
-	/** Registered storage (Σ storageM3 of this node's allocations; null when none states one) against the modelled dam capacity. */
-	storage: { registeredM3: number | null; modelledCapacityM3: number | null };
+	/**
+	 * Registered storage (Σ storageM3 of this node's allocations in force on
+	 * any of the run's days, s21b rows included; null when none states one)
+	 * against the modelled dam capacity (`none` when the run models no dam
+	 * capacity for the node):
+	 * `differenceM3` = capacity − registered (null unless both are known), and
+	 * `status` is allocationStatus(capacity, registered) with the same band, so
+	 * `over` = a dam larger than the storage registered for it, `unregistered`
+	 * = a dam with no storage registered.
+	 */
+	storage: { registeredM3: number | null; modelledCapacityM3: number | null; differenceM3: number | null; status: AllocationStatus };
 }
 
 export interface AllocationComparison {
@@ -222,7 +246,8 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const gd = n.groundwaterToDam ?? null;
 		const ra = n.riverAbstraction ?? null;
 		const side = (source: AllocationWaterSource): AllocationSourceComparison => {
-			const own = allocs.filter((a) => a.waterSource === source);
+			// A storage-only (s21b) row is not a take: it counts for storage below, never here.
+			const own = allocs.filter((a) => a.waterSource === source && !isStorageOnly(a));
 			const years = spans.map((s): AllocationYear => {
 				let modelled = 0;
 				let toDam = 0;
@@ -268,7 +293,16 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				meanRegisteredM3PerYear: mean((y) => y.registeredM3)
 			};
 		};
-		const stated = allocs.filter((a) => a.storageM3 !== null && a.storageM3 !== undefined);
+		// Storage registered for any of the run's days (an allocation that lapsed before the run, or starts after it, isn't the dam's now).
+		const stated = allocs.filter(
+			(a) =>
+				a.storageM3 !== null &&
+				a.storageM3 !== undefined &&
+				(!a.validTo || toEpochDay(a.validTo) >= start) &&
+				(!a.validFrom || toEpochDay(a.validFrom) <= end)
+		);
+		const registeredStorage = stated.length ? stated.reduce((s, a) => s + (a.storageM3 ?? 0), 0) : null;
+		const capacity = n.kind === 'farm' ? (n.damCapacityM3 ?? null) : null;
 		return {
 			nodeId: n.nodeId,
 			name: n.name,
@@ -276,8 +310,11 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 			surface: side('surface'),
 			groundwater: side('groundwater'),
 			storage: {
-				registeredM3: stated.length ? stated.reduce((s, a) => s + (a.storageM3 ?? 0), 0) : null,
-				modelledCapacityM3: n.kind === 'farm' ? (n.damCapacityM3 ?? null) : null
+				registeredM3: registeredStorage,
+				modelledCapacityM3: capacity,
+				differenceM3: registeredStorage !== null && capacity !== null ? capacity - registeredStorage : null,
+				// No modelled dam (a water user, or a farm without one) is no comparison, not a dam of 0 m³.
+				status: capacity === null ? 'none' : allocationStatus(capacity, registeredStorage ?? 0, tolerance)
 			}
 		};
 	});

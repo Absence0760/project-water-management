@@ -36,7 +36,7 @@
 //
 // Pure, like the rest of the engine.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
-import type { AllocationEntry, AllocationWaterSource } from './compare';
+import { isStorageOnly, type AllocationEntry, type AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 
 export const ALLOCATION_MODES = ['none', 'cap', 'fullAllocation'] as const;
@@ -78,12 +78,19 @@ export function usableAllocations(list: readonly AllocationEntry[] | undefined, 
 						: a.validFrom && a.validTo && a.validFrom > a.validTo
 							? 'it is valid from after valid to'
 							: null;
-		if (bad) {
-			warnings.push(`allocation ${String(a.id)} left out: ${bad}`);
+		const use = a.waterUse ?? null;
+		const badUse = use !== null && use !== '21a' && use !== '21b' ? `its water use "${String(use)}" is not 21a or 21b` : null;
+		if (bad || badUse) {
+			warnings.push(`allocation ${String(a.id)} left out: ${bad ?? badUse}`);
 			continue;
 		}
 		// A licence condition that doesn't read is dropped, not the volume (a stored input edited by hand).
 		let c = a;
+		// A storage-only (21b) row registers no take (engine ≥ 1.59.0): a volume on it isn't one either.
+		if (use === '21b' && a.volumeM3PerYear > 0) {
+			warnings.push(`allocation ${String(a.id)}: it is storage only (21b), so its volume of ${a.volumeM3PerYear} m³ a year is not a take and is ignored`);
+			c = { ...c, volumeM3PerYear: 0 };
+		}
 		if (a.months != null && !(Array.isArray(a.months) && a.months.every((m) => Number.isInteger(m) && m >= 1 && m <= 12))) {
 			warnings.push(`allocation ${String(a.id)}: its months of use aren't calendar months 1–12, so they're ignored`);
 			c = { ...c, months: null };
@@ -328,7 +335,11 @@ export function matchAllocations(
 	warnings: string[]
 ): AllocationPlan {
 	// In id order, so a unit's registered volume sums the same to the last bit however the list came.
-	const list = usableAllocations(allocations, warnings).sort((a, b) => cmpStr(String(a.id), String(b.id)));
+	// A storage-only (s21b) allocation is not a take (engine ≥ 1.59.0): it neither caps nor scales a
+	// unit, and RunSummary.allocations doesn't count it; the storage comparison reads it (compare.ts).
+	const list = usableAllocations(allocations, warnings)
+		.filter((a) => !isStorageOnly(a))
+		.sort((a, b) => cmpStr(String(a.id), String(b.id)));
 	const index = new Map(nodes.map((n, i) => [n.id, i]));
 	const byNode = new Map<number, AllocationEntry[]>();
 	for (const a of list) {

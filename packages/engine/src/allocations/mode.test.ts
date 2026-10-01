@@ -76,6 +76,17 @@ describe("allocationMode 'cap'", () => {
 		for (const r of reached) expect(r.usedM3).toBeCloseTo(volume, 3);
 	});
 
+	it('a storage-only (s21b) allocation caps nothing: a dam’s registered storage is not a take (engine 1.59.0, issue #72)', () => {
+		const dam: AllocationEntry = { id: 'dam', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 50_000 };
+		const alone = runModelChecked(withAllocations([dam], 'cap'));
+		expect(col(alone, 'a', 'supplied')).toEqual(col(base, 'a', 'supplied'));
+		expect(alone.summary.allocations).toMatchObject({ used: 0, notMatched: 0, nodes: [] });
+		// Beside a take, the take caps exactly as without it.
+		const both = runModelChecked(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume }, dam], 'cap'));
+		expect(col(both, 'a', 'supplied')).toEqual(col(out, 'a', 'supplied'));
+		expect(both.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+	});
+
 	it('publishes the room at the start of each day, falling by the day’s use and full again on 1 October', () => {
 		const room = col(out, 'a', ALLOCATION_SERIES.surfaceRoom.key)!;
 		const G = col(out, 'a', 'supplied')!;
@@ -166,6 +177,12 @@ describe("allocationMode 'fullAllocation'", () => {
 		for (let t = 0; t < D.length; t += 97) expect(D[t]).toBeCloseTo(D0[t]! * k[t]!, 6);
 		const scaled = out.summary.allocations!.nodes[0]!.scaled!;
 		expect(scaled.every((y) => Math.abs(y.registeredM3 - volume) < 1e-6 * volume)).toBe(true);
+	});
+
+	it('a storage-only (s21b) row scales nothing: the unit keeps its modelled demand and has no factor (engine 1.59.0)', () => {
+		const r = runModelChecked(withAllocations([{ id: 'dam', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 50_000 }], 'fullAllocation'));
+		expect(col(r, 'a', 'demand')).toEqual(col(base, 'a', 'demand'));
+		expect(col(r, 'a', ALLOCATION_SERIES.demandFactor.key)).toBeUndefined();
 	});
 
 	it('leaves a unit without a volume as modelled, with a warning', () => {
@@ -460,6 +477,19 @@ describe('the allocations a run reads', () => {
 		);
 		expect(ok.map((a) => a.id)).toEqual(['ok']);
 		expect(w).toHaveLength(4);
+	});
+
+	it('leaves out an unknown water use, and ignores a volume on a storage-only row, with warnings (engine 1.59.0)', () => {
+		const w: string[] = [];
+		const ok = usableAllocations(
+			[
+				{ id: 'c', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, waterUse: '21c' as never },
+				{ id: 'b', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 120_000, waterUse: '21b', storageM3: 5 }
+			],
+			w
+		);
+		expect(ok).toEqual([{ id: 'b', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 5 }]);
+		expect(w).toEqual([expect.stringMatching(/allocation c left out: its water use "21c"/), expect.stringMatching(/allocation b: it is storage only \(21b\)/)]);
 	});
 
 	it('drops a licence condition that doesn’t read, keeping the volume, with a warning', () => {
