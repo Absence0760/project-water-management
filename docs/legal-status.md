@@ -239,9 +239,11 @@ override any of them by written instruction (operator agreement cl. 3).
   (159_erasure_log.sql) and the audit log's revocations; the old instance's
   final snapshot is deleted within 30 days and the teardown snapshot 90
   days after the shutdown notice.
-- Still open: the organisation's own privacy contact on the farm page and
-  in invitations (s18(1)(b); followups.md § POPIA), until each client's
-  operator agreement settles 3A.1(b).
+- **The organisation's privacy contact** (Privacy §2, s18(1)(b)): a team
+  names whom to ask about its projects' information (168); farmers see it
+  from the farm menu ("Who decides about your farm's information") and
+  invitation emails name it. Where none is set, operator agreement 3A.1(b)
+  (the client's own notice) still covers it.
 
 ## Change log
 
@@ -309,7 +311,9 @@ override any of them by written instruction (operator agreement cl. 3).
   data and alerts on the organisation's legitimate interest, s11(1)(f);
   "and duty to keep" dropped) and says alerts are service messages that
   never advertise; §10 says how to object (an alert's unsubscribe, leaving
-  a project, or telling us or the organisation); §7 says a deleted note's
+  a project, or telling us or the organisation); §2 points to the
+  organisation's privacy contact on the farm page and in invitations
+  (168); §7 says a deleted note's
   text is erased after 90 days (158), that a restore deletes again what was
   deleted after the backup (a 40-day list of deleted accounts and projects,
   159), and that the teardown copy is kept 90 days. Other changes in the

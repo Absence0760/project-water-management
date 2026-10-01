@@ -5045,16 +5045,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       off. Privacy §4 and §10, security.md § Personal information,
       `LEGAL_VERSION` 2026-10-02. The client's information officer may still
       override them by written instruction (operator agreement cl. 3).
-- [ ] **The client's privacy contact on the farm page and in invitations**
-      (POPIA s18(1)(b) for project data; the build list's item 5 in the
-      2026-10-01 POPIA positions). A team-level `privacy_contact` (name,
-      email, postal address; owners and admins edit), shown on the farm
-      view's menu ("Who decides about your farm's information") and in
-      invitation emails, and Privacy §2 then points there. Until it is built,
-      operator agreement 3A.1(b) makes each client give the notice itself.
-      Needs its own migration, routes, the team settings form and farmer-facing
-      strings (Afrikaans too). Trigger: before the first client whose
-      agreement doesn't settle 3A.1(b), or with the next team-settings change.
+- [x] **The client's privacy contact on the farm page and in invitations**
+      (POPIA s18(1)(b) for project data). Done (168_team_privacy_contact;
+      provisional position, pre-counsel research, 2026-10-01): a team's
+      admins set a privacy contact (name or office, email, optional postal
+      address) in Team settings; farmers read it from the farm menu's "Who
+      decides about your farm's information" (`GET
+      /projects/:id/privacy-contact`), and invitation emails to the team or
+      its projects name it. Privacy §2 points there. A project without a
+      team, or a team that hasn't set one, still relies on operator agreement
+      3A.1(b) (the client's own notice); the page then says to ask the
+      inviter or the WUA.
 - [ ] **Operator agreement** (POPIA s20–21, gate B in #103) between the client as
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client

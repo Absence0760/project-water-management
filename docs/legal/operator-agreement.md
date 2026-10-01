@@ -100,7 +100,10 @@ that.
 service, (a) it has a lawful basis under section 11; (b) it will make its
 members and invitees aware of the matters in section 18, including its own
 name and address as responsible party, before or as soon as reasonably
-practicable after their information is entered; and (c) it has considered
+practicable after their information is entered (setting its privacy
+contact in the service's team settings, which the service then shows on its
+farmers' farm pages and in invitation emails, does this for its name and
+contact details); and (c) it has considered
 whether matching registered water-use records (such as WARMS registration
 numbers) to farms or people needs prior authorisation under sections 57
 and 58, and has obtained it where needed.

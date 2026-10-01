@@ -1053,7 +1053,7 @@ email show them by the project role they give, viewer / editor / owner
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
-| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
+| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below) | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
@@ -1066,7 +1066,7 @@ email show them by the project role they give, viewer / editor / owner
   re-roling and removing a member (or their leaving, or accepting a team
   invite), and deleting the team, record `team_member.added/role/removed` /
   `team.deleted` on each of the team's projects (072).
-- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds }` — `role` is
+- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds, privacyContact }` — `role` is
   **your** role in the team. `settings` is the stored document
   (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
   `portfolioThresholds = { green, amber, source: 'team' | 'default' }` is what
@@ -1076,6 +1076,16 @@ email show them by the project role they give, viewer / editor / owner
   allowed); anything else, or an unknown key anywhere in `settings`, is a
   `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
   in the database). Every member reads them; only an admin changes them.
+- **Privacy contact** (168_team_privacy_contact, POPIA s18(1)(b)):
+  `privacyContact = { name, email, postal } | null`, whom people ask about
+  the personal information in the team's projects (the team, as the client
+  organisation, is the responsible party for it). `name` 1–200 characters
+  and a valid `email` (≤ 254) are required, `postal` (≤ 500) is optional
+  (blank = `null`); both trimmed; an unknown key is a `400`
+  (`backend/src/teams/privacyContact.ts`; CHECKs hold the same in the
+  database). Every member reads it; only an admin changes it. Farmers read
+  it through `GET /projects/:id/privacy-contact` ([Farm](#farm)), and
+  invitation emails to the team or its projects name it.
 - `TeamMember = { userId, email, displayName, role }`
 - `409 a team must keep at least one owner` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
@@ -2973,6 +2983,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
 - `farm` is the stored `FarmProjection` (season and last-30 totals, the dam,
