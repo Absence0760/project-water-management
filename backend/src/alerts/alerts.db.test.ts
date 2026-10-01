@@ -793,15 +793,44 @@ describe('an EWR forecast behind the recorded rain', () => {
 		await setForecast(RAIN_END, 12);
 		await evaluate();
 		expect(await events()).toEqual([{ state: 'firing', value: 12 }]);
+		// The workspace's Active alerts and the mail show the event as current (positive control for "out of date" below).
+		const firing = async () => (await owner.call('GET', `/projects/${pid}/alert-events`)).body.events.filter((e: { kind: string }) => e.kind === 'ewr_forecast_fail');
+		expect((await firing()).map((e: { forecastOutOfDate: unknown }) => e.forecastOutOfDate)).toEqual([null]);
+		const [ev] = (await asOwner(`SELECT id FROM alert_event WHERE project_id = $1 AND state = 'firing' AND kind = 'ewr_forecast_fail'`, [pid])) as { id: string }[];
+		/** A new editor with one immediate delivery of the firing event, sent now: their mail's text. */
+		const mailNow = async (name: string) => {
+			const u = await signUp(name);
+			expect((await owner.call('POST', `/projects/${pid}/members`, { email: u.email, role: 'editor' })).status).toBe(201);
+			await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [ev!.id, u.id, pid]);
+			await sendAlerts();
+			const m = mailsTo(u);
+			expect(m).toHaveLength(1);
+			return m[0]!.text;
+		};
+		const current = await mailNow('Afresh');
+		expect(current).toContain('River flow at risk in the forecast');
+		expect(current).not.toContain('out of date');
 		// New rain recorded: this forecast is behind it. The event is left as it is (neither cleared nor updated) until the re-made one decides…
 		expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2023-02-13', values: [4, 0] })).status).toBe(200);
 		await setForecast(RAIN_END, 0);
 		await evaluate();
 		expect(await events()).toEqual([{ state: 'firing', value: 12 }]);
-		// …which clears it.
+		// …and while no newer forecast comes (the forecast feed failing), the event says it is out of date: rain to 14 Feb, the forecast's to 12 Feb.
+		const [made] = (await asOwner(`SELECT created_at FROM model_run WHERE id = $1`, [runId])) as { created_at: Date }[];
+		expect((await firing()).map((e: { forecastOutOfDate: unknown }) => e.forecastOutOfDate)).toEqual([
+			{ madeOn: localDate(made!.created_at, DEFAULT_TIME_ZONE), observedTo: RAIN_END, rainUntil: '2023-02-14' }
+		]);
+		// So does a mail of it sent now (a digest line sent the next morning).
+		expect(await mailNow('Astale')).toContain(
+			'This forecast is out of date: it used the rain recorded to 12 Feb 2023, rain has since been recorded to 14 Feb 2023, and no newer forecast has been made yet.'
+		);
+		// The re-made forecast clears it.
 		await setForecast('2023-02-14', 0);
 		await evaluate();
 		expect(await events()).toEqual([{ state: 'cleared', value: 12 }]);
+		// A cleared event is never marked (the list of all events shows it as it was).
+		const all = (await owner.call('GET', `/projects/${pid}/alert-events?state=all`)).body.events.filter((e: { kind: string }) => e.kind === 'ewr_forecast_fail');
+		expect(all.map((e: { state: string; forecastOutOfDate: unknown }) => [e.state, e.forecastOutOfDate])).toEqual([['cleared', null]]);
 		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 		await asOwner(`DELETE FROM alert_event WHERE project_id = $1`, [pid]);
 	});

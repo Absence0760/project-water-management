@@ -8,6 +8,7 @@
 	// admin or assessor is told their role needs it.
 	import { onMount, tick } from 'svelte';
 	import { api, ApiError, type MfaStatus } from '$lib/api';
+	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { errorText } from '$lib/i18n/apiError';
@@ -25,6 +26,8 @@
 		try {
 			status = await api.auth.mfa.status();
 			loadError = null;
+			// The workspace's prompt (layout/MfaBanner) goes once this read says it's done.
+			if (session.user) mfaStatusSeen(session.user.id, status);
 		} catch (err) {
 			loadError = errorText(err);
 		}
@@ -173,7 +176,7 @@
 	}
 </script>
 
-<section class="panel two-step" aria-labelledby="two-step-h" data-two-step={status ? (status.enrolled ? 'on' : 'off') : 'loading'}>
+<section class="panel two-step" id="two-step" aria-labelledby="two-step-h" data-two-step={status ? (status.enrolled ? 'on' : 'off') : 'loading'}>
 	<h2 id="two-step-h">{t('Two-step sign-in')}</h2>
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{loadError}</div>

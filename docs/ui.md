@@ -113,7 +113,9 @@ saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
 also takes a recovery code). A project owner, team admin or assessor without
-it sees a warning that their actions need it. Errors are worded from their
+it sees a warning that their actions need it (and, on the workspace, the
+two-step sign-in banner, § Invitations below, which links here:
+the panel is `#two-step`). Errors are worded from their
 codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
 is under § Sign-in pages.
 
@@ -1358,7 +1360,11 @@ it scrolls, and isn't fitted to the window.
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
+  Farmer invites stay out of the Members panel's pending list. In both
+  pending lists, an invite whose sender is no longer an owner (team admin)
+  carries a **Sender can no longer invite** badge: nobody can accept it
+  until it is re-sent, and Resend makes you its sender
+  (155_invite_sender_role.sql).
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this page: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".
@@ -6789,11 +6795,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply,
-    and *Other applications on this baseline, summed* (the other submitted
-    or approved applications' own changes in days below the pragmatic EWR,
-    added up, no band, its basis saying it is a sum of separate runs and not
-    one combined run, WP-3.11; *None* when there are none the reader can
-    see)), with the paired band and "worse in k of n"; then **Impact by year
+    and *This and the other applications on this baseline, together*
+    (`evidence-11`: the change in days below the pragmatic EWR at the outlet
+    with this application and every other submitted or approved one run
+    together, from a cumulative assessment of exactly them, and the
+    interaction in its note; no band; *Not assessed* naming each conflict
+    when they conflict, or saying none of exactly them is assessed yet;
+    *None* when there are none the reader can see; an older pack prints its
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
     class** (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
@@ -6849,12 +6858,16 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     Then **Other
     applications on this baseline** (`evidence-cumulative`): each other
     submitted or approved application, its status and its own change in days
-    below the pragmatic EWR and in Reserve months met at the outlet, the sum
-    of those counted (same engine, period and runoff model; any other says
-    why it isn't) and the sum with this application; the words say it is a
-    sum of separate runs, not a combined run (WP-3.11), listed as the reader
-    can see them; past 50 the newest 50 are listed and nothing is summed
-    (page 1's row then *Not assessed*).
+    below the pragmatic EWR and in Reserve months met at the outlet from its
+    own newest run, listed as the reader can see them (past 50 the newest 50).
+    Then **All of them together** (`evidence-11`, `evidence-combined`): this
+    application and each other one, its change alone, the sum of each
+    alone, all together and the interaction, in days below the pragmatic EWR
+    and Reserve months met at the outlet, from the cumulative assessment it
+    names (`evidence-combined-source`); or, in their place, why not
+    (`evidence-combined-na`: the conflicts named, not assessed yet, under
+    way). An older pack (before `evidence-11`) prints its frozen sum of the
+    runs counted and the sum with this application instead.
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
@@ -6922,8 +6935,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
-  `e2e/tests/evidence-allocations.spec.ts`, and for § 6 with objects
-  `e2e/tests/evidence-demand-objects.spec.ts`.
+  `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
+  `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
+  together, assessed, `e2e/tests/evidence-combined.spec.ts` (the
+  conflicting pair is in `evidence-report.spec.ts`).
 
 ### Evidence pack
 
@@ -6973,6 +6988,16 @@ their own application's in [their own view](#the-applicants-pack-view).
   its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
   API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
+  Once issued, a line says what the server's re-run of both runs from the
+  stored bundle found (`reproduction`, 154_pack_reproduce;
+  [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction);
+  `packs/pack.ts` `reproductionNote`, `data-testid="pack-reproduction"`
+  with `data-state` the status): *Reproduced on the server* with the engine
+  and date (an info box), *Not reproduced* with each failed check listed (an
+  error), *Not re-run on the runs' own engine* when only the re-runs differ
+  on another engine (a warning), a quiet *re-running* line with **Check
+  again** while its job runs, or that it couldn't be done and why. It is
+  the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
   link shows (verify's fields, and while it stands the river's figures, never
@@ -7696,6 +7721,20 @@ then.
   invitations**, on every signed-in page but the invitations page, while any
   wait. The count is read once per account, again after an accept or
   decline, and when the tab comes back into view (`auth-extras/inviteCount.svelte.ts`).
+- **The two-step sign-in banner** (`layout/MfaBanner.svelte`, issue #282,
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
+  `routes/+layout.svelte` beside the other banners, on the workspace's
+  pages only, English: not on the account, farm, alert or sign-in pages).
+  For a project owner, team admin or assessor without an authenticator
+  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
+  `403 mfa_required`: what their role needs it for and **Set up two-step
+  sign-in**, linking to the Account page's panel (`/account#two-step`).
+  With an authenticator but a password-only session (`!sessionVerified`),
+  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
+  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  **Dismiss** hides it until the next refusal and moves focus to the page's
+  title. Its own chunk, loaded only while there is something to say
+  (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
   it should have access already.
@@ -7714,7 +7753,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
   series sent by API key (headed **API data behind**, its email's subject
   too), "3 of 14 hydrological units short from … to …, in figures
-  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
+  an auto run published (alert at 1)"), or "No alert is firing". A firing
+  EWR forecast alert whose forecast is behind the recorded rain, with no
+  newer forecast made (the API's `forecastOutOfDate`), has an amber line
+  under it (`data-forecast-out-of-date`, `alerts.ts` `outOfDateText`):
+  "Forecast out of date: made 20 Sep 2026 on the rain recorded to 19 Sep
+  2026, but rain is now recorded to 24 Sep 2026 and no newer forecast has
+  been made. Check the forecast data feed." An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
   restriction notice, background jobs failed, data feed failing,

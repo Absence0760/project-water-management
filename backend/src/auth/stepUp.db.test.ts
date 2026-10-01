@@ -162,4 +162,13 @@ describe('GET /auth/mfa says whether the person’s roles need it', () => {
 		expect((await editor.call('GET', '/auth/mfa')).body).toMatchObject({ required: false });
 		expect((await anon('GET', '/auth/mfa', undefined, enrolledOwnerTwoStep)).body).toMatchObject({ required: true, enrolled: true, sessionVerified: true });
 	});
+	it('not while the requirement is off (MFA_REQUIRED=false): the workspace’s banner and the Account page say what the routes do', async () => {
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		try {
+			expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: false, enrolled: false });
+		} finally {
+			vi.stubEnv('MFA_REQUIRED', 'true');
+		}
+		expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: true });
+	});
 });
