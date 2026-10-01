@@ -109,23 +109,23 @@ describe('app_purge_deleted_notes (156)', () => {
 	});
 
 	it('erases a note deleted more than 90 days ago with its earlier texts, and keeps the rest', async () => {
-		expect(await revisions(ids.oldDraftScenario)).toBe(1);
-		expect(await revisions(ids.submitted)).toBe(1);
+		expect(await revisions(ids.oldDraftScenario!)).toBe(1);
+		expect(await revisions(ids.submitted!)).toBe(1);
 		// The tick runs the purge (and reports how many it erased); its other work is off.
 		const tick = await runTick({ feeds: false, reports: false, alerts: false, maxJobs: 0 });
 		expect(tick.notesPurged).toBeGreaterThanOrEqual(4);
 
-		for (const gone of ['old', 'viaApi', 'oldDraftScenario', 'oldDraftPack']) expect(await exists(ids[gone]!), gone).toBe(false);
-		expect(await revisions(ids.oldDraftScenario)).toBe(0);
-		expect(await revisions(ids.oldDraftPack)).toBe(0);
+		for (const gone of ['old', 'viaApi', 'oldDraftScenario', 'oldDraftPack']) expect(await exists(ids[gone] as string), gone).toBe(false);
+		expect(await revisions(ids.oldDraftScenario!)).toBe(0);
+		expect(await revisions(ids.oldDraftPack!)).toBe(0);
 
 		// Kept: deleted 89 days ago, and the positive control, a note never deleted.
 		expect(await exists(ids.recent!)).toBe(true);
 		expect(await exists(ids.live!)).toBe(true);
 		// Kept at 1 000 days: a licence record's notes (a scenario or pack past draft), with their earlier texts.
-		for (const kept of ['submitted', 'decided', 'issued']) expect(await exists(ids[kept]!), kept).toBe(true);
-		expect(await revisions(ids.submitted)).toBe(1);
-		expect(await revisions(ids.issued)).toBe(1);
+		for (const kept of ['submitted', 'decided', 'issued']) expect(await exists(ids[kept] as string), kept).toBe(true);
+		expect(await revisions(ids.submitted!)).toBe(1);
+		expect(await revisions(ids.issued!)).toBe(1);
 		// Nothing left to purge on a second pass.
 		expect(await purge()).toBe(0);
 	});
