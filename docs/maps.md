@@ -62,6 +62,41 @@ server and no tile CDN: the file is served from the app's own storage.
   then production shows the plain background. Tracked in
   [followups.md § Catchment map](./followups.md#catchment-map-issue-288).
 
+### Colours, theme and the picked name
+
+- **Colours** (`overlayColours` in `mapStyle.ts`, issue #326 E7): the
+  catchment boundary amber-brown (dark: amber), long-dashed and thickest;
+  **farm parcels green** (the app's `--success`), solid outline and a light
+  fill; **water blue** for rivers (3.5 px, thicker than any outline, on a
+  6 px casing), dam polygons (a denser blue fill, 45% against a parcel's 18%,
+  so a dam reads as water and never as a parcel) and gauge and dam points;
+  other features grey and dotted; the picked feature magenta. Every stroke
+  has a contrasting casing and is at least 3:1 against the basemap's
+  background, land, water and land cover in both themes, parcel green and
+  water blue are at least ΔE 60 apart (CIE76; the old blues were 38 light,
+  23 dark), and every pair of stroke colours at least ΔE 40
+  (`mapStyle.test.ts`). The `*Fill` entries are CSS `rgba()` values, so the
+  map's key can draw its swatches from the same function and can't drift.
+  Point markers take their colours from the same function, as custom
+  properties on the map's box: the component has no hex of its own.
+- **Results colouring (A1, prepared):** `CatchmentMap` takes an optional
+  `fills` (feature id → CSS colour). A polygon named there is filled with
+  that colour at 75% (`RESULT_FILL_OPACITY`) instead of its kind's
+  (`overlayData` carries it as a `fill` property; the fill layer's
+  `to-color` falls back to the kind's colour when it is missing or doesn't
+  parse). Nothing passes it yet.
+- **Theme:** the map follows the app's theme, not only the OS's
+  (`appTheme.ts`: `<html data-theme>` when set, else
+  `prefers-color-scheme`), and redraws when either changes: one style holds
+  the basemap and the overlay (`mapStyle()`), so `setStyle` swaps both and
+  the features, the pick and the click handlers carry over. A basemap that
+  failed to load stays dropped.
+- **The picked feature's name** shows in a small box over the map's top-left
+  corner (its kind, then its name), until the basemap has labels (A6). It is
+  hidden from assistive technology (`aria-hidden`): the ways to pick that it reaches are
+  the list's buttons and the point markers' buttons, which already say which
+  is pressed, so announcing it again would say everything twice.
+
 ### CSP and bundle
 
 - MapLibre and the PMTiles reader are **dynamic imports**:
