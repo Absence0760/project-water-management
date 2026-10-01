@@ -6,7 +6,7 @@
 	Farmers see the published run's figures for their own farm; everyone on
 	the project sees the notice. Whether the responsible authority endorsed
 	this run as a baseline, and, for a member the owner marks as acting for
-	it, the action to endorse it, once (161_licensing_authority).
+	it, the action to endorse it, once (163_licensing_authority).
 -->
 <script lang="ts">
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
@@ -29,7 +29,7 @@
 		current: Publication | null;
 		history: PublicationMeta[];
 		canEdit: boolean;
-		/** The caller acts for the responsible authority (161): they endorse a published baseline. */
+		/** The caller acts for the responsible authority (163): they endorse a published baseline. */
 		actsForAuthority?: boolean;
 		onChange?: (p: { current: Publication; history: PublicationMeta[] }) => void;
 	} = $props();

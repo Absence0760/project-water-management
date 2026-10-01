@@ -5,14 +5,15 @@
 // only as "Farm 1", raises their dam, runs it, sees their own view of the
 // results (their farm, nothing downstream, no catchment flows below five farm
 // holders), queues a yield of their own dam and submits it. The assessor (the
-// project's owner) finds it in the Applications tab and decides it; an
+// project's owner, marked as acting for the responsible authority) finds it
+// in the Applications tab and records the authority's decision; an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided. Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember } from '../support/api.ts';
-import { seedApplicantProject } from '../support/applications.ts';
+import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
 import { tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -91,20 +92,28 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(row).toContainText('Awaiting a decision');
 	await row.getByRole('link', { name: NAME }).click();
 	await expect(page).toHaveURL(/tab=scenarios&scenario=/);
-	const decide = page.getByRole('form', { name: 'Decide' });
+	const decide = page.getByRole('form', { name: 'Record the authority’s decision' });
 	// Its run is the one the model run stored: no stamp warning (the control for the test below).
 	await expect(decide).toBeVisible();
 	await expect(page.getByTestId('application-unverified')).toHaveCount(0);
-	await decide.getByLabel('Approved with conditions').check();
-	await decide.getByLabel('Reasons and conditions').fill('Release 5 % of inflow in dry months.');
-	await decide.getByRole('button', { name: 'Record the decision' }).click();
-	await expect(page.getByTestId('application-decision')).toContainText('Approved with conditions');
-	await expect(page.getByTestId('application-decision')).toContainText('Release 5 % of inflow in dry months.');
+	// The Act's words (163_licensing_authority): the authority decides, the app records its letter.
+	const record = decide.getByRole('button', { name: 'Record the authority’s decision' });
+	await decide.getByLabel(/Licence issued \(see its conditions\)/).check();
+	await expect(record).toBeDisabled();
+	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
+	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
+	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
+	await decide.getByLabel('Note: the authority’s reasons and conditions').fill('Release 5 % of inflow in dry months.');
+	await record.click();
+	const decision = page.getByTestId('application-decision');
+	await expect(decision).toContainText('Licence issued (see its conditions): the decision of Synthetic catchment management agency, dated 30 Sep 2026.');
+	await expect(decision).toContainText('Reference WU-SYN-001. Written reasons received.');
+	await expect(decision).toContainText('Release 5 % of inflow in dry months.');
 
 	// The applicant sees the decision.
 	await a.reload();
 	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
-	await expect(a.getByTestId('application-decision')).toContainText('Approved with conditions');
+	await expect(a.getByTestId('application-decision')).toContainText('Licence issued (see its conditions)');
 });
 
 test('an application whose run was changed behind the API shows the assessor a warning and waits for its decision', async ({ page, owner, signIn }) => {
@@ -127,9 +136,11 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await expect(page.getByTestId('application-unverified')).toHaveText(
 		'1 run of this application wasn’t stored by the model run itself: the server’s stamp is missing or no longer matches the results, so it can’t be signed off, and the application can’t be decided until it is deleted (Runs tab).'
 	);
-	const decide = page.getByRole('form', { name: 'Decide' });
-	await decide.getByLabel('Approved', { exact: true }).check();
-	await expect(decide.getByRole('button', { name: 'Record the decision' })).toBeDisabled();
+	const decide = page.getByRole('form', { name: 'Record the authority’s decision' });
+	await decide.getByLabel(/Licence issued/).check();
+	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
+	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('No').check();
+	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
 });
 
 test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
@@ -209,7 +220,42 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await expect(page.getByRole('rowheader', { name: NAME })).toBeVisible();
 		await expectNoViolations(page);
 		await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
-		await expect(page.getByRole('form', { name: 'Decide' })).toBeVisible();
+		await expect(page.getByRole('form', { name: 'Record the authority’s decision' })).toBeVisible();
 		await expectNoViolations(page);
 	});
 }
+
+test('the owner names the responsible authority and marks who acts for it: only they record its decision and endorse the baseline', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Authority applicant');
+	const editor = await signIn('Authority editor');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications authority', applicant.user);
+	await addMember(page.request, project.id, editor.user.email, 'editor');
+	const sid = await submitApplication(applicant.context.request, project.id, runId, upper, NAME);
+
+	// An editor nobody marked reads the application but gets no decision form (163_licensing_authority).
+	const e = editor.page;
+	await e.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	await expect(e.getByTestId('application-decide-who')).toContainText('Only a member the project’s owner marks as acting for the responsible authority');
+	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toHaveCount(0);
+
+	// The owner's Project page: the authority as named, and the tick box on the editor's row.
+	await page.goto(`/projects/${project.id}?tab=project`);
+	await expect(page.getByRole('region', { name: 'Responsible authority' }).getByLabel('Authority name')).toHaveValue(AUTHORITY.name);
+	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${editor.user.id}`));
+	await page.getByRole('region', { name: 'Members' }).getByRole('row', { name: new RegExp(editor.user.displayName) }).getByLabel('Acts for the responsible authority').check();
+	expect((await saved).status()).toBe(200);
+
+	// Marked, the editor gets the form; and endorses the published baseline, once.
+	await e.reload();
+	await expect(e.getByRole('form', { name: 'Record the authority’s decision' })).toBeVisible();
+	await e.goto(`/projects/${project.id}?tab=runs`);
+	const panel = e.getByRole('region', { name: /^Publication/ });
+	await expect(panel.getByTestId('publication-endorsement')).toContainText('Not endorsed by the responsible authority.');
+	const endorse = panel.getByRole('form', { name: 'Endorse this baseline' });
+	await endorse.getByLabel(/^Endorsement note/).fill('Accepted as the baseline for this season.');
+	await endorse.getByRole('button', { name: 'Endorse as the responsible authority' }).click();
+	await expect(panel.getByTestId('publication-endorsement')).toContainText('Endorsed for the responsible authority');
+	await expect(panel.getByTestId('publication-endorsement')).toContainText('by Authority editor');
+	await expect(endorse).toHaveCount(0);
+});

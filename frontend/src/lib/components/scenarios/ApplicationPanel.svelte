@@ -1,6 +1,8 @@
 <script lang="ts">
 	// An application's workflow (WP-3.3, docs/ui.md § Applications): where it
-	// stands, the owner's Submit / Withdraw / Reopen, the assessor's decision,
+	// stands, the owner's Submit / Withdraw / Reopen, the responsible
+	// authority's decision as recorded by a member acting for it
+	// (163_licensing_authority: the app records the decision, never makes it),
 	// and who it is shared with. The server holds every rule (who may move it,
 	// that a submit freezes the ops, that no one decides their own); this
 	// offers only the moves it would allow. Its comments (WP-3.15: the notes
@@ -22,6 +24,7 @@
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import {
 		api,
+		OUTCOME_BASIS,
 		OUTCOME_LABEL,
 		scenarioProblems,
 		SCENARIO_OUTCOMES,
@@ -32,13 +35,14 @@
 		type ScenarioWithCheck
 	} from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	let {
 		projectId,
 		scenario: s,
 		isOwner,
 		canDecide,
+		canEdit = false,
 		problems,
 		unverifiedRuns = 0,
 		locked = false,
@@ -50,8 +54,14 @@
 		scenario: Scenario;
 		/** The applicant who made it: they submit, withdraw, reopen and share it. */
 		isOwner: boolean;
-		/** An editor who isn't its owner: they decide it once submitted. */
+		/**
+		 * An editor who isn't its owner and whom the project's owner marks as
+		 * acting for the responsible authority (163): they record its decision
+		 * once submitted.
+		 */
 		canDecide: boolean;
+		/** An editor or owner of the project: an assessor, whether or not they act for the authority. */
+		canEdit?: boolean;
 		/** How many of its changes don't apply to its base (a submit is refused until none). */
 		problems: number;
 		/**
@@ -108,15 +118,39 @@
 	const withdraw = () => act('Withdrawn.', () => api.scenarios.withdraw(projectId, s.id));
 	const reopen = () => act('Back to draft.', () => api.scenarios.reopen(projectId, s.id));
 
-	// --- the decision ------------------------------------------------------------------
+	// --- the authority's decision (163_licensing_authority) --------------------------
 	let outcome = $state<ScenarioOutcome | ''>('');
 	let reasons = $state('');
+	/** Empty: the project's settings.responsibleAuthority (the server refuses when it names none). */
+	let authority = $state('');
+	let decisionDate = $state('');
+	let reference = $state('');
+	let reasonsReceived = $state<'' | 'yes' | 'no'>('');
 	function decide(e: SubmitEvent) {
 		e.preventDefault();
-		if (!outcome) return;
-		const o = outcome;
-		act('Decided.', () => api.scenarios.decide(projectId, s.id, o, reasons.trim()));
+		if (!outcome || !decisionDate || !reasonsReceived) return;
+		const body = {
+			outcome,
+			...(authority.trim() ? { authority: authority.trim() } : {}),
+			decisionDate,
+			reference: reference.trim(),
+			reasonsReceived: reasonsReceived === 'yes',
+			note: reasons.trim()
+		};
+		act('Decision recorded.', () => api.scenarios.decide(projectId, s.id, body));
 	}
+	/** The decision's record under its outcome: the reference, the reasons answer, who recorded it and when. */
+	const decisionRecord = $derived(
+		[
+			s.decisionReference ? `Reference ${s.decisionReference}.` : '',
+			s.reasonsReceived === true ? 'Written reasons received.' : s.reasonsReceived === false ? 'Written reasons not received.' : '',
+			`Recorded${s.decidedBy ? ` by ${s.decidedBy}` : ''}${s.decidedAt ? ` on ${fmtDate(s.decidedAt, true)}` : ''}.`
+		]
+			.filter(Boolean)
+			.join(' ')
+	);
+	/** An editor who didn't make it: they read it as an assessor (comments, share links), deciding or not. */
+	const assessor = $derived(canDecide || (canEdit && !isOwner));
 
 	// --- sharing -------------------------------------------------------------------------
 	// The owner picks from the people the server lists for them (an applicant:
@@ -205,9 +239,9 @@
 
 	// --- comments and share links (WP-3.15) -------------------------------------------
 	const party = $derived(isOwner || s.members.some((m) => m.userId === session.user?.id));
-	const audiences = $derived(scenarioAudiences({ assessor: canDecide, party }));
+	const audiences = $derived(scenarioAudiences({ assessor, party }));
 	/** The applicant or an assessor shares it, once submitted or decided (the API holds the rule). */
-	const canShare = $derived(isOwner || canDecide);
+	const canShare = $derived(isOwner || assessor);
 	let shareOpen = $state(false);
 
 	const STAGE: Record<Scenario['status'], string> = {
@@ -227,8 +261,12 @@
 
 	{#if s.status === 'decided' && s.outcome}
 		<div class="decision" data-testid="application-decision">
-			<p><strong>{OUTCOME_LABEL[s.outcome]}</strong>{s.decidedBy ? ` by ${s.decidedBy}` : ''}{s.decidedAt ? `, ${fmtDate(s.decidedAt, true)}` : ''}.</p>
+			<p>
+				<strong>{OUTCOME_LABEL[s.outcome]}</strong>{s.decisionAuthority ? `: the decision of ${s.decisionAuthority}` : ''}{s.decisionDate ? `, dated ${fmtDay(s.decisionDate)}` : ''}.
+			</p>
+			<p class="small">{decisionRecord}</p>
 			{#if s.decisionNote}<p class="reasons">{s.decisionNote}</p>{/if}
+			<p class="small muted">Any appeal runs from the authority’s decision letter (National Water Act s148, s41(6)); this app doesn’t work out its deadline.</p>
 		</div>
 	{/if}
 
@@ -252,7 +290,7 @@
 		{#if s.status === 'draft' && problems > 0}<p class="hint">Remove the changes that don't apply before submitting.</p>{/if}
 	{/if}
 
-	{#if canDecide && unverifiedRuns > 0}
+	{#if assessor && unverifiedRuns > 0}
 		<div class="alert alert-warning" role="status" data-testid="application-unverified">
 			{unverifiedRuns === 1 ? '1 run of this application wasn’t' : `${unverifiedRuns} runs of this application weren’t`} stored by the model run itself: the server’s
 			stamp is missing or no longer matches the results, so {unverifiedRuns === 1 ? 'it can’t be signed off' : 'they can’t be signed off'}{s.status === 'submitted'
@@ -262,21 +300,48 @@
 	{/if}
 	{#if canDecide && s.status === 'submitted'}
 		<form class="decide" onsubmit={decide} aria-labelledby="decide-h">
-			<h4 id="decide-h">Decide</h4>
+			<h4 id="decide-h">Record the authority’s decision</h4>
+			<p class="hint">Only the responsible authority decides a licence (National Water Act s27, s41, s42). Record its decision as its letter gives it.</p>
 			<fieldset>
 				<legend>Outcome</legend>
 				{#each SCENARIO_OUTCOMES as o (o)}
-					<label><input type="radio" name="outcome" value={o} bind:group={outcome} /> {OUTCOME_LABEL[o]}</label>
+					<label><input type="radio" name="outcome" value={o} bind:group={outcome} /> {OUTCOME_LABEL[o]} <span class="muted small">({OUTCOME_BASIS[o]})</span></label>
 				{/each}
 			</fieldset>
 			<div class="field">
-				<label for="decide-note">Reasons and conditions</label>
+				<label for="decide-authority">Responsible authority</label>
+				<input id="decide-authority" type="text" maxlength="200" bind:value={authority} aria-describedby="decide-authority-help" />
+				<p id="decide-authority-help" class="hint">Leave it empty for the authority named in the project’s settings.</p>
+			</div>
+			<div class="form-row">
+				<div class="field">
+					<label for="decide-date">Date of the decision letter</label>
+					<input id="decide-date" type="date" required bind:value={decisionDate} />
+				</div>
+				<div class="field grow">
+					<label for="decide-ref">Licence or file reference <span class="muted">(optional)</span></label>
+					<input id="decide-ref" type="text" maxlength="200" bind:value={reference} />
+				</div>
+			</div>
+			<fieldset>
+				<legend>Written reasons received?</legend>
+				<label><input type="radio" name="reasons-received" value="yes" bind:group={reasonsReceived} /> Yes</label>
+				<label><input type="radio" name="reasons-received" value="no" bind:group={reasonsReceived} /> No</label>
+			</fieldset>
+			<div class="field">
+				<label for="decide-note">Note: the authority’s reasons and conditions</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons} aria-describedby="decide-note-help"></textarea>
 				<p id="decide-note-help" class="hint">Shown on the application’s read-only share links, which the applicant can make too.</p>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || unverifiedRuns > 0}>Record the decision</button>
-			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
+			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || !decisionDate || !reasonsReceived || unverifiedRuns > 0}
+				>Record the authority’s decision</button
+			>
+			<p class="hint">A recorded decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
+	{:else if assessor && s.status === 'submitted'}
+		<p class="hint" data-testid="application-decide-who">
+			Only a member the project’s owner marks as acting for the responsible authority records its decision (Members).
+		</p>
 	{/if}
 
 	{#if canReadPacks}

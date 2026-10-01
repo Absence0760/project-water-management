@@ -43,7 +43,7 @@
 		projectId: string;
 		runs: RunMeta[] | null;
 		canEdit: boolean;
-		/** The caller acts for the responsible authority (161): they record its decision on an application. */
+		/** The caller acts for the responsible authority (163): they record its decision on an application. */
 		actsForAuthority?: boolean;
 		/** The caller is an applicant: applications only, on the published run. */
 		applicant?: boolean;

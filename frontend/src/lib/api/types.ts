@@ -201,7 +201,7 @@ export interface OutlookSettings {
 }
 
 /**
- * settings.responsibleAuthority (161_licensing_authority, backend
+ * settings.responsibleAuthority (163_licensing_authority, backend
  * projects/authoritySettings.ts): who decides the project's licence
  * applications, DWS or a CMA with the power. null = none named. Not a model input.
  */
@@ -220,7 +220,7 @@ export interface Project extends ProjectSummary {
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
-	/** The caller acts for the responsible authority (161): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
 	actsForAuthority?: boolean;
 }
 
@@ -300,7 +300,7 @@ export interface Member {
 	role: Role;
 	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
 	party: string | null;
-	/** The owner marked them as acting for the responsible authority (161). Absent from an older API. */
+	/** The owner marked them as acting for the responsible authority (163). Absent from an older API. */
 	actsForAuthority?: boolean;
 }
 
@@ -998,7 +998,7 @@ export interface Scenario {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
-	/** The authority's decision as recorded (161): its name, the date on its letter, its reference, and whether written reasons came. null/'' until decided; the date and the reasons flag are null on a decision recorded before 161. */
+	/** The authority's decision as recorded (163): its name, the date on its letter, its reference, and whether written reasons came. null/'' until decided; the date and the reasons flag are null on a decision recorded before 163. */
 	decisionAuthority?: string | null;
 	decisionDate?: string | null;
 	decisionReference?: string;
@@ -1016,7 +1016,7 @@ export type ScenarioOrigin = 'team' | 'applicant';
 /**
  * The responsible authority's decision on an application, in the National
  * Water Act's and GN R267's words (backend scenarios/schema.ts
- * SCENARIO_OUTCOMES, 161_licensing_authority; provisional position,
+ * SCENARIO_OUTCOMES, 163_licensing_authority; provisional position,
  * pre-counsel research, 2026-10-01).
  */
 export type ScenarioOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered';
@@ -1027,7 +1027,7 @@ export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
 	application_rejected: 'Application rejected (formal requirements)',
 	not_considered: 'Not considered: use already authorised'
 };
-/** POST …/decide: "Record the authority's decision" (161). */
+/** POST …/decide: "Record the authority's decision" (163). */
 export interface DecideRequest {
 	outcome: ScenarioOutcome;
 	/** The authority's name; omitted, the project's settings.responsibleAuthority. */
@@ -1217,11 +1217,11 @@ export interface PublicationMeta {
 	publishedBy: string | null;
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
-	/** The responsible authority's endorsement of this baseline (161): null = not endorsed. Viewers and above only (absent for a farmer, or from an older API). */
+	/** The responsible authority's endorsement of this baseline (163): null = not endorsed. Viewers and above only (absent for a farmer, or from an older API). */
 	endorsement?: PublicationEndorsement | null;
 }
 
-/** Who endorsed a published baseline for the responsible authority, and when (161; POST …/publication/:pubId/endorse). */
+/** Who endorsed a published baseline for the responsible authority, and when (163; POST …/publication/:pubId/endorse). */
 export interface PublicationEndorsement {
 	endorsedAt: string;
 	/** null once that account is gone. */

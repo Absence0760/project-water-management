@@ -56,7 +56,7 @@
 		runs: RunMeta[];
 		/** An editor or owner of the project. */
 		canEdit: boolean;
-		/** The caller acts for the responsible authority (161): with canEdit, they record its decision. */
+		/** The caller acts for the responsible authority (163): with canEdit, they record its decision. */
 		actsForAuthority?: boolean;
 		/** The caller is an applicant (the contributor role): the applicant projection of the base, no comparison. */
 		applicant?: boolean;
