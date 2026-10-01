@@ -136,6 +136,14 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
 		checks: { api: secret(32), worker: secret(32) }
 	},
+	APP_ENCRYPTION_KEY: {
+		why: 'Seals the TOTP secrets of two-step sign-in at rest (auth/secretBox.ts, 144_mfa): the API only, which enrols and checks codes.',
+		checks: { api: secret(32) }
+	},
+	MFA_REQUIRED: {
+		why: 'false turns off the second-factor requirement for owners, team admins and assessors (auth/stepUp.ts) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
+		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
+	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
 	PASSWORD_HASH_COST: { why: 'bcrypt cost override for the local e2e server; auth/password.ts refuses it in Lambda.', checks: { api: optional(oneOf('12')), worker: optional(oneOf('12')) } },

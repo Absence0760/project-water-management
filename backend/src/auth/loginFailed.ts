@@ -21,11 +21,22 @@ import { logEvent } from '../logging/logEvent.js';
  * - `locked`: refused by the per-address lockout before the password was checked.
  * - `invalid_link`: a reset or verification token that is malformed, used,
  *   expired or never existed.
+ * - `bad_code`: a wrong two-step sign-in code (an authenticator or recovery
+ *   code; auth/mfa-routes.ts). `locked` there is the code throttle.
  */
-export type LoginFailureReason = 'unknown_account' | 'bad_password' | 'locked' | 'invalid_link';
+export type LoginFailureReason = 'unknown_account' | 'bad_password' | 'locked' | 'invalid_link' | 'bad_code';
 
 /** The routes that check a credential: the patterns, never a concrete path. */
-export type LoginFailureRoute = '/auth/login' | '/auth/change-password' | '/auth/reset-password' | '/auth/verify-email';
+export type LoginFailureRoute =
+	| '/auth/login'
+	| '/auth/change-password'
+	| '/auth/reset-password'
+	| '/auth/verify-email'
+	| '/auth/mfa/verify'
+	| '/auth/mfa/totp/enrol'
+	| '/auth/mfa/totp/confirm'
+	| '/auth/mfa/totp'
+	| '/auth/mfa/recovery-codes';
 
 /** Log `{"event":"login_failed","route","reason"}`: nothing that names a person. */
 export function logLoginFailed(route: LoginFailureRoute, reason: LoginFailureReason): void {

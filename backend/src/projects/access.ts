@@ -1,5 +1,6 @@
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { requireStepUp } from '../auth/stepUp.js';
 
 /**
  * `farmer` (019_farmer_role, WP-2.1) and `contributor` (044_contributor_role,
@@ -16,6 +17,8 @@ export const rank: Record<Role, number> = { farmer: -2, contributor: -1, viewer:
  * underneath, so a missed call here fails closed, not open.
  *  - not a member (or no such project) → 404, never revealing existence
  *  - member below `min`                → 403
+ *  - `min` owner, without a second factor → 403 mfa_required / mfa_step_up
+ *    (auth/stepUp.ts: an owner's actions need two-step sign-in)
  */
 export async function requireRole(db: Db, projectId: string, min: Role): Promise<Role> {
 	if (!UUID.test(projectId)) throw new ApiError(404, 'not found');
@@ -24,6 +27,7 @@ export async function requireRole(db: Db, projectId: string, min: Role): Promise
 	const role = rows[0]?.role;
 	if (!role) throw new ApiError(404, 'not found');
 	if (rank[role] < rank[min]) throw new ApiError(403, `requires ${min} role`);
+	if (min === 'owner') await requireStepUp(db);
 	return role;
 }
 

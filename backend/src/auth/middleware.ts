@@ -1,19 +1,22 @@
 import { createMiddleware } from 'hono/factory';
 import { ApiError } from '../http/errors.js';
 import { scopeAllows } from '../reports/scope.js';
-import { readSessionClaims } from './session.js';
+import { readSessionClaims, type Amr } from './session.js';
+import { requestAuth } from './stepUp.js';
 
 /**
  * `edgeVerified`: the request passed the CloudFront shared-secret check (app.ts), so the edge's headers can be trusted (http/clientAddress.ts).
  * `renderSession`: the session is the report renderer's (a `scope` claim, reports/scope.ts), set by requireUser.
  */
-export type AuthEnv = { Variables: { userId: string; edgeVerified: boolean; renderSession?: boolean } };
+export type AuthEnv = { Variables: { userId: string; edgeVerified: boolean; renderSession?: boolean; amr?: Amr } };
 
 /**
  * Rejects with 401 unless the request carries a valid session. A render
  * session (the headless report renderer's, reports/scope.ts) is refused with
  * 403 outside the one project and run it was issued for (and, for an impact
- * report, its one comparison with the baseline).
+ * report, its one comparison with the baseline). The rest of the request
+ * runs with the session's `amr` in requestAuth (auth/stepUp.ts), where the
+ * second-factor check reads it.
  */
 export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	const session = await readSessionClaims(c);
@@ -23,5 +26,6 @@ export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	}
 	c.set('userId', session.userId);
 	c.set('renderSession', !!session.scope);
-	await next();
+	c.set('amr', session.amr);
+	await requestAuth.run({ userId: session.userId, amr: session.amr }, () => next());
 });

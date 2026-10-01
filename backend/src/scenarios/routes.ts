@@ -25,6 +25,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
 import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
@@ -453,6 +454,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		const body = DecideBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
+			// The assessor's decision needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const s = await loadScenario(db, id, scenarioId(sid));
 			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant can’t decide their own application');
 			// Decided on runs the model run stored, never on one written past it (077, runs/stamp.ts).

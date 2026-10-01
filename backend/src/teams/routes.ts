@@ -8,6 +8,7 @@ import { accountByEmail, countInvites, inviteByEmail } from '../invites/invites.
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { readJson } from '../http/body.js';
 import { recordTeamAudit } from '../history/record.js';
 import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatch } from './settings.js';
@@ -184,6 +185,8 @@ export const teamRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireTeamRole(db, id, 'viewer');
 			if (userId !== c.get('userId') && role !== 'admin') throw new ApiError(403, 'requires team admin');
+			// Removing someone else is a team admin's action: two-step sign-in (auth/stepUp.ts). Leaving isn't.
+			if (userId !== c.get('userId')) await requireStepUp(db);
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastAdmin(db, id, userId);
 			// Recorded before the row goes, while the leaver can still write events on the team's projects.
