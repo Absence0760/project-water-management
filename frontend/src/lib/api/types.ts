@@ -2270,6 +2270,41 @@ export interface MapImportProblem {
 	message: string;
 }
 
+/** One feature of a file in the import's review (POST …/map/import/preview, issue #326 D2). A refused feature has no geometry type and no kind. */
+export interface MapImportPreviewFeature {
+	index: number;
+	geometryType: MapGeometry['type'] | null;
+	name: string;
+	areaM2: number | null;
+	/** The proposed kind: from the feature's `kind`/`type`/`layer` property, or inferred from its shape. */
+	kind: MapFeatureKind | null;
+	kindFrom: 'property' | 'geometry' | null;
+	/** Why a kind the file gave wasn't used. */
+	note?: string;
+	/** The node of the same name, of a kind the proposed kind can stand for. */
+	nodeId: string | null;
+}
+
+/** The review before an import: nothing is saved until POST …/map/import with each feature's kind. */
+export interface MapImportPreview {
+	fileName: string;
+	sha256: string;
+	/** The same file is in the project already: the import would be refused. */
+	duplicate: boolean;
+	features: MapImportPreviewFeature[];
+	problems: MapImportProblem[];
+	/** The project's nodes, for each row's Stands for. */
+	nodes: { id: string; name: string; kind: MapNodeArea['kind'] }[];
+}
+
+/** One feature as the editor reviewed it (POST …/map/import `features`). */
+export interface MapImportReviewed {
+	index: number;
+	kind: MapFeatureKind;
+	name?: string;
+	nodeId?: string | null;
+}
+
 /** The reference values the quaternary at a point proposes (GET …/map/quaternary). Never applied by the server. */
 export interface QuaternaryProposal {
 	code: string;

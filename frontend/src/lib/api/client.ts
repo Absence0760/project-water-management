@@ -132,6 +132,8 @@ import type {
 	MapFeatureInput,
 	MapFeatureKind,
 	MapFeatureList,
+	MapImportPreview,
+	MapImportReviewed,
 	MapLinkedNodes,
 	QuaternaryLookup
 } from './types';
@@ -850,8 +852,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			update: (id: string, fid: string, body: MapFeatureInput) =>
 				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
 			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
-			/** 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already. */
-			import: (id: string, body: { fileName: string; kind: MapFeatureKind; text: string }) =>
+			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
+			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
+			/**
+			 * Import a file, every feature one `kind` or each its own (`features`, from the review).
+			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already.
+			 */
+			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[] })) =>
 				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
 			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>

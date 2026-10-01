@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "issue #326 D2: the upload sheet's review table (UploadSheet.svelte grew, importReview.ts new) in the Map tab's chunk; measured: total 1461 KB against a 1459 KB ceiling after build:frontend"
+}

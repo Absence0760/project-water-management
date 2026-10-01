@@ -15,16 +15,6 @@ export const KIND_LABEL: Record<MapFeatureKind, string> = {
 	other: 'Other'
 };
 
-/** The kinds a file can be imported as, in the form's order, with what each takes. */
-export const IMPORT_KINDS: { kind: MapFeatureKind; hint: string }[] = [
-	{ kind: 'catchment_boundary', hint: 'one or more polygons, kept as one boundary (it replaces the current one)' },
-	{ kind: 'farm_parcel', hint: 'polygons, one per parcel; a parcel named like a hydrological unit is linked to it' },
-	{ kind: 'dam', hint: 'points or polygons' },
-	{ kind: 'gauge', hint: 'points' },
-	{ kind: 'river', hint: 'lines' },
-	{ kind: 'other', hint: 'any of points, lines and polygons' }
-];
-
 /** The kinds the coordinates form places (a point). */
 export const POINT_KINDS: MapFeatureKind[] = ['gauge', 'dam', 'other'];
 

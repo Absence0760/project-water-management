@@ -2412,15 +2412,28 @@ map" card) stays the schematic; this is the geography.
   **Imported files**. In a narrow modal each row becomes a labelled card.
   `?tab=network&grid=map-features` (any other tab) lands on the Map with
   it open.
-- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors): what the
-  file holds (each kind with what it takes), the file (WGS84, at most 5 MB;
-  a `.zip`/`.shp` is turned away with how to export GeoJSON from QGIS),
-  **Upload**. A refused file lists every problem by feature and imports
-  nothing, and the sheet stays open; a taken one closes the sheet and picks
-  its first feature. Under the form, **Imported files**: each file with its
-  feature count, date, who imported it and its SHA-256 cut to 12
-  characters (the full hash in the tooltip) with **Copy**. D2's review table
-  goes here.
+- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
+  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
+  at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
+  from QGIS) and **Review**, which reads it on the server
+  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Check each kind
+  before you import; nothing is saved until then"), **Set every row’s
+  kind** (a default for the Kind column: each row whose shape can be that
+  kind takes it, and the line under it counts those that can't), and a
+  table, one row per feature: #, Name (editable), Shape (point, line or
+  polygon, with its area), Kind (only the kinds its shape can be, with
+  "from the file" or "from its shape" under it, and why a kind the file gave
+  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
+  boundary or river) and Problems. Two rows marked as the boundary, a
+  refused feature, or a file imported already (by SHA-256) show in an alert
+  over the table and disable **Import n features**; **Choose another file**
+  goes back. A refused file imports nothing; a taken one closes the sheet
+  and picks its first feature. On a phone each row is a card of labelled
+  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  it, **Imported files**: each file with its feature count, date, who
+  imported it and its SHA-256 cut to 12 characters (the full hash in the
+  tooltip) with **Copy**.
 - **Place a point** (`place=1`, a side sheet, editors): kind (gauge, dam,
   other), name, latitude and longitude in decimal degrees ("-33.61" or
   "33.61 S", a decimal comma taken), and what it stands for. Errors show
@@ -2438,6 +2451,10 @@ map" card) stays the schematic; this is the geography.
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways
   scroll), axe light and dark, wide and phone, with the grid open too.
+  `e2e/tests/map-import-review.spec.ts`: a mixed file's proposed kinds and
+  links, one changed and renamed, two boundaries refused in the table, the
+  list grouped after import; a file with a refused feature lists it on its
+  row and imports nothing; the phone's cards, axe.
 
 ## Crops & demand
 
