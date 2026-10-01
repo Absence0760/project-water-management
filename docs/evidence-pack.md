@@ -336,8 +336,9 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   authority, not the team. A signed draft that shouldn't be issued is withdrawn,
   not deleted.
 - **Delete.** Only an unsigned draft is deleted. An issued (or superseded, or
-  withdrawn) pack is never deleted, and a project that has one can't be
-  deleted either, so its verify link keeps answering.
+  withdrawn) pack is never deleted by the app, and a project that has one
+  can't be deleted either, so its verify link keeps answering until the
+  licence record closes ([§ Retention](#retention)).
 
 **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
 delete drafts. Viewers read packs (an application's only when they can read
@@ -350,6 +351,48 @@ share an issued pack by link ([§ Sharing and comments](#sharing-and-comments)).
 Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
 naming the pack.
+
+## Retention
+
+Provisional position (pre-counsel research, 2026-10-01; not legal advice,
+and no counsel has approved it). An issued pack and a sign-off keep the names
+of the people who made and signed them after their accounts are deleted:
+the sign-off is the professional's own statement, and the manifest prints
+its makers under the hash the verify page checks (POPIA s14(1)(b), s14(6)(b);
+[security.md § Personal information](./security.md#personal-information-popia)).
+"The life of the licence record" is a date the project holds
+(159_licence_record, the Project page's **Licence record** panel, [api.md §
+Licence record](./api.md#licence-record)):
+
+- **Granted**: the licence's expiry date (NWA s28(1)(e), at most 40 years)
+  **+ 3 years**, for a professional-negligence claim on the assessment
+  (Prescription Act s11(d), s12(3)).
+- **Refused or withdrawn**: the decision date **+ 3 years** (PAJA's 180
+  days, Water Tribunal appeals and prescription).
+- **No outcome recorded**: a review every **5 years**, from the first pack
+  issued or run nominated (mirroring the NWA s28(1)(f) review interval).
+  The owners record the outcome, or confirm the record is still needed,
+  which sets the next review five years on.
+
+Owners record the outcome, with a reason (the decision letter); editors
+read it. Each change is in the history (`licence.outcome`,
+`licence.confirmed`). The worker's tick (`backend/src/licence/record.ts`)
+emails the owners and the operator (`OPERATOR_EMAIL`) when a review is due,
+on the due date and then a month apart, three times in all, and once when
+the closing date passes ("This licence record can now be deleted"). It
+**never deletes** a licence record: the operator deletes the project, its
+packs and their objects on the client's written confirmation
+([deployment.md § Runbooks](./deployment.md#runbooks), "A licence record
+past its closing date"). A signer is told this before signing
+(`PACK_SIGNER_PUBLIC`).
+
+A team the operator marks as keeping **public records** (`team.public_records`,
+a government body such as DWS or a CMA, National Archives and Records
+Service of South Africa Act s13(2)(a)) keeps its members' names in its
+projects' history after an account is deleted, and its projects and the
+team are deleted only after the client confirms its disposal
+(`team.records_disposal_confirmed_on`; operator agreement 3A.2). Off for
+every team; the operator sets it by SQL, never the app.
 
 ## The PDF
 

@@ -1921,6 +1921,23 @@ export interface AllocationSource {
 	rows: number;
 }
 
+/** The licence decision a project's evidence supports, and how long its licence record is kept (159_licence_record, docs/api.md § Licence record). */
+export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+export interface LicenceRecord {
+	outcome: LicenceOutcome | null;
+	outcomeOn: string | null;
+	expiresOn: string | null;
+	reason: string;
+	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	closesOn: string | null;
+	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
+	reviewDueOn: string | null;
+}
+export type LicenceOutcomeInput =
+	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: null; reason: string };
+
 export interface AllocationList {
 	allocations: Allocation[];
 	sources: AllocationSource[];

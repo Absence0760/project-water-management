@@ -407,6 +407,50 @@ export function erratumNoticeMail(to: string, f: ErratumNoticeFacts): Mail {
 	});
 }
 
+export type LicenceRecordFacts = {
+	projectId: string;
+	projectName: string;
+	/** review: no outcome recorded and the 5-yearly review is due; closes: the record's closing date has passed. */
+	event: 'review' | 'closes';
+	/** The review date, or the closing date (YYYY-MM-DD). */
+	dueOn: string;
+	/** The operator's copy: no "you own" footer, and the project's id for the runbook. */
+	operator?: boolean;
+};
+
+/**
+ * The licence record needs a decision (159_licence_record, licence/record.ts):
+ * the review is due with no outcome recorded, or the record's closing date
+ * passed (it can now be deleted). Sent to the project's owners and the
+ * operator. Nothing is deleted by the app: the operator deletes on the
+ * client's written confirmation (docs/deployment.md § Runbooks). English, as
+ * the workspace is.
+ */
+export function licenceRecordMail(to: string, f: LicenceRecordFacts): Mail {
+	const review = f.event === 'review';
+	const subject = review ? `Record the licence outcome for ${f.projectName} — ${PRODUCT}` : `The licence record of ${f.projectName} can now be deleted — ${PRODUCT}`;
+	const paragraphs = review
+		? [
+				`${f.projectName} holds a licence record: an issued evidence pack or a nominated evidence run, with the names of the people who made and signed it. Its review was due on ${f.dueOn}, and no licence outcome is recorded.`,
+				'Record the licence outcome (granted, with its expiry date, refused or withdrawn), or confirm that the record is still needed. The record is then kept until three years after the licence expires, or three years after the application is refused or withdrawn; a confirmation sets the next review five years on.',
+				'Nothing is deleted until the organisation asks for it.'
+			]
+		: [
+				`The licence record of ${f.projectName} reached its closing date on ${f.dueOn}: three years after the licence expired, or after the application was refused or withdrawn.`,
+				'It can now be deleted, with its evidence packs and the names they keep. Nothing is deleted automatically: ask the operator to delete the project, in writing, or record a later outcome if the licence was renewed.'
+			];
+	return render('licence_record', to, subject, {
+		heading: review ? `Record the licence outcome for ${f.projectName}` : `The licence record of ${f.projectName} can now be deleted`,
+		paragraphs,
+		action: { label: 'Open the licence record', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=project#licence-record`) },
+		footer: [
+			f.operator
+				? `You get this email as the operator of ${PRODUCT} (project ${f.projectId}). The deletion runbook is docs/deployment.md § Runbooks.`
+				: `You get this email because you own ${f.projectName}.`
+		]
+	});
+}
+
 /** What a deletion did, for its confirmation: the catchments and teams the person left (their names, as they stood). */
 export type AccountDeletedFacts = { projects: string[]; teams: string[] };
 

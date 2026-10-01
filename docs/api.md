@@ -2501,6 +2501,29 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
   Each sign-off is in the project's history (`signoff.created`).
 
+## Licence record
+
+How long a project's licence record (its issued packs, nominated runs and
+the names they keep) is kept (159_licence_record; [evidence-pack.md §
+Retention](./evidence-pack.md#retention)). Provisional position (pre-counsel
+research, 2026-10-01).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/licence-record` | – | `{ licenceRecord: LicenceRecord }` | editor |
+| PUT | `/projects/:id/licence-record` | `{ outcome: 'granted', outcomeOn, expiresOn, reason }`, `{ outcome: 'refused' \| 'withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000) | `200 { licenceRecord }`; records `licence.outcome`. `400` for a grant without an expiry or one expiring before it was granted | owner |
+| POST | `/projects/:id/licence-record/confirm` | none, or `{}` (strict) | `200 { licenceRecord }`, the next review five years from today; records `licence.confirmed`. `409` once an outcome is recorded | owner |
+
+- `LicenceRecord = { outcome: 'granted' | 'refused' | 'withdrawn' | null,
+  outcomeOn, expiresOn, reason, closesOn, reviewDueOn }`: `closesOn` is the
+  expiry (granted) or the decision date, + 3 years; `reviewDueOn` the next
+  5-yearly review while no outcome is recorded (null before the first issued
+  pack or nomination).
+- `DELETE /projects/:id` and `DELETE /teams/:id` answer `409`
+  (`details.publicRecords: true`) for a project of, or a team that keeps,
+  public records until the client has confirmed their disposal, and
+  `PATCH /projects/:id` the same for moving such a project out of its team.
+
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's

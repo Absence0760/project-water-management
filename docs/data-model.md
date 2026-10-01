@@ -1304,6 +1304,35 @@ were swept and who was mailed.
   `APP_USER_ON_DELETE`: cascade), `auth/personal-data.security.db.test.ts`
   (`USER_FK_COVERAGE`: the `erratumNotices` section).
 
+### Licence record (159_licence_record.sql)
+
+[evidence-pack.md § Retention](./evidence-pack.md#retention). Columns on
+`project` and `team`; provisional position (pre-counsel research,
+2026-10-01).
+
+- **`project.licence_outcome`** (`granted`, `refused`, `withdrawn`, NULL),
+  `licence_outcome_on`, `licence_expires_on` (exactly when granted, not
+  before the decision), `licence_outcome_reason`; **`record_closes_on`**
+  (generated: expiry or decision + 3 years); **`record_review_due_on`** (set
+  by `licence_record_start` when the project first issues a pack or
+  nominates a run, + 5 years; backfilled for existing projects); the tick's
+  bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
+  `record_close_notified_at`. Two partial indexes serve the tick.
+- Written only through **`app_set_licence_outcome`** and
+  **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
+  tick's **`app_licence_record_due(limit)`** (marks and returns the due
+  notices with the owners to tell); `licence_record_guard` and
+  `licence_record_insert_guard` refuse `water_app`'s own writes of these
+  columns (`project_update` lets an editor update the row).
+- **`team.public_records`**, **`team.records_disposal_confirmed_on`**: set
+  by the operator as the schema owner (`team_public_records_guard` refuses
+  `water_app`). For such a team `app_user_pseudonymise` leaves the audit log
+  of its projects as it is, and `project_public_records_guard` /
+  `team_public_records_guard` refuse deleting its projects or the team, and
+  moving a project out of it, until the disposal is confirmed
+  (`app_project_public_records`).
+- Guards: `licence/licence-record.db.test.ts`.
+
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed

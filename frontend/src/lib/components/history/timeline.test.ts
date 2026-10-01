@@ -193,6 +193,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.deleted', { registrationNo: 'R-2' }))).toBe('Deleted a registered volume (R-2)');
 		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
+		expect(eventLine(ev('licence.outcome', { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'DWS letter' }))).toBe(
+			'Recorded the licence outcome: granted on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
+		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
 		expect(eventLine(ev('map.imported', { fileName: 'parcels.geojson', features: 2, kind: 'farm_parcel' }))).toBe('Imported 2 map features from parcels.geojson');
 		expect(eventLine(ev('map.feature_created', { kind: 'gauge', name: 'Weir' }))).toBe('Placed a gauge “Weir” on the map');
 		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');

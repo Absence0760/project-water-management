@@ -114,7 +114,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PATCH /projects/:id/notes/:noteId': () => ({ body: { body: 'Edited' } }),
 	'POST /projects/:id/api-keys': () => ({ body: { name: 'Ladder key' } }),
 	'PUT /projects/:id/alert-rules': (c) => ({ body: { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] } }),
-	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } })
+	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } }),
+	'PUT /projects/:id/licence-record': () => ({ body: { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'ladder' } })
 };
 
 /**

@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { alertProjectRoutes, alertPublicRoutes, meAlertRoutes } from './alerts/routes.js';
+import { licenceRecordRoutes } from './licence/routes.js';
 import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
@@ -172,6 +173,7 @@ export function createApp() {
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
 	projects.route('/', allocationRoutes);
+	projects.route('/', licenceRecordRoutes);
 	projects.route('/', noteRoutes);
 	projects.route('/', apiKeyRoutes);
 	projects.route('/', alertProjectRoutes);

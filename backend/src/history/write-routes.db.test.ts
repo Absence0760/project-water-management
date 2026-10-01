@@ -251,6 +251,17 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
 	},
+	// The licence record (159). Confirmed first: once an outcome is recorded there is no review to confirm.
+	{
+		route: `POST ${P}/licence-record/confirm`,
+		records: ['licence.confirmed'],
+		call: (c) => c.owner.call('POST', `${at(c)}/licence-record/confirm`)
+	},
+	{
+		route: `PUT ${P}/licence-record`,
+		records: ['licence.outcome'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'guard' })
+	},
 	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
 	{
 		route: `PUT ${P}/alert-rules`,

@@ -381,6 +381,10 @@ Lambda environment (set by `infra/lambda.tf`):
 | `SES_REGION` | unset: SES is in the Lambda's own region |
 | `RUNS_KEPT_PER_PROJECT` | not set by Terraform, so the backend default (20 runs per project) applies; see [data-model.md § Run output volume](./data-model.md#time-series-storage) |
 
+The worker (`infra/jobs.tf`) also gets `OPERATOR_EMAIL`, set to
+`budget_alert_email`: the operator's copy of the licence-record notices
+([evidence-pack.md § Retention](./evidence-pack.md#retention)).
+
 Besides the email settings, `lambda.tf` sets `ALLOWED_ORIGINS` (the site
 origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
 `RUNTIME_SECRET_ARN` / `RUNTIME_SECRET_VERSION`, which name the API's runtime
@@ -1628,7 +1632,9 @@ Every step is an ordinary app action by an owner unless it says "operator".
    maker cleared (138: keep the evidence, remove the name), except an
    ensemble they never completed and their **draft** applications, which go;
    sign-offs keep the typed name and registration; the audit log is
-   pseudonymised ("Deleted user"). A `23514` error at commit ("a project must
+   pseudonymised ("Deleted user"), invitation entries' partly hidden
+   address included (158), except in the projects of a team that keeps
+   public records (159), where the name stays. A `23514` error at commit ("a project must
    keep at least one owner", "a team must keep at least one admin") means
    they are the only owner or admin of something: ask them, or the
    project's or team's other members, to hand it over (make someone else
@@ -1841,6 +1847,27 @@ Every step is an ordinary app action by an owner unless it says "operator".
     and tell every person who had two-step sign-in on to set it up again
     (owners, team admins and assessors can't do those actions until they
     have). Their security log keeps the history.
+16. **A licence record past its closing date** (operator; the "This licence
+    record can now be deleted" email, or a review that went unanswered;
+    [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing
+    is deleted without the organisation's written confirmation: ask the
+    project's owners whether it still needs the record (a renewed licence is
+    a later outcome they record; an unanswered review stays as it is). On a
+    written yes, as the schema owner: note the project's evidence pack
+    objects (`SELECT pdf_key, bundle_key FROM evidence_pack WHERE project_id
+    = '…'`), delete the project in one transaction with its two evidence
+    guards disabled for it (`ALTER TABLE project DISABLE TRIGGER
+    project_evidence_guard, DISABLE TRIGGER project_pack_guard; DELETE FROM
+    project WHERE id = '…'; ALTER TABLE project ENABLE TRIGGER
+    project_evidence_guard, ENABLE TRIGGER project_pack_guard;`), then delete
+    every version of each pack object from the packs bucket with
+    `s3:BypassGovernanceRetention` (`aws s3api delete-object --bucket …
+    --key … --version-id … --bypass-governance-retention`, for each version
+    `list-object-versions` shows). A project of a team that keeps public
+    records (`team.public_records`) also needs the client's confirmation
+    that it holds its records or has a disposal authority, recorded as
+    `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
+    the confirmation, the date and what was deleted in the operator log.
 
 ## Rollback
 

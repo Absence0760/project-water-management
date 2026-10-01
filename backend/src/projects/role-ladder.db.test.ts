@@ -106,7 +106,9 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
-	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in']
+	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in'],
+	['PUT /projects/:id/licence-record', 'the licence outcome sets how long the evidence and the names it keeps are kept (159)'],
+	['POST /projects/:id/licence-record/confirm', 'confirming the licence record is still needed keeps it, with its names, five more years (159)']
 ]);
 
 /**
@@ -173,6 +175,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 
 /** Reads that need editor, and why. */
 const EDITOR_READS = new Map<string, string>([
+	['GET /projects/:id/licence-record', 'the licence outcome and the record’s review and closing dates, for those who manage the evidence (159)'],
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
 	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],

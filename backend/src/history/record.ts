@@ -216,6 +216,9 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// The licence record (159_licence_record): the outcome an owner recorded (with its dates and reason), or a review confirmed.
+	| 'licence.outcome'
+	| 'licence.confirmed'
 	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
 	| 'map.imported'
 	| 'map.feature_created'

@@ -292,6 +292,16 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
+		// The licence record (159): the outcome, the date the record may be deleted, and why.
+		case 'licence.outcome': {
+			const o = str(s.outcome);
+			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';
+			if (!o) return `Cleared the licence outcome${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
+			const what = o === 'granted' ? `granted on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${o} on ${str(s.outcomeOn)}`;
+			return `Recorded the licence outcome: ${what}${closes}`;
+		}
+		case 'licence.confirmed':
+			return `Confirmed the licence record is still needed${str(s.reviewDueOn) ? `; next review ${str(s.reviewDueOn)}` : ''}`;
 		case 'allocation.import_deleted':
 			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'scenario.submitted':

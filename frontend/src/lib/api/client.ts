@@ -39,6 +39,8 @@ import type {
 	AllocationImportRequest,
 	AllocationInput,
 	AllocationList,
+	LicenceOutcomeInput,
+	LicenceRecord,
 	AllocationPreview,
 	AllocationSource,
 	ApiKey,
@@ -868,6 +870,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 * modelled use against them (docs/api.md § Allocations). Modelled, not
 		 * metered; the app never decides whether a use is lawful.
 		 */
+		/** The licence record (159): editors read it, owners record the outcome or confirm a review. */
+		licenceRecord: {
+			get: (id: string) => request<{ licenceRecord: LicenceRecord }>('GET', `${p(id)}/licence-record`).then((r) => r.licenceRecord),
+			set: (id: string, body: LicenceOutcomeInput) => request<{ licenceRecord: LicenceRecord }>('PUT', `${p(id)}/licence-record`, body).then((r) => r.licenceRecord),
+			confirm: (id: string) => request<{ licenceRecord: LicenceRecord }>('POST', `${p(id)}/licence-record/confirm`, {}).then((r) => r.licenceRecord)
+		},
 		allocations: {
 			list: (id: string) => request<AllocationList>('GET', `${p(id)}/allocations`),
 			create: (id: string, body: AllocationInput) =>
