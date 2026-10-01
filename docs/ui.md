@@ -1382,7 +1382,18 @@ it scrolls, and isn't fitted to the window.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text.
+  consultant or client in the same one. Others see the party as text. Each
+  editor and owner row has an **Acts for the responsible authority** tick
+  box for owners (163_licensing_authority; others see it as text when set):
+  those members record the authority's decisions and endorse a published
+  baseline. A change that would make an editor also part of an applying
+  party is refused with the server's `role_conflict` words.
+- **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
+  decides the project's licence applications, its name, kind (a catchment
+  management agency or the Department of Water and Sanitation) and office,
+  saved at once by an editor (`settings.responsibleAuthority`; empty clears
+  it); read-only text for a viewer. The decision form and the evidence
+  report's *For* row read it.
 - **Farmers** (WP-2.1, `project/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
@@ -4821,7 +4832,13 @@ read it before.
   removed and the run is a workbook comparison only. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
-  the section. Viewers see the status and the notice, no actions. The farm
+  the section. A run that was published says whether the responsible
+  authority endorsed it as a baseline ("Endorsed for the responsible
+  authority <date> by <name>", its note; or **Not endorsed by the
+  responsible authority**, which evidence reports on it say on page 1;
+  163_licensing_authority), and a member acting for the authority gets
+  **Endorse as the responsible authority** with an optional note, once
+  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
@@ -6322,7 +6339,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   a decision first, the longest-waiting on top).
 - **The table:** name (a link to it in the Scenarios tab), applicant ("shared
   with N" under it), status as a pill in words (Awaiting a decision;
-  Approved, Approved with conditions or Refused in the band colours, with
+  the authority's outcome in the band colours: *Licence issued (see its
+  conditions)* good, *Licence refused* and *Application rejected (formal
+  requirements)* bad, *Not considered: use already authorised* mixed, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
   "waiting N days" while it awaits a decision), changes and runs, and the
   the application's evidence packs (WP-3.14: each a status badge, newest
@@ -6378,9 +6397,21 @@ dark).
 
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
-list; only its owner edits it, and an editor who isn't its owner gets the
-**Decide** form (outcome radios, reasons and conditions, **Record the
-decision**; final).
+list; only its owner edits it. An editor who isn't its owner and whom the
+owner marks as acting for the responsible authority gets **Record the
+authority's decision** (163_licensing_authority; provisional position,
+pre-counsel research, 2026-10-01): the outcome in the Act's words with its
+basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
+*Application rejected (formal requirements)*, *Not considered: use already
+authorised*), the authority (empty: the project's), the date of the decision
+letter, the licence or file reference, *Written reasons received?* yes or no,
+and a note for the authority's reasons and conditions; the button waits for
+the outcome, the date and the reasons answer; final. Another editor reads
+that only a member acting for the authority records it. A decided
+application shows the outcome, whose decision it was and its date, the
+reference and the reasons answer, who recorded it and when, the note, and
+that any appeal runs from the decision letter (s148, s41(6); no deadline
+worked out).
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and

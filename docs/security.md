@@ -166,8 +166,9 @@ decide a licence application.
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
-  deciding an application (`…/decide`), issuing or withdrawing an
-  evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  recording the authority's decision on an application (`…/decide`),
+  endorsing a published baseline (`…/publication/:pubId/endorse`), issuing
+  or withdrawing an evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
   `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
   needs an authenticator: a sign-off is the professional record an
   authority relies on, and without it is only as strong as the signer's
@@ -1915,6 +1916,32 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **Only a member acting for the responsible authority records its
+    decision** (163_licensing_authority; provisional position, pre-counsel
+    research, 2026-10-01: under the National Water Act only the responsible
+    authority decides a licence, s27, s41, s42). `project_member.acts_for_authority`
+    is set by an owner only (`project_member_authority` refuses anyone else,
+    and an insert, an invite or a new project, always starts it false;
+    water_app's `UPDATE` on `project_member` is the columns `role`, `party`
+    and `acts_for_authority` only). `scenario_guard` refuses the move to
+    `decided` unless `app_acts_for_authority` (editor or above **and**
+    marked), and the route says so first (`403`). The same right, checked
+    by `run_publication_endorse`, endorses a published baseline; an
+    endorsement is set once and never changes (`run_publication_final`),
+    except that the endorser's account going clears `endorsed_by`.
+    `projects/authority.db.test.ts` tries each through the route and past
+    it, with a marked editor as the positive control.
+  - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
+    Someone who edits the project (editor or owner, directly or through its
+    team, `app_member_role`) can't be in an applying party, own an
+    application or be shared one there: `AFTER` triggers on
+    `project_member`, `team_member`, `project` (moving into a team),
+    `scenario` and `scenario_member` raise `role_conflict`, which the API
+    answers as `409 role_conflict` with fixed words (never the database's
+    text). Otherwise an editor of a consultancy-hosted project could read
+    every submitted application and decide with their own client's in view.
+    Rows that conflicted before 163 aren't rewritten; their next change is
+    refused until it resolves the conflict.
   - **Cumulative assessments are the editors' alone** (145_assessment,
     WP-3.11): an assessment names every application in it and shows what
     each does, so `assessment` and `assessment_member` are read and written

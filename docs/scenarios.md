@@ -1175,12 +1175,51 @@ scenario is `'team'`, and behaves exactly as above).
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
-  draft (`…/reopen`). An **assessor**, an editor who isn't the owner, decides
-  a submitted one (`…/decide { outcome, note }`, outcome `approved`,
-  `approved_with_conditions` or `refused`, the words pending the licensing
-  authority); a decision is final. `submitted_at`, `decided_at` and
+  draft (`…/reopen`). An **assessor** is an editor who isn't the owner: they
+  read a submitted application, comment on it and share it by link. The
+  app **records the responsible authority's decision; it never makes one**
+  (163_licensing_authority; provisional position, pre-counsel research,
+  2026-10-01, D14 in [step-3-licensing.md § 11](./roadmap/step-3-licensing.md)):
+  only an assessor the project's owner marks as acting for the authority
+  (below) records it, with **Record the authority's decision** (`…/decide
+  { outcome, authority?, decisionDate, reference?, reasonsReceived, note }`).
+  The outcome is in the National Water Act's and GN R267's words:
+  `licence_issued` (*Licence issued (see its conditions)*: every licence
+  carries conditions, s28(1)(d)), `licence_refused` (s42),
+  `application_rejected` (formal requirements, R267 regs 9(1)(b), 11(2),
+  12(2)(b)) or `not_considered` (the use is already authorised, s40(4)).
+  The record holds the authority's name (the project's
+  `settings.responsibleAuthority` when the form leaves it empty), the date on
+  its decision letter (separate from `decided_at`, the app's stamp), its
+  licence or file reference and whether written reasons were received
+  (s42(b)). A decision is final: the trigger sets it once and never changes
+  it. Decisions recorded before 163 were mapped (`approved` and
+  `approved_with_conditions` → `licence_issued`, `refused` →
+  `licence_refused`), with the authority "Not recorded (before 163)" and no
+  date. A team scenario an editor only marks decided (no outcome) is the
+  team's own what-if and records none of this. The panel says any appeal runs from the authority's decision letter
+  (s148, s41(6)) and works out no deadline. `submitted_at`, `decided_at` and
   `decided_by` are stamped by the trigger. The roadmap's "under review" is
   not a status of its own: a submitted application is the assessors' queue.
+- **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
+  project names it in `settings.responsibleAuthority { name, kind: 'dws' |
+  'cma', office }` (the Project page's *Responsible authority* card; no model
+  input). The owner ticks *Acts for the responsible authority* on the
+  members who act for it (`project_member.acts_for_authority`); as editors or
+  owners they record its decisions and endorse a published baseline for it
+  (`POST …/publication/:pubId/endorse`, once per publication, audit event
+  `publication.endorsed`), and an evidence report on a baseline nobody
+  endorsed says so on page 1. This makes the host matter less: a CMA host, a
+  WUA host with CMA or DWS staff as marked editors (the pilot default), or a
+  consultancy host all work, because the decision and the endorsement are
+  the authority's whoever hosts.
+- **The conflict guard** (163, D1 (c)). Nobody who edits the project
+  (editor or owner, directly or through its team) may be in an applying
+  party, own an application or be shared one there: the database refuses
+  the change (`409 role_conflict`), whichever side of it comes second (a
+  role, a party, a team role, a project moving team, a new application, a
+  share). An applicant's consultant stays a contributor; to make a party
+  member an editor, take them out of the party in the same change.
 - **Who reads it.** Its owner and whoever they share it with
   (`POST|DELETE …/members`, `scenario_member`); the editors once it is submitted (drafts
   stay the applicant's alone, from the assessors too); viewers once it is
