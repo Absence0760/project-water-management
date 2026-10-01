@@ -4424,7 +4424,11 @@ read it before.
   together sit together:
   1. **Summary**. The run header carries the evidence line and a one-line
      preview of the run's notes (`notesPreview`), each a link to the Record
-     group. The summary opens with the run's warnings in two parts
+     group, and, for a run a known engine bug may affect (issue #103), an
+     amber **May be affected by a known bug** (or *by n known bugs*) badge
+     that opens its validation statement (also when loaded as a
+     `#res-validation` link), whose errata table says when each bug
+     changes results. The summary opens with the run's warnings in two parts
      (`runs/credibility.ts` `warningGroups`): **things to check before relying
      on this run** (a warning box; any warning not known to be a data note
      lands here, so a new engine warning is never hidden), then, collapsed,
@@ -4498,7 +4502,10 @@ read it before.
   ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
-  can't be re-run from them, Workbook comparison). Pin and
+  can't be re-run from them, **May be affected** for a run whose engine (or
+  its fit's) had a known bug, its errata ids in the tooltip (mouse only, as
+  the other tags; the header badge says it in words), Workbook
+  comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs

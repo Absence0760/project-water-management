@@ -384,3 +384,15 @@ export async function plantFiringAlert(projectId: string): Promise<void> {
 		await db.query(`INSERT INTO alert_event (rule_id, project_id, kind, state, value) VALUES ($1, $2, 'data_stale', 'firing', 30)`, [rows[0]!.id, projectId]);
 	});
 }
+
+/**
+ * Make a run look as if an older engine made it (issue #103, the known-defect
+ * flag): only its recorded engine_version changes, so the API flags the errata
+ * of that version (docs/engine-errata.md).
+ */
+export async function plantRunEngine(runId: string, engineVersion: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query('UPDATE model_run SET engine_version = $2 WHERE id = $1', [runId, engineVersion]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
