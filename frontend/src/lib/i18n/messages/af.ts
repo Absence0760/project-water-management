@@ -209,6 +209,8 @@ export const af: Catalogue = {
 	'874f0827': 'Seisoensvooruitsig',
 	// What is the season outlook?
 	'd82c623d': 'Wat is die seisoensvooruitsig?',
+	// Your registered water
+	'97df4b2d': 'Jou geregistreerde water',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -305,6 +307,18 @@ export const af: Catalogue = {
 	'e54e8052': 'besproeiing stop by {pct}',
 	// {storage} of {capacity}
 	'e25b39e5': '{storage} van {capacity}',
+	// This is what is registered for your hydrological unit with the Department of Water and Sanitation (DWS). A registered volume is not an entitlement, and it doesn’t say whether a use is lawful.
+	'95525f4e': 'Dit is wat vir jou hidrologiese eenheid by die Departement van Water en Sanitasie (DWS) geregistreer is. ’n Geregistreerde volume is nie ’n reg op water nie, en dit sê nie of ’n gebruik wettig is nie.',
+	// Surface water: {volume} a year
+	'106ead85': 'Oppervlakwater: {volume} per jaar',
+	// Groundwater: {volume} a year
+	'867e8f4b': 'Grondwater: {volume} per jaar',
+	// Dam storage: {volume}
+	'1da2cd80': 'Damberging: {volume}',
+	// The model supplied {got} since {from}. The volume registered for the whole year is {year}.
+	'39eaf4e3': 'Sedert {from} het die model {got} gelewer. Die volume wat vir die hele jaar geregistreer is, is {year}.',
+	// Your dam in the model holds {capacity} when full.
+	'3b652552': 'Jou dam in die model hou {capacity} wanneer hy vol is.',
 	// Model: OK
 	'70c63e42': 'Model: goed',
 	// Model: watch

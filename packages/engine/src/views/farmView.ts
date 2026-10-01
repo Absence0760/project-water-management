@@ -206,6 +206,25 @@ export interface FarmView {
 	 * season has ended.
 	 */
 	outlook?: (FarmOutlookProjection & { publishedAt: string }) | null;
+	/**
+	 * The farm's own registered water (issue #72, docs/allocations.md § Who
+	 * sees what): the allocations on this farm in force today, summed, never a
+	 * name or a registration number. Current, not the publication's: what the
+	 * WUA holds on record now. Absent or null when none is in force.
+	 */
+	registered?: FarmRegistered | null;
+}
+
+/** A farm's registered volumes and storage in force on `asOf` (FarmView.registered). Not an entitlement. */
+export interface FarmRegistered {
+	/** The day they are in force on: today where the catchment is. */
+	asOf: string;
+	/** Σ of the 21(a) surface-water takes, m³ a year; null when none. */
+	surfaceM3PerYear: number | null;
+	/** Σ of the 21(a) groundwater takes, m³ a year; null when none. */
+	groundwaterM3PerYear: number | null;
+	/** Σ of the registered storage (21(b) rows and storage on a take), m³; null when none is stated. */
+	storageM3: number | null;
 }
 
 /** GET /projects/:id/farm (WP-2.6): the farmer's farms in one project, and whether anything is published. */
